@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { XMLBuilder } from "fast-xml-parser";
 import { resolve } from "node:path";
 import { processChangelogDirectory, type ChangelogRelease } from "../src/lib/changelog-content";
@@ -104,14 +105,19 @@ export function changelogFeedPlugin(): Plugin {
     apply: "build",
 
     configResolved(config) {
-      changelogDir = resolve(config.root, "src/content/changelog");
+      changelogDir = resolve(config.root, CONTENT_DIRECTORIES.changelog);
     },
 
     generateBundle() {
+      const releases = processChangelogDirectory(changelogDir);
+
+      // No releases means the `seo` submodule was not fetched; emit no feed.
+      if (releases.length === 0) return;
+
       this.emitFile({
         type: "asset",
         fileName: FEED_FILE_NAME,
-        source: buildFeedXml(processChangelogDirectory(changelogDir)),
+        source: buildFeedXml(releases),
       });
     },
   };

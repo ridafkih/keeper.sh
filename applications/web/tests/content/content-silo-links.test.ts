@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { SEO_CONTENT_ROOT } from "../../src/lib/content-paths";
 import { parse as parseYaml } from "yaml";
 
-const CONTENT_ROOT = join(import.meta.dirname, "../../src/content");
+const CONTENT_ROOT = join(import.meta.dirname, "../..", SEO_CONTENT_ROOT);
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 const INTERNAL_LINK = /]\((\/[^)#]*)(?:#[^)]*)?\)/g;
 
@@ -31,6 +32,8 @@ interface ContentPage {
 
 function readCollection(directory: string): ContentPage[] {
   const collectionDirectory = join(CONTENT_ROOT, directory);
+
+  if (!existsSync(collectionDirectory)) return [];
 
   return readdirSync(collectionDirectory)
     .filter((entry) => entry.endsWith(".mdx"))
@@ -64,7 +67,16 @@ const knownPaths = new Set([
 const siloPages = SILO_DIRECTORIES.flatMap((directory) => readCollection(directory));
 const recipes = readCollection("recipes");
 
-describe("content silos", () => {
+
+/* The `seo` submodule is optional: a clone without it still builds. These suites
+ * assert against real files, so they are skipped rather than weakened — the
+ * "has posts to check" guards must keep failing when content IS present but
+ * empty. */
+const CONTENT_PRESENT = existsSync(
+  join(import.meta.dirname, "../..", SEO_CONTENT_ROOT, "blog"),
+);
+
+describe.skipIf(!CONTENT_PRESENT)("content silos", () => {
   it.each(SILO_DIRECTORIES)("has pages in %s", (directory) => {
     expect(readCollection(directory).length).toBeGreaterThan(0);
   });

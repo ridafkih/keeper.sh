@@ -8,5 +8,5 @@ import { processChangelogDirectory } from "../../src/lib/changelog-content";
  * the tests then assert against the real content rather than a fixture.
  */
 export const changelogReleases = processChangelogDirectory(
-  resolve(fileURLToPath(import.meta.url), "../../../src/content/changelog"),
+  resolve(fileURLToPath(import.meta.url), "../../../seo/changelog"),
 );

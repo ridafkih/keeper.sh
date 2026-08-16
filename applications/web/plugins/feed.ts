@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { XMLBuilder } from "fast-xml-parser";
 import { processBlogDirectory, type ProcessedBlogPost } from "./blog";
 
@@ -85,15 +86,22 @@ export function feedPlugin(): Plugin {
     apply: "build",
 
     configResolved(config) {
-      blogDir = resolve(config.root, "src/content/blog");
+      blogDir = resolve(config.root, CONTENT_DIRECTORIES.blog);
       publicDir = config.publicDir;
     },
 
     generateBundle() {
+      const posts = processBlogDirectory(blogDir, publicDir);
+
+      /* No posts means the `seo` submodule was not fetched. A feed advertising
+       * zero items is worse than no feed, and resolveLastBuildDate has no date
+       * to report, so the file is left out entirely. */
+      if (posts.length === 0) return;
+
       this.emitFile({
         type: "asset",
         fileName: FEED_FILE_NAME,
-        source: buildFeedXml(processBlogDirectory(blogDir, publicDir)),
+        source: buildFeedXml(posts),
       });
     },
   };

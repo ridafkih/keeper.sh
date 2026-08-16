@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
+import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
@@ -196,6 +197,11 @@ export function processBlogDirectory(
   blogDir: string,
   publicDir: string,
 ): ProcessedBlogPost[] {
+  /* The `seo` submodule is optional. An unfetched collection is empty, not an
+   * error — but a directory that exists must still be valid, so a malformed
+   * file in a fetched collection fails the build as before. */
+  if (!existsSync(blogDir)) return [];
+
   const files = readdirSync(blogDir)
     .filter((f) => f.endsWith(".mdx"))
     .sort();
@@ -277,7 +283,7 @@ function contentCollectionPlugin(collection: ContentCollection): Plugin {
 
 export function blogPlugin(): Plugin {
   return contentCollectionPlugin({
-    directory: "src/content/blog",
+    directory: CONTENT_DIRECTORIES.blog,
     exportName: "blogPosts",
     name: "keeper-blog",
     virtualModuleId: "virtual:blog-posts",
@@ -286,7 +292,7 @@ export function blogPlugin(): Plugin {
 
 export function comparePlugin(): Plugin {
   return contentCollectionPlugin({
-    directory: "src/content/compare",
+    directory: CONTENT_DIRECTORIES.compare,
     exportName: "comparePages",
     name: "keeper-compare",
     virtualModuleId: "virtual:compare-pages",
@@ -295,7 +301,7 @@ export function comparePlugin(): Plugin {
 
 export function docsPlugin(): Plugin {
   return contentCollectionPlugin({
-    directory: "src/content/docs",
+    directory: CONTENT_DIRECTORIES.docs,
     exportName: "docsPages",
     name: "keeper-docs",
     virtualModuleId: "virtual:docs-pages",
@@ -304,7 +310,7 @@ export function docsPlugin(): Plugin {
 
 export function guidesPlugin(): Plugin {
   return contentCollectionPlugin({
-    directory: "src/content/guides",
+    directory: CONTENT_DIRECTORIES.guides,
     exportName: "guidesPages",
     name: "keeper-guides",
     virtualModuleId: "virtual:guides-pages",
@@ -313,7 +319,7 @@ export function guidesPlugin(): Plugin {
 
 export function recipesPlugin(): Plugin {
   return contentCollectionPlugin({
-    directory: "src/content/recipes",
+    directory: CONTENT_DIRECTORIES.recipes,
     exportName: "recipesPages",
     name: "keeper-recipes",
     virtualModuleId: "virtual:recipes-pages",

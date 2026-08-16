@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
+import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { XMLBuilder } from "fast-xml-parser";
 import { parse as parseYaml } from "yaml";
 import { staticPageMetadata } from "../src/lib/page-metadata";
@@ -21,7 +22,10 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 interface SitemapEntry {
   path: string;
-  lastmod: string;
+  /* Omitted only for a collection index whose content is absent because the
+   * `seo` submodule was not fetched. lastmod is optional per the sitemap spec;
+   * every other entry derives one and fails loudly if it cannot. */
+  lastmod?: string;
 }
 
 function readStaticEntries(): SitemapEntry[] {
@@ -38,9 +42,9 @@ function readStaticEntries(): SitemapEntry[] {
 
 function buildIndexEntry(path: string, entries: SitemapEntry[]): SitemapEntry {
   const [first] = entries;
-  if (!first) {
-    throw new Error(`The "${path}" index lastmod cannot be derived without any entries.`);
-  }
+  /* The index route exists whether or not its collection does, and
+   * assertIndexableRoutesCovered requires it in the sitemap either way. */
+  if (!first) return { path };
 
   const lastmod = entries.reduce(
     (newest, entry) => (entry.lastmod > newest ? entry.lastmod : newest),
@@ -58,9 +62,8 @@ function buildChangelogEntries(changelogDir: string): SitemapEntry[] {
   const releases = processChangelogDirectory(changelogDir);
   const [newest] = releases;
 
-  if (!newest) {
-    throw new Error("The changelog sitemap entries cannot be built without a release.");
-  }
+  // Changelog ships in the `seo` submodule; without it there are no entries.
+  if (!newest) return [];
 
   return [
     { path: "/changelog", lastmod: newest.date },
@@ -84,6 +87,9 @@ function discoverContentEntries(
   basePath: string,
   label: string,
 ): SitemapEntry[] {
+  // An unfetched collection contributes no entries rather than failing the build.
+  if (!existsSync(directory)) return [];
+
   const files = readdirSync(directory).filter((file) => file.endsWith(".mdx"));
 
   return files.map((file) => {
@@ -116,10 +122,11 @@ function buildSitemapXml(entries: SitemapEntry[]): string {
     "?xml": { "@_version": "1.0", "@_encoding": "UTF-8" },
     urlset: {
       "@_xmlns": "http://www.sitemaps.org/schemas/sitemap/0.9",
-      url: entries.map((entry) => ({
-        loc: `${SITE_URL}${entry.path}`,
-        lastmod: entry.lastmod,
-      })),
+      url: entries.map((entry) =>
+        entry.lastmod
+          ? { loc: `${SITE_URL}${entry.path}`, lastmod: entry.lastmod }
+          : { loc: `${SITE_URL}${entry.path}` },
+      ),
     },
   };
 
@@ -140,12 +147,12 @@ export function sitemapPlugin(): Plugin {
     apply: "build",
 
     configResolved(config) {
-      blogDir = resolve(config.root, "src/content/blog");
-      compareDir = resolve(config.root, "src/content/compare");
-      changelogDir = resolve(config.root, "src/content/changelog");
-      docsDir = resolve(config.root, "src/content/docs");
-      guidesDir = resolve(config.root, "src/content/guides");
-      recipesDir = resolve(config.root, "src/content/recipes");
+      blogDir = resolve(config.root, CONTENT_DIRECTORIES.blog);
+      compareDir = resolve(config.root, CONTENT_DIRECTORIES.compare);
+      changelogDir = resolve(config.root, CONTENT_DIRECTORIES.changelog);
+      docsDir = resolve(config.root, CONTENT_DIRECTORIES.docs);
+      guidesDir = resolve(config.root, CONTENT_DIRECTORIES.guides);
+      recipesDir = resolve(config.root, CONTENT_DIRECTORIES.recipes);
       routeTreeFile = resolve(config.root, "src/generated/tanstack/route-tree.generated.ts");
     },
 

@@ -9,3 +9,6 @@ screenshots/
 applications/mobile/
 .pki/
 .gstack/
+
+# turbo prune --docker output
+out/

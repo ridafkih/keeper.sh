@@ -1,9 +1,10 @@
 import { resolve } from "node:path";
 import type { Plugin } from "vite";
+import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { processChangelogDirectory } from "../src/lib/changelog-content";
 
 /** Where the release folders live, relative to the Vite root. */
-const CHANGELOG_DIRECTORY = "src/content/changelog";
+const CHANGELOG_DIRECTORY = CONTENT_DIRECTORIES.changelog;
 
 const VIRTUAL_MODULE_ID = "virtual:changelog-releases";
 

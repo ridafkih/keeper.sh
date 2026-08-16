@@ -4,7 +4,7 @@ import { changelogReleases as processedReleases } from "virtual:changelog-releas
 /**
  * Every published change to Keeper.sh, newest release first.
  *
- * The content lives in `src/content/changelog`, one folder per release: an
+ * The content lives in the `seo` submodule under `changelog`, one folder per release: an
  * `index.mdx` for the prose and a `notes.json` for the smaller changes. This
  * module only reshapes what `plugins/changelog.ts` reads off disk.
  */

@@ -105,6 +105,10 @@ function readRelease(directory: string, slug: string): ChangelogRelease {
 }
 
 export function processChangelogDirectory(changelogDir: string): ChangelogRelease[] {
+  /* Changelog ships in the optional `seo` submodule. An unfetched directory
+   * means no releases, not a broken build. */
+  if (!existsSync(changelogDir)) return [];
+
   const slugs = readdirSync(changelogDir).filter((entry) =>
     statSync(join(changelogDir, entry)).isDirectory(),
   );

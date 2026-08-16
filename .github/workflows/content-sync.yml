@@ -1,0 +1,51 @@
+name: Sync Content Submodule
+
+# Fired by keeperdotsh/seo when content lands on its main branch. Bumps the
+# submodule pin here so the published site picks the change up, without anyone
+# opening a pull request against this repository for an MDX file.
+on:
+  repository_dispatch:
+    types: [content-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+
+      - name: Move the pin to the latest content
+        id: bump
+        run: |
+          git submodule update --remote applications/web/seo
+          if git diff --quiet -- applications/web/seo; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Content pin already current; nothing to do."
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pin=$(git -C applications/web/seo rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # The build runs before the pin is committed, so broken content fails here
+      # rather than on the deployed site. Content authors do not run this build.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.bump.outputs.changed == 'true'
+      - run: bun install --frozen-lockfile
+        if: steps.bump.outputs.changed == 'true'
+      - run: bunx turbo run build --filter=@keeper.sh/web
+        if: steps.bump.outputs.changed == 'true'
+
+      - name: Commit the pin
+        if: steps.bump.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add applications/web/seo
+          git commit -m "chore(seo): bump content to ${{ steps.bump.outputs.pin }}"
+          git push
