@@ -150,12 +150,20 @@ const compareEventSlots = (
 const getSerializedSlotKey = (startTime: Date, endTime: Date): string =>
   `${Math.trunc(startTime.getTime() / 1000)}\u0000${Math.trunc(endTime.getTime() / 1000)}`;
 
+/*
+ * Reassignment sources are the mappings this pass has authority over, but the ids already
+ * spoken for are every mapping's, in or out of that window. Reading both from the
+ * windowed set lets an occurrence be reassigned onto a syncEventId a mapping outside the
+ * window still holds, and the unique index then refuses every write for that destination
+ * from that point on.
+ */
 const pairReidentifiedMaterializedOccurrences = (
   localEvents: MaterializedSyncableEvent[],
-  existingMappings: EventMapping[],
+  reassignableMappings: EventMapping[],
+  allMappings: EventMapping[],
 ): OccurrenceReassignment[] => {
   const localEventIds = new Set(localEvents.map((event) => event.id));
-  const mappedEventIds = new Set(existingMappings.map((mapping) => getMappingSyncEventId(mapping)));
+  const mappedEventIds = new Set(allMappings.map((mapping) => getMappingSyncEventId(mapping)));
   const newEventsByOwner = new Map<string, MaterializedSyncableEvent[]>();
   const missingMappingsByOwner = new Map<string, EventMapping[]>();
 
@@ -168,7 +176,7 @@ const pairReidentifiedMaterializedOccurrences = (
     newEventsByOwner.set(event.eventStateId, events);
   }
 
-  for (const mapping of existingMappings) {
+  for (const mapping of reassignableMappings) {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
       continue;
     }
@@ -634,6 +642,7 @@ const computeSyncOperations = (
   const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
     authoritativeLocalEvents,
     activeMappings,
+    existingMappings,
   );
   const databaseOnlyReassignments: OccurrenceReassignment[] = [];
   const remoteReassignments: OccurrenceReassignment[] = [];

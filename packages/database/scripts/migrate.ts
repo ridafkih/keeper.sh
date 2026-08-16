@@ -20,6 +20,8 @@ import {
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
 
+const MIGRATION_LOCK_TIMEOUT = "10s";
+
 const connectionString = Bun.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -304,17 +306,38 @@ const validateEventMappingConstraints = async (): Promise<void> => {
     ["calendars", "calendars_sync_ranges_check"],
     ["calendars", "calendars_ingest_coverage_check"],
   ] as const) {
+    /*
+     * Postgres answers NULL from to_regclass for a table that does not exist yet, where
+     * ::regclass throws. This runs before the migrator, on a database that may be empty.
+     */
     const state = await connection.query<{ validated: boolean }>(`
       SELECT convalidated AS validated
       FROM pg_constraint
       WHERE conname = '${constraint}'
-        AND conrelid = '${table}'::regclass
+        AND conrelid = to_regclass('public.${table}')
     `);
     if (state.rows[0]?.validated === false) {
       await connection.query(
         `ALTER TABLE "${table}" VALIDATE CONSTRAINT "${constraint}"`,
       );
     }
+  }
+};
+
+/*
+ * CONCURRENTLY exists to wait for the transactions already reading the table, so the
+ * session-wide lock_timeout the migration runs under is the one setting guaranteed to kill
+ * it. A single reader older than the timeout aborts the build and leaves an invalid index
+ * behind, and the repair is another CONCURRENTLY statement that the same timeout kills
+ * again — so the failure sticks and blocks migration readiness for every later run. The
+ * timeout is lifted for these statements alone and restored immediately after.
+ */
+const withoutLockTimeout = async (run: () => Promise<void>): Promise<void> => {
+  await connection.query(`SET lock_timeout = 0`);
+  try {
+    await run();
+  } finally {
+    await connection.query(`SET lock_timeout = '${MIGRATION_LOCK_TIMEOUT}'`);
   }
 };
 
@@ -328,16 +351,20 @@ const ensureSourceCalendarIndex = async (): Promise<void> => {
   `);
   let state = await getIndexState();
   if (state.rows[0] && !state.rows[0].valid) {
-    await connection.query(`
-      DROP INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
-    `);
+    await withoutLockTimeout(async () => {
+      await connection.query(`
+        DROP INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
+      `);
+    });
     state = await getIndexState();
   }
   if (!state.rows[0]) {
-    await connection.query(`
-      CREATE INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
-      ON "event_mappings" ("sourceCalendarId")
-    `);
+    await withoutLockTimeout(async () => {
+      await connection.query(`
+        CREATE INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
+        ON "event_mappings" ("sourceCalendarId")
+      `);
+    });
   }
   const verifiedState = await getIndexState();
   if (!verifiedState.rows[0]?.valid) {
@@ -392,8 +419,17 @@ try {
   await connection.query(`
     SELECT pg_advisory_lock(hashtext('keeper.sh:database-migration'))
   `);
-  await connection.query(`SET lock_timeout = '10s'`);
+  await connection.query(`SET lock_timeout = '${MIGRATION_LOCK_TIMEOUT}'`);
   await connection.query(`SET statement_timeout = '30min'`);
+  /*
+   * The tombstone protection below commits on its own, outside the migrator's transaction,
+   * so a migrate() that fails afterwards leaves the constraint installed and unvalidated
+   * while drizzle's journal still describes the schema that preceded it. Validation is
+   * otherwise only reachable after a successful run, which is exactly the run that did not
+   * happen — so any constraint left NOT VALID by an earlier attempt is validated here,
+   * before anything else is attempted.
+   */
+  await validateEventMappingConstraints();
   await installPreMigrationTombstoneProtection();
   await consolidateLegacyRecurringEventStates();
 
