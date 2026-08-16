@@ -1,3 +1,6 @@
 [submodule ".claude"]
 	path = .claude
 	url = https://github.com/keeperdotsh/.claude.git
+[submodule "infra"]
+	path = infra
+	url = https://github.com/keeperdotsh/infra.git
