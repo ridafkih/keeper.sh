@@ -20,6 +20,11 @@ import {
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
 
+import {
+  describeNonUtcTimeZone,
+  isUtcTimeZoneName,
+} from "../src/database/migration-timezone";
+
 const connectionString = Bun.env.DATABASE_URL;
 
 if (!connectionString) {
@@ -388,10 +393,26 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
   return state.rows[0]?.ready === true;
 };
 
+const assertUtcServerTimeZone = async (): Promise<void> => {
+  const state = await connection.query<{ TimeZone: string }>("SHOW TimeZone");
+  const [row] = state.rows;
+  if (isUtcTimeZoneName(row?.TimeZone)) {
+    return;
+  }
+  throw new Error(describeNonUtcTimeZone(row?.TimeZone));
+};
+
 try {
   await connection.query(`
     SELECT pg_advisory_lock(hashtext('keeper.sh:database-migration'))
   `);
+  await assertUtcServerTimeZone();
+  /*
+   * With the session in UTC a timestamp -> timestamptz change is binary-identical, so
+   * Postgres records it as metadata and skips the table rewrite. The same ALTER under any
+   * other zone rewrites every row while holding ACCESS EXCLUSIVE.
+   */
+  await connection.query(`SET TimeZone = 'UTC'`);
   await connection.query(`SET lock_timeout = '10s'`);
   await connection.query(`SET statement_timeout = '30min'`);
   await installPreMigrationTombstoneProtection();
