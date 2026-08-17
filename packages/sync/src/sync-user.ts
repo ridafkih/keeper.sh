@@ -796,6 +796,7 @@ const syncDestinationsForUser = async (
             const startedAt = performance.now();
             try {
               return await providerRef.listRemoteEvents({
+                timeMax: requestedWindow.timeMax,
                 timeMin: requestedWindow.timeMin,
               });
             } finally {

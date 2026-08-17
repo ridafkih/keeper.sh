@@ -183,6 +183,7 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
         existingMappings: [...mappings],
         localEvents: options.events,
         remoteEvents: await provider.listRemoteEvents({
+          timeMax: new Date("2099-01-01T00:00:00.000Z"),
           timeMin: (options.scope ?? WIDE_SCOPE).requestedWindow.timeMin,
         }),
       }),

@@ -195,6 +195,7 @@ describe("createGoogleSyncProvider", () => {
     }, { status: 200 }))));
 
     const remoteEvents = await provider.listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
     const mapping = {
@@ -285,8 +286,16 @@ describe("createGoogleSyncProvider", () => {
     });
   });
 
-  it("lists every far-future Keeper event page with one fixed lower boundary and no upper bound", async () => {
+  /*
+   * Written before the sync horizon existed (#443, a month ahead of #452), when nothing
+   * bounded the future and reading everything was the only way to be sure a mirror was
+   * seen. The horizon now says exactly how far forward a pair syncs, and reconciliation
+   * already drops mappings outside it, so an event beyond it is out of scope on both
+   * sides — reading it costs a full calendar walk every pass and can change no decision.
+   */
+  it("bounds every page by the horizon it was given", async () => {
     const timeMin = new Date("2026-07-10T00:00:00.000Z");
+    const timeMax = new Date("2028-07-10T00:00:00.000Z");
     const farFutureStart = "2040-03-15T09:00:00.000Z";
     const farFutureEnd = "2040-03-15T10:00:00.000Z";
     const fetchMock = vi.fn()
@@ -316,7 +325,7 @@ describe("createGoogleSyncProvider", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const remoteEvents = await createProvider({ rateLimiter: { acquire } })
-      .listRemoteEvents({ timeMin });
+      .listRemoteEvents({ timeMax, timeMin });
 
     expect(remoteEvents.map((event) => event.deleteId)).toEqual([
       "canonical-id",
@@ -327,8 +336,8 @@ describe("createGoogleSyncProvider", () => {
     const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
     expect(firstUrl.searchParams.get("timeMin")).toBe(timeMin.toISOString());
     expect(secondUrl.searchParams.get("timeMin")).toBe(timeMin.toISOString());
-    expect(firstUrl.searchParams.has("timeMax")).toBe(false);
-    expect(secondUrl.searchParams.has("timeMax")).toBe(false);
+    expect(firstUrl.searchParams.get("timeMax")).toBe(timeMax.toISOString());
+    expect(secondUrl.searchParams.get("timeMax")).toBe(timeMax.toISOString());
     expect(secondUrl.searchParams.get("pageToken")).toBe("page-2");
     expect(acquire).toHaveBeenCalledTimes(2);
   });
@@ -346,7 +355,7 @@ describe("createGoogleSyncProvider", () => {
     const pending = createProvider({
       rateLimiter: { acquire },
       signal: controller.signal,
-    }).listRemoteEvents({ timeMin: new Date("2026-07-10T00:00:00.000Z") });
+    }).listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: new Date("2026-07-10T00:00:00.000Z") });
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalledWith(1, controller.signal);
     });

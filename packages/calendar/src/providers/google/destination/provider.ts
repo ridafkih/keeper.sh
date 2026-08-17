@@ -441,6 +441,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     );
     url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
     url.searchParams.set("timeMin", options.timeMin.toISOString());
+    url.searchParams.set("timeMax", options.timeMax.toISOString());
     if (pageToken) {
       url.searchParams.set("pageToken", pageToken);
     }
