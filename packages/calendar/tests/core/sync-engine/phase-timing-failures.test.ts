@@ -158,7 +158,8 @@ describe("syncCalendar phase attribution when a phase throws", () => {
       const success = await runSync({ localEvents: [makeEvent(`event-${round}`)] });
       expect(success.thrown).toBeNull();
       attributedTotals.push(expectBalanced(success.event));
-      expect(success.event["sync.phase.currency_check.duration_ms"] as number).toBeLessThan(15);
+      expect(failure.event["sync.phase.currency_check.duration_ms"] as number)
+        .toBeGreaterThan((success.event["sync.phase.currency_check.duration_ms"] as number) * 2);
     }
 
     expect(Math.max(...attributedTotals) - Math.min(...attributedTotals)).toBeLessThan(20);

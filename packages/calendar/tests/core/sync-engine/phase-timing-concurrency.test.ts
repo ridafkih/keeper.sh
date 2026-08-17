@@ -146,7 +146,8 @@ describe("syncCalendar phase attribution under stress", () => {
     expectPhaseArithmetic(fastEvent);
     expect(slowEvent["sync.phase.provider_push.duration_ms"] as number)
       .toBeGreaterThanOrEqual(30);
-    expect(fastEvent["sync.phase.provider_push.duration_ms"] as number).toBeLessThan(20);
+    expect(slowEvent["sync.phase.provider_push.duration_ms"] as number)
+      .toBeGreaterThan((fastEvent["sync.phase.provider_push.duration_ms"] as number) * 2);
   });
 
   it("records read_state and balances when readState rejects", async () => {

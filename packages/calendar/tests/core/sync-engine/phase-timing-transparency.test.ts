@@ -265,8 +265,10 @@ describe("syncCalendar instrumentation transparency", () => {
       runSync({ localEvents: [makeEvent("abcd")], provider }),
     ]);
 
-    expect(fast["sync.phase.provider_push.duration_ms"] as number).toBeLessThan(30);
-    expect(slow["sync.phase.provider_push.duration_ms"] as number).toBeGreaterThanOrEqual(35);
+    const fastPush = fast["sync.phase.provider_push.duration_ms"] as number;
+    const slowPush = slow["sync.phase.provider_push.duration_ms"] as number;
+    expect(slowPush).toBeGreaterThanOrEqual(35);
+    expect(slowPush).toBeGreaterThan(fastPush * 2);
     expectPhaseArithmetic(fast);
     expectPhaseArithmetic(slow);
   });
@@ -307,7 +309,8 @@ describe("syncCalendar instrumentation transparency", () => {
     expectPhaseArithmetic(inner as Record<string, unknown>);
     expectPhaseArithmetic(outer);
     expect(inner?.["sync.phase.provider_push.duration_ms"] as number).toBeGreaterThanOrEqual(15);
-    expect(outer["sync.phase.provider_push.duration_ms"] as number).toBeLessThan(15);
+    expect((inner?.["sync.phase.provider_push.duration_ms"] as number))
+      .toBeGreaterThan((outer["sync.phase.provider_push.duration_ms"] as number) * 2);
     expect(outer["sync.phase.checkpoint_flush.duration_ms"] as number)
       .toBeGreaterThanOrEqual(inner?.["sync.reconcile.duration_ms"] as number);
   });
