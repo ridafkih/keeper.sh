@@ -3,15 +3,15 @@ import {
   outlookEventWithAttendeesListSchema,
   outlookEventWithAttendeesSchema,
 } from "@keeper.sh/data-schemas";
-import type { OutlookEventWithAttendees } from "@keeper.sh/data-schemas";
+import type {
+  OutlookEventWithAttendees } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, TWO_WAY_SOURCE_WRITE_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { instantToWallTime } from "../../../ics/utils/timezone-instant";
 import {
   attemptSourceWrite,
   isRetryableOAuthWriteStatus,
-  refuseWhenOthersAreInvited,
-  refuseWhenSomebodyElseAuthoredIt,
+  refuseWhenOutOfReach,
   resolveAudience,
   resolveAuthorship,
   RICH_BODY_REFUSAL,
@@ -23,6 +23,7 @@ import type {
   SourceEventAuthorship,
   SourceEventUpdate,
   SourceWriteResult,
+  WriteBackReach,
 } from "../../../core/source/writer";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
@@ -36,6 +37,7 @@ const SINGLE_RESULT = "1";
 interface OutlookSourceWriterConfig {
   accessToken: () => Promise<string>;
   accountEmail?: string | null;
+  writeBackReach?: WriteBackReach;
 }
 
 class OutlookSourceLookupError extends Error {
@@ -303,23 +305,22 @@ const createOutlookSourceWriter = (
   const resolveWritableEventId = (
     lookup: { event: OutlookEventWithAttendees | null },
     reference: { sourceEventId: string | null },
-    writesDescription: boolean,
+    write: { isDelete: boolean; updates?: SourceEventUpdate },
   ): { eventId: string | null } | { refusal: SourceWriteResult } => {
     const { event } = lookup;
     if (!event) {
       return { eventId: null };
     }
-    const refusal = refuseWhenOthersAreInvited({ audience: readEventAudience(event) });
+    const refusal = refuseWhenOutOfReach({
+      audience: readEventAudience(event),
+      authorship: readEventAuthorship(event, config.accountEmail),
+      isDelete: write.isDelete,
+      updates: write.updates,
+    }, config.writeBackReach ?? "own_events");
     if (refusal) {
       return { refusal };
     }
-    const authored = refuseWhenSomebodyElseAuthoredIt({
-      authorship: readEventAuthorship(event, config.accountEmail),
-    });
-    if (authored) {
-      return { refusal: authored };
-    }
-    if (writesDescription && carriesUnreadableMarkup(event)) {
+    if (write.updates && "description" in write.updates && carriesUnreadableMarkup(event)) {
       return { refusal: RICH_BODY_REFUSAL };
     }
     return { eventId: event.id ?? reference.sourceEventId };
@@ -339,7 +340,7 @@ const createOutlookSourceWriter = (
     if ("error" in lookup) {
       return toWriteFailure(lookup.error, lookup.retryable);
     }
-    const writable = resolveWritableEventId(lookup, reference, "description" in updates);
+    const writable = resolveWritableEventId(lookup, reference, { isDelete: false, updates });
     if ("refusal" in writable) {
       return writable.refusal;
     }
@@ -397,7 +398,7 @@ const createOutlookSourceWriter = (
     if ("error" in lookup) {
       return toWriteFailure(lookup.error, lookup.retryable);
     }
-    const writable = resolveWritableEventId(lookup, reference, false);
+    const writable = resolveWritableEventId(lookup, reference, { isDelete: true });
     if ("refusal" in writable) {
       return writable.refusal;
     }

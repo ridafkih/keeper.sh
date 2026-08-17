@@ -39,6 +39,16 @@ export {
   REDIS_COMMAND_MAX_KEY,
   type IngestSegmentKey,
 } from "./core/telemetry/segments";
+export {
+  beginInFlight,
+  describeInFlight,
+  endInFlight,
+  measureInFlight,
+  recordInFlightOnWideEvent,
+  snapshotInFlight,
+  type InFlightKind,
+  type InFlightSnapshot,
+} from "./core/telemetry/in-flight";
 export { isOAuthReauthRequiredError } from "./core/oauth/error-classification";
 export {
   buildReauthenticationDemandFields,
@@ -421,7 +431,9 @@ export type {
   CalendarSourceWriter,
   SourceEventUpdate,
   SourceWriteResult,
+  WriteBackReach,
 } from "./core/source/writer";
+export { isWriteBackReach } from "./core/source/writer";
 export {
   MAX_DEREGISTER_ATTEMPTS,
   PUSH_ACTIONS_PER_TICK,

@@ -163,6 +163,7 @@ describe("a CalDAV destination listing that carried the user's own objects but n
     const event = createLocalEvent();
 
     const listing = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: TEST_WINDOW.timeMin,
     });
     const result = classifyInboundChanges({

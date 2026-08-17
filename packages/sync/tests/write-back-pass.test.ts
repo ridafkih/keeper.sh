@@ -531,6 +531,7 @@ describe("runWriteBackPass: the other destinations of the source are told", () =
       abandoned: 0,
       applied: 0,
       failed: 0,
+      heldForGrant: 0,
       quarantined: 0,
       withheld: 0,
     });

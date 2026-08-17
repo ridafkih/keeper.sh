@@ -3,6 +3,7 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { resolveSourceWriter } from "../src/write-back";
 import type { WriteBackApplierConfig } from "../src/write-back";
 
+const DESTINATION_CALENDAR_ID = "22222222-2222-4222-8222-222222222222";
 const SOURCE_CALENDAR_ID = "source-calendar-id";
 
 const CALDAV_CREDENTIALS = {
@@ -71,6 +72,7 @@ describe("a source nobody is configured to reach is reported, never quietly atte
     await expect(resolveSourceWriter(
       createConfig(COMPLETE_OAUTH_CONFIG, database),
       SOURCE_CALENDAR_ID,
+      DESTINATION_CALENDAR_ID,
     )).rejects.toThrow(/encryption key/);
   });
 
@@ -87,6 +89,7 @@ describe("a source nobody is configured to reach is reported, never quietly atte
       await expect(resolveSourceWriter(
         createConfig(withoutField(field), database),
         SOURCE_CALENDAR_ID,
+        DESTINATION_CALENDAR_ID,
       )).rejects.toThrow(new RegExp(field));
     },
   );
@@ -97,6 +100,7 @@ describe("a source nobody is configured to reach is reported, never quietly atte
     await expect(resolveSourceWriter(
       createConfig(COMPLETE_OAUTH_CONFIG, database),
       SOURCE_CALENDAR_ID,
+      DESTINATION_CALENDAR_ID,
     )).resolves.toMatchObject({ deleteEvent: expect.any(Function) });
   });
 });

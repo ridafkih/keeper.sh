@@ -38,16 +38,29 @@ export function DashboardHeading3({ children, as, className }: Omit<DashboardHea
 
 type DashboardSectionProps = {
   title: ReactNode;
-  description: ReactNode;
+  description?: ReactNode;
+  icon?: ReactNode;
   level?: HeadingLevel;
   headingClassName?: string;
 };
 
-export function DashboardSection({ title, description, level = 2, headingClassName }: DashboardSectionProps) {
+export function DashboardSection({
+  title,
+  description,
+  icon,
+  level = 2,
+  headingClassName,
+}: DashboardSectionProps) {
+  const heading = (
+    <DashboardHeadingBase level={level} className={headingClassName}>{title}</DashboardHeadingBase>
+  );
+
   return (
     <div className="flex flex-col px-0.5 pt-4">
-      <DashboardHeadingBase level={level} className={headingClassName}>{title}</DashboardHeadingBase>
-      <Text size="sm">{description}</Text>
+      {icon
+        ? <div className="flex items-center gap-1.5 overflow-hidden">{icon}{heading}</div>
+        : heading}
+      {description && <Text size="sm">{description}</Text>}
     </div>
   );
 }

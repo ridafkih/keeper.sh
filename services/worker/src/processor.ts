@@ -14,6 +14,7 @@ import {
   getDatabaseErrorDetails,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
+import { recordInFlightOnWideEvent } from "@keeper.sh/calendar";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
@@ -222,8 +223,27 @@ const processJob = (
     const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
     const deadlineController = new AbortController();
-    const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
     let needsFlush = true;
+    let deadlineFlushed = false;
+    /*
+     * Aborting the signal is advisory: an await that never observes it keeps the job
+     * running past this deadline, past the queue's lock, and into a stall that is
+     * terminated without ever reaching the flush in the finally below. Writing the
+     * event here — from the timer, which fires whether or not the work cooperates —
+     * is what makes a wedged pass say which call it was still waiting on.
+     */
+    const deadlineTimer = setTimeout(() => {
+      deadlineController.abort();
+      widelog.set("timeout.fired", true);
+      widelog.set("timeout.kind", "job_deadline");
+      widelog.set("timeout.limit_ms", USER_TIMEOUT_MS);
+      widelog.set("error.slug", "sync-deadline-exceeded");
+      recordInFlightOnWideEvent("third_party");
+      widelog.set("outcome", "timeout");
+      widelog.flush();
+      deadlineFlushed = true;
+      needsFlush = false;
+    }, USER_TIMEOUT_MS);
     const pendingDestinationSyncs: Promise<void>[] = [];
 
     try {
@@ -370,14 +390,14 @@ const processJob = (
     } finally {
       await Promise.all(pendingDestinationSyncs);
       clearTimeout(deadlineTimer);
-      if (deadlineController.signal.aborted) {
+      if (deadlineController.signal.aborted && !deadlineFlushed) {
         widelog.set("timeout.fired", true);
         widelog.set("timeout.kind", "job_deadline");
         widelog.set("timeout.limit_ms", USER_TIMEOUT_MS);
         widelog.set("error.slug", "sync-deadline-exceeded");
         needsFlush = true;
       }
-      if (needsFlush) {
+      if (needsFlush && !deadlineFlushed) {
         widelog.flush();
       }
     }

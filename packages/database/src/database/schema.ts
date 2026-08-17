@@ -22,6 +22,7 @@ import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
 const WRITE_BACK_MODE_OFF = "off";
+const WRITE_BACK_REACH_OWN_EVENTS = "own_events";
 const WRITE_BACK_STATE_OK = "ok";
 
 const SYNC_RANGE_SQL_VALUES = SYNC_RANGE_DEFINITIONS
@@ -480,6 +481,17 @@ const sourceDestinationMappingsTable = pgTable(
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    /*
+     * How far a write may reach, as one level rather than a set of flags, because the
+     * levels are strictly ordered by blast radius and each includes the ones before it.
+     * Separate from writeBackMode on purpose: the mode says which verbs are allowed, this
+     * says who they may be aimed at, and the two compose.
+     *
+     * Unlike deleteConfirmationApprovedAt it does not expire. That one answers whether a
+     * particular disappearance was real; this answers what Keeper.sh may ever do, and
+     * expiring it would revoke a permission the user never withdrew.
+     */
+    writeBackReach: text().notNull().default(WRITE_BACK_REACH_OWN_EVENTS),
     sourceCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),

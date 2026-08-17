@@ -57,6 +57,7 @@ create table source_destination_mappings (
   "writeBackMode" text not null default 'off',
   "writeBackState" text not null default 'ok',
   "writeBackStateReason" text
+  ,"writeBackReach" text not null default 'own_events'
 );
 `;
 

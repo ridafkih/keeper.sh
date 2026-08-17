@@ -1,0 +1,1 @@
+ALTER TABLE "source_destination_mappings" ADD COLUMN IF NOT EXISTS "writeBackReach" text DEFAULT 'own_events' NOT NULL;

@@ -695,7 +695,12 @@ const getWriteBackStatesForSource = async (
   userId: string,
   sourceCalendarId: string,
 ): Promise<
-  Record<string, { deletesUnlocked: boolean; reason: string | null; state: string }>
+  Record<string, {
+    deletesUnlocked: boolean;
+    reason: string | null;
+    writeBackReach: string;
+    state: string;
+  }>
 > => {
   const { database } = await import("@/context");
 
@@ -710,6 +715,7 @@ const getWriteBackStatesForSource = async (
       disabled: calendarsTable.disabled,
       ingestLastSucceededAt: calendarsTable.ingestLastSucceededAt,
       lastHealthyReadAt: sourceDestinationMappingsTable.lastHealthyReadAt,
+      writeBackReach: sourceDestinationMappingsTable.writeBackReach,
       writeBackMode: sourceDestinationMappingsTable.writeBackMode,
       writeBackState: sourceDestinationMappingsTable.writeBackState,
       writeBackStateReason: sourceDestinationMappingsTable.writeBackStateReason,
@@ -730,6 +736,7 @@ const getWriteBackStatesForSource = async (
       mapping.destinationCalendarId,
       {
         deletesUnlocked: resolveDeletesUnlocked(mapping, now),
+        writeBackReach: mapping.writeBackReach,
         ...resolveReportedWriteBackState(mapping, now),
       },
     ]),
@@ -988,6 +995,20 @@ const setWriteBackMode = async (
   );
 
   await database.transaction(async (transactionClient) => {
+    /*
+     * Read before the write: RETURNING answers with the row as it now is, which would make
+     * the comparison below always compare the new mode against itself.
+     */
+    const [existing] = await transactionClient
+      .select({ writeBackMode: sourceDestinationMappingsTable.writeBackMode })
+      .from(sourceDestinationMappingsTable)
+      .where(and(
+        eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      ))
+      .limit(SINGLE_ROW);
+    const previousMode = existing?.writeBackMode ?? WRITE_BACK_MODE_OFF;
+
     const updated = await transactionClient
       .update(sourceDestinationMappingsTable)
       .set({
@@ -1008,15 +1029,23 @@ const setWriteBackMode = async (
     }
 
     /*
-     * The recorded observation belongs to the policy it was taken under. Clearing it
-     * with the transition means the first pass after a change adopts what the
-     * destination reports instead of acting on a witness from a different regime.
+     * The recorded observation belongs to the policy it was taken under, so a transition
+     * into or out of write-back drops it: there was no regime to observe under before, and
+     * nothing observed while off is worth acting on after.
+     *
+     * Moving between two write-back modes does not. The observation was taken under
+     * write-back and stays valid under write-back, and clearing it would put the pair back
+     * in the first-observation window — where an edit made before the next pass is adopted
+     * rather than written back. Turning on deletions is exactly when somebody is about to
+     * try two-way sync, which made that the likeliest moment to lose their first edit.
      */
-    await clearDestinationWitness(
-      transactionClient,
-      sourceCalendarId,
-      destinationCalendarId,
-    );
+    if (previousMode === WRITE_BACK_MODE_OFF || writeBackMode === WRITE_BACK_MODE_OFF) {
+      await clearDestinationWitness(
+        transactionClient,
+        sourceCalendarId,
+        destinationCalendarId,
+      );
+    }
     await requestUserSync(transactionClient, userId);
   });
   scheduleMappingReplacementSync(userId);
@@ -1132,6 +1161,63 @@ const resolveDestinationReachable = async (
     return false;
   }
   return !destination.disabled && !destination.needsReauthentication;
+};
+
+/*
+ * Granting clears a hold the pass raised, because the hold was the question this answers.
+ * It deliberately leaves a quarantine alone: those are refusals no permission widens, and
+ * clearing one here would restart a pair that is stopped for a different reason entirely.
+ */
+const setWriteBackReach = async (
+  userId: string,
+  sourceCalendarId: string,
+  destinationCalendarId: string,
+  writeBackReach: string,
+): Promise<void> => {
+  const { database } = await import("@/context");
+  const ownedCalendarIds = await getOwnedCalendarIds(
+    userId,
+    [sourceCalendarId, destinationCalendarId],
+  );
+  assertAllIdsOwned(
+    [sourceCalendarId, destinationCalendarId],
+    ownedCalendarIds,
+    MAPPING_NOT_FOUND_ERROR_MESSAGE,
+  );
+
+  await database.transaction(async (transactionClient) => {
+    const [existing] = await transactionClient
+      .select({ writeBackState: sourceDestinationMappingsTable.writeBackState })
+      .from(sourceDestinationMappingsTable)
+      .where(and(
+        eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      ))
+      .limit(SINGLE_ROW);
+
+    if (!existing) {
+      throw new Error(MAPPING_NOT_FOUND_ERROR_MESSAGE);
+    }
+
+    /*
+     * Any move off the narrowest level answers the question a hold was raised to ask, so the
+     * hold is released and the next pass re-decides on the new level. A quarantine is left
+     * alone: those are refusals no level widens.
+     */
+    const releasesHold = writeBackReach !== "own_events"
+      && existing.writeBackState === "grant_required";
+
+    await transactionClient
+      .update(sourceDestinationMappingsTable)
+      .set({
+        writeBackReach,
+        ...(releasesHold && { writeBackState: "ok", writeBackStateReason: null }),
+      })
+      .where(and(
+        eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      ));
+  });
 };
 
 const resolveDeleteConfirmation = async (
@@ -1309,6 +1395,7 @@ export {
   MAPPING_LIMIT_ERROR_MESSAGE,
   MAPPING_NOT_FOUND_ERROR_MESSAGE,
   resolveDeleteConfirmation,
+  setWriteBackReach,
   setDestinationsForSource,
   setWriteBackMode,
   sourceSupportsWriteBack,

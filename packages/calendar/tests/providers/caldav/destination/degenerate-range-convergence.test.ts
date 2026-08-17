@@ -77,7 +77,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
   const deletes: string[] = [];
   const scope = options.scope ?? WIDE_SCOPE;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+  const listRemoteEvents = (listOptions: { timeMax: Date; timeMin: Date }): Promise<RemoteEventListing> => {
     const remoteEvents: RemoteEvent[] = [];
     for (const iCalString of resources.values()) {
       const parsed = parseICalToRemoteEvent(iCalString);
@@ -171,7 +171,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
         isCurrent: () => Promise.resolve(true),
         provider,
         readState: async () => {
-          const listing = await listRemoteEvents({ timeMin: scope.requestedWindow.timeMin });
+          const listing = await listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: scope.requestedWindow.timeMin });
           return {
             existingMappings: [...mappings],
             localEvents: options.events(),

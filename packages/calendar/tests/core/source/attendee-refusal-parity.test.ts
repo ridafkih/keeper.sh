@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCalDAVSourceWriter } from "../../../src/providers/caldav/source/mutations";
 import { createGoogleSourceWriter } from "../../../src/providers/google/source/mutations";
 import { createOutlookSourceWriter } from "../../../src/providers/outlook/source/mutations";
-import type { CalendarSourceWriter } from "../../../src/core/source/writer";
+import type { CalendarSourceWriter, WriteBackReach } from "../../../src/core/source/writer";
 
 const ACCESS_TOKEN = "access-token";
 const ACCOUNT_EMAIL = "me@example.com";
@@ -20,6 +20,8 @@ const ONE_WRITE = 1;
 const REFERENCE = { sourceEventId: SOURCE_EVENT_ID, sourceEventUid: SOURCE_EVENT_UID };
 const UPDATES = { summary: "Renamed on the destination" } as const;
 const ATTENDEE_REFUSAL = "event_has_attendees";
+const GRANTED = "my_meetings_notifying";
+const WITHHELD = "own_events";
 
 /*
  * The three writers held three separate authorship predicates and drifted apart under
@@ -109,7 +111,7 @@ const buildIcs = (situation: Situation): string => [
   "END:VCALENDAR",
 ].join("\r\n");
 
-const createCalDAVHarness = (situation: Situation): Harness => {
+const createCalDAVHarness = (situation: Situation, writeBackReach: WriteBackReach): Harness => {
   let writes = NO_WRITES;
   const data = buildIcs(situation);
   const client = {
@@ -128,6 +130,7 @@ const createCalDAVHarness = (situation: Situation): Harness => {
     writer: createCalDAVSourceWriter({
       calendarUrl: CALENDAR_URL,
       client: () => Promise.resolve(client),
+      writeBackReach,
     }),
     writes: () => writes,
   };
@@ -170,22 +173,24 @@ const buildOutlookEvent = (situation: Situation): Record<string, unknown> => ({
   subject: "Studio booked",
 });
 
-const createGoogleHarness = (situation: Situation): Harness => {
+const createGoogleHarness = (situation: Situation, writeBackReach: WriteBackReach): Harness => {
   const providerWrites = stubProviderFetch(buildGoogleEvent(situation));
   return {
     writer: createGoogleSourceWriter({
       accessToken: () => Promise.resolve(ACCESS_TOKEN),
       externalCalendarId: SHARED_CALENDAR_ID,
+      writeBackReach,
     }),
     writes: providerWrites,
   };
 };
 
-const createOutlookHarness = (situation: Situation): Harness => {
+const createOutlookHarness = (situation: Situation, writeBackReach: WriteBackReach): Harness => {
   const providerWrites = stubProviderFetch(buildOutlookEvent(situation));
   return {
     writer: createOutlookSourceWriter({
       accessToken: () => Promise.resolve(ACCESS_TOKEN),
+      writeBackReach,
     }),
     writes: providerWrites,
   };
@@ -211,7 +216,7 @@ describe("every source writer answers one refusal rule the same way", () => {
   for (const provider of PROVIDERS) {
     for (const { name, refusal, situation } of SITUATIONS) {
       it(`${provider.name} answers ${name} on an edit`, async () => {
-        const harness = provider.createHarness(situation);
+        const harness = provider.createHarness(situation, WITHHELD);
 
         const result = await harness.writer.updateEvent(REFERENCE, UPDATES);
 
@@ -220,12 +225,27 @@ describe("every source writer answers one refusal rule the same way", () => {
       });
 
       it(`${provider.name} answers ${name} on a delete`, async () => {
-        const harness = provider.createHarness(situation);
+        const harness = provider.createHarness(situation, WITHHELD);
 
         const result = await harness.writer.deleteEvent(REFERENCE);
 
         expect(result.refused).toBe(refusal);
         expect(harness.writes()).toBe(expectedWrites(refusal));
+      });
+
+      /*
+       * The grant is the user answering the one question the guest list asks. Every case the
+       * guest list refused becomes a write once it is given, and every provider has to agree
+       * on that too — a grant honoured by two writers and ignored by the third is the drift
+       * this table exists to catch.
+       */
+      it(`${provider.name} answers ${name} on an edit once shared events are granted`, async () => {
+        const harness = provider.createHarness(situation, GRANTED);
+
+        const result = await harness.writer.updateEvent(REFERENCE, UPDATES);
+
+        expect(result.refused).toBeUndefined();
+        expect(harness.writes()).toBe(ONE_WRITE);
       });
     }
   }

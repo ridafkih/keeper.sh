@@ -46,6 +46,7 @@ const createRow = (overrides: Row = {}): Row => ({
   ingestLastSucceededAt: new Date(),
   sourceCalendarId: SOURCE_CALENDAR_ID,
   writeBackMode: "edits",
+  writeBackReach: "own_events",
   writeBackState: "ok",
   writeBackStateReason: null,
   ...overrides,

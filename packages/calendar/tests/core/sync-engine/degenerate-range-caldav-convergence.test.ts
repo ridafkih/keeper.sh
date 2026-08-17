@@ -182,6 +182,7 @@ const createCalDAVHarness = (options: HarnessOptions): CalDAVHarness => {
       provider,
       readState: async () => {
         const listing = await provider.listRemoteEvents({
+          timeMax: new Date("2099-01-01T00:00:00.000Z"),
           timeMin: (options.scope ?? WIDE_SCOPE).requestedWindow.timeMin,
         });
         return {

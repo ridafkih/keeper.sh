@@ -195,6 +195,7 @@ describe("createGoogleSyncProvider", () => {
     }, { status: 200 }))));
 
     const { items: remoteEvents } = await provider.listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
     const mapping = {
@@ -285,7 +286,7 @@ describe("createGoogleSyncProvider", () => {
     });
   });
 
-  it("lists every far-future Keeper event page with one fixed lower boundary and no upper bound", async () => {
+  it("bounds every page by the horizon it was given", async () => {
     const timeMin = new Date("2026-07-10T00:00:00.000Z");
     const farFutureStart = "2040-03-15T09:00:00.000Z";
     const farFutureEnd = "2040-03-15T10:00:00.000Z";
@@ -316,7 +317,7 @@ describe("createGoogleSyncProvider", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const { items: remoteEvents } = await createProvider({ rateLimiter: { acquire } })
-      .listRemoteEvents({ timeMin });
+      .listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin });
 
     expect(remoteEvents.map((event) => event.deleteId)).toEqual([
       "canonical-id",
@@ -327,8 +328,8 @@ describe("createGoogleSyncProvider", () => {
     const secondUrl = new URL(String(fetchMock.mock.calls[1]?.[0]));
     expect(firstUrl.searchParams.get("timeMin")).toBe(timeMin.toISOString());
     expect(secondUrl.searchParams.get("timeMin")).toBe(timeMin.toISOString());
-    expect(firstUrl.searchParams.has("timeMax")).toBe(false);
-    expect(secondUrl.searchParams.has("timeMax")).toBe(false);
+    expect(firstUrl.searchParams.get("timeMax")).toBe("2099-01-01T00:00:00.000Z");
+    expect(secondUrl.searchParams.get("timeMax")).toBe("2099-01-01T00:00:00.000Z");
     expect(secondUrl.searchParams.get("pageToken")).toBe("page-2");
     expect(acquire).toHaveBeenCalledTimes(2);
   });
@@ -346,7 +347,7 @@ describe("createGoogleSyncProvider", () => {
     const pending = createProvider({
       rateLimiter: { acquire },
       signal: controller.signal,
-    }).listRemoteEvents({ timeMin: new Date("2026-07-10T00:00:00.000Z") });
+    }).listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: new Date("2026-07-10T00:00:00.000Z") });
     await vi.waitFor(() => {
       expect(acquire).toHaveBeenCalledWith(1, controller.signal);
     });

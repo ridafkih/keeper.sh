@@ -111,6 +111,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-07-10T00:00:00.000Z"),
     });
 
@@ -122,6 +123,38 @@ describe("createCalDAVSyncProvider", () => {
     });
   });
 
+  it("drops Keeper objects that start beyond the horizon", async () => {
+    const beyondHorizon = createEvent({
+      endTime: new Date("2040-03-15T10:00:00.000Z"),
+      id: "beyond-horizon-event",
+      startTime: new Date("2040-03-15T09:00:00.000Z"),
+    });
+    const insideHorizon = createEvent({
+      endTime: new Date("2026-07-20T10:00:00.000Z"),
+      id: "inside-horizon-event",
+      startTime: new Date("2026-07-20T09:00:00.000Z"),
+    });
+    const beyondUid = generateDeterministicEventUid(beyondHorizon.id);
+    const insideUid = generateDeterministicEventUid(insideHorizon.id);
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: eventToICalString(beyondHorizon, beyondUid),
+      url: `https://caldav.example.com/calendar/${beyondUid}.ics`,
+    }, {
+      data: eventToICalString(insideHorizon, insideUid),
+      url: `https://caldav.example.com/calendar/${insideUid}.ics`,
+    }]);
+
+    const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2026-09-01T00:00:00.000Z"),
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([insideUid]);
+  });
+
   it("asks the server for Keeper-named objects only", async () => {
     const keeperUid = generateDeterministicEventUid("any-event-id");
     clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
@@ -130,6 +163,7 @@ describe("createCalDAVSyncProvider", () => {
     clientMocks.fetchCalendarObjects.mockResolvedValueOnce([]);
 
     await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-07-10T00:00:00.000Z"),
     });
 
@@ -159,6 +193,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -181,6 +216,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -202,6 +238,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -218,6 +255,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     await expect(createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     })).rejects.toThrow();
   });
@@ -281,6 +319,7 @@ describe("createCalDAVSyncProvider", () => {
     }]);
 
     const { items: remoteEvents } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
 
@@ -303,6 +342,7 @@ describe("createCalDAVSyncProvider", () => {
     clientMocks.deleteCalendarObjectByUrl.mockImplementationOnce(() => Promise.resolve());
     const provider = createProvider();
     const { items: remoteEvents } = await provider.listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-03-01T00:00:00.000Z"),
     });
     const deleteId = remoteEvents[0]?.deleteId ?? "";
@@ -414,7 +454,7 @@ describe("createCalDAVSyncProvider", () => {
     );
     const provider = createProvider();
 
-    await provider.listRemoteEvents({ timeMin: new Date("2026-03-01T00:00:00.000Z") });
+    await provider.listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: new Date("2026-03-01T00:00:00.000Z") });
 
     expect(provider.getSyncDiagnostics()).toMatchObject({
       "remote_objects.listed_count": 900,

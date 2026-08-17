@@ -134,7 +134,7 @@ describe("a destination listing that carried the user's own events but no copies
       userId: "user-1",
     });
 
-    const listing = await provider.listRemoteEvents({ timeMin: TEST_WINDOW.timeMin });
+    const listing = await provider.listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: TEST_WINDOW.timeMin });
     const result = classify(listing);
 
     expect(result.readHealth).toBe("live_empty");
@@ -155,7 +155,7 @@ describe("a destination listing that carried the user's own events but no copies
       userId: "user-1",
     });
 
-    const listing = await provider.listRemoteEvents({ timeMin: TEST_WINDOW.timeMin });
+    const listing = await provider.listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: TEST_WINDOW.timeMin });
     const result = classify(listing);
 
     expect(result.readHealth).toBe("live_empty");

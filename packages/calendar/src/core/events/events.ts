@@ -21,6 +21,7 @@ import {
   resolveWriteBackPolicyState,
 } from "../sync/write-back-policy";
 import type { WriteBackPolicy } from "../sync/write-back-policy";
+import { isWriteBackReach } from "../source/writer";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
@@ -170,6 +171,7 @@ const getWriteBackPoliciesForDestination = async (
       excludeEventLocation: calendarsTable.excludeEventLocation,
       excludeEventName: calendarsTable.excludeEventName,
       ingestLastSucceededAt: calendarsTable.ingestLastSucceededAt,
+      writeBackReach: sourceDestinationMappingsTable.writeBackReach,
       sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
       writeBackMode: sourceDestinationMappingsTable.writeBackMode,
       writeBackState: sourceDestinationMappingsTable.writeBackState,
@@ -186,6 +188,15 @@ const getWriteBackPoliciesForDestination = async (
     if (!isWriteBackMode(row.writeBackMode)) {
       throw new Error(
         `Source-destination mapping for ${row.sourceCalendarId} has an unknown write-back mode`,
+      );
+    }
+    /*
+     * Fatal for the same reason the mode is: a reach nobody can read is a permission nobody
+     * can weigh, and guessing at one silently widens or narrows what a real calendar allows.
+     */
+    if (!isWriteBackReach(row.writeBackReach)) {
+      throw new Error(
+        `Source-destination mapping for ${row.sourceCalendarId} has an unknown write-back reach`,
       );
     }
     /*
@@ -218,6 +229,7 @@ const getWriteBackPoliciesForDestination = async (
       excludeEventDescription: row.excludeEventDescription,
       excludeEventLocation: row.excludeEventLocation,
       excludeEventName: row.excludeEventName,
+      writeBackReach: row.writeBackReach,
       sourceCalendarId: row.sourceCalendarId,
       ...state,
       ...(staleSource && { deleteApproved: false, paused: true }),

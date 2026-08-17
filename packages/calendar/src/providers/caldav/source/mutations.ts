@@ -11,14 +11,14 @@ import {
 import {
   attemptSourceWrite,
   isRetryableWriteStatus,
-  refuseWhenOthersAreInvited,
-  refuseWhenSomebodyElseAuthoredIt,
+  refuseWhenOutOfReach,
   toWriteFailure,
 } from "../../../core/source/writer";
 import type {
   CalendarSourceWriter,
   SourceEventUpdate,
   SourceWriteResult,
+  WriteBackReach,
 } from "../../../core/source/writer";
 
 const NOT_FOUND_STATUS = 404;
@@ -51,6 +51,7 @@ interface CalDAVWriterClient {
  */
 interface CalDAVSourceWriterConfig {
   accountEmail?: string | null;
+  writeBackReach?: WriteBackReach;
   accountUsername?: string | null;
   calendarUrl: string;
   client: () => Promise<CalDAVWriterClient>;
@@ -292,17 +293,14 @@ const createCalDAVSourceWriter = (
     if (!object?.data) {
       return { error: "Event not found on the CalDAV server.", success: false };
     }
-    const refusal = refuseWhenOthersAreInvited({
+    const refusal = refuseWhenOutOfReach({
       audience: readEventAudience(object.data),
-    });
+      authorship: readEventAuthorship(object.data, config.accountEmail),
+      isDelete: false,
+      updates,
+    }, config.writeBackReach ?? "own_events");
     if (refusal) {
       return refusal;
-    }
-    const authored = refuseWhenSomebodyElseAuthoredIt({
-      authorship: readEventAuthorship(object.data, config.accountEmail),
-    });
-    if (authored) {
-      return authored;
     }
 
     const [event] = parseIcsString(object.data).events ?? [];
@@ -362,17 +360,13 @@ const createCalDAVSourceWriter = (
     if (!object) {
       return { success: true };
     }
-    const refusal = refuseWhenOthersAreInvited({
+    const refusal = refuseWhenOutOfReach({
       audience: readEventAudience(object.data ?? ""),
-    });
+      authorship: readEventAuthorship(object.data ?? "", config.accountEmail),
+      isDelete: true,
+    }, config.writeBackReach ?? "own_events");
     if (refusal) {
       return refusal;
-    }
-    const authored = refuseWhenSomebodyElseAuthoredIt({
-      authorship: readEventAuthorship(object.data ?? "", config.accountEmail),
-    });
-    if (authored) {
-      return authored;
     }
 
     const removed = await attemptSourceWrite(

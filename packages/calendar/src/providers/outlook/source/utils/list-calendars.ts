@@ -1,6 +1,8 @@
 import type { OutlookCalendarListEntry, OutlookCalendarListResponse } from "../types";
 import { MICROSOFT_GRAPH_API } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
+import { fetchWithTimeout } from "../../../../core/utils/fetch-with-timeout";
+import { PROVIDER_INGEST_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 
 const INVALID_RESPONSE_STATUS = 502;
 
@@ -106,12 +108,16 @@ const fetchCalendarPage = async (
     url.searchParams.set("$select", "id,name,color,isDefaultCalendar,canEdit,owner");
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchWithTimeout(
+    url.toString(),
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
+    PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
     signal,
-  });
+  );
 
   if (!response.ok) {
     const authRequired = isSimpleAuthError(response.status);

@@ -16,6 +16,7 @@ import type { WriteBackApplierConfig } from "../src/write-back";
 const client = new PGlite();
 const database = drizzle(client);
 
+const DESTINATION_CALENDAR_ID = "22222222-2222-4222-8222-222222222222";
 const SOURCE_CALENDAR_ID = "11111111-1111-4111-8111-111111111111";
 const ACCOUNT_ID = "22222222-2222-4222-8222-222222222222";
 const CREDENTIAL_ID = "33333333-3333-4333-8333-333333333333";
@@ -46,6 +47,14 @@ create table calendars (
   "externalCalendarId" text not null,
   "calendarUrl" text
 );
+create table source_destination_mappings (
+  "id" uuid primary key default gen_random_uuid(),
+  "sourceCalendarId" uuid not null,
+  "destinationCalendarId" uuid not null,
+  "writeBackMode" text not null default 'edits',
+  "writeBackReach" text not null default 'own_events',
+  "writeBackState" text not null default 'ok'
+);
 `;
 
 /*
@@ -70,10 +79,17 @@ const store = createDatabaseWriteBackStore({
   },
 } as unknown as WriteBackApplierConfig);
 
-const seed = async (email: string | null): Promise<void> => {
+const seed = async (email: string | null, reach = "own_events"): Promise<void> => {
+  await client.query(`delete from source_destination_mappings`);
   await client.query(`delete from calendars`);
   await client.query(`delete from calendar_accounts`);
   await client.query(`delete from oauth_credentials`);
+  await client.query(
+    `insert into source_destination_mappings
+       ("sourceCalendarId", "destinationCalendarId", "writeBackReach")
+     values ($1, $2, $3)`,
+    [SOURCE_CALENDAR_ID, DESTINATION_CALENDAR_ID, reach],
+  );
   await client.query(
     `insert into oauth_credentials ("id", "accessToken", "refreshToken", "expiresAt")
      values ($1, 'token', 'refresh', $2)`,
@@ -105,6 +121,7 @@ const recordProviderCalls = (): string[] => {
 };
 
 beforeEach(async () => {
+  await client.query(`drop table if exists source_destination_mappings`);
   await client.query(`drop table if exists calendars`);
   await client.query(`drop table if exists calendar_accounts`);
   await client.query(`drop table if exists oauth_credentials`);
@@ -116,7 +133,7 @@ describe("the identity a production source writer is built with", () => {
     await seed(ACCOUNT_EMAIL);
     const methods = recordProviderCalls();
 
-    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID);
+    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID, DESTINATION_CALENDAR_ID);
     if (!writer) {
       throw new Error("The store built no writer for the source calendar");
     }
@@ -130,11 +147,35 @@ describe("the identity a production source writer is built with", () => {
     expect(result.success).toBe(false);
   });
 
+  /*
+   * The reach the user picked has to travel from the pair row to the writer, and nothing
+   * about the guard itself proves that it does: a writer built with the default refuses a
+   * meeting exactly as one built with a reach that was never read. This is the wiring, and
+   * it is asserted against the production store rather than a hand-built writer for the
+   * same reason the address above is.
+   */
+  it("carries the reach the pair stores into the writer it builds", async () => {
+    await seed(ACCOUNT_EMAIL, "any_event");
+    const methods = recordProviderCalls();
+
+    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID, DESTINATION_CALENDAR_ID);
+    if (!writer) {
+      throw new Error("The store built no writer for the source calendar");
+    }
+    const result = await writer.updateEvent(
+      { sourceEventId: SOURCE_EVENT_UID, sourceEventUid: SOURCE_EVENT_UID },
+      { summary: "Renamed on the destination" },
+    );
+
+    expect(result.refused).toBeUndefined();
+    expect(methods).not.toEqual([]);
+  });
+
   it("refuses to delete it too", async () => {
     await seed(ACCOUNT_EMAIL);
     const methods = recordProviderCalls();
 
-    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID);
+    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID, DESTINATION_CALENDAR_ID);
     if (!writer) {
       throw new Error("The store built no writer for the source calendar");
     }
@@ -157,7 +198,7 @@ describe("the identity a production source writer is built with", () => {
     await seed(null);
     const methods = recordProviderCalls();
 
-    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID);
+    const writer = await store.resolveWriter(SOURCE_CALENDAR_ID, DESTINATION_CALENDAR_ID);
     if (!writer) {
       throw new Error("The store built no writer for the source calendar");
     }

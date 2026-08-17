@@ -1,4 +1,6 @@
 import { widelog } from "widelogger";
+import { beginInFlight, endInFlight } from "./in-flight";
+import type { InFlightKind } from "./in-flight";
 
 /**
  * Every wait and work key below is a disjoint wall-clock slice of the per-source
@@ -38,14 +40,29 @@ const recordSegment = (key: IngestSegmentKey, durationMs: number): void => {
   widelog.count(ACCOUNTED_SEGMENT_KEY, rounded);
 };
 
+const SEGMENT_IN_FLIGHT_KINDS = {
+  "wait.advisory_lock_ms": "lock",
+  "wait.db_pool_ms": "db_pool",
+  "wait.rate_limiter_ms": "rate_limit",
+  "wait.source_lock_ms": "lock",
+  "work.db_commit_ms": "db_query",
+  "work.db_read_ms": "db_query",
+  "work.db_write_ms": "db_query",
+} as const;
+
+const resolveInFlightKind = (key: IngestSegmentKey): InFlightKind =>
+  SEGMENT_IN_FLIGHT_KINDS[key as keyof typeof SEGMENT_IN_FLIGHT_KINDS] ?? "segment";
+
 const measureSegment = async <TResult>(
   key: IngestSegmentKey,
   operation: () => Promise<TResult>,
 ): Promise<TResult> => {
   const startedAt = performance.now();
+  const callId = beginInFlight(resolveInFlightKind(key), key);
   try {
     return await operation();
   } finally {
+    endInFlight(callId);
     recordSegment(key, performance.now() - startedAt);
   }
 };
@@ -88,11 +105,14 @@ const recordRedisCommandDuration = (durationMs: number): void => {
 
 const measureRedisCommand = async <TResult>(
   operation: () => Promise<TResult>,
+  command = "redis",
 ): Promise<TResult> => {
   const startedAt = performance.now();
+  const callId = beginInFlight("redis", command);
   try {
     return await operation();
   } finally {
+    endInFlight(callId);
     recordRedisCommandDuration(performance.now() - startedAt);
   }
 };

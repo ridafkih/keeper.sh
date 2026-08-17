@@ -115,6 +115,7 @@ create table source_destination_mappings (
   "createdAt" timestamptz not null default now(),
   "destinationCalendarId" uuid not null,
   "sourceCalendarId" uuid not null
+  ,"writeBackReach" text not null default 'own_events'
 );
 create table sync_status (
   "id" uuid primary key default gen_random_uuid(),

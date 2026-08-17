@@ -48,7 +48,7 @@ const listWithResource = (uid: string, start: string, end: string) => {
     url: `https://caldav.example.com/calendar/${uid}.ics`,
   }]);
 
-  return createProvider().listRemoteEvents({ timeMin: TIME_MIN });
+  return createProvider().listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: TIME_MIN });
 };
 
 describe("caldav reconciliation read of a degenerate remote range", () => {

@@ -1,33 +1,29 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { TWO_WAY_EDIT_ABSOLUTE_CEILING } from "@keeper.sh/constants";
 import { describe, expect, it } from "vitest";
-import { buildWriteBackFieldSummary } from "@/features/dashboard/components/write-back-summary";
-
-const SOURCE_NAME = "Personal";
-const NO_EXCLUSIONS = {
-  excludeEventDescription: false,
-  excludeEventLocation: false,
-  excludeEventName: false,
-};
 
 /*
- * One pass that sees more than TWO_WAY_EDIT_ABSOLUTE_CEILING edited copies for a source
- * calendar writes none of them back: the whole batch is read as something moving the
- * calendar, every copy is rebuilt from the original and the pair is paused
- * (resolveTrippedSourceCalendarIds in packages/calendar/src/core/sync/write-back.ts). A
- * summary that lists every other exception but not this one lets a user drag a day of
- * meetings and find out afterwards, with the edits already gone.
+ * A pass that sees more edited copies than the ceiling writes none of them back and rebuilds
+ * all of them. Asserting the number against the constant rather than the prose is what stops
+ * the page quoting a ceiling the classifier no longer holds at.
  */
-describe("the summary discloses the per-pass edit ceiling", () => {
-  it("names the number of copies that may be edited at once", () => {
-    const { batch } = buildWriteBackFieldSummary(NO_EXCLUSIONS, SOURCE_NAME);
+const DOC = readFileSync(
+  join(import.meta.dirname, "../../../src/content/docs/two-way-sync.mdx"),
+  "utf8",
+);
 
-    expect(batch).toContain(String(TWO_WAY_EDIT_ABSOLUTE_CEILING));
+describe("what the two-way sync page says about an oversized batch", () => {
+  it("names the number of copies that may be edited at once", () => {
+    expect(DOC).toContain(String(TWO_WAY_EDIT_ABSOLUTE_CEILING));
   });
 
   it("says the edits in an oversized batch are not written back", () => {
-    const { batch } = buildWriteBackFieldSummary(NO_EXCLUSIONS, SOURCE_NAME);
+    expect(DOC).toMatch(/none of those edits reach the original/i);
+  });
 
-    expect(batch).toContain("none of those edits");
-    expect(batch).toContain(SOURCE_NAME);
+  it("says the copies are rebuilt and two-way sync pauses", () => {
+    expect(DOC).toMatch(/rebuilt from it/i);
+    expect(DOC.toLowerCase()).toContain("paus");
   });
 });

@@ -19,3 +19,10 @@ export {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,
 } from "./database/migration-readiness";
+export {
+  beginInFlight,
+  describeInFlight,
+  endInFlight,
+  snapshotInFlight,
+} from "./utils/in-flight";
+export type { InFlightKind, InFlightSnapshot } from "./utils/in-flight";

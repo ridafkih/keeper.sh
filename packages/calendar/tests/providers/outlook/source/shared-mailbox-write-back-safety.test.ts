@@ -103,6 +103,11 @@ describe("an Outlook source write on a calendar somebody else owns", () => {
     expect(requests.filter(({ method }) => method === "PATCH")).toHaveLength(1);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to delete an event that carries attendees", async () => {
     event = COLLEAGUES_MEETING;
 
@@ -111,10 +116,15 @@ describe("an Outlook source write on a calendar somebody else owns", () => {
       sourceEventUid: SOURCE_EVENT_UID,
     });
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(requests.filter(({ method }) => method === "DELETE")).toEqual([]);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to edit an event that carries attendees", async () => {
     event = COLLEAGUES_MEETING;
 
@@ -123,7 +133,7 @@ describe("an Outlook source write on a calendar somebody else owns", () => {
       { summary: "Renamed on the destination" },
     );
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(requests.filter(({ method }) => method === "PATCH")).toEqual([]);
   });
 

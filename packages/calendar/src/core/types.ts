@@ -93,6 +93,15 @@ type MaterializedSyncableEvent = Omit<
 
 interface PushResult {
   success: boolean;
+  /*
+   * What the provider says it stored, read back out of its own response to the push. It is
+   * the only observation of a copy that cannot have been edited by anyone yet, so a
+   * destination that re-encodes what we sent has already done so here. Recording it as the
+   * witness is what stops the first ordinary read of that copy having to guess whether a
+   * difference was the provider normalising or the user editing — a guess with no safe
+   * answer: adopting it desyncs the calendars for good, rebuilding it loops forever.
+   */
+  storedEvent?: RemoteEvent;
   remoteId?: string;
   deleteId?: string;
   echo?: PushEchoComparison;
@@ -196,6 +205,13 @@ type SyncOperation =
   };
 
 interface ListRemoteEventsOptions {
+  /*
+   * The horizon the pair is configured for, carried on both bounds. Reading past it walks
+   * the whole future of the destination every pass to find copies reconciliation would
+   * discard anyway: mappings outside the window are dropped before any add or stale
+   * decision is made, so an event beyond it cannot change an outcome.
+   */
+  timeMax: Date;
   timeMin: Date;
 }
 

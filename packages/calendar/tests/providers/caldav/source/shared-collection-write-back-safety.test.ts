@@ -105,6 +105,11 @@ describe("a CalDAV source write on a collection somebody else owns", () => {
     expect(updated).toHaveLength(1);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to delete an object other people are invited to", async () => {
     const { deleted, writer } = createWriter(COLLEAGUES_MEETING);
 
@@ -113,10 +118,15 @@ describe("a CalDAV source write on a collection somebody else owns", () => {
       sourceEventUid: SOURCE_EVENT_UID,
     });
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(deleted).toEqual([]);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to edit an object other people are invited to", async () => {
     const { updated, writer } = createWriter(COLLEAGUES_MEETING);
 
@@ -125,7 +135,7 @@ describe("a CalDAV source write on a collection somebody else owns", () => {
       { summary: "Renamed on the destination" },
     );
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(updated).toEqual([]);
   });
 });

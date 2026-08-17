@@ -19,7 +19,7 @@ const PERSISTED_REASONS = [
   "delete_source_changed",
   "plan_downgraded",
   "runaway_write_back",
-  "source_event_has_attendees",
+  "shared_event",
   "source_event_rich_body",
   "source_write_refused",
   "write_back_failing",

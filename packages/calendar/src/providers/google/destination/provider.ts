@@ -128,14 +128,49 @@ const getImportedEventId = (body: unknown): string | null => {
   return body.id;
 };
 
+/*
+ * The copy exactly as Google stored it, built by the same mapper the read path uses so the
+ * hash recorded here is the hash a later read will produce. Anything Google re-encoded is
+ * already baked in, which is the whole point: the next read of this copy differs only if a
+ * person changed it.
+ */
+const readStoredEvent = (body: unknown): RemoteEvent | null => {
+  if (!googleEventSchema.allows(body)) {
+    return null;
+  }
+  const event = googleEventSchema.assert(body);
+  const observation = buildGoogleEchoObservation(event);
+  if (!observation || !event.iCalUID) {
+    return null;
+  }
+  return {
+    deleteId: event.id ?? event.iCalUID,
+    editableAvailability: parseGoogleAvailability(event),
+    editableContent: observation.content,
+    editableContentHash: hashEditableEventContentSnapshot(observation.content),
+    editableFields: {
+      isAllDay: Boolean(event.start?.date),
+      summary: event.summary ?? "",
+      ...(event.description && { description: event.description }),
+      ...(event.location && { location: event.location }),
+    },
+    endTime: observation.endTime,
+    isKeeperEvent: true,
+    startTime: observation.startTime,
+    supportedAvailabilities: ["busy", "free"],
+    uid: event.iCalUID,
+  };
+};
+
 const createImportResult = (
   deleteId: string | null,
   remoteId: string,
   statusCode: number,
   echo: PushEchoComparison,
+  storedEvent: RemoteEvent | null,
 ): PushResult => {
   if (deleteId) {
-    return { deleteId, echo, remoteId, success: true };
+    return { deleteId, echo, remoteId, success: true, ...(storedEvent && { storedEvent }) };
   }
   return {
     error: "Google import response is missing the event ID",
@@ -301,6 +336,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           entry.uid,
           response.statusCode,
           compareGoogleImportEcho(entry.resource, response.body),
+          readStoredEvent(response.body),
         );
       } else {
         results[entry.index] = {
@@ -449,6 +485,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     );
     url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
     url.searchParams.set("timeMin", options.timeMin.toISOString());
+    url.searchParams.set("timeMax", options.timeMax.toISOString());
     if (pageToken) {
       url.searchParams.set("pageToken", pageToken);
     }

@@ -74,9 +74,14 @@ const createWriteBack = (mappingId: string): InboundClassification => ({
   updates: { endTime: MOVED_END_TIME, isAllDay: false, startTime: MOVED_START_TIME },
 });
 
-const ATTENDEE_REFUSAL = {
-  error: "Keeper.sh does not write to a source event other people are invited to.",
-  refused: "event_has_attendees",
+/*
+ * An event somebody else authored, not one with guests on it. A guest list is a permission
+ * the user can give, so it holds the single event and asks for it; this one is the pair
+ * losing the right to write at all, which is what the fencing below is about.
+ */
+const AUTHORSHIP_REFUSAL = {
+  error: "Keeper.sh does not write to a source event somebody else created.",
+  refused: "event_authored_by_someone_else",
   success: false,
 } as const;
 
@@ -89,8 +94,8 @@ const createHarness = () => {
   const tombstones: string[] = [];
 
   const writer: CalendarSourceWriter = {
-    deleteEvent: () => Promise.resolve(ATTENDEE_REFUSAL),
-    updateEvent: () => Promise.resolve(ATTENDEE_REFUSAL),
+    deleteEvent: () => Promise.resolve(AUTHORSHIP_REFUSAL),
+    updateEvent: () => Promise.resolve(AUTHORSHIP_REFUSAL),
   };
 
   const locked: LockedWriteBackStore = {
@@ -150,7 +155,7 @@ describe("a write the source writer refuses pauses the pair instead of retrying 
     expect(harness.committedDeletes).toEqual([]);
     expect(harness.abandoned).toEqual(["tombstone-1"]);
     expect(harness.quarantines).toEqual([
-      { reason: "source_event_has_attendees", sourceCalendarId: SOURCE_CALENDAR_ID },
+      { reason: "source_event_authored_by_someone_else", sourceCalendarId: SOURCE_CALENDAR_ID },
     ]);
     expect(result.quarantined).toBe(ONCE);
     expect(result.failed).toBe(NOTHING);
@@ -166,7 +171,7 @@ describe("a write the source writer refuses pauses the pair instead of retrying 
     });
 
     expect(harness.quarantines).toEqual([
-      { reason: "source_event_has_attendees", sourceCalendarId: SOURCE_CALENDAR_ID },
+      { reason: "source_event_authored_by_someone_else", sourceCalendarId: SOURCE_CALENDAR_ID },
     ]);
     expect(result.quarantined).toBe(ONCE);
     expect(result.failed).toBe(NOTHING);

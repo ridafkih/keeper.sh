@@ -79,6 +79,7 @@ import { Route as dashboardDashboardIcalFeedIdRouteImport } from './../../routes
 import { Route as dashboardDashboardAccountsAccountIdIndexRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.index'
 import { Route as dashboardDashboardAccountsAccountIdSetupRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.setup'
 import { Route as dashboardDashboardAccountsAccountIdCalendarIdRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId'
+import { Route as dashboardDashboardAccountsAccountIdCalendarIdTwoWayRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId_.two-way'
 
 const oauthRouteRoute = oauthRouteRouteImport.update({
   id: '/(oauth)',
@@ -457,6 +458,12 @@ const dashboardDashboardAccountsAccountIdCalendarIdRoute =
     path: '/$accountId/$calendarId',
     getParentRoute: () => dashboardDashboardAccountsRouteRoute,
   } as any)
+const dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute =
+  dashboardDashboardAccountsAccountIdCalendarIdTwoWayRouteImport.update({
+    id: '/$accountId/$calendarId_/two-way',
+    path: '/$accountId/$calendarId/two-way',
+    getParentRoute: () => dashboardDashboardAccountsRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/blog': typeof marketingBlogRouteRouteWithChildren
@@ -524,6 +531,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/accounts/$accountId/$calendarId/two-way': typeof dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof oauthAuthRouteRouteWithChildren
@@ -585,6 +593,7 @@ export interface FileRoutesByTo {
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/accounts/$accountId/$calendarId/two-way': typeof dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -658,6 +667,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/(dashboard)/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/(dashboard)/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/two-way': typeof dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -727,6 +737,7 @@ export interface FileRouteTypes {
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId/'
+    | '/dashboard/accounts/$accountId/$calendarId/two-way'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -788,6 +799,7 @@ export interface FileRouteTypes {
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId'
+    | '/dashboard/accounts/$accountId/$calendarId/two-way'
   id:
     | '__root__'
     | '/(auth)'
@@ -860,6 +872,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/accounts/$accountId/$calendarId'
     | '/(dashboard)/dashboard/accounts/$accountId/setup'
     | '/(dashboard)/dashboard/accounts/$accountId/'
+    | '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/two-way'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1361,6 +1374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdRouteImport
       parentRoute: typeof dashboardDashboardAccountsRouteRoute
     }
+    '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/two-way': {
+      id: '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/two-way'
+      path: '/$accountId/$calendarId/two-way'
+      fullPath: '/dashboard/accounts/$accountId/$calendarId/two-way'
+      preLoaderRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdTwoWayRouteImport
+      parentRoute: typeof dashboardDashboardAccountsRouteRoute
+    }
   }
 }
 
@@ -1390,6 +1410,7 @@ interface dashboardDashboardAccountsRouteRouteChildren {
   dashboardDashboardAccountsAccountIdCalendarIdRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   dashboardDashboardAccountsAccountIdSetupRoute: typeof dashboardDashboardAccountsAccountIdSetupRoute
   dashboardDashboardAccountsAccountIdIndexRoute: typeof dashboardDashboardAccountsAccountIdIndexRoute
+  dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute
 }
 
 const dashboardDashboardAccountsRouteRouteChildren: dashboardDashboardAccountsRouteRouteChildren =
@@ -1400,6 +1421,8 @@ const dashboardDashboardAccountsRouteRouteChildren: dashboardDashboardAccountsRo
       dashboardDashboardAccountsAccountIdSetupRoute,
     dashboardDashboardAccountsAccountIdIndexRoute:
       dashboardDashboardAccountsAccountIdIndexRoute,
+    dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute:
+      dashboardDashboardAccountsAccountIdCalendarIdTwoWayRoute,
   }
 
 const dashboardDashboardAccountsRouteRouteWithChildren =

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { beginInFlight, endInFlight } from "./in-flight";
 
 interface DatabasePoolWindowSample {
   inFlight: number;
@@ -85,15 +86,23 @@ const transactionStates = new WeakMap<object, TransactionState>();
  * park `waitsForConnection` at true. `catch` and `finally` are own methods reaching the
  * raw `then`, so they must route through the hooked one or a query settles unreleased.
  */
+const NO_IN_FLIGHT = -1;
+const QUERY_LABEL_LIMIT = 120;
+
+const labelStatement = (statement: string): string =>
+  statement.replaceAll(/\s+/gu, " ").trim().slice(0, QUERY_LABEL_LIMIT);
+
 const instrumentQuery = (
   query: object,
   transactional: boolean,
   transactionState: TransactionState | undefined,
+  statement: string,
 ): object => {
   const scope = windowScopes.getStore() ?? null;
 
   let state: "unissued" | "issued" | "settled" = "unissued";
   let startedAt = 0;
+  let inFlightId = NO_IN_FLIGHT;
 
   const issue = (): void => {
     if (state !== "unissued") {
@@ -125,6 +134,7 @@ const instrumentQuery = (
     }
 
     startedAt = performance.now();
+    inFlightId = beginInFlight("db_query", labelStatement(statement));
   };
 
   const settle = (failed: boolean): void => {
@@ -132,6 +142,7 @@ const instrumentQuery = (
       return;
     }
     state = "settled";
+    endInFlight(inFlightId);
     const durationMs = performance.now() - startedAt;
     counters.inFlight -= 1;
     if (!transactional) {
@@ -234,6 +245,7 @@ const instrumentClient = (
       originalUnsafe.call(client, query, params),
       transactional,
       transactionStates.get(client),
+      query,
     );
 
   for (const method of TRANSACTION_METHODS) {

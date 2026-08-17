@@ -12,7 +12,7 @@ const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 const createFakeClient = () => {
   const pending: PromiseWithResolvers<unknown[]>[] = [];
   const client = {
-    unsafe: (): object => {
+    unsafe: (_statement: string): object => {
       const deferred = Promise.withResolvers<unknown[]>();
       pending.push(deferred);
       return deferred.promise;
@@ -31,8 +31,8 @@ describe("database pool telemetry", () => {
     instrumentDatabasePool(client, 2);
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
-      const first = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
-      const second = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+      const first = (client.unsafe("select 1") as PromiseLike<unknown>).then((result) => result);
+      const second = (client.unsafe("select 1") as PromiseLike<unknown>).then((result) => result);
 
       expect(readWindow().inFlight).toBe(2);
       expect(readWindow().queryCount).toBe(2);
@@ -56,7 +56,7 @@ describe("database pool telemetry", () => {
     instrumentDatabasePool(client, 2);
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
-      const queries = ([client.unsafe(), client.unsafe(), client.unsafe()] as PromiseLike<unknown>[])
+      const queries = ([client.unsafe("select 1"), client.unsafe("select 1"), client.unsafe("select 1")] as PromiseLike<unknown>[])
         .map((query) => query.then((result) => result));
 
       expect(readWindow().queuedQueryCount).toBe(1);
@@ -76,7 +76,7 @@ describe("database pool telemetry", () => {
     instrumentDatabasePool(client, 2);
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
-      const query = client.unsafe() as PromiseLike<unknown>;
+      const query = client.unsafe("select 1") as PromiseLike<unknown>;
       pending[0]?.reject(new Error("connection closed"));
       await expect(Promise.resolve(query)).rejects.toThrow("connection closed");
 
@@ -91,14 +91,14 @@ describe("database pool telemetry", () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 2);
 
-    const before = client.unsafe() as PromiseLike<unknown>;
+    const before = client.unsafe("select 1") as PromiseLike<unknown>;
     pending[0]?.resolve([]);
     await before;
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
       expect(readWindow().queryCount).toBe(0);
 
-      const during = client.unsafe() as PromiseLike<unknown>;
+      const during = client.unsafe("select 1") as PromiseLike<unknown>;
       pending[1]?.resolve([]);
       await during;
 

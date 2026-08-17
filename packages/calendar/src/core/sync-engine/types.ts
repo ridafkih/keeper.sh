@@ -33,6 +33,19 @@ interface PendingInsert {
   syncEventHash: string | null;
   startTime: Date;
   endTime: Date;
+  /*
+   * The copy as the provider stored it, taken from its own answer to the push. A mapping
+   * born with this cannot reach the first-observation guess, because there is nothing left
+   * to guess about: the only later difference is one a person made.
+   */
+  destinationAvailability?: EventAvailability | null;
+  destinationContentHash?: string | null;
+  destinationDescription?: string | null;
+  destinationEndTime?: Date | null;
+  destinationIsAllDay?: boolean | null;
+  destinationLocation?: string | null;
+  destinationStartTime?: Date | null;
+  destinationSummary?: string | null;
 }
 
 interface PendingUpdate {

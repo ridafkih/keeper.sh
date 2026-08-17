@@ -1703,6 +1703,7 @@ const classifyInboundChanges = (
 };
 
 export {
+  readObservedState,
   assertWriteBackPayload,
   classifyInboundChanges,
   getDestinationDrift,

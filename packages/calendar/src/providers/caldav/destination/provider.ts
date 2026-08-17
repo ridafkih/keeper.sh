@@ -360,7 +360,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       assertAllEventsSupported(resources);
       const objectPath = new URL(url, calendarUrl).pathname;
       for (const parsed of resources.events) {
-        if (!isKeeperEvent(parsed.uid) || resolveTimeRangeEnd(parsed) < options.timeMin) {
+        const beyondHorizon = parsed.startTime > options.timeMax;
+        if (
+          !isKeeperEvent(parsed.uid)
+          || beyondHorizon
+          || resolveTimeRangeEnd(parsed) < options.timeMin
+        ) {
           continue;
         }
 

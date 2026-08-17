@@ -9,7 +9,10 @@ import { WRITE_BACK_STATE_COPY } from "@/lib/write-back-copy";
  * for the pause to be lifted — so every quarantine reason has to say where the copy ends up.
  *
  * The delete_confirmation_required reasons are deliberately absent: that state keeps the
- * mode and holds every mapping of the pair, so none of their copies are rebuilt.
+ * mode and holds every mapping of the pair, so none of their copies are rebuilt. shared_event
+ * is absent for the same reason and one more: grant_required keeps the mode AND leaves the
+ * rest of the pair writing, so it holds the single meeting rather than the pair, and saying
+ * the copies revert would describe something that did not happen.
  * delete_probe_blocked is one of them — packages/sync/src/write-back-pass.ts hands it to
  * requestDeleteConfirmation, which stores delete_confirmation_required.
  */
@@ -18,7 +21,6 @@ const QUARANTINE_REASONS = [
   "delete_daily_cap",
   "plan_downgraded",
   "runaway_write_back",
-  "source_event_has_attendees",
   "source_event_rich_body",
   "source_write_refused",
   "write_back_failing",

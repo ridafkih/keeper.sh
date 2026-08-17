@@ -2,6 +2,7 @@ import { ErrorResponse } from "@/utils/responses";
 import {
   calendarIdsBodySchema,
   deleteConfirmationBodySchema,
+  writeBackReachBodySchema,
   writeBackModeBodySchema,
 } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
@@ -296,6 +297,60 @@ interface PatchDeleteConfirmationDependencies {
  * calendar, so it carries the same plan gate the toggle does; declining only puts copies
  * back and is always allowed.
  */
+interface PatchWriteBackReachDependencies {
+  canUseTwoWaySync: (userId: string) => Promise<boolean>;
+  setWriteBackReach: (
+    userId: string,
+    sourceCalendarId: string,
+    destinationCalendarId: string,
+    writeBackReach: string,
+  ) => Promise<void>;
+}
+
+/*
+ * Narrowing is never gated on the plan. A permission the user can no longer reach to take
+ * back is not a permission they gave.
+ */
+const handlePatchWriteBackReachRoute = async (
+  context: MappingPutRouteContext,
+  dependencies: PatchWriteBackReachDependencies,
+): Promise<Response> => {
+  const sourceCalendarId = context.params.id;
+  const destinationCalendarId = context.params.destinationId;
+  if (!sourceCalendarId || !destinationCalendarId) {
+    return ErrorResponse.badRequest(
+      "Source ID and destination ID are required",
+    ).toResponse();
+  }
+
+  if (!writeBackReachBodySchema.allows(context.body)) {
+    return ErrorResponse.badRequest(
+      "writeBackReach must be own_events, my_meetings, my_meetings_notifying or any_event",
+    ).toResponse();
+  }
+  const { writeBackReach } = writeBackReachBodySchema.assert(context.body);
+
+  if (writeBackReach !== "own_events" && !await dependencies.canUseTwoWaySync(context.userId)) {
+    return ErrorResponse.forbidden(TWO_WAY_PRO_ERROR_MESSAGE).toResponse();
+  }
+
+  try {
+    await dependencies.setWriteBackReach(
+      context.userId,
+      sourceCalendarId,
+      destinationCalendarId,
+      writeBackReach,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message === MAPPING_NOT_FOUND_ERROR_MESSAGE) {
+      return ErrorResponse.notFound().toResponse();
+    }
+    throw error;
+  }
+
+  return Response.json({ success: true });
+};
+
 const handlePatchDeleteConfirmationRoute = async (
   context: MappingPutRouteContext,
   dependencies: PatchDeleteConfirmationDependencies,
@@ -348,6 +403,7 @@ const handlePatchDeleteConfirmationRoute = async (
 export {
   handleGetSourceDestinationsRoute,
   handlePatchDeleteConfirmationRoute,
+  handlePatchWriteBackReachRoute,
   handlePatchMappingWriteBackModeRoute,
   MAPPING_NOT_FOUND_ERROR_MESSAGE,
   handlePutSourceDestinationsRoute,

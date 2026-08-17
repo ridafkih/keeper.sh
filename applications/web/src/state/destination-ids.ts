@@ -25,6 +25,12 @@ export interface WriteBackStatus {
    */
   deletesUnlocked?: boolean;
   reason: string | null;
+  /*
+   * How far a write may reach. Absent on a payload written before the levels existed, and
+   * read as the narrowest: a permission missing from a response must never render as one
+   * that was given.
+   */
+  writeBackReach?: string;
   state: string;
 }
 

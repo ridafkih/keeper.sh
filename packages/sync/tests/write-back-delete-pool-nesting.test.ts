@@ -191,6 +191,7 @@ describe.skipIf(!administrativeUrl)(
           abandoned: 0,
           applied: 0,
           failed: 0,
+          heldForGrant: 0,
           quarantined: 0,
           withheld: 1,
         })),

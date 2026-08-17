@@ -189,9 +189,43 @@ class DestinationCalendarStore {
         ...(event.description && { description: event.description }),
         ...(event.location && { location: event.location }),
       });
-      return { deleteId: remoteId, remoteId, success: true };
+      if (!this.echoStoredEvent) {
+        return { deleteId: remoteId, remoteId, success: true };
+      }
+      const stored = this.remote.get(remoteId);
+      const record = this.storedAsRead(stored);
+      return {
+        deleteId: remoteId,
+        remoteId,
+        storedEvent: record && {
+          deleteId: remoteId,
+          editableAvailability: "busy",
+          editableContentHash: createEditableEventContentHash(record),
+          editableFields: {
+            isAllDay: record.isAllDay,
+            summary: record.summary,
+            ...(record.description && { description: record.description }),
+            ...(record.location && { location: record.location }),
+          },
+          endTime: record.endTime,
+          isKeeperEvent: true,
+          startTime: record.startTime,
+          supportedAvailabilities: ["busy", "free"],
+          uid: remoteId,
+        } as RemoteEvent,
+        success: true,
+      };
     }));
   };
+
+  public echoStoredEvent = false;
+
+  private storedAsRead(stored: RemoteRecord | undefined): RemoteRecord | undefined {
+    if (!stored || !this.normalizeOnRead) {
+      return stored;
+    }
+    return this.normalizeOnRead(stored);
+  }
 
   public listRemoteEvents = (): Promise<RemoteEvent[]> => {
     if (this.failNextRead) {
@@ -570,6 +604,36 @@ describe("two-way sync: termination", () => {
     expect(harness.destination.pushes).toEqual([]);
     expect(harness.destination.deletes).toEqual([]);
     expect(harness.source.writes).toHaveLength(1);
+  });
+
+  /*
+   * The hole this closes. Without a witness the first read of a copy has to guess whether a
+   * difference is the provider re-encoding what we sent or the user editing it, and neither
+   * answer is safe: adopting leaves the two calendars disagreeing for good, rebuilding loops
+   * against any destination that normalises. A provider that says what it stored removes the
+   * question — the copy is on record before anyone could touch it.
+   */
+  it("writes back an edit made before the copy was ever read", async () => {
+    const harness = createHarness({ writeBackMode: "edits" });
+    harness.destination.echoStoredEvent = true;
+    seedOrdinaryEvent(harness.source);
+
+    await harness.runPass();
+    harness.destination.editMirror({ summary: "Moved by the user" });
+    await harness.runPass();
+
+    expect(harness.source.writes).toHaveLength(1);
+  });
+
+  it("still swallows that edit when the provider does not say what it stored", async () => {
+    const harness = createHarness({ writeBackMode: "edits" });
+    seedOrdinaryEvent(harness.source);
+
+    await harness.runPass();
+    harness.destination.editMirror({ summary: "Moved by the user" });
+    await harness.runPass();
+
+    expect(harness.source.writes).toEqual([]);
   });
 
   it("absorbs a normalizing destination exactly once and never writes to the source", async () => {

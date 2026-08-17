@@ -121,7 +121,7 @@ const createGoogleHarness = (events: MaterializedSyncableEvent[]) => {
       isCurrent: () => Promise.resolve(true),
       provider,
       readState: async () => {
-        const listing = await provider.listRemoteEvents({ timeMin: SCOPE.requestedWindow.timeMin });
+        const listing = await provider.listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: SCOPE.requestedWindow.timeMin });
         return {
           existingMappings: [...mappings],
           localEvents: events,

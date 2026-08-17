@@ -50,6 +50,7 @@ create table source_destination_mappings (
   "sourceCalendarId" uuid not null,
   "destinationCalendarId" uuid not null,
   "writeBackMode" text not null default 'off'
+  ,"writeBackReach" text not null default 'own_events'
 );
 `;
 

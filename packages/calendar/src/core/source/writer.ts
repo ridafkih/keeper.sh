@@ -196,6 +196,30 @@ const refuseWhenOthersAreInvited = (
   }
 };
 
+/*
+ * What a write reaches beyond the user, named once. Permission is asked per consequence
+ * rather than per verb, because the verb does not say who hears about it: deleting a solo
+ * event is the user's own business, and moving a meeting mails everyone on it.
+ *
+ * "foreign_event" is the one answer no grant widens. A calendar a colleague shared carries
+ * their bookings, and the provider's write grant says the account may write there — it does
+ * not say the event is the user's to destroy.
+ */
+type SourceWriteConsequence = "foreign_event" | "own_event" | "shared_event";
+
+const resolveConsequence = (event: {
+  audience: SourceEventAudience;
+  authorship: SourceEventAuthorship;
+}): SourceWriteConsequence => {
+  if (event.authorship === "someone_else") {
+    return "foreign_event";
+  }
+  if (event.audience === "no_one_else") {
+    return "own_event";
+  }
+  return "shared_event";
+};
+
 const AUTHORSHIP_REFUSAL: SourceWriteResult = {
   error: "Keeper.sh does not write to a source event somebody else created.",
   refused: "event_authored_by_someone_else",
@@ -230,6 +254,94 @@ const refuseWhenSomebodyElseAuthoredIt = (
     return AUTHORSHIP_REFUSAL;
   }
   return null;
+};
+
+/*
+ * How far a write may reach, in one order, each level including the ones before it. The
+ * order is blast radius and nothing else: whose data the write touches, and how many
+ * people hear about it.
+ *
+ * It is deliberately separate from the mode. The mode says which verbs are allowed, this
+ * says who they may be aimed at, and the two compose: reach at "any_event" with mode
+ * "edits" may change a colleague's event and may never delete one.
+ */
+const WRITE_BACK_REACH_LEVELS = [
+  "own_events",
+  "my_meetings",
+  "my_meetings_notifying",
+  "any_event",
+] as const;
+
+type WriteBackReach = typeof WRITE_BACK_REACH_LEVELS[number];
+
+const isWriteBackReach = (value: string): value is WriteBackReach =>
+  WRITE_BACK_REACH_LEVELS.includes(value as WriteBackReach);
+
+const reachRank = (reach: WriteBackReach): number =>
+  WRITE_BACK_REACH_LEVELS.indexOf(reach);
+
+const reaches = (granted: WriteBackReach, needed: WriteBackReach): boolean =>
+  reachRank(granted) >= reachRank(needed);
+
+/*
+ * Which writes the people on a meeting hear about. A time that moved and an event that was
+ * cancelled are mailed to every attendee; a retitled meeting shows the new title the next
+ * time they look and sends nothing. The split exists so the permission that notifies people
+ * can be withheld without withholding the one that does not.
+ */
+const notifiesAttendees = (write: {
+  isDelete: boolean;
+  updates?: SourceEventUpdate;
+}): boolean => {
+  if (write.isDelete) {
+    return true;
+  }
+  const updates = write.updates ?? {};
+  const NOTIFYING_FIELDS = ["startTime", "endTime", "isAllDay", "startTimeZone"] as const;
+  return NOTIFYING_FIELDS.some((field) => field in updates);
+};
+
+/*
+ * The single gate every provider asks. The refusal keeps naming which question it answers:
+ * a guest list that was read and had people on it reads differently to one that could not
+ * be read at all, and an event somebody else created reads differently again.
+ */
+const neededFor = (write: {
+  isDelete: boolean;
+  updates?: SourceEventUpdate;
+}): WriteBackReach => {
+  if (notifiesAttendees(write)) {
+    return "my_meetings_notifying";
+  }
+  return "my_meetings";
+};
+
+const refuseWhenOutOfReach = (
+  event: {
+    audience: SourceEventAudience;
+    authorship: SourceEventAuthorship;
+    isDelete: boolean;
+    updates?: SourceEventUpdate;
+  },
+  granted: WriteBackReach,
+): SourceWriteResult | null => {
+  const consequence = resolveConsequence(event);
+  if (consequence === "foreign_event") {
+    if (reaches(granted, "any_event")) {
+      return null;
+    }
+    return AUTHORSHIP_REFUSAL;
+  }
+  if (consequence === "own_event") {
+    return null;
+  }
+  if (reaches(granted, neededFor(event))) {
+    return null;
+  }
+  if (event.audience === "unreadable") {
+    return UNREADABLE_ATTENDEE_REFUSAL;
+  }
+  return ATTENDEE_REFUSAL;
 };
 
 /*
@@ -333,6 +445,9 @@ export {
   isRetryableOAuthWriteStatus,
   isRetryableWriteStatus,
   normalizeAttendeeAddress,
+  isWriteBackReach,
+  refuseWhenOutOfReach,
+  WRITE_BACK_REACH_LEVELS,
   refuseWhenOthersAreInvited,
   refuseWhenSomebodyElseAuthoredIt,
   resolveAudience,
@@ -343,6 +458,8 @@ export {
 };
 export type {
   CalendarSourceWriter,
+  SourceWriteConsequence,
+  WriteBackReach,
   SourceEventAudience,
   SourceEventAuthorship,
   SourceEventUpdate,

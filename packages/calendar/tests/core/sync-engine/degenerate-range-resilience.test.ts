@@ -188,6 +188,7 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       provider,
       readState: async () => {
         const listing = await provider.listRemoteEvents({
+          timeMax: new Date("2099-01-01T00:00:00.000Z"),
           timeMin: WIDE_SCOPE.requestedWindow.timeMin,
         });
         return {

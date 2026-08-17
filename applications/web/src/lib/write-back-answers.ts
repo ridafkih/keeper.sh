@@ -2,6 +2,16 @@ import type { WriteBackMode, WriteBackStatus } from "@/state/destination-ids";
 
 type DeleteConfirmationAnswer = "apply" | "apply_empty_destination" | "decline";
 
+const GRANT_REQUIRED_STATE = "grant_required";
+
+/*
+ * A held meeting is the one pause whose answer is purely a permission. The status line
+ * points at the level control rather than carrying its own button, so there is one place
+ * the permission is set and the held case cannot drift from the ordinary one.
+ */
+const isHeldForPermission = (status: WriteBackStatus | null): boolean =>
+  status?.state === GRANT_REQUIRED_STATE;
+
 const DELETE_CONFIRMATION_STATE = "delete_confirmation_required";
 
 /*
@@ -96,5 +106,11 @@ const resolveModeSelection = (input: {
   return "commit";
 };
 
-export { PROBE_BLOCKED_REASON, resolveDeleteConfirmationAnswers, resolveModeSelection };
+export {
+  GRANT_REQUIRED_STATE,
+  PROBE_BLOCKED_REASON,
+  resolveDeleteConfirmationAnswers,
+  resolveModeSelection,
+  isHeldForPermission,
+};
 export type { DeleteConfirmationAnswer, ModeSelection };

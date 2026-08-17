@@ -295,6 +295,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const buildOutlookEventsUrl = (
     lookbackStart: Date,
+    lookaheadEnd: Date,
     nextLink: string | null,
   ): URL => {
     if (nextLink) {
@@ -303,7 +304,8 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const baseUrl = new URL(calendarEventsUrl);
     baseUrl.searchParams.set(
       "$filter",
-      `end/dateTime ge '${lookbackStart.toISOString()}'`,
+      `end/dateTime ge '${lookbackStart.toISOString()}'`
+      + ` and start/dateTime le '${lookaheadEnd.toISOString()}'`,
     );
     baseUrl.searchParams.set("$top", String(OUTLOOK_PAGE_SIZE));
     baseUrl.searchParams.set(
@@ -321,7 +323,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     let rawItemCount = 0;
     let nextLink: string | null = null;
     do {
-      const url = buildOutlookEventsUrl(options.timeMin, nextLink);
+      const url = buildOutlookEventsUrl(options.timeMin, options.timeMax, nextLink);
 
       const response = await sendRequestWithRetry(url, {
         headers: {

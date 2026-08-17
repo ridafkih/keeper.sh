@@ -182,6 +182,25 @@ const installEventMappingCompatibilityTrigger = async (): Promise<void> => {
   }
 };
 
+/*
+ * A guest list used to quarantine the whole pair, so one invited meeting stopped every other
+ * event on that calendar from writing back. It is a permission the user can now give, and a
+ * permission they have not given yet is no reason to distrust the pair: the state is cleared
+ * so the pair resumes on the mode it still holds, and the meeting alone is held until the
+ * grant arrives. Nothing is granted here — that answer is only the user's to give.
+ *
+ * Deliberately outside the readiness gate below: a database that already reports ready would
+ * skip it, and the pairs stuck today are exactly the ones on such a database.
+ */
+const releasePairsHeldByTheGuestListRefusal = async (): Promise<void> => {
+  await connection.query(`
+    UPDATE "source_destination_mappings"
+    SET "writeBackState" = 'ok', "writeBackStateReason" = NULL
+    WHERE "writeBackState" = 'quarantined'
+      AND "writeBackStateReason" = 'source_event_has_attendees'
+  `);
+};
+
 const normalizeCalendarCoverage = async (): Promise<void> => {
   await connection.query(`
     UPDATE "calendars"
@@ -302,6 +321,18 @@ const installEventMappingConstraints = async (): Promise<void> => {
       END IF;
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint
+        WHERE conname = 'source_destination_mappings_write_back_reach_check'
+          AND conrelid = 'source_destination_mappings'::regclass
+      ) THEN
+        ALTER TABLE "source_destination_mappings"
+          ADD CONSTRAINT "source_destination_mappings_write_back_reach_check"
+          CHECK ("writeBackReach" IN (
+            'own_events', 'my_meetings', 'my_meetings_notifying', 'any_event'
+          ))
+          NOT VALID;
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
         WHERE conname = 'calendars_sync_ranges_check'
           AND conrelid = 'calendars'::regclass
       ) THEN
@@ -348,6 +379,7 @@ const validateEventMappingConstraints = async (): Promise<void> => {
     ["event_mappings", "event_mappings_destination_witness_check"],
     ["event_mappings", "event_mappings_pending_delete_check"],
     ["source_destination_mappings", "source_destination_mappings_write_back_mode_check"],
+    ["source_destination_mappings", "source_destination_mappings_write_back_reach_check"],
     ["calendars", "calendars_sync_ranges_check"],
     ["calendars", "calendars_ingest_coverage_check"],
   ] as const) {
@@ -414,13 +446,14 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
           AND conname = 'event_mappings_sourceCalendarId_calendars_id_fk'
       )
       AND (
-        SELECT count(*) = 6
+        SELECT count(*) = 7
         FROM pg_constraint
         WHERE conname IN (
           'event_mappings_identity_check',
           'event_mappings_destination_witness_check',
           'event_mappings_pending_delete_check',
           'source_destination_mappings_write_back_mode_check',
+          'source_destination_mappings_write_back_reach_check',
           'calendars_sync_ranges_check',
           'calendars_ingest_coverage_check'
         )
@@ -491,6 +524,8 @@ try {
   await migrate(database, {
     migrationsFolder: `${import.meta.dirname}/../drizzle`,
   });
+
+  await releasePairsHeldByTheGuestListRefusal();
 
   if (!(await isPostMigrationRuntimeReady())) {
     await installEventMappingCompatibilityTrigger();

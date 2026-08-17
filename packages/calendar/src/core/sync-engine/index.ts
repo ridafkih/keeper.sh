@@ -14,7 +14,7 @@ import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
-import { classifyInboundChanges } from "../sync/write-back";
+import { classifyInboundChanges, readObservedState } from "../sync/write-back";
 import type {
   DeleteConfirmationRequest,
   InboundClassification,
@@ -276,7 +276,18 @@ const processAddResults = (
     if (pushResult.conflictResolved) {
       conflictsResolved += 1;
     }
+    const stored = pushResult.storedEvent && readObservedState(pushResult.storedEvent);
     changes.inserts.push({
+      ...(stored && {
+        destinationAvailability: stored.availability,
+        destinationContentHash: stored.contentHash,
+        destinationDescription: stored.description,
+        destinationEndTime: stored.endTime,
+        destinationIsAllDay: stored.isAllDay,
+        destinationLocation: stored.location,
+        destinationStartTime: stored.startTime,
+        destinationSummary: stored.summary,
+      }),
       eventStateId: operation.event.eventStateId ?? operation.event.id,
       sourceCalendarId: operation.event.calendarId,
       syncEventId: operation.event.id,

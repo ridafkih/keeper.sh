@@ -162,11 +162,18 @@ const WRITE_BACK_STATE_COPY: Record<string, string> = {
     + " behalf, so two-way sync to {destination} is paused and nothing on {source} was"
     + " touched. The change on the copy is not kept: the copies go back to matching"
     + " {source}.",
-  source_event_has_attendees:
+  /*
+   * The one hold on this list the user can lift, so it reads as a question rather than a
+   * stoppage. Everything else on the pair is still syncing, which is why it does not say
+   * two-way is paused: it is not.
+   */
+  shared_event:
     "A copy on {destination} was changed, but the original on {source} is a meeting other"
-    + " people are invited to. Keeper.sh will not cancel or move a meeting on their behalf,"
-    + " so two-way sync to {destination} is paused and nothing on {source} was touched. The"
-    + " change on the copy is not kept: the copies go back to matching {source}.",
+    + " people are invited to. Moving it emails everyone on it and cancelling it calls the"
+    + " meeting off for them, so Keeper.sh held that one event and left the rest of"
+    + " {destination} syncing. Nothing on {source} was touched. Allow Keeper.sh to write to"
+    + " meetings you organise and it will apply the change; events somebody else created are"
+    + " never included.",
   source_write_refused:
     "A copy on {destination} was changed, but {source} refused the change to the original."
     + " Nothing on {source} was touched and two-way sync to {destination} is paused. The"

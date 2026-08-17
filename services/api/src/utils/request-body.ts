@@ -13,6 +13,17 @@ const writeBackModeBodySchema = type({
 });
 type WriteBackModeBody = typeof writeBackModeBodySchema.infer;
 
+/*
+ * One level rather than a grant and a withdrawal, because the levels are ordered: moving
+ * between any two of them is the same request, and a narrowing cannot be lost while a
+ * widening survives.
+ */
+const writeBackReachBodySchema = type({
+  writeBackReach: "'own_events' | 'my_meetings' | 'my_meetings_notifying' | 'any_event'",
+  "+": "reject",
+});
+type WriteBackReachBody = typeof writeBackReachBodySchema.infer;
+
 const deleteConfirmationBodySchema = type({
   decision: "'apply' | 'apply_empty_destination' | 'decline'",
   "+": "reject",
@@ -108,6 +119,7 @@ type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 export {
   calendarIdsBodySchema,
   deleteConfirmationBodySchema,
+  writeBackReachBodySchema,
   writeBackModeBodySchema,
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
@@ -121,6 +133,7 @@ export {
 export type {
   CalendarIdsBody,
   DeleteConfirmationBody,
+  WriteBackReachBody,
   WriteBackModeBody,
   CalendarPausePatchBody,
   SourcePatchBody,

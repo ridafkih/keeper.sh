@@ -6,6 +6,7 @@ import {
   createMicrosoftTokenRefresher,
   createOutlookSourceWriter,
   isSourceSnapshotFresh,
+  isWriteBackReach,
   TWO_WAY_EPOCH_WINDOW_MS,
   withSourceIngestLocks,
   WRITE_BACK_WITNESS_RESET,
@@ -16,6 +17,7 @@ import type {
   RefreshLockStore,
   RemoteEventPresence,
   RemoteEventReference,
+  WriteBackReach,
   WriteBackUpdates,
 } from "@keeper.sh/calendar";
 import { createDigestAwareFetch, resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
@@ -225,10 +227,35 @@ const createOAuthAccessTokenReader = async (
   };
 };
 
+/*
+ * How far a write may reach is a property of the pair, not of the source: the same calendar
+ * can feed one destination the user gave meeting access to and another they did not. It is
+ * read here, next to the writer it constrains, so a writer can never be built without one.
+ */
+const resolveWriteBackReach = async (
+  config: WriteBackApplierConfig,
+  sourceCalendarId: string,
+  destinationCalendarId: string,
+): Promise<WriteBackReach> => {
+  const [pair] = await config.database
+    .select({ writeBackReach: sourceDestinationMappingsTable.writeBackReach })
+    .from(sourceDestinationMappingsTable)
+    .where(and(
+      eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+      eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+    ))
+    .limit(1);
+  if (!pair || !isWriteBackReach(pair.writeBackReach)) {
+    return "own_events";
+  }
+  return pair.writeBackReach;
+};
+
 const resolveOAuthSourceWriter = async (
   config: WriteBackApplierConfig,
   provider: string,
   sourceCalendarId: string,
+  destinationCalendarId: string,
 ): Promise<CalendarSourceWriter | null> => {
   const [credentials] = await config.database
     .select({
@@ -264,16 +291,23 @@ const resolveOAuthSourceWriter = async (
    * Without it every event on a calendar a colleague shared reads as authorless, and the
    * refusal that keeps their events out of a mirror's reach never fires.
    */
+  const writeBackReach = await resolveWriteBackReach(
+    config,
+    sourceCalendarId,
+    destinationCalendarId,
+  );
   if (provider === "google") {
     return createGoogleSourceWriter({
       accessToken,
       accountEmail: credentials.accountEmail,
       externalCalendarId: credentials.externalCalendarId,
+      writeBackReach,
     });
   }
   return createOutlookSourceWriter({
     accessToken,
     accountEmail: credentials.accountEmail,
+    writeBackReach,
   });
 };
 
@@ -296,6 +330,7 @@ const requireEncryptionKey = (
 const resolveCalDAVSourceWriter = async (
   config: WriteBackApplierConfig,
   sourceCalendarId: string,
+  destinationCalendarId: string,
 ): Promise<CalendarSourceWriter | null> => {
   const [credentials] = await config.database
     .select({
@@ -324,9 +359,15 @@ const resolveCalDAVSourceWriter = async (
     requireEncryptionKey(config.encryptionKey, sourceCalendarId),
   );
   const { calendarUrl } = credentials;
+  const writeBackReach = await resolveWriteBackReach(
+    config,
+    sourceCalendarId,
+    destinationCalendarId,
+  );
   return createCalDAVSourceWriter({
     accountEmail: credentials.accountEmail,
     calendarUrl,
+    writeBackReach,
     client: () => {
       /*
        * Tsdav takes no per-request signal, so the only bound on a CalDAV write held
@@ -355,6 +396,7 @@ const resolveCalDAVSourceWriter = async (
 const resolveSourceWriter = async (
   config: WriteBackApplierConfig,
   sourceCalendarId: string,
+  destinationCalendarId: string,
 ): Promise<CalendarSourceWriter | null> => {
   const [source] = await config.database
     .select({ provider: calendarAccountsTable.provider })
@@ -367,10 +409,15 @@ const resolveSourceWriter = async (
     return null;
   }
   if (OAUTH_PROVIDERS.has(source.provider)) {
-    return resolveOAuthSourceWriter(config, source.provider, sourceCalendarId);
+    return resolveOAuthSourceWriter(
+      config,
+      source.provider,
+      sourceCalendarId,
+      destinationCalendarId,
+    );
   }
   if (CALDAV_PROVIDERS.has(source.provider)) {
-    return resolveCalDAVSourceWriter(config, sourceCalendarId);
+    return resolveCalDAVSourceWriter(config, sourceCalendarId, destinationCalendarId);
   }
   return null;
 };
@@ -803,6 +850,21 @@ const createDatabaseWriteBackStore = (
       [sourceCalendarId],
     );
   },
+  /*
+   * Deliberately not a quarantine: the state is recorded so the dashboard can ask for the
+   * permission, and the destination witnesses are left standing. Clearing them would throw
+   * away the record of what the copies looked like over a question the user has not been
+   * asked yet, and the pair is still trusted with everything the grant does not cover.
+   */
+  requireGrant: async (sourceCalendarId, destinationCalendarId, grant) => {
+    await config.database
+      .update(sourceDestinationMappingsTable)
+      .set({ writeBackState: "grant_required", writeBackStateReason: grant })
+      .where(and(
+        eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+      ));
+  },
   readSourceEvent: (eventStateId) => readSourceEventFrom(config.database, eventStateId),
   /*
    * The number handed back is the budget this outcome is judged against, and nothing else:
@@ -921,7 +983,8 @@ const createDatabaseWriteBackStore = (
         eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
       ));
   },
-  resolveWriter: (sourceCalendarId) => resolveSourceWriter(config, sourceCalendarId),
+  resolveWriter: (sourceCalendarId, destinationCalendarId) =>
+    resolveSourceWriter(config, sourceCalendarId, destinationCalendarId),
   withSourceLock: (sourceCalendarId, run) =>
     withSourceIngestLocks(
       config.database,

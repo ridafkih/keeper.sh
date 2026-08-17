@@ -160,11 +160,22 @@ const asUnreachedSource = (attempt: SourceAttempt, error: unknown): unknown => {
   return new SourceUnreachedError(error);
 };
 
+/*
+ * The refusals nothing the user can say will change. A guest list is deliberately absent:
+ * it is a permission they can give, so it holds the one event and asks, rather than
+ * declaring the pair untrustworthy and stopping every other write on it.
+ */
 const QUARANTINE_REASONS_BY_REFUSAL: Record<string, string> = {
   event_authored_by_someone_else: "source_event_authored_by_someone_else",
   event_body_is_rich_text: "source_event_rich_body",
-  event_has_attendees: "source_event_has_attendees",
 };
+
+const GRANTS_BY_REFUSAL: Record<string, string> = {
+  event_has_attendees: "shared_event",
+};
+
+const resolveGrantSought = (refusal: string): string | null =>
+  GRANTS_BY_REFUSAL[refusal] ?? null;
 
 const resolveQuarantineReason = (refusal: string): string =>
   QUARANTINE_REASONS_BY_REFUSAL[refusal] ?? "source_write_refused";
@@ -281,6 +292,16 @@ interface WriteBackStore {
     destinationCalendarId: string,
     reason: string,
   ) => Promise<void>;
+  /*
+   * A permission the user has not given yet. Recorded so the dashboard can ask for it, and
+   * deliberately not a quarantine: the pair is still trusted and everything the grant does
+   * not cover keeps writing.
+   */
+  requireGrant?: (
+    sourceCalendarId: string,
+    destinationCalendarId: string,
+    grant: string,
+  ) => Promise<void>;
   readSourceEvent: (eventStateId: string) => Promise<SourceEventSnapshot | null>;
   /*
    * A write-back the provider keeps rejecting would otherwise be retried under the source
@@ -327,7 +348,10 @@ interface WriteBackStore {
     | { heldByAnotherPass: true }
     | { id: string; observedAt: Date; priorAttempt: boolean }
   >;
-  resolveWriter: (sourceCalendarId: string) => Promise<CalendarSourceWriter | null>;
+  resolveWriter: (
+    sourceCalendarId: string,
+    destinationCalendarId: string,
+  ) => Promise<CalendarSourceWriter | null>;
   withSourceLock: <TResult>(
     sourceCalendarId: string,
     run: (locked: LockedWriteBackStore) => Promise<TResult>,
@@ -353,6 +377,7 @@ interface WriteBackPassResult {
   abandoned: number;
   applied: number;
   failed: number;
+  heldForGrant: number;
   quarantined: number;
   withheld: number;
 }
@@ -473,7 +498,7 @@ const isPairStillAuthorized = async (
   return classification.type !== "delete" || writeBackMode === "edits_and_deletes";
 };
 
-type Outcome = "abandoned" | "applied" | "quarantined" | "withheld";
+type Outcome = "abandoned" | "applied" | "heldForGrant" | "quarantined" | "withheld";
 
 /*
  * What happened to the classification, and whether the pair stopped accepting work
@@ -569,11 +594,25 @@ const runLockedUpdate = (
     },
   );
 
-const quarantineRefusal = async (
+/*
+ * Two different answers wear the same shape. A refusal the user can lift is recorded as a
+ * question and holds only the event it was raised on; one they cannot is the pair losing
+ * the right to write at all, and fences the rest of the pass off from it.
+ */
+const answerRefusal = async (
   input: WriteBackPassInput,
   target: WriteBackTarget,
   error: SourceWriteRefusedError,
 ): Promise<Outcome> => {
+  const grant = resolveGrantSought(error.refusal);
+  if (grant !== null) {
+    await input.store.requireGrant?.(
+      target.sourceCalendarId,
+      target.destinationCalendarId,
+      grant,
+    );
+    return "heldForGrant";
+  }
   await input.store.quarantineMapping(
     target.sourceCalendarId,
     target.destinationCalendarId,
@@ -622,10 +661,8 @@ const applyUpdate = async (
 ): Promise<ClassificationOutcome> => {
   const outcome = await runBudgetedUpdate(input, target, writer, classification);
   if (outcome.kind === "refused") {
-    return {
-      outcome: await quarantineRefusal(input, target, outcome.refusal),
-      pausesPair: true,
-    };
+    const answered = await answerRefusal(input, target, outcome.refusal);
+    return { outcome: answered, pausesPair: answered === "quarantined" };
   }
   if (outcome.kind === "over-budget") {
     await quarantineRunaway(input, target);
@@ -810,7 +847,7 @@ const applyDelete = async (
     const answer = asUnreachedSource(attempt, error);
     if (answer instanceof SourceWriteRefusedError) {
       await releaseTombstone();
-      return { outcome: await quarantineRefusal(input, target, answer) };
+      return { outcome: await answerRefusal(input, target, answer) };
     }
     /*
      * Only an answer that says what happened releases the record — plus the case where
@@ -904,6 +941,7 @@ const runWriteBackPass = async (
     abandoned: NO_WORK,
     applied: NO_WORK,
     failed: NO_WORK,
+    heldForGrant: NO_WORK,
     quarantined: NO_WORK,
     withheld: NO_WORK,
   };
@@ -940,7 +978,10 @@ const runWriteBackPass = async (
         continue;
       }
       failedTarget = target;
-      const writer = await input.store.resolveWriter(target.sourceCalendarId);
+      const writer = await input.store.resolveWriter(
+        target.sourceCalendarId,
+        target.destinationCalendarId,
+      );
       if (!writer) {
         throw new UnusableSourceError(
           `Source calendar ${target.sourceCalendarId} has no usable write credentials`,

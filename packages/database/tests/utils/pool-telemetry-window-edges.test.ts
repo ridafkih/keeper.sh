@@ -8,7 +8,7 @@ import {
 const createFakeClient = () => {
   const pending: PromiseWithResolvers<unknown[]>[] = [];
   const client = {
-    unsafe: (): object => {
+    unsafe: (_statement: string): object => {
       const deferred = Promise.withResolvers<unknown[]>();
       pending.push(deferred);
       return deferred.promise;
@@ -36,7 +36,7 @@ describe("database pool telemetry window boundaries", () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 10);
 
-    const early = client.unsafe() as PromiseLike<unknown>;
+    const early = client.unsafe("select 1") as PromiseLike<unknown>;
     await withDatabasePoolWindow(async (window): Promise<void> => {
       await settleAfter(pending[0], 25);
       await early;
@@ -52,7 +52,7 @@ describe("database pool telemetry window boundaries", () => {
     const { client, pending } = createFakeClient();
     instrumentDatabasePool(client, 10);
 
-    const early = client.unsafe() as PromiseLike<unknown>;
+    const early = client.unsafe("select 1") as PromiseLike<unknown>;
     await withDatabasePoolWindow(async (window): Promise<void> => {
       pending[0]?.reject(new Error("connection terminated"));
       await expect(early).rejects.toThrow("connection terminated");
@@ -69,7 +69,7 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     await withDatabasePoolWindow(async (window): Promise<void> => {
-      const inflight = (client.unsafe() as PromiseLike<unknown>).then((result) => result);
+      const inflight = (client.unsafe("select 1") as PromiseLike<unknown>).then((result) => result);
       const sample = window();
 
       expect(sample.queryCount).toBe(1);
@@ -89,7 +89,7 @@ describe("database pool telemetry window boundaries", () => {
     const samples: string[] = [];
     for (let round = 0; round < 5; round += 1) {
       await withDatabasePoolWindow(async (window): Promise<void> => {
-        const query = client.unsafe() as PromiseLike<unknown>;
+        const query = client.unsafe("select 1") as PromiseLike<unknown>;
         pending[round]?.resolve([]);
         await query;
         const sample = window();
@@ -112,7 +112,7 @@ describe("database pool telemetry window boundaries", () => {
     instrumentDatabasePool(client, 10);
 
     await withDatabasePoolWindow(async (window): Promise<void> => {
-      const query = client.unsafe() as PromiseLike<unknown>;
+      const query = client.unsafe("select 1") as PromiseLike<unknown>;
       pending[0]?.resolve([]);
       await query;
       const sample = window();

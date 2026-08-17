@@ -43,11 +43,11 @@ describe("the record of deleted events the consent promises", () => {
   });
 
   it("is linked from the modal that makes the promise", () => {
-    const calendarPage = join(
+    const twoWaySections = join(
       webSource,
-      "routes/(dashboard)/dashboard/accounts/$accountId.$calendarId.tsx",
+      "features/dashboard/components/two-way-sync-sections.tsx",
     );
-    const source = readFileSync(calendarPage, "utf8");
+    const source = readFileSync(twoWaySections, "utf8");
     const consentModal = source.slice(source.indexOf("function DeletionConsentModal"));
 
     expect(consentModal).toContain(DELETED_EVENTS_PAGE);

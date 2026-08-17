@@ -132,6 +132,7 @@ describe("CalDAV destination: confirming a copy is really gone", () => {
     });
 
     const { items } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -153,6 +154,7 @@ describe("CalDAV destination: confirming a copy is really gone", () => {
     });
 
     const { items } = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
       timeMin: new Date("2026-01-01T00:00:00.000Z"),
     });
 

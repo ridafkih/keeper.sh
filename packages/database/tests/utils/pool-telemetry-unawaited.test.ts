@@ -13,7 +13,7 @@ interface FakeQuery extends PromiseLike<unknown> {
 const createFakeClient = () => {
   const pending: PromiseWithResolvers<unknown[]>[] = [];
   const client = {
-    unsafe: (): object => {
+    unsafe: (_statement: string): object => {
       const deferred = Promise.withResolvers<unknown[]>();
       pending.push(deferred);
       return deferred.promise;
@@ -33,7 +33,7 @@ describe("database pool telemetry for queries that are never awaited", () => {
 
     withDatabasePoolWindow((readWindow): void => {
       for (let index = 0; index < 10; index += 1) {
-        client.unsafe();
+        client.unsafe("select 1");
       }
 
       const sample = readWindow();
@@ -48,10 +48,10 @@ describe("database pool telemetry for queries that are never awaited", () => {
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
       for (let index = 0; index < 10; index += 1) {
-        client.unsafe();
+        client.unsafe("select 1");
       }
 
-      const query = client.unsafe() as FakeQuery;
+      const query = client.unsafe("select 1") as FakeQuery;
       const awaited = query.then((result) => result);
       pending.at(-1)?.resolve([]);
       await awaited;
@@ -68,7 +68,7 @@ describe("database pool telemetry for queries that are never awaited", () => {
     instrumentDatabasePool(client, 2);
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
-      const query = client.unsafe() as FakeQuery;
+      const query = client.unsafe("select 1") as FakeQuery;
       const viaThen = query.then((result) => result);
       const viaCatch = query.catch(() => null);
       const viaFinally = query.finally(() => null);
@@ -91,7 +91,7 @@ describe("database pool telemetry for queries that are never awaited", () => {
     instrumentDatabasePool(client, 2);
 
     await withDatabasePoolWindow(async (readWindow): Promise<void> => {
-      const query = client.unsafe() as FakeQuery;
+      const query = client.unsafe("select 1") as FakeQuery;
       const first = query.catch(() => "handled");
       const second = query.catch(() => "handled");
 

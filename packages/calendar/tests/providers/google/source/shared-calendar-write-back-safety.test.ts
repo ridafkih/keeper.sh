@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WriteBackReach } from "../../../../src/core/source/writer";
 import { createGoogleSourceWriter } from "../../../../src/providers/google/source/mutations";
 
 const ACCESS_TOKEN = "google-access-token";
@@ -37,10 +38,11 @@ interface RecordedRequest {
   url: string;
 }
 
-const createWriter = () => createGoogleSourceWriter({
+const createWriter = (writeBackReach: WriteBackReach = "own_events") => createGoogleSourceWriter({
   accessToken: () => Promise.resolve(ACCESS_TOKEN),
   accountEmail: ACCOUNT_EMAIL,
   externalCalendarId: SHARED_CALENDAR_ID,
+  writeBackReach,
 });
 
 describe("a Google source write on a shared calendar", () => {
@@ -107,6 +109,11 @@ describe("a Google source write on a shared calendar", () => {
     expect(requests.filter(({ method }) => method === "PATCH")).toHaveLength(1);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to delete an event other people are invited to", async () => {
     event = SOMEONE_ELSES_MEETING;
 
@@ -115,10 +122,15 @@ describe("a Google source write on a shared calendar", () => {
       sourceEventUid: SOURCE_EVENT_UID,
     });
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(requests.filter(({ method }) => method === "DELETE")).toEqual([]);
   });
 
+  /*
+   * The event is both somebody else's and carries guests. The authorship answer is the one
+   * reported because it is the one no grant widens: naming the guest list here would offer
+   * the user a permission that, once given, still refuses this write.
+   */
   it("still refuses to edit an event other people are invited to", async () => {
     event = SOMEONE_ELSES_MEETING;
 
@@ -127,8 +139,55 @@ describe("a Google source write on a shared calendar", () => {
       { summary: "Renamed on the destination" },
     );
 
-    expect(result.refused).toBe("event_has_attendees");
+    expect(result.refused).toBe("event_authored_by_someone_else");
     expect(requests.filter(({ method }) => method === "PATCH")).toEqual([]);
+  });
+
+  /*
+   * The ceiling. Granting shared events answers a question about the user's own meetings;
+   * it says nothing about a colleague's booking, and no answer to it ever will. If this
+   * pair of cases goes green with the guard removed, the grant has become a way to destroy
+   * somebody else's data.
+   */
+  it("still refuses to edit somebody else's event when shared events are granted", async () => {
+    event = SOMEONE_ELSES_MEETING;
+
+    const result = await createWriter("my_meetings_notifying").updateEvent(
+      { sourceEventId: SOURCE_EVENT_ID, sourceEventUid: SOURCE_EVENT_UID },
+      { summary: "Renamed on the destination" },
+    );
+
+    expect(result.refused).toBe("event_authored_by_someone_else");
+    expect(requests.filter(({ method }) => method === "PATCH")).toEqual([]);
+  });
+
+  it("still refuses to delete somebody else's event when shared events are granted", async () => {
+    event = SOMEONE_ELSES_MEETING;
+
+    const result = await createWriter("my_meetings_notifying").deleteEvent({
+      sourceEventId: SOURCE_EVENT_ID,
+      sourceEventUid: SOURCE_EVENT_UID,
+    });
+
+    expect(result.refused).toBe("event_authored_by_someone_else");
+    expect(requests.filter(({ method }) => method === "DELETE")).toEqual([]);
+  });
+
+  /*
+   * The top of the ladder. Google granted this account write access to the calendar, and at
+   * this level the user has said to use it — so a colleague's event is theirs to change.
+   * It is the only level that opens this, which is why the two below it still refuse above.
+   */
+  it("writes to somebody else's event once any_event is granted", async () => {
+    event = SOMEONE_ELSES_MEETING;
+
+    const result = await createWriter("any_event").updateEvent(
+      { sourceEventId: SOURCE_EVENT_ID, sourceEventUid: SOURCE_EVENT_UID },
+      { summary: "Renamed on the destination" },
+    );
+
+    expect(result.refused).toBeUndefined();
+    expect(requests.filter(({ method }) => method === "PATCH")).toHaveLength(1);
   });
 
   it("reports Google's own rejection of the edit as a failure rather than a refusal", async () => {

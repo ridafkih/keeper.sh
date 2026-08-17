@@ -1,3 +1,5 @@
+import { beginInFlight, endInFlight } from "../telemetry/in-flight";
+
 class RequestTimeoutError extends Error {
   public readonly timeoutMs: number;
 
@@ -54,6 +56,23 @@ const buildTimeoutSignal = (timeoutMs: number, externalSignal?: AbortSignal | nu
   };
 };
 
+const resolveRawTarget = (input: string | URL | Request): string => {
+  if (input instanceof Request) {
+    return input.url;
+  }
+  return String(input);
+};
+
+const describeTarget = (input: string | URL | Request): string => {
+  const raw = resolveRawTarget(input);
+  try {
+    const { host, pathname } = new URL(raw);
+    return `${host}${pathname}`;
+  } catch {
+    return raw;
+  }
+};
+
 const fetchWithTimeout = async (
   input: string | URL | Request,
   init: RequestInit,
@@ -61,6 +80,7 @@ const fetchWithTimeout = async (
   externalSignal?: AbortSignal,
 ): Promise<Response> => {
   const { signal, isTimeout } = buildTimeoutSignal(timeoutMs, externalSignal);
+  const callId = beginInFlight("provider_http", describeTarget(input));
   try {
     return await fetch(input, { ...init, signal });
   } catch (error) {
@@ -68,6 +88,8 @@ const fetchWithTimeout = async (
       throw new RequestTimeoutError(timeoutMs);
     }
     throw error;
+  } finally {
+    endInFlight(callId);
   }
 };
 

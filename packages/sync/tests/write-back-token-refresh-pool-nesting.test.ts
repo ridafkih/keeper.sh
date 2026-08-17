@@ -12,6 +12,7 @@ import type { WriteBackApplierConfig } from "../src/write-back";
  * held. One write then needs two connections at once, and enough of them at once hold
  * every connection the process has while each waits for one no other can give back.
  */
+const DESTINATION_CALENDAR_ID = "22222222-2222-4222-8222-222222222222";
 const administrativeUrl = process.env.KEEPER_TEST_DATABASE_URL;
 const DEADLINE_MS = 8000;
 const DEADLINE_MULTIPLE = 3;
@@ -59,6 +60,14 @@ create table calendars (
   "externalCalendarId" text,
   "disabled" boolean not null default false,
   "ingestLastSucceededAt" timestamptz
+);
+create table source_destination_mappings (
+  "id" uuid primary key default gen_random_uuid(),
+  "sourceCalendarId" uuid not null,
+  "destinationCalendarId" uuid not null,
+  "writeBackMode" text not null default 'edits',
+  "writeBackReach" text not null default 'own_events',
+  "writeBackState" text not null default 'ok'
 );
 `;
 
@@ -144,7 +153,7 @@ describe.skipIf(!administrativeUrl)(
         userId: "user-1",
       } as unknown as WriteBackApplierConfig);
 
-      const writer = await store.resolveWriter(SOURCE_ID);
+      const writer = await store.resolveWriter(SOURCE_ID, DESTINATION_CALENDAR_ID);
       expect(writer).not.toBeNull();
 
       const outcome = await Promise.race([

@@ -150,7 +150,7 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
   const state = createSharedState(options);
   let nextRemoteId = 0;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+  const listRemoteEvents = (listOptions: { timeMax: Date; timeMin: Date }): Promise<RemoteEventListing> => {
     const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const startTime = parseGoogleEventTime(event.start);
       const endTime = parseGoogleEventTime(event.end);
@@ -238,7 +238,7 @@ const createGoogleHarness = (options: HarnessOptions): Harness => {
       isCurrent: () => Promise.resolve(true),
       provider,
       readState: async () => {
-        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        const listing = await listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: state.scope.requestedWindow.timeMin });
         return {
           existingMappings: [...mappings],
           localEvents: readLocalEvents(state.events, state.scope),
@@ -280,7 +280,7 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
     return { endTime, startTime };
   };
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+  const listRemoteEvents = (listOptions: { timeMax: Date; timeMin: Date }): Promise<RemoteEventListing> => {
     const items = [...stored.values()].flatMap((event): RemoteEvent[] => {
       const range = readRange(event);
       if (!range || range.endTime < listOptions.timeMin) {
@@ -363,7 +363,7 @@ const createOutlookHarness = (options: HarnessOptions): Harness => {
       isCurrent: () => Promise.resolve(true),
       provider,
       readState: async () => {
-        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        const listing = await listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: state.scope.requestedWindow.timeMin });
         return {
           existingMappings: [...mappings],
           localEvents: readLocalEvents(state.events, state.scope),
@@ -397,7 +397,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
     rejectUnsupportedRecurrenceDates: false,
   }).events;
 
-  const listRemoteEvents = (listOptions: { timeMin: Date }): Promise<RemoteEventListing> => {
+  const listRemoteEvents = (listOptions: { timeMax: Date; timeMin: Date }): Promise<RemoteEventListing> => {
     const items = readResources().flatMap((event): RemoteEvent[] => {
       if (event.endTime < listOptions.timeMin) {
         return [];
@@ -459,7 +459,7 @@ const createCalDAVHarness = (options: HarnessOptions): Harness => {
       isCurrent: () => Promise.resolve(true),
       provider,
       readState: async () => {
-        const listing = await listRemoteEvents({ timeMin: state.scope.requestedWindow.timeMin });
+        const listing = await listRemoteEvents({ timeMax: new Date("2099-01-01T00:00:00.000Z"), timeMin: state.scope.requestedWindow.timeMin });
         return {
           existingMappings: [...mappings],
           localEvents: readLocalEvents(state.events, state.scope),

@@ -1,5 +1,6 @@
 import { TWO_WAY_SOURCE_INGEST_MAX_AGE_MS } from "@keeper.sh/constants";
 import { resolveWriteBackFieldNames } from "@keeper.sh/data-schemas";
+import type { WriteBackReach } from "../source/writer";
 import type {
   WriteBackFieldExclusions,
   WriteBackFieldName,
@@ -9,7 +10,16 @@ const WRITE_BACK_MODES = ["edits", "edits_and_deletes", "off"] as const;
 
 type WriteBackMode = typeof WRITE_BACK_MODES[number];
 
-type WriteBackState = "delete_confirmation_required" | "ok" | "quarantined";
+/*
+ * "grant_required" is a permission the user has not given yet, not a pair that went wrong.
+ * It keeps the mode and, unlike a quarantine, leaves the pair writing everything the grant
+ * does not cover.
+ */
+type WriteBackState =
+  | "delete_confirmation_required"
+  | "grant_required"
+  | "ok"
+  | "quarantined";
 
 /*
  * The set of fields two-way sync may write to a real calendar is declared once, beside the
@@ -40,6 +50,13 @@ interface WriteBackPolicy {
    * from under the question it just asked.
    */
   paused: boolean;
+  /*
+   * How far a write may reach. Not part of the mode ladder because it answers a different
+   * question: the mode says which verbs are allowed, this says who they may be aimed at.
+   * Absent is the narrowest level: a permission missing from a policy must never read as
+   * one that was given.
+   */
+  writeBackReach?: WriteBackReach;
   sourceCalendarId: string;
   writeBackMode: WriteBackMode;
 }
@@ -112,6 +129,8 @@ const isSourceSnapshotFresh = (
  * copies the question is about be re-created on the next pass, destroying the pending
  * state the answer is supposed to resolve.
  */
+const GRANT_REQUIRED_STATE = "grant_required";
+
 const resolveWriteBackPolicyState = (
   writeBackMode: WriteBackMode,
   writeBackState: string,
@@ -135,7 +154,12 @@ const resolveWriteBackPolicyState = (
       writeBackMode,
     };
   }
-  if (writeBackState !== "ok") {
+  /*
+   * A pair that only lacks a permission is still a pair Keeper.sh trusts, so it keeps its
+   * mode and is not paused: the events the grant covers are held one at a time by the
+   * writer, and everything else on the pair goes on syncing.
+   */
+  if (writeBackState !== "ok" && writeBackState !== GRANT_REQUIRED_STATE) {
     return {
       deleteApproved: false,
       deleteApprovedAt: null,
@@ -193,6 +217,7 @@ export {
   isSourceSnapshotFresh,
   isWriteBackMode,
   resolveWriteBackEligibleFields,
+  GRANT_REQUIRED_STATE,
   resolveWriteBackPolicyState,
   WRITE_BACK_MODES,
   WRITE_BACK_WITNESS_RESET,
