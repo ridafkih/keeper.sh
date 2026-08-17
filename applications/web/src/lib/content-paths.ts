@@ -12,3 +12,5 @@ export const CONTENT_DIRECTORIES = {
   guides: `${SEO_CONTENT_ROOT}/guides`,
   recipes: `${SEO_CONTENT_ROOT}/recipes`,
 } as const;
+
+export const MOVED_PATHS_FILE = "moved-paths.json";

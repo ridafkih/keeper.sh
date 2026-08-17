@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
-import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
+import { CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
@@ -278,8 +278,6 @@ function contentCollectionPlugin(collection: ContentCollection): Plugin {
     },
   };
 }
-
-export const MOVED_PATHS_FILE = "moved-paths.json";
 
 export function movedPathsPlugin(): Plugin {
   const collections: Array<{ basePath: string; directory: string }> = [
