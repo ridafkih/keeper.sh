@@ -20,8 +20,7 @@ on:
         options: [seo, infra]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   bump:
@@ -39,10 +38,44 @@ jobs:
           esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
+      # Two installation tokens, because this repository and the submodules sit
+      # under different accounts and one installation token cannot span both.
+      # The Keeper bot app is installed on each.
+      #
+      # Using an app token rather than GITHUB_TOKEN also matters: a pull request
+      # opened with GITHUB_TOKEN does not trigger workflow runs, so the bump PR
+      # would arrive with no checks.
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-main
+        with:
+          app-id: ${{ vars.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: ridafkih
+          repositories: keeper.sh
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-submodules
+        with:
+          app-id: ${{ vars.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: keeperdotsh
+          repositories: |
+            seo
+            infra
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          submodules: recursive
-          token: ${{ secrets.SUBMODULE_TOKEN }}
+          submodules: false
+          token: ${{ steps.app-main.outputs.token }}
+
+      - name: Fetch the submodules
+        env:
+          SUBMODULE_TOKEN: ${{ steps.app-submodules.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init --recursive
 
       - name: Move the pin
         id: bump
@@ -57,8 +90,8 @@ jobs:
           echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       # Both submodules build the web app. seo supplies its content directly;
-      # infra does not, but a bump that cannot build is still a bump worth
-      # catching here rather than after merge.
+      # infra does not, but a bump that cannot build is still worth catching
+      # here rather than after merge.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: steps.bump.outputs.changed == 'true'
       - run: bun install --frozen-lockfile
@@ -69,13 +102,18 @@ jobs:
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
+          GH_TOKEN: ${{ steps.app-main.outputs.token }}
+          APP_SLUG: ${{ steps.app-main.outputs.app-slug }}
           NAME: ${{ steps.target.outputs.name }}
           PIN: ${{ steps.bump.outputs.pin }}
           BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.bump.outputs.pin }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The bot's own user id, so the commit is attributed to the app rather
+          # than showing as an unrecognised author.
+          BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+
           git checkout -b "$BRANCH"
           git add "${{ steps.target.outputs.path }}"
           git commit -m "chore($NAME): bump to $PIN"
