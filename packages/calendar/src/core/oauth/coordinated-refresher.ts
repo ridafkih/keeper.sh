@@ -18,11 +18,6 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const MS_PER_SECOND = 1000;
 
-/*
- * The provider has already rotated by the time this write runs, so a lost write costs the only
- * copy of the new refresh token. Retried here rather than through withBackoff, which charges
- * provider retry counters that a database write has no business moving.
- */
 const PERSIST_ATTEMPTS = 3;
 const PERSIST_BACKOFF_MS = 50;
 
@@ -89,12 +84,6 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
               refreshToken: result.refresh_token ?? refreshToken,
             });
           } catch (error) {
-            /*
-             * A failed write is ambiguous: it may have committed with only the acknowledgement
-             * lost, so the credential is not marked for reauthentication here. The next refresh
-             * asks the provider, which answers definitively. Only a rotated token is actually
-             * lost — without rotation the stored refresh token still works.
-             */
             widelog.set("token.rotation_lost", rotated);
             throw error;
           }
