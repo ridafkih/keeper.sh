@@ -3281,3 +3281,971 @@ listed a narrower or wider window than it mirrors can still retire what it no lo
 **Proved by.**
 `tests/deletion/two-windows.test.ts :: RECON-O7: an event inside proven coverage but outside the mirror window retires the mirror`;
 `tests/coverage/proven-coverage.test.ts :: RECON-O4: the same absence is reported as unresolved rather than silently dropped`.
+
+---
+
+# sync-shadow learnings ledger
+
+`@keeper.sh/sync-shadow` (`packages/sync-kit/shadow`) appends its own section rather than renumbering
+anyone. Entries are `SHADOW-I<n>`.
+
+This package is a **dry run**. It builds the planner's four inputs from what a caller already holds when it
+syncs a destination, runs `planReconciliation`, and renders the resulting `Plan` as a bounded, loggable
+**catalog** whose subject is deletions. It compares nothing against the existing engine and claims no
+equivalence. It records intent.
+
+Most of the deletion-authority, coverage, provenance, precondition, cursor and bounded-sample lessons are
+already discharged upstream in `@keeper.sh/sync-protocol`, `@keeper.sh/sync-ical` and
+`@keeper.sh/sync-reconcile`. Where that is so, the entry is one line citing the upstream id and stating the
+obligation this package still carries. The entries written out in full are the ones sync-shadow genuinely
+owns: **what a synthesized listing may claim**, **what makes a translation untranslatable**, and **how the
+catalog renders**.
+
+Every **Proved by** citation names a file under `packages/sync-kit/shadow/tests` and the exact test name
+inside it. The suite does not exist yet — this document and the design it records are the specification the
+suite is written against, and `tests/hygiene/ledger-citations.test.ts`, scoped to this section, will fail the
+build for any citation whose file or verbatim test name is missing once the tests land. Nothing below may be
+implemented without its citation becoming real.
+
+## Module map
+
+- `src/errors.ts` — `ShadowInternalDataError`.
+- `src/options.ts` — `ShadowOptions`: `asOf`, the coverage age bound, the window predicate, the limits, the planner.
+- `src/plan-unit.ts` — `PlanUnit` and `planUnitWithReconciliation`, the injection point for the planner.
+- `src/time/instant.ts` — canonical-UTC instant predicate and total order.
+- `src/time/epoch.ts` — `epochMillisecondsOf` and `secondsBetween`. The only arithmetic in the package.
+- `src/input/stored-coverage.ts` — `StoredSourceCoverage`, `SourceCoverageProof`, `sourceCoverageFrom`.
+- `src/input/read-completeness.ts` — `LocalReadCompleteness`, the withholding counters, `readIsComplete`,
+  `withheldFromSource`.
+- `src/input/read-witness.ts` — `SourceReadWitness`: the post-lock narrowed coverage and source-calendar set.
+- `src/input/destination-sync-input.ts` — `DestinationSyncInput`, `StoredSourceEvent`, `MirrorRow`.
+- `src/translate/refusal.ts` — `translationRefusals`, `TranslationRefusal`, `Refused`.
+- `src/translate/guards.ts` — every translation refusal is decided here; `refusalFor` is the single entry point.
+- `src/translate/decode.ts` — `DecodeStoredEvent`, the one decoder both halves of a unit are built with.
+- `src/translate/instants.ts` — the canonical-instant sweep over an input.
+- `src/translate/listing.ts` — `synthesizeSourceListing`: partial by default, snapshot only under proof.
+- `src/translate/known.ts` — `buildKnownState` from `MirrorRow`s; decode failures become `KnownState.corrupt`.
+- `src/translate/mappings.ts` — `buildMappingSet`; carries the stored delete identifier through untouched.
+- `src/translate/observed.ts` — `buildObservedState`; the destination listing is the caller's, unmodified.
+- `src/translate/policy.ts` — `buildPolicy`; `coverageBySource` and the listing coverage come from one value.
+- `src/translate/partition.ts` — `partitionBySourceCalendar`: one translation unit per mapped source.
+- `src/translate/translate.ts` — `translateDestinationSync`.
+- `src/catalog/limits.ts` — `ShadowLimits`, `defaultShadowLimits`.
+- `src/catalog/resolution.ts` — the per-unit indexes; resolves a planned removal to its mirror and its time.
+- `src/catalog/recurrence.ts` — `RecurrenceIdentity` and `EntryTime`; an anchor is never dressed as a range.
+- `src/catalog/sample.ts` — `boundedSampleOf`: the bounded sample and the count it omitted.
+- `src/catalog/entries.ts` — `DeletionEntry`, `CreationEntry`, `UpdateEntry`, `ReplacementEntry`, `ForgottenRowEntry`, `UnresolvedEntry`, `CoverageVerdict`, `CatalogCaveat`.
+- `src/catalog/deletions.ts` — retire-mirror tombstones and replace-retire legs, by cause.
+- `src/catalog/writes.ts` — creations, updates, replacements.
+- `src/catalog/unresolved.ts` — unresolved entries, kept per reason, never bucketed as "other".
+- `src/catalog/order.ts` — the stable content-derived signature every catalog section is ordered by.
+- `src/catalog/catalog.ts` — the `Catalog` union and `catalogTranslation`.
+- `src/catalog/render.ts` — `renderCatalog`: flat scalars, bounded samples, uncapped totals.
+- `src/shadow-run.ts` — `catalogShadowRun`.
+- `src/index.ts` — the public surface.
+
+## Adopted
+
+### SHADOW-I1. A synthesized source listing may not claim a coverage it did not record
+
+The caller holds **stored** source state, not a source listing. Claiming a full window from stale stored
+state fills the catalog with deletions that only ever existed inside this package. `synthesizeSourceListing`
+therefore returns `kind: "partial"` unless it is handed a `SourceCoverageProof` of kind `proven` for the
+source. The protocol's `partial` arm declares `coverage?: never; removals?: never; cursor?: never`, so the
+**type system**, not a runtime branch, forbids an unproven listing from licensing a deletion — and
+`listingAuthority("partial") === "none"`, so `speaksForAbsence` and `mayRetireItsOwnMirrors` are both false
+and every tombstone path is unreachable.
+
+**Proved by.**
+`tests/listing/default-is-partial.test.ts :: SHADOW-I1: a listing synthesized without a coverage proof is partial`;
+`tests/listing/default-is-partial.test-d.ts :: SHADOW-I1: a partial listing cannot be given a coverage or a removal`;
+`tests/overwrite/no-wipe.test.ts :: SHADOW-O1: an unproven translation of a fully absent baseline catalogs zero deletions`.
+
+### SHADOW-I2. The listing's coverage and the policy's `coverageBySource` are one value or they are wrong
+
+`provenCoverageOf` in `plan-reconciliation.ts` reads **neither** `listing.coverage` alone nor
+`policy.coverageBySource` alone: it requires `observed.source.kind === "snapshot"` *and* a matching entry in
+`policy.coverageBySource` keyed by `calendarKeyString(known.calendar)`. `listing.coverage` is never consulted
+by the tombstone path at all. A careful author who sets the listing's coverage honestly and leaves
+`coverageBySource` empty gets a catalog of zero deletions and concludes the engine is safe — the exact false
+negative that makes a shadow run worthless. One who fills `coverageBySource` from the requested window gets
+every deletion.
+
+`sourceCoverageFrom` is therefore the **only** constructor, and both the listing's `CoverageWindow` and the
+policy's `ProvenCoverage` entry are derived from its single return value inside `buildPolicy` and
+`synthesizeSourceListing`. No exported function accepts the two separately.
+
+**Proved by.**
+`tests/coverage/one-constructor.test.ts :: SHADOW-I2: the synthesized listing and the policy agree on coverage by construction`;
+`tests/coverage/one-constructor.test-d.ts :: SHADOW-I2: no public function accepts a listing coverage and a policy coverage separately`;
+`tests/overwrite/coverage-false-negative.test.ts :: SHADOW-O2: a proof present and a proof absent differ only in the proof`.
+
+### SHADOW-I3. Coverage comes from the recorded ingest window, never from the requested window
+
+`resolveStoredSourceCoverage` in `packages/sync/src/sync-user.ts` builds the window from
+`calendarsTable.ingestWindowStart`/`ingestWindowEnd` — never from `syncHistoricRange`/`syncFutureRange` —
+and intersects it with the requested window before it can authorize anything. The comment on
+`createAggregateAuthorityWindow` is explicit that granting the requested window lets a freshly imported,
+unmapped calendar delete every Keeper-tagged event another calendar row put there.
+
+`StoredSourceCoverage` carries `ingestWindowStart`, `ingestWindowEnd`, `ingestWindowRecordedAt`,
+`historicRange` and `futureRange`, all nullable, and `sourceCoverageFrom` refuses the row —
+`noRecordedIngestWindow`, `noRecordedAxes`, `unorderedIngestWindow` — rather than substituting anything.
+Discharged upstream as RECON-I3, RECON-I4, RECON-I5; sync-shadow's obligation is only to construct
+`ProvenCoverage` honestly.
+
+**Corrected in review.** Validating the recorded ingest window and then not *using* it was the same failure
+in a quieter form: the two axes are caller-supplied values derived from configured sync ranges, so an axis of
+`2000-01-01 .. 2400-01-01` beside a one-day recorded ingest window proved the whole mirror window. Each axis
+is now intersected with `ingestWindowStart .. ingestWindowEnd` **before** it is intersected with the mirror
+window, so no axis can claim ground the recording does not cover.
+
+**Proved by.**
+`tests/coverage/from-recorded-state.test.ts :: SHADOW-I3: a missing ingest window yields unproven, not the requested window`;
+`tests/coverage/from-recorded-state.test.ts :: SHADOW-I3: the requested window never widens the recorded one`;
+`tests/coverage/from-recorded-state.test.ts :: SHADOW-I3: an axis wider than the recorded ingest window is clamped to it`.
+
+### SHADOW-I4. Coverage is two axes, not one span
+
+`ProvenCoverage.proven` carries `historic` and `future` as separate `TimeWindow`s, matching the repo's
+`syncHistoricRange`/`syncFutureRange` split. Collapsing them into a single `start..end` claims coverage over
+the gap between them. `sourceCoverageFrom` intersects each axis with the mirror window independently and
+never synthesises a bounding window.
+
+**Corrected in review.** The synthesized snapshot listing did stitch the axes back together: its
+`coverage.covered` was `{ historic.start, future.end }`, which claims the gap the axes deliberately leave and,
+when one axis was clamped to a degenerate point, claims ground the ingest never touched. It was inert only
+because `provenCoverageOf` reads `policy.coverageBySource` and never `listing.coverage` — a trap for the first
+reader who wires it up, in the one package whose thesis is that coverage licenses deletion.
+
+`covered` is now produced by `sourceCoverageFrom` itself, beside the two axes, under three rules: one
+non-empty axis publishes that axis alone; two contiguous axes publish their union; two axes with a gap
+between them are refused outright as `nonContiguousCoverageAxes`, because there is no single honest span to
+publish and a shadow run that under-reports visibly beats one that over-claims quietly.
+
+**Proved by.**
+`tests/coverage/axes.test.ts :: SHADOW-I4: the two axes are intersected independently`;
+`tests/coverage/axes.test.ts :: SHADOW-I4: the gap between the axes is never claimed as covered`;
+`tests/coverage/axes.test.ts :: SHADOW-I4: an axis outside the recorded ingest window proves nothing`;
+`tests/coverage/one-constructor.test.ts :: SHADOW-I4: the listing claims no window the proof did not prove`;
+`tests/overwrite/axes.test.ts :: SHADOW-O3: a proven future axis does not license a historic deletion`.
+
+### SHADOW-I5. Deletion authority is all-or-nothing across mapped sources
+
+`createAggregateAuthorityWindow` returns `null` when a destination has zero mapped sources, or when the
+number of resolved source coverage windows does not equal the number of mapped source calendars. A per-source
+loop that quietly skips the unresolvable source reproduces exactly the bug this guard exists to prevent.
+
+`buildPolicy` resolves every mapped source's proof first. If **any** one is `unproven`, every entry becomes
+`{ kind: "unproven" }` and every synthesized listing stays `partial`. Zero mapped sources is a refusal
+(`noMappedSourceCalendars`), not an empty proven set.
+
+**Proved by.**
+`tests/coverage/all-or-nothing.test.ts :: SHADOW-I5: one unresolvable source makes every source unproven`;
+`tests/coverage/all-or-nothing.test.ts :: SHADOW-I5: zero mapped source calendars refuses the translation`;
+`tests/overwrite/all-or-nothing.test.ts :: SHADOW-O4: a second source with no recorded coverage cannot license the first source's deletions`.
+
+### SHADOW-I6. Stored coverage has an age, and the live engine does not check it
+
+`resolveStoredSourceCoverage` validates that `ingestWindowRecordedAt` is a finite `Date` and **never checks
+its age**. Coverage recorded weeks ago is currently accepted as proof of present absence. This is the
+brief's "stale stored state fills the catalog with deletions" failure, and it is a live gap in the current
+engine, not a hypothetical.
+
+`ShadowOptions` takes an explicit `asOf: Instant` and `maxCoverageAgeSeconds: number` from the caller.
+A recording older than the bound downgrades to `unproven` with refusal `recordingTooOld`; a recording later
+than `asOf` refuses as `recordedInTheFuture`. Purity holds because the clock arrives as an argument.
+
+The honest consequence: **the shadow reports fewer deletions than the live engine would perform in the stale
+case.** That asymmetry is a named `CatalogCaveat` (`coverageStalerThanTheLiveEngineAccepts`) emitted on the
+catalog, so the catalog is never read as a parity claim it is not making.
+
+**Proved by.**
+`tests/coverage/staleness.test.ts :: SHADOW-I6: a recording older than the bound is unproven`;
+`tests/coverage/staleness.test.ts :: SHADOW-I6: a recording later than asOf is refused`;
+`tests/catalog/caveats.test.ts :: SHADOW-I6: a stale downgrade emits the under-reporting caveat by name`.
+
+### SHADOW-I7. Coverage must be the post-lock, narrowed value, and the shadow cannot narrow it itself
+
+Coverage is re-verified under lock **after** the remote read and may only narrow, never widen; if the mapped
+source set changed during the remote read the run is superseded outright. sync-shadow is pure and does no IO,
+so it cannot re-verify anything. It therefore **requires** the caller to hand it the narrowed value and both
+source-calendar sets: `SourceReadWitness` carries `sourceCalendarsBeforeRemoteRead`,
+`sourceCalendarsAtLocalRead`, and `coverageNarrowedAfterRemoteRead: true` — a literal `true`, so a caller
+holding only pre-read coverage cannot construct the witness at all. A witness whose two sets differ refuses
+the translation with `sourceCalendarSetChangedDuringRead`; it is not quietly accepted.
+
+**Proved by.**
+`tests/translation/read-witness.test.ts :: SHADOW-I7: a changed source calendar set refuses the translation`;
+`tests/translation/read-witness.test-d.ts :: SHADOW-I7: a witness cannot say the coverage was not narrowed`.
+
+### SHADOW-I8. A listing built from stored state can never name a removal
+
+A stored read carries no removal signal of any kind — it cannot name what was deleted. That alone
+disqualifies `kind: "delta"` for the source side, and it is a second, independent reason (beside coverage)
+that the default is `partial`. `synthesizeSourceListing` has no `delta` arm and fabricates no `Removal`.
+The catalog records `noSourceRemovalSignal` as a standing caveat, because "zero explicit removals" here means
+"we cannot see them", not "there were none".
+
+Google forces `showDeleted` with a `syncToken` and answers 410 when the token expires; Graph's
+`@removed`/`deleted` conflates "deleted" with "moved out of the `calendarView` range", so a provider removal
+signal is not even reliably a deletion. Discharged upstream as protocol entry 34 and RECON-I2.
+
+**Proved by.**
+`tests/listing/no-delta-arm.test-d.ts :: SHADOW-I8: a synthesized source listing is never a delta`;
+`tests/catalog/caveats.test.ts :: SHADOW-I8: every catalog carries the no-removal-signal caveat`.
+
+### SHADOW-I9. An incomplete local read cannot claim a snapshot, and its withheld rows must ride the listing
+
+Absence from a local read is not absence from the source. A recurrence series withheld for exceeding the
+occurrence budget is missing for a technical limit; treating it as gone mass-deleted every mirror at the
+provider and mass-re-added them on the next run.
+
+`LocalReadCompleteness` requires a count for **every** member of `withholdingCounters` —
+`overBudgetRecurrenceSeries`, `emptyTimeRange`, `invertedTimeRange`, `missingSourceEventUid`,
+`excludedBySyncPolicy`, `outsideReconciliationWindow`, `unparseableStoredPayload`, `unresolvableTimeZone`,
+`supersededRevision` — as a total `Record`, so a caller cannot forget one. Any non-zero counter downgrades
+the listing to `partial` and records the counter name in the coverage verdict. The withheld identities ride
+the listing's `withheld` array, which `partial` carries, so the planner reports them as
+`unresolved: "withheldBySource"` rather than tombstoning them. A counter that disagrees with the length of
+the withheld list refuses the translation (`withheldCountsDisagreeWithWithheldList`) — a count without its
+identities is the zero that means "we never looked".
+
+**Proved by.**
+`tests/listing/incomplete-read.test.ts :: SHADOW-I9: any non-zero withholding counter downgrades the listing to partial`;
+`tests/listing/incomplete-read.test.ts :: SHADOW-I9: withheld identities reach the plan as withheldBySource`;
+`tests/overwrite/withheld-series.test.ts :: SHADOW-O5: a stored read missing an over-budget series catalogs zero deletions`.
+
+### SHADOW-I10. The mirror-window retirement path must not be reachable from a synthesized listing
+
+`retiredByTheMirrorWindow` **never consults coverage**. It fires when `mayRetireItsOwnMirrors(authority)`
+holds, `scopeIsTheMirrorWindow` is false, the row is non-recurring, a mapping exists, and the row falls
+outside `policy.mirrorWindow`. A translation that sets `scope.window` to a bounding source-authority window
+while `mirrorWindow` is the requested window manufactures `outsideMirrorWindow` tombstones for every mapping
+in the gap — deletions that exist only inside sync-shadow, under unproven coverage, which is the worst
+possible catalog artifact.
+
+`buildPolicy` and `synthesizeSourceListing` take the mirror window from **one** field of
+`DestinationSyncInput` and write it to both `policy.mirrorWindow` and `listing.scope.window`, making
+`sameTimeWindow(source.scope.window, policy.mirrorWindow)` true by construction and this path unreachable.
+
+The honest consequence, again recorded rather than hidden: the live engine's `buildRemoveOperations` **does**
+retire mappings outside the requested window, so the shadow under-reports that class. Emitted as the
+`mirrorWindowRetirementSuppressed` caveat.
+
+**Proved by.**
+`tests/listing/scope-is-the-mirror-window.test.ts :: SHADOW-I10: the scope window and the mirror window are the same value`;
+`tests/overwrite/manufactured-retirement.test.ts :: SHADOW-O6: a mapping between recorded coverage and the requested edge is not catalogued as a deletion`;
+`tests/catalog/caveats.test.ts :: SHADOW-I10: suppressing the mirror-window path emits its caveat`.
+
+### SHADOW-I11. Mappings are never pre-filtered by the coverage window
+
+Adds must be matched against **every** existing mapping, not only the authoritative ones. A mapping sitting
+between recorded source coverage and the requested window edge looked unmapped, its event was re-added, the
+insert was swallowed by the mapping uniqueness index, and the orphaned remote event was deleted on the next
+run — one create and one delete per event, per run, indefinitely. `buildMappingSet` forwards every mapping
+for the destination and filters nothing; the planner decides at the decision points. In a shadow catalog that
+churn loop would read as intentional destruction.
+
+**Proved by.**
+`tests/translation/mappings-unfiltered.test.ts :: SHADOW-I11: a mapping outside proven coverage is still in the mapping set`;
+`tests/overwrite/coverage-band-churn.test.ts :: SHADOW-O7: an event in the coverage band produces neither a creation nor a deletion`.
+
+### SHADOW-I12. Only `retireMirror` and a replace's retire leg are deletions
+
+`Tombstone` is a two-member union and only one member destroys anything remote: `retireMirror` carries a
+`DeleteHandle` and an `ObservedPrecondition` and is a real provider delete; `forgetKnownRow` carries neither
+and only drops a local row. Separately, `PlannedWrite` of kind `"replace"` carries
+`retire: Extract<WriteIntent, { kind: "delete" }>` alongside `recreate` — every replace **is** a real provider
+delete. Counting only `Plan.tombstones` under-reports every drifted mirror; lumping `forgetKnownRow` in
+over-reports harmless local cleanup.
+
+`Catalog.deletions` therefore contains exactly the `retireMirror` tombstones plus every replace's retire leg,
+each tagged with `origin: "tombstone" | "replaceRetire"`. `forgetKnownRow` goes in `forgottenLocalRows`, a
+separate and clearly-named field.
+
+**Proved by.**
+`tests/catalog/deletion-membership.test.ts :: SHADOW-I12: a forgetKnownRow tombstone is not a deletion`;
+`tests/catalog/deletion-membership.test.ts :: SHADOW-I12: a replace's retire leg is a deletion`;
+`tests/catalog/deletion-membership.test-d.ts :: SHADOW-I12: the deletions field cannot hold a tombstone without a handle`.
+
+### SHADOW-I13. A replace is one entry, not a deletion plus a creation
+
+sync-reconcile expresses replace as ONE plan entry (RECON-I25) precisely so a delete cannot land without its
+recreate. The catalog renders a replace as a single `ReplacementEntry` showing both legs. Its retire leg is
+**counted** in `deletions` (SHADOW-I12) with `origin: "replaceRetire"`, and is **not** duplicated into
+`creations`. A reader scanning the deletion count sees the replace, and a reader scanning replacements sees
+that it is not an outright removal. An occurrence whose identity changed within its series is a
+reassignment, not a delete plus an add, and a verifiable-unchanged reassignment is a mapping-only update with
+no provider write at all — it must never appear in `deletions`.
+
+**Proved by.**
+`tests/catalog/replace-is-one-entry.test.ts :: SHADOW-I13: a replace renders as one entry carrying both legs`;
+`tests/catalog/replace-is-one-entry.test.ts :: SHADOW-I13: a reassignment with no provider write is not a deletion`.
+
+### SHADOW-I14. Deletions are broken out by cause, because the incident turned on the distinction
+
+Retiring a mirror is not deleting a source event. Retiring at the window edge narrows scope; the source event
+is retained in Keeper's own store. A reader scanning a catalog for "would this have destroyed something"
+judges an `outsideMirrorWindow` retirement completely differently from an `absentFromSnapshot` one. The 1728
+far-future rows deleted in production hinged entirely on that distinction, and a single flat deletion count
+hides it. Every `DeletionEntry` carries its `TombstoneCause`, and `renderCatalog` emits a separate count per
+cause as its own scalar field.
+
+**Proved by.**
+`tests/catalog/deletions-by-cause.test.ts :: SHADOW-I14: every tombstone cause gets its own counter`;
+`tests/catalog/deletions-by-cause.test.ts :: SHADOW-I14: a cause with no deletions still renders a zero`.
+
+### SHADOW-I15. A deletion entry must locate the real calendar event, and must carry no customer content
+
+Direct tension between the brief's "carry enough with each deletion to find the real calendar event
+afterwards" and the codebase's settled convention that divergence telemetry reports booleans and UTF-16
+lengths, never values, "so the churn can be attributed without logging customer content". No wide event in
+this codebase carries a title, summary, description or location; UIDs, provider ids and state ids are logged
+freely.
+
+A `DeletionEntry` carries: `sourceIdentityKey`, `uid`, the recurrence identity (master / override instant /
+slot start and end), `remoteEventId`, `deleteHandle`, `handleSource`, `time` (start and end instants or
+calendar dates), `sourceCalendar`, `destinationCalendar`, `cause`, `origin`, `preconditionKind` and
+`licensedBy`. Every one of those locates the event in the provider UI. It carries **no** title, description
+or location, and not even the content fingerprint value — the fingerprint is content-derived and is not
+needed to find the event. A title in the catalog would be a new privacy regression against a settled
+convention.
+
+**Proved by.**
+`tests/catalog/deletion-identity.test.ts :: SHADOW-I15: a deletion entry names the uid, the remote id and the delete handle separately`;
+`tests/catalog/no-content.test.ts :: SHADOW-I15: no catalog field carries a title, description or location`;
+`tests/catalog/no-content.test.ts :: SHADOW-I15: a rendered catalog of a content-bearing plan contains none of its content`.
+
+### SHADOW-I16. The UID, the remote id and the delete handle are three fields, not one
+
+Identity is not the bare UID, and provider identifiers are not interchangeable. A mapping stores
+`destinationEventUid` **and** a separate `deleteIdentifier`; deriving a CalDAV object URL from the embedded
+VEVENT UID deleted at a nonexistent path, the 404 was reported as success, and the object was swept again
+every sync forever. A catalog that shows only a UID cannot be checked against the calendar, and a reviewer
+who assumes `uid === deleteHandle` will misread which object would have been removed. `buildMappingSet`
+carries the stored delete identifier through unchanged; it never reconstructs it.
+
+**Proved by.**
+`tests/catalog/deletion-identity.test.ts :: SHADOW-I16: a mapping whose delete handle differs from its uid renders all three`;
+`tests/translation/mappings-unfiltered.test.ts :: SHADOW-I16: the stored delete identifier is carried through untouched`.
+
+### SHADOW-I17. The catalog shows which delete handle the plan would actually use, and whether it fell back
+
+Reconciliation has just listed the remote copy, so its provider id is already in hand;
+`resolveMappingDeleteId` prefers it, because a mapping written before delete identifiers were recorded stores
+the iCalUID, which Google's delete endpoint rejects — costing a second batch request per delete and doubling
+rate-limit spend. `tombstoneFor` already encodes this preference
+(`mirrors.byId.get(...)?.deleteHandle ?? mapping.destination.deleteHandle`). `DeletionEntry.handleSource` is
+`"observedListing"` or `"storedMapping"`, because a fallback is itself a finding worth counting across a few
+days of traffic.
+
+**Proved by.**
+`tests/catalog/delete-handle-source.test.ts :: SHADOW-I17: a handle taken from the observed listing is labelled as such`;
+`tests/catalog/delete-handle-source.test.ts :: SHADOW-I17: a mapping with no observed mirror falls back and says so`.
+
+### SHADOW-I18. `provenanceIndeterminate` gets its own field, never an "other" bucket
+
+Only events carrying our own provenance may be deleted from a destination. The shadow adds nothing to that
+judgement, but an indeterminate-provenance deletion in a dry run is the single most alarming thing the
+catalog could surface. `UnresolvedEntry` is kept per `UnresolvedReason` and `renderCatalog` emits a scalar
+counter for each of the eleven reasons; there is no residual bucket. Discharged upstream as RECON-I7,
+RECON-I8 and ICAL-I37.
+
+**Proved by.**
+`tests/catalog/unresolved-by-reason.test.ts :: SHADOW-I18: every unresolved reason renders its own counter`;
+`tests/catalog/unresolved-by-reason.test.ts :: SHADOW-I18: no unresolved entry is folded into a residual bucket`.
+
+### SHADOW-I19. A deletion under unproven coverage is a bug in this package, and must be greppable as one
+
+`DeletionEntry.licensedBy` records the `ProvenCoverage` kind that licensed it. It lets an operator answer
+"would this ever have destroyed something" without re-deriving anything, and it makes the impossible case
+visible: `renderCatalog` emits `shadow.deletions.unproven_count`, which must always be `0`. If it is ever
+non-zero in production, the catalog has named the bug and the events it would have destroyed.
+
+**Proved by.**
+`tests/catalog/licensed-by.test.ts :: SHADOW-I19: every deletion records the coverage kind that licensed it`;
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: the real planner produces no deletion under unproven coverage`;
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: the unproven deletion counter names the contradiction rather than hiding it`.
+
+### SHADOW-I20. Silence and failure must never look alike
+
+Three independent precedents in this codebase: "don't wipe existing events when remote fetch fails" made
+ingest's outcome a named string with an explicit `flushed` boolean; CalDAV PUTs return no body, so their
+pushes are declared **uncomparable** rather than reported as a divergence count of zero; and a run truncated
+at the gate is `superseded`, not zero.
+
+`Catalog` is a discriminated union whose failure arms are structurally distinct from a planned run:
+
+- `{ kind: "cataloged", ... }`
+- `{ kind: "notTranslated", reason: TranslationRefusal, detail: string }`
+- `{ kind: "plannerRefused", sourceCalendar: CalendarKey, invariant: string }`
+
+`deletions: []` is **unreachable** from a failure — the failure arms do not have the field. `renderCatalog`
+emits the discriminant as its own scalar (`shadow.outcome`) and the reason as another
+(`shadow.not_translated_reason`), so a Grafana filter separates them and counts each cause.
+
+**Proved by.**
+`tests/catalog/failure-is-not-silence.test-d.ts :: SHADOW-I20: a failed catalog has no deletions field`;
+`tests/catalog/failure-is-not-silence.test.ts :: SHADOW-I20: a refusal and an empty plan render different outcomes`;
+`tests/catalog/failure-is-not-silence.test.ts :: SHADOW-I20: every refusal reason is countable on its own`.
+
+### SHADOW-I21. The planner throws, and a shadow run that dies produces no catalog at all
+
+`planReconciliation` throws `ReconcileInternalDataError` from at least three sites: `ensureOneSourceCalendar`,
+`refuseDuplicateClaim` and `refuseForeignDestination`. A shadow run that dies on production data produces no
+catalog, which in a log aggregator reads identically to a clean run. `catalogTranslation` catches
+`ReconcileInternalDataError` **only** — never a bare `Error` — and renders `plannerRefused` carrying the
+invariant string. Any other throw propagates; swallowing an unknown failure is the bug this entry exists to
+prevent.
+
+**Proved by.**
+`tests/catalog/planner-refusal.test.ts :: SHADOW-I21: a duplicate mapping claim renders as plannerRefused, not as zero deletions`;
+`tests/catalog/planner-refusal.test.ts :: SHADOW-I21: a non-reconcile error is not swallowed`.
+
+### SHADOW-I22. One plan per source calendar, merged into one destination catalog
+
+`ensureOneSourceCalendar` enforces exactly one source calendar per plan, but the caller in `sync-user.ts`
+holds local events drawn from many source calendars mirrored into one destination. A naive translation that
+packs them all into one `KnownState` throws on the first multi-source user in production.
+`partitionBySourceCalendar` produces one translation unit per mapped source; `catalogTranslation` plans each
+and merges. Deletions stay attributed to their originating source via `DeletionEntry.sourceCalendar`.
+
+Cross-source interactions — two sources mirroring the same UID into one destination — are invisible to each
+individual plan. That is recorded as the `crossSourceInteractionsInvisible` caveat, not silently omitted.
+
+**Proved by.**
+`tests/translation/partition.test.ts :: SHADOW-I22: two source calendars produce two plans and one catalog`;
+`tests/translation/partition.test.ts :: SHADOW-I22: a deletion names the source calendar it came from`;
+`tests/catalog/caveats.test.ts :: SHADOW-I22: a multi-source run emits the cross-source caveat`.
+
+### SHADOW-I23. Unparseable stored rows become `KnownState.corrupt`, never a filter
+
+`deriveTombstones` opens with `if (input.known.corrupt.length > 0) return { tombstones: [], unresolved:
+corruptRowsReported(...) }` — one unparseable stored row disables **all** deletions for that plan and reports
+every corrupt row by id. Filtering bad rows out instead would make them look absent and licence their
+deletion. `buildKnownState` routes every `IcsInternalDataError` from `parseStoredCanonicalEvent` into
+`KnownState.corrupt` with the row's `RemoteEventId`, and never drops a row.
+
+Internal data fails loud; but where the pipeline already **models** the failure, the modelled path wins over
+a throw — `requireMappingSyncEventId` throws because there is no modelled path for a mapping with no
+identity, and that case (`duplicateSourceIdentityClaim`, `mirrorPointsAtAnotherDestination`) is a translation
+refusal here, not a skipped row.
+
+**Proved by.**
+`tests/translation/corrupt-rows.test.ts :: SHADOW-I23: an unparseable stored payload becomes a corrupt known row`;
+`tests/overwrite/corrupt-rows.test.ts :: SHADOW-O9: one corrupt row alongside four healthy ones catalogs zero deletions`;
+`tests/translation/refusals.test.ts :: SHADOW-I23: a mapping identity that cannot be skipped refuses the translation`.
+
+### SHADOW-I24. Local events must arrive already normalized for the destination
+
+Normalization runs **before** reconciliation, never inside the serializer, so the mapping, the content hash
+and the pushed resource all agree on one range. Google 400s a zero-duration or inverted range; one calendar
+failed roughly fifty times an hour, and the push never recorded a mapping, so the same add was recomputed
+every run. Translating raw stored events would make the planner see a range the destination could never hold
+and emit phantom replaces — the catalog would then report churn the real engine does not have.
+
+sync-shadow reads nothing and normalizes nothing. `DestinationSyncInput.normalization` is a
+`DestinationNormalizationWitness` — `{ appliedBy: "caller"; provider: ProviderId }` with `appliedBy` a
+literal — so the caller must assert it; a `provider` that differs from `capabilities.provider` refuses with
+`normalizedForAnotherProvider`, and the absence of the field is a compile error, not a default.
+
+**Proved by.**
+`tests/translation/normalization-witness.test-d.ts :: SHADOW-I24: a translation cannot be requested without a normalization witness`;
+`tests/translation/normalization-witness.test.ts :: SHADOW-I24: a witness for another provider refuses the translation`;
+`tests/translation/normalization-witness.test.ts :: SHADOW-I24: the shadow does not itself alter any event time`.
+
+### SHADOW-I25. One window predicate judges every layer, and the shadow supplies none of its own
+
+A timed VEVENT with no DTEND ends at its DTSTART per RFC 5545 §3.6.1; `overlapsTimeWindow` switches to
+start-inclusive membership for zero-duration and inverted ranges, and a dedicated test asserts ingest,
+materialization and destination reconciliation read the same five degenerate cases identically — a CalDAV
+filter that disagreed by one millisecond made a boundary event oscillate between insert and prune forever.
+
+`ReconciliationPolicy.withinWindow` is injected. `ShadowOptions.withinWindow` is passed straight through and
+sync-shadow applies **no** window test of its own when deciding what a synthesized listing covers or which
+events it forwards. A second predicate is a second answer, and the disagreement shows up as fabricated
+deletions at the edges. Window membership is judged on the published span with slack, which is another
+reason the shadow forwards everything the caller gave and lets the injected predicate decide.
+
+**Proved by.**
+`tests/listing/no-filtering.test.ts :: SHADOW-I25: every event the caller supplies reaches the listing`;
+`tests/listing/no-filtering.test.ts :: SHADOW-I25: the injected predicate is the only window judgement made`;
+`tests/listing/degenerate-ranges.test.ts :: SHADOW-I25: five degenerate ranges are forwarded unchanged`.
+
+### SHADOW-I26. Storage bounds and mirror bounds are different windows
+
+The caller's stored source events span a wider range than the destination's mirror window — storage is
+unbounded, only mirroring is bounded, and windowing an ICS fetch at fetch time once made the snapshot diff
+delete every historic `event_state` on first ingest after deploy. The translation must not treat the stored
+read's extent as the listing's coverage: coverage comes from the recorded ingest window, the mirror window
+comes from the destination's configured ranges, and they are separate fields of `DestinationSyncInput`.
+Conflating them is precisely how a shadow run manufactures deletions that exist only inside this package.
+
+**Proved by.**
+`tests/coverage/two-windows.test.ts :: SHADOW-I26: the stored read's extent is never used as coverage`;
+`tests/coverage/two-windows.test.ts :: SHADOW-I26: the mirror window and the coverage window are separate inputs`.
+
+### SHADOW-I27. Identifier lists are a capped sample beside an uncapped count
+
+Wide-event identifier lists must be bounded by both element count and total bytes, with a per-identifier
+truncation for a single pathological value, deduplicated, and emitting only loggable scalars — never an
+object, never `undefined`. The production limits are 20 elements / 2048 chars with ` (+N more)` and
+`... (truncated)` markers; sync-reconcile's `boundedSample` and `PlanLimits` (`sampleCount: 32`,
+`sampleBytes: 4096`) are the in-repo answer and `total` is what makes a truncated sample safe to read.
+OpenTelemetry reinforces it from the other side: its default is 128 attributes with **silent** drops and
+silent string truncation, so an unbounded deletions array does not fail loudly, it quietly stops being true.
+
+The catalog **is** a wide-event payload, so this is the rendering contract verbatim. `renderCatalog` uses
+`BoundedSample` semantics — sample plus uncapped total — and `ShadowLimits` gives **deletions a larger budget
+than everything else** (`deletionSampleCount: 200`, `deletionSampleBytes: 65536`) because deletions are the
+subject and the budgets should say so; context sections keep reconcile's 32 / 4096. A single identifier is
+truncated at `identifierBytes` with an explicit marker. A missing optional field is **omitted**, never
+emitted as `undefined`.
+
+**Corrected in review, twice.** A truncated sample said so only by arithmetic against the total, so
+`shadow.deletions.sample_omitted` is now emitted beside it: what was dropped is counted, not inferred. And a
+deletion was sampled by `identityKey` alone, which loses exactly what SHADOW-I16 says the reader needs and
+collapses two distinct destructive intents on one identity into one name. A sampled deletion is now the
+composite `identityKey|remoteEventId|deleteHandle|handleSource|origin|cause`, and the deletion byte budget
+was raised to 65536 so carrying the locator does not crowd out the names.
+
+**Proved by.**
+`tests/catalog/bounds.test.ts :: SHADOW-I27: exactly on the sample limit keeps the whole list`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: one past the limit reports the remainder in the total`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: a complete deletion sample says nothing was omitted`;
+`tests/catalog/bounds.test.ts :: SHADOW-I16: a sampled deletion names the remote id and the handle, not only the identity`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: a nine-thousand-character identifier is truncated with a marker`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: a repeated identifier is counted once`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: a missing optional field is omitted, not emitted as undefined`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: every rendered value is a boolean, a number or a string`;
+`tests/catalog/bounds.test.ts :: SHADOW-I27: deletions get a larger budget than context sections`.
+
+### SHADOW-I28. The catalog is byte-identical across identical inputs and independent of input order
+
+The ICS telemetry suites assert idempotence and no-churn by name: "settles without churning the surviving row
+over repeated polls", "does not churn the stored row when the feed reorders the colliding events". Ordering
+must be decided by a stable content-derived signature, not feed order (RECON-I22 / entry 27). Every catalog
+section is ordered by `signatureOf`, a NUL-joined content-derived key, never by array position. Otherwise a
+few days of production catalogs cannot be diffed or grouped, and an operator cannot tell a new deletion from
+a re-log of yesterday's.
+
+**Proved by.**
+`tests/catalog/stable-order.test.ts :: SHADOW-I28: identical inputs produce a byte-identical catalog`;
+`tests/catalog/stable-order.test.ts :: SHADOW-I28: all permutations of a five-event input produce the same catalog`;
+`tests/catalog/stable-order.test.ts :: SHADOW-I28: the catalog is independent of the ambient time zone`.
+
+### SHADOW-I29. Refusal reasons are a named `as const` union, one per cause
+
+A 500-user outage must not render as 500 quiet zeros, and a single opaque failure bucket cannot be
+investigated. `translationRefusals` is `as const` and each member names a cause a Grafana query can count:
+`noMappedSourceCalendars`, `sourceCalendarSetChangedDuringRead`, `unnormalizedLocalEvents`,
+`normalizedForAnotherProvider`, `nonCanonicalInstant`, `mirrorWindowInverted`,
+`destinationListingIsNotThisDestination`, `mirrorPointsAtAnotherDestination`, `duplicateSourceIdentityClaim`,
+`storedCoverageMissingForMappedSource`, `withheldCountsDisagreeWithWithheldList`. Callers `switch` with
+`assertNever`, so an unhandled failure mode is a compile error.
+
+**Proved by.**
+`tests/translation/refusals.test.ts :: SHADOW-I29: every refusal reason is reachable from a real input`;
+`tests/translation/refusals.test-d.ts :: SHADOW-I29: a switch over the refusal reasons is exhaustive`.
+
+### SHADOW-I30. The shadow never reads the ambient clock, and its only time arithmetic is explicit
+
+`asOf` and `maxCoverageAgeSeconds` arrive as arguments. Instants are compared by
+`src/time/instant.ts`, which requires canonical UTC RFC 3339 values and compares them by their own total
+order — it never calls `Date`, `Date.parse`, `Intl`, `toLocale*` or reads `process.env`. A non-canonical
+instant refuses the translation with `nonCanonicalInstant` rather than being coerced. The reconcile hygiene
+suite replaces `globalThis.Date` with a throwing class and asserts planning still succeeds; sync-shadow
+carries the same suite adapted to its surface.
+
+**Proved by.**
+`tests/hygiene/purity.test.ts :: SHADOW-L3: a run succeeds with Date replaced by a throwing class`;
+`tests/hygiene/purity.test.ts :: SHADOW-L3: no source file references Intl, process.env or toLocale`;
+`tests/time/canonical-instant.test.ts :: SHADOW-I30: a non-canonical instant refuses the translation`.
+
+### SHADOW-I31. `coverageForWholeFeed` is explicitly rejected
+
+`@keeper.sh/sync-ical` ships `coverageForWholeFeed`, which claims `1800-01-01 .. 2400-01-01`. That is
+legitimate for an ICS feed — the feed genuinely **is** the whole calendar — and catastrophic if reused for
+stored source state, which is a snapshot of a bounded past read. sync-shadow imports
+`parseStoredCanonicalEvent` and `withinTimeWindow` from sync-ical and does not import
+`coverageForWholeFeed`; a hygiene test greps for it.
+
+**Proved by.**
+`tests/hygiene/rejected-imports.test.ts :: SHADOW-I31: no source file imports coverageForWholeFeed`.
+
+### SHADOW-I32. The destination listing is the caller's, forwarded unchanged
+
+`ObservedState` is `bothSides` whenever the caller read the destination. sync-shadow does not synthesize,
+filter, re-order or re-key the destination listing: a `partial` or `cursorLost` destination read must reach
+the planner as itself, because the planner's own authority rules are what stop it licensing anything. A
+destination listing whose `scope.calendar` is not the destination refuses with
+`destinationListingIsNotThisDestination` — a listing of the wrong calendar is not a listing of an empty one.
+
+**Proved by.**
+`tests/translation/destination-listing.test.ts :: SHADOW-I32: the destination listing is forwarded unchanged`;
+`tests/overwrite/destination-partial.test.ts :: SHADOW-O10: a partial destination listing catalogs no deletion and no overwrite`;
+`tests/translation/destination-listing.test.ts :: SHADOW-I32: a listing of another calendar refuses the translation`.
+
+### SHADOW-I33. Every iteration is bounded in the input size, and the bound is proved
+
+The one lockup-adjacent obligation that applies (RECON-I42). The catalog builder walks each plan once; there
+is no recursion, no fixed-point loop and no unbounded accumulation. The sample caps must be provably hit
+rather than assumed: a pathological plan with tens of thousands of tombstones and a nine-thousand-character
+identifier must still render a loggable record within `ShadowLimits`, and the per-source loop must invoke the
+planner exactly once per mapped source.
+
+**Proved by.**
+`tests/lockup/bounded-walk.test.ts :: SHADOW-L4: a plan with fifty thousand tombstones renders within the limits`;
+`tests/lockup/bounded-walk.test.ts :: SHADOW-L5: the planner is invoked exactly once per mapped source calendar`;
+`tests/lockup/bounded-walk.test.ts :: SHADOW-L7: a degenerate override chain terminates`.
+
+### SHADOW-I34. The catalog states its caveats rather than implying parity
+
+`catalogCaveats` is `as const`: `mirrorWindowRetirementSuppressed`, `noSourceRemovalSignal`,
+`coverageStalerThanTheLiveEngineAccepts`, `crossSourceInteractionsInvisible`,
+`underReportsRelativeToLiveEngine`. The last is emitted whenever **any** mapped source came back unproven —
+not only when the recording was too old — because every such downgrade suppresses that source's deletions and
+the log line has to say so; `mirrorWindowRetirementSuppressed` names its own standing under-report (I10).
+Each is emitted on the catalog when the condition that produces it holds,
+and rendered as a joined scalar. This package does not compare itself against the existing engine and does
+not claim equivalence; the caveats are how the catalog says so in the log line rather than in a design
+document nobody reads at 3am.
+
+**Proved by.**
+`tests/catalog/caveats.test.ts :: SHADOW-I34: every caveat is reachable and renders by name`;
+`tests/catalog/caveats.test.ts :: SHADOW-I34: no catalog claims parity with the existing engine`.
+
+## Not applicable to sync-shadow
+
+### SHADOW-I35. The whole lockup family — deadlines, leases, single-flight, retries, aborts
+
+**NOT APPLICABLE.** sync-shadow awaits nothing: no IO, no clock, no database, no provider, no locks, no
+coalescing, no retries. There is no lease to release on throw, no deadline to enforce with a
+never-resolving stub, no single-flight leader whose failure could strand followers, no retry path needing a
+ceiling, and no abort signal to reject mid-flight. Inventing an async seam so the package has something to
+test would add exactly the failure class the obsession exists to prevent.
+
+The honest discharge is structural, following RECON-I45..I48: the purity suite asserts that no export's
+`constructor.name` contains `AsyncFunction` and that `catalogShadowRun` returns a plain value, and the
+no-`Bun.sleep` hygiene test is carried forward as a cheap guard (`Bun.sleep` is a native primitive
+`vi.useFakeTimers` cannot patch — a lesson that cost this team real CI time, and it stays enforced even where
+it cannot currently fire). The single lockup obligation that does apply is bounded iteration, and it is
+SHADOW-I33 above.
+
+**Proved by.**
+`tests/hygiene/purity.test.ts :: SHADOW-L1: no exported function is async`;
+`tests/hygiene/no-bun-sleep.test.ts :: SHADOW-L2: no source file references Bun.sleep, setTimeout or setInterval`.
+
+### SHADOW-I36. Provider transport, throttling, quota, reauthentication and cursor persistence
+
+**NOT APPLICABLE.** sync-shadow performs no IO by mandate. Throttle signals, quota scopes, 401/403 handling
+and cursor persistence belong to the provider adapters and the caller. `CursorDecision` is rendered into the
+catalog verbatim (it is a finding: a synthesized listing always yields `hold: "listingIncomplete"` or
+`reset: "corruptKnownState"`), but sync-shadow never acts on it.
+
+### SHADOW-I37. iCalendar parsing, timezone resolution and recurrence expansion
+
+**NOT APPLICABLE.** Lenient parsing, `VTIMEZONE` synthesis, Windows zone mapping, floating-date anchoring,
+full-day interpretation, revision collapse and recurrence expansion are all owned by `@keeper.sh/sync-ical`
+and are already ledgered as `ICAL-I1`–`ICAL-I71`. sync-shadow imports `parseStoredCanonicalEvent` and
+`withinTimeWindow` and reimplements none of it. The one iCalendar-adjacent obligation it carries is
+SHADOW-I25: use the shared window predicate and add no second one.
+
+### SHADOW-I38. Applying anything
+
+**NOT APPLICABLE.** A shadow run produces a catalog, never a write. There is no apply path, so
+"a delete lands and the recreate fails" is not a failure mode this package can have. What it must not do is
+**mis-report** the replace as two independent entries (SHADOW-I13).
+
+## Dependencies taken and rejected
+
+**Taken:** `@keeper.sh/sync-protocol`, `@keeper.sh/sync-ical`, `@keeper.sh/sync-reconcile` — all
+`workspace:*`, all consumed as source. Zero runtime dependencies beyond those three. Dev: `vitest ^4.1.4`,
+`typescript 5.9.3`, `@types/bun`, `@keeper.sh/typescript-config`.
+
+**Rejected, with reasons.**
+
+- `ical.js` — parsing, already owned by sync-ical, which deliberately reimplemented lenient parsing because
+  the production bugs were in leniency, not in conformance.
+- `rrule` / `rrule-temporal` — recurrence expansion; sync-shadow never expands, and `rrule.js` carries a
+  documented footgun that only UTC-represented `Date` objects are safe.
+- `ts-ics` — overlaps sync-ical with no added coverage of the Outlook/Windows-timezone and floating-date
+  cases the repo has already paid for.
+- `tsdav` — CalDAV transport; this package performs no IO by mandate.
+- `temporal-polyfill` — roughly 45 kB gzipped, and more importantly it would introduce a second time model
+  beside the protocol's tagged `Instant` / `CalendarDate` / `ZoneId` handles. sync-shadow only ever compares
+  and formats already-tagged values; `src/time/instant.ts` is a total order over canonical UTC strings and is
+  smaller than the import.
+- A logging library — the catalog is a value. Emitting it is the caller's job, which is what keeps the
+  package pure.
+
+**On the runner.** Bun is the runtime; the tests run as `TZ=UTC bun x --bun vitest run`, matching every
+sibling. Vitest supplies the `typecheck` lane over `tests/**/*.test-d.ts`, which `bun test` has no equivalent
+for, and in this package family the type-level guarantees **are** the specification — `partial` carrying
+`coverage?: never` is a proof, not a comment. Bare `bun test` is the wrong runner here and produces bogus
+`vi.hoisted is not a function` errors. `Bun.file` is used in the ledger-citations hygiene test.
+
+## The test id scheme
+
+Every test is named `SHADOW-<series><n>: <what it proves>`, and the **Proved by** lines above cite that exact
+string so the ledger can be walked against the suite by grep.
+
+- `SHADOW-I<n>` — the ledger entry the test honours, one for one.
+- `SHADOW-O<n>` — an **overwrite** obligation: a deletion, a write or an identity that must not move. Each
+  must fail before its guard exists.
+- `SHADOW-L<n>` — a **lockup** obligation: a bound, a ceiling, or the proven absence of a timer, a clock or a
+  promise.
+
+### SHADOW-O index — the overwrite family
+
+Each line names the failure it prevents and how the test forces it.
+
+- `SHADOW-O1` — tests/overwrite/no-wipe.test.ts — *a synthesized listing claims the whole window and every
+  mirror whose source row is missing is catalogued as a deletion.* Forced by a translation with no coverage
+  proof whose mirrors have no matching stored source event at all; an implementation that reaches for
+  `snapshot` because the shape is more convenient catalogs every one of them.
+- `SHADOW-O2` — tests/overwrite/coverage-false-negative.test.ts — *the author sets `listing.coverage`
+  honestly, leaves `policy.coverageBySource` empty, sees zero deletions and declares the engine safe.* Forced
+  by running one input twice, once with the proof and once without, asserting the counts differ; an
+  implementation that fills only the listing reports zero in both runs.
+- `SHADOW-O3` — tests/overwrite/axes.test.ts — *a wide future range licenses a historic deletion.* Forced by
+  proving only the future axis and placing one absence on each axis.
+- `SHADOW-O4` — tests/overwrite/all-or-nothing.test.ts — *a freshly imported, unmapped calendar deletes every
+  Keeper-tagged event another calendar row put there.* Forced by two mapped sources where the second has no
+  recorded ingest window; a per-source loop that skips it catalogs the first source's deletions.
+- `SHADOW-O5` — tests/overwrite/withheld-series.test.ts — *a recurrence series withheld for exceeding the
+  occurrence budget is treated as gone and its mirrors are mass-deleted then mass-re-added.* Forced by a
+  stored read with a non-zero `overBudgetRecurrenceSeries` counter and the series' mirror still present;
+  asserted over ten consecutive identical runs so re-add churn would show.
+- `SHADOW-O6` — tests/overwrite/manufactured-retirement.test.ts — *the scope window and the mirror window
+  disagree and `retiredByTheMirrorWindow` manufactures deletions that exist only inside this package.* Forced
+  by a mirror sitting between recorded coverage and the requested edge; an implementation that sets
+  `scope.window` to a bounding authority window retires it under unproven coverage.
+- `SHADOW-O7` — tests/overwrite/coverage-band-churn.test.ts — *a mapping in the coverage band looks unmapped,
+  is re-created, the insert is swallowed by the uniqueness index and the orphan is deleted next run.* Forced
+  by pre-filtering mappings by the coverage window; the catalog then shows a create and a delete for the same
+  identity.
+- `SHADOW-O8` — tests/overwrite/unproven-deletion.test.ts — *a deletion is catalogued under
+  `{ kind: "unproven" }` and nobody notices — or, worse, is dropped so the catalog reads clean.* Forced from
+  both sides: the real planner over every listing kind must catalogue no deletion at all, and an injected plan
+  carrying a tombstone or a replace under unproven coverage must publish it, name the identity in the sample
+  and count it in `shadow.deletions.unproven_count` (SHADOW-I39).
+- `SHADOW-O9` — tests/overwrite/corrupt-rows.test.ts — *a delta diff against an unreadable baseline computes
+  bogus deletions.* Forced by one unparseable stored payload alongside four healthy rows; an implementation
+  that filters the bad row catalogs its deletion.
+- `SHADOW-O10` — tests/overwrite/destination-partial.test.ts — *a truncated destination read presents as an
+  empty destination.* Forced by a `partial` destination listing with a fully populated mapping set.
+- `SHADOW-O11` — tests/overwrite/destination-cursor-lost.test.ts — *a 410 on the destination wipes the
+  mirrors.* Forced by a `cursorLost` destination listing with every mapping present.
+- `SHADOW-O12` — tests/overwrite/replace-not-two-entries.test.ts — *a replace is decomposed into a deletion
+  and a creation, inflating the number the reader is scanning for.* Forced by a drifted mirror; the catalog
+  must show one `ReplacementEntry` and one deletion tagged `replaceRetire`, not two independent entries.
+- `SHADOW-O13` — tests/overwrite/reassignment.test.ts — *an occurrence re-paired within its series is
+  reported as a deletion plus an add.* Forced by an occurrence whose slot key moved but whose remote state is
+  verifiable and unchanged; the catalog must show a mapping-only update and zero deletions.
+- `SHADOW-O14` — tests/overwrite/forget-is-not-delete.test.ts — *`forgetKnownRow` is counted as destruction,
+  or `retireMirror` is filed as local cleanup.* Forced by a plan carrying one of each; the two must land in
+  different fields.
+- `SHADOW-O15` — tests/overwrite/echo.test.ts — *an event carrying our own provenance is echoed back and
+  catalogued as a write.* Forced by a stored source event stamped `ours` with our own `InstallationId`, an
+  outranking revision and a changed fingerprint, beside a control stamped `foreign` that is otherwise
+  identical and **does** produce the update — so the suppression is attributable to the guard and not to some
+  other rejection (SHADOW-I44).
+- `SHADOW-O16` — tests/overwrite/echo.test.ts — *another installation's mirror is catalogued as an orphan
+  deletion.* Forced by an `ours` destination event carrying a foreign `InstallationId`.
+- `SHADOW-O17` — tests/overwrite/indeterminate-provenance.test.ts — *an unattributable destination event is
+  catalogued as a deletion, or filed under a generic bucket.* Forced by an `indeterminate` destination event
+  with no mapping; it must appear as `unresolved: provenanceIndeterminate` with its own counter.
+- `SHADOW-O18` — tests/overwrite/delete-handle.test.ts — *a legacy iCalUID is shown as the handle the plan
+  would use, and a reviewer checks the wrong object.* Forced by a mapping whose stored handle differs from the
+  observed one; the catalog must show the observed handle and `handleSource: "observedListing"`.
+- `SHADOW-O19` — tests/overwrite/stale-coverage.test.ts — *stored coverage recorded weeks ago is accepted as
+  proof of present absence.* Forced by an `ingestWindowRecordedAt` older than `maxCoverageAgeSeconds` with an
+  otherwise valid row; the live engine's own `resolveStoredSourceCoverage` passes this input.
+- `SHADOW-O20` — tests/overwrite/pre-read-coverage.test.ts — *pre-read coverage is used, having widened while
+  the destination was being read.* Forced at the type level: a `SourceReadWitness` with
+  `coverageNarrowedAfterRemoteRead: false` must not compile, and a witness whose two source-calendar sets
+  differ must refuse.
+- `SHADOW-O21` — tests/overwrite/no-content.test.ts — *a title, description or location reaches a log.*
+  Forced by a plan whose events carry distinctive marker strings in every content field, asserting none of
+  them appears anywhere in the rendered catalog.
+- `SHADOW-O22` — tests/overwrite/idempotent.test.ts — *the same input catalogs differently on a second run,
+  so an operator cannot tell a new deletion from a re-log of yesterday's.* Forced by comparing two runs
+  byte-for-byte, and by all 120 permutations of a five-event input.
+
+### SHADOW-L index — the lockup family
+
+Each line names the failure it prevents and how the test forces it. The family is structurally absent
+(SHADOW-I35); these prove the absence rather than exercise a timer.
+
+- `SHADOW-L1` — tests/hygiene/purity.test.ts — *an await is introduced and with it a deadline, a lease and a
+  single-flight coordinator that can wedge.* Forced by reflecting over every export and asserting no
+  `constructor.name` contains `AsyncFunction`, and that `catalogShadowRun` returns a plain value rather than a
+  thenable.
+- `SHADOW-L2` — tests/hygiene/no-bun-sleep.test.ts — *`Bun.sleep` enters the package and `vi.useFakeTimers`
+  silently fails to patch it, burning real CI wall time.* Forced by grepping `src` for `Bun.sleep`,
+  `setTimeout`, `setInterval` and `new Promise`.
+- `SHADOW-L3` — tests/hygiene/purity.test.ts — *the ambient clock or the ambient zone leaks in and the
+  catalog stops being reproducible.* Forced by replacing `globalThis.Date` with a throwing class, running a
+  full catalog, and re-running under `TZ=Pacific/Kiritimati` asserting byte equality.
+- `SHADOW-L4` — tests/lockup/bounded-walk.test.ts — *an unbounded deletions array quietly stops being true
+  when the log pipeline drops it.* Forced by a plan with fifty thousand tombstones and a
+  nine-thousand-character identifier, asserting both the count cap and the byte cap are hit and the record
+  stays loggable.
+- `SHADOW-L5` — tests/lockup/bounded-walk.test.ts — *the per-source loop re-plans a source, or plans a source
+  it was not given.* Forced by a counting stub planner over three mapped sources, asserting exactly three
+  invocations with three distinct calendar keys.
+- `SHADOW-L6` — tests/lockup/bounded-walk.test.ts — *one pathological identifier consumes the whole byte
+  budget and hides every other deletion.* Forced by one nine-thousand-character uid followed by fifty normal
+  ones, asserting the normal ones still appear.
+- `SHADOW-L7` — tests/lockup/bounded-walk.test.ts — *a self-referential occurrence chain recurses.* Forced by
+  an override whose recurrence instant names its own master and a slot pair that reference each other.
+- `SHADOW-L8` — tests/lockup/render-is-total.test.ts — *a catalog member renders as a throw and the shadow
+  run produces nothing, which reads as a clean run.* Forced by a table over every `Catalog` arm, every
+  `TranslationRefusal`, every `TombstoneCause` and every `UnresolvedReason`, asserting each renders.
+
+### SHADOW-I39. A deletion under unproven coverage is published and flagged, never dropped
+
+**Reversed in review.** The first implementation had `deletionsOf` return `[]` whenever the plan's coverage
+was not `proven`, arguing that publishing such a deletion publishes the thing SHADOW-I19 forbids. That was
+backwards, and it was wrong on the facts twice over:
+
+- **It was not a narrow guard.** Only `absentFromSnapshot` tombstones are coverage-gated inside the planner
+  (`absenceIsProven`); a `replace` write's retire leg comes from `decideReassignedWrite` and is produced
+  regardless of coverage. Coverage is unproven on ordinary paths — `recordingTooOld`, `localReadIncomplete`,
+  `siblingSourceUnproven` (which downgrades every partition if any one is unproven). So a planned DELETE of a
+  real calendar event could vanish from `catalog.deletions` while its sibling recreate was published.
+- **It broke SHADOW-I20 in the one field that matters.** A dropped deletion rendered byte-for-byte like a
+  clean run, and `licensedBy: "unproven"` and `shadow.deletions.unproven_count` — the fields that exist so
+  the bug can be named — were structurally unreachable.
+
+Every deletion the planner emits is now catalogued, tagged with the coverage kind that licensed it, and
+counted by `shadow.deletions.unproven_count`. A non-zero count is the alarm; zero is a fact, not a
+suppression. The safety claim is unchanged and is still proved: under the real planner, no listing kind
+crossed with any tombstone cause produces a deletion under unproven coverage, because by SHADOW-I1 an
+unproven listing is `partial`, whose authority is `none`.
+
+**Proved by.**
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: the real planner produces no deletion under unproven coverage`;
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: a deletion a planner emits under unproven coverage is published and flagged`;
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: a replace's retire leg under unproven coverage is counted too`;
+`tests/overwrite/unproven-deletion.test.ts :: SHADOW-O8: a proven plan under the same shape does still catalogue its deletion`.
+
+### SHADOW-I40. A mirror stamped by another installation is a finding, not a silence
+
+`classifyProvenance` gives four dispositions, and `planReconciliation` reports only `indeterminate` mirrors
+it cannot attribute. A destination event stamped `ours` by a *different* installation and claimed by none of
+our mappings is equally unattributable from here: we cannot tell whether it is another Keeper.sh
+installation's mirror that must be left alone or an orphan of ours. It must never become a deletion — that
+is the whole of SHADOW-O16 — but it must also not vanish, so the shadow adds it to `unresolved` under
+`provenanceIndeterminate`, the one reason that already means "this package cannot attribute this event".
+The planner's own indeterminate reports are left untouched, so the two never double-count the same event.
+
+**Proved by.**
+`tests/overwrite/echo.test.ts :: SHADOW-O16: another installation's mirror is not catalogued as an orphan deletion`;
+`tests/overwrite/echo.test.ts :: SHADOW-O16: the foreign mirror is not silently ignored either`;
+`tests/overwrite/indeterminate-provenance.test.ts :: SHADOW-O17: the reported entry names the remote id a reviewer would look up`.
+
+### SHADOW-I41. A corrupt stored row is reported under the id its mirror row was recorded with
+
+`KnownState.corrupt` disables every deletion for that plan and is reported by id, so the id has to be the one
+an operator can look up. A stored source payload and the mirror row that mirrors it are joined on the event
+UID, not on the stored row's own primary key: those two differ whenever the source was re-ingested under a
+new remote id. The corrupt row therefore carries the mirror's `sourceRemoteId` — the baseline the diff would
+have been computed against — and falls back to the stored row's id only when nothing mirrors it.
+
+**Corrected in review.** A UID is not an identity. A series carries a master, its overrides and its slots all
+under one UID, which `ics-revision-collapse-telemetry.test.ts` records as routine, and the first
+implementation resolved a corrupt row with `mirrors.find(uid matches)` — so one unreadable payload was
+reported under a *sibling's* remote id and excluded that sibling, not itself, from `known.events`. The
+unreadable baseline then looked present, and its stale-revision guard was skipped. Two rules now hold:
+
+- the corrupt row is attributed to the mirror whose `sourceRemoteId` equals the stored row's own id, or to
+  the single mirror sharing the UID when there is exactly one, and otherwise to the stored row's own id —
+  never to an arbitrary sibling;
+- **every** mirror sharing an unreadable UID leaves `known.events`, because a listing that dropped the
+  unreadable payload beside a `KnownState` that still holds its siblings is manufactured absence.
+
+**Proved by.**
+`tests/overwrite/corrupt-rows.test.ts :: SHADOW-O9: the corrupt row is reported by id rather than being filtered away`;
+`tests/translation/corrupt-rows.test.ts :: SHADOW-I23: a corrupt row is reported by its remote id, not dropped`;
+`tests/translation/corrupt-rows.test.ts :: SHADOW-I23: an unparseable stored payload becomes a corrupt known row`;
+`tests/translation/corrupt-rows.test.ts :: SHADOW-I41: one unreadable occurrence of a uid never borrows a sibling's remote id`;
+`tests/translation/corrupt-rows.test.ts :: SHADOW-I41: every mirror sharing an unreadable uid leaves known.events`.
+
+### SHADOW-I42. A fixture default must not swallow the null it is being asked to express
+
+The red-phase `storedSourceEvent` fixture defaulted its payload with `spec.canonical ?? canonicalPayload(…)`,
+so the one input written to express "this row was stored without a canonical payload" — `canonical: null` —
+silently received a perfectly good payload, and the `unnormalizedLocalEvents` refusal was unreachable from
+the suite that claimed to reach every refusal. The default now keys off `Object.hasOwn`, so an explicitly
+passed `null` survives. `??` and `||` defaults are the standard way this repository loses a deliberate null;
+this is the second time it has hidden a refusal path rather than a value.
+
+**Proved by.**
+`tests/translation/refusals.test.ts :: SHADOW-I29: every refusal reason is reachable from a real input`.
+
+### SHADOW-I43. A shadow invariant that breaks still renders a catalog
+
+SHADOW-I21 catches the planner's `ReconcileInternalDataError` and renders `plannerRefused`, but the shadow's
+own invariants — a planned removal naming a source identity no mapping claims — threw `ShadowInternalDataError`
+out of the catalog stage, past the planner's `try`, and out of `catalogShadowRun` into the caller's sync path.
+A dry run riding along on production traffic must never throw into the run it is shadowing, and by SHADOW-I20
+a failure must be distinguishable **in the output**. `Catalog` therefore has a fourth arm, `shadowRefused`,
+carrying the invariant string, rendered as `shadow.outcome` plus `shadow.shadow_invariant`. It is reachable
+today only through an injected `PlanUnit`, which is precisely the case where a contradiction must be named.
+
+**Proved by.**
+`tests/catalog/failure-is-not-silence.test.ts :: SHADOW-I43: a broken shadow invariant renders as its own outcome, not as a throw`;
+`tests/lockup/render-is-total.test.ts :: SHADOW-L8: every catalog shape renders without throwing`.
+
+### SHADOW-I44. Source provenance is carried, never manufactured
+
+The first implementation stamped every synthesized source event `provenance: { kind: "foreign" }` because
+`StoredSourceEvent` had no provenance field, which made reconcile's echo guard structurally unreachable:
+`classifyObservations` runs over the **source** listing, so an `ours` row is `suppressedEcho` and an
+`indeterminate` one is reported — and laundering both into `foreign` turned our own echo into a write back to
+the calendar it came from. That is ICAL-I37 verbatim ("an event carrying our provenance is emitted as ours,
+never laundered into foreign"), and the entry that claimed it was discharged upstream was wrong: upstream can
+only honour it if this package forwards what the caller read.
+
+`StoredSourceEvent.provenance` is a required `Provenance`, read from the same stored row the fingerprint comes
+from, and `synthesizeSourceListing` forwards it unchanged through a switch over the three arms. A caller who
+cannot determine it says `indeterminate` — a value the planner reports — and cannot say `foreign` by omission,
+because the field has no default.
+
+**Proved by.**
+`tests/overwrite/echo.test.ts :: SHADOW-O15: an event carrying our own provenance is not echoed back as a write`;
+`tests/overwrite/echo.test.ts :: SHADOW-O15: the same drift from a foreign row is a write, so the guard is what suppressed it`;
+`tests/overwrite/echo.test.ts :: SHADOW-O15: an indeterminate source row is reported rather than written or laundered`.
+
+### SHADOW-I45. A row that names an unmapped source calendar refuses the translation
+
+`partitionBySourceCalendar` keeps only the rows whose `sourceCalendar` is in `mappedSourceCalendars`, so a
+mirror, a stored event or a withheld row naming any other calendar was silently discarded: its destination
+event went unclaimed and the run said nothing about it. Silence standing in for "we could not account for
+this input" is SHADOW-I20's failure at the translation layer. `rowOnAnUnmappedSourceCalendar` names the row
+and the calendar it claimed, and refuses.
+
+Related, and fixed with it: `LocalReadCompleteness.withheld` now carries the source calendar per row, so each
+unit's listing receives only its own withheld events instead of every unit reporting — and mis-attributing —
+the whole destination's list.
+
+**Proved by.**
+`tests/translation/refusals.test.ts :: SHADOW-I29: every refusal reason is reachable from a real input`;
+`tests/translation/refusals.test-d.ts :: SHADOW-I29: a switch over the refusal reasons is exhaustive`.
+
+### SHADOW-I46. An anchor is not a zero-length event
+
+`DeletionEntry.time` is the field an operator uses to find the real calendar event, and a recurring master
+has no single occurrence to report. Reporting its anchor as `{ start: anchor.start, end: anchor.start }` — or
+an all-day anchor as `endDateExclusive === startDate` — manufactures exactly the degenerate range
+`tests/ics/degenerate-range-source-ingest.test.ts` exists to warn about, in the field that is supposed to
+locate the event. `EntryTime` is therefore a three-arm union: `occurrence` carries a real `EventTime`,
+`seriesAnchor` carries the protocol's `RecurrenceAnchor` unchanged, and `unrecorded` says so out loud for an
+identity with no recorded time. Nothing is fabricated, and `removedTimeOf` no longer needs to throw.
+
+**Proved by.**
+`tests/catalog/deletion-identity.test.ts :: SHADOW-I15: a deletion entry names the uid, the remote id and the delete handle separately`;
+`tests/listing/degenerate-ranges.test.ts :: SHADOW-I25: five degenerate ranges are forwarded unchanged`.

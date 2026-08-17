@@ -8,8 +8,8 @@ interface Citation {
 
 const ledgerText = (): Promise<string> => Bun.file(`${packageRoot}../LEARNINGS.md`).text();
 
-const reconcileSectionOf = (ledger: string): string => {
-  const start = ledger.indexOf("# sync-reconcile learnings ledger");
+const shadowSectionOf = (ledger: string): string => {
+  const start = ledger.indexOf("# sync-shadow learnings ledger");
   const next = ledger.indexOf("\n# ", start + 1);
   if (next === -1) {
     return ledger.slice(start);
@@ -35,17 +35,17 @@ const titlesIn = (text: string): readonly string[] =>
     return [title];
   });
 
-const citations = citationsIn(reconcileSectionOf(await ledgerText()));
+const citations = citationsIn(shadowSectionOf(await ledgerText()));
 
-describe("the ledger can be walked against the suite", () => {
-  test("RECON-I29: every cited test file exists", async () => {
+describe("the sync-shadow ledger can be walked against the suite", () => {
+  test("SHADOW-I35: every cited test file exists", async () => {
     const files = new Set(await sourceFiles("tests"));
     const missing = citations.filter((citation) => !files.has(citation.file));
 
     expect(missing.map((citation) => citation.file)).toEqual([]);
   });
 
-  test("RECON-I29: every cited test name exists verbatim in the file that is cited", async () => {
+  test("SHADOW-I35: every cited test name exists verbatim in the file that is cited", async () => {
     const broken: string[] = [];
     const titlesOf = new Map<string, readonly string[]>();
     for (const citation of citations) {
@@ -60,7 +60,7 @@ describe("the ledger can be walked against the suite", () => {
     expect(broken).toEqual([]);
   });
 
-  test("RECON-I29: the walk covers the whole ledger, not a handful of lines", () => {
-    expect(citations.length).toBeGreaterThan(100);
+  test("SHADOW-I35: the walk covers the whole section, not a handful of lines", () => {
+    expect(citations.length).toBeGreaterThan(60);
   });
 });

@@ -1,0 +1,23 @@
+{
+  "name": "@keeper.sh/sync-shadow",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint .",
+    "test": "TZ=UTC bun x --bun vitest run"
+  },
+  "dependencies": {
+    "@keeper.sh/sync-ical": "workspace:*",
+    "@keeper.sh/sync-protocol": "workspace:*",
+    "@keeper.sh/sync-reconcile": "workspace:*"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
+  }
+}
