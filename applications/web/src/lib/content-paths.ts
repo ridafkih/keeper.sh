@@ -14,3 +14,31 @@ export const CONTENT_DIRECTORIES = {
 } as const;
 
 export const MOVED_PATHS_FILE = "moved-paths.json";
+
+export interface SupersedingPage {
+  basePath: string;
+  replaces?: string[];
+  slug: string;
+}
+
+export function buildMovedPaths(pages: SupersedingPage[]): Record<string, string> {
+  const moved: Record<string, string> = {};
+
+  for (const page of pages) {
+    for (const from of page.replaces ?? []) {
+      const to = `${page.basePath}/${page.slug}`;
+
+      if (from === to) {
+        throw new Error(`"${from}" redirects to itself.`);
+      }
+
+      if (moved[from] && moved[from] !== to) {
+        throw new Error(`"${from}" is claimed by both "${moved[from]}" and "${to}".`);
+      }
+
+      moved[from] = to;
+    }
+  }
+
+  return moved;
+}

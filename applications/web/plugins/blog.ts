@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
-import { CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
+import { buildMovedPaths, CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
@@ -300,21 +300,15 @@ export function movedPathsPlugin(): Plugin {
     },
 
     generateBundle() {
-      const moved: Record<string, string> = {};
-      for (const { basePath, directory } of collections) {
-        for (const post of processBlogDirectory(resolve(root, directory), publicDir)) {
-          for (const from of post.metadata.replaces ?? []) {
-            const to = `${basePath}/${post.slug}`;
-            if (moved[from] && moved[from] !== to) {
-              throw new Error(`"${from}" is claimed by both "${moved[from]}" and "${to}".`);
-            }
-            if (from === to) {
-              throw new Error(`"${from}" redirects to itself.`);
-            }
-            moved[from] = to;
-          }
-        }
-      }
+      const moved = buildMovedPaths(
+        collections.flatMap(({ basePath, directory }) =>
+          processBlogDirectory(resolve(root, directory), publicDir).map((post) => ({
+            basePath,
+            replaces: post.metadata.replaces,
+            slug: post.slug,
+          })),
+        ),
+      );
 
       this.emitFile({
         type: "asset",
