@@ -21,6 +21,7 @@ import { renderZonedDate, utcText } from "./zoned-date";
 interface RecurrenceSet {
   readonly master: CanonicalEvent;
   readonly overrides: readonly CanonicalEvent[];
+  readonly sequence: number;
 }
 
 type SerialisedResource =
@@ -175,10 +176,16 @@ const recurrenceIdLine = (event: CanonicalEvent, options: IcsOptions): readonly 
   return timedLines("RECURRENCE-ID", event.identity.recurrenceInstant, null, options);
 };
 
-const eventLines = (event: CanonicalEvent, uid: EventUid, options: IcsOptions): readonly string[] => [
+const eventLines = (
+  event: CanonicalEvent,
+  uid: EventUid,
+  sequence: number,
+  options: IcsOptions,
+): readonly string[] => [
   "BEGIN:VEVENT",
   `UID:${uid.value}`,
   "DTSTAMP:19700101T000000Z",
+  `SEQUENCE:${sequence}`,
   `${provenanceStamp}:${options.installation.value}`,
   ...recurrenceIdLine(event, options),
   ...describedLines(event.content),
@@ -296,7 +303,7 @@ const normalisedEvents = (set: RecurrenceSet): RecurrenceSet | null => {
     }
     overrides.push({ ...override, content });
   }
-  return { master: { ...set.master, content: master }, overrides };
+  return { ...set, master: { ...set.master, content: master }, overrides };
 };
 
 const foldedLines = (lines: readonly string[]): readonly string[] =>
@@ -351,8 +358,10 @@ const serialiseCalendarResource = (set: RecurrenceSet, options: IcsOptions): Ser
     "VERSION:2.0",
     "PRODID:-//keeper.sh//sync-ical//EN",
     ...zoneLines,
-    ...eventLines(normalised.master, uid, options),
-    ...normalised.overrides.flatMap((override) => [...eventLines(override, uid, options)]),
+    ...eventLines(normalised.master, uid, set.sequence, options),
+    ...normalised.overrides.flatMap((override) => [
+      ...eventLines(override, uid, set.sequence, options),
+    ]),
     "END:VCALENDAR",
   ];
   return { kind: "resource", text: foldedText(lines), zones };

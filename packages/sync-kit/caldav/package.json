@@ -1,0 +1,26 @@
+{
+  "name": "@keeper.sh/sync-caldav",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint .",
+    "test": "TZ=UTC bun x --bun vitest run"
+  },
+  "dependencies": {
+    "@keeper.sh/digest-fetch": "workspace:*",
+    "@keeper.sh/sync-ical": "workspace:*",
+    "@keeper.sh/sync-protocol": "workspace:*",
+    "tsdav": "^2.1.8",
+    "xml-js": "^1.6.11"
+  },
+  "devDependencies": {
+    "@keeper.sh/sync-conformance": "workspace:*",
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
+  }
+}

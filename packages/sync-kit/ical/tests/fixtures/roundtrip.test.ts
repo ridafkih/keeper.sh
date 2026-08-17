@@ -33,7 +33,7 @@ const canonicalise = (body: string): readonly CanonicalEvent[] => {
 
 const reserialise = (events: readonly CanonicalEvent[]): readonly string[] =>
   events.flatMap((event) => {
-    const serialised = serialiseCalendarResource({ master: event, overrides: [] }, testOptions());
+    const serialised = serialiseCalendarResource({ master: event, overrides: [], sequence: 0 }, testOptions());
     if (serialised.kind !== "resource") {
       return [];
     }

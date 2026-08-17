@@ -8,7 +8,7 @@ describe("the writer's input shape", () => {
     expectTypeOf<readonly CanonicalEvent[]>().not.toMatchTypeOf<RecurrenceSet>();
   });
 
-  test("ICAL-I40: a set names exactly one master and its overrides", () => {
-    expectTypeOf<keyof RecurrenceSet>().toEqualTypeOf<"master" | "overrides">();
+  test("ICAL-I40: a set names exactly one master, its overrides, and the SEQUENCE they share", () => {
+    expectTypeOf<keyof RecurrenceSet>().toEqualTypeOf<"master" | "overrides" | "sequence">();
   });
 });

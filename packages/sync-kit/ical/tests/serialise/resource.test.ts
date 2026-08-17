@@ -52,7 +52,7 @@ describe("serialising a recurrence set into one calendar object resource", () =>
   test("ICAL-O37: an override carrying a different UID is refused, never written", () => {
     expect(
       serialiseCalendarResource(
-        { master, overrides: [overrideWith("evt-other")] },
+        { master, overrides: [overrideWith("evt-other")], sequence: 0 },
         testOptions(),
       ),
     ).toEqual({
@@ -64,7 +64,7 @@ describe("serialising a recurrence set into one calendar object resource", () =>
 
   test("RFC 4791 §4.1: a set serialises to one master and N overrides sharing one UID", () => {
     const serialised = serialiseCalendarResource(
-      { master, overrides: [overrideWith("evt-series")] },
+      { master, overrides: [overrideWith("evt-series")], sequence: 0 },
       testOptions(),
     );
 
@@ -79,7 +79,7 @@ describe("serialising a recurrence set into one calendar object resource", () =>
 
   test("RFC 4791 §4.1: a VTIMEZONE is emitted for each unique TZID the resource uses", () => {
     const serialised = serialiseCalendarResource(
-      { master, overrides: [overrideWith("evt-series")] },
+      { master, overrides: [overrideWith("evt-series")], sequence: 0 },
       testOptions(),
     );
 
@@ -110,14 +110,14 @@ describe("serialising a recurrence set into one calendar object resource", () =>
       },
     };
 
-    expect(serialiseCalendarResource({ master: inverted, overrides: [] }, testOptions())).toEqual({
+    expect(serialiseCalendarResource({ master: inverted, overrides: [], sequence: 0 }, testOptions())).toEqual({
       kind: "refused",
       constraint: "invertedRange",
     });
   });
 
   test("ICAL-I40: a master with no overrides is still one resource", () => {
-    const serialised = serialiseCalendarResource({ master, overrides: [] }, testOptions());
+    const serialised = serialiseCalendarResource({ master, overrides: [], sequence: 0 }, testOptions());
 
     expect(serialised.kind).toBe("resource");
     if (serialised.kind !== "resource") {

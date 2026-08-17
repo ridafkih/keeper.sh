@@ -240,6 +240,23 @@
         "vitest": "^4.1.4",
       },
     },
+    "packages/sync-kit/caldav": {
+      "name": "@keeper.sh/sync-caldav",
+      "dependencies": {
+        "@keeper.sh/digest-fetch": "workspace:*",
+        "@keeper.sh/sync-ical": "workspace:*",
+        "@keeper.sh/sync-protocol": "workspace:*",
+        "tsdav": "^2.1.8",
+        "xml-js": "^1.6.11",
+      },
+      "devDependencies": {
+        "@keeper.sh/sync-conformance": "workspace:*",
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+        "vitest": "^4.1.4",
+      },
+    },
     "packages/sync-kit/conformance": {
       "name": "@keeper.sh/sync-conformance",
       "dependencies": {
@@ -679,6 +696,8 @@
     "@keeper.sh/queue": ["@keeper.sh/queue@workspace:packages/queue"],
 
     "@keeper.sh/sync": ["@keeper.sh/sync@workspace:packages/sync"],
+
+    "@keeper.sh/sync-caldav": ["@keeper.sh/sync-caldav@workspace:packages/sync-kit/caldav"],
 
     "@keeper.sh/sync-conformance": ["@keeper.sh/sync-conformance@workspace:packages/sync-kit/conformance"],
 

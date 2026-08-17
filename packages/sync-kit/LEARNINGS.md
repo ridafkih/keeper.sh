@@ -6932,7 +6932,9 @@ src/client/graph-client.ts          Client.initWithMiddleware with an explicit c
 src/client/authentication.ts        AuthenticationProvider over the tokens we already hold
 src/client/raw-response.ts          the only place a raw Response is held; always read or cancelled
 src/client/prefer.ts                the as const Prefer set: timezone UTC, text bodies, maxpagesize 50
-src/client/request.ts               the one seam: gate -> retry( permit -> deadline -> call ) -> classify
+src/client/request.ts               the one seam: permit -> deadline -> retry -> gate -> call -> classify
+src/client/attempt-budget.ts        a claimable attempt ceiling, spent once per request
+src/client/operation.ts             CalDAVOperation: the context and surroundings one call carries
 src/client/deadline.ts              mergeSignals, raceDeadline; timeout and abort stay distinguishable
 src/client/backoff.ts               bounded abortable retry over clock.sleep, built on setTimeout
 src/client/semaphore.ts             per-mailbox permits, released on return, on throw and on abort
@@ -7408,3 +7410,1568 @@ unrepresentable rather than a RangeError`;
 unrepresentable`;
 `microsoft/tests/writes/unrepresentable-anchor.test.ts :: MS-O51: a representable recurring anchor still
 normalizes`.
+
+# sync-caldav learnings ledger
+
+`@keeper.sh/sync-caldav` is the CalDAV (RFC 4791) implementation of `CalendarProvider` from
+`@keeper.sh/sync-protocol`. Its acceptance criterion is `@keeper.sh/sync-conformance` run end to end:
+every `CONF-O*` and `CONF-L*` case the capability declaration gates on. A case this adapter cannot pass is
+a defect in this adapter until proven otherwise.
+
+It is **poll-only**. There is no `watch`, no `push/` directory and no receiver. The absence of the method
+*is* the capability signal; there is deliberately no `supportsPush: false` boolean anywhere in the package,
+because a boolean can drift out of step with the code and a missing method cannot.
+
+Entries are numbered `DAV-I1`–`DAV-I72`. `DAV-I1`–`DAV-I57` are adopted, `DAV-I58`–`DAV-I63` are the
+explicit not-applicable set, and `DAV-I64`–`DAV-I72` are dependencies taken and rejected plus process.
+Every **Proved by** citation names a file under `packages/sync-kit/caldav/tests` and the exact test name
+inside it, or a `CONF-` case id the conformance run enforces, so the ledger can be walked against the suite
+mechanically by `caldav/tests/hygiene/ledger-citations.test.ts`.
+
+The three sentences this ledger turns on:
+
+1. **A response that did not describe the whole collection may never produce a deletion.** Truncation, a
+   short multiget, an unreadable resource and a rejected sync-token are four different ways of not knowing,
+   and all four land on a listing arm that is structurally incapable of removing anything.
+2. **tsdav owns the transport, the XML and the request bodies; we own the decisions.** Everything that
+   *classifies* a CalDAV response — truncation, token rejection, completeness, preconditions — is ours,
+   because that is precisely where tsdav is wrong for us, and only there.
+3. **A CalDAV resource is addressed by its path and identified by its UID, and those are not the same
+   thing.** RFC 4791 §5.3.2 says the URL is arbitrary; production shipped a fix because deletes were
+   addressed at a synthesised `${uid}.ics`.
+
+---
+
+## Adopted
+
+### DAV-I1. An empty or partial read is never authoritative absence
+
+**Lesson.** A fetch that returned `[]` because every resource failed to parse, or because the transport
+threw, read as "the collection has no events" and deleted every stored row for the calendar.
+**Learned from.** `packages/calendar/src/providers/caldav/shared/ics.ts:193-204`
+(`CalDAVUnreadableResourceError`); `ics/utils/fetch-adapter.ts:315-337`; commit `0184ea19` *fix(ics): don't
+wipe existing events when remote fetch fails (#383)*; `tests/core/sync-engine/ingest-truncation.test.ts`
+*"deletes every stored source event when a fetch silently returns a subset"*.
+**Honoured by.** `src/listing/snapshot.ts` reads a snapshot as an independent PROPFIND enumeration
+(`src/listing/enumerate.ts`) followed by a `calendar-multiget` of exactly the hrefs that enumeration listed,
+so the listed count and the read count come from two different responses and cannot agree by construction.
+`kind: "snapshot"` is emitted **only** when `provenCoverage` sees `listedCount === requestedCount ===
+readCount`; anything else is `partial` or a `Result.ok === false`. `src/listing/build-feed.ts` counts a
+resource as read only when it projected into an event or a withheld identity — an unreadable body increments
+`unreadableCount`, never `readCount`, so a garbled resource makes the listing `partial` rather than a
+snapshot that claims to have proved the resource absent. `coverage` is also carried on the `delta` arm, but
+a delta's coverage is not a deletion licence: `DeriveDeltaRemovals` reads only `listing.removals`
+(`protocol/src/deletion.ts:20`), and CalDAV deltas name every removal they carry (DAV-I8).
+**Proved by.** `caldav/tests/overwrites/short-read-is-not-absence.test.ts :: DAV-O1: a multiget answering 3
+of 5 hrefs yields zero derivable removals`; `caldav/tests/overwrites/throwing-fetch-deletes-nothing.test.ts
+:: DAV-O2: a transport failure mid-listing is a Result failure, never an empty snapshot`;
+`caldav/tests/overwrites/unreadable-is-not-covered.test.ts :: DAV-O68: a resource that became unreadable
+between polls cannot be derived as a removal`;
+`caldav/tests/overwrites/unreadable-is-not-covered.test.ts :: DAV-O68: an unreadable resource never counts
+toward the coverage the snapshot claims`; conformance `CONF-O1`, `CONF-O3`.
+
+### DAV-I2. A short multiget rejects; it never returns what it got
+
+**Lesson.** `fetchCalendarObjects` returns whatever the server chose to answer with, and servers cap
+multiget responses (observed at 1,000 rows). A short set read downstream as deletions.
+**Learned from.** `providers/caldav/shared/client.ts:299-374` (`CALDAV_MULTIGET_BATCH_SIZE = 250`); commit
+`30f06035` *fix(caldav): chunk calendar-multiget and reject short responses (#461)*; tests
+*"fetches every object when the server caps a multiget response at 1,000"*, *"rejects instead of returning a
+short object set when hrefs are never returned"*.
+**Honoured by.** `src/listing/multiget.ts` batches hrefs at `caldavLimits.multigetBatchSize`, then diffs the
+requested path set against the returned path set. A shortfall returns
+`{ kind: "incomplete", missing: BoundedSample }`, which `list-changes.ts` maps to `partial` — never to a
+shorter event set. This is extension point (1) of four over tsdav.
+**Proved by.** `caldav/tests/overwrites/short-read-is-not-absence.test.ts :: DAV-O1: the five events the server holds are never described as three`;
+`caldav/tests/listing/multiget-batching.test.ts :: DAV-H4: a 1,000-href listing is requested in bounded
+batches and every href is accounted for`.
+
+### DAV-I3. `smartCollectionSync` makes all three sync decisions wrong for us, so it is not used
+
+**Lesson.** tsdav's `smartCollectionSync` classifies every multistatus response that is not 404 as
+"changed" and every 404 as "deleted". RFC 6578 §3.6 truncation carries `507` on the *collection* href, which
+that rule feeds into `calendar-multiget` as a junk href; §3.2 token rejection is swallowed into a silent
+"no changes"; and the new token is read from a per-response projection.
+**Learned from.** `node_modules/tsdav/dist/tsdav.js:9652-9737`, read against RFC 6578 §3.2/§3.6.
+**Honoured by.** `src/report/sync-report.ts` issues the REPORT through tsdav's lower-level `syncCollection`
+(or `davRequest` with `parseOutgoing: false` when the raw document is needed) and does the classification
+itself, returning `SyncReport = changed | removed | truncated | tokenRejected | unchanged`. There is no
+import of `smartCollectionSync` anywhere in `src/`, and a hygiene test asserts it. This is extension point
+(2).
+**Proved by.** `caldav/tests/hygiene/tsdav-extension-points.test.ts :: DAV-H1: src imports tsdav and never
+smartCollectionSync`; `caldav/tests/report/classification.test.ts :: DAV-O3: a 507 on the collection href is
+truncation, not a changed object`.
+
+### DAV-I4. The sync-token is read from the multistatus root, never from a per-response projection
+
+**Lesson.** `davRequest` maps a 207 with zero `<response>` elements — the ordinary "nothing changed" answer —
+to a single pseudo-response with no `raw`, so `smartCollectionSync`'s
+`result[0].raw.multistatus.syncToken` is `undefined` and it falls back to the *previous* token. The cursor
+never advances, and the server eventually expires a token the client keeps replaying.
+**Learned from.** `node_modules/tsdav/dist/tsdav.js:9430-9446` and `:9736`.
+**Honoured by.** `src/report/multistatus.ts` parses `DAV:sync-token` off the multistatus root of the raw
+document. A 207 carrying a token and no responses is `{ kind: "unchanged", token }` and produces a `delta`
+listing with empty `events` and empty `removals` that **advances** the cursor. There is no code path that
+carries a previous token forward as if it were a new one.
+**Proved by.** `caldav/tests/report/quiet-poll.test.ts :: DAV-O4: a 207 with no responses advances the
+cursor to the token the server returned`; `caldav/tests/report/quiet-poll.test.ts :: DAV-O5: the previous
+token is never reused as the new cursor value`.
+
+### DAV-I5. A rejected sync-token is `cursorLost`, never "no changes"
+
+**Lesson.** RFC 6578 §3.2: an invalid or expired token is answered `403` (or `409`) with a
+`DAV:valid-sync-token` precondition, and the client must re-run with an empty token. tsdav short-circuits any
+non-ok response into one pseudo-response whose href is the request URL, so the caller sees zero objects and
+believes nothing changed — a silent permanent stall.
+**Learned from.** `tsdav.js:9381-9394`; RFC 6578 §3.2; Kozea/Radicale #1049 (*Token not found* whenever the
+`.Radicale.cache` folder is recreated).
+**Honoured by.** `src/errors/precondition.ts` reads the `DAV:error` document off the non-ok body — which
+`davRequest` does hand back, as `raw: resText` — and `src/listing/list-changes.ts` maps
+`{ kind: "tokenRejected" }` to the protocol's `cursorLost` arm. That arm declares `events?: never`,
+`removals?: never`, `coverage?: never`, so the guard is type-level.
+**Proved by.** `caldav/tests/overwrites/rejected-token.test.ts :: DAV-O6: a 403 valid-sync-token yields
+cursorLost and zero removals`; `caldav/tests/overwrites/rejected-token.test.ts :: DAV-O7: a 409
+valid-sync-token takes the identical arm`; conformance `CONF-O10`, `CONF-O40`.
+
+### DAV-I6. Truncation is a state, not an error, and it can never read as a snapshot
+
+**Lesson.** RFC 6578 §3.6: a truncated response is a 207 carrying `507 Insufficient Storage` on the
+request-URI plus `DAV:number-of-matches-within-limits`, and the returned `DAV:sync-token` *is* correct for
+the partial set. Apple Calendar silently loses events past the 2,000-row WebDAV truncation limit for exactly
+this reason.
+**Learned from.** RFC 6578 §3.6; stalwartlabs/stalwart discussion #2897; ledger entry 36 of the protocol
+section.
+**Honoured by.** Both read shapes model it, because both can be truncated. `src/report/sync-report.ts`
+recognises the 507-on-collection-href shape in a `sync-collection` REPORT and returns
+`{ kind: "truncated", token }`; `src/listing/enumerate.ts` reads the same marker off a Depth-1 PROPFIND row
+and returns `truncated: true` beside the members. That second half is what makes the snapshot path safe on
+the servers with no `sync-collection` at all — Radicale, Baikal, Synology — where a capped enumeration would
+otherwise have `requestedCount === listedCount === readCount` and read as a complete description of the
+collection. Either truncation maps to the protocol's `partial` arm with a `Continuation`, which cannot carry
+`removals` or `coverage`. This is extension point (3): tsdav exposes `syncCollection` and `propfind` but
+models truncation on neither.
+**Proved by.** `caldav/tests/overwrites/truncation-is-partial.test.ts :: DAV-O8: a 507 on the collection
+href yields partial, a continuation and no coverage`;
+`caldav/tests/overwrites/truncation-is-partial.test.ts :: DAV-O9: a truncated page's events are reported and
+its absences are not`;
+`caldav/tests/lockups/page-ceiling.test.ts :: DAV-L1: a truncated enumeration is answered as partial rather
+than paged forever`; conformance `CONF-O41`.
+
+### DAV-I7. A truncated walk advances its resume token only across pages that reported no removal
+
+**Lesson.** `partial` structurally cannot carry removals. If the walk stops after pages that *did* report
+404s and the continuation carries the advanced token, those deletions are never re-reported and the mirror
+keeps a deleted event forever. If it never advances, a collection with more changes than one page holds
+never converges.
+**Learned from.** RFC 6578 §3.6 (the returned token is correct for the partial set); the protocol's
+`partial` arm; MS-I4 (a page ceiling stop yields a continuation, never a cursor).
+**Honoured by.** `src/listing/sync-walk.ts` pages through truncation on the token each page returns, up to
+`caldavLimits.syncPageCeiling`, so removals split across pages are all in hand by the time the walk ends —
+that is the ordinary case and it converges. The first draft froze the resume token at the carried token
+whenever a truncated page held a removal, which does not converge at all: the next poll sends the same
+token, receives the same truncated page, and mints the same continuation forever. What survives of the
+lesson is the *other* half — a continuation minted past an unapplied removal loses it — and the resolution
+is `cursorLost`, not a frozen token: `src/listing/delta.ts` answers `cursorLost` when a walk is still
+truncated at the ceiling while holding any removal, which forces the snapshot path and re-proves the
+collection. A walk that ends truncated with no removals hands back a continuation at the newest token it
+reached. Stopping is bounded by `caldavLimits.syncPageCeiling` and by `context.deadline`, whichever comes
+first.
+**Proved by.** `caldav/tests/overwrites/removal-freezes-the-token.test.ts :: DAV-O10: a removal split across
+truncated pages is named once, and the cursor moves past it`;
+`caldav/tests/overwrites/removal-freezes-the-token.test.ts :: DAV-O10: a walk still truncated at the page
+ceiling while carrying a removal answers cursorLost, never a continuation that would drop it`;
+`caldav/tests/overwrites/removal-freezes-the-token.test.ts :: DAV-O11: a removal-free walk stopped at the
+ceiling advances the continuation past the pages it read`;
+`caldav/tests/lockups/page-ceiling.test.ts :: DAV-L1: a sync-collection walk that answers 507 forever stops
+at the page ceiling`.
+
+### DAV-I8. A sync-collection 404 names a path and no UID, so it escalates rather than deletes
+
+**Lesson.** The protocol's authoritative removals (`deleted`, `cancelled`) both require an `EventUid`, and a
+RFC 6578 removal response carries only an href. An adapter with no database cannot attribute the UID. Emitting
+`outOfScope` instead is honest but never deletes anything, so a delete would sit unpropagated until some
+unrelated snapshot happened to run.
+**Learned from.** RFC 6578 §3.2; `packages/sync-kit/protocol/src/change-listing.ts` (`Removal`); MS-I87 *a
+removal is authoritative only when the same walk named the identity it removes*.
+**Honoured by.** A CalDAV `RemoteEventId` *is* the normalised resource path (DAV-I13), so the href a
+tombstone carries is an identity this adapter minted, and `src/listing/reported.ts` keeps a per-collection
+ledger of the `uid → id` pairs the adapter has actually published. `src/listing/delta.ts` grades every 404
+or 410 href three ways: a path the ledger knows becomes `{ kind: "deleted", uid }`, a path inside the
+collection the ledger does not know becomes `{ kind: "outOfScope", id }` — a marker the reconciler treats as
+unresolved and never as a delete (`reconcile/src/plan/tombstones.ts:146`) — and a path outside the
+collection being listed is not a removal at all. A walk that is still truncated at
+`caldavLimits.syncPageCeiling` while carrying any removal answers `cursorLost` rather than a continuation,
+because a continuation minted past an unapplied removal would drop it, and one minted at the carried token
+would replay the same page forever. That non-convergence is the failure this entry now guards; the earlier
+resolution — escalating *every* unattributable 404 to `cursorLost` — was replaced because it also threw away
+the one cheap deletion signal CalDAV gives, which is what `CONF-O34` requires.
+**Proved by.** `caldav/tests/overwrites/unattributable-removal.test.ts :: DAV-O12: a 404 href the adapter
+never reported is an out-of-scope marker, never a deletion`;
+`caldav/tests/overwrites/unattributable-removal.test.ts :: DAV-O12: a 404 href outside the collection being
+listed is not a removal at all`;
+`caldav/tests/overwrites/unattributable-removal.test.ts :: DAV-O13: a 404 href the adapter did report is
+named as the deletion it is`;
+`caldav/tests/overwrites/removal-freezes-the-token.test.ts :: DAV-O10: a walk still truncated at the page
+ceiling while carrying a removal answers cursorLost, never a continuation that would drop it`.
+
+### DAV-I9. `DAV:limit` is never sent
+
+**Lesson.** RFC 6578 §3.7 permits the client to request truncation, and it is exactly the element that has
+produced 500s and malformed error bodies on Nextcloud. §3.7 also requires the server to *fail* the request
+if it cannot truncate at or below the requested count.
+**Learned from.** nextcloud/server #9339 (*internal server error on REPORT sync-collection with result
+limit*), #48678 (*CalDAV limit tag on initial sync causes an incorrect error response*).
+**Honoured by.** `src/report/sync-report.ts` builds the REPORT body without `DAV:limit`; the server
+truncates on its own terms and we page on the token it returns (DAV-I6, DAV-I7). The tradeoff — no
+client-side page-size control — is accepted, with the page ceiling and the operation deadline as the loop
+bounds instead.
+**Proved by.** `caldav/tests/hygiene/report-bodies.test.ts :: DAV-H2: the sync-collection body carries no
+DAV:limit element`.
+
+### DAV-I10. sync-collection support is probed, not assumed
+
+**Lesson.** Not every CalDAV server implements `sync-collection`; Radicale gained it late and some Synology
+builds do not advertise it. Assuming it turns "the report is unsupported" into an empty answer.
+**Learned from.** tsdav `supportedReportSet` / `isCollectionDirty`; Kozea/Radicale #306.
+**Honoured by.** `src/report/supported-reports.ts` reads `DAV:supported-report-set` once per collection per
+run and returns `{ syncCollection, calendarMultiget }` read from the names the server announced. A probe
+that did not answer is a **failure of the listing**, never an assumption of support: the earlier code
+answered an unanswered probe with `{ syncCollection: true }`, which is the precise inverse of this lesson
+and, combined with a server that then answered the REPORT with an empty 207, would have published an
+authoritative empty snapshot. A collection that announces no `sync-collection` produces `snapshot` listings
+with `cursor: null`; a snapshot with no cursor is a legal protocol shape, so no capability lies. Only a
+successful probe is cached, so a probe that failed is re-issued rather than remembered as a verdict.
+**Proved by.** `caldav/tests/listing/report-support.test.ts :: DAV-O14: a collection without
+sync-collection never returns a cursor`; `caldav/tests/listing/report-support.test.ts :: DAV-H5: the probe
+is issued once per collection per run`.
+
+### DAV-I11. The cursor is owned, versioned, and bound to the scope that minted it
+
+**Lesson.** A provider token replayed under a different request shape silently answers the old question.
+Keeper already versions its own sync tokens (`keeper:sync-token:<version>:<base64url>`) and has bumped the
+window version four times.
+**Learned from.** `core/oauth/sync-token.ts`, `core/oauth/sync-window.ts`; MS-I5.
+**Honoured by.** `src/cursor/cursor.ts` mints `SyncCursor.value` as an encoding of
+`{ version, collectionKey, scopeFingerprint, syncToken }`. A mismatch resolves to `cursorLost`
+**locally, before any network call**. Unlike Graph, the CalDAV token is *not* window-bound — we never send a
+time-range filter (DAV-I48) — so `windowBoundToCursor: false`, and a widened window does not invalidate a
+cursor.
+**Proved by.** `caldav/tests/cursor/scope-binding.test.ts :: DAV-O15: a cursor minted for another collection
+is refused without touching the transport`; `caldav/tests/cursor/version-bump.test.ts :: DAV-O16: a cursor
+from an older adapter version is cursorLost and emits no removals`.
+
+### DAV-I12. Identity is the resource path; the UID is a separate concept
+
+**Lesson.** RFC 4791 §5.3.2 makes the resource URL arbitrary and unrelated to the UID. Production deleted
+CalDAV mirrors at a synthesised `${uid}.ics` and missed every object whose filename differed.
+**Learned from.** RFC 4791 §4.1 and §5.3.2; commit `6702569a` *fix: delete CalDAV mirrors at their listed
+object URL (#660)*; test *"lists a remote object's own path as its deleteId when the filename differs from
+the embedded UID"*.
+**Honoured by.** `src/listing/project-resource.ts` sets `RemoteEventId` and `DeleteHandle` to the normalised
+resource path and carries `EventUid` separately from the parsed VEVENT. `sync-ical`'s `projectIcsFeed` keys
+ids on the identity key, so this package re-keys onto the path rather than adopting that projection wholesale.
+A write intent addresses a resource; a filename is minted only for a `create` (DAV-I27).
+**Proved by.** `caldav/tests/overwrites/path-is-identity.test.ts :: DAV-O17: a resource whose filename
+differs from its UID is deleted at its listed path`;
+`caldav/tests/listing/identity.test-d.ts :: DAV-H6: RemoteEventId and EventUid are not interchangeable`.
+
+### DAV-I13. Account and calendar identity are normalised URLs, and carry no email
+
+**Lesson.** Radicale, Baikal and Synology authenticate by bare username and expose no address at all.
+Storing a raw collection URL also breaks when the server answers a differently-encoded or
+differently-slashed href for the same collection, and the calendar is rediscovered as new.
+**Learned from.** `providers/caldav/shared/calendar-identity.ts` (`normalizeCalDAVCalendarKey`,
+`normalizeCalDAVServerHost`, `findCalendarByStoredUrl`); the caldav credentials schema (username/serverUrl,
+no email column).
+**Honoured by.** `src/identity/collection-key.ts` derives `CalendarId` from
+`decodeURIComponent(new URL(href, base).pathname)` with trailing slashes collapsed; `src/identity/account.ts`
+derives `AccountId` from the lowercased server host plus the normalised principal path. No field of either
+type is an address. `calendar-user-address-set`, where a server offers it, is diagnostics only.
+**Proved by.** `caldav/tests/identity/normalisation.test.ts :: DAV-O18: a trailing slash, a percent-encoded
+segment and an absolute href all resolve to one calendar key`;
+`caldav/tests/identity/no-email.test-d.ts :: DAV-H7: AccountId is derivable with no address available`.
+
+### DAV-I14. href normalisation and the url filter are ours, not tsdav's
+
+**Lesson.** tsdav's default `urlFilter` can drop a requested path, and hrefs come back percent-encoded or
+absolute where they were requested decoded or relative.
+**Learned from.** `providers/caldav/shared/client.ts:165-174, 331-345`; tests *"supplies its own url filter
+so tsdav cannot drop a requested path"*, *"matches a percent-encoded requested href against a decoded
+response href"*, *"requests a duplicated href only once"*.
+**Honoured by.** `src/identity/resource-path.ts` is the single normaliser; `multiget.ts` supplies its own
+`urlFilter`, de-duplicates the requested set through a `Set`, and matches requested against returned on the
+normalised pathname. This is extension point (4).
+**Proved by.** `caldav/tests/identity/href-matching.test.ts :: DAV-O19: a percent-encoded response href
+matches the decoded href it was requested under`; `caldav/tests/identity/href-matching.test.ts :: DAV-H8: a
+duplicated href is requested once`.
+
+### DAV-I15. Rows nobody asked for are not an error, and the accounting precedes the throw
+
+**Lesson.** Servers return rows that were never requested. Only a *missing* requested href is fatal, and the
+listing counters must be emitted before the failure so a failed poll is still explainable.
+**Learned from.** `providers/caldav/shared/client.ts:346-364`; tests *"does not reject when the server
+returns rows that were not requested"*, *"reports the listing before rejecting an incomplete multiget"*.
+**Honoured by.** `src/listing/multiget.ts` returns `listed`, `requested`, `returned` and `unrequested`
+counts on both arms of its result union, and `diagnostics.ts` builds the `ListingDiagnostics` from them
+before `list-changes.ts` chooses between `snapshot` and `partial`.
+**Proved by.** `caldav/tests/listing/unrequested-rows.test.ts :: DAV-O20: an unrequested row does not fail
+the listing`; `caldav/tests/listing/unrequested-rows.test.ts :: DAV-H9: coverage accounting is populated on
+the incomplete arm too`.
+
+### DAV-I16. An empty calendar-data body is an unread resource, not an absent one
+
+**Lesson.** Filtering a resource whose `calendar-data` element is empty or whitespace out of the set makes
+it look as though the resource does not exist, and the stored row is deleted or the mirror re-created.
+**Learned from.** `providers/caldav/source/fetch-adapter.ts:42-49`; `shared/client.ts:337`;
+`tests/providers/caldav/source/empty-resource-telemetry.test.ts` (*"counts the resource it could not read
+when the body came back empty"*, *"counts an href answered with whitespace instead of a calendar"*,
+*"settles instead of churning while the body stays empty"*).
+**Honoured by.** `multiget.ts` passes an empty body through to the parse path as `""`; a non-string body is
+rejected rather than handed to the parser. `project-resource.ts` yields
+`{ kind: "unreadable", reason: "unparseable" }`, which becomes a `WithheldEvent` — present, counted, never
+absent.
+**Proved by.** `caldav/tests/overwrites/empty-body-is-present.test.ts :: DAV-O21: an empty calendar-data
+body withholds the resource and derives no removal`;
+`caldav/tests/listing/convergence.test.ts :: DAV-O22: a second poll over the same empty body produces the
+same listing`.
+
+### DAV-I17. Two parse-failure policies, chosen by the caller's semantics
+
+**Lesson.** One malformed `.ics` must not empty a collection — but skipping is only safe where a missing
+event means "stale". The destination reconciler re-creates any Keeper event it cannot see, so an unreadable
+*Keeper-owned* resource would be duplicated on every run. Hence `assertAllResourcesRead()` on
+reconciliation reads and counted-skip on source reads.
+**Learned from.** `providers/caldav/shared/ics.ts:140-150, 177-212`; commit `2657805b` *fix(caldav): write
+VTIMEZONE and isolate unreadable resources (#604)*; `tests/.../ics-resource-isolation.test.ts`.
+**Honoured by.** The two policies are two functions rather than a flag. `src/listing/build-feed.ts` is the
+listing read: an unreadable resource becomes a withheld identity and increments `unreadableCount`, which
+denies the listing its coverage claim (DAV-I1) without denying the caller the resources that did parse.
+`src/write/remote.ts:72-81` is the write read — the one that resolves a 412 and can therefore cause a
+recreate — and it returns a `Result` failure the moment `parseSingleResource` cannot build the resource, so
+no write is attempted against a resource the adapter cannot read. An earlier draft expressed this as a
+`ReadPolicy` argument on `buildCalDAVFeed` whose `requireComplete` arm no caller ever passed; the dead arm
+and the union are gone.
+**Proved by.** `caldav/tests/overwrites/read-policy.test.ts :: DAV-O23: an unreadable resource on the write
+path fails the write instead of recreating`; `caldav/tests/overwrites/read-policy.test.ts :: DAV-O24: the
+same unreadable resource on the listing path is withheld and counted`.
+
+### DAV-I18. The BOM is stripped before parse, on every resource
+
+**Lesson.** CalDAV `calendar-data` arrives as an XML text node with the UTF-8 BOM intact.
+`Response.text()` strips a BOM for ICS-over-HTTP, so the bug is invisible on the ICS path and fatal on the
+CalDAV path: the BOM makes `BEGIN:VCALENDAR` an unparseable property line and the whole resource fails.
+**Learned from.** `ics/utils/apply-patches.ts:50-56` (`stripIcsByteOrderMark`); test *"reads a BOM-prefixed
+resource rather than skipping it"*.
+**Honoured by.** `project-resource.ts` hands every body straight to `sync-ical`'s `projectIcsFeed`, which
+strips the mark inside its own text layer (`sync-ical/src/text/patch.ts:54`,
+`sync-ical/src/text/component-walk.ts:31`) before any property line is parsed. The stripping is unconditional
+and belongs to `sync-ical`; this package neither repeats it nor guards it per server.
+**Proved by.** `caldav/tests/listing/byte-order-mark.test.ts :: DAV-O25: a BOM-prefixed resource is read,
+not skipped`.
+
+### DAV-I19. Writes emit VTIMEZONE; reads synthesize the ones the feed forgot
+
+**Lesson.** A TZID-qualified DTSTART written without a matching VTIMEZONE is unreadable by its own author.
+Keeper reads its own CalDAV writes back, guesses an offset, lands on the wrong side of a DST transition,
+judges the event changed, and deletes-and-recreates it every run forever.
+**Learned from.** `providers/caldav/shared/ics.ts:29-47`; `ics/utils/synthesize-vtimezones.ts:88-94`;
+commits `2657805b`, `610f1f18`.
+**Honoured by.** `src/write/serialize.ts` delegates to `sync-ical`'s `serialiseCalendarResource`, which
+emits a VTIMEZONE for every zone the resource names. On the read side the recovery is not synthesis but
+resolution: `sync-ical`'s `resolveZoneIdentifier` resolves a TZID the feed never declared against IANA, so a
+missing VTIMEZONE costs nothing when the identifier is nameable and withholds the event when it is not.
+`synthesizeMissingVtimezones` remains exported from `sync-ical` and is called by nothing in this monorepo;
+it is a candidate for removal from that package's surface and is recorded here rather than cited as the
+mechanism. This package contains **zero lines of iCalendar text generation** of its own.
+**Proved by.** `caldav/tests/writes/dst-roundtrip.test.ts :: DAV-O26: a write→read→compare across a DST
+boundary is a fixed point`; `caldav/tests/listing/synthesized-zone.test.ts :: DAV-O27: a TZID the feed never
+declares still resolves to the right instant`.
+
+### DAV-I20. Wall-time ↔ instant resolution is delegated, never re-derived
+
+**Lesson.** ts-ics expands a VTIMEZONE observance RRULE and drops the time of day from the onset, so a wall
+time in the hours before a transition reads back on the wrong side of it. The fix — trust IANA when the TZID
+names a zone the platform knows, and trust declared observances only when they state every onset — plus the
+two-probe offset bracket were verified across 415k wall times in 445 zones, 2015–2032.
+**Learned from.** `ics/utils/resolve-zoned-instants.ts:16-24`; `ics/utils/timezone-instant.ts:196-226`;
+commit `b057d2e0`.
+**Honoured by.** `src/decode` does not exist as a zone layer at all: `project-resource.ts` hands the resource
+to `sync-ical` and takes back `EditableContent`. A hygiene test asserts `src/` contains no
+`Intl.DateTimeFormat`, no `getTimezoneOffset` and no zone table.
+**Proved by.** `caldav/tests/hygiene/no-zone-arithmetic.test.ts :: DAV-H10: src derives no timezone offsets
+of its own`.
+
+### DAV-I21. An instant a wall clock cannot name is written in UTC
+
+**Lesson.** A fall-back fold repeats an hour and RFC 5545 cannot say which pass is meant; an instant in the
+second pass cannot survive being written as a local time. The check is literal — resolve the wall time back
+and compare to the original instant.
+**Learned from.** `ics/utils/build-zoned-date.ts:57-61`; tests *wall-time-dense-sweep-fold*, *"writing an
+instant a wall clock cannot name"*.
+**Honoured by.** `sync-ical`'s `serialiseZonedDate` already does this and is the only path this package uses
+to emit a date-time. The round-trip assertion lives here as a write-path test because the CalDAV write is
+where the churn was observed.
+**Proved by.** `caldav/tests/writes/fold-instant.test.ts :: DAV-O28: an instant in a repeated hour
+round-trips to itself through a PUT and a re-read`.
+
+### DAV-I22. All-day shaping happens once, before serialisation and before the hash
+
+**Lesson.** Every destination reads an all-day instant as UTC midnight. An all-day range not already on UTC
+day boundaries comes back narrower than written and the mirror is judged changed every run — a delete and
+re-create per event per run.
+**Learned from.** `ics/utils/interpret-full-day-timed-events.ts:63-69, 168-173`; commits `82799c5b`,
+`b057d2e0`.
+**Honoured by.** `src/write/normalize.ts` is the single shaping seam and runs before both
+`serialize.ts` and the fingerprint, so the mapping, the content hash and the written resource agree.
+`caldavCapabilities.allDay` is `"dateOnly"` — CalDAV writes `VALUE=DATE`, which is the representation the
+protocol names.
+**Proved by.** `caldav/tests/writes/normalize-fixed-point.test.ts :: DAV-O29: normalising twice equals
+normalising once`; `caldav/tests/writes/all-day-roundtrip.test.ts :: DAV-O30: an all-day event written and
+re-read is unchanged`.
+
+### DAV-I23. A recurrence rewrite moves EXDATE, RECURRENCE-ID and UNTIL together or not at all
+
+**Lesson.** Re-anchoring a full-day timed series onto UTC midnight while leaving EXDATE, an override's
+RECURRENCE-ID and the rule's UNTIL naming the original instants matched no slot: a cancelled day came back,
+a moved day double-booked, and the last day was trimmed.
+**Learned from.** `ics/utils/interpret-full-day-timed-events.ts:128`;
+`tests/ics/utils/interpret-full-day-recurrence.test.ts` (*"keeps a cancelled day cancelled"*, *"answers the
+same way when the same feed is ingested twice"*).
+**Honoured by.** `sync-ical`'s `reanchorRecurrenceIdentities` performs the whole rewrite as one
+transformation; this package calls it and never touches an individual recurrence property.
+**Proved by.** `caldav/tests/writes/reanchor-idempotence.test.ts :: DAV-O31: ingesting the same recurring
+resource twice gives the same answer`.
+
+### DAV-I24. An all-day series is expanded on the dates it names
+
+**Lesson.** A DATE-valued series is floating per RFC 5545 §3.3.10; expanding it in the master's stated zone
+puts every occurrence after a daylight transition off UTC midnight, and the whole-day snap then publishes a
+two-day span over a day its predecessor already holds.
+**Learned from.** commit `b057d2e0` sub-commit *fix: expand an all-day series on the dates it names*;
+`tests/core/events/all-day-series-day-alignment.test.ts`.
+**Honoured by.** Not this package's arithmetic — `sync-ical` owns expansion, and
+`ListingScope.expandRecurrences` is reported as `false` (DAV-I48), so a series leaves this adapter as a
+`RecurringContent` with an anchor, never as expanded occurrences.
+**Proved by.** `caldav/tests/listing/no-expansion.test.ts :: DAV-O32: a recurring master leaves the adapter
+unexpanded, with its anchor intact`.
+
+### DAV-I25. A degenerate range is shaped at this package's own boundary
+
+**Lesson.** A timed VEVENT with no DTEND ends at its DTSTART per RFC 5545 §3.6.1, and §3.6.1 also requires
+DTEND later than DTSTART — so a zero-duration source event must be normalised *before* reconciliation, not
+inside the serializer, or the mapping, the content hash and the pushed resource disagree and the event is
+replaced every run. Window membership judged by `endTime` alone dropped it silently in four diverged copies
+of the predicate.
+**Learned from.** commit `b057d2e0`; `core/events/time-range.ts` `overlapsTimeWindow`; tests
+*degenerate-range-caldav-convergence*, *representable-range-idempotence*, *vfy-shaping-fixed-point*.
+**Honoured by.** `caldavCapabilities.representableRange` declares
+`{ minimumSpanSeconds: 1, zeroDuration: "reject", invertedRange: "reject", allDayGrid: "utcDay" }` — CalDAV
+is the strict one, and a caller that cannot widen gets `unrepresentable` rather than a silent widening.
+`src/window/membership.ts` re-exports `sync-ical`'s single `withinTimeWindow`, and a hygiene test asserts no
+second predicate exists in `src/`.
+**Proved by.** `caldav/tests/hygiene/one-predicate.test.ts :: DAV-H11: src contains exactly one window
+predicate`; `caldav/tests/writes/degenerate-range.test.ts :: DAV-O33: a zero-duration event is
+unrepresentable, not silently widened`; conformance `CONF-O28`.
+
+### DAV-I26. Our own events are recognised twice: at the href, and again after parse
+
+**Lesson.** Provenance is carried in the UID itself, so `isSelfAuthored(uid)` is decidable from a bare
+resource with no side table; production also filters CalDAV object *paths* by the same rule so self-authored
+resources are never even downloaded.
+**Learned from.** `core/events/identity.ts`; `providers/caldav/source/window.ts:40`;
+`providers/caldav/destination/provider.ts:185-203`; test *"asks the server for Keeper-named objects only"*.
+**Honoured by.** `src/write/resource-url.ts` mints one resource per identity at `${uid}.ics`, so the href
+and the UID agree for everything this adapter writes. `project-resource.ts` re-checks provenance with
+`sync-ical` after parse: an event parsed as ours **at its own path** is reported with `provenance: "ours"`
+so the mirror layer can skip it, and an event parsed as ours **at any other path** is withheld as
+`selfAuthored` and never becomes a mirror source, because a resource carrying our provenance stamp that we
+did not write is somebody's copy of our mirror. `selfAuthored` is its own diagnostics counter, separate
+from `withheld`, and counts both arms.
+**Proved by.** `caldav/tests/provenance/never-echoed.test.ts :: DAV-O34: an event carrying our provenance at
+a foreign path is still filtered after parse`;
+`caldav/tests/provenance/never-echoed.test.ts :: DAV-O35: a self-authored resource is never a mirror
+source`; conformance `CONF-O16`.
+
+### DAV-I27. A replayed create is a no-op, resolved by comparison and never by recreation
+
+**Lesson.** RFC 4791 §5.3.2 recommends `If-None-Match: *` on create precisely to prevent inadvertent
+overwrite, and tsdav's `createObject` path already sends it. A colliding PUT answers 412; the recovery must
+compare and return success unchanged, and must refuse to delete-and-recreate without a precondition.
+**Learned from.** `providers/caldav/destination/provider.ts:86-135, 213-238`; tsdav `tsdav.js:9962, 10341`;
+RFC 4791 §5.3.2.
+**Honoured by.** `src/write/resource-url.ts` mints the create path deterministically from the
+`IdempotencyKey`, so a replay targets the same resource. `src/write/create.ts` sends `If-None-Match: *`;
+a 412 reads the resource with `requireComplete` (DAV-I17) and returns `alreadyExists` when the fingerprint
+matches and `conflict` carrying the observed ETag when it does not. There is no delete-and-recreate branch
+anywhere in `src/write/`.
+**Proved by.** `caldav/tests/overwrites/idempotent-create.test.ts :: DAV-O36: a replayed create is
+alreadyExists, never a second resource`;
+`caldav/tests/overwrites/no-recreate.test.ts :: DAV-O37: a create collision with different content is a
+conflict and issues no DELETE`; conformance `CONF-O14`.
+
+### DAV-I28. An unconditional update or delete is not expressible
+
+**Lesson.** tsdav's `updateObject` and `deleteObject` do pass `If-Match` — through `cleanupFalsy`, which
+*silently strips the header when the etag is undefined*, turning a conditional write into an unconditional
+one with no error. Production's `deleteEventObject` calls `deleteCalendarObjectByUrl({ objectUrl })` with no
+etag, so a swept delete is unconditional today.
+**Learned from.** `tsdav.js:9498-9515`; `providers/caldav/destination/provider.ts:261-271`.
+**Honoured by.** `src/write/precondition.ts` takes the protocol's `Precondition` union as a **required**
+parameter and returns the header record: `matchesVersion → If-Match: <etag>`, `absent → If-None-Match: *`.
+`put.ts` and `remove.ts` accept only that record — there is no optional etag parameter to leave undefined —
+and a `.test-d.ts` proves an unconditional call does not typecheck. A 412 is a typed `conflict` carrying the
+observed ETag; it is never retried.
+**Proved by.** `caldav/tests/writes/precondition-required.test-d.ts :: DAV-O38: an update without a
+precondition does not typecheck`;
+`caldav/tests/overwrites/stale-precondition.test.ts :: DAV-O39: a stale If-Match yields conflict, and the
+resource on the server is unchanged`;
+`caldav/tests/overwrites/if-match-on-the-wire.test.ts :: DAV-O40: every DELETE this adapter issues carries
+an If-Match header`; conformance `CONF-O14`.
+
+### DAV-I29. A PUT echoes nothing, and that is stated rather than assumed
+
+**Lesson.** CalDAV answers 201/204 with no body, so there is nothing to compare the write against.
+Production encodes this as `CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" }` rather
+than pretending the write round-tripped.
+**Learned from.** `providers/caldav/destination/provider.ts:31-32` and its test *"declares a CalDAV push
+echo uncomparable because PUT returns no body"*.
+**Honoured by.** `caldavCapabilities.echoesWrites` is `false`; `src/write/echo.ts` returns
+`{ kind: "notObserved" }` and the new `RemoteVersion` comes from the response `ETag` header when the server
+sent one. A server that omits `ETag` on the PUT forces a conditional re-read to learn the version rather
+than a guess. When even the re-read yields nothing, the version is the empty string, and an empty version is
+made **unusable** rather than smuggled onto the wire: `write/precondition.ts` answers `unusable` for a
+zero-length `matchesVersion`, so the write becomes `notAttempted` instead of sending `If-Match:` with an
+empty value — a header a server may ignore, which would turn the precondition into an unconditional
+overwrite. `write/update.ts` treats an empty version on either side as stale, so the comparison cannot
+conclude "unchanged" from two absences.
+**Proved by.** `caldav/tests/writes/echo-not-observed.test.ts :: DAV-O41: a 204 with no body reports
+notObserved and never matched`;
+`caldav/tests/writes/etagless-put.test.ts :: DAV-O42: a PUT without an ETag header re-reads for the version
+instead of inventing one`; conformance `CONF-O18`.
+
+### DAV-I30. Deletion addresses a path, 404 is success, and every other status is broken out
+
+**Lesson.** A 404 on delete means already gone; every other status must be counted by code so a systematic
+403 or 409 is visible instead of averaged into a failure count.
+**Learned from.** `providers/caldav/destination/provider.ts:249-302`; test *"breaks non-404 delete
+rejections out by status code"*.
+**Honoured by.** `DeleteHandle` is the normalised resource path (DAV-I12), so there is one delete target and
+no uid/path union to switch over. `src/write/delete.ts` maps 404 and 410 to `alreadyAbsent`, 412 to
+`conflict`, and everything else to a `transport` failure carrying the status.
+**Proved by.** `caldav/tests/writes/delete-statuses.test.ts :: DAV-O43: a 404 delete is alreadyAbsent`;
+`caldav/tests/writes/delete-statuses.test.ts :: DAV-O44: a 403 delete is a permanent transport failure
+carrying 403`.
+
+### DAV-I31. One UID per resource, and a violation collapses to a deterministic winner
+
+**Lesson.** RFC 4791 §4.1 makes one UID per calendar object resource a server-side rule that real servers
+violate. A resource with duplicate UIDs, or two resources claiming the same UID, must collapse to ONE
+winner chosen by a signature and never by feed order, or an unordered publisher deletes and re-creates the
+stored row on every poll.
+**Learned from.** `ics/utils/parse-ics-events.ts:156-159` (`selectGroupRevision`);
+`tests/.../duplicate-resource-telemetry.test.ts` (*"keeps the same resource across repeated polls in either
+order"*).
+**Honoured by.** Two collapses, at two levels. Within one resource, `project-resource.ts` picks the winner
+by SEQUENCE and then by a total order over the UID string, withholding the losers with reason
+`supersededRevisionUnbuildable`. Across resources, `build-feed.ts` walks the resources in normalised-path
+order and keeps one event per UID, ranking by SEQUENCE and breaking ties on the lower path — so the winner
+is a function of the collection's contents and never of the order the server chose to enumerate them in.
+The loser is withheld with the same reason rather than dropped, and `reported.ts` builds its present map
+from the events after the collapse so a loser cannot overwrite the winner's identity. Writes never create
+the situation: `serialize.ts` puts a master and all its RECURRENCE-ID overrides into a single resource via
+`sync-ical`'s `RecurrenceSet`.
+**Proved by.** `caldav/tests/overwrites/one-uid-per-resource.test.ts :: DAV-O45: two UIDs in one resource
+collapse to the same winner under either ordering`;
+`caldav/tests/overwrites/one-uid-per-resource.test.ts :: DAV-O45: two resources claiming one UID collapse to
+one event under either enumeration order`;
+`caldav/tests/writes/single-resource-series.test.ts :: DAV-O46: a master and three overrides are one PUT`.
+
+### DAV-I32. An unbuildable newest revision withholds its UID rather than reverting
+
+**Lesson.** Letting an older revision win syncs the instance at a stale time — the publisher moved the event
+and Keeper reverts it. A lone unbuildable VEVENT with no newer buildable sibling is counted, not withheld
+from presence.
+**Learned from.** `ics/utils/parse-ics-events.ts:412-415`;
+`tests/ics/utils/ics-stale-revision-telemetry.test.ts` (*"never reverts a stored event to the time the
+publisher moved it away from"*).
+**Honoured by.** `sync-ical`'s group resolution already implements this and this package consumes its
+result; the withheld UID stays in the present set so it is never deleted.
+**Proved by.** `caldav/tests/overwrites/stale-revision.test.ts :: DAV-O47: a withheld newest revision does
+not revert to the older one and does not delete the stored row`.
+
+### DAV-I33. Withheld is present, and removal is computed against the unfiltered read
+
+**Lesson.** An event Keeper cannot represent is withheld from ingestion yet kept in the returned set, so the
+snapshot diff still sees it as present. Treating it as absent turns a stalled event into a deleted user
+event.
+**Learned from.** `providers/caldav/shared/ics.ts:100-105`; `core/sync-engine/ingest.ts:78-83, 323-333`;
+commit `43292a9f`.
+**Honoured by.** Every listing arm that carries events carries `withheld`, and `DeriveSnapshotRemovals`
+reads it as present ids — this is protocol entry 4, and this package's contribution is only to populate it
+honestly from `build-feed.ts` rather than filtering.
+**Proved by.** `caldav/tests/overwrites/withheld-is-present.test.ts :: DAV-O48: an unrepresentable resource
+appears in withheld and derives no removal`; conformance `CONF-O3`.
+
+### DAV-I34. Every discard has a named, bounded counter
+
+**Lesson.** A dropped VEVENT is read downstream as a deletion, and the discard counter is the only trace
+removal leaves. Uncapped identifier lists push the log line past what the pipeline keeps and take the
+counters with it.
+**Learned from.** `ics/utils/parse-ics-events.ts:458-461`; `core/sync-engine/ingest.ts:22-27`; tests
+*ingest-wide-event-list-bounds*.
+**Honoured by.** `src/listing/diagnostics.ts` builds `ListingDiagnostics` with `withheld`, `selfAuthored`
+and `unrepresentable` as separate `BoundedSample`s, capped at `caldavLimits.maxDiagnosticSample`, each with
+its exact total beside the sample. Samples carry identifiers only — never titles, descriptions or
+locations.
+**Proved by.** `caldav/tests/listing/diagnostics-bounds.test.ts :: DAV-H12: a 5,000-discard poll emits at
+most 20 sampled identifiers and the exact total`;
+`caldav/tests/listing/diagnostics-bounds.test.ts :: DAV-H13: no diagnostics field carries event content`;
+conformance `CONF-O33`.
+
+### DAV-I35. Digest is negotiated from the challenge, cached, and never rewritten here
+
+**Lesson.** The naive Basic-only client fails half of real servers. The working shape: try Basic, and on 401
+inspect `WWW-Authenticate` — upgrade to Digest only if Digest is offered; when starting from Digest and the
+server answers 401 offering Basic and not Digest, downgrade. The negotiated method is cached per client and
+persisted per account, because re-negotiating spends a fresh challenge every request and strict servers
+(Synology, Baikal) reject the replayed nonce-count.
+**Learned from.** `providers/caldav/shared/digest-fetch.ts`; `packages/digest-fetch/src/index.ts` (session
+keyed on nonce, nonceCount zero-padded to 8); tests *client-auth-negotiation*, *client-digest-strict-server*
+(*"never replays a nonce-count across the concurrent per-collection probes"*, *"converges on the rotated
+nonce instead of failing the account"*).
+**Honoured by.** `src/client/authenticating-fetch.ts` composes `@keeper.sh/digest-fetch` with the
+negotiation state machine and is passed to tsdav as its `fetch`, with `authMethod: "Custom"` and a no-op
+`authFunction` so our fetch owns authentication end to end. **No digest arithmetic is written in this
+package.** The challenge is collected once per client by a single bodiless `OPTIONS` probe of the server
+root, and replayed to the digest layer from there, so no *operation* request is ever sent unauthenticated
+and then repeated — a repeated request is what strict servers count twice. Because that repetition is the
+whole point, authentication is installed in **exactly one place**: `createCalDAVClient` builds the
+`DAVClient` with `createAuthenticatingFetch` as its `fetch`, and `internals.ts` uses that client's
+`fetchOverride` unwrapped. An earlier shape wrapped it a second time, which put two negotiation state
+machines, two `OPTIONS` probes and two Authorization rewrites on every request — precisely the count strict
+servers reject. The probe's outcome is memoised per client but **only on success**: a probe that rejected is
+forgotten, so one network blip cannot fail every later request from that client. `knownAuthMethod` on
+`CalDAVCredentials` is the baseline the resolved scheme is compared against, and `onAuthMethodResolved` —
+supplied by the caller to `createCalDAVClient` — fires only when the stored verdict is actually stale;
+persisting that verdict is the caller's concern, not this package's.
+**Proved by.** `caldav/tests/auth/negotiation.test.ts :: DAV-O49: a 401 offering Digest upgrades; a 401
+offering only Basic downgrades`; `caldav/tests/auth/nonce-count.test.ts :: DAV-L2: concurrent collection
+probes never replay a nonce-count`; `caldav/tests/auth/stored-method.test.ts :: DAV-O50: a stale stored
+method converges on the server's actual scheme within one run`;
+`caldav/tests/auth/probe-recovery.test.ts :: DAV-L20: a probe that failed once does not fail every request
+that follows it`;
+`caldav/tests/client/composition.test.ts :: DAV-O55: every request reaches the injected fetch exactly once
+per attempt`.
+
+### DAV-I36. A 401 from one probe is not a verdict about the account
+
+**Lesson.** Discovery fires concurrent per-collection probes. A denied task collection, or a timed-out
+well-known probe, made Keeper mark working customer credentials as needing reauthentication. A 401 is
+*refuted* by any request that succeeded after it started, and a transport failure must be reported as itself
+whichever order it settles in.
+**Learned from.** `providers/caldav/shared/response-status-scope.ts`; `shared/client.ts:129-156`; tests
+*client-discovery-concurrency* (*"reports the timeout, not invalid credentials, when the denial lands
+first/last"*).
+**Honoured by.** `src/client/auth-scope.ts` records every request's start and settle tick for the duration
+of one `OperationContext` and answers `reauthRequired` only when no request that started before a 401
+succeeded after it. The scope is created per operation in `internals.ts` and passed as an argument — there
+is no module-level state and no `AsyncLocalStorage`, so two accounts cannot contaminate each other.
+**Proved by.** `caldav/tests/auth/scoped-verdict.test.ts :: DAV-O51: a denied task collection beside a
+successful calendar probe is not reauthRequired`;
+`caldav/tests/auth/scoped-verdict.test.ts :: DAV-O52: a timeout is reported as a timeout whether it settles
+before or after the 401`;
+`caldav/tests/auth/two-accounts.test.ts :: DAV-L3: two accounts polling concurrently do not share a verdict`.
+
+### DAV-I37. Credentials withheld across a redirect is its own outcome
+
+**Lesson.** A redirect crossing a security boundary must drop the `Authorization` header, and the resulting
+401 must not be reported as invalid customer credentials — otherwise a server redirecting its principal
+lookup to another domain marks every customer on it as needing reauthentication.
+**Learned from.** `packages/calendar/src/utils/safe-fetch.ts` (`getWithheldCredentials`);
+`shared/client.ts:84-95`; `tests/utils/safe-fetch-redirect-authorization.test.ts`.
+**Honoured by.** `src/errors/classify.ts` has a `credentialsWithheld` arm distinct from
+`authenticationFailed`, and it maps to `{ kind: "transport", status: 401, disposition: "permanent" }` rather
+than `reauthRequired`. The redirect policy itself belongs to the injected fetch (DAV-I44), not here.
+**Proved by.** `caldav/tests/auth/withheld-credentials.test.ts :: DAV-O53: a 401 after a cross-site redirect
+is never reauthRequired`.
+
+### DAV-I38. Classification reads statuses and typed fields, never message text
+
+**Lesson.** A Drizzle/Postgres error inlines the SQL and its bound parameters, so an event title containing
+"authentication failed" made a database outage look like invalid credentials and flipped
+`needsReauthentication` on real accounts. There are ~25 existing tests proving Postgres, Redis and
+event-title false positives.
+**Learned from.** `providers/caldav/source/auth-error-classification.ts:126-131`;
+`response-status-scope.ts` (`MAX_CAUSE_DEPTH = 16`); commit `9e513565`.
+**Honoured by.** `src/errors/dav-error.ts` is a total decoder from `unknown` to
+`{ status: number | null, precondition: DavPrecondition | null }`, and `classify.ts` switches on those
+fields alone. A hygiene test asserts `src/` contains no `.message.includes(` and no `/authentication/i`.
+The cause-chain walk in `dav-error.ts` is depth-bounded and cycle-guarded.
+**Proved by.** `caldav/tests/errors/no-message-matching.test.ts :: DAV-H14: src classifies on no error
+message anywhere`; `caldav/tests/errors/hostile-bodies.test.ts :: DAV-O54: an event title containing
+"authentication failed" never produces reauthRequired`;
+`caldav/tests/errors/cause-cycle.test.ts :: DAV-L4: a cyclic cause chain terminates`.
+
+### DAV-I39. Every await on the server has a deadline and an abort that actually rejects
+
+**Lesson.** This product has shipped hangs. A timeout must stay distinguishable from a caller abort, an
+aborted listener must be removed so the merged controller is not held alive, and an already-aborted signal's
+reason must be preserved.
+**Learned from.** `core/utils/fetch-with-timeout.ts`; commit `1b8e796d` *hard request timeouts + enforced
+job deadline (#418)*; test *"reports a timeout as a timeout when the calendar listing itself never
+answers"*.
+**Honoured by.** `src/client/deadline.ts` exports `mergeSignals` and `raceDeadline`; `src/client/request.ts`
+is the single seam every CalDAV request passes through, and it arms a deadline from `context.deadline`
+around each request. Returning is not enough: when the sleep wins the race, `raceDeadline` **aborts the
+merged signal** it handed the work before it resolves, so the fetch under it is cancelled rather than left
+running unobserved against the transport gate. A rejection from the work itself is carried out rather than
+relabelled — the earlier code answered any rejection with `budgetExhausted`, which discarded the real
+failure before `request.ts` could classify it. The authentication probe is inside that discipline too: it
+takes the caller's signal and is raced against it, so an already-aborted request never waits on an
+`OPTIONS` that will not answer (`src/client/authenticating-fetch.ts`).
+**Proved by.** `caldav/tests/lockups/deadline.test.ts :: DAV-L5: a fetch stub that never resolves makes
+listChanges reject at the deadline, not hang`;
+`caldav/tests/lockups/every-verb-deadline.test.ts :: DAV-L6: listCalendars, listChanges and all four write
+verbs each reject at the deadline against a stalling stub`;
+`caldav/tests/lockups/abort-vs-timeout.test.ts :: DAV-L7: a caller abort mid-flight rejects as aborted and
+removes its listeners`;
+`caldav/tests/lockups/deadline-cancels.test.ts :: DAV-L7: the signal handed to the work is aborted when the
+budget expires`;
+`caldav/tests/lockups/deadline-cancels.test.ts :: DAV-L7: a genuine rejection is carried out rather than
+relabelled as an exhausted budget`;
+`caldav/tests/auth/probe-recovery.test.ts :: DAV-L20: a request carrying an aborted signal rejects even
+though the probe never answers`; conformance `CONF-L1`, `CONF-L4`.
+
+### DAV-I40. A permit is released on return, on throw and on abort
+
+**Lesson.** `executeTask` decrements `activeCount` in a `finally` so a throwing body cannot leak a
+concurrency permit; `cancel()` removes the abort listener *and* re-drives the queue, because otherwise the
+freed slot is never refilled and the whole batch wedges.
+**Learned from.** `core/utils/rate-limiter.ts:53-113, 209-216`;
+`tests/core/utils/rate-limiter.test.ts` (*"rejects an aborted queued task without starting it"*).
+**Honoured by.** `src/client/semaphore.ts` holds per-collection permits and runs the body inside a
+`try`/`finally`, so a body that **throws synchronously** — before its first `await`, which the
+`() => Promise<Value>` type does not prevent — releases its permit like any other. The earlier shape passed
+`body()` as an argument to the releasing helper, so a synchronous throw never reached the release at all and
+two of them wedged a collection for the life of the process. An aborted waiter is refused **in place**: the
+abort listener drives a purge pass that rejects every abandoned waiter regardless of whether a permit is
+free, rather than waiting for that waiter to reach the head of the queue. Following MS-I90, a caller that is
+already aborted is refused rather than admitted and released afterwards, so a write can never land after the
+provider reported `notAttempted`.
+**Proved by.** `caldav/tests/lockups/permit-release.test.ts :: DAV-L8: a throwing body releases its permit`;
+`caldav/tests/lockups/synchronous-throw.test.ts :: DAV-L8: a body that throws before its first await still
+releases the permit`;
+`caldav/tests/lockups/permit-release.test.ts :: DAV-L9: an aborted waiter is refused the permit rather than
+running`;
+`caldav/tests/lockups/synchronous-throw.test.ts :: DAV-L10: a queued waiter that aborts is refused while the
+permits are still held`;
+`caldav/tests/lockups/permit-release.test.ts :: DAV-L10: cancelling a queued task re-drives the queue`;
+conformance `CONF-L2`.
+
+### DAV-I41. A single-flight leader's failure reaches its followers
+
+**Lesson.** A losing waiter that throws or waits forever is one of the hang shapes this product has shipped.
+The lock's waiter poll has an absolute deadline and a `finally` that cancels the registration whenever
+acquisition did not happen — including on abort — and cancellation atomically promotes the previous live
+waiter.
+**Learned from.** `packages/sync/src/sync-lock.ts:191-244, 334-386`;
+`tests/core/oauth/refresh-coordinator.test.ts` (*"releases the lock after failures"*).
+**Honoured by.** `src/client/single-flight.ts` coalesces by collection key; the leader's rejection is the
+followers' rejection, and every entry releases its own map slot in `finally` so a failed leader cannot
+strand the key.
+**Proved by.** `caldav/tests/lockups/single-flight.test.ts :: DAV-L11: a failing leader rejects every
+follower rather than leaving them pending`;
+`caldav/tests/lockups/single-flight.test.ts :: DAV-L12: two concurrent calls for the same collection
+coalesce and neither deadlocks`;
+`caldav/tests/lockups/single-flight.test.ts :: DAV-L13: an aborted follower does not cancel the leader's
+work for the others`; conformance `CONF-L3`, `CONF-L6`.
+
+### DAV-I42. Ordered, de-duplicated acquisition, and no network I/O under a held lock
+
+**Lesson.** Advisory locks are acquired in a deterministic sorted order over a de-duplicated key set, and
+remote I/O was explicitly moved outside database transactions because holding a pooled connection across a
+slow provider call caused database backpressure.
+**Learned from.** `core/source/ingest-lock.ts`; commits `1c5171d2`, `7e17062a`.
+**Honoured by.** `src/client/semaphore.ts` sorts and de-duplicates its key set before acquiring, so two
+concurrent writers cannot deadlock on inverted order. This package holds no database handle at all (a
+hygiene test asserts no `@keeper.sh/database` import), so the backpressure half is honoured by construction.
+**Proved by.** `caldav/tests/lockups/ordered-keys.test.ts :: DAV-L14: two callers acquiring the same two
+collections in opposite request order do not deadlock`;
+`caldav/tests/hygiene/no-database.test.ts :: DAV-H15: src imports no database or queue package`.
+
+### DAV-I43. Every retry has a provable ceiling and an abortable sleep
+
+**Lesson.** `withBackoff` caps the delay, honours a provider `Retry-After` only up to that cap, distinguishes
+retryable from non-retryable, and rejects immediately on an already-aborted signal and mid-sleep on a fresh
+abort. `Bun.sleep` is a native primitive `vi.useFakeTimers` cannot patch.
+**Learned from.** `core/utils/backoff.ts`; `tests/core/utils/backoff.test.ts` (*"caps the delay at 64
+seconds"*, *"aborts during backoff sleep when signal is triggered"*); oven-sh/bun #16142.
+**Honoured by.** `src/client/backoff.ts` runs over the injected `clock.sleep`, which is `setTimeout`-based;
+attempts are bounded by `context.retryBudget.maxAttempts` and delays by
+`context.retryBudget.retryDelayCeilingMs`. A hygiene test forbids `Bun.sleep` in `src/` and in `tests/`.
+**Proved by.** `caldav/tests/lockups/retry-ceiling.test.ts :: DAV-L15: a server failing forever stops at
+maxAttempts and reports the last failure`;
+`caldav/tests/lockups/retry-ceiling.test.ts :: DAV-L16: a Retry-After of one hour is clamped to the ceiling`;
+`caldav/tests/lockups/backoff-abort.test.ts :: DAV-L17: an abort mid-sleep rejects immediately`;
+`caldav/tests/hygiene/no-bun-sleep.test.ts :: DAV-H16: no src or test file calls Bun.sleep`; conformance `CONF-L5`.
+
+### DAV-I44. The fetch arrives as an argument, and SSRF policy is not re-invented here
+
+**Lesson.** CalDAV server URLs come straight from the customer, so the fetch layer must block non-http
+schemes, block resolution to loopback/private/link-local ranges and their IPv4-mapped IPv6 equivalents,
+enforce a redirect depth cap with `redirect: "manual"`, and retry exactly once on a pooled-socket
+ECONNRESET — never when the body is a stream.
+**Learned from.** `packages/calendar/src/utils/safe-fetch.ts`; commit `84af4818`.
+**Honoured by.** `CalDAVDependencies.client` is a required argument with no default, and the fetch reaches
+this package only inside it — `createCalDAVClient({ fetch, credentials, onAuthMethodResolved })` is the one
+constructor, and it is where the caller's safe fetch is handed in. This package makes no network call except
+through `client.fetchOverride`, and a hygiene test asserts `src/` never references the global `fetch`.
+Composition order is fixed by `createCalDAVClient` and applied once: safe fetch → authenticating fetch →
+tsdav (DAV-I35).
+**Proved by.** `caldav/tests/hygiene/no-global-fetch.test.ts :: DAV-H17: src references no global fetch and
+no module-level client`;
+`caldav/tests/client/composition.test.ts :: DAV-O55: every request reaches the injected fetch exactly once
+per attempt`.
+
+### DAV-I45. Windows and tzurl identifiers are resolved by sync-ical, not mapped here
+
+**Lesson.** Exchange emits `"Eastern Standard Time"` and `"Customized Time Zone"`, Thunderbird emits
+`/mozilla.org/<ver>/America/Denver`, and `Etc/GMT+N` has an inverted sign. These must be normalised to IANA
+downstream, but a synthesized VTIMEZONE must keep the ORIGINAL identifier in its TZID or nothing in the
+resource links to it.
+**Learned from.** `ics/utils/normalize-timezone.ts`, `resolve-timezone-identifier.ts:65-68`,
+`synthesize-vtimezones.ts:78-83`; commits `7c276d8e`, `ac6fa18c`, `0111e5de`.
+**Honoured by.** `sync-ical`'s `resolveZoneIdentifier` and `synthesizeMissingVtimezones` do all of it;
+`caldav/src` names no zone identifier at all (same hygiene test as DAV-I20).
+**Proved by.** `caldav/tests/listing/windows-zone.test.ts :: DAV-O56: a resource with a Windows TZID
+resolves to an IANA zone and keeps the original TZID in its synthesized VTIMEZONE`.
+
+### DAV-I46. Leniency is a declarative patch layer, and compliant feeds pass through untouched
+
+**Lesson.** Real feeds violate RFC 5545 in known recoverable ways that Apple, Google and Outlook tolerate —
+bare-date `DTSTART:YYYYMMDD` without `VALUE=DATE`, EXDATE lists that omit `VALUE=DATE`. Handled as
+declarative pre-parse patches, chainable, with compliant feeds untouched.
+**Learned from.** `ics/utils/apply-patches.ts`; `ics/patches/coerce-compliant-date.ts`; tests
+*lenient-parser* (*"leaves spec-compliant feeds untouched"*).
+**Honoured by.** `sync-ical`'s `defaultIcsPatches` are passed through `IcsOptions` and composed in
+`src/text/extended-date-time.ts` with one CalDAV-local patch — an extended ISO-8601 `DTSTART` value coerced
+to the RFC 5545 basic form, which is what several Radicale and Baikal exports emit. The patch layer is the
+only place leniency lives; no parse path in this package holds a `try`/`catch`.
+**Proved by.** `caldav/tests/listing/lenient-resources.test.ts :: DAV-O57: a compliant resource is byte-identical
+through the patch layer`.
+
+### DAV-I47. Each function's failure blast radius is a stated part of its contract
+
+**Lesson.** `resolveEventEndTime` is deliberately total *"because throwing here would drop the whole
+calendar, not the one VEVENT"*. Locality of failure is a design property decided deliberately, not an
+accident of where a `try` happened to be.
+**Learned from.** `ics/utils/parse-ics-events.ts:16-17`.
+**Honoured by.** Every function in `src/listing/` returns a union or a `Result`. Exactly three modules raise
+at their caller, and each raises a named class rather than a bare `Error`: `src/client/semaphore.ts` raises
+`PermitAborted`, `src/client/single-flight.ts` raises `FlightAbandoned`, and
+`src/conformance-obligations.ts` rejects with the complaint the conformance suite is asking about. The first
+two are coordination refusals, not provider outcomes, and `src/provider.ts` catches both and maps them to
+`{ kind: "notAttempted", reason: "aborted" }`; anything else that escapes becomes a permanent transport
+failure rather than a cancellation the caller never asked for. The two read policies of DAV-I17 are the
+explicit statement of blast radius at the only seam where it varies.
+**Proved by.** `caldav/tests/hygiene/no-throw.test.ts :: DAV-H18: only the two coordination refusals throw,
+and the provider catches both`;
+`caldav/tests/hygiene/no-throw.test.ts :: DAV-H18: a transport that throws becomes a Result failure, not an
+exception`;
+`caldav/tests/listing/per-resource-isolation.test.ts :: DAV-O58: one malformed resource in fifty leaves the
+other forty-nine listed`.
+
+### DAV-I48. The window bounds what is mirrored, never what is read; `expand` is never sent
+
+**Lesson.** An ICS/CalDAV collection is retained whole. Filtering the fetched set by the window before the
+snapshot diff makes the diff delete every historic event on the next ingest. A recurring master lying
+entirely before the window still produces occurrences inside it, and production had to stop sending
+`CALDAV:expand` at all because servers break on it.
+**Learned from.** `ics/utils/fetch-adapter.ts:388-393`; `providers/caldav/source/window.ts:7-12`; commits
+`95c05b7f`, `f242cf8f`, `17a0dfc3`; tests *"keeps a recurring master that lies entirely before the window"*,
+*"lists far-future Keeper objects without imposing a two-year CalDAV report cutoff"*.
+**Honoured by.** `src/listing/request-shape.ts` sends no `time-range` filter that could bound retention and
+never sends `CALDAV:expand`; the listing reports `scope.expandRecurrences === false`. Coverage is therefore
+the whole collection (`sync-ical`'s `coverageForWholeFeed` window), and it is claimed only when every href
+was read (DAV-I1). Membership, where a caller needs it, is `withinCalDAVWindow`.
+**Proved by.** `caldav/tests/hygiene/report-bodies.test.ts :: DAV-H3: no request body contains an expand
+element`; `caldav/tests/listing/window-is-not-retention.test.ts :: DAV-O59: an event outside the requested
+window is listed, not removed`;
+`caldav/tests/listing/window-is-not-retention.test.ts :: DAV-O60: a master before the window survives`.
+
+### DAV-I49. A recurrence budget is per-series and never fails the poll
+
+**Lesson.** A widened window can pull a pathological series over the occurrence budget; dropping the whole
+ingest puts the calendar into permanent backoff.
+**Learned from.** `core/sync-engine/ingest.ts:248-257`; commit `1c5171d2`.
+**Honoured by.** Because this adapter never expands (DAV-I48), the budget that applies is `sync-ical`'s
+parse-side bound (`maxExceptionDates`, `maxPropertyValues`). A resource exceeding it is withheld with
+`recurrenceBudgetExceeded` and counted; the listing still succeeds.
+**Proved by.** `caldav/tests/listing/exdate-flood.test.ts :: DAV-O61: a resource with 10,000 EXDATEs is
+withheld and the rest of the collection still lists`.
+
+### DAV-I50. Every listing, parse and write path is proven idempotent by running it twice
+
+**Lesson.** Every production churn incident in `packages/calendar` was a second run disagreeing with the
+first, and the assertion appears by name on nearly every telemetry file: *"settles without churning the
+surviving row over repeated polls"*, *"converges over repeated polls of the same malformed feed"*.
+**Learned from.** `ics-superseded-slot-telemetry`, `ics-malformed-vevent-telemetry`,
+`empty-resource-telemetry`, `client-discovery-probe-failures`.
+**Honoured by.** Listings sort by normalised resource path — never by server response order — before
+assembling events, removals, withheld and diagnostics, so two polls of an unchanged collection are byte-equal.
+**Proved by.** `caldav/tests/listing/convergence.test.ts :: DAV-O62: two polls of an unchanged collection
+produce identical listings`;
+`caldav/tests/listing/convergence.test.ts :: DAV-O63: reordering the server's responses does not change the
+listing`;
+`caldav/tests/writes/convergence.test.ts :: DAV-O64: replaying the same write plan produces no second
+operation`; conformance `CONF-O20`.
+
+### DAV-I51. Two operations on one client, and two accounts, cannot contaminate each other
+
+**Lesson.** There are dedicated production tests for *"two CalDAV accounts syncing at the same time"* and
+*"two operations racing on one CalDAV client"*, because the digest session and the auth verdict were both
+client-global.
+**Learned from.** `tests/.../client-digest-and-cross-client.test.ts`, `client-auth-status-interleaving.test.ts`.
+**Honoured by.** Per-operation state (the auth scope, the deadline, the retry budget) lives in the
+`OperationContext`-derived object created in `internals.ts` per call, not on a module and not on a shared
+client field. The digest session is per credentials object, which is per account by construction.
+**Proved by.** `caldav/tests/auth/two-accounts.test.ts :: DAV-L3: neither account's poll waits on the other's transport`;
+`caldav/tests/client/interleaving.test.ts :: DAV-L18: two listChanges calls on one client interleave without
+sharing a verdict or a nonce-count`; conformance `CONF-L7`.
+
+### DAV-I52. The request bodies are pinned against tsdav's own
+
+**Lesson.** A malformed filter makes a server silently return nothing, which reads as an empty collection
+and therefore as mass deletion. Production has a test literally named *"our calendar-query body against
+tsdav's own"*, and CalDAV time-range attributes must be the compact `YYYYMMDDTHHMMSSZ` form, not an ISO
+string.
+**Learned from.** `providers/caldav/shared/api.ts:5-25`; `tests/.../api.test.ts`.
+**Honoured by.** `src/listing/request-shape.ts` names every element through tsdav's own `DAVNamespace` and
+`DAVNamespaceShort` constants rather than string literals, so a tsdav upgrade that renames a namespace
+prefix is a type error here, and `request-bodies.test.ts` pins the prop set against those constants and
+against the href count the multiget was given. What is **not** pinned is the serialised XML byte-for-byte
+against `tsdav.calendarQuery`/`syncCollection`: those helpers issue the request rather than returning a
+body, so there is nothing to diff without a second transport stub. That is the residual risk on this entry,
+and it is stated rather than implied.
+**Proved by.** `caldav/tests/listing/request-bodies.test.ts :: DAV-H19: our sync-collection and multiget
+bodies match tsdav's own for the same inputs`;
+`caldav/tests/listing/request-bodies.test.ts :: DAV-H19: a multiget body names every href it was given and
+nothing else`.
+
+### DAV-I53. Text is canonicalised once, and the same function feeds the hash and the wire
+
+**Lesson.** ICS is CRLF-delimited; descriptions and summaries must be normalised to LF before serialisation
+*and* before the content hash, or the same event hashes differently on write and read-back and is replaced
+every run.
+**Learned from.** `providers/caldav/shared/ics.ts:26-27, 58`; test *"canonicalizes CRLF text before
+serialization so replay hashes converge"*.
+**Honoured by.** `src/write/normalize.ts` exports one `shapedContent`, which folds CRLF and CR to LF in
+`title`, `description` and `location`. It is applied at **both** ends of the round trip and nowhere else:
+`listing/project-resource.ts` shapes every parsed event before it fingerprints it, and
+`write/normalize.ts` shapes the content before it is serialised and before `caldavFingerprint` sees it. The
+key ordering both the fingerprint and the canonical encoder use is the single `compareCodeUnits` in
+`src/canonical.ts`. `caldavFingerprintContract.canonicalisation` is `"rfc8785"` because the protocol's
+`FingerprintContract` admits no other value; the encoder in `src/fingerprint.ts` implements the JCS shape it
+needs — sorted keys by UTF-16 code unit, `JSON.stringify` for strings and numbers, which is the same
+ECMAScript number-to-string RFC 8785 §3.2.2.3 adopts — over a value tree that only ever holds strings,
+small integers and null.
+**Proved by.** `caldav/tests/writes/crlf-canonicalisation.test.ts :: DAV-O65: an event whose description
+arrives CRLF hashes identically after a write and a read-back`.
+
+### DAV-I54. Every response body this adapter does not read is cancelled
+
+**Lesson.** A 401 being retried under a different scheme, a 412 being turned into a typed error, a write
+whose status is all we need — each leaks a socket if its body is not released, and eventually the poller
+wedges.
+**Learned from.** `providers/caldav/shared/client.ts:104-116, 252-256`; `digest-fetch.ts:76, 99`.
+**Honoured by.** `src/client/response-body.ts` exports the one `releaseResponseBody`, called before the
+status check rather than after it, and `src/client/request.ts` is the only place a raw `Response` is held.
+**Proved by.** `caldav/tests/lockups/body-release.test.ts :: DAV-L19: a 412, a 401 retry and a 204 each
+release their body exactly once`;
+`caldav/tests/hygiene/one-raw-response.test.ts :: DAV-H20: only src/client holds a raw Response`.
+
+### DAV-I55. The VTIMEZONE we emit is Outlook-compatible, and that is sync-ical's job
+
+**Lesson.** Outlook requires a baseline observance and specific observance shapes, and RDATE inside a
+VTIMEZONE observance is only usable where the serialiser supports it.
+**Learned from.** commits `0111e5de`, `cecd4024`; `tests/ics/utils/build-vtimezone.test.ts`.
+**Honoured by.** `sync-ical`'s `buildVtimezone` is the only generator; DAV-I19's fixed-point test covers the
+CalDAV round trip.
+**Proved by.** `caldav/tests/writes/dst-roundtrip.test.ts :: DAV-O26: the second write of the same content is not a change`.
+
+### DAV-I56. tsdav is extended at exactly four points and replaced at none
+
+**Lesson.** The existing production client already depends on tsdav and extends it precisely where it falls
+short. There is no prohibition on tsdav anywhere in this repository; the precedent is reach-for-the-library-
+then-extend.
+**Learned from.** `providers/caldav/shared/client.ts:2, 191-210`.
+**Honoured by.** Discovery is tsdav's: `src/calendars/discover.ts` calls `client.createAccount` — which
+runs `.well-known/caldav`, `DAV:current-user-principal` and `CALDAV:calendar-home-set` — and then
+`client.fetchCalendars`, and filters the result to collections whose `supported-calendar-component-set`
+includes `VEVENT`, using the server's own `DAV:displayname`. An earlier draft hand-rolled a Depth-1 PROPFIND
+of `/` and treated every non-root row as a calendar, which finds nothing on Nextcloud, Fastmail or iCloud —
+where calendars are not children of the root — and returns address books and task collections as calendars
+where it finds anything at all. The four extension points, and no others, are: (1) bounded-batch multiget
+with requested-vs-returned verification (DAV-I2); (2) an injected digest-aware fetch under
+`authMethod: "Custom"` with a no-op `authFunction` (DAV-I35); (3) RFC 6578 and RFC 4918 response
+classification — truncation on both the REPORT and the PROPFIND, token rejection, root sync-token (DAV-I3,
+DAV-I4, DAV-I5, DAV-I6); (4) our own `urlFilter` and pathname normalisation (DAV-I14). Each is named in the
+package README beside the tsdav behaviour that forced it.
+**Proved by.** `caldav/tests/hygiene/tsdav-extension-points.test.ts :: DAV-H1: discovery and every DAV verb
+go through tsdav rather than a hand-rolled request`;
+`caldav/tests/hygiene/tsdav-extension-points.test.ts :: DAV-H21: the README names each extension point and
+the tsdav line that forced it`.
+
+### DAV-I57. Sync-token invalidation is routine on self-hosted servers, so `cursorLost` is a cheap path
+
+**Lesson.** Radicale stores sync-tokens in a `.Radicale.cache` folder and invalidates every client's token
+whenever that cache is recreated. Nextcloud has shipped 500s and malformed errors on sync-collection.
+Treating cursor loss as an exceptional error path means the common case runs through the least-tested code.
+**Learned from.** Kozea/Radicale #1049, #306; nextcloud/server #9339, #48678.
+**Honoured by.** `cursorLost` is produced by exactly one function, `src/listing/list-changes.ts`, from four
+triggers (token rejected, cursor version mismatch, scope mismatch, unattributable removal), and every
+trigger has its own test. The next call falls back to the snapshot path with no extra caller state.
+**Proved by.** `caldav/tests/cursor/all-triggers.test.ts :: DAV-O66: the four cursorLost triggers take one
+code path and none emits a removal`;
+`caldav/tests/cursor/recovery.test.ts :: DAV-O67: the poll after a cursorLost snapshots and re-establishes a
+cursor`.
+
+### DAV-I69. An RDATE inside a VEVENT is rejected at the boundary it was found on
+
+**Lesson.** ts-ics silently drops `RDATE` inside a `VEVENT`, and the first recovery attributed a folded
+RDATE to the wrong event across a component boundary — so a series either quietly lost occurrences or
+gained one from its neighbour. Three separate lessons came out of it: a folded RDATE must still be seen, a
+mismatched `BEGIN`/`END` must fail closed rather than let an RDATE hide inside it, and an RDATE must never
+leak onto the next event when components are adjacent.
+**Learned from.** `packages/calendar/src/ics/utils/validate-recurrence-input.ts`;
+`tests/ics/utils/validate-recurrence-input.test.ts` (*"rejects folded RDATE properties inside VEVENT"*,
+*"fails closed when a mismatched component boundary tries to hide event RDATE"*, *"does not leak RDATE onto
+the next event when components are adjacent"*).
+**Honoured by.** `sync-ical` owns both halves. The boundary is `src/text/component-walk.ts`, which unfolds
+before it looks and attributes every property to the component it actually closed under — so a folded RDATE
+is still seen and cannot leak onto the adjacent VEVENT. The verdict is
+`declaresRecurrenceDates` at `sync-ical/src/parse/parse-vevent.ts:303-304`: a VEVENT carrying **any** RDATE
+is withheld rather than narrowed to its RRULE. That is the right refusal here because this adapter never
+expands (DAV-I48) and hands a series out as `RecurringContent` with an anchor and an RRULE, so an occurrence
+set an RRULE cannot express has no representation at all and must not be published as though it did.
+`sync-ical` also exports `detectEventLevelRecurrenceDates` for callers that want the UID list without
+parsing; nothing in this monorepo calls it, and it is noted here as surface to review rather than cited as
+the mechanism. This package adds nothing to either half — its contribution is to pass the resource through
+`projectIcsFeed` whole rather than pre-splitting it, so the boundary the walk sees is the one the server
+sent.
+**Proved by.** `caldav/tests/listing/event-rdate.test.ts :: DAV-O71: a VEVENT carrying an event-level RDATE
+is withheld, never narrowed to its RRULE`;
+`caldav/tests/listing/event-rdate.test.ts :: DAV-O71: the withheld series does not cost its neighbour in the
+same resource its listing`;
+`caldav/tests/listing/exdate-flood.test.ts :: DAV-O61: a resource with 10,000 EXDATEs is withheld and the
+rest of the collection still lists`.
+
+### DAV-I70. DTSTART + DURATION is nominal wall time, and the interpretation lives in sync-ical
+
+**Lesson.** A VEVENT may carry `DURATION` instead of `DTEND`, and the weeks and days of an ISO-8601 duration
+are *nominal* — one day is "the same wall-clock time tomorrow", not 86,400,000 milliseconds. Adding it as
+fixed milliseconds lands an event an hour out across a DST transition, which the fingerprint reads as a
+content change, which is the delete-and-recreate churn class.
+**Learned from.** `packages/calendar/src/ics/utils/recurrence-duration.ts` (`addIcsDuration`) and its
+wall-time tests. Radicale and Baikal exports routinely use `DURATION` rather than `DTEND`.
+**Honoured by.** `sync-ical` owns it end to end: `src/parse/duration.ts` parses the value and
+`src/parse/end-time.ts` resolves the end instant in the event's own zone, so the nominal parts are added as
+wall time and the exact parts as elapsed time. This package neither parses nor adds a duration; DAV-I25
+covers only the case where there is no `DTEND` **and** no `DURATION`, which ends the event at its own start.
+The CalDAV round trip over a transition is a fixed point because both halves go through that resolution.
+**Proved by.** `caldav/tests/writes/dst-roundtrip.test.ts :: DAV-O26: a write→read→compare across a DST
+boundary is a fixed point`;
+`caldav/tests/writes/fold-instant.test.ts :: DAV-O28: an instant in a repeated hour round-trips to itself
+through a PUT and a re-read`.
+
+### DAV-I71. A SEQUENCE is written, not only read
+
+**Lesson.** `SEQUENCE` is how every other client orders our update against its own copy, and it is what this
+adapter's own duplicate-collapse ranks on (DAV-I31, DAV-I32). A writer that never emits it leaves every
+resource it touches at revision 0, so its own writes always rank lowest against any other client's, and a
+mirror that reads its own write back sees a revision that never advances.
+**Learned from.** RFC 5545 §3.8.7.4; the revision lessons at DAV-I31 and DAV-I32; conformance `CONF-O44`,
+which requires one create plus one applied update to leave the calendar holding revision 2.
+**Honoured by.** `sync-ical`'s `RecurrenceSet` carries a required `sequence`, emitted on every VEVENT of the
+resource, so the field cannot be forgotten by a new caller. `src/write/serialize.ts` takes the revision of
+the resource being replaced and writes its successor — 1 on a create, `existing.revision + 1` on an update.
+It is deliberately **not** part of the content fingerprint (`src/fingerprint.ts` has no revision field), so
+advancing the sequence on a write does not by itself make the next read look like a change.
+**Proved by.** `caldav/tests/writes/sequence.test.ts :: DAV-O70: a create writes SEQUENCE:1 and an applied
+update advances it`;
+`caldav/tests/writes/sequence.test.ts :: DAV-O70: the revision the adapter reads back is the SEQUENCE it
+wrote`; conformance `CONF-O44`.
+
+### DAV-I72. An idempotency key names one resource, and the name is validated before it is a URL
+
+**Lesson.** The created resource's path is the collection path with the idempotency key interpolated into
+it. `IdempotencyKey` is an unconstrained string in the protocol, and `URL.parse` normalises `..`, so a key
+carrying a path segment writes into a calendar the caller never named. `If-None-Match: *` stops it
+overwriting an existing resource; it does not stop it landing in the wrong collection.
+**Learned from.** `protocol/src/handles.ts` (`IdempotencyKey` is `{ kind, value: string }`); the same class
+of defect as the href-normalisation lesson at DAV-I14.
+**Honoured by.** `src/write/resource-url.ts` exports `namesOneResource`, which admits only
+`A-Za-z0-9._@:+-` and refuses an empty key or any dot-segment. `src/write/create.ts` checks it **before**
+normalising content, serialising or building a URL, and answers `{ kind: "unsupported", operation: "write" }`
+— a typed refusal that issues no request at all. The same key becomes the VEVENT `UID`, so the check guards
+both the path and the identity.
+**Proved by.** `caldav/tests/overwrites/hostile-idempotency-key.test.ts :: DAV-O69: a key carrying a path
+segment is refused before any request is made`;
+`caldav/tests/overwrites/hostile-idempotency-key.test.ts :: DAV-O69: no request a hostile key provokes ever
+leaves the collection it was given`.
+
+---
+
+## Not applicable to sync-caldav
+
+### DAV-I58. NOT APPLICABLE — wide-event telemetry in a pooled transaction callback
+
+**Lesson.** Part of ingest runs inside a persistence transaction callback, which a pooled driver invokes in
+the async context of whoever released the connection, so a `widelog` call there lands on another source's
+event.
+**Learned from.** `core/sync-engine/ingest.ts:191-197`.
+**Why not.** This package holds no database handle and does no ambient-context work: diagnostics are values
+on the returned listing, and the clock and hash arrive as arguments. Recorded so it is not reintroduced if
+this package ever writes into a shared transaction. **Proved by.**
+`caldav/tests/hygiene/no-database.test.ts :: DAV-H15: the whole src tree was walked, not an empty directory`.
+
+### DAV-I59. NOT APPLICABLE — delta-window pruning of stranded events
+
+**Lesson.** A delta source must prune stored events outside a narrowed window, because it only reports
+changes and a stranded event would never be re-reported.
+**Learned from.** `core/sync-engine/ingest.ts:153-159`.
+**Why not.** This adapter never narrows what it reads by a window (DAV-I48), so no event is ever stranded
+outside one. The pruning rule belongs to the caller's snapshot handling, and the protocol already separates
+the two by listing kind rather than by a flag.
+
+### DAV-I60. NOT APPLICABLE — push channel health, renewal and receiver hardening
+
+**Lesson.** Google and Graph channels expire, need staggered renewal, and their receivers must verify a
+client state in constant time.
+**Learned from.** `GOOG-I*` and `MS-I73`–`MS-I81`.
+**Why not.** CalDAV has no push. RFC 6578 is a polling optimisation, not a notification channel; the
+WebDAV-Push draft is not implemented by the servers this adapter targets. `CalendarProvider` has no `watch`
+member, this package declares no `push/` module, and the **absence of the method is the signal**. There is
+deliberately no `supportsPush: false`.
+**Proved by.** `caldav/tests/hygiene/poll-only.test-d.ts :: DAV-H22: the exported provider has no watch
+member and src declares no push capability boolean`.
+
+### DAV-I61. NOT APPLICABLE — OAuth token refresh coordination
+
+**Lesson.** Concurrent refreshes for one credential must be coalesced and the lock released on failure.
+**Learned from.** `tests/core/oauth/refresh-coordinator.test.ts`.
+**Why not.** CalDAV credentials here are username/password (Basic or Digest); there is no token to refresh.
+The single-flight machinery still exists for *listings* (DAV-I41), which is where CalDAV's coalescing need
+actually is. If a server offering Bearer/OIDC (Nextcloud) is ever supported, the refresh belongs to the
+credential provider that mints the header, not to this adapter.
+
+### DAV-I62. NOT APPLICABLE — Google and Microsoft over CalDAV
+
+**Lesson.** Google's CalDAV v2 endpoint is live but the legacy `/calendar/dav` path is removed and new Cloud
+projects face fresh CalDAV quotas from 2026-05-01; Microsoft offers no CalDAV for Microsoft 365 at all.
+**Learned from.** `developers.google.com/workspace/calendar/caldav/v2/guide`; openhab #5557.
+**Why not.** Google and Microsoft are served by `@keeper.sh/sync-google` and `@keeper.sh/sync-microsoft` over
+their native APIs. This adapter targets Nextcloud, Radicale, Baikal, Fastmail, iCloud and Synology, where
+CalDAV is the only interface. Recorded so nobody later routes Google through this adapter to save work.
+
+### DAV-I63. NOT APPLICABLE — Bun's data and test-runner APIs
+
+**Lesson.** Prefer a platform capability over a dependency where it genuinely fits.
+**Why not.** `Bun.sql`, `bun:sqlite` and `Bun.redis` are irrelevant here — this package touches no store.
+`bun:test` is actively wrong: the repository runs `bun x --bun vitest run`, and bare `bun test` produces
+bogus `vi.hoisted is not a function` errors. `Bun.sleep` is forbidden outright (DAV-I43). `HTMLRewriter` was
+considered for the multistatus read and rejected: it is an HTML parser and WebDAV is namespaced XML. The one
+Bun capability that matters is that it runs TypeScript source directly, which is why these packages ship
+unbuilt.
+
+---
+
+## Dependencies taken and rejected
+
+### DAV-I64. Taken: `tsdav` (^2.1.8, the version already in the lockfile)
+
+Transport, discovery, XML generation and parsing, and the raw REPORT bodies: `createDAVClient`,
+`fetchCalendars`, `calendarQuery`, `calendarMultiGet`, `syncCollection`, `davRequest`, `propfind`,
+`supportedReportSet`, `createObject`, `updateObject`, `deleteObject`. It is already a dependency of
+`packages/calendar` and `services/api`, it is actively released, and CalDAV's digest auth and XML are exactly
+the security-sensitive, high-surface code that should not be re-written. Tradeoff recorded: its xml-js
+projection camelCases and strips namespaces, so anything read out of a response must be reachable through
+that projection and is verified per property rather than assumed. **Not used:** `smartCollectionSync`
+(DAV-I3) and the bare `updateObject`/`deleteObject` etag parameter (DAV-I28).
+
+### DAV-I65. Taken: `@keeper.sh/digest-fetch` (workspace)
+
+Digest already solved in-repo, with nonce-keyed sessions, monotonic zero-padded nonce-counts across
+concurrent requests, qop selection, opaque and nonce rotation — each behind a failing-server test from
+Synology and Baikal. Writing digest again would be the single most security-sensitive new code in this
+package for no benefit.
+
+### DAV-I66. Taken: `xml-js` (direct, pinned to tsdav's own version)
+
+Needed for exactly one thing: reading the multistatus *document* — the root `DAV:sync-token`, the collection
+href's 507 status, and the `DAV:error` precondition on a non-2xx — all three of which tsdav's per-response
+projection loses (DAV-I4). It is already in the tree as tsdav's dependency; declaring it directly makes the
+dependency honest instead of relying on hoisting, and it guarantees our reader and tsdav's parse the same
+document the same way. Rejected alternatives: writing a regex reader over the raw XML (namespace-unsafe),
+`fast-xml-parser` (a second XML parser in one package), and `HTMLRewriter` (wrong grammar).
+
+### DAV-I67. Taken: `@keeper.sh/sync-protocol`, `@keeper.sh/sync-ical`; dev `@keeper.sh/sync-conformance`
+
+`sync-protocol` is the contract. `sync-ical` owns parsing, canonicalisation, lenient patches, VTIMEZONE
+generation, the wall-time corpus and the window predicate — this package generates and parses **no
+iCalendar text of its own**. The one piece of text handling that does live here is `shapedContent` in
+`src/write/normalize.ts`, which folds CRLF to LF in the three free-text fields so the fingerprint and the
+wire agree (DAV-I53); it operates on `EditableContent`, never on ICS syntax. Tradeoff accepted: `sync-ical` becomes a bottleneck for CalDAV bug fixes;
+duplicating the parser is how the timezone lessons get lost. `sync-conformance` is the acceptance gate and is
+a dev dependency only.
+
+### DAV-I68. Rejected: `ical.js`, `ts-ics`, `rrule`, `node-ical`
+
+All would be a second iCalendar implementation beside `sync-ical`, and `ts-ics` in particular is the source
+of the observance-expansion bug that `ICAL-I*` documents at length. Nothing this adapter needs is missing
+from `sync-ical`.
+
+### DAV-I69. Rejected: a hand-rolled CalDAV transport, XML layer or digest client
+
+This is the previous attempt's shape and the reason this brief exists. Hand-rolling digest authentication in
+particular means writing a large amount of security-sensitive code to avoid a maintained library that already
+works and is already a dependency of this product. Zero-dependency is not a goal here and is not cited as
+one anywhere in this package.
+
+### DAV-I70. Rejected: `temporal-polyfill` / `@js-temporal/polyfill`
+
+`sync-ical` already resolves wall times against the platform's IANA data with a two-probe bracket verified
+over 415k wall times across 445 zones. A polyfill would add weight and a second source of truth for the one
+thing that must have exactly one.
+
+### DAV-I71. Rejected: a hygiene test that bans a library
+
+The previous attempt added a test failing the build if anyone imported tsdav. A test that bans a dependency
+is a repository-wide policy, and repository-wide policy is not this package's to make silently. The hygiene
+tests here constrain *this package's own* behaviour — no `Bun.sleep`, no global fetch, no database import, no
+message-matching, no second window predicate, no `smartCollectionSync` — and each names the defect it
+prevents. If a dependency constraint is wanted, it belongs in a proposal to the people who own the repo.
+
+### DAV-I72. Process: Bun runs it, vitest asserts it, and `Bun.sleep` never appears
+
+`bun x --bun vitest run` per package (never bare `bun test`); `bunx turbo run test lint types --force` for a
+real verdict, because turbo caches. oxlint runs with the restriction category on: no console, no ternaries
+anywhere, `eqeqeq`. Fake timers are used wherever a delay is asserted, which is why every sleep in this
+package is `setTimeout`-based and arrives through the injected clock.
+
+---
+
+## Module map
+
+```
+src/index.ts                        the public surface and nothing else
+src/capabilities.ts                 caldavCapabilities: the as const Capabilities<"caldav">
+src/limits.ts                       caldavLimits as const: batch size, page ceiling, concurrency, samples
+src/dependencies.ts                 CalDAVDependencies: client, credentials, clock, gate, hash, installation
+src/internals.ts                    assembles semaphore, transport, single flight, auth scope, ledger once
+src/decisions.ts                    what the last coverage and retry decisions were actually made from
+src/provider.ts                     createCalDAVProvider -> CalendarProvider<"caldav">
+src/contract.ts                     createCalDAVContract -> ProviderContract<"caldav">
+src/conformance-obligations.ts      the seven ConformanceObligation implementations
+src/canonical.ts                    sync-ical options for this adapter, and the one key comparator
+src/fingerprint.ts                  caldavFingerprintContract and the injected-hash fingerprint
+
+src/client/dav-client.ts            createCalDAVClient: tsdav with authMethod "Custom", our fetch
+src/client/authenticating-fetch.ts  basic <-> digest negotiation over @keeper.sh/digest-fetch
+src/client/auth-scope.ts            per-operation status recorder; a 401 is refuted by a later success
+src/client/response-body.ts         releaseResponseBody: the one place a discarded body is cancelled
+src/client/request.ts               the one seam: permit -> deadline -> retry -> gate -> call -> classify
+src/client/attempt-budget.ts        a claimable attempt ceiling, spent once per request
+src/client/operation.ts             CalDAVOperation: the context and surroundings one call carries
+src/client/deadline.ts              mergeSignals, raceDeadline; timeout and abort stay distinguishable
+src/client/backoff.ts               bounded abortable retry over clock.sleep, built on setTimeout
+src/client/semaphore.ts             per-collection permits; released on return, throw and abort
+src/client/single-flight.ts         coalescing by collection key; leader failure reaches followers
+
+src/identity/account.ts             AccountId from server host + principal path; never an address
+src/identity/collection-key.ts      CalendarId from the decoded, slash-collapsed collection pathname
+src/identity/resource-path.ts       the one href -> normalised pathname function
+
+src/report/multistatus.ts           the document reader: root sync-token, per-href status, DAV:error
+src/report/sync-report.ts           SyncReport union: changed | removed | truncated | tokenRejected | unchanged
+src/report/supported-reports.ts     supported-report-set probe, cached per collection per run
+src/report/collection-tag.ts        ctag and DAV:sync-token read before a snapshot enumerates
+
+src/listing/list-changes.ts         orchestration; the only producer of cursorLost
+src/listing/mode.ts                 ListingMode: snapshot | resumeSnapshot | delta | resumeDelta
+src/listing/request-shape.ts        as const REPORT bodies; no DAV:limit, no expand, no retention filter
+src/listing/enumerate.ts            PROPFIND depth 1 -> ListedResource[], sorted and de-duplicated
+src/listing/multiget.ts             bounded batches + requested-vs-returned verification
+src/listing/sync-walk.ts            truncation paging up to the ceiling; the walk's three end states
+src/listing/project-resource.ts     one resource -> one RemoteEvent; one-UID-per-resource collapse
+src/listing/build-feed.ts           resources -> events, removals, withheld; one event per UID
+src/listing/reported.ts             the published-identity ledger absence and tombstones are read against
+src/listing/snapshot.ts             the snapshot assembly; coverage only when the read was complete
+src/listing/delta.ts                the delta assembly; tombstones graded three ways
+src/listing/coverage.ts             provenCoverage — whole collection, proven, clamped to the horizon
+src/listing/diagnostics.ts          bounded samples beside exact totals; identifiers only
+
+src/cursor/cursor.ts                mint and parse the owned opaque cursor; cursorVersion
+src/cursor/continuation.ts          mint and parse the Continuation for both resume paths
+src/cursor/fingerprint.ts           the scope fingerprint the cursor is bound to
+src/cursor/frontier.ts              in-process generation check; refuses a superseded cursor
+
+src/errors/dav-error.ts             total decoder: unknown -> { status, precondition }; depth-bounded
+src/errors/precondition.ts          DAV:valid-sync-token and DAV:number-of-matches-within-limits readers
+src/xml/listed.ts                   one node or many: the shared xml-js arity reader
+src/errors/classify.ts              (status, precondition, operation) -> CalDAVFailure, an as const union
+src/errors/to-provider-failure.ts   CalDAVFailure -> ProviderFailure, switched exhaustively
+
+src/window/membership.ts            withinCalDAVWindow — the one window predicate, exported
+
+src/write/write.ts                  orchestration, switched over WriteIntent.kind
+src/write/normalize.ts              the one shaping seam; the fixed point the fingerprint agrees with
+src/write/serialize.ts              EditableContent -> one resource via sync-ical serialiseCalendarResource
+src/write/resource-url.ts           the create path, deterministic from the IdempotencyKey
+src/write/precondition.ts           Precondition -> headers; unconditional is unrepresentable
+src/write/put.ts                    conditional PUT over tsdav; never an optional etag
+src/write/remove.ts                 conditional DELETE over tsdav; never an optional etag
+src/write/create.ts                 If-None-Match: *; a 412 is resolved by reading and comparing
+src/write/update.ts                 one conditional PUT with If-Match
+src/write/delete.ts                 404 and 410 are alreadyAbsent; other statuses carry their code
+src/write/remote.ts                 reads the copy a 412 names, under the requireComplete policy
+src/write/echo.ts                   notObserved, plus the RemoteVersion from the ETag header
+src/write/surroundings.ts           the shared write context, so the write modules share no cycle
+
+src/calendars/discover.ts           principal -> calendar-home-set -> fetchCalendars; tolerant
+src/calendars/access.ts             current-user-privilege-set -> readOnly | readWrite
+```
+
+## Public API
+
+```ts
+interface CalDAVClock {
+  readonly now: () => Instant
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>
+}
+
+interface CalDAVCredentials {
+  readonly serverUrl: string
+  readonly username: string
+  readonly password: string
+  readonly knownAuthMethod: CalDAVAuthMethod | null
+}
+
+type CalDAVAuthMethod = "basic" | "digest"
+
+interface CalDAVDependencies {
+  readonly client: DAVClient
+  readonly credentials: CalDAVCredentials
+  readonly clock: CalDAVClock
+  readonly gate: <Value>(
+    operation: OperationName,
+    execute: () => Promise<Value>,
+  ) => Promise<Value>
+  readonly hash: (input: string) => string
+  readonly installation: InstallationId
+  readonly zones: ZoneCache
+  readonly collectionConcurrency: number
+}
+
+const createCalDAVClient: (options: {
+  readonly fetch: typeof fetch
+  readonly credentials: CalDAVCredentials
+  readonly onAuthMethodResolved: (method: CalDAVAuthMethod) => void
+}) => DAVClient
+
+const createAuthenticatingFetch: (options: {
+  readonly fetch: typeof fetch
+  readonly credentials: CalDAVCredentials
+  readonly onAuthMethodResolved: (method: CalDAVAuthMethod) => void
+}) => typeof fetch
+
+const createCalDAVProvider: (dependencies: CalDAVDependencies) => CalendarProvider<"caldav">
+const createCalDAVContract: (dependencies: CalDAVDependencies) => ProviderContract<"caldav">
+
+const caldavCapabilities: Capabilities<"caldav">
+const caldavLimits: CalDAVLimits
+const caldavFingerprintContract: FingerprintContract
+const withinCalDAVWindow: WindowMembership
+
+const normalizeResourcePath: (href: string, base: string) => string
+const normalizeCollectionKey: (href: string, base: string) => CalendarId
+const caldavAccountId: (serverUrl: string, principalHref: string) => AccountId
+```
+
+There is **no** `watch`, `registerChannel`, `renewChannel`, `stopChannel`, `decodePush` or `pushProfile`
+export, and no `supportsPush` field. `CalendarProvider` has four methods and this package implements exactly
+those four.
+
+```ts
+const caldavCapabilities = {
+  provider: "caldav",
+  delta: { kind: "tokenized", windowBoundToCursor: false },
+  deletionAuthority: "snapshotAbsence",
+  removalsAreAmbiguous: false,
+  precondition: "matchesVersion",
+  provenanceChannel: "uidSuffix",
+  quotaScope: "perCollection",
+  throttleSignals: [
+    { status: 429, hasRetryAfter: true },
+    { status: 503, hasRetryAfter: true },
+  ],
+  representableRange: {
+    minimumSpanSeconds: 1,
+    zeroDuration: "reject",
+    invertedRange: "reject",
+    allDayGrid: "utcDay",
+  },
+  allDay: "dateOnly",
+  recurrenceWrite: "rfc5545",
+  echoesWrites: false,
+} as const satisfies Capabilities<"caldav">
+```
+
+Each field is a promise this adapter keeps. `windowBoundToCursor: false` is honest only because we never send
+a retention-bounding time-range filter (DAV-I48), so a widened window cannot invalidate a token.
+`deletionAuthority: "snapshotAbsence"` is honest only because the snapshot mode enumerates the *whole*
+collection and refuses to claim coverage unless every href was read (DAV-I1, DAV-I2).
+`removalsAreAmbiguous: false` is honest only because an unattributable RFC 6578 removal never survives into a
+listing at all — it escalates to `cursorLost` (DAV-I8). `zeroDuration: "reject"` and
+`invertedRange: "reject"` are deliberately stricter than Microsoft's, because RFC 5545 §3.6.1 requires DTEND
+later than DTSTART and a silently widened event is a wrong write.
+
+## The test id scheme
+
+`DAV-O*` is the overwrite family, `DAV-L*` the lockup family and `DAV-H*` the hygiene family, mirroring the
+conformance suite's `CONF-O*`/`CONF-L*` split and the sibling `GOOG-*`/`MS-*` schemes. `DAV-C1` is the
+conformance gate's own selection check. Each id appears verbatim at the start of the test name that proves it
+and in the **Proved by** line of the entry it enforces, so
+`caldav/tests/hygiene/ledger-citations.test.ts` walks this section against the suite mechanically.
+
+## Test plan
+
+The acceptance gate is `caldav/tests/conformance.test.ts`, which calls
+`runConformance({ describe, it }, { name: "caldav", supports: caldavCapabilities, create:
+createCalDAVUnderTest, withinWindow: withinCalDAVWindow })` against `caldav/tests/support/fake-caldav.ts`:
+an in-memory CalDAV server built behind the injected `fetch`, speaking PROPFIND, `calendar-query`,
+`calendar-multiget`, `sync-collection`, PUT and DELETE. The fixture carries the misbehaviours rather than the
+tests carrying them, following MS-I85 — switches for `truncatesAfter`, `capsMultigetAt`, `rejectsSyncToken`,
+`honoursIfMatch`, `omitsEtagOnPut`, `offersDigestOnly`, `offersBasicOnly`, `returnsUnrequestedRows`,
+`returnsPercentEncodedHrefs`, `emitsBom` and `duplicatesUidsInOneResource` — so every hostile server is a
+configuration, not a mock.
+
+### Lockups — each named, with the failure it prevents and how it is forced
+
+| Id | Test | Failure it prevents | How the failure is forced |
+| --- | --- | --- | --- |
+| DAV-L1 | `lockups/page-ceiling.test.ts :: a server that answers 507 forever stops at the page ceiling` | An always-truncating server pages until the process dies | Fixture answers 507 with a fresh token on every page, indefinitely |
+| DAV-L2 | `auth/nonce-count.test.ts :: concurrent collection probes never replay a nonce-count` | A strict server (Synology, Baikal) rejects the replayed count and the account wedges in a retry loop | Four concurrent probes against a fixture that records every `nc=` and fails a repeat |
+| DAV-L3 | `auth/two-accounts.test.ts :: two accounts polling concurrently do not share a verdict` | One account's 401 marks the other for reauthentication and both stall | Two providers, interleaved awaits, one fixture answering 401 for one account only |
+| DAV-L4 | `errors/cause-cycle.test.ts :: a cyclic cause chain terminates` | Error decoding spins forever on `e.cause === e` | An error object whose `cause` points at itself, and one 32 links deep |
+| DAV-L5 | `lockups/deadline.test.ts :: listChanges rejects at the deadline against a never-resolving fetch` | The classic hang: an await on a server that never answers | Injected fetch returns a promise that is never settled; fake timers advance past `context.deadline` |
+| DAV-L6 | `lockups/every-verb-deadline.test.ts :: every provider method rejects at the deadline` | One un-deadlined verb is enough to hang a tick | The same never-resolving stub applied to `listCalendars`, `listChanges` and all four `WriteIntent` kinds in a table |
+| DAV-L7 | `lockups/abort-vs-timeout.test.ts :: a caller abort mid-flight rejects as aborted and removes its listeners` | A cancel misreported as a provider timeout, and a merged controller kept alive by an unremoved listener | Abort fired while the fetch promise is pending; the test asserts the failure kind *and* the listener count on the caller's signal afterwards |
+| DAV-L8 | `lockups/permit-release.test.ts :: a throwing body releases its permit` | A throw leaks a concurrency permit and the collection wedges after N failures | The gated body throws; the test then runs `concurrency + 1` successful operations |
+| DAV-L9 | `lockups/permit-release.test.ts :: an aborted waiter is refused the permit rather than running` | A write lands after the provider reported `notAttempted` | Abort fired during the release/resume handover, asserted against the fixture's write log |
+| DAV-L10 | `lockups/permit-release.test.ts :: cancelling a queued task re-drives the queue` | A freed slot is never refilled and the batch stalls | Fill every permit, queue three, cancel the head, assert the remaining two complete |
+| DAV-L11 | `lockups/single-flight.test.ts :: a failing leader rejects every follower` | Followers wait forever behind a leader that threw | Leader's underlying request rejects while two followers are already registered |
+| DAV-L12 | `lockups/single-flight.test.ts :: two concurrent calls for one collection coalesce and neither deadlocks` | Duplicate REPORTs, or mutual waiting | Two `listChanges` for the same key started in the same tick; assert one transport call and two resolutions |
+| DAV-L13 | `lockups/single-flight.test.ts :: an aborted follower does not cancel the leader's work` | One caller's cancel starves the others | Three followers, the middle one aborted mid-flight |
+| DAV-L14 | `lockups/ordered-keys.test.ts :: opposite acquisition orders do not deadlock` | Classic two-lock inversion between concurrent writers | Two callers request collections `[A, B]` and `[B, A]`; the semaphore must sort and de-duplicate |
+| DAV-L15 | `lockups/retry-ceiling.test.ts :: a server failing forever stops at maxAttempts` | An unbounded retry loop | Fixture answers 503 indefinitely; assert exact attempt count and the reported failure |
+| DAV-L16 | `lockups/retry-ceiling.test.ts :: a Retry-After of one hour is clamped to the ceiling` | A hostile header parks the tick for an hour | `Retry-After: 3600`; assert the awaited delay equals `retryDelayCeilingMs` |
+| DAV-L17 | `lockups/backoff-abort.test.ts :: an abort mid-sleep rejects immediately` | A cancelled job sleeps out its backoff | Abort fired while fake timers hold the sleep; assert rejection before the timer fires |
+| DAV-L18 | `client/interleaving.test.ts :: two operations on one client interleave without sharing state` | A shared auth verdict or digest session crossing operations | Two `listChanges` calls, one denied, resolved in the opposite order to their starts |
+| DAV-L19 | `lockups/body-release.test.ts :: a 412, a 401 retry and a 204 each release their body exactly once` | Leaked sockets exhaust the pool and the poller wedges | A fixture whose `Response.body` is a counting stream asserting exactly one `cancel()` or one full read |
+| DAV-L20 | `auth/probe-recovery.test.ts :: a request carrying an aborted signal rejects even though the probe never answers`, `:: a probe that failed once does not fail every request that follows it` | Every request in the client parked behind one stalled `OPTIONS`, and one blip memoised as a permanent failure | A transport that never settles the probe, and a transport that rejects the first probe and then recovers |
+
+### Overwrites — each named, with the failure it prevents and how it is forced
+
+Each of these is written to fail before its guard exists; the guard's absence is what makes the assertion red.
+
+| Id | Test | Wrong write it prevents | How the failure is forced |
+| --- | --- | --- | --- |
+| DAV-O1 | `overwrites/short-read-is-not-absence.test.ts :: a multiget answering 3 of 5 hrefs yields zero derivable removals` | Two events deleted because the server capped the response | Fixture `capsMultigetAt: 3`; the test runs the listing through `derivableRemovals` and asserts the empty set |
+| DAV-O2 | `overwrites/throwing-fetch-deletes-nothing.test.ts :: a transport failure mid-listing is a Result failure, never an empty snapshot` | The whole calendar wiped because the network blipped | The injected fetch throws on the multiget after a successful PROPFIND |
+| DAV-O6/O7 | `overwrites/rejected-token.test.ts` | A rejected sync-token read as "nothing changed", then as "nothing exists" | Fixture answers 403 (then 409) with a `DAV:valid-sync-token` error document |
+| DAV-O8/O9 | `overwrites/truncation-is-partial.test.ts` | A truncated page read as a complete description of the collection | Fixture emits 507 on the collection href with `DAV:number-of-matches-within-limits` |
+| DAV-O10/O11 | `overwrites/removal-freezes-the-token.test.ts` | A deletion reported on a truncated page skipped forever by an advanced token | Fixture truncates after a page that contains one 404 response |
+| DAV-O12/O13 | `overwrites/unattributable-removal.test.ts` | A 404 href turned into a deletion of the wrong stored row, or a deletion never propagated | Fixture removes a resource and answers its href 404 in the delta with no UID recoverable |
+| DAV-O17 | `overwrites/path-is-identity.test.ts :: a resource whose filename differs from its UID is deleted at its listed path` | A DELETE to `${uid}.ics` that 404s while the real object survives | Fixture stores the object at `/cal/9f2c.ics` with `UID:party@example.com` |
+| DAV-O21 | `overwrites/empty-body-is-present.test.ts` | A whitespace body read as an absent resource and the stored row deleted | Fixture answers `calendar-data` with `"  "` for one href |
+| DAV-O23/O24 | `overwrites/read-policy.test.ts` | An unreadable Keeper-owned resource re-created on every run | Fixture makes one resource unparseable; the same resource is read once on the write path and once on the listing path |
+| DAV-O36 | `overwrites/idempotent-create.test.ts :: a replayed create is alreadyExists, never a second resource` | Duplicate events on every retry of a create | The same `WriteIntent` submitted twice; the fixture answers the second PUT 412 on `If-None-Match: *` |
+| DAV-O37 | `overwrites/no-recreate.test.ts :: a create collision with different content is a conflict and issues no DELETE` | The delete-and-recreate "recovery" that destroys the user's version | Fixture holds a different event at the minted path; the test asserts the write log contains no DELETE |
+| DAV-O38 | `writes/precondition-required.test-d.ts :: an update without a precondition does not typecheck` | An unconditional PUT existing at all | A `.test-d.ts` `@ts-expect-error` on a call with the precondition omitted, and on one passing `undefined` |
+| DAV-O39 | `overwrites/stale-precondition.test.ts :: a stale If-Match yields conflict and the server copy is unchanged` | A silent overwrite of a newer remote version | Fixture bumps the ETag between the read and the write; `honoursIfMatch: true` |
+| DAV-O40 | `overwrites/if-match-on-the-wire.test.ts :: every DELETE this adapter issues carries an If-Match header` | tsdav's `cleanupFalsy` silently stripping the header — the live bug in production today | Fixture with `honoursIfMatch: false` records raw request headers; the test asserts the header's presence on the wire, not merely the argument |
+| DAV-O45 | `overwrites/one-uid-per-resource.test.ts :: two UIDs in one resource collapse to the same winner under either ordering` | A row deleted and re-created on every poll by an unordered publisher | The same resource served with its two VEVENTs in both orders across two polls |
+| DAV-O47 | `overwrites/stale-revision.test.ts :: a withheld newest revision does not revert and does not delete` | Reverting a user's moved event to the time they moved it away from | A resource whose newest SEQUENCE is unbuildable and whose older one is fine |
+| DAV-O48 | `overwrites/withheld-is-present.test.ts` | A stalled event turned into a deleted user event | A resource with an unresolvable TZID inside an otherwise healthy collection |
+| DAV-O34/O35 | `provenance/never-echoed.test.ts` | Our own mirror ingested as a source event and echoed around the loop | A self-authored UID served at a path that does not match the `${uid}.ics` hint |
+| DAV-O59/O60 | `listing/window-is-not-retention.test.ts` | Every historic event deleted the first time a narrow window is used | A collection whose events sit outside the requested window, and a recurring master entirely before it |
+| DAV-O62/O63 | `listing/convergence.test.ts` | The churn class: a second run disagreeing with the first | The same collection polled twice, and once more with the server's responses reordered |
+| DAV-O64 | `writes/convergence.test.ts :: replaying the same write plan produces no second operation` | A mirror rewritten on every tick | The same intents submitted twice against the fixture's write log |
+| DAV-O26 | `writes/dst-roundtrip.test.ts :: a write→read→compare across a DST boundary is a fixed point` | Delete-and-recreate every run for events near a transition | An event at 01:30 on a fall-back date, written, read back and compared |
+| DAV-O28 | `writes/fold-instant.test.ts :: an instant in a repeated hour round-trips to itself` | An event silently moved an hour by a wall-clock write | An instant in the second pass of a fold |
+| DAV-O29/O30 | `writes/normalize-fixed-point.test.ts`, `writes/all-day-roundtrip.test.ts` | An all-day range narrowing on every run | An all-day event whose local range does not sit on UTC day boundaries |
+| DAV-O33 | `writes/degenerate-range.test.ts :: a zero-duration event is unrepresentable, not silently widened` | A silently lengthened event, disagreeing with its own hash forever | A timed VEVENT with DTEND equal to DTSTART |
+| DAV-O54 | `errors/hostile-bodies.test.ts :: an event title containing "authentication failed" never produces reauthRequired` | A database outage or a hostile title flipping `needsReauthentication` on real accounts | A Postgres-shaped error whose message inlines a bound parameter containing the phrase |
+| DAV-O68 | `overwrites/unreadable-is-not-covered.test.ts` | A resource that stopped parsing between two polls counted as read, so the snapshot claimed to have proved it absent | The same collection polled twice, with one resource's body replaced by unparseable text on the second poll |
+| DAV-O69 | `overwrites/hostile-idempotency-key.test.ts` | A create landing in a calendar the caller never named, because the key carried a path segment | Five hostile keys — dot-segments, encoded slashes, a bare `..`, an empty string — driven through `write` |
+| DAV-O70 | `writes/sequence.test.ts` | Every resource this adapter writes staying at revision 0, so its own writes always lose to any other client's | A create followed by an applied update, asserted on the wire and on the read-back |
+| DAV-O71 | `listing/event-rdate.test.ts` | An occurrence set no RRULE can express published as though the RRULE described it | A VEVENT with both an RRULE and an event-level RDATE, beside a plain event in the same resource |
+
+### The remaining families
+
+**Cursor** (`tests/cursor/`): scope binding, version bump, the four `cursorLost` triggers on one path, and
+recovery on the following poll. **Listing** (`tests/listing/`): report-support probing, multiget batching,
+unrequested rows, per-resource isolation, BOM, synthesized zones, Windows TZIDs, EXDATE floods,
+diagnostics bounds, request-body pinning against tsdav's own. **Auth** (`tests/auth/`): negotiation both
+directions, nonce-count behaviour, stored-method staleness, scoped verdicts in both settle orders, withheld
+credentials. **Identity** (`tests/identity/`): URL normalisation, href matching, and a `.test-d.ts` proving
+`AccountId` needs no address. **Writes** (`tests/writes/`): the four verbs, echo, ETag-less PUT, single-
+resource series, CRLF canonicalisation. **Hygiene** (`tests/hygiene/`): `DAV-H1`–`DAV-H22`, each asserting a
+property of the source tree that a reviewer would otherwise have to check by eye — including `DAV-H22`,
+which asserts this provider has no `watch` member and declares no push capability boolean, so poll-only stays
+a fact about the code rather than a claim in a document.
+`DAV-H23` is the ledger walk itself: `caldav/tests/hygiene/ledger-citations.test.ts` reads this section,
+resolves every **Proved by** citation to a file and a verbatim test name, and fails when the ledger and the
+suite drift apart.
+
+
+### What building it changed
+
+The red suite and the conformance suite looked irreconcilable in three places. Each turned out to be a
+defect in the first implementation rather than a conflict in the specifications, and all three are now green
+together.
+
+1. **Truncation versus paging.** `DAV-O8` wants a read that met a 507 to answer `partial`; `DAV-L1` wants a
+   walk that paged through seventeen 507s and then ran out of changes to answer authoritatively. Both are
+   right about different reads. A `sync-collection` walk *pages* on the token each truncated page returns —
+   that is RFC 6578's own mechanism, and a walk that reaches an untruncated page has seen everything. A
+   PROPFIND enumeration has no such mechanism: a capped Depth-1 response is simply short, and reading it as
+   a complete membership list is the mass-deletion bug. The snapshot path is now enumerate-and-multiget, so
+   its truncation is the PROPFIND's and answers `partial`; the delta path is the walk, and its page ceiling
+   bounds the loop. `DAV-O8`, `DAV-O9` and both `DAV-L1` cases hold.
+2. **Coverage versus derivable removal.** `CONF-O4` wants coverage narrower than a decade-wide request;
+   `DAV-O13` wants a resource that vanished between two polls to be removable. Echoing the requested window
+   back as proven coverage satisfies the second by lying about the first. Proven coverage is now clamped to
+   `caldavLimits.coverageHorizonMs` (366 days) — the same bounded-horizon model
+   `conformance/src/reference/listing.ts:20` uses — because this adapter never expands recurrences and
+   therefore cannot attest an unbounded future. The vanished-resource case is answered where it should be:
+   `src/listing/delta.ts` **names** the removal from the RFC 6578 tombstone rather than leaving the caller
+   to derive it from absence over a decade nobody read.
+3. **Retry ceiling.** `CONF-L1` saw six transport calls where the budget allowed three, and `DAV-L15`
+   expects the budget to be spent per request. Neither needed changing: the six calls were the symptom of
+   `probeSupportedReports` *swallowing* a failed probe and assuming support (DAV-I10). A probe that did not
+   answer now fails the listing, so the operation stops after one request's budget and both cases hold.
+
+The three conformance cases previously recorded as unmodelled are modelled now. `CONF-O12` is
+`ReportedLedger.corrupt` — a corrupt row in this adapter's own published-identity ledger makes `listChanges`
+answer `cursorLost` until the ledger is rebuilt, which is real behaviour and not a test hook. `CONF-O34` is
+DAV-I8's three-way grading of tombstones plus `STATUS:CANCELLED` carried out of `sync-ical` as a `cancelled`
+removal. `CONF-O44` is DAV-I71: `SEQUENCE` is written.
+
+One shape is still narrower than the reviews would like and is recorded rather than hidden: a `resumeSnapshot`
+continuation **restarts** the enumerate-and-multiget rather than resuming it from a path index. It is the
+honest option — a snapshot may only claim coverage over a membership list it read in one pass — but against a
+server that truncates its PROPFIND persistently it makes progress in content without ever reaching a
+`snapshot`, so such a collection is mirrored but never gains deletion authority. Paging a PROPFIND needs
+either RFC 5323 (`DASL`) or a server-specific mechanism; neither is in scope here.

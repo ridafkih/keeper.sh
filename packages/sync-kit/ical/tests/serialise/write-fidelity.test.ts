@@ -55,7 +55,7 @@ const textOf = (resource: SerialisedResource): string => {
 };
 
 const serialise = (event: CanonicalEvent) =>
-  serialiseCalendarResource({ master: event, overrides: [] }, testOptions());
+  serialiseCalendarResource({ master: event, overrides: [], sequence: 0 }, testOptions());
 
 describe("what we actually write back to a real calendar", () => {
   test("ICAL-O52: the VTIMEZONE covers the year the event itself occurs in", () => {

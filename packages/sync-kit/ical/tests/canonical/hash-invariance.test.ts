@@ -97,7 +97,7 @@ describe("what the fingerprint deliberately cannot see", () => {
       return;
     }
     const serialised = serialiseCalendarResource(
-      { master: canonical, overrides: [] },
+      { master: canonical, overrides: [], sequence: 0 },
       testOptions(),
     );
     expect(serialised.kind).toBe("resource");
