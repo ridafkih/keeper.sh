@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SEO_CONTENT_ROOT } from "../../src/lib/content-paths";
+import { parseIndexableRoutePaths } from "../../src/lib/indexable-routes";
 import { parse as parseYaml } from "yaml";
 
 const CONTENT_ROOT = join(import.meta.dirname, "../..", SEO_CONTENT_ROOT);
@@ -59,12 +60,18 @@ function readCollection(directory: string): ContentPage[] {
 
 const knownPaths = new Set([
   ...STATIC_PATHS,
+  ...parseIndexableRoutePaths(
+    readFileSync(
+      join(import.meta.dirname, "../..", "src/generated/tanstack/route-tree.generated.ts"),
+      "utf8",
+    ),
+  ),
   ...LINKED_DIRECTORIES.flatMap((directory) =>
     readCollection(directory).map((page) => page.path),
   ),
 ]);
 
-const siloPages = SILO_DIRECTORIES.flatMap((directory) => readCollection(directory));
+const linkedPages = LINKED_DIRECTORIES.flatMap((directory) => readCollection(directory));
 const recipes = readCollection("recipes");
 
 
@@ -77,7 +84,7 @@ describe.skipIf(!CONTENT_PRESENT)("content silos", () => {
     expect(readCollection(directory).length).toBeGreaterThan(0);
   });
 
-  it.each(siloPages)("links $path only to pages that exist", ({ content }) => {
+  it.each(linkedPages)("links $path only to pages that exist", ({ content }) => {
     const broken = [...content.matchAll(INTERNAL_LINK)]
       .map((match) => match[1])
       .filter((link) => !knownPaths.has(link));
