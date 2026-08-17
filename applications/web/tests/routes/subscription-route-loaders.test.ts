@@ -3,11 +3,13 @@ import { isRedirect } from "@tanstack/react-router";
 import { HttpError } from "../../src/lib/fetcher";
 import { Route as UpgradeRoute } from "../../src/routes/(dashboard)/dashboard/upgrade/index";
 import { Route as SettingsRoute } from "../../src/routes/(dashboard)/dashboard/settings/index";
+import { Route as DashboardRoute } from "../../src/routes/(dashboard)/dashboard/index";
 
 type RouteOptions = { options: Record<string, unknown> };
 
 const upgradeRoute = UpgradeRoute as unknown as RouteOptions;
 const settingsRoute = SettingsRoute as unknown as RouteOptions;
+const dashboardRoute = DashboardRoute as unknown as RouteOptions;
 
 const CUSTOMER_STATE_PATH = "/api/auth/customer/state";
 const ENTITLEMENTS_PATH = "/api/entitlements";
@@ -56,6 +58,16 @@ const runSettingsLoader = async (
   { commercialMode = true } = {},
 ) => {
   const loader = settingsRoute.options.loader as (args: unknown) => Promise<unknown>;
+  return loader({
+    context: { fetchApi, runtimeConfig: { commercialMode } },
+  });
+};
+
+const runDashboardLoader = async (
+  fetchApi: <T>(path: string) => Promise<T>,
+  { commercialMode = true } = {},
+) => {
+  const loader = dashboardRoute.options.loader as (args: unknown) => Promise<unknown>;
   return loader({
     context: { fetchApi, runtimeConfig: { commercialMode } },
   });
@@ -225,72 +237,76 @@ describe("settings route loader", () => {
     (path, callIndex) =>
       path === CAPABILITIES_PATH ? capabilitiesBody : respond(path, callIndex);
 
-  it("preloads a paying customer as pro through the fallback", async () => {
-    const { calls, fetchApi } = createApi(
-      respondWithCapabilities((path) =>
-        path === CUSTOMER_STATE_PATH ? new HttpError(500, path) : { plan: "pro" },
-      ),
+  it("still renders the page when the plan reads are down", async () => {
+    const { fetchApi } = createApi(
+      respondWithCapabilities((path) => new HttpError(503, path)),
     );
 
-    const data = (await runSettingsLoader(fetchApi)) as {
-      subscription: unknown;
-    };
+    const data = (await runSettingsLoader(fetchApi)) as { authCapabilities: unknown };
+
+    expect(data.authCapabilities).toMatchObject({ credentialMode: "email" });
+  });
+
+  it("no longer reads the plan, which the dashboard preloads instead", async () => {
+    const { calls, fetchApi } = createApi(respondWithCapabilities(() => ({})));
+
+    await runSettingsLoader(fetchApi);
+
+    expect(calls).toEqual([CAPABILITIES_PATH]);
+  });
+});
+
+describe("dashboard route loader", () => {
+  it("preloads a paying customer as pro through the fallback", async () => {
+    const { calls, fetchApi } = createApi((path) =>
+      path === CUSTOMER_STATE_PATH ? new HttpError(500, path) : { plan: "pro" },
+    );
+
+    const data = (await runDashboardLoader(fetchApi)) as { subscription: unknown };
 
     expect(data.subscription).toEqual({ plan: "pro", interval: null });
     expect(calls).toContain(ENTITLEMENTS_PATH);
   });
 
   it("never preloads a plan the fallback did not actually report", async () => {
-    const { fetchApi } = createApi(
-      respondWithCapabilities((path) =>
-        path === CUSTOMER_STATE_PATH ? new HttpError(500, path) : { plan: "enterprise" },
-      ),
+    const { fetchApi } = createApi((path) =>
+      path === CUSTOMER_STATE_PATH ? new HttpError(500, path) : { plan: "enterprise" },
     );
 
-    const data = (await runSettingsLoader(fetchApi)) as {
-      subscription: unknown;
-    };
+    const data = (await runDashboardLoader(fetchApi)) as { subscription: unknown };
 
     expect(data.subscription).toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
   });
 
   it("still renders the page when both plan reads are down", async () => {
-    const { fetchApi } = createApi(
-      respondWithCapabilities((path) => new HttpError(503, path)),
-    );
+    const { fetchApi } = createApi((path) => new HttpError(503, path));
 
-    const data = (await runSettingsLoader(fetchApi)) as {
-      authCapabilities: unknown;
-      subscription: unknown;
-    };
+    const data = (await runDashboardLoader(fetchApi)) as { subscription: unknown };
 
-    expect(data.authCapabilities).toMatchObject({ credentialMode: "email" });
     expect(data.subscription).toBeUndefined();
     expect(errorSpy).toHaveBeenCalled();
   });
 
   it("does not read the plan at all outside commercial mode", async () => {
-    const { calls, fetchApi } = createApi(respondWithCapabilities(() => ({})));
+    const { calls, fetchApi } = createApi(() => ({}));
 
-    const data = (await runSettingsLoader(fetchApi, { commercialMode: false })) as {
+    const data = (await runDashboardLoader(fetchApi, { commercialMode: false })) as {
       subscription: unknown;
     };
 
     expect(data.subscription).toBeUndefined();
-    expect(calls).toEqual([CAPABILITIES_PATH]);
+    expect(calls).toEqual([]);
   });
 
   it("converges on the same preload across repeated runs during the outage", async () => {
     const results: unknown[] = [];
 
     for (let run = 0; run < 3; run += 1) {
-      const { fetchApi } = createApi(
-        respondWithCapabilities((path) =>
-          path === CUSTOMER_STATE_PATH ? new HttpError(429, path) : { plan: "pro" },
-        ),
+      const { fetchApi } = createApi((path) =>
+        path === CUSTOMER_STATE_PATH ? new HttpError(429, path) : { plan: "pro" },
       );
-      const data = (await runSettingsLoader(fetchApi)) as { subscription: unknown };
+      const data = (await runDashboardLoader(fetchApi)) as { subscription: unknown };
       results.push(data.subscription);
     }
 
@@ -298,11 +314,9 @@ describe("settings route loader", () => {
   });
 
   it("does not send a paying customer to a login screen it cannot reach when the session expires", async () => {
-    const { fetchApi } = createApi(
-      respondWithCapabilities((path) => new HttpError(401, path)),
-    );
+    const { fetchApi } = createApi((path) => new HttpError(401, path));
 
-    const data = (await runSettingsLoader(fetchApi)) as { subscription: unknown };
+    const data = (await runDashboardLoader(fetchApi)) as { subscription: unknown };
 
     expect(data.subscription).toBeUndefined();
   });

@@ -7,7 +7,6 @@ import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Settings from "lucide-react/dist/esm/icons/settings";
-import CircleArrowUp from "lucide-react/dist/esm/icons/circle-arrow-up";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Bug from "lucide-react/dist/esm/icons/bug";
@@ -44,10 +43,27 @@ import { ProviderIconStack } from "@/components/ui/primitives/provider-icon-stac
 import { pluralize } from "@/lib/pluralize";
 import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { SyncStatus } from "@/features/dashboard/components/sync-status";
+import CreditCard from "lucide-react/dist/esm/icons/credit-card";
+import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { getCommercialMode } from "@/config/commercial";
-import { useEntitlements } from "@/hooks/use-entitlements";
+import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
+import { openCustomerPortal } from "@/utils/checkout";
+
+async function loadSubscription(context: {
+  fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
+  runtimeConfig: { commercialMode: boolean };
+}) {
+  if (!context.runtimeConfig.commercialMode) return undefined;
+  try {
+    return await fetchSubscriptionStateWithApi(context.fetchApi);
+  } catch (error) {
+    console.error("[subscription] dashboard loader preload failed, deferring to the client read:", error);
+    return undefined;
+  }
+}
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
+  loader: async ({ context }) => ({ subscription: await loadSubscription(context) }),
   component: DashboardPage,
 });
 
@@ -83,7 +99,7 @@ function DashboardPage() {
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
         </NavigationMenu>
-        <UpgradeMenu />
+        <PlanMenu />
         <NavigationMenu>
           <AccountsPopover />
           <NavigationMenuLinkItem to="/dashboard/settings">
@@ -115,22 +131,41 @@ interface RefreshStatus {
   tone: "muted" | "danger";
 }
 
-function UpgradeMenu() {
-  const { data: entitlements } = useEntitlements();
+function PlanMenu() {
+  const navigate = useNavigate();
+  const { subscription: loaderSubscription } = Route.useLoaderData();
+  const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
+    fallbackData: loaderSubscription,
+  });
+  const isPro = subscription?.plan === "pro";
+  const [isManaging, setIsManaging] = useState(false);
 
-  if (!getCommercialMode() || entitlements?.plan !== "free") {
+  const handleManagePlan = async () => {
+    if (!isPro) {
+      navigate({ to: "/dashboard/upgrade" });
+      return;
+    }
+    setIsManaging(true);
+    try {
+      await openCustomerPortal();
+    } catch {
+      setIsManaging(false);
+    }
+  };
+
+  if (!getCommercialMode()) {
     return null;
   }
 
   return (
-    <NavigationMenu>
-      <NavigationMenuLinkItem to="/dashboard/upgrade">
+    <NavigationMenu variant={isPro ? "default" : "highlight"}>
+      <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
         <NavigationMenuItemIcon>
-          <CircleArrowUp size={15} />
+          {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
         </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>Upgrade to Pro</NavigationMenuItemLabel>
+        <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
         <NavigationMenuItemTrailing />
-      </NavigationMenuLinkItem>
+      </NavigationMenuButtonItem>
     </NavigationMenu>
   );
 }
