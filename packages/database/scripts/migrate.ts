@@ -21,6 +21,10 @@ import {
 } from "@keeper.sh/data-schemas";
 
 import {
+  BLOCKING_LOCK_TIMEOUT,
+  withoutLockTimeout,
+} from "../src/database/concurrent-index";
+import {
   describeNonUtcTimeZone,
   isUtcTimeZoneName,
 } from "../src/database/migration-timezone";
@@ -333,16 +337,16 @@ const ensureSourceCalendarIndex = async (): Promise<void> => {
   `);
   let state = await getIndexState();
   if (state.rows[0] && !state.rows[0].valid) {
-    await connection.query(`
+    await withoutLockTimeout(connection, () => connection.query(`
       DROP INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
-    `);
+    `));
     state = await getIndexState();
   }
   if (!state.rows[0]) {
-    await connection.query(`
+    await withoutLockTimeout(connection, () => connection.query(`
       CREATE INDEX CONCURRENTLY "event_mappings_source_calendar_idx"
       ON "event_mappings" ("sourceCalendarId")
-    `);
+    `));
   }
   const verifiedState = await getIndexState();
   if (!verifiedState.rows[0]?.valid) {
@@ -413,7 +417,7 @@ try {
    * other zone rewrites every row while holding ACCESS EXCLUSIVE.
    */
   await connection.query(`SET TimeZone = 'UTC'`);
-  await connection.query(`SET lock_timeout = '10s'`);
+  await connection.query(`SET lock_timeout = '${BLOCKING_LOCK_TIMEOUT}'`);
   await connection.query(`SET statement_timeout = '30min'`);
   await installPreMigrationTombstoneProtection();
   await consolidateLegacyRecurringEventStates();

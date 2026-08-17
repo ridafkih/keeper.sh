@@ -152,10 +152,11 @@ const getSerializedSlotKey = (startTime: Date, endTime: Date): string =>
 
 const pairReidentifiedMaterializedOccurrences = (
   localEvents: MaterializedSyncableEvent[],
-  existingMappings: EventMapping[],
+  reassignableMappings: EventMapping[],
+  allMappings: EventMapping[],
 ): OccurrenceReassignment[] => {
   const localEventIds = new Set(localEvents.map((event) => event.id));
-  const mappedEventIds = new Set(existingMappings.map((mapping) => getMappingSyncEventId(mapping)));
+  const mappedEventIds = new Set(allMappings.map((mapping) => getMappingSyncEventId(mapping)));
   const newEventsByOwner = new Map<string, MaterializedSyncableEvent[]>();
   const missingMappingsByOwner = new Map<string, EventMapping[]>();
 
@@ -168,7 +169,7 @@ const pairReidentifiedMaterializedOccurrences = (
     newEventsByOwner.set(event.eventStateId, events);
   }
 
-  for (const mapping of existingMappings) {
+  for (const mapping of reassignableMappings) {
     if (localEventIds.has(getMappingSyncEventId(mapping))) {
       continue;
     }
@@ -634,6 +635,7 @@ const computeSyncOperations = (
   const occurrenceReassignments = pairReidentifiedMaterializedOccurrences(
     authoritativeLocalEvents,
     activeMappings,
+    existingMappings,
   );
   const databaseOnlyReassignments: OccurrenceReassignment[] = [];
   const remoteReassignments: OccurrenceReassignment[] = [];
