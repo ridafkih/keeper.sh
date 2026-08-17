@@ -123,11 +123,6 @@ describe("createCalDAVSyncProvider", () => {
     });
   });
 
-  /*
-   * The horizon is the whole statement of how far forward a pair syncs. An event past it can
-   * never change an outcome — reconciliation drops its mapping — so letting one through only
-   * gives the engine a stale mirror to reason about.
-   */
   it("drops Keeper objects that start beyond the horizon", async () => {
     const beyondHorizon = createEvent({
       endTime: new Date("2040-03-15T10:00:00.000Z"),

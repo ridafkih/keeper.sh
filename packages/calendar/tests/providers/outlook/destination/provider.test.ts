@@ -232,11 +232,6 @@ describe("createOutlookSyncProvider", () => {
       .toContain("start/dateTime le '2099-01-01T00:00:00.000Z'");
   });
 
-  /*
-   * Written before the sync horizon existed (#443, ahead of #452). The horizon now says how
-   * far forward a pair syncs and reconciliation drops mappings outside it, so an event past
-   * it cannot change an outcome and costs a full mailbox walk to fetch.
-   */
   it("pages through Keeper events within the horizon", async () => {
     const timeMin = new Date("2026-07-10T00:00:00.000Z");
     const nextLink = "https://graph.microsoft.com/v1.0/me/events?$skiptoken=page-2";

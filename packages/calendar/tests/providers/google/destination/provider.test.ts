@@ -286,13 +286,6 @@ describe("createGoogleSyncProvider", () => {
     });
   });
 
-  /*
-   * Written before the sync horizon existed (#443, a month ahead of #452), when nothing
-   * bounded the future and reading everything was the only way to be sure a mirror was
-   * seen. The horizon now says exactly how far forward a pair syncs, and reconciliation
-   * already drops mappings outside it, so an event beyond it is out of scope on both
-   * sides — reading it costs a full calendar walk every pass and can change no decision.
-   */
   it("bounds every page by the horizon it was given", async () => {
     const timeMin = new Date("2026-07-10T00:00:00.000Z");
     const timeMax = new Date("2028-07-10T00:00:00.000Z");

@@ -162,12 +162,6 @@ type SyncOperation =
   };
 
 interface ListRemoteEventsOptions {
-  /*
-   * The horizon the pair is configured for, carried on both bounds. Reading past it walks
-   * the whole future of the destination every pass to find copies reconciliation would
-   * discard anyway: mappings outside the window are dropped before any add or stale
-   * decision is made, so an event beyond it cannot change an outcome.
-   */
   timeMax: Date;
   timeMin: Date;
 }
