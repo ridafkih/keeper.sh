@@ -7,6 +7,7 @@ import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Settings from "lucide-react/dist/esm/icons/settings";
+import CircleArrowUp from "lucide-react/dist/esm/icons/circle-arrow-up";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
 import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Bug from "lucide-react/dist/esm/icons/bug";
@@ -43,6 +44,8 @@ import { ProviderIconStack } from "@/components/ui/primitives/provider-icon-stac
 import { pluralize } from "@/lib/pluralize";
 import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { SyncStatus } from "@/features/dashboard/components/sync-status";
+import { getCommercialMode } from "@/config/commercial";
+import { useEntitlements } from "@/hooks/use-entitlements";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
   component: DashboardPage,
@@ -80,6 +83,7 @@ function DashboardPage() {
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
         </NavigationMenu>
+        <UpgradeMenu />
         <NavigationMenu>
           <AccountsPopover />
           <NavigationMenuLinkItem to="/dashboard/settings">
@@ -109,6 +113,26 @@ function DashboardPage() {
 interface RefreshStatus {
   message: string;
   tone: "muted" | "danger";
+}
+
+function UpgradeMenu() {
+  const { data: entitlements } = useEntitlements();
+
+  if (!getCommercialMode() || entitlements?.plan !== "free") {
+    return null;
+  }
+
+  return (
+    <NavigationMenu>
+      <NavigationMenuLinkItem to="/dashboard/upgrade">
+        <NavigationMenuItemIcon>
+          <CircleArrowUp size={15} />
+        </NavigationMenuItemIcon>
+        <NavigationMenuItemLabel>Upgrade to Pro</NavigationMenuItemLabel>
+        <NavigationMenuItemTrailing />
+      </NavigationMenuLinkItem>
+    </NavigationMenu>
+  );
 }
 
 function CalendarSourcesMenu() {
