@@ -25,5 +25,3 @@ export const CONTENT_DIRECTORIES = {
   guides: `${SEO_CONTENT_ROOT}/guides`,
   recipes: `${SEO_CONTENT_ROOT}/recipes`,
 } as const;
-
-export type ContentCollectionName = keyof typeof CONTENT_DIRECTORIES;
