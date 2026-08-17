@@ -45,7 +45,6 @@ import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { SyncStatus } from "@/features/dashboard/components/sync-status";
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
-import { getCommercialMode } from "@/config/commercial";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
 import { openCustomerPortal } from "@/utils/checkout";
 
@@ -63,7 +62,10 @@ async function loadSubscription(context: {
 }
 
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
-  loader: async ({ context }) => ({ subscription: await loadSubscription(context) }),
+  loader: async ({ context }) => ({
+    commercialMode: context.runtimeConfig.commercialMode,
+    subscription: await loadSubscription(context),
+  }),
   component: DashboardPage,
 });
 
@@ -133,7 +135,7 @@ interface RefreshStatus {
 
 function PlanMenu() {
   const navigate = useNavigate();
-  const { subscription: loaderSubscription } = Route.useLoaderData();
+  const { commercialMode, subscription: loaderSubscription } = Route.useLoaderData();
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
     fallbackData: loaderSubscription,
   });
@@ -153,7 +155,7 @@ function PlanMenu() {
     }
   };
 
-  if (!getCommercialMode()) {
+  if (!commercialMode) {
     return null;
   }
 

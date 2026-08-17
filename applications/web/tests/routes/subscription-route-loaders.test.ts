@@ -288,6 +288,26 @@ describe("dashboard route loader", () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 
+  it("reports commercial mode from the loader, so the row server-renders", async () => {
+    const { fetchApi } = createApi((path) =>
+      path === CUSTOMER_STATE_PATH ? new HttpError(500, path) : { plan: "pro" },
+    );
+
+    const data = (await runDashboardLoader(fetchApi)) as { commercialMode: unknown };
+
+    expect(data.commercialMode).toBe(true);
+  });
+
+  it("reports commercial mode as off without reaching for the window", async () => {
+    const { fetchApi } = createApi(() => ({}));
+
+    const data = (await runDashboardLoader(fetchApi, { commercialMode: false })) as {
+      commercialMode: unknown;
+    };
+
+    expect(data.commercialMode).toBe(false);
+  });
+
   it("does not read the plan at all outside commercial mode", async () => {
     const { calls, fetchApi } = createApi(() => ({}));
 
