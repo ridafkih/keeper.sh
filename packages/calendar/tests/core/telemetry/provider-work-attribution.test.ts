@@ -40,6 +40,17 @@ afterEach(() => {
 const FAST_PAGE_MS = 5;
 const SLOW_PAGE_MS = 80;
 
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
 const runInEvent = async (source: string, run: () => Promise<void>): Promise<void> => {
   await context(async () => {
     widelog.set("source", source);
@@ -87,8 +98,8 @@ describe("provider work attribution", () => {
 
     const event = eventFor("paged");
     expect(event.provider?.request_count).toBe(3);
-    expect(event.provider?.slowest_request_ms).toBeGreaterThanOrEqual(SLOW_PAGE_MS);
-    expect(event.work?.provider_http_ms).toBeGreaterThanOrEqual(SLOW_PAGE_MS);
+    expect(event.provider?.slowest_request_ms).toBeGreaterThanOrEqual(chargedAtLeast(SLOW_PAGE_MS));
+    expect(event.work?.provider_http_ms).toBeGreaterThanOrEqual(chargedAtLeast(SLOW_PAGE_MS));
   });
 
   it("keeps decode out of the http segment and both inside accounted_ms", async () => {
@@ -127,7 +138,7 @@ describe("provider work attribution", () => {
     });
 
     const event = eventFor("slow-body");
-    expect(event.work?.provider_http_ms ?? 0).toBeGreaterThanOrEqual(SLOW_PAGE_MS);
+    expect(event.work?.provider_http_ms ?? 0).toBeGreaterThanOrEqual(chargedAtLeast(SLOW_PAGE_MS));
     expect(event.work?.transform_ms ?? 0).toBeLessThan(SLOW_PAGE_MS);
   });
 

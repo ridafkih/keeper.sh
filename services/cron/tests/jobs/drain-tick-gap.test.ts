@@ -60,6 +60,17 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 const SUPPRESSED_TICK_MS = 40;
 const SLOW_DRAIN_BODY_MS = 60;
 
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
 beforeAll(async () => {
   ({ default: drainJob } = await import("../../src/jobs/drain-pending-ingest"));
 });
@@ -83,7 +94,7 @@ describe("drain tick gap", () => {
     await Bun.sleep(SUPPRESSED_TICK_MS);
     await drainJob.callback();
 
-    expect(fields.get("push_drain.tick_gap_ms")).toBeGreaterThanOrEqual(SUPPRESSED_TICK_MS);
+    expect(fields.get("push_drain.tick_gap_ms")).toBeGreaterThanOrEqual(chargedAtLeast(SUPPRESSED_TICK_MS));
   });
 
   it("counts the overrunning tick's own runtime, not the idle time after it", async () => {
@@ -94,7 +105,7 @@ describe("drain tick gap", () => {
     await drainJob.callback();
 
     expect(fields.get("push_drain.tick_gap_ms"))
-      .toBeGreaterThanOrEqual(SLOW_DRAIN_BODY_MS + SUPPRESSED_TICK_MS);
+      .toBeGreaterThanOrEqual(chargedAtLeast(SLOW_DRAIN_BODY_MS + SUPPRESSED_TICK_MS));
   });
 
   it("does not roll a lock-contended tick into the next tick's gap", async () => {

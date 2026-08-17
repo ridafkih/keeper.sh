@@ -51,6 +51,17 @@ const SEGMENTS: [IngestSegmentKey, number][] = [
 
 const MEASURED_SLEEP_MS = 30;
 
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
 const readNested = (event: EmittedEvent, key: string): number => {
   let node: unknown = event;
   for (const part of key.split(".")) {
@@ -124,7 +135,7 @@ describe("segment accounting", () => {
       }).catch(() => null);
     });
 
-    expect(readNested(event, "work.provider_http_ms")).toBeGreaterThanOrEqual(MEASURED_SLEEP_MS);
+    expect(readNested(event, "work.provider_http_ms")).toBeGreaterThanOrEqual(chargedAtLeast(MEASURED_SLEEP_MS));
     expect(readNested(event, "accounted_ms"))
       .toBeCloseTo(readNested(event, "work.provider_http_ms"), 2);
   });
@@ -136,7 +147,7 @@ describe("segment accounting", () => {
     }));
 
     const residual = readNested(event, "duration_ms") - readNested(event, "accounted_ms");
-    expect(residual).toBeGreaterThanOrEqual(MEASURED_SLEEP_MS * 0.5);
+    expect(residual).toBeGreaterThanOrEqual(chargedAtLeast(MEASURED_SLEEP_MS * 0.5));
     expect(readNested(event, "accounted_ms"))
       .toBeLessThanOrEqual(readNested(event, "duration_ms"));
   });

@@ -41,6 +41,17 @@ const REFRESH_FLOOR_MS = 90;
 const HOUR_MS = 3_600_000;
 const EXPIRES_IN_SECONDS = 3600;
 
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
 const runInEvent = async (source: string, run: () => Promise<void>): Promise<void> => {
   await context(async () => {
     widelog.set("source", source);
@@ -91,7 +102,7 @@ describe("token refresh attribution", () => {
 
     const event = eventFor("refreshing");
     expect(event.token?.refresh_attempted).toBe(true);
-    expect(event.wait?.token_refresh_ms).toBeGreaterThanOrEqual(REFRESH_FLOOR_MS);
+    expect(event.wait?.token_refresh_ms).toBeGreaterThanOrEqual(chargedAtLeast(REFRESH_FLOOR_MS));
     expect(event.accounted_ms).toBe(event.wait?.token_refresh_ms);
   });
 
@@ -132,7 +143,7 @@ describe("token refresh attribution", () => {
     expect(joinerEvent.token?.refresh_coalesced).toBe(true);
     expect(creatorEvent.token?.refresh_coalesced).toBeUndefined();
     expect(joinerEvent.wait?.token_refresh_ms).toBeGreaterThan(0);
-    expect(creatorEvent.wait?.token_refresh_ms).toBeGreaterThanOrEqual(REFRESH_FLOOR_MS);
+    expect(creatorEvent.wait?.token_refresh_ms).toBeGreaterThanOrEqual(chargedAtLeast(REFRESH_FLOOR_MS));
     expect(creatorEvent.accounted_ms).toBe(creatorEvent.wait?.token_refresh_ms);
   });
 });

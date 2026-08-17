@@ -45,6 +45,17 @@ const OCCUPANCY_WHEN_FULL = 30;
 const SLOW_EVAL_MS = 25;
 
 /*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
+/*
  * A limiter whose first decisions are "wait", so the segment covers the sleep and
  * not merely the round trip. Every acquire ends by granting so the loop terminates.
  */
@@ -87,7 +98,7 @@ describe("rate limiter wait attribution", () => {
     await runInEvent("only", () => limiter.acquire(1));
 
     const event = eventFor("only");
-    expect(event.wait?.rate_limiter_ms).toBeGreaterThanOrEqual(THROTTLE_WAIT_MS);
+    expect(event.wait?.rate_limiter_ms).toBeGreaterThanOrEqual(chargedAtLeast(THROTTLE_WAIT_MS));
     expect(event.ratelimit?.acquire_count).toBe(1);
     expect(event.ratelimit?.throttled_count).toBe(1);
     expect(event.ratelimit?.queue_depth_max).toBe(1);
@@ -115,7 +126,7 @@ describe("rate limiter wait attribution", () => {
     await runInEvent("overlay", () => limiter.acquire(1));
 
     const event = eventFor("overlay");
-    expect(event.redis?.command_ms_max).toBeGreaterThanOrEqual(SLOW_EVAL_MS);
+    expect(event.redis?.command_ms_max).toBeGreaterThanOrEqual(chargedAtLeast(SLOW_EVAL_MS));
     expect(event.accounted_ms).toBe(event.wait?.rate_limiter_ms);
   });
 

@@ -36,6 +36,17 @@ afterEach(() => {
 
 const RETRY_DELAY_MS = 120;
 
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+
+
 const runInEvent = async (source: string, run: () => Promise<void>): Promise<void> => {
   await context(async () => {
     widelog.set("source", source);
@@ -76,7 +87,7 @@ describe("provider retry wait attribution", () => {
 
     const event = eventFor("retried");
     expect(event.provider?.retry_count).toBe(2);
-    expect(event.wait?.provider_retry_ms).toBeGreaterThanOrEqual(RETRY_DELAY_MS * 2);
+    expect(event.wait?.provider_retry_ms).toBeGreaterThanOrEqual(chargedAtLeast(RETRY_DELAY_MS * 2));
     expect(event.accounted_ms).toBe(event.wait?.provider_retry_ms);
   });
 
