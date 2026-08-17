@@ -262,6 +262,19 @@
         "vitest": "^4.1.4",
       },
     },
+    "packages/sync-kit/reconcile": {
+      "name": "@keeper.sh/sync-reconcile",
+      "dependencies": {
+        "@keeper.sh/sync-ical": "workspace:*",
+        "@keeper.sh/sync-protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+        "vitest": "^4.1.4",
+      },
+    },
     "packages/typescript-config": {
       "name": "@keeper.sh/typescript-config",
       "devDependencies": {
@@ -622,6 +635,8 @@
     "@keeper.sh/sync-ical": ["@keeper.sh/sync-ical@workspace:packages/sync-kit/ical"],
 
     "@keeper.sh/sync-protocol": ["@keeper.sh/sync-protocol@workspace:packages/sync-kit/protocol"],
+
+    "@keeper.sh/sync-reconcile": ["@keeper.sh/sync-reconcile@workspace:packages/sync-kit/reconcile"],
 
     "@keeper.sh/typescript-config": ["@keeper.sh/typescript-config@workspace:packages/typescript-config"],
 

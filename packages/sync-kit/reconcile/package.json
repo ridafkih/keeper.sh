@@ -1,0 +1,22 @@
+{
+  "name": "@keeper.sh/sync-reconcile",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint .",
+    "test": "TZ=UTC bun x --bun vitest run"
+  },
+  "dependencies": {
+    "@keeper.sh/sync-ical": "workspace:*",
+    "@keeper.sh/sync-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
+  }
+}
