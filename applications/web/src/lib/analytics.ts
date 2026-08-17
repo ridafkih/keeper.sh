@@ -102,8 +102,12 @@ export const ANALYTICS_EVENTS = {
 
 type EventProperties = Record<string, string | number | boolean>;
 
+const PAGE_VIEW_EVENT = "page_view";
+
 const track = (event: string, properties?: EventProperties): void => {
   globalThis.visitors?.track(event, properties);
+  if (event === PAGE_VIEW_EVENT) return;
+  globalThis.gtag?.("event", event, properties);
 };
 
 interface IdentifyProps {
@@ -118,6 +122,7 @@ const identify = (
 ): void => {
   if (options.gdprApplies && !hasAnalyticsConsent()) return;
   globalThis.visitors?.identify(user);
+  globalThis.gtag?.("set", { user_id: user.id });
 };
 
 interface ConversionOptions {
