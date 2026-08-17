@@ -43,6 +43,16 @@ const CALENDAR_ID = "calendar-primary";
 const ADVISORY_LOCK_STATEMENT_INDEX = 3;
 
 const SECOND_POOL_WAIT_MS = 15;
+
+/*
+ * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
+ * an exact floor makes these assertions report timer granularity rather than attribution.
+ * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
+ * still fails.
+ */
+const TIMER_SLACK_MS = 5;
+
+const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
 let sourceCount = 1;
 let stagedPoolWaits: number[] = [];
 let lockAcquires = true;
@@ -279,7 +289,7 @@ describe("ingest duration decomposition", () => {
 
     expect(event.outcome).toBe("success");
     expect(event.ingest?.lock_acquired).toBe(true);
-    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(LOCK_WAIT_MS);
+    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(chargedAtLeast(LOCK_WAIT_MS));
     expect(event.duration_ms ?? 0).toBeGreaterThanOrEqual(event.wait?.source_lock_ms ?? 0);
   });
 
@@ -288,8 +298,8 @@ describe("ingest duration decomposition", () => {
 
     const event = await runTick();
 
-    expect(event.redis?.command_ms_max).toBeGreaterThanOrEqual(REDIS_COMMAND_MS);
-    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(REDIS_COMMAND_MS);
+    expect(event.redis?.command_ms_max).toBeGreaterThanOrEqual(chargedAtLeast(REDIS_COMMAND_MS));
+    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(chargedAtLeast(REDIS_COMMAND_MS));
   });
 
   it("attributes the pool handover, the advisory lock and the commit separately", async () => {
@@ -299,9 +309,9 @@ describe("ingest duration decomposition", () => {
 
     const event = await runTick();
 
-    expect(event.wait?.db_pool_ms).toBeGreaterThanOrEqual(POOL_WAIT_MS);
-    expect(event.wait?.advisory_lock_ms).toBeGreaterThanOrEqual(ADVISORY_WAIT_MS);
-    expect(event.work?.db_commit_ms).toBeGreaterThanOrEqual(COMMIT_MS);
+    expect(event.wait?.db_pool_ms).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
+    expect(event.wait?.advisory_lock_ms).toBeGreaterThanOrEqual(chargedAtLeast(ADVISORY_WAIT_MS));
+    expect(event.work?.db_commit_ms).toBeGreaterThanOrEqual(chargedAtLeast(COMMIT_MS));
     expect(event.wait?.db_pool_ms).toBeLessThan(POOL_WAIT_MS + ADVISORY_WAIT_MS);
   });
 
@@ -312,7 +322,7 @@ describe("ingest duration decomposition", () => {
     const event = await runTick();
 
     expect(event.outcome).toBe("error");
-    expect(event.wait?.db_pool_ms ?? 0).toBeGreaterThanOrEqual(POOL_WAIT_MS);
+    expect(event.wait?.db_pool_ms ?? 0).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
   });
 
   it("counts the statements it timed on both sides of the transaction boundary", async () => {
@@ -340,7 +350,7 @@ describe("ingest duration decomposition", () => {
 
     expect(event.ingest?.lock_acquired).toBe(false);
     expect(event.outcome).toBe("skipped");
-    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(LOCK_WAIT_MS);
+    expect(event.wait?.source_lock_ms).toBeGreaterThanOrEqual(chargedAtLeast(LOCK_WAIT_MS));
     expect(event.work?.db_commit_ms).toBeUndefined();
   });
 
@@ -354,9 +364,9 @@ describe("ingest duration decomposition", () => {
       .toSorted((first, second) => first - second);
 
     expect(events).toHaveLength(2);
-    expect(poolWaits[0]).toBeGreaterThanOrEqual(SECOND_POOL_WAIT_MS);
+    expect(poolWaits[0]).toBeGreaterThanOrEqual(chargedAtLeast(SECOND_POOL_WAIT_MS));
     expect(poolWaits[0]).toBeLessThan(POOL_WAIT_MS);
-    expect(poolWaits[1]).toBeGreaterThanOrEqual(POOL_WAIT_MS);
+    expect(poolWaits[1]).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
     for (const event of events) {
       expect(event.accounted_ms ?? 0).toBeLessThanOrEqual(event.duration_ms ?? 0);
     }
