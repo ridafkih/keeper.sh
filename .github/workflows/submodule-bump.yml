@@ -17,7 +17,7 @@ on:
         description: Which submodule to bump
         required: true
         type: choice
-        options: [seo, infra]
+        options: [seo, infra, claude]
 
 permissions:
   contents: read
@@ -32,8 +32,9 @@ jobs:
           NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
         run: |
           case "$NAME" in
-            seo)   echo "path=applications/web/seo" >> "$GITHUB_OUTPUT" ;;
-            infra) echo "path=infra"                >> "$GITHUB_OUTPUT" ;;
+            seo)    echo "path=applications/web/seo" >> "$GITHUB_OUTPUT" ;;
+            infra)  echo "path=infra"                 >> "$GITHUB_OUTPUT" ;;
+            claude) echo "path=.claude"               >> "$GITHUB_OUTPUT" ;;
             *)     echo "Unknown submodule: '$NAME'" >&2; exit 1 ;;
           esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
@@ -62,6 +63,7 @@ jobs:
           repositories: |
             seo
             infra
+            .claude
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,7 +77,7 @@ jobs:
           git config --global \
             url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo infra
+          git submodule update --init applications/web/seo "${{ steps.target.outputs.path }}"
 
       - name: Move the pin
         id: bump
@@ -89,15 +91,16 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # Both submodules build the web app. seo supplies its content directly;
-      # infra does not, but a bump that cannot build is still worth catching
-      # here rather than after merge.
+      # seo supplies the site's content and infra describes what it runs on, so
+      # both build before the pull request exists. .claude holds agent and editor
+      # configuration that nothing in the build reads, so it skips the build
+      # rather than spending the minutes.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: steps.bump.outputs.changed == 'true'
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
       - run: bun install --frozen-lockfile
-        if: steps.bump.outputs.changed == 'true'
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
       - run: bunx turbo run build --filter=@keeper.sh/web
-        if: steps.bump.outputs.changed == 'true'
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
 
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'
