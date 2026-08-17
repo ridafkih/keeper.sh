@@ -46,6 +46,13 @@ const remoteIdOf = (outcome: WriteOutcome): string => {
   return "no-remote";
 };
 
+const remoteHandleOf = (outcome: WriteOutcome): string => {
+  if ("remote" in outcome) {
+    return outcome.remote.deleteHandle.value;
+  }
+  return "no-remote";
+};
+
 const echoKindOf = (outcome: WriteOutcome): string => {
   if ("echo" in outcome) {
     return outcome.echo.kind;
@@ -266,7 +273,7 @@ const writeCases = <Provider extends ProviderId>(
         await write(context, createFor(context, supports, scope.calendar, replaced, "09")),
       );
       const before = await writeLogLength(context.provider);
-      const removed = `handle-${replaced}`;
+      const removed = remoteHandleOf(original);
 
       const deleted = await write(
         context,
@@ -353,7 +360,7 @@ const writeCases = <Provider extends ProviderId>(
         updateIntent(
           supports,
           scope.calendar,
-          `id-${key}`,
+          remoteIdOf(created),
           seriesAnchoredAt(key, "11"),
           versionOf(created),
         ),
@@ -395,9 +402,10 @@ const writeCases = <Provider extends ProviderId>(
       );
       const held = versionOf(created);
 
+      const target = remoteIdOf(created);
       const [earlier, later] = await Promise.all([
-        write(context, updateIntent(supports, scope.calendar, `id-${key}`, meetingAt(key, "11"), held)),
-        write(context, updateIntent(supports, scope.calendar, `id-${key}`, meetingAt(key, "13"), held)),
+        write(context, updateIntent(supports, scope.calendar, target, meetingAt(key, "11"), held)),
+        write(context, updateIntent(supports, scope.calendar, target, meetingAt(key, "13"), held)),
       ]);
       const stored = await objectsMarked(context.provider, "CONF-O44");
       const answers = [earlier, later];
@@ -442,23 +450,41 @@ const writeCases = <Provider extends ProviderId>(
         ),
       );
       const stale = versionOf(created);
+      const target = remoteIdOf(created);
 
       await write(
         context,
-        updateIntent(supports, scope.calendar, `id-${key}`, meetingAt(key, "11"), stale),
+        updateIntent(supports, scope.calendar, target, meetingAt(key, "11"), stale),
       );
       const replayed = await write(
         context,
-        updateIntent(supports, scope.calendar, `id-${key}`, meetingAt(key, "13"), stale),
+        updateIntent(supports, scope.calendar, target, meetingAt(key, "13"), stale),
       );
 
+      if (!replayed.ok) {
+        insist(
+          "CONF-O39",
+          replayed.failure.kind === "conflict",
+          `a spent precondition failed as "${replayed.failure.kind}" instead of a conflict`,
+        );
+        return;
+      }
       insist(
         "CONF-O39",
-        !replayed.ok && replayed.failure.kind === "conflict",
+        replayed.value.kind === "conflict",
         "a write whose precondition was already spent was accepted a second time",
       );
+      assertConflictNotOverwrite(replayed);
     },
   ),
 ];
 
-export { echoKindOf, meetingAt, remoteIdOf, seriesAnchoredAt, versionOf, writeCases };
+export {
+  echoKindOf,
+  meetingAt,
+  remoteHandleOf,
+  remoteIdOf,
+  seriesAnchoredAt,
+  versionOf,
+  writeCases,
+};

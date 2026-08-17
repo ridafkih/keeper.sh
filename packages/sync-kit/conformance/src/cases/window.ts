@@ -10,6 +10,7 @@ import { derivableRemovals } from "../assertions/no-removal";
 import type { KnownIdentity } from "../assertions/no-removal";
 import type { CaseContext, ConformanceCase } from "../registry/case";
 import { createIntent } from "./intents";
+import { presentIdentities } from "./deletion-safety";
 import { refusedWith } from "./capabilities";
 import type { EventDraft } from "./support";
 import {
@@ -137,7 +138,7 @@ const windowCases = <Provider extends ProviderId>(
       await seedWith(context, edges);
 
       const listing = listingOf("CONF-O27", await listChanges(context, scope));
-      const listed = new Set(uidsOf(listing));
+      const listed = new Set(presentIdentities(listing));
       const covered = coveredWindowOf(listing, scope.window);
       for (const event of edges) {
         const time = timeOf(event);
@@ -161,10 +162,16 @@ const windowCases = <Provider extends ProviderId>(
         );
       }
 
+      insist(
+        "CONF-O27",
+        (listing.withheld ?? []).every((entry) => entry.reason.length > 0),
+        "a boundary event counted as present was withheld without a reason for withholding it",
+      );
+
       const second = listingOf("CONF-O27", await listChanges(context, scope));
       insist(
         "CONF-O27",
-        new Set(uidsOf(second)).size === listed.size,
+        new Set(presentIdentities(second)).size === listed.size,
         "two polls of the same boundary set disagreed about which events the window admits",
       );
 

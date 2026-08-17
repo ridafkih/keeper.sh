@@ -1,0 +1,82 @@
+import type { calendar_v3 } from "@googleapis/calendar";
+import { compareCodeUnits } from "../canonical";
+
+interface CollapsedRevisions {
+  readonly winners: readonly calendar_v3.Schema$Event[];
+  readonly losers: number;
+  readonly superseded: ReadonlySet<string>;
+}
+
+const revisionInstantOf = (item: calendar_v3.Schema$Event): number => {
+  const updated = Date.parse(item.updated ?? "");
+  if (!Number.isNaN(updated)) {
+    return updated;
+  }
+  const created = Date.parse(item.created ?? "");
+  if (!Number.isNaN(created)) {
+    return created;
+  }
+  return 0;
+};
+
+const tieBreakerOf = (item: calendar_v3.Schema$Event): string =>
+  `${item.etag ?? ""}${item.id ?? ""}`;
+
+const anonymousKey = (position: number): string => `anonymous:${position}`;
+
+const identityOf = (item: calendar_v3.Schema$Event, position: number): string => {
+  if (typeof item.id !== "string" || item.id.length === 0) {
+    return anonymousKey(position);
+  }
+  return `id:${item.id}`;
+};
+
+const newerOf = (
+  held: calendar_v3.Schema$Event,
+  candidate: calendar_v3.Schema$Event,
+): calendar_v3.Schema$Event => {
+  const difference = revisionInstantOf(candidate) - revisionInstantOf(held);
+  if (difference > 0) {
+    return candidate;
+  }
+  if (difference < 0) {
+    return held;
+  }
+  if (compareCodeUnits(tieBreakerOf(candidate), tieBreakerOf(held)) > 0) {
+    return candidate;
+  }
+  return held;
+};
+
+const collapseRevisions = (items: readonly calendar_v3.Schema$Event[]): CollapsedRevisions => {
+  const winners = new Map<string, calendar_v3.Schema$Event>();
+  const superseded = new Set<string>();
+  for (const [position, item] of items.entries()) {
+    const identity = identityOf(item, position);
+    const held = winners.get(identity);
+    if (!held) {
+      winners.set(identity, item);
+      continue;
+    }
+    superseded.add(identity);
+    winners.set(identity, newerOf(held, item));
+  }
+  return {
+    winners: [...winners.values()],
+    losers: items.length - winners.size,
+    superseded,
+  };
+};
+
+const supersededIds = (collapsed: CollapsedRevisions): ReadonlySet<string> => {
+  const identifiers = new Set<string>();
+  for (const key of collapsed.superseded) {
+    if (key.startsWith("id:")) {
+      identifiers.add(key.slice("id:".length));
+    }
+  }
+  return identifiers;
+};
+
+export { collapseRevisions, revisionInstantOf, supersededIds };
+export type { CollapsedRevisions };

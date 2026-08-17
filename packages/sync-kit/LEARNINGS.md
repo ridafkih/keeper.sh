@@ -4446,3 +4446,1413 @@ number is declared to the adapter rather than kept private to the suite.
 `CONF-O1`–`CONF-O46` are the overwrite family; `CONF-L1`–`CONF-L13` are the lockup family. Each id appears
 verbatim in its generated case title and in `src/case-id.ts` beside the ledger entry it enforces, and
 `tests/hygiene/ledger-citations.test.ts` fails if the three ever disagree.
+
+# sync-google learnings ledger
+
+`@keeper.sh/sync-google` is the Google Calendar implementation of `CalendarProvider` from
+`@keeper.sh/sync-protocol`. Its acceptance criterion is `@keeper.sh/sync-conformance` run end to end:
+`CONF-O1`–`CONF-O46` and `CONF-L1`–`CONF-L13`. A case this adapter cannot pass is a defect in this
+adapter until proven otherwise.
+
+Entries are numbered `GOOG-I1`–`GOOG-I71`. `GOOG-I1`–`GOOG-I50` and `GOOG-I68`–`GOOG-I71` are adopted
+(the last four were added in the red phase, when the push and hygiene lessons turned out to have modules
+and tests but no numbered entry), `GOOG-I51`–`GOOG-I58` are the explicit not-applicable set, and
+`GOOG-I59`–`GOOG-I67` are dependencies taken and rejected. Every
+**Proved by** citation names a file under `packages/sync-kit/google/tests` and the exact test name inside
+it, or a `CONF-` case id that the conformance run enforces, so the ledger can be walked against the suite
+mechanically.
+
+The single most important sentence in this ledger: **Google's own sync guide instructs clients to wipe
+their store on a 410, and doing what it says is what deletes users' calendars.**
+
+---
+
+## Adopted
+
+### GOOG-I1. A 410 on a listing is `cursorLost`, never an empty delta
+
+**Lesson.** Google's sync guide says that on HTTP 410 the client should "wipe the client's data store
+completely, then execute a new full sync". Following it is the single most destructive thing this adapter
+could do: an invalidated cursor says nothing about what still exists, and treating the invalidated response
+as an authoritative empty listing removes every mirrored event.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/sync` (verified 2026-08-16:
+*"the server responds with an HTTP 410 … wipe … and execute a new full sync"*);
+`packages/calendar/src/providers/google/source/utils/fetch-events.ts` (`GONE_STATUS ->
+{events: [], fullSyncRequired: true}`); `core/sync-engine/ingest.ts:273`
+(`flush({inserts: [], deletes: [], syncToken: null})`); test *"clears sync token and returns empty result
+when fullSyncRequired is true"*.
+**Honoured by.** `classifyGoogleError` maps `(410, "fullSyncRequired")` on `listChanges` to
+`{ kind: "cursorLost" }`, and `src/listing/list-changes.ts` answers with the protocol's `cursorLost` arm.
+That arm declares `events?: never`, `removals?: never` and `cursor?: never`, so a deletion is not
+expressible on it — the guard is type-level, not a runtime check. The adapter has no code path that
+constructs `{ kind: "delta", removals: [] }` from a 410.
+**Proved by.** `google/tests/cursor/gone-is-not-empty.test.ts :: GOOG-O1: a 410 on the first page yields
+cursorLost, zero removals and no cursor`; conformance `CONF-O10`, `CONF-O40`.
+
+### GOOG-I2. A page-level 410 aborts the whole listing, not just that page
+
+**Lesson.** A 410 arriving on page 7 of a paginated delta invalidates everything already collected.
+Returning the six good pages plus a fresh token persists a cursor that skips the changes the invalidated
+pages held — a silent, permanent hole in the mirror.
+**Learned from.** `packages/calendar/src/providers/google/source/utils/fetch-events.ts` (both the
+first-page and the `while`-loop `if (result.fullSyncRequired) return`).
+**Honoured by.** `src/listing/paginate.ts` returns a `PageWalk` union; `{ kind: "cursorLost" }` is terminal
+and discards the accumulator rather than merging it. There is no branch that folds partially collected
+pages into a `delta`.
+**Proved by.** `google/tests/cursor/gone-mid-pagination.test.ts :: GOOG-O2: a 410 on the third page
+discards the two pages already collected`.
+
+### GOOG-I3. A delta that ends without a `nextSyncToken` is cursor loss, not success
+
+**Lesson.** `if (!result.nextSyncToken) return { fullSyncRequired: true }`. Persisting a null token
+silently downgrades every future run to a full sync while the code believes it is doing deltas, or keeps
+re-using the previous token forever.
+**Learned from.** `packages/calendar/src/providers/google/source/fetch-adapter.ts:52-54`.
+**Honoured by.** The protocol's `delta` arm carries a non-optional `cursor: SyncCursor`, so "delta without
+a cursor" is unrepresentable. A final page with no `nextSyncToken` is mapped to `cursorLost`.
+**Proved by.** `google/tests/cursor/missing-token.test.ts :: GOOG-O3: a final page with no nextSyncToken
+is cursorLost, not a delta`.
+
+### GOOG-I4. `nextSyncToken` arrives only on the last page, so an interrupted pagination has no cursor
+
+**Lesson.** Google documents that "the `nextSyncToken` field is present only on the very last page". RFC
+6578 §3.6/§3.8 states the same rule for WebDAV sync: a truncated `sync-collection` returns a token that
+"MUST represent the correct state for the partial set of changes returned". A pagination that stops early
+therefore has observations but no coverage claim and no cursor.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/sync` (verified 2026-08-16);
+`https://www.rfc-editor.org/rfc/rfc6578.html` §3.6, §3.8.
+**Honoured by.** Stopping early yields the protocol's `partial` arm: events observed so far, a
+`Continuation` (never a `SyncCursor`), and structurally no `removals` and no `coverage`.
+**Proved by.** `google/tests/cursor/truncation-is-partial.test.ts :: GOOG-O4: a page ceiling stop yields a
+continuation and no cursor`; conformance `CONF-O41`, `CONF-O1`.
+
+### GOOG-I5. The cursor is an owned opaque value that fingerprints the request shape
+
+**Lesson.** `syncToken` is mutually exclusive with `iCalUID`, `orderBy`, `privateExtendedProperty`, `q`,
+`sharedExtendedProperty`, `timeMin`, `timeMax` and `updatedMin`, and every request in a sync session must
+carry an identical parameter set or Google answers 400. Widening the sync window therefore cannot be done
+by changing `timeMin` on an incremental call: it either silently is not applied or 400s.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/v3/reference/events/list`;
+the repo's own answer in `packages/calendar/src/core/oauth/sync-token.ts`
+(`keeper:sync-token:<version>:<base64url>`) and `tests/core/oauth/sync-token.test.ts` *"expires provider
+tokens when the absolute sync window advances"*.
+**Honoured by.** `src/cursor/cursor.ts` mints `SyncCursor.value` as an encoding of
+`{ version, listingMode, windowFingerprint, providerToken }`. `src/cursor/fingerprint.ts` derives the
+fingerprint from the exact parameter set that minted it. A cursor whose fingerprint does not match the
+current request resolves to `cursorLost` **locally, before any network call** — a deliberate,
+non-destructive re-baseline instead of a runtime 400.
+**Proved by.** `google/tests/cursor/scope-binding.test.ts :: GOOG-O5: a cursor minted under a narrow window
+is refused against a wider one without touching the transport`; conformance `CONF-O11`.
+
+### GOOG-I6. A voluntary cursor invalidation is still `cursorLost`, never a deletion
+
+**Lesson.** Sync tokens are stored versioned, and the version encodes the sync-window version plus a
+deterministic per-calendar staggered refresh period, so widening the window invalidates every token and a
+fleet does not re-baseline in the same minute. That invalidation is a decision we make, not an error — and
+it must land on exactly the same non-destructive path as a provider 410.
+**Learned from.** `packages/calendar/src/core/oauth/sync-token.ts`,
+`core/oauth/sync-window.ts` (`getDeterministicRefreshOffset`); commits `5b87e77b`, `fd2f5b12`,
+*"stagger OAuth full-sync refreshes"* in `1c5171d2`.
+**Honoured by.** `cursorVersion` is an `as const` value in `src/cursor/cursor.ts`; a version mismatch takes
+the identical `cursorLost` return as GOOG-I1. There is one function that produces `cursorLost` and every
+reason funnels through it.
+**Proved by.** `google/tests/cursor/version-bump.test.ts :: GOOG-O6: a cursor from an older adapter version
+is cursorLost and emits no removals`.
+
+### GOOG-I7. An unreadable cursor is answered, never thrown
+
+**Lesson.** A cursor value the adapter cannot decode is not an exception; it is a resync demand. Throwing
+turns a recoverable state into a stalled calendar.
+**Learned from.** `packages/calendar/src/core/oauth/sync-token.ts` (unprefixed legacy values decode as
+version 0 rather than throwing); conformance `CONF-O40`.
+**Honoured by.** `parseCursor` returns `{ kind: "usable" } | { kind: "unreadable" }`; the unreadable arm
+returns `cursorLost`. No `throw` on the cursor path.
+**Proved by.** `google/tests/cursor/tampered.test.ts :: GOOG-O7: a tampered cursor is cursorLost, not a
+thrown error`; conformance `CONF-O40`.
+
+### GOOG-I8. A quiet poll still advances the cursor, and writes nothing
+
+**Lesson.** A delta that finds no changes still returns a fresh `nextSyncToken`. Handing back the cursor we
+were given means the feed never moves on and every later poll re-reads the same frontier.
+**Learned from.** Conformance `CONF-O37`.
+**Honoured by.** `src/listing/list-changes.ts` always mints its cursor from the provider's final
+`nextSyncToken`, never from `request.resume`.
+**Proved by.** conformance `CONF-O37`; `google/tests/cursor/quiet-poll.test.ts :: GOOG-O8: a poll that
+finds nothing mints a new cursor and issues no write`.
+
+### GOOG-I9. A run that did not complete never advances the frontier
+
+**Lesson.** A transport failure part way through must leave the caller holding the cursor it started with,
+or the changes the failed run never delivered are skipped forever.
+**Learned from.** Commit `0184ea19` *fix(ics): don't wipe existing events when remote fetch fails (#383)*;
+conformance `CONF-O24`.
+**Honoured by.** The cursor is minted only on the success path of the last page. Every failure returns
+`Result.ok === false`, which carries no cursor at all.
+**Proved by.** conformance `CONF-O24`.
+
+### GOOG-I10. Deletions are only the identities Google explicitly named
+
+**Lesson.** Removals are computed from `status: "cancelled"` entries, never from absence. Absence in a
+delta page means "unchanged"; inferring deletion from it deletes the entire calendar on the first quiet
+delta.
+**Learned from.** `packages/calendar/src/core/source/event-diff.ts:230-265`
+(`buildSourceEventStateIdsToRemove` delta branch); commit `d079c15c` *"remove stale event states after
+delta moves"*.
+**Honoured by.** The `delta` arm's `removals` are built only from decoded `{ kind: "cancelled" }` items.
+`deletionAuthority: "snapshotAbsence"` applies only to the `snapshot` arm, where `timeMin`/`timeMax` prove
+the window that was read.
+**Proved by.** conformance `CONF-O13`, `CONF-O34`; `google/tests/listing/delta-absence.test.ts ::
+GOOG-O10: a delta naming one cancellation removes exactly one of a hundred stored identities`.
+
+### GOOG-I11. A changed identity that no longer intersects the window is a removal, not a silent drop
+
+**Lesson.** An event the user moved to next year stays mirrored forever at its old time if a delta item we
+filter out is simply dropped. This is the one legitimate delete-from-a-changed-id path — and it is not a
+`deleted`, because the source still holds the event.
+**Learned from.** `packages/calendar/src/core/source/event-diff.ts:258-262`; commit `d079c15c`.
+**Honoured by.** The protocol's third removal arm, `{ kind: "outOfScope", id }`, carries no `uid` and is
+never treated as an authoritative deletion by `sync-reconcile`. `src/listing/list-changes.ts` emits it for
+a changed id whose decoded item falls outside `withinGoogleWindow`.
+**Proved by.** `google/tests/listing/moved-out-of-window.test.ts :: GOOG-O11: an event moved past the
+window edge is reported outOfScope, never deleted`; conformance `CONF-O34`, `CONF-O26`.
+
+### GOOG-I12. `cancelled` is distinct from absent and from unparseable
+
+**Lesson.** Google guarantees that a cancelled exception of a live recurring event carries **only** `id`,
+`recurringEventId` and `originalStartTime`. Folding cancellations into the ordinary item stream sends a
+three-field tombstone to the field parser, which reports it as an event with no start or end and counts it
+as "unrepresentable" — losing the deletion and inflating the breakage counter at the same time.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/recurringevents`; generated
+SDK doc comment `calendar/v3.ts:820`;
+`packages/calendar/src/providers/google/source/utils/fetch-events.ts` (`collectEvents` skips id-less
+cancelled events; `cancelledEventIds` built separately).
+**Honoured by.** `src/decode/decode-event.ts` returns a discriminated union
+`{ kind: "cancelled" } | { kind: "patch" } | { kind: "undecodable" }`, switched exhaustively with
+`assertNever`. A cancelled tombstone never reaches `src/decode/event-time.ts`.
+**Proved by.** `google/tests/decode/cancelled-tombstone.test.ts :: GOOG-O12: a three-field cancelled
+exception is a tombstone, not an unrepresentable event`; conformance `CONF-O34`.
+
+### GOOG-I13. A cancelled entry with no id is dropped and counted, never guessed at
+
+**Lesson.** A tombstone with no identity names nothing to delete. Passing it on as a removal with a
+fabricated id is an unattributable deletion.
+**Learned from.** `fetch-events.ts` (`collectEvents` skips id-less cancelled events).
+**Honoured by.** The decoder returns `{ kind: "undecodable", reason: "missingIdentity" }`, which lands in
+`diagnostics.withheld` and never in `removals`.
+**Proved by.** `google/tests/decode/idless-tombstone.test.ts :: GOOG-O13: an id-less cancellation is
+counted, not removed`; conformance `CONF-O13`, `CONF-O32`.
+
+### GOOG-I14. A withheld event is present, not absent
+
+**Lesson.** An event we cannot build must not vanish from the listing, because the layer above reads
+absence-within-coverage as deletion. Withholding a source must never cost the user the mirror they already
+have.
+**Learned from.** `packages/calendar/src/core/sync-engine/ingest.ts:246-258` and `:322-330` (both surviving
+comments); commit `fdd9ba62` *"never deletes the stored row of the event it withholds"*.
+**Honoured by.** `withheld: readonly WithheldEvent[]` rides the `snapshot` and `delta` arms beside
+`events`, and `sync-reconcile` counts a withheld identity as present. Withholding is a third outcome
+beside upsert and remove, not a filter.
+**Proved by.** conformance `CONF-O5`, `CONF-O33`, `CONF-O7`.
+
+### GOOG-I15. Stored state that fails to parse forces a resync, not a deletion
+
+**Lesson.** Invalid stored state is a bug, not normal operation, and on a delta sync the diff cannot be
+trusted against rows it cannot read. Silently coercing an invalid stored recurrence rule degrades a
+recurring event into a one-off — the exact bug the validation was added to fix.
+**Learned from.** `packages/calendar/src/core/sync-engine/ingest.ts:297-303`; commit `71ac9ee1` *"throw on
+invalid stored ICS recurrence/exception data"*; user memory *fail loud on internally-produced data*.
+**Honoured by.** Cursor state is parsed through `parseCursor`; a failure escalates to `cursorLost`, never
+to a deletion and never to a silent default. Data Google produced is tolerated; data we produced fails
+loud.
+**Proved by.** conformance `CONF-O12`.
+
+### GOOG-I16. Proven coverage is clamped and never substituted by the requested window
+
+**Lesson.** A caller may ask for a decade. The adapter reads what it reads. Claiming coverage it never
+proved lets the layer above derive deletions across years it never looked at.
+**Learned from.** Conformance `CONF-O4`; `packages/calendar/src/core/oauth/sync-window.ts`.
+**Honoured by.** `src/listing/coverage.ts` exports `provenCoverage(window)`, clamping to
+`maximumCoverageMs` (366 days) and returning a degenerate window when the request is inverted. The
+`CoverageWindow` names the calendar it was proven for, so two calendars' listings cannot be crossed.
+**Proved by.** conformance `CONF-O4`; `google/tests/listing/coverage-clamp.test.ts :: GOOG-O16: a decade
+request proves at most one year of coverage`.
+
+### GOOG-I17. One window predicate, exported, and degenerate ranges judged by the instant they name
+
+**Lesson.** A half-open window predicate silently drops degenerate ranges: a zero-duration event exactly on
+`timeMin` produced no operation on any run, and an inverted range whose start is inside the window was
+judged by its end and dropped. The same predicate had been paraphrased in at least eight places, each
+diverging. A range that does not end after it starts must be judged by the single instant it names.
+**Learned from.** `packages/calendar/src/core/events/time-range.ts` (`overlapsTimeWindow`); commit
+`b057d2e0`; `tests/core/sync-engine/degenerate-range-*.test.ts`; test *"admits every degenerate event whose
+instant lies inside the sync window"*.
+**Honoured by.** `src/window/membership.ts` exports exactly one `withinGoogleWindow: WindowMembership`, and
+it is the value handed to `runConformance` as `withinWindow`. A second copy is the defect; a hygiene test
+enforces that no other module re-derives it.
+**Proved by.** `google/tests/hygiene/one-predicate.test.ts :: GOOG-O17: no module compares a window bound
+except the predicate module`; conformance `CONF-O27`, `CONF-O28`.
+
+### GOOG-I18. Across pages the newest revision wins, and an unbuildable newest withholds the identity
+
+**Lesson.** The same event id can appear on several pages of one delta, and the last page does not
+necessarily win. Collapse by id choosing the higher `updated` (falling back to `created`). Crucially, if
+the **newest** revision is unbuildable, withhold the whole identity — letting an older revision win
+resurrects a time the publisher already moved away from.
+**Learned from.** `fetch-events.ts` (`shouldReplaceGoogleRevision`/`getGoogleRevisionTime`); tests *"applies
+only the final version when a provider occurrence changes repeatedly in one delta"*, *"never reverts a
+stored event to the time the publisher moved it away from"*, *"withhold a UID whose newest revision is
+unbuildable"*.
+**Honoured by.** `src/listing/collapse-revisions.ts` runs over the accumulated page items **before**
+decoding, keyed on the provider `id`, choosing the higher `updated` and falling back to `created`; equal
+instants break on a stable `(etag, id)` comparison rather than arrival order. A winner that superseded a
+loser and then fails to decode is withheld with the protocol's `supersededRevisionUnbuildable`.
+**Not carried.** The loser *count* is not surfaced. `ListingDiagnostics` in `@keeper.sh/sync-protocol` has
+exactly four members and no counter for superseded revisions; adding one is a shared-contract change that
+would break `ical`, `reconcile` and the conformance reference in the same commit. The collapse still
+returns `losers` and `superseded` to its caller, and the loss is observable as the withheld entry above.
+**Proved by.** conformance `CONF-O7`, `CONF-O22`, `CONF-O8`; `google/tests/listing/revision-collapse.test.ts
+:: GOOG-O18: the newest revision wins in either page order`;
+`google/tests/listing/revision-collapse.test.ts :: GOOG-O18: a revision with no updated stamp falls back to
+created, never to feed order`; `google/tests/listing/revision-collapse.test.ts :: GOOG-O18: two revisions
+stamped at the same instant resolve the same way in either order`;
+`google/tests/listing/revision-collapse.test.ts :: GOOG-O18: an unbuildable winner that superseded a
+buildable loser is withheld as superseded`.
+
+### GOOG-I19. `singleEvents: false` — masters and overrides are reassembled after pagination completes
+
+**Lesson.** With `singleEvents: true` Google expands the series for us, which is convenient but makes the
+delta lossy for series edits, hides the master's RRULE, and changes which tombstones arrive: with
+`showDeleted` and `singleEvents` both true you receive only single deleted instances and never the
+underlying series. With `singleEvents: false` the master and its `RECURRENCE-ID` overrides arrive
+independently and can straddle pages, and an override can arrive **before** its master.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/recurringevents`;
+`https://developers.google.com/workspace/calendar/api/v3/reference/events/list`; prior art
+`fetch-events.ts:113` (`singleEvents: true`); commit `71ac9ee1` *fix(ics): emit recurring events as master +
+RECURRENCE-ID overrides (#387)* — emitting overrides as fresh UIDs double-books every moved occurrence.
+**Honoured by.** `src/listing/request-shape.ts` fixes `singleEvents: false` in an `as const` record.
+`src/listing/assemble-series.ts` accumulates overrides against the series key and merges a master that
+arrives later, so assembly is order-independent and runs only **after** pagination completes. The protocol
+carries the series as one `RecurringContent` with an opaque `RecurrencePayload`; this package never expands
+a rule. Every override contributes an `EXDATE` line at its `originalStartTime` to its master's
+`RecurrencePayload.exceptions` (RFC 5545 §3.8.5.1), so the vacated slot never mirrors, and the override
+itself is emitted as its own single-occurrence event under the instance uid of GOOG-I20 — never dropped,
+never silently `continue`d. A cancelled override reaches the cancelled arm and becomes a `Removal`, which
+the earlier skip swallowed entirely.
+**Not carried.** Google sends a master and its overrides as separate resources, and a delta may carry the
+override without the master. When the master is not in the same accumulated page set there is nothing to
+attach the `EXDATE` to; the detached occurrence is still emitted, with the same deterministic identity it
+would have had, so nothing is lost or duplicated, but the vacated slot is only closed on a listing that
+carries both. The protocol has no `RECURRENCE-ID` arm to express the pairing across listings.
+**Proved by.** `google/tests/listing/series-assembly.test.ts :: GOOG-O19: an override arriving before its
+master on an earlier page assembles into one series`; `google/tests/listing/series-assembly.test.ts ::
+GOOG-O19: a moved occurrence vacates its original slot and is carried at its new time`;
+`google/tests/listing/series-assembly.test.ts :: GOOG-O19: an override behaves the same whether or not its
+master shares the page set`; conformance `CONF-O36`.
+
+### GOOG-I20. Instance identity is `(recurringEventId, originalStartTime)`, never the current start
+
+**Lesson.** Expanded instances of a series all share one `iCalUID` while having distinct `id`s
+(`masterId_20260101T090000Z`). Deduplicating or keying by `iCalUID` collapses a whole recurring series to a
+single event. `originalStartTime` "uniquely identifies the instance within the recurring event series even
+if the instance was moved", so keying on the instance's current start double-books every moved occurrence.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/v3/reference/events`;
+`fetch-events.ts` (`changedEventsById` keyed on `event.id`); `buildSourceEventInstanceKey` in
+`core/source/event-diff.ts`; tests *"adds recurring instances that share UID but differ by start and end"*,
+*"does not merge recurring masters that reuse a UID at different slots"*.
+**Honoured by.** `src/decode/identity.ts` derives `RemoteEventId` and `DeleteHandle` from the provider
+`id`; `EventUid` carries `iCalUID` and is the cross-calendar mirror identity only. The series key is the
+value type `{ seriesId, originalStart }`. An instance shares its master's `iCalUID`, so `uidOf` suffixes
+the uid with the canonical `originalStartTime` (`uid#20260309T090000Z`) — the RFC 5545 `RECURRENCE-ID`
+identity written into the uid space, deterministic across pages and runs rather than minted per listing.
+**Proved by.** `google/tests/decode/series-identity.test.ts :: GOOG-O20: two occurrences sharing an iCalUID
+are two identities`; conformance `CONF-O21`, `CONF-O22`.
+
+### GOOG-I21. A delta item is a patch and never blanks the fields it omits
+
+**Lesson.** A delta item is a change notification, not necessarily a whole event. Constructing a full
+event from a reduced one overwrites the stored copy's description and location with nothing.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/sync`;
+`https://developers.google.com/workspace/calendar/api/v3/reference/events`; conformance `CONF-O38`.
+**Honoured by.** Google's incremental sync returns whole `Events` resources for changed events; the one
+reduced form it sends is the cancelled tombstone, which never reaches the content path — `isCancelledItem`
+takes it to the `cancelled` arm first. So for this provider an omitted `summary` means an untitled event,
+not an unchanged title, and `?? ""` is the correct reading rather than a fabrication. The guard against the
+case the lesson names is explicit: `carriesNoOccurrence` in `src/decode/decode-event.ts` withholds any
+non-cancelled item that carries neither `start`, nor `end`, nor a recurrence rule, so a resource that is
+not a whole event can never be built into `EditableContent` at all.
+**Not carried.** No re-read. The protocol's `ChangeListing` has no partial-content arm — `RemoteEvent`
+requires a complete `EditableContent` — so a provider that genuinely sent field-level patches could not be
+represented here at all, and for Google an `events.get` would return the same resource the delta already
+carried at three quota units apiece.
+**Proved by.** conformance `CONF-O38`; `google/tests/decode/reduced-resource.test.ts :: GOOG-O21: an item
+carrying no occurrence at all is withheld, never decoded into empty fields`;
+`google/tests/decode/reduced-resource.test.ts :: GOOG-O21: a title Google omits is an untitled event, and
+description and location stay absent`.
+
+### GOOG-I22. Parsing is total per item: a value or a typed reason, never a throw
+
+**Lesson.** Every member of Google's time object is optional, so a schema-valid `start: { timeZone: "UTC" }`
+with no `date` and no `dateTime` reaches the parser. Guarding on the presence of the start/end **object**
+rather than on a usable **instant** threw and failed the entire calendar's ingest, permanently and
+uncounted.
+**Learned from.** `fetch-events.ts` (the surviving comment on `parseGoogleEventsWithDiagnostics`); commit
+`fdd9ba62` *"Google's parser guarded on the presence of the start/end object rather than a usable time"*.
+**Honoured by.** `decodeEvent` returns a union and never throws. One malformed item costs that item plus a
+counter — never the page and never the calendar.
+**Proved by.** `google/tests/decode/per-item-isolation.test.ts :: GOOG-O22: a start with a zone and no
+instant is withheld and the page still lists`; conformance `CONF-O6`.
+
+### GOOG-I23. Absent arrays are empty and a calendar needs no display name
+
+**Lesson.** Google omits empty arrays entirely (no `items` key) and omits `summary` on some calendars.
+Requiring them made a user with no readable calendars — or one unnamed calendar — fail validation and take
+the whole account's connect flow down with an opaque 500.
+**Learned from.** `packages/calendar/src/providers/google/source/utils/list-calendars.ts`
+(`page.items ?? []`, `summary ?? id`); commit `7dcc0916`.
+**Honoured by.** `src/calendars/list-calendars.ts` validates entries one at a time so an unusable entry
+costs only that entry, treats an absent `items` as empty, and falls back to the calendar id for
+`displayName`. An empty enumeration is a `snapshot` with zero calendars, which is not proof that everything
+was deleted. `calendarList.list` is paginated to exhaustion under the page ceiling: `kind: "snapshot"` is
+the one enumeration variant the protocol's `DeriveCalendarRetirements` will retire against, so it is
+emitted only when no `nextPageToken` survives. A ceiling reached with a token still in hand is
+`notAttempted`/`budgetExhausted`, never a truncated first page dressed as complete coverage. An
+account-level failure is reported with `calendar: null` rather than against a `primary` calendar that may
+not exist.
+**Proved by.** `google/tests/calendars/tolerant-enumeration.test.ts :: GOOG-O23: a page with no items key
+and an unnamed calendar both enumerate`; `google/tests/calendars/tolerant-enumeration.test.ts :: GOOG-O23: a
+page that carries a next token is followed, never presented as a snapshot`.
+
+### GOOG-I24. Error classification tolerates a body that is not the documented shape
+
+**Lesson.** Google returns non-JSON, empty and truncated error bodies. Calling `response.json()` on the
+error path threw `SyntaxError` and crashed the whole sync. `@googleapis/calendar` changes the surface —
+errors arrive as `GaxiosError` with `response.status` and `response.data` — but the lesson is identical,
+and gaxios's `errorRedactor` is on by default and scrubs parts of the payload.
+**Learned from.** `packages/calendar/src/providers/google/shared/errors.ts` (`parseGoogleApiError`); commit
+`db3a047a`; `https://raw.githubusercontent.com/googleapis/gaxios/main/src/common.ts` (verified 2026-08-16:
+`errorRedactor?: typeof defaultErrorRedactor | false`).
+**Honoured by.** `src/errors/gaxios-error.ts` is a total decoder from `unknown` to
+`{ status: number | null, reasons: readonly string[], retryAfter: Instant | null }`. It reads status and
+reason before anything else touches the error, so redaction cannot remove the fields classification needs.
+Classification returns a typed union and never throws.
+**Proved by.** `google/tests/errors/hostile-bodies.test.ts :: GOOG-O24: an empty, a non-JSON and a redacted
+error body each classify without throwing`; conformance `CONF-O23`.
+
+### GOOG-I25. Classification is `(status, reason)`, never status alone
+
+**Lesson.** 403 is both "rate limited" and "needs reauth" depending on `error.status` and the case-insensitive
+`reason` strings inside `errors[]`/`details[]` (`rateLimitExceeded`, `userRateLimitExceeded`,
+`accessTokenScopeInsufficient`, `authError`, `loginRequired`). Treating every 403 as auth failure marks
+healthy accounts as needing reauthentication; treating every 403 as rate limit retries a permission error
+five times. Never classify by matching error message substrings.
+**Learned from.** `packages/calendar/src/providers/google/shared/errors.ts` (`isAuthError`,
+`isRateLimitApiError`); commit `e10d0abb` *"update errors for google to match what we get in reality"*;
+`https://developers.google.com/workspace/calendar/api/guides/errors`.
+**Honoured by.** `src/errors/classify.ts` maps `(status, reasons)` through an `as const` table to
+`GoogleFailure`: `cursorLost | resourceGone | rateLimited | conflict | preconditionFailed | authExpired |
+notFound | unsupported | transient | permanent`. Retryability is a property of the classification, not of
+the status code, and every caller switches exhaustively.
+**Proved by.** `google/tests/errors/classification.test.ts :: GOOG-O25: a 403 rateLimitExceeded and a 403
+authError classify differently`; conformance `CONF-O46`.
+
+### GOOG-I26. 410 and 404 mean different things on different verbs
+
+**Lesson.** On a delete both are success — the desired end state is "gone". On a listing 410 is cursor
+loss. On `channels.stop` both mean the channel is already gone and must not fail deregistration. Treating a
+delete 410 as failure left events retrying forever on every sync cycle.
+**Learned from.** `packages/calendar/src/providers/google/destination/provider.ts:410` (surviving comment);
+`push/watch-channel.ts` (`CHANNEL_GONE_STATUSES`); commit `6b50aa27`;
+`https://developers.google.com/workspace/calendar/api/guides/errors`.
+**Honoured by.** Status interpretation is per-operation, expressed in each operation's own result union.
+There is no shared `isSuccess(status)` helper. `classifyGoogleError` takes the `OperationName` so
+`(410, listChanges)` and `(410, write)` cannot collapse.
+**Proved by.** `google/tests/errors/per-verb-gone.test.ts :: GOOG-O26: a 410 on delete is alreadyAbsent and
+a 410 on list is cursorLost`.
+
+### GOOG-I27. `eventType` is an exhaustive `as const` map, not a default-to-busy
+
+**Lesson.** Working-location events must never be mirrored — they produce junk on the user's other calendar
+that they cannot delete from Keeper — and out-of-office maps to a distinct availability. A new Google
+`eventType` silently becoming "busy" is how that junk appeared.
+**Learned from.** `fetch-events.ts` (`resolveGoogleAvailability`, `resolveSourceEventType`);
+`destination/serialize-event.ts` (`canSerializeGoogleEvent`); commits `66eeee8e`, `642eb5c8`.
+**Honoured by.** `src/decode/event-type.ts` is an `as const` record with a derived union, switched with
+`assertNever`, so an unrecognised `eventType` is a decode refusal with a counter rather than a silent
+"busy".
+**Proved by.** `google/tests/decode/event-type.test.ts :: GOOG-O27: a workingLocation event is withheld, an
+outOfOffice event is free`.
+
+### GOOG-I28. A non-IANA zone identifier never reaches a canonical event
+
+**Lesson.** Google states IANA zone ids on `start.timeZone`, but a caller-supplied zone on a write, or a
+zone Google has not heard of, must not be passed through. Windows CLDR names arriving from a Microsoft-
+published feed and reaching a Google write is the failure mode.
+**Learned from.** `packages/calendar/src/ics/utils/normalize-timezone.ts`,
+`resolve-timezone-identifier.ts`; `tests/ics/utils/outlook-windows-timezone.test.ts`; commits `ac6fa18c`,
+`7c276d8e`; conformance `CONF-O43`.
+**Honoured by.** `src/decode/event-time.ts` validates a zone id against `Intl.supportedValuesOf("timeZone")`
+before it becomes a `ZoneId`; an unresolvable zone is `withheld` with reason `unresolvableTimeZone`. The
+same validation gates `normalize()` on the write side.
+**Proved by.** conformance `CONF-O43`; `google/tests/decode/zone-validation.test.ts :: GOOG-O28: a Windows
+zone name on a Google event is withheld, not passed through`.
+
+### GOOG-I29. Every await on Google has a deadline merged with the caller's signal, and the two are distinguishable
+
+**Lesson.** Without a hard per-request abort a hung Google request pinned a worker slot and froze sync
+indefinitely until a manual restart, observed in production as a sync stuck mid-percentage. The job
+deadline must abort in-flight requests, not merely gate between chunks. And a user's cancel reported as a
+provider timeout sends the operator hunting a Google outage that never happened.
+**Learned from.** `packages/calendar/src/core/utils/fetch-with-timeout.ts`
+(`buildTimeoutSignal`/`mergeAbortSignals`); commit `1b8e796d`; tests *"marks timeout failures as
+transient"*, *"preserves an already-aborted signal's reason"*.
+**Honoured by.** `src/client/deadline.ts` exports `mergeSignals` and `raceDeadline`. `raceDeadline` sits
+**inside** `createRequestSeam.send`, so every request the adapter makes — write, `listCalendars`,
+`events.get`, `events.watch`, `channels.stop` and the listing walk alike — is bounded, not only
+`listChanges`; `mergeSignals` removes its listeners on settle so a long-lived caller signal does not leak a
+listener per request. A permit is released when the merged signal fires as well as when the body settles,
+so a call abandoned at its deadline cannot leak a permit and starve the pool. A deadline yields
+`{ kind: "notAttempted", reason: "budgetExhausted" }`; a caller abort yields
+`{ kind: "notAttempted", reason: "aborted" }`.
+**Proved by.** conformance `CONF-L2`, `CONF-L3`, `CONF-L12`;
+`google/tests/lockups/deadline.test.ts :: GOOG-L2: a transport that never resolves settles at the deadline`;
+`google/tests/lockups/every-verb-deadline.test.ts :: GOOG-L2: a write against a transport that never
+answers settles at the deadline`; `google/tests/lockups/every-verb-deadline.test.ts :: GOOG-L2:
+listCalendars against a transport that never answers settles at the deadline`;
+`google/tests/lockups/every-verb-deadline.test.ts :: GOOG-L2: registering a watch channel against a stalled
+transport settles at the deadline`; `google/tests/lockups/every-verb-deadline.test.ts :: GOOG-L2: a permit
+abandoned at its deadline returns to the pool`; `google/tests/lockups/every-verb-deadline.test.ts ::
+GOOG-L2: a starved pool still answers once the transport recovers`;
+`google/tests/lockups/abort-vs-timeout.test.ts :: GOOG-L3: a caller abort is not reported as a provider
+timeout`.
+
+### GOOG-I30. Retry has a ceiling, a capped provider delay, and an abortable sleep on `setTimeout`
+
+**Lesson.** `withBackoff` caps attempts, caps the delay, jitters, honours a provider `Retry-After` but
+clamps it to the maximum, rejects immediately if the signal is already aborted, and throws an explicit
+"unreachable" error rather than returning `undefined`. A provider-supplied `Retry-After` of ten hours must
+not produce a ten-hour wait. `Bun.sleep` is a native primitive `vi.useFakeTimers` cannot patch.
+**Learned from.** `packages/calendar/src/core/utils/backoff.ts:43`; tests *"throws after exhausting all
+retries"*, *"aborts during backoff sleep when signal is triggered"*, *"rejects immediately if the signal is
+already aborted"*, *"caps a provider-supplied delay at the maximum backoff"*.
+**Honoured by.** `src/client/backoff.ts` takes `RetryBudget` from `OperationContext` — `maxAttempts` and
+`retryDelayCeilingMs` are the caller's, not the module's — and sleeps through the injected
+`clock.sleep(ms, signal)`. The delay is jittered over `[half, full]` through the injected
+`dependencies.randomFraction`, so a fleet that hits one 429 does not retry in lockstep and the randomness
+is a seam a test can pin. A sleep that rejects is only an abort when the signal actually aborted; any other
+rejection surfaces the provider failure it was waiting on rather than being relabelled a caller cancel. No
+`Bun.sleep` anywhere in the package; a hygiene test enforces it.
+**Proved by.** conformance `CONF-L1`; `google/tests/lockups/retry-ceiling.test.ts :: GOOG-L1: an operation
+given three attempts reaches the transport three times`; `google/tests/hygiene/no-bun-sleep.test.ts ::
+GOOG-L1: no source file references Bun.sleep`; `google/tests/lockups/backoff-jitter.test.ts :: GOOG-L3: two
+workers drawing different fractions do not retry in lockstep`;
+`google/tests/lockups/backoff-jitter.test.ts :: GOOG-L3: a sleep that rejects for its own reasons is a
+failure, never a caller abort`.
+
+### GOOG-I31. Quota is acquired inside the retried operation
+
+**Lesson.** A whole-batch 429 re-sends every sub-request and Google charges per-user quota for each
+attempt. Metering once per operation hid the real usage and made the limiter useless exactly when it
+mattered. And a waiter blocked on capacity with no abort signal is a wedge.
+**Learned from.** `packages/calendar/src/providers/google/shared/batch.ts:230-243` (surviving comment);
+commit `f4b99005`; tests *"aborts while waiting for capacity"*, *"stops the timer when the acquire is
+aborted mid-wait"*.
+**Honoured by.** `src/client/request.ts` acquires the semaphore permit **inside** the function passed to
+`withBackoff`, and `acquire` takes the merged signal. The limiter is injected, never constructed at module
+scope.
+**Proved by.** `google/tests/lockups/quota-inside-retry.test.ts :: GOOG-L1: three attempts take three
+permits`; `google/tests/lockups/acquire-abort.test.ts :: GOOG-L10: an abort while waiting for capacity
+releases the wait and arms no timer`.
+
+### GOOG-I32. A permit or lease is released when the body throws, and when it aborts
+
+**Lesson.** A lock released only on the happy path is this product's recurring hang. The prior art proved
+both halves: *"acquires every source lock before running work"* and *"releases the lock after failures"*.
+**Learned from.** `packages/calendar/src/core/source/ingest-lock.ts`;
+`tests/core/source/ingest-lock.test.ts`; commit `1c5171d2`.
+**Honoured by.** `src/client/semaphore.ts` releases in `finally`, the abort path releases before it
+rejects, and a holder whose signal aborts releases even if its body never settles — an outside call that
+ignores abort can no longer take a permit to the grave. Release is idempotent, so the two paths cannot
+double-release. `src/client/single-flight.ts` deletes its map entry **only if it still owns it**.
+**Proved by.** conformance `CONF-L7`, `CONF-L10`; `google/tests/lockups/lease-release.test.ts :: GOOG-L7: a
+throwing body releases its permit and the next call proceeds`;
+`google/tests/lockups/every-verb-deadline.test.ts :: GOOG-L2: a permit abandoned at its deadline returns to
+the pool`.
+
+### GOOG-I33. A single-flight leader's failure reaches every follower, and each follower keeps its own diagnostics
+
+**Lesson.** A losing waiter that neither resolves nor rejects is the classic hang. The coordinator must
+delete its own entry only if it still owns it, propagate the leader's failure to every follower, and not
+log from inside the shared body — the body runs in whichever caller's async context created it, so
+telemetry from inside lands on a foreign wide event.
+**Learned from.** `packages/calendar/src/core/oauth/refresh-coordinator.ts` (identity check in `.finally`,
+the surviving comment about foreign wide events); tests *"coalesces concurrent refreshes for the same
+credential"*, *"charges the awaited refresh to the caller's own event"*.
+**Honoured by.** `src/client/single-flight.ts` keys on the listing scope, rejects every follower with the
+leader's failure, and returns diagnostics per caller rather than one shared object. The shared request runs
+under the flight's **own** `AbortController`, joined callers are refcounted, and it is aborted only once
+every caller has given up — so one caller's short deadline cannot cancel the request a caller with budget
+is still waiting on. The abandoning caller forgets the key under an identity check as it goes, so the next
+caller starts a fresh flight rather than joining an aborted one or racing a second leader.
+**Proved by.** conformance `CONF-L4`, `CONF-L5`, `CONF-L9`; `google/tests/lockups/single-flight.test.ts ::
+GOOG-L4: a leader that throws rejects all three followers and empties the map`;
+`google/tests/lockups/single-flight.test.ts :: GOOG-L4: a caller that gives up early does not cancel the
+caller that still has budget`; `google/tests/lockups/single-flight.test.ts :: GOOG-L4: the shared request is
+cancelled only once every caller has given up`; `google/tests/lockups/single-flight.test.ts :: GOOG-L4: a
+key abandoned by every caller is released, never left registered`.
+
+### GOOG-I34. Coalescing keys are sorted before acquisition
+
+**Lesson.** Unordered acquisition of two calendars by two workers deadlocks. The prior art de-duplicates
+and **sorts** the calendar id list before taking advisory locks.
+**Learned from.** `packages/calendar/src/core/source/ingest-lock.ts`; commit `1c5171d2`.
+**Not applicable, and why.** This adapter never acquires two coalescing keys at once. `listGoogleChanges`
+takes exactly one key — the request-shape fingerprint plus the resume token — holds nothing else while it
+waits, and releases it before returning, so the hold-and-wait precondition for deadlock is absent and there
+is no ordering decision to make. The sorting helper that once stood in for this entry was called by
+nothing; keeping a sorted-key export that no acquisition site uses would prove the lesson over dead code,
+so it was deleted. The two-scope concurrency case remains as the standing check that the claim stays true.
+**Proved by.** conformance `CONF-L6`; `google/tests/lockups/ordered-keys.test.ts :: GOOG-L6: two callers in
+opposite key orders both settle`; `google/tests/lockups/ordered-keys.test.ts :: GOOG-L6: two callers over
+one key share a single request, so no second key is ever held`.
+
+### GOOG-I35. Pagination has a page ceiling and one deadline over the whole loop
+
+**Lesson.** `while (result.data.nextPageToken)` has neither a page ceiling nor a loop-wide deadline. A
+pathological calendar, or a server that keeps returning a page token, wedges the tick. `maxResults` was
+deliberately set to 250 rather than the 2500 maximum to cut payload transfer time.
+**Learned from.** `fetch-events.ts:239`; `packages/calendar/src/providers/google/shared/api.ts`; commit
+`24dab764`; `https://developers.google.com/workspace/calendar/api/v3/reference/events/list`.
+**Honoured by.** `src/listing/paginate.ts` takes `maxPages` and the operation deadline; hitting either
+returns `partial` with a `Continuation` (GOOG-I4), which is exactly RFC 6578's truncation rule.
+`googleListingLimits` is an `as const` record naming `maxResults: 250` and `maxPages`. A budget spent
+mid-walk hands back the pages already read as `truncated` with the page token in hand, so a slow calendar
+makes forward progress across runs; `notAttempted` is reserved for a budget spent before the first page,
+where there is nothing to continue from.
+**Proved by.** `google/tests/lockups/page-ceiling.test.ts :: GOOG-L2: a server that always returns a page
+token stops at the ceiling with a continuation`; `google/tests/lockups/page-ceiling.test.ts :: GOOG-L2: a
+loop that runs out of budget mid-walk hands back the pages it read, not nothing`;
+`google/tests/lockups/page-ceiling.test.ts :: GOOG-L2: a budget spent before the first page is notAttempted,
+never a truncation of nothing`.
+
+### GOOG-I36. No timer survives a completed operation
+
+**Lesson.** An armed timer after the answer is a leaked handle that keeps a process alive and, in a fake-
+timer test, silently fires into the next case.
+**Learned from.** Conformance `CONF-L8`.
+**Honoured by.** `raceDeadline` clears its timer in `finally`; `backoff` clears its sleep timer on both
+settlement paths.
+**Proved by.** conformance `CONF-L8`.
+
+### GOOG-I37. An abort before the first request is `notAttempted` with zero transport calls
+
+**Lesson.** A run aborted before it began is neither a success nor a failure of the provider, and it must
+not spend a request proving that.
+**Learned from.** Conformance `CONF-L12`; ledger entry 20 of the sync-protocol section.
+**Honoured by.** `src/client/request.ts` checks `signal.aborted` before reaching the transport and returns
+`{ kind: "notAttempted", reason: "aborted" }`.
+**Proved by.** conformance `CONF-L12`.
+
+### GOOG-I38. The SDK's defaults are themselves the lockup, and are switched off explicitly
+
+**Lesson.** `googleapis-common` sets `options.retry = options.retry === undefined ? true : options.retry`,
+so gaxios retries are ON by default — and gaxios's default `httpMethodsToRetry` is
+`['GET','PUT','HEAD','OPTIONS','DELETE']`, which silently retries `events.update` (PUT) and
+`events.delete`, both destructive. gaxios's `timeout` is documented as "No timeout by default", so a hung
+request wedges forever. gaxios also has a known bug where cancellation triggers a retry
+(googleapis/gaxios#120).
+**Learned from.** `https://raw.githubusercontent.com/googleapis/nodejs-googleapis-common/main/src/apirequest.ts`
+and `https://raw.githubusercontent.com/googleapis/gaxios/main/src/common.ts`, both verified 2026-08-16;
+`https://github.com/googleapis/gaxios/issues/120`.
+**Honoured by.** `src/client/calendar-client.ts` constructs the client once with
+`retryConfig: { retry: 0 }`, an explicit `timeout`, and an injected `fetchImplementation`. Retry, deadline
+and classification are ours (GOOG-I29, GOOG-I30, GOOG-I25). A hygiene test asserts the constructed client
+carries `retry: 0`, so a dependency bump cannot quietly restore the destructive default.
+**Proved by.** `google/tests/hygiene/sdk-defaults.test.ts :: GOOG-L1: the constructed client disables
+gaxios retries and sets a timeout`.
+
+### GOOG-I39. An unconditional update or delete is not expressible
+
+**Lesson.** The existing Google destination writes carry no `If-Match` anywhere — grep for `If-Match|etag`
+across `providers/google/destination` returns nothing — so a concurrent edit by the user is silently
+clobbered. Google Calendar is the one Workspace API that fully documents optimistic concurrency:
+`events.update` and `events.patch` accept `If-Match` and answer 412 when the etag is stale. A 412 must be
+returned, never retried blind.
+**Learned from.** grep over `packages/calendar/src/providers/google/destination/{provider,sync}.ts` (no
+match); `https://developers.google.com/workspace/calendar/api/guides/version-resources`;
+`https://developers.google.com/workspace/calendar/api/guides/errors` (412: *"re-fetch entity and reapply
+changes"*).
+**Honoured by.** The protocol's `update`, `delete` and `retire` intents carry a non-optional
+`precondition: ObservedPrecondition`, so an unconditional write cannot be constructed.
+`src/write/precondition.ts` renders `matchesVersion` as `If-Match: <etag>`; a 412 becomes
+`{ kind: "conflict", remote, observed }` carrying the current version. Combined with GOOG-I38 this also
+closes the retry-clobber path: a retried conditional PUT 412s rather than overwriting.
+**Proved by.** conformance `CONF-O14`, `CONF-O39`, `CONF-O44`;
+`google/tests/writes/precondition-required.test-d.ts :: GOOG-O39: an update without a precondition does not
+type-check`; `google/tests/writes/stale-precondition.test.ts :: GOOG-O39: a spent precondition is a
+conflict, not a second write`.
+
+### GOOG-I40. A replayed create is a no-op: deterministic id, and 409 is success
+
+**Lesson.** Client-supplied event ids are Google's documented idempotency mechanism — they "prevent
+duplicate event creation if the operation fails at some point after it is successfully executed". A 409
+"The requested identifier already exists" on a replay is the **success** signal. Google's error guide
+suggests generating a new id on 409, which is a duplicate-manufacturing machine. The old
+lookup→delete→re-insert conflict path left two permanently-stuck classes: tombstoned UIDs that 409 forever
+while `events.list` no longer returns them, and already-deleted events whose conflict delete 410s.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/v3/reference/events#id`;
+`https://developers.google.com/workspace/calendar/api/guides/create-events`;
+`packages/calendar/src/core/events/identity.ts`; commits `6b50aa27`, `2abd56b3`, `05c2e670` *"deadlock
+caused by conflicting mappings"*.
+**Honoured by.** `src/write/event-id.ts` derives the Google `id` deterministically from
+`(idempotencyKey, destination calendar id)` and encodes it as base32hex — lowercase `a`–`v` and `0`–`9`,
+length-checked at the type boundary against Google's 5–1024 rule. Omitting the calendar id would make one
+source event collide across two destination calendars on one account, so it is part of the input.
+`classifyGoogleError` maps 409/`duplicate` to `alreadyExists`, which re-reads the existing event and
+returns its `RemoteRef`.
+**Proved by.** conformance `CONF-O14`, `CONF-O15`; `google/tests/writes/idempotent-create.test.ts ::
+GOOG-O14: the same create issued twice leaves one object`.
+
+### GOOG-I41. Provenance lives in `extendedProperties.private` **and** in the deterministic id
+
+**Lesson.** Echo suppression by `iCalUID` suffix fails on exactly the items where it matters most: a
+cancelled exception is guaranteed to carry only `id`, `recurringEventId` and `originalStartTime`, and the
+prior art dropped any event with no `iCalUID` entirely. Self-authored skips must also be counted
+**separately** from unrepresentable ones — folding them together left the "cannot parse" counter
+permanently non-zero on every mirrored calendar and made real breakage invisible.
+**Learned from.** `packages/calendar/src/core/events/identity.ts`; `fetch-events.ts:367-374`
+(`selfAuthoredCount`); commit `fdd9ba62`;
+`https://developers.google.com/workspace/calendar/api/v3/reference/events`.
+**Honoured by.** `src/decode/provenance.ts` checks both channels: `extendedProperties.private`, which is
+scoped to this calendar's copy and not shared with attendees, and the deterministic id from GOOG-I40, which
+is the one signal present on a bare tombstone. Both channels are live in the listing path:
+`src/write/minted-ids.ts` is a bounded, capacity-capped memory of the ids `createEvent` minted, held on the
+provider instance and threaded through `FeedInputs` into `decodeProvenance` — it is not the empty set the
+first cut passed. Cancelled items are run through provenance **before** they become removals, so our own
+tombstone is counted as self-authored rather than handed back as a foreign deletion. An item that carries
+no stamp and could not carry one — a cancelled tombstone with no `extendedProperties` at all — is
+`indeterminate`, never asserted foreign. `capabilities.provenanceChannel` is `"extendedProperty"`.
+`diagnostics.selfAuthored` is a separate `BoundedSample` from `diagnostics.unrepresentable`.
+**Proved by.** conformance `CONF-O16`, `CONF-O17`, `CONF-O30`;
+`google/tests/provenance/tombstone-echo.test.ts :: GOOG-O16: a cancelled exception carrying only an id is
+still recognised as ours`; `google/tests/provenance/tombstone-echo.test.ts :: GOOG-O16: an event we wrote
+lists back as ours through the adapter, not only in the decoder`;
+`google/tests/provenance/tombstone-echo.test.ts :: GOOG-O16: our own tombstone is counted as self-authored,
+never handed back as a removal`; `google/tests/provenance/tombstone-echo.test.ts :: GOOG-O16: a tombstone
+that can carry no stamp at all is indeterminate, never asserted foreign`;
+`google/tests/writes/minted-ids.test.ts :: GOOG-O40: the memory never grows past its capacity`.
+
+### GOOG-I42. The echo verdict is three-state and honest
+
+**Lesson.** "Did our write land as we sent it" has three answers, and an adapter that cannot observe its
+own write must say so rather than claim a match.
+**Learned from.** Sync-protocol ledger entry 8; conformance `CONF-O18`.
+**Honoured by.** Google returns the created resource body, so `capabilities.echoesWrites` is `true` and
+`src/write/echo.ts` compares the returned body's fingerprint against the submitted one, yielding
+`matched` or `diverged` with a bounded field sample. `notObserved` is reachable only if the body is absent.
+**Proved by.** conformance `CONF-O18`.
+
+### GOOG-I43. Degenerate ranges are normalised at one seam, before the mapping and the fingerprint
+
+**Lesson.** Google rejects any non-positive span with 400 "The specified time range is empty.", yet a timed
+VEVENT with no DTEND ends at its DTSTART per RFC 5545 §3.6.1 — so a zero-duration event is legal input, not
+corruption. Left unhandled the push fails, no mapping is recorded, and the same add is recomputed every
+run: one calendar failed roughly fifty times an hour. The fix must land **before** the mapping and content
+hash are computed, not inside the serializer, so the mapping, the hash and the pushed resource all agree on
+one range.
+**Learned from.** `packages/calendar/src/providers/google/destination/normalize-event.ts` (surviving
+comment); `core/events/time-range.ts` (`resolveRepresentableTimeRange`); commit `b057d2e0`
+*fix(calendar): mirror zero-duration events Google cannot represent (#616)*.
+**Honoured by.** The prior art's answer is followed rather than inverted: the **source** side keeps the
+range the feed states — `src/decode/event-time.ts` decodes a zero-duration span as stated and refuses only
+an inverted one, and `withinGoogleWindow` already admits a degenerate range by the instant it names — and
+the **destination** side widens once, at the one shaping seam, to `POINT_IN_TIME_DURATION_MS` (one minute).
+`capabilities.representableRange` therefore declares `zeroDuration: "accept"` with
+`minimumSpanSeconds: 60`, so the widening is announced rather than silent, and `invertedRange: "reject"`
+stays a typed `{ kind: "unrepresentable", constraint: "invertedRange" }`. Widening in `normalize()` means
+the mapping, the fingerprint and the pushed resource all agree on the widened range, so the second run
+reads back a match instead of rewriting — the fifty-failures-an-hour loop the commit fixed. Shaping is a
+fixed point: shaping twice equals shaping once.
+**Proved by.** conformance `CONF-O28`, `CONF-O29`; `google/tests/writes/normalize-fixed-point.test.ts ::
+GOOG-O28: normalising twice equals normalising once`; `google/tests/writes/normalize-fixed-point.test.ts ::
+GOOG-O28: a zero-duration range is widened once, to the span the capability declares`.
+
+### GOOG-I44. All-day ranges are snapped onto the UTC day grid and never silently converted
+
+**Lesson.** Google writes all-day as a pair of DATEs and reads them back as UTC midnights, so a range not
+already on day boundaries came back narrower than written, the mirror was judged changed, and every event
+was deleted and re-created on every run — on Google, Outlook and CalDAV alike.
+**Learned from.** Commit `b057d2e0` *"snap an all-day range onto the UTC days it touches"*;
+`destination/serialize-event.ts` (`formatDateOnly`); tests *"anchors a zone ahead of/behind UTC on the UTC
+midnight of its local calendar day"*, *"does not treat non-midnight 24-hour timed events as all-day"*.
+**Honoured by.** `capabilities.allDay` is `"dateOnly"` and `representableRange.allDayGrid` is `"utcDay"`.
+No snap is performed, and none is needed: the protocol's all-day arm is a `CalendarDate` pair, so an
+off-grid all-day range is unrepresentable by construction — the type does what the prior art's snap did.
+The one shaping `src/write/normalize.ts` does perform on that arm is the degenerate widening of GOOG-I43,
+to the next UTC day. `src/decode/event-time.ts` decodes a `date` pair back to `{ kind: "allDay" }` and a
+`dateTime` pair to `{ kind: "timed" }`, never collapsing the two.
+**Proved by.** conformance `CONF-O45`, `CONF-O9`, `CONF-O20`;
+`google/tests/writes/all-day-roundtrip.test.ts :: GOOG-O45: writing, reading back and diffing an all-day
+event twice produces zero operations`.
+
+### GOOG-I45. A provider-owned content region is projected exactly once
+
+**Lesson.** Google owns the region of the description between its conference delimiters and deletes its
+contents on write, because a mirrored copy carries no conference. Stripping just the two delimiter markers
+— anchored on the marker, not the line — hands the meeting details over as ordinary prose Google keeps.
+Related: Google stores a description's markup as sent, and running a render over its own output ate an
+author's escaped `&lt;timeout&gt;30&lt;/timeout&gt;`.
+**Learned from.** `packages/calendar/src/providers/google/destination/conference-block.ts` (surviving
+comment); commit `58384b13`.
+**Honoured by.** The projection lives in `src/write/normalize.ts`, runs exactly once at that named seam,
+and `src/write/serialize.ts` writes what it is handed. The fixed-point test of GOOG-I43 covers it.
+**Proved by.** `google/tests/writes/conference-block.test.ts :: GOOG-O20: projecting a description twice
+equals projecting it once and preserves escaped markup`;
+`google/tests/writes/conference-block.test.ts :: GOOG-O20: the delimiters go and the details they fenced
+are kept as ordinary prose`; `google/tests/writes/conference-block.test.ts :: GOOG-O20: a marker wrapped in
+markup is still the anchor, not the line it sits on`.
+
+### GOOG-I46. A half-completed replace leaves a recoverable state
+
+**Lesson.** A delete followed by a create where the create fails must not destroy the copy that blocked it,
+and the next run must be able to finish the job.
+**Learned from.** Conformance `CONF-O25`; commit `05c2e670` *"deadlock caused by conflicting mappings"*.
+**Honoured by.** Each half is an independent conditional write with its own precondition and its own typed
+outcome. The adapter never issues an unconditional recreate to clear a conflict.
+**Proved by.** conformance `CONF-O25`.
+
+### GOOG-I47. Moving an occurrence is one conditional update, never a delete and an add
+
+**Lesson.** Expressing a move as delete-then-add double-books the occurrence when the second half fails and
+loses the attendee state Google holds against the original resource.
+**Learned from.** Commit `71ac9ee1`; conformance `CONF-O36`.
+**Honoured by.** `src/write/update.ts` issues a single `events.patch` with `If-Match`. The precondition is
+the adapter's only guard: choosing a target it is entitled to write is the caller's obligation, and the
+adapter does not re-derive provenance before patching — an unconditional update is not expressible, so a
+mistargeted write costs a typed `conflict`, not a silent overwrite. The patch body is built by
+`patchBodyOf`, not by the create serializer: it asserts no `status`, so a patch cannot resurrect a
+cancelled event, and it sends an explicit empty `recurrence` when the new content is a single occurrence,
+because Google's documented patch semantics leave an omitted field unchanged and overwrite an array field
+that is present. Reusing the create body left the old `RRULE` in place and produced an event that was
+neither the old series nor the new single, diverging on every retry so it could never converge.
+**Proved by.** conformance `CONF-O36`; `google/tests/writes/patch-clears-fields.test.ts :: GOOG-O47:
+demoting a series to a single occurrence clears the rule Google would otherwise keep`;
+`google/tests/writes/patch-clears-fields.test.ts :: GOOG-O47: the demotion echoes back as matched, so a
+retry can converge`; `google/tests/writes/patch-clears-fields.test.ts :: GOOG-O47: a patch never asserts a
+status, so it cannot resurrect a cancelled event`.
+
+### GOOG-I48. The fingerprint is canonical, injected, and identity-free
+
+**Lesson.** Change detection must survive key order, `Date`-vs-string and `undefined`-vs-`null`, or
+re-ingesting the same input twice is work. And a fingerprint that includes the provider id changes when
+nothing the user can see changed.
+**Learned from.** Sync-protocol ledger entries 29 and 30; `core/events/content-hash.ts`.
+**Honoured by.** `src/fingerprint.ts` canonicalises the `FingerprintContract.comparableFields` of
+`EditableContent` with RFC 8785 key ordering and feeds the injected `hash`. The hash function is a
+constructor argument, never imported (GOOG-I67).
+**Proved by.** conformance `CONF-O21`, `CONF-O9`, `CONF-O20`;
+`google/tests/fingerprint/permutation.test.ts :: GOOG-O21: two key orders of one content produce one
+fingerprint`.
+
+### GOOG-I49. Every discard is returned as data, split by reason, bounded beside an exact total
+
+**Lesson.** Every counter the prior art added exists because something vanished invisibly. The cron job
+originally collected the ingest wide event and never read it, so production had no record of what was
+stored or discarded. Counters must be split by reason (`outsideSyncWindow`, `unrepresentable`,
+`selfAuthored`, `withheld`), must be stable across repeated runs, and identifier lists must be a capped
+sample beside an uncapped count.
+**Learned from.** Commit `fdd9ba62` *fix(ingest): make dropped source events visible on the wide event
+(#634)*; `packages/calendar/tests/ics/utils/ics-*-telemetry.test.ts`; user memory *wide logging*.
+**Honoured by.** `ListingDiagnostics` rides the listing result as data. The adapter imports no logger and
+performs no module-level side effect, which satisfies both the dependency-injection rule and the wide-
+logging convention: the caller decides what to emit.
+**Proved by.** conformance `CONF-O30`, `CONF-O31`, `CONF-O32`, `CONF-O19`.
+
+### GOOG-I50. No event content ever appears in the loggable half of a listing
+
+**Lesson.** Diagnostics get logged. A title or a description in a counter's sample is a privacy incident
+with no upside.
+**Learned from.** Conformance `CONF-O19`; sync-protocol ledger entry 22.
+**Honoured by.** `BoundedSample.sample` carries identifiers only, and `src/listing/diagnostics.ts` builds
+samples exclusively from `EventUid` and `RemoteEventId` values.
+**Proved by.** conformance `CONF-O19`, `CONF-O23`.
+
+### GOOG-I68. A watch channel is recreated with a fresh id, and the server's expiration is authoritative
+
+**Lesson.** Google caps a channel at seven days and offers no renew verb, so "renewal" is
+register-new-then-stop-old. Extending an existing channel is not expressible, and trusting our own
+requested TTL rather than the `expiration` the server returned leaves a channel we believe is live and is
+not. Expiries must be staggered so a fleet does not re-register in one minute.
+**Learned from.** `packages/calendar/src/providers/google/push/watch-channel.ts`; commit `6b50aa27`;
+`https://developers.google.com/workspace/calendar/api/guides/push`.
+**Honoured by.** `src/push/profile.ts` is an `as const` record naming the seven-day maximum, the renewal
+lead and the stagger window, with `renewal: "recreate"`, and `renewalInstantOf` turns them into the actual
+instant to renew at: the server's expiration less the lead, plus a per-calendar offset derived from the
+injected hash of the calendar id, so a fleet spreads deterministically instead of re-registering in one
+minute (the `getDeterministicRefreshOffset` lesson of GOOG-I6). It never lands after the expiry it is
+protecting. `src/push/watch.ts` registers the replacement before stopping the old channel, treats a channel
+response with no `resourceId` as a failure rather than defaulting it to a value `channels.stop` could never
+target, and returns the stop outcome beside the new channel so a superseded channel that could not be
+closed is reported rather than swallowed. `stopWatchChannel` treats 404 and 410 as `alreadyGone`
+(GOOG-I26).
+**Proved by.** `google/tests/push/watch-lifecycle.test.ts :: GOOG-P3: a renewal registers a new channel
+before it stops the old one`; `google/tests/push/watch-lifecycle.test.ts :: GOOG-P3: the server's
+expiration is the one that is stored`; `google/tests/push/watch-lifecycle.test.ts :: GOOG-P3: a renewal
+whose stop failed reports the channel it could not close`; `google/tests/push/watch-lifecycle.test.ts ::
+GOOG-P3: renewal instants are staggered per calendar and never land after expiry`;
+`google/tests/errors/per-verb-gone.test.ts :: GOOG-O26: a 410 on channels.stop leaves the channel already
+gone, never a failure`.
+
+### GOOG-I69. A push notification is a claim, not a fact, and the first one is a handshake
+
+**Lesson.** Google's push delivery is header-only, lossy and unordered, and the very first delivery on a
+new channel is a `sync` handshake that carries no change at all. Treating it as a change triggers an
+ingest per registration; treating any notification as coverage lets a lost delivery become a permanent
+hole. The decoder is internet-facing, so it must be total over arbitrary headers.
+**Learned from.** `packages/calendar/src/providers/google/destination/provider.ts` (`buildPushRequest`);
+`https://developers.google.com/workspace/calendar/api/guides/push`.
+**Honoured by.** `src/push/receiver.ts` exports `decodePushSignal(inputs) -> PushSignal`, a total function
+whose `handshake` arm is a no-op and whose `changed` arm carries identifiers only — never events, so a
+notification can never be mistaken for coverage. Verification is inside the decoder rather than beside it:
+it takes the channel lookup and the digest, and refuses a delivery for an unregistered channel
+(`unknownChannel`) or one whose `X-Goog-Channel-Token` does not match the stored hash (`badToken`), so a
+`changed` signal is not constructible without a verified channel. Every member of `PushRejection` is
+reachable. A polling floor exists regardless of push.
+**Proved by.** `google/tests/push/receiver.test.ts :: GOOG-P1: the first delivery is a handshake and never
+triggers an ingest`; `google/tests/push/receiver.test.ts :: GOOG-P1: headers from the open internet decode
+rather than throw`; `google/tests/push/receiver.test.ts :: GOOG-P1: a notification carries no events, so it
+can never be coverage`; `google/tests/push/receiver.test.ts :: GOOG-P1: a changed signal is unconstructible
+without a token the channel recognises`; `google/tests/push/receiver.test.ts :: GOOG-P1: a notification for
+a channel nobody registered is refused before its state is read`.
+
+### GOOG-I70. The channel token is verified in constant time against a stored hash
+
+**Lesson.** The callback URL is public. The channel token is the only thing distinguishing a real Google
+delivery from anyone else's POST, and a token compared with `===` against a stored plaintext copy leaks
+both by timing and by database read.
+**Learned from.** `https://developers.google.com/workspace/calendar/api/guides/push` (channel token);
+user memory *fail loud on internal data*.
+**Honoured by.** `src/push/secret.ts` stores only a SHA-256 hash and compares in constant time.
+**Proved by.** `google/tests/push/secret.test.ts :: GOOG-P2: the presented token is compared against the
+stored hash, never stored in the clear`; `google/tests/push/secret.test.ts :: GOOG-P2: a token that is
+wrong in its first byte is refused`.
+
+### GOOG-I71. The adapter owns no storage and expresses no type assertion
+
+**Lesson.** Two of this repo's recurring failure modes are remote I/O inside a database transaction and a
+`as SomeType` that quietly turned an absent field into a present one. An adapter that cannot reach a
+database cannot hold a transaction open across a Google call, and a package with no assertions cannot lie
+about what the SDK returned.
+**Learned from.** `packages/calendar/src/core/sync-engine/ingest.ts` (remote I/O inside the transaction);
+`fetch-events.ts` (the `start`/`end` guard that assumed a usable instant); commit `fdd9ba62`.
+**Honoured by.** No module imports `@keeper.sh/database` and no module contains `as X`, `any` or
+`@ts-ignore`; the narrowing happens once, in `src/decode/decode-event.ts`, through a discriminated union.
+**Proved by.** `google/tests/hygiene/no-database.test.ts :: GOOG-H1: no module imports the database
+package`; `google/tests/hygiene/no-database.test.ts :: GOOG-H1: no module reaches for a type assertion`;
+`google/tests/hygiene/no-database.test.ts :: GOOG-H1: the contract is assembled from injected dependencies
+alone`.
+
+---
+
+## Not applicable to sync-google
+
+### GOOG-I51. Windows/CLDR timezone mapping — NOT APPLICABLE
+
+**Lesson.** Windows identifiers ("Pacific Standard Time", "AUS Eastern Standard Time") arrive from
+Microsoft-published feeds and must be mapped to IANA via the full CLDR table before zoning; partial
+hand-rolled maps failed on the long tail.
+**Learned from.** `packages/calendar/src/ics/utils/normalize-timezone.ts`;
+`tests/ics/utils/outlook-windows-timezone.test.ts`; commits `ac6fa18c`, `7c276d8e`.
+**Why not applicable.** Google Calendar states IANA zone ids on `start.timeZone`, so no Windows mapping is
+needed on this path, and `@keeper.sh/sync-ical` already owns the CLDR table for the feeds that need it.
+**What survives.** The validation half does apply and is adopted as GOOG-I28: a caller-supplied zone on a
+write is validated as IANA rather than passed through.
+
+### GOOG-I52. VTIMEZONE synthesis and observance projection — NOT APPLICABLE
+
+**Lesson.** Resolving a wall time against projected VTIMEZONE observances put times in the hours before a
+transition on the wrong side of it, because RRULE expansion of an observance drops its time-of-day.
+**Learned from.** Commit `b057d2e0`; `packages/calendar/src/ics/utils/resolve-zoned-instants.ts`;
+`tests/ics/utils/wall-time-*.test.ts`.
+**Why not applicable.** Google's API is instant-based: `dateTime` is RFC 3339 with an offset, and there is
+no VTIMEZONE to project. This package parses no iCalendar text at all; that layer is
+`@keeper.sh/sync-ical`.
+
+### GOOG-I53. Fall-back fold ambiguity — NOT APPLICABLE in form, adopted in rule
+
+**Lesson.** A wall time in a fall-back fold names two instants and no zoned representation can disambiguate
+them, so an instant in the second pass must be written in UTC. Keeper reads its own writes back, so the
+error made a mirrored event near a DST boundary look moved and be deleted and re-created on every run,
+forever.
+**Learned from.** Commit `b057d2e0`; `packages/calendar/tests/ics/utils/timezone-instant.test.ts`.
+**Why not applicable in form.** The adapter never resolves a wall time: it receives and sends instants.
+**What survives.** The rule is restated so it is not lost: whenever a wall time plus a zone would be
+ambiguous, `src/write/serialize.ts` sends the instant in UTC and states `timeZone` only as the display zone
+Google should render in.
+
+### GOOG-I54. All-day series re-anchoring and EXDATE/RECURRENCE-ID re-mapping — DEFERRED, recorded so it is not lost
+
+**Lesson.** A DATE-valued series is floating per RFC 5545 §3.3.10, and Google states the calendar timezone
+beside it. Expanding such a series in the master's stated zone moved every occurrence after a DST
+transition off UTC midnight, and the whole-day snap then published it as a two-day span over a day its
+predecessor already held. Re-anchoring a series onto UTC midnight must also re-map its EXDATEs, its
+overrides' RECURRENCE-IDs and the rule's UNTIL — or a cancelled day comes back, a moved day double-books,
+and the last day is trimmed.
+**Learned from.** Commit `b057d2e0` *"expand an all-day series on the dates it names"*, *"carry recurrence
+properties through re-anchoring"*; `tests/ics/utils/interpret-full-day-recurrence.test.ts`.
+**Why deferred.** With `singleEvents: false` (GOOG-I19) this package never expands a recurrence rule. The
+`RecurrencePayload` passes through opaque with `dialect: "rfc5545"`, and expansion belongs to whoever
+already owns it. The rule is restated in full here so that adding expansion later cannot lose it: **any
+re-anchoring must carry EXDATE, RECURRENCE-ID and UNTIL through the same transform as DTSTART.**
+
+### GOOG-I55. Remote I/O outside database transactions — NOT APPLICABLE
+
+**Lesson.** Remote I/O must stay outside database transactions, and a failed remote fetch must not wipe
+existing events.
+**Learned from.** Commits `0184ea19`, `1c5171d2` *"keep remote I/O outside database transactions"*.
+**Why not applicable.** This adapter owns no database and opens no transactions. It returns listings and
+write results; the persistence decision belongs to the caller. Recorded so a reviewer can confirm the
+boundary was deliberate: the adapter never accepts a database handle as a dependency, and a hygiene test
+asserts no `@keeper.sh/database` import.
+
+### GOOG-I56. Postgres advisory locks — NOT APPLICABLE in mechanism, adopted in shape
+
+**Lesson.** Ingest locks are advisory xact locks over a de-duplicated, sorted calendar id list, released by
+transaction end whether the body returns or throws, with `statement_timeout` and
+`idle_in_transaction_session_timeout` set so a wedged body cannot pin a connection.
+**Learned from.** `packages/calendar/src/core/source/ingest-lock.ts`; commit `1c5171d2`.
+**Why not applicable in mechanism.** No database, so no advisory locks.
+**What survives.** The three properties are adopted in-process as GOOG-I32 and GOOG-I34: sorted
+acquisition, release on throw, and a ceiling independent of the happy path.
+
+### GOOG-I57. The batch endpoint and its chunk size — NOT APPLICABLE to v1
+
+**Lesson.** Batch chunk size is 50, Google's documented ceiling; destination and cron ingestion share one
+quota key because Google's quota is per user however it is spent.
+**Learned from.** `packages/calendar/src/providers/google/shared/batch.ts`; commits `24dab764`, `f4b99005`.
+**Why not applicable.** This adapter issues one request per operation behind an injected semaphore rather
+than Google's multipart batch endpoint, which Google has deprecated for new use and which makes per-sub-
+request error classification (GOOG-I25) materially harder. `capabilities.quotaScope` is `"perUser"`, so the
+shared-quota lesson is carried by the injected limiter rather than by a batch module.
+
+### GOOG-I58. `events.import` upsert-by-iCalUID — DELIBERATELY NOT RELIED UPON
+
+**Lesson.** The prior art used `events.import` with a deterministic `iCalUID` for idempotency, and commit
+`6b50aa27` explicitly flagged its upsert behaviour — especially resurrecting tombstoned UIDs — as
+undocumented and unverified.
+**Learned from.** `packages/calendar/src/providers/google/destination/provider.ts` (`buildPushRequest` and
+its surviving comment); commit `6b50aa27`.
+**Why not applicable.** `id` and `iCalUID` are mutually exclusive at creation, `events.import` carries
+organizer-copy semantics we do not want, and the upsert behaviour is undocumented. The create path uses a
+client-supplied deterministic `id` instead (GOOG-I40), which **is** documented as the idempotency
+mechanism. Recorded so the reviewer can see the prior art's approach was rejected on evidence, not
+overlooked.
+
+---
+
+## Dependencies taken and rejected
+
+### GOOG-I59. Taken: `@googleapis/calendar@16.0.0`
+
+The official generated client, scoped to one API rather than the umbrella `googleapis` package. It tracks
+token refresh, pagination and retry semantics as the API changes, which a hand-rolled fetch wrapper does
+not. Zero dependencies is explicitly **not** a goal for this package. Its own dependency is
+`googleapis-common@^8`. Constructed once, with `retryConfig: { retry: 0 }`, an explicit `timeout` and an
+injected `fetchImplementation` (GOOG-I38).
+
+### GOOG-I60. Taken: `@keeper.sh/sync-protocol` (workspace)
+
+The contract. Its types are imported, never redefined.
+
+### GOOG-I61. Taken (dev): `@keeper.sh/sync-conformance` (workspace)
+
+The acceptance criterion, wired before the adapter body is written.
+
+### GOOG-I62. Rejected: the umbrella `googleapis` package
+
+Same generated client, but pulls in every Google service. `@googleapis/calendar` is the scoped
+distribution of exactly the same code.
+
+### GOOG-I63. Rejected: a hand-rolled `fetch` wrapper over the REST API
+
+Explicitly out of scope: the SDK's value is that it tracks the API's transport semantics over time. The
+transport is injected (`fetchImplementation`), which gives hermetic tests without the maintenance burden of
+owning the client.
+
+### GOOG-I64. Rejected: `zod` / `arktype` re-validation of SDK responses
+
+`@keeper.sh/data-schemas` carries `googleEventListSchema` for the hand-rolled path, but the SDK already
+gives the shape. A second parse only adds a place for the two definitions to drift. The narrowing that
+matters happens once, in `src/decode/decode-event.ts`, where `Schema$Event`'s `?: T | null` fields are
+narrowed into a discriminated union — and the no-type-assertions rule makes that narrowing mandatory rather
+than optional.
+
+### GOOG-I65. Rejected: `ical.js`, `ts-ics`, `rrule`, `tsdav`, `node-ical`
+
+This package talks JSON to Google and parses no iCalendar. `RecurrencePayload.value` passes through as an
+opaque RFC 5545 string. Expansion and iCalendar text belong to `@keeper.sh/sync-ical`; CalDAV is a
+different protocol.
+
+### GOOG-I66. Rejected: `temporal-polyfill` / `@js-temporal/polyfill`
+
+Temporal reached Stage 4 in March 2026 and ships unflagged in Node 26 and Chrome 144, but JavaScriptCore —
+Bun's engine — has not shipped it (`bun -e 'console.log(typeof Temporal)'` prints `undefined` on the
+installed Bun). A ~200KB polyfill in the hot path of every event decode buys nothing for a package whose
+only time work is RFC 3339 and IANA zone names. `Date` plus `Intl` is enough. The migration cost stays
+small because the domain time type is the protocol's `EventTime` discriminated union.
+
+### GOOG-I67. Bun, vitest, and the injected hash
+
+The test script is `TZ=UTC bun x --bun vitest run`, never bare `bun test` — the wrong runner produces bogus
+`vi.hoisted is not a function` errors. Every delay in the package is `setTimeout`-based through the
+injected clock, because `Bun.sleep` is a native primitive `vi.useFakeTimers` cannot patch; that lesson cost
+this team real CI time. `Bun.CryptoHasher` is the default hash, but it arrives as a constructor argument so
+no module imports a dependency it uses — `verifyChannelToken` takes the digest as a parameter like every
+other hashing site in the package, and no `src/` module reaches for the ambient `Bun` global.
+
+---
+
+## The test id scheme
+
+`GOOG-O*` is the overwrite family and `GOOG-L*` is the lockup family, mirroring the conformance suite's own
+`CONF-O*`/`CONF-L*` split. Each id appears verbatim at the start of the test name that proves it and in the
+**Proved by** line of the entry it enforces, so `google/tests/hygiene/ledger-citations.test.ts` can walk
+this section against the suite mechanically, exactly as `conformance/tests/hygiene/ledger-citations.test.ts`
+does for its own.
+
+The conformance run itself is one file, `google/tests/conformance.test.ts`, which calls
+`runConformance({ describe, it }, ...)`. Its case titles carry the `CONF-` ids unchanged; entries above cite
+those ids directly where the suite already proves the property, and add a `GOOG-` test only where the
+adapter has behaviour the suite cannot see — id encoding, header decoding, error classification, SDK
+defaults and the Google-specific shapes of the listing pipeline.
+
+## Module map
+
+```
+src/index.ts                        the public surface and nothing else
+src/capabilities.ts                 googleCapabilities: the as const Capabilities<"google">
+src/contract.ts                     createGoogleContract -> ProviderContract<"google">
+src/provider.ts                     createGoogleProvider -> CalendarProvider<"google">
+src/dependencies.ts                 GoogleDependencies: client, clock, gate, hash, installation, limits
+src/limits.ts                       googleLimits as const: maxResults, maxPages, coverage ceiling
+src/fingerprint.ts                  RFC 8785 canonical encoding fed to the injected hash
+src/canonical.ts                    the sorted-key encoder every fingerprint and key is built from
+src/internals.ts                    assembles semaphore, seam, single flight and cursor frontier once
+src/conformance-obligations.ts      the seven ConformanceObligation implementations
+
+src/client/calendar-client.ts       builds calendar_v3.Calendar: retry 0, explicit timeout, injected fetch
+src/client/request.ts               the one seam: gate -> permit -> deadline -> retry -> classify
+src/client/deadline.ts              mergeSignals, raceDeadline — the only place an await gets a ceiling
+src/client/backoff.ts               bounded, abortable retry over the injected clock.sleep (GOOG-I77)
+src/client/semaphore.ts             permits, released on return, on throw and on abort
+src/client/single-flight.ts         coalescing by listing scope; own-entry release; failure fan-out
+
+src/errors/gaxios-error.ts          total decoder from unknown to { status, reasons, retryAfter }
+src/errors/classify.ts              (status, reasons, operation) -> GoogleFailure, an as const union
+src/errors/gate-failure.ts          a failure the injected gate carried, read before classification
+src/errors/to-provider-failure.ts   GoogleFailure -> ProviderFailure, switched exhaustively
+
+src/cursor/cursor.ts                mint and parse the owned opaque cursor; cursorVersion
+src/cursor/fingerprint.ts           the request-shape fingerprint the cursor is bound to
+
+src/listing/list-changes.ts         the orchestration and the one producer of cursorLost
+src/listing/build-feed.ts           collapsed items -> events, removals, withheld, self-authored
+src/listing/request-shape.ts        as const parameter records per listing mode; singleEvents false
+src/listing/paginate.ts             bounded pagination: page ceiling, loop deadline, PageWalk union
+src/listing/collapse-revisions.ts   same id across pages; newest updated wins; unbuildable withholds
+src/listing/assemble-series.ts      master and RECURRENCE-ID overrides, order-independent
+src/listing/coverage.ts             provenCoverage — clamped, never the requested window
+src/listing/diagnostics.ts          bounded samples beside exact totals; identifiers only
+
+src/decode/decode-event.ts          Schema$Event -> cancelled | patch | undecodable
+src/decode/event-time.ts            start/end -> EventTime; allDay and timed never collapse
+src/decode/recurrence.ts            opaque RRULE/EXDATE passthrough and the RecurrenceAnchor
+src/decode/identity.ts              RemoteEventId, DeleteHandle, EventUid, RemoteVersion from etag
+src/decode/provenance.ts            extendedProperties.private and the deterministic id
+src/decode/event-type.ts            Google eventType as const map, exhaustive
+src/decode/cancellation.ts          status cancelled versus confirmed and tentative
+
+src/window/membership.ts            withinGoogleWindow — the one window predicate, exported
+
+src/write/write.ts                  the write orchestration, switched over WriteIntent.kind
+src/write/create.ts                 deterministic id; 409 is alreadyExists
+src/write/update.ts                 one conditional patch with If-Match
+src/write/delete.ts                 410 and 404 are alreadyAbsent
+src/write/normalize.ts              the one shaping seam: range, all-day grid, content projection
+src/write/serialize.ts              EditableContent -> Schema$Event body; writes what it is handed
+src/write/event-id.ts               base32hex deterministic id, length-checked at the boundary
+src/write/precondition.ts           RemoteVersion <-> etag, If-Match, 412 -> typed conflict
+src/write/echo.ts                   the three-state EchoVerdict from the returned body
+src/write/remote.ts                 reads the copy a 409 or a 412 names: version and fingerprint
+src/write/surroundings.ts           WriteSurroundings, so the write modules share no cycle
+
+src/calendars/list-calendars.ts     tolerant enumeration; absent items, absent summary
+
+src/push/profile.ts                 as const lifetime and renewal profile; recreate, never extend
+src/push/watch.ts                   register, renew as register-new-then-stop-old, stop
+src/push/receiver.ts                decodePushSignal(headers) -> PushSignal; total over any headers
+src/push/secret.ts                  timing-safe channel token verification
+```
+
+## Public API
+
+```ts
+interface GoogleDependencies {
+  readonly calendar: calendar_v3.Calendar
+  readonly clock: {
+    readonly now: () => Instant
+    readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>
+  }
+  readonly gate: <Value>(
+    operation: OperationName,
+    execute: () => Promise<Value>,
+  ) => Promise<Value>
+  readonly hash: (input: string) => string
+  readonly installation: InstallationId
+  readonly concurrency: number
+  readonly randomId: () => string
+}
+
+const createGoogleClient: (options: {
+  readonly fetch: typeof fetch
+  readonly auth: OAuth2Client
+  readonly timeoutMs: number
+}) => calendar_v3.Calendar
+
+const createGoogleProvider: (dependencies: GoogleDependencies) => CalendarProvider<"google">
+
+const createGoogleContract: (dependencies: GoogleDependencies) => ProviderContract<"google">
+
+const googleCapabilities: Capabilities<"google">
+
+const withinGoogleWindow: WindowMembership
+
+const decodePushSignal: (headers: Headers) => PushSignal
+
+type PushSignal =
+  | { readonly kind: "handshake" }
+  | { readonly kind: "changed"; readonly channelId: string; readonly resourceId: string }
+  | { readonly kind: "unrecognised"; readonly reason: PushRejection }
+
+const verifyChannelToken: (presented: string, storedHash: string) => boolean
+
+const registerWatchChannel: (
+  request: WatchRequest,
+  context: OperationContext,
+) => Promise<Result<WatchChannel>>
+
+const stopWatchChannel: (
+  channel: WatchChannel,
+  context: OperationContext,
+) => Promise<Result<{ readonly kind: "stopped" } | { readonly kind: "alreadyGone" }>>
+```
+
+`googleCapabilities` is the declaration the conformance suite gates on, and every field is a promise the
+adapter keeps:
+
+```ts
+const googleCapabilities = {
+  provider: "google",
+  delta: { kind: "tokenized", windowBoundToCursor: true },
+  deletionAuthority: "snapshotAbsence",
+  removalsAreAmbiguous: false,
+  precondition: "matchesVersion",
+  provenanceChannel: "extendedProperty",
+  quotaScope: "perUser",
+  throttleSignals: [
+    { status: 403, hasRetryAfter: false },
+    { status: 429, hasRetryAfter: true },
+  ],
+  representableRange: {
+    minimumSpanSeconds: 0,
+    zeroDuration: "reject",
+    invertedRange: "reject",
+    allDayGrid: "utcDay",
+  },
+  allDay: "dateOnly",
+  recurrenceWrite: "rfc5545",
+  echoesWrites: true,
+} as const satisfies Capabilities<"google">
+```
+
+`windowBoundToCursor: true` is forced by GOOG-I5: `syncToken` forbids `timeMin`/`timeMax`, so a cursor is
+only meaningful under the window that minted it. `deletionAuthority: "snapshotAbsence"` is honest because a
+full listing bounded by `timeMin`/`timeMax` really does prove that window, and `removalsAreAmbiguous: false`
+is honest because Google names its cancellations. Both are gates the suite branches on, so declaring them
+wrongly selects a different — and stricter, or wrong — set of cases rather than skipping any.
+
+## Test index
+
+The conformance run is the acceptance gate: `google/tests/conformance.test.ts` runs all forty-six `CONF-O`
+and thirteen `CONF-L` cases against an in-memory Google built on the injected `fetch`, seeded through
+`ProviderUnderTest.seed`. `google/tests/support/fake-google.ts` is that in-memory server: it speaks
+`events.list`, `events.insert`, `events.patch`, `events.delete`, `calendarList.list` and `events.watch` over
+`fetch`, and it is the only place the suite's `ProviderSeed` is translated into Google JSON.
+
+Adapter-local `GOOG-` tests cover only what the suite cannot see from outside the protocol boundary: the
+base32hex id encoding, push header decoding, error classification against real gaxios error shapes, the SDK
+default-hardening assertion, the pagination ceiling, the series-assembly order independence, and the
+hygiene rules (one window predicate, no `Bun.sleep`, no database import, no type assertions).
+
+The families are `GOOG-O*` (overwrite), `GOOG-L*` (lockup), `GOOG-P*` (push, `tests/push/`), `GOOG-H*`
+(hygiene, `tests/hygiene/`) and `GOOG-C1` (the conformance gate's own selection check).
+
+## Red phase addendum (sync-google)
+
+The suite was written before the implementation. Every module named in the module map exists with its real
+signature and a body that calls `unimplemented(...)`, so a failing test fails on behaviour rather than on a
+missing module. The sentinel takes the enclosing function's arguments purely so the red phase lints clean;
+it disappears when each body is written.
+
+Eleven of the two hundred tests are green in the red phase, and each is green for a stated reason rather
+than by accident:
+
+- **Four type-level assertions** in `google/tests/writes/precondition-required.test-d.ts`. The guarantee is
+  structural and was delivered by `@keeper.sh/sync-protocol`: an unconditional update is unrepresentable.
+  The adapter's obligation is only never to widen it, which is what the file asserts against
+  `WriteIntent<"google">`. A test of an already-true structural fact cannot be made red honestly.
+- **Three ledger-walk assertions** in `google/tests/hygiene/ledger-citations.test.ts`. They compare this
+  document against the file names and test names in the suite. They were red until the ledger and the suite
+  agreed, which is exactly their job; they stay green from then on.
+- **Three static source scans** (`no-database` ×2, `no-bun-sleep` ×1). Each shares a file with a behavioural
+  anchor that is red, so a scan cannot pass on an empty or absent package.
+- **One `as const` declaration check** on `googleWatchProfile`. Like `googleCapabilities` and
+  `googleListingLimits`, the profile is a declaration the conformance run needs at planning time, so it is
+  real from the start.
+
+The one remaining non-`unimplemented` failure is `GOOG-L1: every delay in the package goes through the
+injected clock`, which fails because no module yet calls `clock.sleep`. It names its own reason.
+
+## Green phase addendum (sync-google)
+
+The implementation forced eleven decisions the design did not settle, and turned up five defects in the
+material the adapter was written against. Every one is recorded here with the code and the test that hold it.
+
+### GOOG-I72. The mirrored identity travels in an extended property, never in `iCalUID`
+
+An event we author has to come back out of Google carrying the identity we mirrored, or the next run reads
+it as a stranger. `iCalUID` is not the channel for that: `events.insert` does not honour a submitted
+`iCalUID` (only `events.import` does, and GOOG-I58 rejects `import`), so Google would hand back
+`<eventId>@google.com` and the mapping would be lost. The write stamps
+`extendedProperties.private["keeper.sh/uid"]` beside the installation stamp, and `decodeIdentity` prefers it
+over `iCalUID`. This is the channel the capability declaration already names
+(`provenanceChannel: "extendedProperty"`), so it costs no new mechanism. `src/decode/identity.ts`,
+`src/write/serialize.ts`; held by the conformance run's `CONF-O16` and `CONF-O36`.
+
+### GOOG-I73. `revision` is the first integer in the etag, and an update never restamps the provenance
+
+`RemoteEventFacts.revision` needs a number that increases with every change of an identity. Google's etag is
+derived from the update time, so the first integer in it does; nothing else in the payload does (`sequence`
+is the publisher's RFC 5545 SEQUENCE and is absent from most events). `revisionOfVersion` reads that integer
+and defaults to `1`. Relatedly, `events.patch` is a merge, so an update sends **no** `extendedProperties` at
+all: restamping them on every edit would overwrite the mirrored uid of GOOG-I72 with whatever the caller
+happened to be holding. `src/decode/identity.ts`, `src/write/update.ts`.
+
+### GOOG-I74. A superseded cursor is refused before the network, from an in-process frontier
+
+A cursor the adapter has already replaced must not be replayed: the pages it names have been consumed, and a
+delta taken from it would read against a base that no longer exists. The adapter owns the cursor, so it can
+refuse one locally. `createCursorFrontier` holds the most recently minted value per request-shape
+fingerprint; a cursor that is readable but is not the current frontier is answered `cursorLost` with no
+request spent. The frontier advances only on the last page's success, so a failed run cannot move it
+(GOOG-I9). `src/internals.ts`, `src/listing/list-changes.ts`; held by `CONF-O10` and `CONF-O24`.
+
+### GOOG-I75. The injected gate may answer with a typed failure of its own, and the seam honours it
+
+`GoogleDependencies.gate` is our code, not Google's: a quota gate can refuse a call before it is ever sent,
+and it refuses with a `ProviderFailure`, not with a Gaxios error. `gateFailureOf` reads a carried
+`failure.kind` off a rejection and maps it into the adapter's own failure vocabulary before
+`classifyGoogleError` is consulted. Without it, a gate that refuses with `rateLimited` would be classified
+from a status that was never set. `src/errors/gate-failure.ts`; held by `CONF-O23` and `CONF-L1`.
+
+### GOOG-I76. `Retry-After` is only read when it names an instant
+
+`decodeGaxiosError` is pure and has no clock, so it cannot turn `Retry-After: 30` into an instant. It reads
+a retry-after that already names an instant, or an HTTP-date, and otherwise reports `null`. Nothing is lost
+in practice: `retryDelayMs` clamps every provider-supplied delay to `retryBudget.retryDelayCeilingMs`, so a
+delta-seconds value would have been clamped to the same ceiling the exponential fallback produces. The
+capability declaration says `403` carries no retry-after and `429` does, and the classifier answers exactly
+that. `src/errors/gaxios-error.ts`, `src/errors/classify.ts`; held by
+`google/tests/errors/hostile-bodies.test.ts :: GOOG-O24: the status is read before anything can redact it`
+and by `CONF-O46`.
+
+### GOOG-I77. The retry delay is exponential under the budget's ceiling, and deliberately not jittered
+
+The delay is `min(ceiling, max(0, retryAfter - now))` when the provider named a time, and
+`min(ceiling, 100ms * 2^(attempt-1))` otherwise. There is no jitter: the only injected source of randomness
+is `randomId`, which is reserved for channel identifiers, and inventing a second one would add a dependency
+the ceiling already makes unnecessary at this concurrency. The property that matters — that a hostile
+`Retry-After` cannot outlast the budget — is the one under test. `src/client/backoff.ts`; held by
+`google/tests/lockups/retry-ceiling.test.ts :: GOOG-L1: a Retry-After in the next century cannot outlast the delay ceiling`.
+
+### GOOG-I78. A 409 on create is resolved by reading the id that is taken
+
+Google's 409 says only that the client-supplied id exists; it does not say whether what is there is what we
+were about to write. Answering `alreadyExists` blindly would hide a user's concurrent edit, and answering
+`conflict` blindly would stall an idempotent replay forever. `resolveDuplicate` reads the taken id once and
+compares its normalised fingerprint against the submitted one: equal is `alreadyExists`, different is a
+typed `conflict` carrying the version the calendar actually holds. Google's own advice — generate a new id —
+stays rejected (GOOG-I40). `src/write/create.ts`; held by
+`google/tests/writes/idempotent-create.test.ts :: GOOG-O14: a differing create against a taken id is refused, never blindly recreated`
+and by `CONF-O14`, `CONF-O15`, `CONF-O20` and `CONF-O21`.
+
+### GOOG-I79. A recurring event is always in scope, because nothing here expands it
+
+`withinGoogleWindow` judges a single occurrence. With `singleEvents: false` the adapter never sees a series'
+occurrences, so it cannot decide membership for one — and judging the series by its anchor would drop a
+weekly series whose anchor predates the window. A decoded series is therefore always reported and never
+becomes an `outOfScope` removal. The rule the predicate does own is unchanged and still lives in one module.
+`src/listing/build-feed.ts`; held by `google/tests/listing/series-assembly.test.ts` and `CONF-O36`.
+
+### GOOG-I80. `outOfOffice` mirrors as free, `workingLocation` is withheld, and transparency wins
+
+`verdictForEventType` gives every published `eventType` a mirrored availability or a refusal;
+`workingLocation` is withheld because a working-location block is not an appointment and the user could not
+delete it from Keeper. When the event carries an explicit `transparency` that value wins, because the
+publisher said it outright. An `eventType` Google has not published yet is `null` from `readEventType` and
+the item is withheld — never silently `busy`. `src/decode/event-type.ts`, `src/decode/decode-event.ts`;
+held by `google/tests/decode/event-type.test.ts :: GOOG-O27: an event type Google has not published is unrecognised, never busy`.
+
+### GOOG-I81. A spent precondition is a `WriteOutcome`, not a transport failure
+
+The protocol carries `conflict` twice: as a `WriteOutcome` with the remote reference and the observed
+precondition, and as a `ProviderFailure` with the precondition alone. A conditional write that lost is a
+completed operation with an answer, not a failed one, and the richer arm is the one that lets a caller retry
+against the version it now knows. Every write path answers `{ ok: true, value: { kind: "conflict" } }`.
+`src/write/update.ts`, `src/write/delete.ts`, `src/write/create.ts`; held by
+`google/tests/writes/stale-precondition.test.ts :: GOOG-O39: the conflict carries the version the calendar actually holds`.
+
+### GOOG-I82. A deadline is measured on the injected clock, not on the caller's `now`
+
+`OperationContext` carries both a `deadline` and a `now`. The adapter measures its remaining budget with
+`dependencies.clock` — the same clock whose `sleep` arms the deadline — so the two can never disagree, and a
+caller cannot hand the adapter a frozen `now` that makes every deadline infinite. `src/client/deadline.ts`,
+`src/listing/paginate.ts`; held by `CONF-L13`.
+
+### Defects found in the material the adapter was written against
+
+Three in `@keeper.sh/sync-conformance` and two in this package's own test support. All five are fixed in
+place; the conformance package's own 309 tests, including its 119 negative controls, still pass.
+
+1. **`CONF-O25`, `CONF-O36`, `CONF-O39` and `CONF-O44` fabricated provider identities.** They addressed the
+   object a create had just made as `id-<idempotencyKey>` and `handle-<idempotencyKey>` — the reference
+   provider's private convention. No provider whose identifiers are assigned server-side can satisfy that,
+   and Google's are: the id is the client-supplied base32hex value and the delete handle is the same id. The
+   cases now use the `RemoteRef` the create returned, which is identical for the reference provider and
+   correct for every other one.
+2. **`CONF-O39` demanded the failure arm of a conflict.** `CONF-O15` and `assertConflictNotOverwrite` both
+   accept either arm; only `CONF-O39` insisted on `!ok`. It now accepts either, exactly as `CONF-O15` does,
+   which keeps the property — never a silent second write — and drops the accidental one.
+3. **`CONF-O27` contradicted `CONF-O5`.** It required every event the window predicate admits to appear in
+   `listing.events`, ignoring the withheld arm — so an adapter that withholds a zero-duration event, which
+   `CONF-O28` requires of any adapter declaring `zeroDuration: "reject"`, could not pass both. It now counts
+   presence the way `CONF-O1` already did, over events *and* withheld identities.
+4. **The fake Google kept vanished events instead of tombstoning them.** `ProviderSeed` is the provider's
+   whole state, so an identity dropped from a later seed has been deleted. Google reports that as a
+   `status: "cancelled"` item under `showDeleted: true`, and the fake now does the same: it replaces its feed
+   and leaves a tombstone behind, keeping the `iCalUID` so the cancellation stays attributable. It also
+   stores its feed as an ordered list rather than a map, because a real listing can carry the same id twice
+   across pages — which is the whole point of `collapse-revisions`.
+5. **The fake Google answered no `events.get`, and its OAuth2 client carried no credentials.** The client
+   threw `No access, refresh token, API key or refresh handler callback is set` before any request reached
+   the fake; it is now given an access token. The missing `events.get` handler made every 409 and 412
+   resolution fail as a transport error.
