@@ -39,6 +39,7 @@ jobs:
       packages: write
     steps:
       - id: content-access
+        if: matrix.package.name == 'web'
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
         run: |
