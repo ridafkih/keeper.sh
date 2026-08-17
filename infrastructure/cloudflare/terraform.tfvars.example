@@ -1,0 +1,6 @@
+zone_id = "REPLACE_WITH_ZONE_ID"
+
+# Prefer the environment over a file:
+#   export TF_VAR_cloudflare_api_token=...
+# terraform.tfvars is gitignored, but the token is better off never on disk.
+# cloudflare_api_token = "REPLACE_WITH_API_TOKEN"
