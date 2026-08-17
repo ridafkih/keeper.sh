@@ -75,7 +75,7 @@ jobs:
           git config --global \
             url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
-          git submodule update --init --recursive
+          git submodule update --init applications/web/seo infra
 
       - name: Move the pin
         id: bump

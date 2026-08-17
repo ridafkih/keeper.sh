@@ -18,9 +18,18 @@ jobs:
             infra
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          token: ${{ steps.app-token.outputs.token }}
+
+      # Only the content submodule is needed to build and test. `.claude` holds
+      # editor configuration and `infra` holds Terraform; cloning either wastes
+      # time and would need permissions CI has no reason to hold.
+      - name: Fetch the content submodule
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run types
@@ -39,9 +48,18 @@ jobs:
             infra
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          token: ${{ steps.app-token.outputs.token }}
+
+      # Only the content submodule is needed to build and test. `.claude` holds
+      # editor configuration and `infra` holds Terraform; cloning either wastes
+      # time and would need permissions CI has no reason to hold.
+      - name: Fetch the content submodule
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -60,9 +78,18 @@ jobs:
             infra
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          token: ${{ steps.app-token.outputs.token }}
+
+      # Only the content submodule is needed to build and test. `.claude` holds
+      # editor configuration and `infra` holds Terraform; cloning either wastes
+      # time and would need permissions CI has no reason to hold.
+      - name: Fetch the content submodule
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run unused
@@ -103,9 +130,18 @@ jobs:
             infra
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          token: ${{ steps.app-token.outputs.token }}
+
+      # Only the content submodule is needed to build and test. `.claude` holds
+      # editor configuration and `infra` holds Terraform; cloning either wastes
+      # time and would need permissions CI has no reason to hold.
+      - name: Fetch the content submodule
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun -e 'console.log(require("node:os").availableParallelism(), require("node:os").cpus().length)'
@@ -150,9 +186,18 @@ jobs:
             infra
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: recursive
-          token: ${{ steps.app-token.outputs.token }}
+
+      # Only the content submodule is needed to build and test. `.claude` holds
+      # editor configuration and `infra` holds Terraform; cloning either wastes
+      # time and would need permissions CI has no reason to hold.
+      - name: Fetch the content submodule
+        env:
+          TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run --filter @keeper.sh/database test:migrations
