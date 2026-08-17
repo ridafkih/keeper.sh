@@ -1,13 +1,9 @@
 name: Bump Submodule
 
-# Fired by keeperdotsh/seo and keeperdotsh/infra when a commit lands on their
-# main branch. Moves the submodule pin here and opens a pull request, so a
-# content or infrastructure change never rewrites this repository's main
-# without review.
-#
-# Each dispatch opens its own pull request rather than reusing a branch: bumps
-# stack, so three content merges produce three reviewable PRs instead of one
-# branch quietly advancing underneath an open review.
+concurrency:
+  group: bump-${{ github.event.client_payload.submodule || inputs.submodule }}
+  cancel-in-progress: false
+
 on:
   repository_dispatch:
     types: [submodule-updated]
@@ -39,13 +35,6 @@ jobs:
           esac
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
 
-      # Two installation tokens, because this repository and the submodules sit
-      # under different accounts and one installation token cannot span both.
-      # The Keeper bot app is installed on each.
-      #
-      # Using an app token rather than GITHUB_TOKEN also matters: a pull request
-      # opened with GITHUB_TOKEN does not trigger workflow runs, so the bump PR
-      # would arrive with no checks.
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-main
         with:
@@ -91,16 +80,22 @@ jobs:
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
-      # seo supplies the site's content and infra describes what it runs on, so
-      # both build before the pull request exists. .claude holds agent and editor
-      # configuration that nothing in the build reads, so it skips the build
-      # rather than spending the minutes.
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
       - run: bun install --frozen-lockfile
         if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
       - run: bunx turbo run build --filter=@keeper.sh/web
         if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
+
+      - name: Report a failed bump
+        if: failure()
+        env:
+          GH_TOKEN: ${{ steps.app-main.outputs.token }}
+          NAME: ${{ steps.target.outputs.name }}
+        run: |
+          gh issue create \
+            --title "Bumping the $NAME submodule failed" \
+            --body "The run that failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'
@@ -111,17 +106,15 @@ jobs:
           PIN: ${{ steps.bump.outputs.pin }}
           BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.bump.outputs.pin }}
         run: |
-          # The bot's own user id, so the commit is attributed to the app rather
-          # than showing as an unrecognised author.
           BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
-          git checkout -b "$BRANCH"
+          git checkout -B "$BRANCH"
           git add "${{ steps.target.outputs.path }}"
           git commit -m "chore($NAME): bump to $PIN"
-          git push -u origin "$BRANCH"
-          gh pr create \
-            --title "chore($NAME): bump to $PIN" \
-            --body "" \
-            --head "$BRANCH"
+          git push -u --force-with-lease origin "$BRANCH"
+
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --title "chore($NAME): bump to $PIN" --body "" --head "$BRANCH"
+          fi

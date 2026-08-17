@@ -93,9 +93,6 @@ export function feedPlugin(): Plugin {
     generateBundle() {
       const posts = processBlogDirectory(blogDir, publicDir);
 
-      /* No posts means the `seo` submodule was not fetched. A feed advertising
-       * zero items is worse than no feed, and resolveLastBuildDate has no date
-       * to report, so the file is left out entirely. */
       if (posts.length === 0) return;
 
       this.emitFile({

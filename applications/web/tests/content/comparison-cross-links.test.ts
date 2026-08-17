@@ -44,10 +44,6 @@ const comparisons = COLLECTIONS.flatMap(({ basePath, directory }) =>
 );
 
 
-/* The `seo` submodule is optional: a clone without it still builds. These suites
- * assert against real files, so they are skipped rather than weakened — the
- * "has posts to check" guards must keep failing when content IS present but
- * empty. */
 const CONTENT_PRESENT = existsSync(
   join(import.meta.dirname, "../..", SEO_CONTENT_ROOT, "blog"),
 );

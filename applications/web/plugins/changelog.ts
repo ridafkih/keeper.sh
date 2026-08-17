@@ -3,9 +3,6 @@ import type { Plugin } from "vite";
 import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { processChangelogDirectory } from "../src/lib/changelog-content";
 
-/** Where the release folders live, relative to the Vite root. */
-const CHANGELOG_DIRECTORY = CONTENT_DIRECTORIES.changelog;
-
 const VIRTUAL_MODULE_ID = "virtual:changelog-releases";
 
 export function changelogPlugin(): Plugin {
@@ -16,7 +13,7 @@ export function changelogPlugin(): Plugin {
     name: "keeper-changelog",
 
     configResolved(config) {
-      contentDir = resolve(config.root, CHANGELOG_DIRECTORY);
+      contentDir = resolve(config.root, CONTENT_DIRECTORIES.changelog);
     },
 
     resolveId(id) {

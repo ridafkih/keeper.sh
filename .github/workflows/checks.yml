@@ -7,22 +7,24 @@ jobs:
   types:
     runs-on: ubuntu-latest
     steps:
+      - id: content-access
+        env:
+          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
+        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
+        if: steps.content-access.outputs.available == 'yes'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: keeperdotsh
-          repositories: |
-            seo
-            infra
+          repositories: seo
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Only the content submodule is needed to build and test. `.claude` holds
-      # editor configuration and `infra` holds Terraform; cloning either wastes
-      # time and would need permissions CI has no reason to hold.
       - name: Fetch the content submodule
+        if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -37,22 +39,24 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
+      - id: content-access
+        env:
+          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
+        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
+        if: steps.content-access.outputs.available == 'yes'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: keeperdotsh
-          repositories: |
-            seo
-            infra
+          repositories: seo
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Only the content submodule is needed to build and test. `.claude` holds
-      # editor configuration and `infra` holds Terraform; cloning either wastes
-      # time and would need permissions CI has no reason to hold.
       - name: Fetch the content submodule
+        if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -67,22 +71,24 @@ jobs:
   unused:
     runs-on: ubuntu-latest
     steps:
+      - id: content-access
+        env:
+          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
+        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
+        if: steps.content-access.outputs.available == 'yes'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: keeperdotsh
-          repositories: |
-            seo
-            infra
+          repositories: seo
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Only the content submodule is needed to build and test. `.claude` holds
-      # editor configuration and `infra` holds Terraform; cloning either wastes
-      # time and would need permissions CI has no reason to hold.
       - name: Fetch the content submodule
+        if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -119,22 +125,24 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
+      - id: content-access
+        env:
+          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
+        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
+        if: steps.content-access.outputs.available == 'yes'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: keeperdotsh
-          repositories: |
-            seo
-            infra
+          repositories: seo
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Only the content submodule is needed to build and test. `.claude` holds
-      # editor configuration and `infra` holds Terraform; cloning either wastes
-      # time and would need permissions CI has no reason to hold.
       - name: Fetch the content submodule
+        if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -175,22 +183,24 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
+      - id: content-access
+        env:
+          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
+        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
+        if: steps.content-access.outputs.available == 'yes'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: keeperdotsh
-          repositories: |
-            seo
-            infra
+          repositories: seo
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Only the content submodule is needed to build and test. `.claude` holds
-      # editor configuration and `infra` holds Terraform; cloning either wastes
-      # time and would need permissions CI has no reason to hold.
       - name: Fetch the content submodule
+        if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |

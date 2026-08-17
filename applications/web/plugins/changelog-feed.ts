@@ -111,7 +111,6 @@ export function changelogFeedPlugin(): Plugin {
     generateBundle() {
       const releases = processChangelogDirectory(changelogDir);
 
-      // No releases means the `seo` submodule was not fetched; emit no feed.
       if (releases.length === 0) return;
 
       this.emitFile({

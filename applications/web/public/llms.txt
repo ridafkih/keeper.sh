@@ -34,10 +34,10 @@ Keeper.sh is for people whose commitments are split across accounts that cannot 
 
 ## Setup Guides
 
-- [How to Sync Google Calendar with Outlook](https://www.keeper.sh/blog/how-to-sync-google-calendar-with-outlook): what colleagues see in Outlook.
-- [How to Sync Outlook Calendar with Google Calendar](https://www.keeper.sh/blog/how-to-sync-outlook-calendar-with-google-calendar): meeting titles stay at work.
-- [How to Sync Google Calendar with iCloud](https://www.keeper.sh/blog/sync-google-calendar-with-icloud): work meetings on your iPhone, with no work account.
-- [How to Sync iCloud Calendar with Google Calendar](https://www.keeper.sh/blog/sync-icloud-calendar-with-google-calendar): the Apple app password, and who sees titles.
+- [How to Sync Google Calendar with Outlook](https://www.keeper.sh/blog/sync-google-calendar-with-outlook): two-way sync, and what colleagues see in Outlook.
+- [How to Add Google Calendar to Outlook](https://www.keeper.sh/blog/add-google-calendar-to-outlook): the read-only route, and when it is enough.
+- [How to Add Google Calendar to iPhone](https://www.keeper.sh/blog/how-to-add-google-calendar-to-iphone): work meetings on your iPhone, with no work account.
+- [How to Sync Apple Calendar to Google Calendar](https://www.keeper.sh/blog/how-to-sync-apple-calendar-to-google-calendar): the Apple app password, and who sees titles.
 - [How to Sync iCloud Calendar with Outlook](https://www.keeper.sh/blog/sync-icloud-calendar-with-outlook): block personal time at work.
 - [How to Sync Fastmail Calendar with Google Calendar](https://www.keeper.sh/blog/sync-fastmail-calendar-with-google-calendar): the Fastmail app password, and what travels.
 - [How to Sync Fastmail Calendar with Outlook](https://www.keeper.sh/blog/sync-fastmail-calendar-with-outlook): app password first, then Microsoft 365.
@@ -48,15 +48,15 @@ Keeper.sh is for people whose commitments are split across accounts that cannot 
 
 ## Comparisons
 
-- [Best Calendar Sync Tools: 9 Compared on Price, Speed and Privacy](https://www.keeper.sh/blog/best-calendar-sync-tools): nine tools on price and privacy.
+- [Best Calendar Sync Tools: 9 Compared on Price, Speed and Privacy](https://www.keeper.sh/compare/best-calendar-sync-tools): nine tools on price and privacy.
 - [Open-Source Calendar Sync Tools Compared](https://www.keeper.sh/blog/open-source-calendar-sync): the projects you can run yourself.
-- [Keeper.sh vs CalendarBridge](https://www.keeper.sh/blog/keeper-sh-vs-calendarbridge): pricing at eight calendars.
-- [Keeper.sh vs Kalender Sync](https://www.keeper.sh/blog/keeper-sh-vs-kalender-sync): EU contracting and update speed.
-- [Keeper.sh vs Morgen](https://www.keeper.sh/blog/keeper-sh-vs-morgen): update speed, data location, native apps.
-- [Keeper.sh vs OneCal](https://www.keeper.sh/blog/keeper-sh-vs-onecal): which calendars each connects.
-- [Keeper.sh vs Reclaim.ai](https://www.keeper.sh/blog/keeper-sh-vs-reclaim-ai): free-plan scope and cost.
-- [Keeper.sh vs SyncDate](https://www.keeper.sh/blog/keeper-sh-vs-syncdate): update speed, price and agent tools.
-- [Keeper.sh vs SyncThemCalendars](https://www.keeper.sh/blog/keeper-sh-vs-syncthemcalendars): two-way setup and pricing by count.
+- [Keeper.sh vs CalendarBridge](https://www.keeper.sh/compare/calendarbridge-alternative): pricing at eight calendars.
+- [Keeper.sh vs Kalender Sync](https://www.keeper.sh/compare/kalender-sync-alternative): EU contracting and update speed.
+- [Keeper.sh vs Morgen](https://www.keeper.sh/compare/morgen-alternative): update speed, data location, native apps.
+- [Keeper.sh vs OneCal](https://www.keeper.sh/compare/onecal-alternative): which calendars each connects.
+- [Keeper.sh vs Reclaim.ai](https://www.keeper.sh/compare/reclaim-ai-alternative): free-plan scope and cost.
+- [Keeper.sh vs SyncDate](https://www.keeper.sh/compare/syncdate-alternative): update speed, price and agent tools.
+- [Keeper.sh vs SyncThemCalendars](https://www.keeper.sh/compare/syncthemcalendars-alternative): two-way setup and pricing by count.
 
 ## Background
 

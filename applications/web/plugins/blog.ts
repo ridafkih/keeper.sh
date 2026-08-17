@@ -16,6 +16,7 @@ const blogPostMetadataSchema = type({
   createdAt: "string.date.iso",
   description: "string >= 1",
   "image?": OPEN_GRAPH_IMAGE_PATH,
+  "replaces?": "string[]",
   "slug?": /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
   tags: "string[]",
   title: "string >= 1",
@@ -197,9 +198,6 @@ export function processBlogDirectory(
   blogDir: string,
   publicDir: string,
 ): ProcessedBlogPost[] {
-  /* The `seo` submodule is optional. An unfetched collection is empty, not an
-   * error — but a directory that exists must still be valid, so a malformed
-   * file in a fetched collection fails the build as before. */
   if (!existsSync(blogDir)) return [];
 
   const files = readdirSync(blogDir)

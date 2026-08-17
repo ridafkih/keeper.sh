@@ -22,9 +22,6 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 interface SitemapEntry {
   path: string;
-  /* Omitted only for a collection index whose content is absent because the
-   * `seo` submodule was not fetched. lastmod is optional per the sitemap spec;
-   * every other entry derives one and fails loudly if it cannot. */
   lastmod?: string;
 }
 
@@ -42,8 +39,6 @@ function readStaticEntries(): SitemapEntry[] {
 
 function buildIndexEntry(path: string, entries: SitemapEntry[]): SitemapEntry {
   const [first] = entries;
-  /* The index route exists whether or not its collection does, and
-   * assertIndexableRoutesCovered requires it in the sitemap either way. */
   if (!first) return { path };
 
   const lastmod = entries.reduce(
@@ -62,7 +57,6 @@ function buildChangelogEntries(changelogDir: string): SitemapEntry[] {
   const releases = processChangelogDirectory(changelogDir);
   const [newest] = releases;
 
-  // Changelog ships in the `seo` submodule; without it there are no entries.
   if (!newest) return [];
 
   return [
@@ -87,7 +81,6 @@ function discoverContentEntries(
   basePath: string,
   label: string,
 ): SitemapEntry[] {
-  // An unfetched collection contributes no entries rather than failing the build.
   if (!existsSync(directory)) return [];
 
   const files = readdirSync(directory).filter((file) => file.endsWith(".mdx"));
