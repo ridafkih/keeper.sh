@@ -41,7 +41,12 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ -z "$APP_ID" ]; then
+            echo "KEEPER_BOT_APP_ID is missing; a release cannot ship without content." >&2
+            exit 1
+          fi
+          echo "available=yes" >> "$GITHUB_OUTPUT"
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -63,6 +68,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -107,7 +113,12 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ -z "$APP_ID" ]; then
+            echo "KEEPER_BOT_APP_ID is missing; a release cannot ship without content." >&2
+            exit 1
+          fi
+          echo "available=yes" >> "$GITHUB_OUTPUT"
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -129,6 +140,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:

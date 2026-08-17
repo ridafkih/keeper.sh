@@ -10,7 +10,16 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "available=yes" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "available=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            exit 1
+          fi
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -32,6 +41,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run types
@@ -42,7 +52,16 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "available=yes" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "available=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            exit 1
+          fi
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -64,6 +83,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -74,7 +94,16 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "available=yes" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "available=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            exit 1
+          fi
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -96,6 +125,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run unused
@@ -128,7 +158,16 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "available=yes" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "available=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            exit 1
+          fi
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -150,6 +189,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun -e 'console.log(require("node:os").availableParallelism(), require("node:os").cpus().length)'
@@ -186,7 +226,16 @@ jobs:
       - id: content-access
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-        run: echo "available=${APP_ID:+yes}" >> "$GITHUB_OUTPUT"
+          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ -n "$APP_ID" ]; then
+            echo "available=yes" >> "$GITHUB_OUTPUT"
+          elif [ "$IS_FORK" = "true" ]; then
+            echo "available=no" >> "$GITHUB_OUTPUT"
+          else
+            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            exit 1
+          fi
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-token
@@ -208,6 +257,7 @@ jobs:
             url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
             "https://github.com/keeperdotsh/"
           git submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run --filter @keeper.sh/database test:migrations

@@ -87,16 +87,6 @@ jobs:
       - run: bunx turbo run build --filter=@keeper.sh/web
         if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
 
-      - name: Report a failed bump
-        if: failure()
-        env:
-          GH_TOKEN: ${{ steps.app-main.outputs.token }}
-          NAME: ${{ steps.target.outputs.name }}
-        run: |
-          gh issue create \
-            --title "Bumping the $NAME submodule failed" \
-            --body "The run that failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'
         env:
@@ -110,6 +100,7 @@ jobs:
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
           git checkout -B "$BRANCH"
           git add "${{ steps.target.outputs.path }}"
           git commit -m "chore($NAME): bump to $PIN"
@@ -118,3 +109,17 @@ jobs:
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             gh pr create --title "chore($NAME): bump to $PIN" --body "" --head "$BRANCH"
           fi
+
+      - name: Report a failed bump
+        if: failure()
+        env:
+          GH_TOKEN: ${{ steps.app-main.outputs.token || secrets.GITHUB_TOKEN }}
+          NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Bumping the $NAME submodule failed"
+          if [ -n "$(gh issue list --search "$TITLE in:title" --state open --json number --jq '.[].number')" ]; then
+            echo "An open issue already tracks this."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "The run that failed: $RUN"
