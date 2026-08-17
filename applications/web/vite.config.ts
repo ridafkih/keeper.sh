@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import svgr from "vite-plugin-svgr";
 import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
-import { blogPlugin, comparePlugin, docsPlugin, guidesPlugin, recipesPlugin } from "./plugins/blog";
+import { blogPlugin, comparePlugin, docsPlugin, guidesPlugin, movedPathsPlugin, recipesPlugin } from "./plugins/blog";
 import { changelogPlugin } from "./plugins/changelog";
 import { feedPlugin } from "./plugins/feed";
 import { changelogFeedPlugin } from "./plugins/changelog-feed";
@@ -38,6 +38,7 @@ export default defineConfig(({ isSsrBuild }) => ({
       ],
     }),
     svgr(),
+    !isSsrBuild && movedPathsPlugin(),
     !isSsrBuild && sitemapPlugin(),
     !isSsrBuild && feedPlugin(),
     !isSsrBuild && changelogFeedPlugin(),

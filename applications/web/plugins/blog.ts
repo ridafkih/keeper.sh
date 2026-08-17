@@ -279,6 +279,54 @@ function contentCollectionPlugin(collection: ContentCollection): Plugin {
   };
 }
 
+export const MOVED_PATHS_FILE = "moved-paths.json";
+
+export function movedPathsPlugin(): Plugin {
+  const collections: Array<{ basePath: string; directory: string }> = [
+    { basePath: "/blog", directory: CONTENT_DIRECTORIES.blog },
+    { basePath: "/compare", directory: CONTENT_DIRECTORIES.compare },
+    { basePath: "/docs", directory: CONTENT_DIRECTORIES.docs },
+    { basePath: "/guides", directory: CONTENT_DIRECTORIES.guides },
+    { basePath: "/recipes", directory: CONTENT_DIRECTORIES.recipes },
+  ];
+
+  let root: string;
+  let publicDir: string;
+
+  return {
+    name: "keeper-moved-paths",
+
+    configResolved(config) {
+      root = config.root;
+      publicDir = config.publicDir;
+    },
+
+    generateBundle() {
+      const moved: Record<string, string> = {};
+      for (const { basePath, directory } of collections) {
+        for (const post of processBlogDirectory(resolve(root, directory), publicDir)) {
+          for (const from of post.metadata.replaces ?? []) {
+            const to = `${basePath}/${post.slug}`;
+            if (moved[from] && moved[from] !== to) {
+              throw new Error(`"${from}" is claimed by both "${moved[from]}" and "${to}".`);
+            }
+            if (from === to) {
+              throw new Error(`"${from}" redirects to itself.`);
+            }
+            moved[from] = to;
+          }
+        }
+      }
+
+      this.emitFile({
+        type: "asset",
+        fileName: MOVED_PATHS_FILE,
+        source: JSON.stringify(moved, null, 2),
+      });
+    },
+  };
+}
+
 export function blogPlugin(): Plugin {
   return contentCollectionPlugin({
     directory: CONTENT_DIRECTORIES.blog,
