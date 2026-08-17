@@ -1,0 +1,86 @@
+name: Bump Submodule
+
+# Fired by keeperdotsh/seo and keeperdotsh/infra when a commit lands on their
+# main branch. Moves the submodule pin here and opens a pull request, so a
+# content or infrastructure change never rewrites this repository's main
+# without review.
+#
+# Each dispatch opens its own pull request rather than reusing a branch: bumps
+# stack, so three content merges produce three reviewable PRs instead of one
+# branch quietly advancing underneath an open review.
+on:
+  repository_dispatch:
+    types: [submodule-updated]
+  workflow_dispatch:
+    inputs:
+      submodule:
+        description: Which submodule to bump
+        required: true
+        type: choice
+        options: [seo, infra]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve which submodule moved
+        id: target
+        env:
+          NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
+        run: |
+          case "$NAME" in
+            seo)   echo "path=applications/web/seo" >> "$GITHUB_OUTPUT" ;;
+            infra) echo "path=infra"                >> "$GITHUB_OUTPUT" ;;
+            *)     echo "Unknown submodule: '$NAME'" >&2; exit 1 ;;
+          esac
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          token: ${{ secrets.SUBMODULE_TOKEN }}
+
+      - name: Move the pin
+        id: bump
+        run: |
+          git submodule update --remote "${{ steps.target.outputs.path }}"
+          if git diff --quiet -- "${{ steps.target.outputs.path }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is already current; nothing to do."
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      # Both submodules build the web app. seo supplies its content directly;
+      # infra does not, but a bump that cannot build is still a bump worth
+      # catching here rather than after merge.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.bump.outputs.changed == 'true'
+      - run: bun install --frozen-lockfile
+        if: steps.bump.outputs.changed == 'true'
+      - run: bunx turbo run build --filter=@keeper.sh/web
+        if: steps.bump.outputs.changed == 'true'
+
+      - name: Open a pull request
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
+          NAME: ${{ steps.target.outputs.name }}
+          PIN: ${{ steps.bump.outputs.pin }}
+          BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.bump.outputs.pin }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add "${{ steps.target.outputs.path }}"
+          git commit -m "chore($NAME): bump to $PIN"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "chore($NAME): bump to $PIN" \
+            --body "" \
+            --head "$BRANCH"
