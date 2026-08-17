@@ -240,6 +240,15 @@
         "vitest": "^4.1.4",
       },
     },
+    "packages/sync-kit/protocol": {
+      "name": "@keeper.sh/sync-protocol",
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+        "vitest": "^4.1.4",
+      },
+    },
     "packages/typescript-config": {
       "name": "@keeper.sh/typescript-config",
       "devDependencies": {
@@ -596,6 +605,8 @@
     "@keeper.sh/queue": ["@keeper.sh/queue@workspace:packages/queue"],
 
     "@keeper.sh/sync": ["@keeper.sh/sync@workspace:packages/sync"],
+
+    "@keeper.sh/sync-protocol": ["@keeper.sh/sync-protocol@workspace:packages/sync-kit/protocol"],
 
     "@keeper.sh/typescript-config": ["@keeper.sh/typescript-config@workspace:packages/typescript-config"],
 
