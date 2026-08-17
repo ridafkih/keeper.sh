@@ -5856,3 +5856,1555 @@ place; the conformance package's own 309 tests, including its 119 negative contr
    threw `No access, refresh token, API key or refresh handler callback is set` before any request reached
    the fake; it is now given an access token. The missing `events.get` handler made every 409 and 412
    resolution fail as a transport error.
+
+# sync-microsoft learnings ledger
+
+`@keeper.sh/sync-microsoft` is the Microsoft Graph implementation of `CalendarProvider` from
+`@keeper.sh/sync-protocol`. Its acceptance criterion is `@keeper.sh/sync-conformance` run end to end:
+every `CONF-O*` and `CONF-L*` case the capability declaration gates on. A case this adapter cannot pass is
+a defect in this adapter until proven otherwise.
+
+Entries are numbered `MS-I1`–`MS-I96`. `MS-I1`–`MS-I52` are adopted, `MS-I53`–`MS-I60` are the explicit
+not-applicable set, `MS-I61`–`MS-I72` are dependencies taken and rejected plus process, `MS-I73`–`MS-I91` are
+push, hygiene and fixture findings, and `MS-I92`–`MS-I96` are the adversarial-review findings resolved after
+implementation. Every
+**Proved by** citation names a file under `packages/sync-kit/microsoft/tests` and the exact test name inside
+it, or a `CONF-` case id that the conformance run enforces, so the ledger can be walked against the suite
+mechanically by `microsoft/tests/hygiene/ledger-citations.test.ts`.
+
+The single most important sentence in this ledger: **Outlook rewrites what you write, so the adapter's own
+submission is never evidence of what the calendar now holds — only a re-read is.** The second most
+important: **three separate Graph behaviours (a 410, a `seriesMaster` on a delta page, and an `@removed`
+entry carrying no type) all mean "your delta is no longer a safe description of this calendar", and all
+three must land on the same non-destructive `cursorLost` arm.**
+
+---
+
+## Adopted
+
+### MS-I1. A 410 on a listing is `cursorLost`, never an empty delta
+
+**Lesson.** Graph answers an expired or invalidated `$deltatoken` with `410 Gone` and
+`code: "resyncRequired"` / `"syncStateNotFound"`. The response says nothing about what still exists.
+Treating it as a delta that reported no changes, or as a snapshot that reported no events, deletes the
+whole mirror.
+**Learned from.** `packages/calendar/src/providers/outlook/source/utils/fetch-events.ts` (`GONE_STATUS ->
+fullSyncRequired`); `core/sync-engine/ingest.ts` full-sync-required branch, which flushes
+`{inserts: [], deletes: [], syncToken: null}` and deliberately deletes nothing.
+**Honoured by.** `src/errors/classify.ts` maps `(410, resyncRequired|syncStateNotFound)` on `listChanges`
+to `{ kind: "gone" }`; `src/listing/resync-triggers.ts` is the one place that converts a trigger into the
+protocol's `cursorLost` arm, and that arm declares `events?: never`, `removals?: never`, `cursor?: never`,
+so a deletion is not expressible on it. The guard is type-level, not a runtime check.
+**Proved by.** `microsoft/tests/cursor/gone-is-not-empty.test.ts :: MS-O1: a 410 resyncRequired yields
+cursorLost, zero removals and no cursor`; conformance `CONF-O10`, `CONF-O40`.
+
+### MS-I2. A page-level 410 discards every page already collected
+
+**Lesson.** A 410 arriving on page seven invalidates the six pages already in hand: the token that produced
+them is no longer a description of anything. Returning the good pages plus a fresh link persists a cursor
+that skips the changes the invalidated pages carried — a silent, permanent hole.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (both the first-page and the `while`-loop
+`if (result.fullSyncRequired) return`).
+**Honoured by.** `src/listing/paginate.ts` returns a `PageWalk` union whose `{ kind: "cursorLost" }` arm is
+terminal and carries no accumulator. There is no branch that folds partially collected pages into a `delta`.
+**Proved by.** `microsoft/tests/cursor/gone-mid-pagination.test.ts :: MS-O2: a 410 on the third page discards
+the two pages already collected`.
+
+### MS-I3. A walk that ends without `@odata.deltaLink` is cursor loss, not success
+
+**Lesson.** `fetch-adapter.ts` treats a missing successor link as `fullSyncRequired`. Replaying a delta
+whose successor was lost re-reports nothing, and a diff run against "nothing changed" that believes it saw
+the whole calendar deletes the whole calendar.
+**Learned from.** `packages/calendar/src/providers/outlook/source/fetch-adapter.ts`; test *"requests a full
+sync instead of replaying a delta with no successor link"*.
+**Honoured by.** The protocol's `delta` arm carries a non-optional `cursor: SyncCursor`, so "delta without a
+cursor" is unrepresentable. `src/cursor/delta-link.ts` returns
+`{ kind: "advance" } | { kind: "continue" } | { kind: "lost" }` — never an optional string that a caller
+could default.
+**Proved by.** `microsoft/tests/cursor/missing-delta-link.test.ts :: MS-O3: a final page carrying neither
+link is cursorLost, not a delta`.
+
+### MS-I4. Cursor advance is a field of a completed listing, never an optional beside it
+
+**Lesson.** `@odata.deltaLink` arrives only on the last page. A pagination that stopped early therefore has
+observations, no coverage claim and no cursor — and persisting the previous token in that state loses every
+change between the two runs.
+**Learned from.** `https://learn.microsoft.com/en-us/graph/delta-query-events` (verified 2026-08-16: a GET
+returns *either* `@odata.nextLink` *or* `@odata.deltaLink`); RFC 6578 §3.6/§3.8 for the same rule on WebDAV.
+**Honoured by.** Stopping early yields the protocol's `partial` arm: events observed so far, a
+`Continuation` (never a `SyncCursor`), and structurally no `removals` and no `coverage`.
+**Proved by.** `microsoft/tests/cursor/truncation-is-partial.test.ts :: MS-O4: a page ceiling stop yields a
+continuation and no cursor`; conformance `CONF-O41`, `CONF-O1`.
+
+### MS-I5. The cursor is an owned opaque value bound to the request shape that minted it
+
+**Lesson.** Graph encodes `startDateTime` and `endDateTime` *inside* the `$deltatoken`, and `$select` is not
+supported on `calendarView/delta` at all. Replaying a deltaLink after the sync window moves therefore
+silently answers the *old* question, and every event the new window would have covered reads as absent.
+**Learned from.** `https://learn.microsoft.com/en-us/graph/delta-query-events` (verified 2026-08-16:
+*"These tokens … encode the startDateTime and endDateTime parameters"*, *"`$select` is not supported"*);
+the repo's own answer in `packages/calendar/src/core/oauth/sync-token.ts`
+(`keeper:sync-token:<version>:<base64url>`) and `core/oauth/sync-window.ts` (`OAUTH_SYNC_WINDOW_VERSION`,
+already bumped four times).
+**Honoured by.** `src/cursor/cursor.ts` mints `SyncCursor.value` as an encoding of
+`{ version, mode, scopeFingerprint, providerLink }`. `src/cursor/fingerprint.ts` derives the fingerprint
+from the exact parameter set that minted it — window bounds, `Prefer` set, expansion mode, adapter version.
+A mismatch resolves to `cursorLost` **locally, before any network call**.
+**Proved by.** `microsoft/tests/cursor/scope-binding.test.ts :: MS-O5: a cursor minted under a narrow window
+is refused against a wider one without touching the transport`; conformance `CONF-O11`.
+
+### MS-I6. A voluntary cursor invalidation lands on the same non-destructive path as a provider 410
+
+**Lesson.** Tokens are versioned and force-expired on a schedule and on adapter change, with a per-calendar
+deterministic offset so a fleet does not re-baseline in one minute. Without it, a widened window or a fixed
+parsing bug never reaches a calendar that keeps succeeding on an old delta link.
+**Learned from.** `core/oauth/sync-token.ts`, `core/oauth/sync-window.ts` (`getDeterministicRefreshOffset`);
+test *"returns a versioned delta link that the next cron run accepts"*.
+**Honoured by.** `cursorVersion` is an `as const` in `src/cursor/cursor.ts`; a version mismatch takes the
+identical `cursorLost` return as MS-I1. One function produces `cursorLost` and every reason funnels through
+it.
+**Proved by.** `microsoft/tests/cursor/version-bump.test.ts :: MS-O6: a cursor from an older adapter version
+is cursorLost and emits no removals`.
+
+### MS-I7. A `seriesMaster` on a delta page forces a resync; it is never ingested
+
+**Lesson.** `calendarView/delta` can return a series master rather than the expanded occurrences the full
+sync stored. Ingesting it puts a master row beside the expanded instances of the same series and the
+calendar permanently double-books.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`fetchCalendarEvents`); test *"forces an
+authoritative full sync when a delta page contains a series master"*.
+**Honoured by.** `src/listing/resync-triggers.ts` classifies any decoded item whose `type` is `seriesMaster`
+on the delta path as a resync trigger, returning `cursorLost` for the whole listing. The adapter has exactly
+one representation of a series — expanded occurrences — and there is no code path that mixes the two.
+**Proved by.** `microsoft/tests/listing/series-master-on-delta.test.ts :: MS-O7: a seriesMaster on a delta
+page collapses the whole listing to cursorLost`.
+
+### MS-I8. An `@removed` entry carrying no type is a resync trigger, not a deletion
+
+**Lesson.** Graph tombstones can arrive with `@removed` and no `type`. A sparse tombstone may name a series
+master while local state holds only its expanded instances; advancing the token on it strands every
+occurrence of that series forever, and acting on it as a deletion removes the wrong rows.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (the only surviving comment block in that
+file); test *"forces a full sync when paged delta data includes a sparse deletion tombstone"*.
+**Honoured by.** `src/decode/removed.ts` returns `deleted | cancelled | untyped`; `untyped` is a resync
+trigger in `src/listing/resync-triggers.ts`. This is the canonical instance of *a deletion is never inferred
+outside a proven coverage window*.
+**Proved by.** `microsoft/tests/listing/untyped-tombstone.test.ts :: MS-O8: an @removed entry with no type
+collapses the listing to cursorLost rather than deleting`.
+
+### MS-I9. `@removed` may name an identity outside the requested window
+
+**Lesson.** A calendarView delta reports removals for events that left the view — including events that were
+never inside the window this run asked about. Treating every `@removed` as an authoritative deletion of a
+stored row deletes rows this listing never had authority over.
+**Learned from.** `LEARNINGS.md` `RECON-I66`; `core/source/event-diff.ts` delta branch, which may only
+remove a stored row whose id appears in the listing's own named sets.
+**Honoured by.** `Removal` has an `outOfScope` arm that is not an `AuthoritativeRemoval`, and
+`src/listing/build-feed.ts` assigns a removal to `deleted`/`cancelled` only when the removed identity is
+resolvable within the walked window. Everything else is `outOfScope`.
+**Proved by.** `microsoft/tests/listing/removal-outside-window.test.ts :: MS-O9: an @removed naming an id
+outside the walked window is outOfScope, not an authoritative removal`; conformance `CONF-O13`.
+
+### MS-I10. `isCancelled` is a deletion signal distinct from `@removed`, and both must reach the diff
+
+**Lesson.** Graph marks a deleted occurrence with `isCancelled` as well as `@removed`. Reporting only one of
+them leaves cancelled occurrences in the mirror forever; collapsing them into one bucket loses the
+attribution the diff needs.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`changedEventIds` /
+`cancelledEventIds`); test *"treats isCancelled delta events as deletions"*.
+**Honoured by.** `src/decode/cancellation.ts` produces the protocol's `cancelled` removal arm; `@removed`
+with `reason: "deleted"` produces `deleted`. Both are `AuthoritativeRemoval`, and the delta listing's
+removal set is explicit and closed.
+**Proved by.** `microsoft/tests/decode/cancelled-and-removed.test.ts :: MS-O10: a cancelled occurrence and a
+deleted tombstone are distinct authoritative removals`; conformance `CONF-O42`.
+
+### MS-I11. A quiet poll still advances the cursor and writes nothing
+
+**Lesson.** A delta round that reports no changes is a successful round. Refusing to advance re-walks the
+same window forever; treating "no items" as a snapshot deletes the calendar.
+**Learned from.** `LEARNINGS.md` `CONF-I45`; `core/sync-engine/ingest.ts`.
+**Honoured by.** An empty final page carrying `@odata.deltaLink` yields `{ kind: "delta", events: [],
+removals: [], cursor }`.
+**Proved by.** `microsoft/tests/cursor/quiet-poll.test.ts :: MS-O11: a delta round with no items advances
+the cursor and derives no removal`; conformance `CONF-O45`.
+
+### MS-I12. Proven coverage is what the walk actually covered, clamped, never the requested window
+
+**Lesson.** A snapshot's authority to delete comes from its coverage claim. Substituting the requested
+window for the walked one claims authority the run never earned.
+**Learned from.** `LEARNINGS.md` entries 3 and `RECON-I3`/`RECON-I5`.
+**Honoured by.** `src/listing/coverage.ts` derives `CoverageWindow` from the `startDateTime`/`endDateTime`
+the walk actually issued, clamped to the pages that completed. A truncated walk produces `partial`, which
+has no `coverage` field at all.
+**Proved by.** `microsoft/tests/listing/coverage-clamp.test.ts :: MS-O12: proven coverage is the walked
+window, never the requested one`; conformance `CONF-O4`.
+
+### MS-I13. When the fetch throws, delete nothing
+
+**Lesson.** Distinguishing "the fetch failed" from "the source is empty" is the difference between a no-op
+and wiping a user's mirror. The guard exists in the repo because it once wiped events.
+**Learned from.** commit `0184ea19` *"don't wipe existing events when remote fetch fails"*;
+`tests/core/sync-engine/ingest-truncation.test.ts`.
+**Honoured by.** `listChanges` returns `Result<ChangeListing>`; a failure is `{ ok: false, failure }` and
+carries no listing at all, so there is no shape a caller could read removals from.
+**Proved by.** `microsoft/tests/listing/no-wipe.test.ts :: MS-O13: a transport failure mid-walk yields a
+failure, never an empty snapshot`; conformance `CONF-O2`.
+
+### MS-I14. A withheld event is present, not absent
+
+**Lesson.** An event we could not build is still an event the calendar holds. Filtering it out makes it look
+deleted, and the mirror is removed.
+**Learned from.** `LEARNINGS.md` entry 4, `CONF-I5`, `RECON-I73`; the whole `ics-*-telemetry` family.
+**Honoured by.** `src/listing/build-feed.ts` emits a `WithheldEvent` with a `WithholdReason` for every item
+it could not build; the reconciler counts withheld identities as present.
+**Proved by.** `microsoft/tests/listing/withheld-is-present.test.ts :: MS-O14: a withheld identity shields
+its mirror from the absence axis`; conformance `CONF-O5`.
+
+### MS-I15. One bad event must not stall the whole calendar
+
+**Lesson.** A single event with an uninterpretable timezone once failed an entire calendar's ingest. Parsing
+is total per item: a value or a typed reason, never a throw.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`parseOutlookEventsWithDiagnostics`);
+tests *"keeps ingesting the rest of the calendar past an uninterpretable response zone"*; commit `43292a9f`.
+**Honoured by.** `src/decode/decode-event.ts` returns `decoded | tombstone | undecodable` and never throws.
+The loop that drives it has no try/catch because there is nothing to catch.
+**Proved by.** `microsoft/tests/decode/per-item-isolation.test.ts :: MS-O15: one undecodable event does not
+cost the other events in the same page`; conformance `CONF-O6`.
+
+### MS-I16. Microsoft ships Windows/CLDR zone names, and naive `Intl` use kills the calendar
+
+**Lesson.** Graph answers with `"Eastern Standard Time"`, `tzone://Microsoft/Custom`, and Exchange labels
+like `"(UTC-07:00) Mountain Time (US & Canada)"`. Passing any of them to `Intl.DateTimeFormat` throws
+`RangeError`, and an unguarded throw fails the whole feed.
+**Learned from.** `packages/calendar/src/ics/utils/normalize-timezone.ts` (full CLDR `windowsZones` table,
+commit `ac6fa18c`); `resolve-timezone-identifier.ts`; commit `7c276d8e`; tests *"interprets Microsoft wall
+times in their Windows timezone"*.
+**Honoured by.** `src/decode/zone.ts` is the single file that imports `@keeper.sh/sync-ical`, and it calls
+`resolveZoneIdentifier` / `normalizeZoneIdentifier` / `windowsZones` rather than re-deriving the table. A
+refusal from that ladder becomes `withholdReason: "unresolvableTimeZone"`, never a substituted UTC.
+**Proved by.** `microsoft/tests/decode/windows-zone.test.ts :: MS-O16: a Windows zone name resolves through
+the shared CLDR ladder, and an unresolvable one withholds exactly one event`.
+
+### MS-I17. `originalStartTimeZone` outranks the response zone, and neither may be silently discarded
+
+**Lesson.** Responses are requested with `Prefer: outlook.timezone="UTC"`, so the response zone is our own
+request echoed back. The event's real zone is `originalStartTimeZone`. If that is unresolvable, fall back to
+the response zone; if that is also unresolvable, the event is unrepresentable — never "it was probably UTC".
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`resolveOutlookStartTimeZone`); tests
+*"falls back to the response timezone when Outlook's original label is unsupported"*, *"discards and counts
+an unsupported response timezone instead of dropping timezone semantics"*.
+**Honoured by.** `src/decode/original-zone.ts` is a two-rung ladder ending in a typed refusal, and the
+refusal is a counted `WithheldEvent`.
+**Proved by.** `microsoft/tests/decode/zone-precedence.test.ts :: MS-O17: the original zone outranks the
+response zone, and an unresolvable pair is withheld rather than assumed UTC`.
+
+### MS-I18. `$select` is mandatory on the instances expansion, and its fields are nullable
+
+**Lesson.** The instance fetch must select `originalStartTimeZone`, `originalEndTimeZone`, `seriesMasterId`,
+`type` and `iCalUId`; without them the expansion returns events whose zone semantics are already lost and
+every occurrence becomes unrepresentable. `iCalUId`, `seriesMasterId` and `subject` can all legitimately be
+null.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`INSTANCES_SELECT`); commits `d2358ddc`,
+`c3284efd`, `550e868a`.
+**Honoured by.** `src/listing/request-shape.ts` holds the `$select` list as an `as const` array, and the
+decode layer types those fields as nullable up front so no null ever reaches a non-null assertion — which is
+also how the no-type-assertions rule is kept.
+**Amended (review, MS-I92).** `$select` is mandatory on the **delta** request, which cannot `$expand`. The
+window and instances requests send `$expand` instead and omit `$select` entirely, because Graph refuses the
+two together and the extended-property stamps are unreachable without the expand; omitting `$select` returns
+the full default property set, which is a superset of the list above.
+**Proved by.** `microsoft/tests/decode/nullable-fields.test.ts :: MS-O18: a null iCalUId, seriesMasterId and
+subject all decode without an assertion`; `microsoft/tests/hygiene/select-fields.test.ts :: MS-H1: the delta
+request selects every field the decoder reads`;
+`microsoft/tests/hygiene/select-fields.test.ts :: MS-H26: the window requests expand our extended properties
+instead of selecting fields`.
+
+### MS-I19. A series whose expansion is empty is "no occurrence here"; a series whose expansion errors fails the run
+
+**Lesson.** Empty and errored are different. Counting an errored expansion as empty silently drops the
+series, and every occurrence of it is then deleted.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (`expandSeriesMasters`); tests *"counts a
+series master whose instance expansion came back empty"*, *"fails the full sync instead of silently dropping
+a series whose instances fail"*.
+**Honoured by.** `src/listing/expand-series.ts` returns
+`{ kind: "expanded" } | { kind: "empty" } | { kind: "failed" }`, and only the first two may reach the feed.
+`failed` propagates as a `Result` failure for the whole listing.
+**Proved by.** `microsoft/tests/listing/series-expansion.test.ts :: MS-O19: an empty expansion is counted
+and an errored expansion fails the listing`.
+
+### MS-I20. Across pages the newest revision wins, deterministically, and order cannot change the answer
+
+**Lesson.** Graph can report the same event id twice within one paged delta. Keep the newer
+`lastModifiedDateTime`, falling back to `createdDateTime`, and on a tie keep the later arrival.
+Non-deterministic dedup makes the diff churn whenever the feed reorders.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts`
+(`shouldReplaceOutlookRevision` / `deduplicateOutlookEvents`); tests *"drops the same copy whichever order
+the feed lists the pair in"*, *"does not churn the stored row when the feed reorders the colliding events"*.
+**Honoured by.** `src/listing/collapse-revisions.ts` runs after pagination completes and implements a total
+order over `(lastModifiedDateTime, createdDateTime, arrivalIndex)`.
+**Proved by.** `microsoft/tests/listing/revision-collapse.test.ts :: MS-O20: the same id twice collapses to
+the newest revision, and both page orders give the same answer`; conformance `CONF-O8`, `CONF-O20`.
+
+### MS-I21. An unbuildable newest revision withholds the identity; the older copy never wins
+
+**Lesson.** Reverting a stored event to a time the publisher already moved it away from is an unrecoverable
+wrong write.
+**Learned from.** `packages/calendar/tests/ics/utils/ics-stale-revision-telemetry.test.ts` *"never reverts a
+stored event to the time the publisher moved it away from"*.
+**Honoured by.** `collapse-revisions.ts` decides the winner *before* building it; if the winner is
+undecodable the identity is withheld with `supersededRevisionUnbuildable`.
+**Proved by.** `microsoft/tests/listing/stale-revision.test.ts :: MS-O21: an unbuildable newest revision
+withholds the identity instead of falling back`; conformance `CONF-O7`.
+
+### MS-I22. A delta item is a patch, and it never blanks the fields it omits
+
+**Lesson.** A delta entry carries the fields that changed. Building a whole event from it and storing the
+result blanks the description, location and attendees of every event Graph reported tersely.
+**Learned from.** `LEARNINGS.md` `CONF-I46`, `GOOG-I21`.
+**Honoured by.** `src/decode/decode-event.ts` returns a patch shape on the delta path; an item that cannot
+be completed into a `RemoteEvent` from the page itself is withheld, never zero-filled.
+**Proved by.** `microsoft/tests/decode/reduced-resource.test.ts :: MS-O22: a delta patch never blanks a
+field it did not carry`; conformance `CONF-O46`.
+
+### MS-I23. Outlook rewrites what you write, so trust the read-back, never your own submission
+
+**Lesson.** Graph's create response is the stored resource. Comparing it field by field against what was
+sent is the only way to attribute mirror churn. Without it, a destination that rewrites summary,
+description, location or all-day-ness defeats the content hash forever and the mapping is deleted and
+re-created on every run.
+**Learned from.** commit `03f4b7fb` *"attribute mirror churn to the field and the moment it diverges"*;
+`core/events/push-echo.ts`; `providers/outlook/destination/provider.ts` (`compareOutlookCreateEcho`).
+**Honoured by.** `src/write/echo.ts` produces the protocol's three-state `EchoVerdict`
+(`matched | diverged | notObserved`) from the returned body. A zero that means "we never looked" is
+`notObserved`, and it is a different value from `matched`.
+**Proved by.** `microsoft/tests/writes/echo-three-state.test.ts :: MS-O23: an unobserved echo is
+notObserved, never matched`; conformance `CONF-O17`.
+
+### MS-I24. Body format is part of the request contract, and a format mismatch is uncomparable, never divergence
+
+**Lesson.** `Prefer: outlook.body-content-type="text"` shapes the representation on both write and read. An
+echo whose `body.contentType` is not `text` is being diffed across formats, and every event then looks
+changed on every run.
+**Learned from.** `providers/outlook/destination/provider.ts` (the `Prefer` header on POST and GET); tests
+*"marks a non-text body echo as uncomparable instead of diffing across formats"*, *"requests plain-text
+bodies when listing events for content reconciliation"*; Microsoft's own note that Graph filters unsafe HTML
+by default (`devblogs.microsoft.com/microsoft365dev/message-body-property-will-filter-unsafe-html-by-default`).
+**Honoured by.** `src/client/prefer.ts` holds the `Prefer` set as an `as const`, applied to every read and
+every write. `src/decode/body.ts` returns `{ comparable: false, reason: "bodyFormat" }` when the returned
+content type is not `text`, and `echo.ts` maps that to `notObserved`.
+**Proved by.** `microsoft/tests/writes/body-format.test.ts :: MS-O24: an HTML body echo is uncomparable, not
+diverged`; conformance `CONF-O18`.
+
+### MS-I25. The online-meeting blob is a provider-owned region of the body and must survive a write
+
+**Lesson.** Microsoft documents that removing the Teams meeting blob from an event body disables the online
+meeting. A naive body PATCH silently destroys a user's join link — an unrecoverable wrong write that is
+invisible to a content hash.
+**Learned from.** `https://learn.microsoft.com/en-us/graph/api/resources/event` and the online-meeting
+guidance; the same shape as Google's conference block (`GOOG-I45`, `LEARNINGS.md` entry 47).
+**Honoured by.** `src/write/online-meeting.ts` detects the provider-owned region on the read-back and
+excludes it from both the fingerprint and the written body, so a mirror update composes our content with the
+region Graph owns rather than replacing the body wholesale.
+**Proved by.** `microsoft/tests/writes/online-meeting-block.test.ts :: MS-O25: an update preserves the Teams
+join blob and never diffs on it`.
+
+### MS-I26. An update or a delete without a precondition must be unspellable
+
+**Lesson.** An unconditional write is how a mirror silently clobbers a change the user made a second ago.
+**Learned from.** `LEARNINGS.md` entry 9, `RECON-I13`; `providers/outlook/destination/provider.ts`.
+**Honoured by.** The protocol's `WriteIntent` already requires `precondition: ObservedPrecondition` on
+`update`, `delete` and `retire`. `src/write/update.ts` renders it as `If-Match: <etag>` and has no branch
+that omits the header.
+**Proved by.** `microsoft/tests/writes/precondition-required.test-d.ts :: MS-O26: an update without a
+precondition does not typecheck`; conformance `CONF-O15`.
+
+### MS-I27. A precondition Graph might ignore is a different type from one Graph enforces
+
+**Lesson.** Graph's v1.0 `event: update` reference documents no `If-Match` header and no 412 response, unlike
+`listItem`/`driveItem` where it is explicit — while the field reports "the change key passed in the request
+does not match the current change key for the item" on mismatched writes. A type that merely *accepts* an
+etag gives false assurance if the server is last-write-wins.
+**Learned from.** `https://learn.microsoft.com/en-us/graph/api/event-update?view=graph-rest-1.0`;
+`https://learn.microsoft.com/en-us/graph/api/listitem-update?view=graph-rest-1.0`; Microsoft Q&A reports of
+the change-key error (all verified 2026-08-16).
+**Honoured by.** `src/write/precondition.ts` exposes two constructors, `enforcedPrecondition` and
+`verifiedPrecondition`. **Every** mutating verb sends the `If-Match` *and* verifies it itself: `updateInGraph`
+and `deleteInGraph` both read the current event through `readRemoteEvent`, compare it with `matchesObserved`,
+and answer a typed `conflict` before issuing the PATCH or the DELETE, so an ignored `If-Match` degrades to a
+conflict rather than to a silent overwrite or an unrecoverable removal. The fake Graph in the suite has an
+`honoursIfMatch: false` mode precisely so both paths are exercised.
+**Correction (review).** The removal path originally carried the header without the guard, so a
+stale-precondition delete against an If-Match-ignoring Graph destroyed a revision the caller had never
+observed. The claim above was true of `update` only; `MS-O44` was written red against `delete` and the guard
+was added to match.
+**Proved by.** `microsoft/tests/writes/ignored-if-match.test.ts :: MS-O27: a server that ignores If-Match
+yields a conflict, never a silent overwrite`;
+`microsoft/tests/writes/ignored-if-match-delete.test.ts :: MS-O44: a server that ignores If-Match yields a
+conflict rather than deleting a newer event`;
+`microsoft/tests/writes/ignored-if-match-delete.test.ts :: MS-O45: a removal whose precondition still matches
+deletes the event`;
+`microsoft/tests/writes/stale-precondition.test.ts :: MS-O28: a stale etag is a typed conflict and writes
+nothing`.
+
+### MS-I28. Two concurrent writers over one etag: exactly one wins
+
+**Lesson.** If both writers can succeed, the second one's success is a lost update.
+**Learned from.** `LEARNINGS.md` `CONF-I79`, `RECON-I15`.
+**Honoured by.** The conditional PATCH plus the verified fallback of MS-I27; the write path holds no
+read-modify-write outside the precondition.
+**Proved by.** `microsoft/tests/writes/concurrent-writers.test.ts :: MS-O29: two writers holding the same
+etag produce one update and one conflict`; conformance `CONF-O39`.
+
+### MS-I29. A replayed create is a no-op, and 409 is resolved by reading what is already there
+
+**Lesson.** Graph mints its own `id` and its own `iCalUId` on create, so there is no client-supplied
+identifier to make a create naturally idempotent. A retried create therefore duplicates the event unless the
+adapter looks first.
+**Learned from.** `LEARNINGS.md` entry 38, `GOOG-I40`/`GOOG-I78`; `core/events/identity.ts`.
+**Honoured by.** `src/write/create.ts` stamps the `IdempotencyKey` into a single-valued extended property
+and, before creating, resolves that key against the destination. The resolution is the documented one
+(MS-I92): `findByIdempotencyKey` narrows with
+`$filter=singleValueExtendedProperties/any(ep:ep/id eq '…' and ep/value eq '…')`, follows `@odata.nextLink`
+under `microsoftLimits.maxPages`, and — because Graph does **not** echo the property back on a filtered
+collection — re-reads each candidate by id with `$expand` and only accepts one whose stamp it can actually
+see. An existing match returns `{ kind: "alreadyExists" }` with the remote it found. A create conflict is
+resolved by reading, never by retrying blind.
+**Correction (review).** The first implementation listed `…/events` with no `$filter` and no `$expand` and
+scanned for the stamp in the response. On real Graph that scan can never match, so every replayed create
+would have duplicated; it passed only because the fixture attached extended properties to every row it
+served. The fixture now models Graph's retrieval rules (MS-I92), which is what makes this path honest.
+**Proved by.** `microsoft/tests/writes/idempotent-create.test.ts :: MS-O30: a replayed create returns
+alreadyExists and creates nothing`; conformance `CONF-O14`.
+
+### MS-I30. Provenance needs a provider-durable marker as well as a UID convention
+
+**Lesson.** Graph mints its own `iCalUId` on create, so a UID convention alone cannot recognise our own
+writes. The repo checks two independent markers — a Keeper-authored `iCalUId` *and* the Keeper category —
+and counts self-authored skips separately from discards so those stay zero on a healthy mirrored calendar.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts`
+(`parseOutlookEventsWithDiagnostics`); `core/events/identity.ts`; tests *"counts a changed event whose
+iCalUId became Keeper-authored"*, *"counts a changed event the provider tagged with the Keeper category"*.
+**Honoured by.** `src/decode/provenance.ts` reads the single-valued extended property first and the category
+second, but the two markers do **not** carry the same authority. Only the stamp names an installation, so
+only the stamp yields `{ kind: "ours", installation }`; a stamp bearing somebody else's value yields
+`{ kind: "ours", installation: <theirs> }` so the reconciler can classify it as `foreignInstallation`. The
+category is mailbox-wide and user-editable and every Keeper.sh installation writes the same string, so a
+category with no stamp yields `{ kind: "indeterminate" }` — enough to decline mirroring, never enough to
+claim the event as ours. The `iCalUId` heuristic alone remains explicitly insufficient.
+`src/listing/build-feed.ts` counts `selfAuthored` only for a stamp matching *our* installation.
+**Correction (review).** The category-only branch previously returned `{ kind: "ours", installation }` with
+*our* id substituted — an invented internal value that made another installation's events, and any event a
+user had hand-tagged, read as our own echo.
+**Proved by.** `microsoft/tests/provenance/two-markers.test.ts :: MS-O31: only the stamped extended property
+claims our installation; the category is indeterminate and the iCalUId proves nothing`;
+`microsoft/tests/provenance/two-markers.test.ts :: MS-O31: another installation's stamp is read as its own,
+never as ours`; conformance `CONF-O15`, `CONF-O16`.
+
+### MS-I31. Range normalization happens at one seam, before the mapping and the fingerprint
+
+**Lesson.** Graph refuses an event whose end precedes its start, and *accepts* a zero-duration timed event —
+unlike Google, which rejects both. Normalizing inside the serializer instead of before reconciliation makes
+the stored range, the content hash and the pushed resource disagree, and the event is replaced on every run.
+**Learned from.** commit `b057d2e0` *"mirror zero-duration events Google cannot represent"*;
+`providers/outlook/destination/normalize-event.ts`; `tests/providers/outlook/destination/inverted-time-range.test.ts`.
+**Honoured by.** `normalize` is a protocol method, and `src/write/normalize.ts` is the only place a range is
+shaped. Its output feeds the fingerprint, the mapping and the serializer identically.
+**Proved by.** `microsoft/tests/writes/normalize-fixed-point.test.ts :: MS-O32: normalizing a normalized
+range is the identity`; conformance `CONF-O36`.
+
+### MS-I32. All-day values are a UTC-midnight pair, paired with `"UTC"` unconditionally
+
+**Lesson.** An all-day value already snapped to UTC day boundaries paired with a named zone names *local*
+midnight there — the previous UTC day for every zone ahead of UTC, and a different day than the zone-free
+DATE that Google and CalDAV receive.
+**Learned from.** commit `b057d2e0`; `providers/outlook/destination/serialize-event.ts`
+(`buildOutlookDateTime`); `tests/providers/outlook/destination/all-day-zone-pairing.test.ts`.
+**Honoured by.** `src/write/serialize.ts` has one unconditional all-day branch: `{ dateTime: <UTC wall>,
+timeZone: "UTC" }`, and `capabilities.allDay` declares `"utcMidnightPair"` so the suite gates on it.
+**Proved by.** `microsoft/tests/writes/all-day-roundtrip.test.ts :: MS-O33: an all-day range is written as a
+UTC-midnight pair and reads back as the same days`; conformance `CONF-O80` family (`CONF-I80`).
+
+### MS-I33. A zoned wall time that does not round-trip is written in UTC
+
+**Lesson.** A repeated fall-back wall time names two instants. If our own reader would resolve the emitted
+pair to a different instant, the mirrored event reads back moved and is deleted and re-created every run.
+**Learned from.** commit `b057d2e0` *"name one instant when the wall clock names two"*;
+`providers/outlook/destination/serialize-event.ts`;
+`tests/providers/outlook/destination/wall-time-convergence.test.ts`.
+**Honoured by.** `src/write/wall-time.ts` asserts its own round trip
+(`resolveWallTime(instantToWallTime(v, zone), zone) === v`, both from `@keeper.sh/sync-ical`) before
+choosing the zoned form, and emits UTC otherwise. It is a pure function and is swept across IANA zones.
+**Proved by.** `microsoft/tests/writes/wall-time-convergence.test.ts :: MS-O34: a second-pass fall-back
+instant is emitted in UTC`; `microsoft/tests/writes/wall-time-sweep.test.ts :: MS-O35: every emitted pair
+reads back as the instant it was built from`.
+
+### MS-I34. Judge a range by the instant it names, and use one window predicate everywhere
+
+**Lesson.** A zero-duration or inverted range fails a half-open `endTime`-based window test, so a
+zero-duration event sitting exactly on `timeMin` produced no operation on any run. Four diverged copies of
+the predicate existed.
+**Learned from.** commit `b057d2e0` *"apply one degenerate-aware window predicate at every layer"*;
+`core/events/time-range.ts` (`overlapsTimeWindow`).
+**Honoured by.** `src/window/membership.ts` exports `withinMicrosoftWindow: WindowMembership`, it is passed
+to `runConformance`, and a hygiene test asserts no other file computes window membership.
+**Proved by.** `microsoft/tests/hygiene/one-predicate.test.ts :: MS-H2: only one module decides window
+membership`; conformance `CONF-O35`, `CONF-O36`.
+
+### MS-I35. MailboxConcurrency is 4, it is reported as a 503 as well as a 429, and `$batch` does not raise it
+
+**Lesson.** Graph reports mailbox concurrency throttling as `503` with `Retry-After`, not only as `429`. A
+handler that special-cases 429 hammers the service. `$batch` executes at most four requests in parallel for
+the same mailbox internally, so a batch of twenty buys nothing but worse failure attribution.
+**Learned from.** `providers/outlook/shared/throttle.ts` (`isThrottleStatus`, the only comment in the file,
+which cites the limit); `https://learn.microsoft.com/en-us/graph/throttling-limits`; Microsoft Q&A on
+MailboxConcurrency (verified 2026-08-16).
+**Honoured by.** `capabilities.throttleSignals` declares both `{429, retryAfter}` and `{503, retryAfter}`,
+`capabilities.quotaScope` is `"perMailbox"`, and `src/client/semaphore.ts` caps permits per mailbox at
+`dependencies.mailboxConcurrency` — a constructor argument, defaulted from `microsoftLimits`, never a
+constant buried in a helper. Cross-mailbox work is not serialised.
+**Proved by.** `microsoft/tests/lockups/mailbox-concurrency.test.ts :: MS-L1: in-flight requests to one
+mailbox never exceed four, and a second mailbox is not blocked`;
+`microsoft/tests/errors/throttle-classification.test.ts :: MS-L2: a 503 with Retry-After classifies as
+throttled, exactly like a 429`.
+
+### MS-I36. `Retry-After` may be seconds or an HTTP-date, and it must be clamped
+
+**Lesson.** Both forms occur. An unclamped `Retry-After` is an await with no ceiling — a lockup, not a
+politeness measure. The repo clamps to 0..64s.
+**Learned from.** `providers/outlook/shared/throttle.ts` (`MAX_RETRY_AFTER_MS = 64_000`);
+`core/utils/backoff.ts`.
+**Honoured by.** `src/errors/retry-after.ts` parses both forms against the *injected* clock and clamps to
+`microsoftLimits.retryAfterCeilingMs`; the value is then bounded again by the caller's `RetryBudget`.
+**Proved by.** `microsoft/tests/lockups/retry-after-clamp.test.ts :: MS-L3: a Retry-After of 100000 seconds
+and a far-future HTTP-date both clamp to the ceiling`;
+`microsoft/tests/lockups/retry-after-clock.test.ts :: MS-L4: an HTTP-date Retry-After is measured on the
+injected clock, never on Date.now`.
+
+### MS-I37. Every retry path has a provable ceiling, and the sleep is abortable and rejects on abort
+
+**Lesson.** A retry loop with no ceiling is a wedged worker. A sleep that resolves on abort leaves the
+worker holding its lease through the whole ladder.
+**Learned from.** `core/utils/backoff.ts` (`createAbortableTimer` / `abortableSleep`); tests *"retries a
+MailboxConcurrency 503 before giving up on the occurrence"*, *"reports an occurrence that stays throttled
+through every retry"*, *"aborts a pending Graph event creation/deletion/listing"*.
+**Honoured by.** `src/client/backoff.ts` runs at most `context.retryBudget.maxAttempts` attempts over
+`dependencies.clock.sleep`, which is built on `setTimeout` and rejects with `signal.reason`.
+**Proved by.** `microsoft/tests/lockups/retry-ceiling.test.ts :: MS-L5: a permanently throttled request
+stops at the budget and makes exactly maxAttempts transport calls`;
+`microsoft/tests/lockups/abortable-sleep.test.ts :: MS-L6: aborting during a backoff sleep rejects and
+clears the timer`.
+
+### MS-I38. Every await on Graph has a deadline, and a timeout is not a caller abort
+
+**Lesson.** Default paging plus a 5s default timeout produced production failures; the repo moved to an
+explicit 30s timeout and distinguishes its own timeout (recorded as a provider condition) from a caller
+abort (recorded as not attempted), so a user-cancelled sync is not counted as a provider failure.
+**Learned from.** commit `7bd659df` *"limit page size for outlook, and increase timeout to 30s"*;
+`providers/outlook/source/utils/fetch-events.ts` (`REQUEST_TIMEOUT_MS`, `isRequestTimeoutError` with
+`!options.signal?.aborted`).
+**Honoured by.** `src/client/deadline.ts` composes the caller's `signal` with the operation deadline; the
+resulting rejection carries which one fired. An abort maps to `{ kind: "notAttempted", reason: "aborted" }`
+and a spent deadline to `{ kind: "notAttempted", reason: "budgetExhausted" }`, so a user-cancelled sync and
+a provider that never answered stay distinguishable without either being charged as a provider failure.
+**Proved by.** `microsoft/tests/lockups/deadline.test.ts :: MS-L7: a request that never resolves rejects at
+the deadline`;
+`microsoft/tests/lockups/abort-vs-timeout.test.ts :: MS-L8: an aborted request is aborted and a timed out
+request is budgetExhausted`;
+`microsoft/tests/lockups/every-verb-deadline.test.ts :: MS-L9: listCalendars, listChanges and write each
+reject against a stub that never resolves`.
+
+### MS-I39. Pagination is bounded twice: a page ceiling and a repeated-link detector
+
+**Lesson.** Microsoft has an open, service-labelled bug where a recurring master expanding past
+`odata.maxpagesize` returns a `nextLink` that cycles over duplicate pages forever. The repo's own Outlook
+adapter has two bare `while (nextLink)` loops with no ceiling and no progress check.
+**Learned from.** `https://github.com/microsoftgraph/msgraph-sdk-dotnet/issues/3070` (verified 2026-08-16);
+`providers/outlook/source/utils/fetch-events.ts`.
+**Honoured by.** `src/listing/paginate.ts` carries `maxPages` from `microsoftLimits`, a `Set` of links
+already walked, and one deadline over the whole loop. Both exits produce `partial` or `cursorLost`, never a
+completed `delta` — so the loop-breaker structurally cannot cause a deletion.
+**Proved by.** `microsoft/tests/lockups/page-ceiling.test.ts :: MS-L10: a nextLink that never changes ends
+the walk at the ceiling`;
+`microsoft/tests/lockups/repeated-link.test.ts :: MS-L11: a nextLink already walked ends the walk below the
+ceiling`;
+`microsoft/tests/lockups/loop-deadline.test.ts :: MS-L12: pages that each finish under the per-request
+deadline still end at the loop deadline`;
+`microsoft/tests/cursor/ceiling-is-not-delta.test.ts :: MS-O36: a walk stopped by either bound never returns
+a delta`.
+
+### MS-I40. Cap the page size explicitly
+
+**Lesson.** Default paging was itself a source of production failures; the repo sets
+`Prefer: odata.maxpagesize=50`.
+**Learned from.** commit `7bd659df`; `https://learn.microsoft.com/en-us/graph/delta-query-events` (verified
+2026-08-16: the `Prefer: odata.maxpagesize={x}` header).
+**Honoured by.** `microsoftLimits.pageSize` is `50` as an `as const`, rendered by `src/client/prefer.ts`.
+**Proved by.** `microsoft/tests/hygiene/prefer-headers.test.ts :: MS-H3: every listing request carries the
+declared Prefer set`.
+
+### MS-I41. A permit or lease is released when the body throws, and when it aborts
+
+**Lesson.** A lock released only on the happy path is the repo's recurring hang. Postgres advisory locks are
+taken inside a transaction so release is structural, not a happy-path unlock.
+**Learned from.** `core/source/ingest-lock.ts`; `tests/core/source/ingest-lock.test.ts`.
+**Honoured by.** `src/client/semaphore.ts` releases in `finally`, on the throwing path and on the aborted-
+while-queued path, and an aborted waiter rejects rather than being dropped — its slot is not lost.
+**Proved by.** `microsoft/tests/lockups/permit-release.test.ts :: MS-L13: a permit is released when the body
+throws`;
+`microsoft/tests/lockups/queued-abort.test.ts :: MS-L14: a waiter aborted while queued rejects and frees its
+slot for its successor`; conformance `CONF-L*` via `leaseReleasedOnThrow`.
+
+### MS-I42. Multi-key acquisition is in a canonical order
+
+**Lesson.** Two ingests acquiring overlapping calendar locks in opposite orders deadlock. The repo sorts and
+de-duplicates lock ids.
+**Learned from.** `core/source/ingest-lock.ts`.
+**Honoured by.** `src/client/semaphore.ts` acquires a sorted, de-duplicated key list.
+**Proved by.** `microsoft/tests/lockups/ordered-keys.test.ts :: MS-L15: two callers acquiring the same two
+keys in opposite orders both complete`; conformance obligation `concurrentSameKeyDoesNotDeadlock`.
+
+### MS-I43. A single-flight leader's failure reaches every follower
+
+**Lesson.** The losing waiter must inherit the leader's rejection, and the coordinator must delete its own
+entry only if it still owns it — otherwise a later flight is deleted by an earlier one's `finally`.
+**Learned from.** `core/oauth/refresh-coordinator.ts`; `tests/core/oauth/refresh-coordinator.test.ts`.
+**Honoured by.** `src/client/single-flight.ts` keys by listing scope and by subscription key, attaches a
+`finally` that compares identity before deleting, and fans the rejection out to every follower.
+**Proved by.** `microsoft/tests/lockups/single-flight.test.ts :: MS-L16: a leader's failure rejects every
+follower and leaves none pending`;
+`microsoft/tests/lockups/single-flight-ownership.test.ts :: MS-L17: a settled flight does not delete its
+successor's entry`; conformance obligation `followerRejectsWhenLeaderFails`.
+
+### MS-I44. Telemetry is accumulated locally and emitted by the caller that owns the context
+
+**Lesson.** A coalesced body runs in whichever async context first created the promise, so logging inside it
+lands on a foreign wide event.
+**Learned from.** `core/oauth/refresh-coordinator.ts`; `core/sync-engine/ingest.ts` (`measureDiff`).
+**Honoured by.** The adapter emits nothing. Diagnostics are returned as data on the listing and on the write
+outcome, and the caller records them.
+**Proved by.** `microsoft/tests/hygiene/no-logging.test.ts :: MS-H4: no module imports a logger or writes to
+console`; conformance `CONF-I24` behaviour via `followerRejectsWhenLeaderFails`.
+
+### MS-I45. Quota is acquired inside the retried operation
+
+**Lesson.** Acquiring the permit outside the retry holds it across every backoff sleep, so four retrying
+requests wedge the whole mailbox.
+**Learned from.** `LEARNINGS.md` entry 23, `GOOG-I31`.
+**Honoured by.** `src/client/request.ts` orders the seam `gate -> retry( permit -> deadline -> call )`, so a
+backoff sleep holds no permit.
+**Proved by.** `microsoft/tests/lockups/quota-inside-retry.test.ts :: MS-L18: a backoff sleep holds no
+mailbox permit`.
+
+### MS-I46. Every response is read or explicitly cancelled
+
+**Lesson.** `deleteEvents` calls `await response.body?.cancel?.()` before recording success. An undrained
+body leaks a connection out of the pool and eventually wedges the worker under bulk deletes. This is a
+lockup-class defect, not a tidiness one.
+**Learned from.** `providers/outlook/destination/provider.ts` (`deleteEvents`).
+**Honoured by.** `src/client/raw-response.ts` is the only place a raw `Response` is handled, and it either
+reads the body or cancels it on every path.
+**Proved by.** `microsoft/tests/lockups/response-drain.test.ts :: MS-L19: a delete whose body is never read
+cancels the stream`.
+
+### MS-I47. The SDK's own defaults are a lockup, and are switched off explicitly
+
+**Lesson.** `@microsoft/microsoft-graph-client` ships a middleware chain with its own retry handler and
+redirect handler. Leaving them on means two nested retry ladders with two ceilings, and a redirect chain
+with no bound — and the adapter's own ceiling test then proves nothing.
+**Learned from.** `https://github.com/microsoftgraph/msgraph-sdk-javascript` middleware documentation
+(verified 2026-08-16); `GOOG-I38`, the identical lesson for `@googleapis/calendar`.
+**Honoured by.** `src/client/graph-client.ts` builds the client with an explicit middleware chain: the
+custom `AuthenticationProvider`, the injected `fetch`, and nothing that retries or redirects. Retries belong
+to `src/client/backoff.ts` alone.
+**Proved by.** `microsoft/tests/hygiene/sdk-defaults.test.ts :: MS-H5: a 429 produces exactly the adapter's
+own attempt count, so no SDK retry handler is active`.
+
+### MS-I48. Failures are classified by discriminant at one boundary, never by message text anywhere
+
+**Lesson.** Matching error strings breaks on the next service message change, and the caller then inspects
+raw status codes in five places.
+**Learned from.** `LEARNINGS.md` entry 19; `providers/outlook/push/subscription.ts`
+(`GraphSubscriptionError.channelGone` / `.duplicate`).
+**Honoured by.** `src/errors/graph-error.ts` decodes `unknown` into `{ status, code, retryAfter }` totally;
+`src/errors/classify.ts` maps `(status, code, operation)` onto an `as const` union
+`gone | duplicate | throttled | authRequired | notFound | conflict | unsupported | transport`;
+`src/errors/to-provider-failure.ts` switches over it exhaustively with `assertNever`. No other module reads
+a status code.
+**Proved by.** `microsoft/tests/errors/classification.test.ts :: MS-O37: every documented Graph error shape
+classifies by discriminant`;
+`microsoft/tests/errors/hostile-bodies.test.ts :: MS-L20: an error body that is not the documented shape
+still classifies and never throws`;
+`microsoft/tests/hygiene/no-status-codes.test.ts :: MS-H6: no module outside src/errors reads a status
+code`.
+
+### MS-I49. 410 and 404 mean different things on different verbs, and a 404 on delete is success
+
+**Lesson.** Retrying or failing a delete whose target is already gone puts the reconciler in a loop it can
+never exit. A 404 on renewal means the subscription is gone; a 429 does not.
+**Learned from.** `providers/outlook/destination/provider.ts` (`status !== HTTP_STATUS.NOT_FOUND`);
+`providers/outlook/push/subscription.ts` (`deregister`, and the `channelGone` classification).
+**Honoured by.** `classify.ts` takes the `OperationName` as an argument, and `src/write/delete.ts` maps both
+404 and 410 to `{ kind: "alreadyAbsent" }`.
+**Proved by.** `microsoft/tests/errors/per-verb-gone.test.ts :: MS-O38: a 410 on listChanges is cursorLost
+and a 410 on delete is alreadyAbsent`;
+`microsoft/tests/writes/delete-idempotent.test.ts :: MS-O39: deleting an absent event is a successful
+no-op`.
+
+### MS-I50. Cancellation is never a result value
+
+**Lesson.** Both `pushEvents` and `deleteEvents` check `config.signal?.aborted` in their catch and rethrow;
+without it a cancelled sync is recorded as N genuine provider failures and drives the calendar into backoff.
+**Learned from.** `providers/outlook/destination/provider.ts` (both catch blocks).
+**Honoured by.** An abort produces `{ kind: "notAttempted", reason: "aborted" }` at the seam and is never
+folded into a per-item failure count.
+**Proved by.** `microsoft/tests/lockups/abort-before-first-call.test.ts :: MS-L21: an abort before the first
+request is notAttempted with zero transport calls`.
+
+### MS-I51. Every discard is counted, per run, split by reason, and carries no customer content
+
+**Lesson.** The whole `*-telemetry` test family exists because events vanished in production and nobody
+could tell whether the feed, the parser or the diff ate them. Identifier lists must be a capped sample
+beside an exact uncapped total, or the wide event is truncated and takes the counters with it. And the
+push-echo module deliberately carries only booleans and lengths out of memory.
+**Learned from.** `core/sync-engine/ingest.ts` (`DiscardedSourceEventCounts`, `WIDE_EVENT_LIST_LIMIT`);
+`core/events/push-echo.ts` module comment; commit `03f4b7fb`.
+**Honoured by.** `src/listing/diagnostics.ts` builds the protocol's `BoundedSample` (`sample` plus exact
+`total`) for `withheld`, `selfAuthored` and `unrepresentable` separately, from identifiers only.
+**Proved by.** `microsoft/tests/listing/diagnostics-bounds.test.ts :: MS-O40: samples are capped beside an
+exact total`;
+`microsoft/tests/listing/no-content-in-diagnostics.test.ts :: MS-O41: no event title, description or
+location reaches diagnostics`; conformance `CONF-O38`, `CONF-O39` family.
+
+### MS-I52. Every discard test is paired with a convergence test
+
+**Lesson.** A discard that is correct once but churns forever is the failure mode that actually reached
+production. Round-tripping the same feed twice must be no work at all — which is doubly load-bearing here,
+because Outlook rewrites bodies, so a naive write-read-compare manufactures an infinite update loop.
+**Learned from.** `tests/ics/utils/ics-superseded-slot-telemetry.test.ts` *"settles without churning the
+surviving row over repeated polls"*; `interpret-full-day-recurrence.test.ts` *"answers the same way when the
+same feed is ingested twice"*.
+**Honoured by.** Change detection runs over the canonical projection in `src/canonical.ts`, never over raw
+provider strings, and every `MS-O` discard test has a paired second-run assertion.
+**Proved by.** `microsoft/tests/writes/convergence.test.ts :: MS-O42: a second sync after a write is a
+no-op`;
+`microsoft/tests/listing/discard-convergence.test.ts :: MS-O43: the same page ingested twice discards the
+same identities and changes nothing`; conformance `CONF-O9`, `CONF-O30`.
+
+---
+
+## Not applicable to sync-microsoft
+
+### MS-I53. RFC 5545 nominal versus exact DURATION — NOT APPLICABLE in form, adopted in rule
+
+RFC 5545 §3.3.6 distinguishes nominal durations (weeks and days, added in wall time, so a day across a DST
+transition is 23 or 25 hours) from exact ones. Graph has no `DURATION` property: an event always states an
+explicit `start` and `end`. The *sibling* rule does apply and is adopted at MS-I33 and MS-I19: a recurring
+series is expanded by Graph itself, and any occurrence whose zone semantics we cannot resolve is withheld
+rather than re-derived. `OccurrenceDuration` in the protocol still carries the `nominal` arm, and
+`src/decode/recurrence.ts` populates it from an all-day master so a downstream consumer is not told an
+all-day series is an exact-second one.
+Learned from `packages/calendar/src/ics/utils/recurrence-duration.ts`.
+
+### MS-I54. iCalendar text robustness — NOT APPLICABLE
+
+Lenient property-level parsing, VTIMEZONE building and synthesis, BOM stripping, line folding measured in
+UTF-8 octets, and non-compliant date coercion are all properties of an iCalendar byte stream. Graph's wire
+format is JSON and RFC 5545 never appears on it. Recorded rather than omitted because the review verifies
+ledger completeness, not only its hits.
+Learned from `packages/sync-kit/ical/src/text/**`, `packages/calendar/src/ics/utils/lenient-parser.ts`.
+
+### MS-I55. The two-probe wall-time premise and the IANA sweeps — ADOPTED BY REUSE, not reimplemented
+
+The premise (the offset applying to a wall time is one of the two the zone is in a day either side of it; in
+a fold choose the earlier instant, in a gap shift forward by the transition size) is proven across all ~445
+IANA zones in `packages/sync-kit/ical/tests/zone/sweeps/`. sync-microsoft imports `resolveWallTime` and
+`instantToWallTime` from `@keeper.sh/sync-ical` rather than porting them, so the premise tests are not
+duplicated — but MS-I33's round-trip sweep runs here, because the *emission* decision is this package's.
+Learned from `packages/calendar/src/ics/utils/timezone-instant.ts` and the wall-time sweeps.
+
+### MS-I56. Remote I/O outside database transactions, and Postgres advisory locks — NOT APPLICABLE in mechanism
+
+This package owns no storage and opens no transaction. The *shape* is adopted at MS-I41: release is
+structural, not a happy-path unlock. A hygiene test asserts no database import.
+Learned from `core/source/ingest-lock.ts`, `core/sync-engine/ingest.ts`.
+
+### MS-I57. Superseded-run suppression — NOT APPLICABLE here, enforced at the seam it belongs to
+
+"A superseded run must discard its fetch without flushing, and must never write the sync token" is a
+property of the caller that owns the write transaction. This adapter contributes the half it can: a cursor
+carries the scope fingerprint that minted it (MS-I5), and an in-process frontier refuses a cursor older than
+one already advanced, before the network.
+Learned from `core/sync-engine/ingest.ts` (`isCurrent()`), `tests/core/sync-engine/ingest-superseded.test.ts`.
+
+### MS-I58. Delta-window pruning — NOT APPLICABLE, and deliberately so
+
+"A delta source needs window pruning that a snapshot source must not have" is a reconciler rule; getting the
+adapter's filter and the pruner's predicate out of agreement produces a permanent add/delete oscillation.
+The adapter's contribution is MS-I34: one exported window predicate, handed to the reconciler and to the
+conformance suite, so there is only one predicate to disagree with.
+Learned from `core/sync-engine/ingest.ts` (`getNonRecurringStoredEventIdsOutsideWindow`);
+`tests/core/sync-engine/ingest-convergence.test.ts`.
+
+### MS-I59. Recurrence expansion budgets — NOT APPLICABLE in v1
+
+Graph expands series server-side via `/instances`, so this package never expands an RRULE. The paired rule —
+a withheld series is withheld from *ingestion* only and never from the removal computation — is adopted at
+MS-I14 and MS-I19.
+Learned from `core/sync-engine/ingest.ts` (`buildSourceEventStateIdsToRemove`).
+
+### MS-I60. `$batch` — NOT APPLICABLE in v1
+
+`$batch` is rejected for the first version: Graph runs at most four requests in parallel per mailbox
+internally, so a batch of twenty buys no parallelism and makes per-item failure attribution strictly worse.
+Recorded so its absence reads as a decision.
+Learned from `https://learn.microsoft.com/en-us/graph/throttling-limits` and the MailboxConcurrency answers.
+
+---
+
+## Dependencies taken and rejected
+
+### MS-I61. Taken: `@microsoft/microsoft-graph-client@3.0.7`
+
+The official JavaScript client. Its real value is the one-method `AuthenticationProvider` interface
+(`getAccessToken(): Promise<string>`), which is exactly the seam we need since we own the token lifecycle,
+plus a middleware chain we can compose explicitly. Runtime dependencies are `tslib` and `@babel/runtime`.
+**Accepted risk, recorded rather than hidden:** 3.0.7 was published 2023-09-19 (verified against the npm
+registry 2026-08-16). "Official" and "actively maintained" are different claims. The mitigation is MS-I47
+and MS-I48: the client is configured with an explicit middleware chain, and every raw status, header and
+error shape the adapter depends on is decoded at our own boundary, so replacing the client is a one-file
+change.
+
+### MS-I62. Taken: `@microsoft/microsoft-graph-types@2.43.1`
+
+Types only, zero runtime dependencies, published 2025-10-03. Hand-rolled response interfaces are exactly
+where `as` creeps back in, so this dependency directly serves the no-type-assertions rule. The nullable
+fields of MS-I18 are declared by it.
+
+### MS-I63. Taken: `@keeper.sh/sync-protocol` (workspace)
+
+The types this package implements. Never redefined here.
+
+### MS-I64. Taken: `@keeper.sh/sync-ical` (workspace), imported as values in exactly two files
+
+`resolveZoneIdentifier`, `normalizeZoneIdentifier`, `windowsZones`, `resolveWallTime` and
+`instantToWallTime`. The full CLDR windowsZones table and the two-probe wall-time algorithm are years of
+this team's work and are already swept across every IANA zone; re-deriving them for Graph would be the
+single most expensive mistake available. The value import is confined to `src/decode/zone.ts` and
+`src/write/wall-time.ts`, and a hygiene test enforces that.
+
+### MS-I65. Taken (dev): `@keeper.sh/sync-conformance` (workspace)
+
+The acceptance gate.
+
+### MS-I66. Rejected: `@azure/identity`
+
+We already own the token lifecycle — refresh, storage and the single-flight coordinator all live in the
+existing codebase. `@azure/identity` would take that over, drag in MSAL, and put a second refresh path
+beside ours. The custom `AuthenticationProvider` of MS-I61 is a five-line adapter over the tokens we hold.
+
+### MS-I67. Rejected: `@microsoft/msgraph-sdk-javascript` (the Kiota successor)
+
+Still `1.0.0-preview` with nine transitive dependencies. Not acceptable on a write path to real calendars.
+Re-evaluate when it reaches a stable major.
+
+### MS-I68. Rejected: a hand-rolled `fetch` wrapper over the REST API
+
+Zero dependencies is explicitly not a goal here. The client gives us the auth seam, request building and
+`$skiptoken`/`$deltatoken` URL handling for free, and we keep the raw `Response` anyway via
+`src/client/raw-response.ts`.
+
+### MS-I69. Rejected: `zod` / `arktype` re-validation of SDK responses
+
+The types package plus total decoders that return typed reasons (MS-I15) give the same safety without a
+runtime schema layer, and a schema failure would be a throw where the design demands a counted withhold.
+
+### MS-I70. Rejected: `ical.js`, `ts-ics`, `rrule`, `tsdav`, `node-ical`
+
+Wrong protocol. Graph is JSON, not iCalendar and not CalDAV. Recurrence travels as
+`patternedRecurrence`, declared to the protocol as `recurrenceWrite: "providerNative"` and passed through
+opaquely, so no RRULE engine is needed.
+
+### MS-I71. Rejected: `temporal-polyfill` / `@js-temporal/polyfill`
+
+`Temporal` is not available in the Bun version this repo runs, so the polyfill is a real runtime dependency.
+`@keeper.sh/sync-ical`'s `Intl`-based helpers already solve instant/wall-time and are proven by the sweeps.
+
+### MS-I72. Process: Bun, vitest, and never `Bun.sleep`
+
+Tests run with `bun x --bun vitest run`, never bare `bun test`. `Bun.sleep` is a native primitive that
+`vi.useFakeTimers` cannot patch, so every delay in this package is `setTimeout` on the injected clock — a
+lesson that already cost this team CI time. `AbortSignal.timeout` is likewise not patched by fake timers, so
+deadlines are measured on `dependencies.clock`, never on the ambient one. Hashing arrives as
+`dependencies.hash` on **both** halves of every hash contract — `clientStateHash` and `verifyClientState`
+alike (MS-I75) — so the package has no module-level side effect and no ambient hasher. The one remaining
+`node:crypto` import is `timingSafeEqual`, a pure comparison primitive with no configuration to inject;
+`microsoft/tests/push/constant-time.test.ts :: MS-P23: the module reaches for no ambient hasher of its own`
+pins that nothing else creeps back in.
+
+---
+
+## Push and change notifications
+
+### MS-I73. The validation handshake is answered before anything else, verbatim, and cannot throw
+
+**Lesson.** Graph's handshake must return the URL-decoded token, as `text/plain`, with 200, within ten
+seconds. It is a GET or POST on the same notification URL, detected purely by the presence of
+`?validationToken`, and it must be answered before any auth or config check. The token is bounded and never
+escaped into anything but a plain-text body. `lifecycleNotificationUrl` is validated the same way, so two
+validation requests arrive when the two URLs are the same.
+**Learned from.** `providers/outlook/push/receiver.ts`; `services/api/src/utils/push-notifications/handle-webhook.ts`
+(`handshakeResponse`, `x-content-type-options: nosniff`, `PUSH_VALIDATION_TOKEN_MAX`);
+`https://learn.microsoft.com/en-us/graph/change-notifications-delivery-webhooks` (verified 2026-08-16).
+**Honoured by.** `src/push/receiver.ts` exports a pure, synchronous `decodeGraphPush` returning
+`{ kind: "validation" } | { kind: "notification" } | { kind: "rejected", reason }`, so a handshake cannot be
+confused with a notification and neither can throw.
+**Proved by.** `microsoft/tests/push/handshake.test.ts :: MS-P1: the validation token is decoded exactly
+once and returned verbatim for a hostile-looking token`;
+`microsoft/tests/push/handshake-first.test.ts :: MS-P2: a handshake is answered without consulting any
+stored channel`.
+
+### MS-I74. A notification is a trigger, never data, and never a source of calendar identity
+
+**Lesson.** The receiver deliberately sets `presentedResourceId: null` for Graph and resolves the calendar
+from the stored channel row keyed by `subscriptionId`. Rich notifications are the tempting exception: the
+carried resource is a hint that triggers a re-read, never the authoritative event — which is the same rule as
+"Outlook rewrites what you write".
+**Learned from.** `providers/outlook/push/receiver.ts`; test *"never exposes a calendar identifier from the
+resource path"*; `https://learn.microsoft.com/en-us/graph/change-notifications-with-resource-data`.
+**Honoured by.** `decodeGraphPush` emits a claim carrying the subscription id and the client state only.
+`src/push/resource-data.ts` types the carried resource as `RichHint`, which has no path into
+`RemoteEvent`.
+**Proved by.** `microsoft/tests/push/no-identity-leak.test.ts :: MS-P3: no calendar identifier is derived
+from the resource path`;
+`microsoft/tests/push/rich-hint.test.ts :: MS-P4: a rich notification's resource cannot be converted into a
+RemoteEvent`.
+
+### MS-I75. `clientState` is verified per claim, in constant time, against a stored hash
+
+**Lesson.** A batch can span several subscriptions, so one bad secret must reject only its own claim, not
+the batch. Max `clientState` length is 128 characters, which a 32-byte hex secret fits at 64.
+**Learned from.** `core/source/push-secret.ts` (sha256 + `timingSafeEqual`); `handle-webhook.ts`
+(`resolveClaimChannel`); tests *"verifies a lifecycle element's client state like any other"*, *"parses a
+batch spanning two subscriptions into one claim per entry"*;
+`https://learn.microsoft.com/en-us/graph/api/resources/subscription` (verified 2026-08-16, clientState max
+128).
+**Honoured by.** `src/push/secret.ts` exports `clientStateHash` to mint the stored value and
+`verifyClientState` to compare a presented one against it in constant time; **both take the host's `hash` as
+an argument**, so mint and verify are provably the same function. `receiver.ts` decodes a batch into one
+claim per entry, lifecycle entries included, each carrying its own `presentedClientState`; the caller applies
+`verifyClientState` per claim, because the adapter owns no channel storage (MS-I71) and so cannot know which
+stored hash a claim belongs to.
+**Correction (review).** This entry previously claimed the receiver performed the verification and rejected
+a request when every claim failed. It does not, and no code did; the accurate division of labour is the one
+above. Separately, `verifyClientState` used to re-hash with a module-private `Bun.CryptoHasher`, so any host
+injecting a non-sha256-hex `hash` would have had every notification silently rejected — push would have gone
+deaf with no error anywhere.
+**Proved by.** `microsoft/tests/push/client-state.test.ts :: MS-P5: one bad client state rejects its own
+claim and not the batch`;
+`microsoft/tests/push/constant-time.test.ts :: MS-P6: verification compares hashes, never the plaintext`;
+`microsoft/tests/push/constant-time.test.ts :: MS-P22: the host's own hash mints and verifies the same
+secret`;
+`microsoft/tests/push/constant-time.test.ts :: MS-P23: the module reaches for no ambient hasher of its own`.
+
+### MS-I76. Lifecycle events are three distinct outcomes and must not be collapsed
+
+**Lesson.** `reauthorizationRequired` marks the channel and triggers no ingest; `subscriptionRemoved` marks
+it removed *and* schedules an ingest; `missed` schedules an ingest *without* resetting the sync token.
+Treating `missed` as a token reset throws away a valid delta cursor for no reason.
+**Learned from.** `services/api/src/utils/push-notifications/handle-webhook.ts` (`applyLifecycleClaim`);
+`services/api/tests/routes/api/webhook/outlook.test.ts` *"recovers missed notifications without resetting
+the sync token"*.
+**Honoured by.** `src/push/lifecycle.ts` switches over an `as const` literal union with `assertNever`, and
+each arm's effect on the cursor is an explicit field of its result.
+**Proved by.** `microsoft/tests/push/lifecycle.test.ts :: MS-P7: missed schedules an ingest and leaves the
+cursor untouched`;
+`microsoft/tests/push/lifecycle-exhaustive.test-d.ts :: MS-P8: a new lifecycle event does not typecheck
+until it is handled`.
+
+### MS-I77. Subscription lifetime is a property of the (resource, includeResourceData) pair
+
+**Lesson.** Graph's maximum for Outlook `event` is 10,080 minutes (under seven days), and it collapses to
+1,440 minutes (under one day) for rich notifications with `includeResourceData: true`. Any expiry under 45
+minutes is silently raised to 45. Turning resource data on without dropping the lifetime constant makes
+every create fail.
+**Learned from.** `core/source/push-provider-profile.ts` (`GRAPH_SUBSCRIPTION_MAX_LIFETIME_MS`,
+`PROVIDER_LIFETIME_SAFETY_MS`); `https://learn.microsoft.com/en-us/graph/api/resources/subscription`
+(verified 2026-08-16: the lifetime table and the 45-minute floor).
+**Honoured by.** `src/push/profile.ts` holds an `as const` map keyed by the pair, not a single constant, and
+clamps a requested expiry to `maxLifetime - safetyMargin`. Basic notifications are the default; rich ones
+are opt-in and select the shorter lifetime by construction.
+**Proved by.** `microsoft/tests/push/lifetime.test.ts :: MS-P9: enabling resource data selects the 1440
+minute lifetime`;
+`microsoft/tests/push/lifetime-floor.test.ts :: MS-P10: an expiry under 45 minutes is raised before the
+request`.
+
+### MS-I78. Graph renews by extending, and renewals are staggered deterministically
+
+**Lesson.** Graph renews with `PATCH expirationDateTime` while Google renews by recreating; the two
+semantics must stay apart. Renewal expiries are staggered across a quarter of the lifetime so a fleet does
+not renew in one thundering herd. A 404 or 410 on renewal means gone — re-register; a 429 does not. A 409 on
+create means the `(changeType, resource)` pair already exists, which is a distinguishable duplicate, not a
+generic failure.
+**Learned from.** `providers/outlook/push/subscription.ts` (`GraphSubscriptionError.channelGone` /
+`.duplicate`); `core/source/push-provider-profile.ts` (`resolveStaggerPeriodMs`); tests *"marks a vanished
+subscription as gone so the caller can re-register"*, *"does not mark a throttled renewal as gone"*,
+*"surfaces a 409 as a distinguishable duplicate outcome"*.
+**Honoured by.** `src/push/subscription.ts` exposes `registerSubscription`, `renewSubscription` (a PATCH),
+`deleteSubscription` and `listSubscriptions`, each returning `Result` over the classified union of MS-I48.
+`src/push/profile.ts` derives the stagger from `dependencies.randomFraction` seeded per channel, so it is
+deterministic per calendar.
+**Proved by.** `microsoft/tests/push/renewal.test.ts :: MS-P11: a 404 on renewal is gone and a 429 is not`;
+`microsoft/tests/push/duplicate.test.ts :: MS-P12: a 409 on create is a duplicate outcome, not a transport
+failure`;
+`microsoft/tests/push/stagger.test.ts :: MS-P13: two channels of the same lifetime renew at different
+instants`.
+
+### MS-I79. Drift reconciliation owns URLs by exact match, and never touches this tick's own work
+
+**Lesson.** Graph can list subscriptions, so reconciliation is possible and necessary — but it must never
+delete a subscription registered during the same tick, and prefix matching would delete a sibling
+deployment's subscription whose `notificationUrl` merely extends ours.
+**Learned from.** `tests/core/source/manage-push-channels.test.ts` *"never deletes a subscription registered
+during the same tick"*, *"leaves a sibling deployment's subscription alone when its url extends ours"*;
+`providers/outlook/push/subscription.ts` (`listOutlookSubscriptions`).
+**Honoured by.** `src/push/reconcile.ts` decides ownership by exact URL match or a proper path-segment
+boundary, and takes the tick start instant as an argument so anything created after it is excluded.
+**Proved by.** `microsoft/tests/push/reconcile.test.ts :: MS-P14: a sibling url that extends ours is not
+ours`;
+`microsoft/tests/push/reconcile-tick.test.ts :: MS-P15: a subscription created after the tick started is
+never deleted`.
+
+### MS-I80. A calendar-scoped subscription needs the provider account id, and its absence is a reported refusal
+
+**Lesson.** A calendar-scoped Graph subscription needs the provider account id in the resource path
+(`/users/{providerAccountId}/calendars/{id}/events`). An account missing that id must be withheld from
+registration with an attributed reason, never registered against `/me`, which binds the subscription to
+whichever identity the token happens to carry.
+**Learned from.** `core/source/push-provider-profile.ts` (`requiresProviderAccountId`); commits `491d0cdd`,
+`c9592879`; tests *"withholds an Outlook calendar whose account carries no provider account id"*,
+*"attributes a withheld calendar to the reason that withheld it"*.
+**Honoured by.** `src/push/subscription.ts` takes a `SubscriptionScope` that cannot be constructed without
+the account id, so `/me` is unspellable, and the caller receives a typed refusal carrying the reason.
+**Proved by.** `microsoft/tests/push/scope-required.test-d.ts :: MS-P16: a subscription scope without a
+provider account id does not typecheck`;
+`microsoft/tests/push/scope-refusal.test.ts :: MS-P17: a calendar with no provider account id is withheld
+with its reason`.
+
+### MS-I81. The receiver persists and returns 202; it never does work inline
+
+**Lesson.** Graph expects a 2xx within three seconds or it retries for four hours; more than 10% slow
+responses in a ten-minute window marks the endpoint "slow" (a ten-minute delivery delay) and more than 15%
+marks it "drop", at which point notifications are lost unrecoverably.
+**Learned from.** `services/api/src/utils/push-notifications/handle-webhook.ts` (`readBoundedBody`,
+`claimPushAdmission`, `ACCEPTED_STATUS`);
+`https://learn.microsoft.com/en-us/graph/change-notifications-delivery-webhooks` (verified 2026-08-16).
+**Honoured by.** `decodeGraphPush` is pure and synchronous and takes an already-bounded body, so a hostile
+payload cannot exhaust the process and nothing in the decode path can await.
+**Proved by.** `microsoft/tests/push/bounded-body.test.ts :: MS-L22: an oversized notification body is
+refused before parsing`;
+`microsoft/tests/push/synchronous.test.ts :: MS-L23: decoding performs no await and arms no timer`.
+
+---
+
+## The test id scheme
+
+`MS-O*` is the overwrite family, `MS-L*` the lockup family, `MS-P*` the push family and `MS-H*` the hygiene
+family, mirroring the conformance suite's own `CONF-O*`/`CONF-L*` split and the sibling `GOOG-*` scheme.
+Each id appears verbatim at the start of the test name that proves it and in the **Proved by** line of the
+entry it enforces, so `microsoft/tests/hygiene/ledger-citations.test.ts` walks this section against the suite
+mechanically. `MS-C1` is the conformance gate's own selection check.
+
+## Module map
+
+```
+src/index.ts                        the public surface and nothing else
+src/capabilities.ts                 microsoftCapabilities: the as const Capabilities<"microsoft">
+src/limits.ts                       microsoftLimits as const: page size, page ceiling, concurrency, clamps
+src/contract.ts                     createMicrosoftContract -> ProviderContract<"microsoft">
+src/provider.ts                     createMicrosoftProvider -> CalendarProvider<"microsoft">
+src/dependencies.ts                 MicrosoftDependencies: graph, clock, gate, hash, installation, zones
+src/internals.ts                    assembles semaphore, seam, single flight and cursor frontier once
+src/conformance-obligations.ts      the seven ConformanceObligation implementations
+src/canonical.ts                    the sorted-key encoder every fingerprint is built from
+src/fingerprint.ts                  microsoftFingerprintContract and the injected-hash fingerprint
+
+src/client/graph-client.ts          Client.initWithMiddleware with an explicit chain (MS-I47)
+src/client/authentication.ts        AuthenticationProvider over the tokens we already hold
+src/client/raw-response.ts          the only place a raw Response is held; always read or cancelled
+src/client/prefer.ts                the as const Prefer set: timezone UTC, text bodies, maxpagesize 50
+src/client/request.ts               the one seam: gate -> retry( permit -> deadline -> call ) -> classify
+src/client/deadline.ts              mergeSignals, raceDeadline; timeout and abort stay distinguishable
+src/client/backoff.ts               bounded abortable retry over clock.sleep, built on setTimeout
+src/client/semaphore.ts             per-mailbox permits, released on return, on throw and on abort
+src/client/single-flight.ts         coalescing by listing scope and subscription key; own-entry release
+
+src/errors/graph-error.ts           total decoder: unknown -> { status, code, retryAfter }
+src/errors/retry-after.ts           seconds or HTTP-date, parsed on the injected clock and clamped
+src/errors/classify.ts              (status, code, operation) -> MicrosoftFailure, an as const union
+src/errors/to-provider-failure.ts   MicrosoftFailure -> ProviderFailure, switched exhaustively
+
+src/cursor/cursor.ts                mint and parse the owned opaque cursor; cursorVersion
+src/cursor/fingerprint.ts           the request-shape fingerprint the cursor is bound to
+src/cursor/delta-link.ts            advance | continue | lost; never an optional string
+src/cursor/frontier.ts              in-process generation check; refuses a superseded cursor
+
+src/listing/list-changes.ts         the orchestration and the one producer of cursorLost
+src/listing/request-shape.ts        as const parameter and $select records per listing mode
+src/listing/paginate.ts             page ceiling, seen-link set, one loop deadline; PageWalk union
+src/listing/resync-triggers.ts      410, seriesMaster-on-delta and untyped @removed collapse here
+src/listing/collapse-revisions.ts   same id across pages; newest lastModified wins; ties by arrival
+src/listing/expand-series.ts        seriesMaster -> /instances; expanded | empty | failed
+src/listing/build-feed.ts           decoded items -> events, removals, withheld, selfAuthored
+src/listing/coverage.ts             provenCoverage — clamped to the walk, never the request
+src/listing/diagnostics.ts          bounded samples beside exact totals; identifiers only
+
+src/decode/decode-event.ts          Event -> decoded | tombstone | undecodable; total per item
+src/decode/removed.ts               @removed -> deleted | cancelled | untyped
+src/decode/cancellation.ts          isCancelled as a first-class removal
+src/decode/event-type.ts            singleInstance | occurrence | exception | seriesMaster as const
+src/decode/event-time.ts            start/end/isAllDay -> EventTime; the two arms never collapse
+src/decode/zone.ts                  the one importer of the sync-ical zone ladder
+src/decode/original-zone.ts         originalStartTimeZone, then the response zone, then a refusal
+src/decode/identity.ts              RemoteEventId, DeleteHandle, EventUid (nullable), RemoteVersion
+src/decode/provenance.ts            extended property and category; the iCalUId alone is not enough
+src/decode/recurrence.ts            patternedRecurrence passthrough and the RecurrenceAnchor
+src/decode/body.ts                  comparable only when the returned contentType is text
+
+src/window/membership.ts            withinMicrosoftWindow — the one window predicate, exported
+
+src/write/write.ts                  orchestration, switched over WriteIntent.kind
+src/write/normalize.ts              the one shaping seam: inverted widened, zero-duration kept
+src/write/serialize.ts              EditableContent -> Graph body; all-day always paired with UTC
+src/write/wall-time.ts              round-trip check before a zoned pair; UTC otherwise
+src/write/create.ts                 idempotency key resolution first; 409 resolved by reading
+src/write/update.ts                 one conditional PATCH with If-Match
+src/write/delete.ts                 404 and 410 are alreadyAbsent
+src/write/precondition.ts           enforcedPrecondition vs verifiedPrecondition; 412 -> conflict
+src/write/online-meeting.ts         the provider-owned body region, preserved and excluded
+src/write/echo.ts                   the three-state EchoVerdict from the read-back
+src/write/remote.ts                 reads the copy a 409 or a 412 names
+src/write/surroundings.ts           the shared write context, so the write modules share no cycle
+
+src/calendars/list-calendars.ts     tolerant enumeration; absent display names, absent items
+
+src/push/profile.ts                 as const lifetimes keyed by (resource, includeResourceData)
+src/push/subscription.ts            register, renew by PATCH, delete, list
+src/push/reconcile.ts               drift reconciliation: exact URL ownership, tick-start exclusion
+src/push/receiver.ts                decodeGraphPush: validation | notification | rejected; pure
+src/push/lifecycle.ts               the three lifecycle outcomes, exhaustive
+src/push/secret.ts                  constant-time clientState verification, per claim
+src/push/resource-data.ts           RichHint: a trigger to re-read, never a RemoteEvent
+```
+
+## Public API
+
+```ts
+interface MicrosoftClock {
+  readonly now: () => Instant
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>
+}
+
+interface MicrosoftDependencies {
+  readonly graph: Client
+  readonly clock: MicrosoftClock
+  readonly gate: <Value>(
+    operation: OperationName,
+    execute: () => Promise<Value>,
+  ) => Promise<Value>
+  readonly hash: (input: string) => string
+  readonly installation: InstallationId
+  readonly mailboxConcurrency: number
+  readonly randomFraction: () => number
+}
+
+const createGraphClient: (options: {
+  readonly fetch: typeof fetch
+  readonly getAccessToken: () => Promise<string>
+  readonly timeoutMs: number
+}) => Client
+
+const createMicrosoftProvider: (dependencies: MicrosoftDependencies) => CalendarProvider<"microsoft">
+const createMicrosoftContract: (dependencies: MicrosoftDependencies) => ProviderContract<"microsoft">
+
+const microsoftCapabilities: Capabilities<"microsoft">
+const microsoftLimits: MicrosoftLimits
+const microsoftFingerprintContract: FingerprintContract
+const withinMicrosoftWindow: WindowMembership
+
+const decodeGraphPush: (request: {
+  readonly url: string
+  readonly method: string
+  readonly body: string | null
+}) => GraphPushSignal
+
+type GraphPushSignal =
+  | { readonly kind: "validation"; readonly token: string }
+  | { readonly kind: "notification"; readonly claims: readonly GraphPushClaim[] }
+  | { readonly kind: "rejected"; readonly reason: PushRejection }
+
+interface GraphPushClaim {
+  readonly subscriptionId: string
+  readonly presentedClientState: string | null
+  readonly lifecycle: GraphLifecycleEvent | null
+  readonly hint: RichHint | null
+}
+
+type GraphLifecycleEvent = "reauthorizationRequired" | "subscriptionRemoved" | "missed"
+
+const verifyClientState: (presented: string, storedHash: string) => boolean
+
+const registerSubscription: (
+  request: SubscriptionRequest,
+  context: OperationContext,
+) => Promise<Result<GraphSubscription>>
+
+const renewSubscription: (
+  subscription: GraphSubscription,
+  context: OperationContext,
+) => Promise<Result<GraphSubscription>>
+
+const deleteSubscription: (
+  subscription: GraphSubscription,
+  context: OperationContext,
+) => Promise<Result<{ readonly kind: "deleted" } | { readonly kind: "alreadyGone" }>>
+
+const listSubscriptions: (
+  context: OperationContext,
+) => Promise<Result<readonly GraphSubscription[]>>
+
+const subscriptionLifetimeMs: (
+  resource: SubscriptionResource,
+  includeResourceData: boolean,
+) => number
+```
+
+`microsoftCapabilities` is the declaration the conformance suite gates on, and every field is a promise the
+adapter keeps:
+
+```ts
+const microsoftCapabilities = {
+  provider: "microsoft",
+  delta: { kind: "tokenized", windowBoundToCursor: true },
+  deletionAuthority: "snapshotAbsence",
+  removalsAreAmbiguous: false,
+  precondition: "matchesVersion",
+  provenanceChannel: "extendedProperty",
+  quotaScope: "perMailbox",
+  throttleSignals: [
+    { status: 429, hasRetryAfter: true },
+    { status: 503, hasRetryAfter: true },
+  ],
+  representableRange: {
+    minimumSpanSeconds: 0,
+    zeroDuration: "accept",
+    invertedRange: "clampToStart",
+    allDayGrid: "utcDay",
+  },
+  allDay: "utcMidnightPair",
+  recurrenceWrite: "providerNative",
+  echoesWrites: true,
+} as const satisfies Capabilities<"microsoft">
+```
+
+`windowBoundToCursor: true` is forced by MS-I5: the window bounds live inside the `$deltatoken`.
+`removalsAreAmbiguous: false` is the reading the green phase forced, and MS-I86 records why: the ambiguity
+of MS-I8 and MS-I9 is expressed *per removal* — an untyped `@removed` is a resync trigger and an identity the
+walk never covered is `outOfScope` — so what survives into the listing is never ambiguous. `deletionAuthority: "snapshotAbsence"` is honest only because the snapshot mode is
+a full `calendarView` bounded by `startDateTime`/`endDateTime` that really does prove that window, and
+because the three resync triggers of MS-I1, MS-I7 and MS-I8 guarantee a delta can never masquerade as one.
+`zeroDuration: "accept"` and `invertedRange: "clampToStart"` are the Graph-specific half of MS-I31 — and are
+deliberately different from Google's, which rejects both.
+
+## Test index
+
+The conformance run is the acceptance gate: `microsoft/tests/conformance.test.ts` calls
+`runConformance({ describe, it }, { name: "microsoft", supports: microsoftCapabilities, create:
+createMicrosoftUnderTest, withinWindow: withinMicrosoftWindow })` against an in-memory Graph built on the
+injected `fetch`. `microsoft/tests/support/fake-graph.ts` is that server: it speaks `calendarView`,
+`calendarView/delta`, `events`, `events/{id}/instances`, `subscriptions` and the `$batch` refusal, and it is
+the only place a `ProviderSeed` is translated into Graph JSON. It carries three deliberate switches —
+`honoursIfMatch`, `rewritesBody` and `cyclesNextLink` — so MS-O27, MS-O24 and MS-L10 have a server that
+misbehaves the way the real one does.
+
+Adapter-local tests cover only what the suite cannot see from outside the protocol boundary: the three
+resync triggers, cursor encoding and scope binding, Windows zone resolution, the series expansion outcomes,
+error classification against real Graph error shapes, the SDK default-hardening assertion, the pagination
+bounds, the push receiver and subscription lifecycle, and the hygiene rules (one window predicate, no
+`Bun.sleep`, no logger, no database import, no type assertions, no status codes outside `src/errors`).
+
+## Red phase addendum (sync-microsoft)
+
+The red suite is 211 tests across 95 files. Every test was written before any behaviour existed; the source
+tree carries signatures whose bodies raise `Unimplemented`, so a red is an unimplemented adapter and never a
+missing module. Four entries below record the ids the suite carries that the entries above do not cite, so
+the ledger stays a complete map of the suite.
+
+### MS-I82. Enumeration tolerates the shapes Graph actually answers
+
+**Lesson.** Graph's calendar list carries entries with a null `name`, entries with no `id` at all, and a body
+that occasionally is not the documented envelope. Skipping the unusable entries is right; reading a body with
+no `value` array as "this account has no calendars" is a deletion waiting to happen.
+**Honoured by.** `src/calendars/list-calendars.ts` drops an entry with no id and keeps one with no display
+name; a body that is not the documented envelope is a `Result` failure, never an empty enumeration.
+**Proved by.** `microsoft/tests/calendars/tolerant-enumeration.test.ts :: MS-O44: an enumeration with absent
+items and absent display names still answers`;
+`microsoft/tests/calendars/tolerant-enumeration.test.ts :: MS-O44: an enumeration whose body carries no value
+array is a failure, not an empty calendar list`.
+
+### MS-I83. The hygiene rules are themselves tests, and each is anchored to behaviour
+
+**Lesson.** A grep-only hygiene test passes on an empty package, so it proves nothing until the rule it
+guards is load-bearing. Each hygiene test therefore carries one behavioural assertion over the unit it
+protects, so it is red until that unit exists and red again the moment the rule is broken.
+**Honoured by.** `MS-H7` (no database import, no type assertion outside an import alias, and a contract
+assembled from injected dependencies alone), `MS-H8` (the `@keeper.sh/sync-ical` value import confined to
+`src/decode/zone.ts` and `src/write/wall-time.ts`), `MS-H9` (this ledger walked against the suite).
+**Proved by.** `microsoft/tests/hygiene/no-assertions.test.ts :: MS-H7: no module imports the database
+package or asserts a type`;
+`microsoft/tests/hygiene/zone-import.test.ts :: MS-H8: only the zone decoder and the wall-time emitter import
+sync-ical as values`;
+`microsoft/tests/hygiene/ledger-citations.test.ts :: MS-H9: every cited test name exists verbatim in the file
+that is cited`.
+
+### MS-I84. Six tests cannot be red in the red phase, and that is a property of what they assert
+
+`MS-O26`, `MS-P8` and `MS-P16` are `.test-d.ts` type assertions: the type design *is* a deliverable of the red
+phase, so they pass the moment the signatures land, and they go red only if a later change makes an
+unconditional write, an unhandled lifecycle event or a `/me`-scoped subscription spellable. The three `MS-H9`
+ledger-walk assertions are the same shape over documentation. Every other test — 205 of 211 — fails today,
+203 of them by raising `Unimplemented` out of the module under test and two by the hygiene rules they name
+(no `clock.sleep` and no shared zone ladder import exist yet).
+
+### MS-I85. The fake Graph carries the misbehaviours, not the tests
+
+`microsoft/tests/support/fake-graph.ts` is the only translation of a `ProviderSeed` into Graph JSON, and its
+switches are the real service's documented misbehaviours: `honoursIfMatch(false)` for the last-write-wins
+reading of MS-I27, `rewritesBody(true)` for the HTML rewrite of MS-I24, `cyclesNextLink()` and
+`repeatsLinkAfter(n)` for the `nextLink` cycle of MS-I39, `withholdDeltaLink()` for MS-I3, and `putRaw` for
+items that are not valid `Event` resources at all. No test reaches past it to stub an internal function, and
+no lockup test asserts elapsed wall-clock time: each one counts operations, asserts a typed refusal, or runs
+at two configured ceilings and shows the outcome differs.
+
+## Green phase addendum (sync-microsoft)
+
+### MS-I86. `removalsAreAmbiguous` describes the removals that survive, not the ones the wire carries
+
+**Lesson.** The design declared `removalsAreAmbiguous: true` on the reading that Graph's `@removed` entries
+may carry no type (MS-I8) and may name identities the walk never covered (MS-I9). Under that declaration the
+shared suite becomes unsatisfiable: `CONF-O6` requires that an identity the source really dropped is *named*
+as a removal, while the ambiguous branch of `CONF-O13` requires that no listing ever names one. Both arrive
+as the same page shape — one event, one cancelled row, one untyped `@removed` — so no adapter can answer
+both. The flag is about what reaches the reconciler, and by then every ambiguity has already been spent: an
+untyped tombstone has collapsed the round to `cursorLost` (MS-I8) and an unattributable identity has been
+demoted to `outOfScope` (MS-I9). What is left is attributable, so the honest declaration is `false`.
+**Learned from.** `sync-conformance` `CONF-O6` against `CONF-O13`, running the two branches side by side.
+**Honoured by.** `src/capabilities.ts` declares `removalsAreAmbiguous: false`; the ambiguity itself still
+lives in `src/listing/resync-triggers.ts` and in the `outOfScope` arm of `src/listing/build-feed.ts`.
+**Proved by.** `microsoft/tests/listing/untyped-tombstone.test.ts :: MS-O8: an @removed entry with no type
+collapses the listing to cursorLost rather than deleting`;
+`microsoft/tests/listing/removal-outside-window.test.ts :: MS-O9: an @removed naming an id outside the
+walked window is outOfScope, not an authoritative removal`;
+`microsoft/tests/decode/cancelled-and-removed.test.ts :: MS-O10: a cancelled occurrence and a deleted
+tombstone are distinct authoritative removals`.
+
+### MS-I87. A removal is authoritative only when the same walk named the identity it removes
+
+**Lesson.** `Removal.deleted` and `Removal.cancelled` both carry a `uid`, and a Graph tombstone carries only
+an `id`. The type therefore refuses to express an authoritative removal the walk cannot attribute, which is
+exactly the guard MS-I9 asks for: the uid is resolved from the events the same round decoded, and a
+tombstone naming an identity that round never saw degrades to `outOfScope`.
+**Honoured by.** `src/listing/build-feed.ts` builds a uid index from the decoded events of the round and
+resolves every tombstone against it before choosing an arm.
+**Proved by.** `microsoft/tests/listing/removal-outside-window.test.ts :: MS-O9: an @removed naming an id
+outside the walked window is outOfScope, not an authoritative removal`.
+
+### MS-I88. Identity is a property we stamp, not one Graph hands back
+
+**Lesson.** Graph mints `iCalUId` itself, so a mirrored event read back does not carry the identity the
+caller asked us to write. Every conformance case that inspects what it wrote — replayed creates, conflicts,
+concurrent writers — addresses objects by that identity. The adapter stamps the idempotency key into a
+single-value extended property beside the provenance stamp and prefers it over `iCalUId` on read; an absent
+`iCalUId` falls back to the event id, while a *present but empty* one is `missingIdentity`, because a blank
+identity is a broken record rather than an omitted projection.
+**Honoured by.** `src/decode/extended-property.ts` names the property, `src/decode/identity.ts` reads it
+first, `src/write/serialize.ts` writes it and carries the stamps of an event forward across a PATCH so an
+update never strips the identity or the provenance the create established.
+**Scope limit (review).** The stamp is only *readable* where the request asked for it (MS-I92). It is
+present on the write path and on the calendarView window listing, which `$expand` it; it is **absent** on the
+delta listing, which cannot `$expand`. So `uidOf`'s `iCalUId` fallback is not a courtesy — on a delta round
+it is the only identity available, and the same is true of the provenance category. `MS-O30`'s replayed
+create and `CONF-O16`'s round trip both run through paths that do expand, which is why the stamp is still
+load-bearing where it matters.
+**Proved by.** `microsoft/tests/decode/nullable-fields.test.ts :: MS-O18: a null iCalUId, seriesMasterId and
+subject all decode without an assertion`;
+`microsoft/tests/writes/idempotent-create.test.ts :: MS-O30: a replayed create returns alreadyExists and
+creates nothing`;
+`microsoft/tests/provenance/two-markers.test.ts :: MS-O31: only the stamped extended property claims our
+installation; the category is indeterminate and the iCalUId proves nothing`.
+
+### MS-I89. The operation deadline is armed once, at the seam the caller entered
+
+**Lesson.** Arming a deadline inside the request seam as well as at the provider boundary spends a second
+timer on the injected clock for every request, and an observer of that clock cannot tell a backoff sleep
+from a deadline. Worse, it hides which ceiling actually stopped a run. The deadline is armed once per
+`listCalendars`, `listChanges` and `write`; the seam below it owns only the retry ladder, and the page loop
+below that only re-reads the remaining budget.
+**Honoured by.** `src/internals.ts` wraps every verb in `raceDeadline`; `src/client/request.ts` retries
+against the caller's signal alone; `src/listing/paginate.ts` compares `remainingMilliseconds` before each
+page and never arms a timer.
+**Proved by.** `microsoft/tests/lockups/quota-inside-retry.test.ts :: MS-L18: a backoff sleep holds no
+mailbox permit`;
+`microsoft/tests/lockups/every-verb-deadline.test.ts :: MS-L9: listCalendars, listChanges and write each
+reject against a stub that never resolves`;
+`microsoft/tests/lockups/loop-deadline.test.ts :: MS-L12: pages that each finish under the per-request
+deadline still end at the loop deadline`.
+
+### MS-I90. A permit an aborted caller can no longer use is refused, not merely released
+
+**Lesson.** Releasing the permit when the signal fires still leaves the caller awaiting a body that will
+never settle, so the caller wedges even though the mailbox recovered. The guarded body is raced against the
+abort, so an aborted caller rejects with `PermitAborted` and the seam records `notAttempted` rather than
+charging the provider.
+**Honoured by.** `src/client/semaphore.ts` races the body against the abort inside the same `finally` that
+releases the permit, **and** checks `signal.aborted` on entry to `holding` before it invokes the body at all.
+**Correction (review).** The entry guard was missing, which left a one-microtask window with no owner: once
+`release()` hands a queued waiter its slot it aborts that waiter's `listening` controller, removing the
+listener registered in `queued()`, while `holding` does not run until the following microtask. An abort
+landing in between fired at no listener and was dropped, `holding` then registered on an already-aborted
+signal — which never fires — and the body ran to completion. Through `createRequestSeam` that body is the
+POST/PATCH/DELETE, so a caller told `notAttempted` could still have written to the calendar.
+**Proved by.** `microsoft/tests/lockups/permit-release.test.ts :: MS-L13: a permit is released when the
+caller is aborted mid-body`;
+`microsoft/tests/lockups/queued-abort.test.ts :: MS-L14: a waiter aborted while queued rejects and frees its
+slot for its successor`;
+`microsoft/tests/lockups/resume-abort.test.ts :: MS-L26: an abort between release and body rejects instead of
+running the body`;
+`microsoft/tests/lockups/resume-abort.test.ts :: MS-L27: the permit freed by the aborted handover is still
+usable by the next caller`.
+
+### MS-I91. The fixture was under-modelling Graph in four places, and each one hid a real guard
+
+**Lesson.** Four behaviours the red phase's fake Graph did not carry each made a guard untestable, so each
+was added to the fixture rather than worked around in the adapter. A delta response mints a **fresh**
+`$deltatoken` every round, which is what makes a superseded cursor detectable at all (MS-I57). A seed that
+drops an identity reports it as a **cancelled row**, which is how Graph expresses a deletion in a delta feed
+and the only way a real removal can be named. `ProviderSeed.corruptKnownRows` answers **410 resyncRequired**,
+which is the demand for a full resync the reconciler is being tested against. Scripted write failures reach
+the **subscription** verbs, so a renewal can be shown to distinguish a vanished channel from a throttled one
+(MS-I78). `microsoft/tests/cursor/quiet-poll.test.ts` was seeding an *empty* calendar to stand for a quiet
+round, which under a fixture that models deletion asserts that emptying a calendar derives no removals —
+the exact hazard this package exists to prevent — so it now re-seeds the same events it started with.
+**Honoured by.** `microsoft/tests/support/fake-graph.ts`.
+**Proved by.** `microsoft/tests/cursor/quiet-poll.test.ts :: MS-O11: a delta round with no items advances
+the cursor and derives no removal`;
+`microsoft/tests/push/renewal.test.ts :: MS-P11: a 404 on renewal is gone and a 429 is not`.
+
+### MS-I92. Extended properties are outside `$select`; only `$expand` or `$filter` retrieves them
+
+**Lesson.** A single-valued extended property is *never* returned by a plain read, and `$select` cannot ask
+for one. Graph documents exactly two retrievals: `$expand=singleValueExtendedProperties($filter=id eq '…')`
+returns the property on the instance or collection, and
+`$filter=singleValueExtendedProperties/any(ep:ep/id eq '…' and ep/value eq '…')` returns the *instances* that
+carry a matching property — and states plainly that "the response body doesn't include the extended
+property". Two further constraints follow from the field: `$expand` is not supported alongside the advanced
+query parameters that `$select` travels with, so a request asks for one or the other; and `$expand` on
+`calendarView/delta` is rejected outright ("Parsing OData Select and Expand failed"). This is the deciding
+constraint for MS-I88 and MS-I30, and it is why four separate reads — `uidOf`, `readProvenance`,
+`storedPayload` and `heldProperties` — would otherwise have silently run on their fallbacks forever.
+**Learned from.** `https://learn.microsoft.com/en-us/graph/api/singlevaluelegacyextendedproperty-get`;
+`https://learn.microsoft.com/en-us/graph/known-issues`; Microsoft Q&A *"Expanded SingleValueExtendedProperties
+do not show up when combined with $select"* and *"How to expand Microsoft Graph extended properties in
+calendar events in a calendar view"* (all verified 2026-08-16).
+**Honoured by.** `src/decode/extended-property.ts` owns both query shapes as `expandKeeperProperties` and
+`matchesPropertyValue`. `src/listing/request-shape.ts` sends `$expand` on the window and instances requests
+and `$select` on delta, never both, with the constraint recorded as the package's one cited comment.
+`src/write/remote.ts` expands on every single-event read and uses the `any(...)` filter plus a confirming
+re-read for the idempotency lookup (MS-I29). Where the stamp is unreachable — the delta round — the adapter
+runs on `iCalUId` and answers `indeterminate` provenance rather than pretending to know (MS-I30).
+**Proved by.** `microsoft/tests/hygiene/select-fields.test.ts :: MS-H1: the delta request selects every field
+the decoder reads`;
+`microsoft/tests/hygiene/select-fields.test.ts :: MS-H26: the window requests expand our extended properties
+instead of selecting fields`;
+`microsoft/tests/writes/idempotent-create.test.ts :: MS-O30: a replayed create returns alreadyExists and
+creates nothing`, now against a fixture that withholds extended properties from any request that did not
+`$expand` them and honours the `any(...)` filter.
+
+### MS-I93. An expansion cut short is a distinct answer from a series with no occurrences
+
+**Lesson.** `expandSeries` mapped an aborted context onto `{ kind: "empty" }` — the same value a genuinely
+empty series produces. The caller dropped every occurrence of that series and went on to build a `snapshot`
+carrying `provenCoverage(scope, scope.window)`: a full coverage claim over a window whose recurring events had
+all been silently discarded. Because `DeriveSnapshotRemovals` licenses absence-based deletion inside a proven
+coverage window, that listing would have deleted every occurrence of every series. Nothing in the types
+stopped it; only the ordering inside `raceDeadline` did, which is a wrong write held off by a race rather
+than by construction.
+**Learned from.** Review of this package's own listing path against the `ICAL`/`CONF` rule that a deletion is
+never inferred outside a proven coverage window.
+**Honoured by.** `SeriesExpansion` gains an `abandoned` arm the caller cannot mistake for an empty series;
+`expandItems` propagates it and `completedListing` answers `{ kind: "notAttempted", reason: "aborted" }`, so
+no coverage-claiming listing is ever built from a truncated expansion.
+**Proved by.** `microsoft/tests/listing/abandoned-expansion.test.ts :: MS-O46: an aborted expansion is
+abandoned, never an empty series`;
+`microsoft/tests/listing/abandoned-expansion.test.ts :: MS-O47: a listing abandoned mid-expansion yields no
+snapshot claiming coverage`.
+
+### MS-I94. A ceiling the client cannot enforce is deleted, not decorated
+
+**Lesson.** `GraphClientOptions.timeoutMs` was validated by `checkedCeiling`, stored on the transport handler
+and then never used: `execute` handed the request straight to `fetch`, and `requestCeilingMs()` had no caller
+anywhere. Nothing hung, because the operation-level `raceDeadline` is the real bound — but a client that
+advertises a per-request ceiling it does not apply teaches the next reader a false invariant. The obvious
+repair, composing `AbortSignal.timeout` into the request, is barred twice over by this package's own rules:
+MS-I72 because fake timers cannot patch `AbortSignal.timeout` (`MS-L6` pins that no source file names it),
+and MS-I89 because arming a second timer below the provider seam is exactly the thing that made it
+impossible to tell which ceiling stopped a run. So the field, its validator and its accessor were removed
+instead, leaving the operation deadline as the single documented bound.
+**Learned from.** Review; resolved against MS-I72 and MS-I89 rather than against the reviewer's first
+suggestion.
+**Honoured by.** `src/client/graph-client.ts` carries `fetch` and `getAccessToken` only, and
+`GraphTransportHandler` forwards the caller's signal untouched.
+**Proved by.** `microsoft/tests/lockups/request-ceiling.test.ts :: MS-L28: the transport passes the caller's
+signal through and adds no timer of its own`;
+`microsoft/tests/lockups/request-ceiling.test.ts :: MS-L29: the client takes no request ceiling it would not
+enforce`;
+`microsoft/tests/hygiene/no-bun-sleep.test.ts :: MS-L6: no source file references Bun.sleep or
+AbortSignal.timeout`;
+`microsoft/tests/lockups/every-verb-deadline.test.ts :: MS-L9: listCalendars, listChanges and write each
+reject against a stub that never resolves`.
+
+### MS-I95. A subscription Graph did not describe is a failure, never an invented row
+
+**Lesson.** `registerSubscription` fell back to `{ id: "", … }` when Graph's 201 body was unreadable and
+still answered `ok: true`. That fabricated record then addressed `PATCH subscriptions/` and
+`DELETE subscriptions/` — the collection, not a row — and entered `reconcileSubscriptions` as `keep: [""]`,
+which protects nothing and lets a live subscription be classified deletable. `renewSubscription` already
+handled the identical case correctly, so the two verbs disagreed about the same body.
+**Learned from.** Review; the repo rule that internally-produced data fails loud rather than falling back.
+**Honoured by.** `registerSubscription` returns `unreadableSubscription` when `subscriptionOf` yields null,
+matching `renewSubscription` exactly.
+**Proved by.** `microsoft/tests/push/unreadable-registration.test.ts :: MS-P24: a 201 without an id fails
+rather than minting an empty subscription`.
+
+### MS-I96. Serialization arithmetic is bounded before it runs, not caught after it throws
+
+**Lesson.** `normalizeForMicrosoft` is typed `Result<…>` but could throw: the recurring arm's
+`anchorViolation` checked only the zone, so an anchor whose `start` did not parse reached
+`new Date(Date.parse(<garbage>)).toISOString()` and raised `RangeError`. The emit side had the same class of
+hole — `shiftedDate` and the duration arms compute `Date.parse(...) + n * ms` with no bound, and ECMA-262
+gives a Date only ±8.64e15 ms before `toISOString` throws. Inside the write path that throw is caught by
+`attemptOnce`, classified as a transport failure, and a deterministic serialization bug is retried to the
+budget ceiling and then reported as if Graph had failed.
+**Learned from.** Adopted #42 *"Adapters must return failures, not throw them"*; `ICAL-I64` *"a feed value
+must never reach arithmetic that can throw"*; ECMA-262 `sec-time-values-and-time-range`.
+**Honoured by.** `constraintViolatedBy` rejects both shapes before `shapeForMicrosoft` runs: an unparseable
+anchor start is `invertedRange`, a timed span leaving the Date range is `minimumSpan`, and an all-day anchor
+leaving it is `allDayGrid`. The non-recurring arm already guarded the parse and now shares one
+`unreadableInstant` predicate with the recurring one.
+**Proved by.** `microsoft/tests/writes/unrepresentable-anchor.test.ts :: MS-O48: a recurring anchor whose
+start does not parse is unrepresentable`;
+`microsoft/tests/writes/unrepresentable-anchor.test.ts :: MS-O49: a nominal span past the Date range is
+unrepresentable rather than a RangeError`;
+`microsoft/tests/writes/unrepresentable-anchor.test.ts :: MS-O50: an all-day anchor past the Date range is
+unrepresentable`;
+`microsoft/tests/writes/unrepresentable-anchor.test.ts :: MS-O51: a representable recurring anchor still
+normalizes`.
