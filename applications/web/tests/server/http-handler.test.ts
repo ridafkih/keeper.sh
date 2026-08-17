@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleApplicationRequest, resolveCanonicalRedirect } from "../../src/server/http-handler";
+
+const MOVED_PATHS: Record<string, string> = {
+  "/blog/keeper-sh-vs-calendarbridge": "/compare/calendarbridge-alternative",
+  "/blog/keeper-sh-vs-onecal": "/compare/onecal-alternative",
+};
+
+vi.mock("../../src/lib/moved-paths", () => ({
+  resolveMovedPath: (pathname: string) => MOVED_PATHS[pathname] ?? null,
+}));
 import type { Runtime, ServerConfig } from "../../src/server/types";
 
 const config: ServerConfig = {
