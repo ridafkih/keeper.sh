@@ -75,7 +75,7 @@ const validateProtocol = (protocol: string): void => {
 };
 
 interface PinnedConnection {
-  url: string;
+  urls: string[];
   host: string;
   serverName: string | null;
 }
@@ -94,16 +94,17 @@ const pinnedServerName = (parsed: URL): string | null => {
   return null;
 };
 
-const buildPinnedConnection = (parsed: URL, address: string): PinnedConnection => {
+const pinnedUrl = (parsed: URL, address: string): string => {
   const pinned = new URL(parsed.href);
   pinned.hostname = formatAddressForUrl(address);
-
-  return {
-    host: parsed.host,
-    serverName: pinnedServerName(parsed),
-    url: pinned.href,
-  };
+  return pinned.href;
 };
+
+const buildPinnedConnection = (parsed: URL, addresses: string[]): PinnedConnection => ({
+  host: parsed.host,
+  serverName: pinnedServerName(parsed),
+  urls: addresses.map((address) => pinnedUrl(parsed, address)),
+});
 
 /*
  * The validated address is carried into the connection because Bun resolves the
@@ -135,12 +136,7 @@ const resolveConnection = async (url: string, options?: SafeFetchOptions): Promi
     assertUnicastAddress(address, "The provided URL resolves to a private or reserved network address.");
   }
 
-  const pinned = addresses.at(0);
-  if (!pinned) {
-    throw new UrlSafetyError("The provided URL could not be resolved to any IP address.");
-  }
-
-  return buildPinnedConnection(parsed, pinned);
+  return buildPinnedConnection(parsed, addresses);
 };
 
 const validateUrlSafety = async (url: string, options?: SafeFetchOptions): Promise<void> => {
@@ -212,11 +208,11 @@ const pinnedTlsOptions = (connection: PinnedConnection): Pick<BunFetchRequestIni
   return { tls: { serverName: connection.serverName } };
 };
 
-const pinnedInput = (input: string | Request | URL, connection: PinnedConnection): string | Request => {
+const pinnedInput = (input: string | Request | URL, url: string): string | Request => {
   if (input instanceof Request) {
-    return new Request(connection.url, input);
+    return new Request(url, input);
   }
-  return connection.url;
+  return url;
 };
 
 interface PinnedRequest {
@@ -224,21 +220,16 @@ interface PinnedRequest {
   init: BunFetchRequestInit;
 }
 
-const buildRequest = (
+const buildPinnedRequest = (
   input: string | Request | URL,
   init: BunFetchRequestInit,
   headers: Record<string, string>,
-  connection: PinnedConnection | null,
-): PinnedRequest => {
-  if (!connection) {
-    return { init, input };
-  }
-
-  return {
-    init: { ...init, headers: { ...headers, host: connection.host }, ...pinnedTlsOptions(connection) },
-    input: pinnedInput(input, connection),
-  };
-};
+  connection: PinnedConnection,
+  url: string,
+): PinnedRequest => ({
+  init: { ...init, headers: { ...headers, host: connection.host }, ...pinnedTlsOptions(connection) },
+  input: pinnedInput(input, url),
+});
 
 const withoutAuthorization = (headers: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "authorization"));
 
@@ -305,6 +296,48 @@ const fetchWithStaleSocketRetry = async (
   }
 };
 
+const isTransportFailure = (error: unknown): boolean => {
+  if (!(error instanceof Error) || error.name === "AbortError") {
+    return false;
+  }
+  return "code" in error && typeof error.code === "string";
+};
+
+const fetchPinned = async (
+  input: string | Request | URL,
+  init: BunFetchRequestInit,
+  headers: Record<string, string>,
+  connection: PinnedConnection,
+): Promise<Response> => {
+  let lastError: unknown = new UrlSafetyError("The provided URL could not be resolved to any IP address.");
+
+  for (const url of connection.urls) {
+    const request = buildPinnedRequest(input, init, headers, connection, url);
+    try {
+      return await fetchWithStaleSocketRetry(request.input, request.init);
+    } catch (error) {
+      if (!isTransportFailure(error) || !isReplayableRequest(input, init)) {
+        throw error;
+      }
+      lastError = error;
+    }
+  }
+
+  throw lastError;
+};
+
+const performFetch = (
+  input: string | Request | URL,
+  init: BunFetchRequestInit,
+  headers: Record<string, string>,
+  connection: PinnedConnection | null,
+): Promise<Response> => {
+  if (!connection) {
+    return fetchWithStaleSocketRetry(input, init);
+  }
+  return fetchPinned(input, init, headers, connection);
+};
+
 const followRedirects = async (
   initialUrl: string,
   initialResponse: Response,
@@ -340,14 +373,12 @@ const followRedirects = async (
     currentHeaders = nextHeaders;
     currentUrl = redirectUrl;
 
-    const request = buildRequest(
+    currentResponse = await performFetch(
       currentUrl,
       { ...init, headers: currentHeaders, redirect: "manual", signal },
       currentHeaders,
       connection,
     );
-
-    currentResponse = await fetchWithStaleSocketRetry(request.input, request.init);
 
     if (!isRedirect(currentResponse)) {
       return settle(currentResponse);
@@ -417,8 +448,7 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     const headers = mergeHeaderRecord(input, init);
 
     try {
-      const request = buildRequest(input, { ...init, redirect: "manual", signal }, headers, connection);
-      const response = await fetchWithStaleSocketRetry(request.input, request.init);
+      const response = await performFetch(input, { ...init, redirect: "manual", signal }, headers, connection);
 
       if (callerWantsManual || !isRedirect(response)) {
         return response;
