@@ -157,3 +157,48 @@ describe("safe-fetch only fails over on a failure to connect", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
+
+describe("safe-fetch follows a record that genuinely changed", () => {
+  const originalFetch = globalThis.fetch;
+  const MOVED_ADDRESS = "93.184.216.99";
+
+  beforeEach(() => {
+    mockResolve4.mockReset();
+    mockResolve6.mockReset();
+    mockResolve6.mockRejectedValue(new Error("no AAAA records"));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("resolves again on the next request rather than reusing the earlier address", async () => {
+    mockResolve4.mockResolvedValueOnce([FIRST_ADDRESS]);
+    mockResolve4.mockResolvedValueOnce([MOVED_ADDRESS]);
+    const fetchMock = vi.fn<FetchFn>(() => Promise.resolve(new Response("calendar", { status: 200 })));
+    installMockFetch(fetchMock);
+
+    const safeFetch = createSafeFetch(enabledOptions);
+    await safeFetch("https://calendar.example.com/feed.ics");
+    await safeFetch("https://calendar.example.com/feed.ics");
+
+    expect(mockResolve4).toHaveBeenCalledTimes(2);
+    expect(requestedHostname(fetchMock.mock.calls[0]?.[0] ?? "")).toBe(FIRST_ADDRESS);
+    expect(requestedHostname(fetchMock.mock.calls[1]?.[0] ?? "")).toBe(MOVED_ADDRESS);
+  });
+
+  it("rejects a host that has genuinely moved to a private address", async () => {
+    mockResolve4.mockResolvedValueOnce([FIRST_ADDRESS]);
+    mockResolve4.mockResolvedValueOnce(["10.0.0.5"]);
+    const fetchMock = vi.fn<FetchFn>(() => Promise.resolve(new Response("calendar", { status: 200 })));
+    installMockFetch(fetchMock);
+
+    const safeFetch = createSafeFetch(enabledOptions);
+    await safeFetch("https://calendar.example.com/feed.ics");
+
+    await expect(safeFetch("https://calendar.example.com/feed.ics")).rejects.toThrow(
+      "The provided URL resolves to a private or reserved network address.",
+    );
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
