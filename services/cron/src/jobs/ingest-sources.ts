@@ -74,8 +74,9 @@ const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
  * family, and each user's calendars run at USER_CALENDAR_CONCURRENCY within that
  * one slot. A seventeen-calendar account occupies one slot instead of the whole
  * budget, so no user's backlog can starve another user's freshness. The per-user
- * cap also keeps concurrent calls per provider account under Graph's documented
- * MailboxConcurrency of four.
+ * cap is a per-pass budget against Graph's documented MailboxConcurrency of four,
+ * not a hard ceiling: passes overlap (overrunProtection is off) and the skip-lock
+ * is per calendar, so stacked slow passes can still reach the provider limit.
  */
 const SOURCE_CONCURRENCY = 5;
 const USER_CALENDAR_CONCURRENCY = 2;
@@ -868,16 +869,18 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
       ),
     )
   /*
-   * A calendar that has never completed an ingest goes to the front of the pass.
-   * The listing is otherwise unordered, which in practice is heap order: a calendar
-   * connected a minute ago sits behind the whole fleet, and a new user's first
-   * ingest is the one wait they judge the product by. ingestWindowRecordedAt is
-   * written by the first successful ingest of every source family, so null here
-   * means exactly "never ingested".
+   * Two tiers, unordered within each: calendars that have never completed an
+   * ingest go first — a new user's first ingest is the one wait they judge the
+   * product by, and ingestWindowRecordedAt is written by the first successful
+   * ingest of every family, so null means exactly "never ingested". Pro users
+   * come next, so a pro calendar whose push notification was dropped is repaired
+   * within one pass rather than after the whole rotation. The plan is coalesced
+   * because most free users have no subscription row at all, and a bare NULL
+   * would sort ahead of 'pro' under DESC.
    */
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1099,7 +1102,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     )
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1263,7 +1266,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
     )
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     );
 
   const settlements = await allSettledGroupedWithConcurrency(

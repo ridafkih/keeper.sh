@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, arrayContains, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/jobs/ingest-sources";
@@ -110,8 +111,25 @@ describe("ingestOAuthSources selection", () => {
 
     expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     ]]);
+  });
+
+  /*
+   * Rendered SQL, not the AST: a user with no subscription row yields a NULL plan,
+   * and a bare `plan = 'pro' DESC` sorts those NULLs ahead of every pro user —
+   * inverting the priority for exactly the majority case. The coalesce is what
+   * makes the ordering mean what it says, so its presence is pinned as text.
+   */
+  it("renders a null-safe pro ordering", async () => {
+    await ingestOAuthSources();
+
+    const dialect = new PgDialect();
+    const [ordering] = capturedOrderings as [unknown[]];
+    const rendered = dialect.sqlToQuery(ordering[1] as Parameters<PgDialect["sqlToQuery"]>[0]);
+
+    expect(rendered.sql).toContain("coalesce(");
+    expect(rendered.sql).toContain("= 'pro'");
   });
 
   it("orders every source family the same way", async () => {
@@ -119,13 +137,13 @@ describe("ingestOAuthSources selection", () => {
 
     expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     ]]);
   });
 });

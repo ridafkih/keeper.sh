@@ -76,18 +76,23 @@ const allSettledGroupedWithConcurrency = async <TResult>(
 
   const results: PromiseSettledResult<TResult>[] = Array.from({ length: tasks.length });
   const groupTasks = [...groupedIndexes.values()].map((indexes) => async () => {
-    const groupTaskList = indexes.flatMap((index) => {
-      const task = tasks[index];
-      if (!task) {
-        return [];
-      }
-      return [task];
-    });
-    const settled = await allSettledWithConcurrency(groupTaskList, {
-      concurrency: options.taskConcurrency ?? DEFAULT_CONCURRENCY,
-    });
+    /*
+     * Kept indexes and tasks stay paired: filtering tasks alone would shift every
+     * later settlement onto the wrong index, and callers attribute by index.
+     */
+    const keptIndexes = indexes.filter((index) => Boolean(tasks[index]));
+    const settled = await allSettledWithConcurrency(
+      keptIndexes.flatMap((index) => {
+        const task = tasks[index];
+        if (!task) {
+          return [];
+        }
+        return [task];
+      }),
+      { concurrency: options.taskConcurrency ?? DEFAULT_CONCURRENCY },
+    );
     for (const [position, settlement] of settled.entries()) {
-      const originalIndex = indexes[position];
+      const originalIndex = keptIndexes[position];
       if (typeof originalIndex === "number" && settlement) {
         results[originalIndex] = settlement;
       }
