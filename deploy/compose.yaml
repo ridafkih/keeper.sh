@@ -35,6 +35,7 @@ services:
     env_file: .env
     environment:
       ENV: production
+      DATABASE_POOL_MAX: "15"
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
       BLOCK_PRIVATE_RESOLUTION: "true"
     volumes:
@@ -55,6 +56,7 @@ services:
     env_file: .env
     environment:
       ENV: production
+      DATABASE_POOL_MAX: "25"
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
       WORKER_JOB_QUEUE_ENABLED: "true"
       BLOCK_PRIVATE_RESOLUTION: "true"
@@ -71,6 +73,7 @@ services:
     env_file: .env
     environment:
       ENV: production
+      DATABASE_POOL_MAX: "25"
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
@@ -87,6 +90,7 @@ services:
     env_file: .env
     environment:
       ENV: production
+      DATABASE_POOL_MAX: "5"
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro

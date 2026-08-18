@@ -5,7 +5,7 @@ import { createKeeperMcpHandler } from "./mcp-handler";
 import { createKeeperMcpToolset } from "./toolset";
 import { withWideEvent } from "./utils/middleware";
 
-const database = await createDatabase(env.DATABASE_URL);
+const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 
 const { auth: baseAuth } = createAuth({
   database,

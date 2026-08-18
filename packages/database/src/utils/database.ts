@@ -6,6 +6,7 @@ import { instrumentDatabasePool } from "./pool-telemetry";
 interface DatabasePoolOptions {
   statementTimeoutMs?: number;
   idleInTransactionTimeoutMs?: number;
+  maxConnections?: number;
 }
 
 const DEFAULT_STATEMENT_TIMEOUT_MS = 30_000;
@@ -74,6 +75,7 @@ const waitForConnection = async (database: DatabaseInstance): Promise<void> => {
 };
 
 const createDatabase = async (url: string, options?: DatabasePoolOptions): Promise<DatabaseInstance> => {
+  const maxConnections = options?.maxConnections ?? POOL_MAX_CONNECTIONS;
   const statementTimeoutMs = options?.statementTimeoutMs ?? DEFAULT_STATEMENT_TIMEOUT_MS;
   const idleInTransactionTimeoutMs =
     options?.idleInTransactionTimeoutMs ?? DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS;
@@ -81,7 +83,7 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
   const database = drizzle({
     connection: {
       url: connectionUrl,
-      max: POOL_MAX_CONNECTIONS,
+      max: maxConnections,
       idleTimeout: POOL_IDLE_TIMEOUT_SECONDS,
       maxLifetime: POOL_MAX_LIFETIME_SECONDS,
       prepare: PREPARED_STATEMENTS_ENABLED,
@@ -89,7 +91,7 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
   });
   instrumentDatabasePool(
     database.$client as unknown as Parameters<typeof instrumentDatabasePool>[0],
-    POOL_MAX_CONNECTIONS,
+    maxConnections,
   );
   await waitForConnection(database);
   return database;
