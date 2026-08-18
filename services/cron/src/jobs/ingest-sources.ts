@@ -48,7 +48,7 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, refreshLockRedis, refreshLockStore } from "@/context";
@@ -855,7 +855,16 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
         eq(calendarsTable.disabled, false),
         ...buildOAuthSourceIdFilter(calendarIds),
       ),
-    );
+    )
+  /*
+   * A calendar that has never completed an ingest goes to the front of the pass.
+   * The listing is otherwise unordered, which in practice is heap order: a calendar
+   * connected a minute ago sits behind the whole fleet, and a new user's first
+   * ingest is the one wait they judge the product by. ingestWindowRecordedAt is
+   * written by the first successful ingest of every source family, so null here
+   * means exactly "never ingested".
+   */
+    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
 
   const settlements = await allSettledWithConcurrency(
     oauthSources.map((source) => {
@@ -1071,7 +1080,8 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
       ),
-    );
+    )
+    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
 
   const settlements = await allSettledWithConcurrency(
     caldavSources.map((source) => {
@@ -1229,7 +1239,8 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
         eq(calendarsTable.calendarType, "ical"),
         eq(calendarsTable.disabled, false),
       ),
-    );
+    )
+    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
 
   const settlements = await allSettledWithConcurrency(
     icsSources.map((source) => {
