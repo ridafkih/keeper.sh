@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, arrayContains, desc, eq, inArray, isNull } from "drizzle-orm";
-import { calendarsTable } from "@keeper.sh/database/schema";
+import { and, arrayContains, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/jobs/ingest-sources";
 
@@ -23,8 +23,8 @@ const createQueryBuilder = () => {
   builder.where = (predicate: unknown) => {
     capturedPredicates.push(predicate);
     return Object.assign(Promise.resolve([]), {
-      orderBy: (ordering: unknown) => {
-        capturedOrderings.push(ordering);
+      orderBy: (...orderings: unknown[]) => {
+        capturedOrderings.push(orderings);
         return Promise.resolve([]);
       },
     });
@@ -105,21 +105,27 @@ describe("ingestOAuthSources selection", () => {
     expect(capturedPredicates).toHaveLength(0);
   });
 
-  it("puts calendars that have never completed an ingest at the front", async () => {
+  it("puts never-ingested calendars first, then pro users", async () => {
     await ingestOAuthSources();
 
-    expect(capturedOrderings).toEqual([
+    expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-    ]);
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    ]]);
   });
 
   it("orders every source family the same way", async () => {
     await job?.callback();
 
-    expect(capturedOrderings).toEqual([
+    expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-    ]);
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    ]]);
   });
 });

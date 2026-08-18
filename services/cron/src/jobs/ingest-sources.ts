@@ -1,7 +1,7 @@
 import type { CronOptions } from "cronbake";
 import {
   ingestSource,
-  allSettledWithConcurrency,
+  allSettledGroupedWithConcurrency,
   insertEventStatesWithConflictResolution,
   buildEventStateInsertRow,
   createGoogleTokenRefresher,
@@ -47,6 +47,7 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
@@ -68,7 +69,16 @@ import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
+/*
+ * The unit of scheduling is the user: SOURCE_CONCURRENCY users ingest at once per
+ * family, and each user's calendars run at USER_CALENDAR_CONCURRENCY within that
+ * one slot. A seventeen-calendar account occupies one slot instead of the whole
+ * budget, so no user's backlog can starve another user's freshness. The per-user
+ * cap also keeps concurrent calls per provider account under Graph's documented
+ * MailboxConcurrency of four.
+ */
 const SOURCE_CONCURRENCY = 5;
+const USER_CALENDAR_CONCURRENCY = 2;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
 /*
@@ -849,6 +859,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
@@ -864,9 +875,12 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
    * written by the first successful ingest of every source family, so null here
    * means exactly "never ingested".
    */
-    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
+    .orderBy(
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    );
 
-  const settlements = await allSettledWithConcurrency(
+  const settlements = await allSettledGroupedWithConcurrency(
     oauthSources.map((source) => {
       const enqueuedAt = Date.now();
       return () =>
@@ -1038,7 +1052,8 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
         }),
       SOURCE_TIMEOUT_MS);
     }),
-    { concurrency: SOURCE_CONCURRENCY },
+oauthSources.map((source) => source.userId),
+    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1075,15 +1090,19 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
+    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
+    .orderBy(
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    );
 
-  const settlements = await allSettledWithConcurrency(
+  const settlements = await allSettledGroupedWithConcurrency(
     caldavSources.map((source) => {
       const enqueuedAt = Date.now();
       return () =>
@@ -1210,7 +1229,8 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
         }),
       SOURCE_TIMEOUT_MS);
     }),
-    { concurrency: SOURCE_CONCURRENCY },
+caldavSources.map((source) => source.userId),
+    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1234,15 +1254,19 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
       ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
     })
     .from(calendarsTable)
+    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         eq(calendarsTable.calendarType, "ical"),
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(desc(isNull(calendarsTable.ingestWindowRecordedAt)));
+    .orderBy(
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(sql`${userSubscriptionsTable.plan} = 'pro'`),
+    );
 
-  const settlements = await allSettledWithConcurrency(
+  const settlements = await allSettledGroupedWithConcurrency(
     icsSources.map((source) => {
       const enqueuedAt = Date.now();
       return () =>
@@ -1341,7 +1365,8 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
         }),
       SOURCE_TIMEOUT_MS);
     }),
-    { concurrency: SOURCE_CONCURRENCY },
+icsSources.map((source) => source.userId),
+    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
