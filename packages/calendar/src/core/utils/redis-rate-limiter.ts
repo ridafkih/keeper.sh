@@ -4,6 +4,8 @@ import {
 } from "@keeper.sh/constants";
 import { widelog } from "widelogger";
 import { measureRedisCommand, recordSegment } from "../telemetry/segments";
+import { createLeasedSemaphore } from "./leased-semaphore";
+import type { RedisLeaseClient, SemaphoreLease } from "./leased-semaphore";
 
 const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
@@ -190,9 +192,63 @@ const createGoogleUserRateLimiter = (
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
 
-export { createGoogleUserRateLimiter, createRedisRateLimiter };
+// Modest default so many workers hitting one CalDAV/ICS host stay polite together.
+const HOST_REQUESTS_PER_MINUTE = 30;
+
+interface HostRateLimiterOptions {
+  requestsPerMinute?: number;
+}
+
+/*
+ * Keyed by target host, not user: CalDAV/ICS servers throttle by origin traffic,
+ * so every worker fetching from the same host must draw from one shared budget.
+ */
+const createHostRateLimiter = (
+  redis: RedisScriptClient,
+  host: string,
+  options?: HostRateLimiterOptions,
+): RedisRateLimiter => createRedisRateLimiter(
+  redis,
+  `ratelimit:host:${host}`,
+  { requestsPerMinute: options?.requestsPerMinute ?? HOST_REQUESTS_PER_MINUTE },
+);
+
+// One under Graph's documented MailboxConcurrency of 4, leaving headroom for user traffic.
+const OUTLOOK_ACCOUNT_CONCURRENCY = 3;
+// Comfortably above the 120s ingest timeout so a live holder never loses its lease mid-run.
+const OUTLOOK_LEASE_TTL_MS = 150_000;
+
+interface OutlookAccountSemaphore {
+  acquireLease(signal?: AbortSignal): Promise<SemaphoreLease>;
+  release(lease: SemaphoreLease): Promise<void>;
+}
+
+const createOutlookAccountSemaphore = (
+  redis: RedisLeaseClient,
+  accountId: string,
+): OutlookAccountSemaphore => {
+  const semaphore = createLeasedSemaphore(redis, {
+    capacity: OUTLOOK_ACCOUNT_CONCURRENCY,
+    ttlMs: OUTLOOK_LEASE_TTL_MS,
+  });
+  const key = `outlook:account:${accountId}`;
+
+  return {
+    acquireLease: (signal?: AbortSignal) => semaphore.acquireLease(key, signal),
+    release: (lease: SemaphoreLease) => semaphore.release(lease),
+  };
+};
+
+export {
+  createGoogleUserRateLimiter,
+  createHostRateLimiter,
+  createOutlookAccountSemaphore,
+  createRedisRateLimiter,
+};
 export type {
   GoogleRateLimitLane,
+  HostRateLimiterOptions,
+  OutlookAccountSemaphore,
   RedisRateLimiter,
   RedisRateLimiterConfig,
   RedisScriptClient,

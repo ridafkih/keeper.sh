@@ -8,6 +8,8 @@ import {
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
   createGoogleUserRateLimiter,
+  createHostRateLimiter,
+  createOutlookAccountSemaphore,
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
@@ -26,7 +28,8 @@ import {
   PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
-import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
+import type { SemaphoreLease } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, OutlookAccountSemaphore, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -91,6 +94,16 @@ const instrumentedLockRedis = {
 };
 
 const sourceIngestLock = createSyncLock(instrumentedLockRedis);
+
+/*
+ * The ioredis set overloads type expiry/condition tokens positionally, so the
+ * semaphore's variadic option list has to go through the generic command runner.
+ */
+const leaseLockRedis: RedisLeaseClient = {
+  del: (...keys: string[]): Promise<number> => refreshLockRedis.del(...keys),
+  set: (key: string, value: string, ...options: string[]): Promise<string | null> =>
+    refreshLockRedis.call("set", key, value, ...options) as Promise<string | null>,
+};
 
 const measureDatabaseRead = async <TResult>(
   read: () => PromiseLike<TResult>,
@@ -475,12 +488,96 @@ const resolveTokenRefresher = (provider: string) => {
   return null;
 };
 
-const resolveRateLimiter = (provider: string, userId: string): RedisRateLimiter | undefined => {
-  if (provider !== "google") {
-    return;
+interface RateLimiterSourceContext {
+  accountId?: string;
+  serverUrl?: string;
+  url?: string;
+  userId: string;
+}
+
+const resolveTargetHost = (target: string | null): string | null => {
+  if (!target) {
+    return null;
+  }
+  try {
+    return new URL(target).hostname;
+  } catch {
+    return null;
+  }
+};
+
+/*
+ * The semaphore's contract is per-run concurrency, not per-request pacing, so one
+ * ingest run must hold exactly one lease: the first acquire takes it, later acquires
+ * (pagination) reuse it. The lease TTL outlives the ingest timeout, so a crashed
+ * holder frees its slot without an explicit release.
+ */
+/*
+ * One lease per source, released when the source's ingest finishes: leaving it to
+ * the 150s TTL means an account's fourth calendar in a pass waits longer than its
+ * own 120s deadline for a slot nobody is going to free.
+ */
+interface IngestRateLimiter extends RedisRateLimiter {
+  dispose?: () => Promise<void>;
+}
+
+const createSemaphoreRateLimiterAdapter = (
+  semaphore: OutlookAccountSemaphore,
+): IngestRateLimiter => {
+  let lease: Promise<SemaphoreLease> | null = null;
+  return {
+    acquire: async (_count: number, signal?: AbortSignal): Promise<void> => {
+      if (!lease) {
+        lease = measureSegment("wait.rate_limiter_ms", () => semaphore.acquireLease(signal));
+      }
+      await lease;
+    },
+    dispose: async (): Promise<void> => {
+      if (!lease) {
+        return;
+      }
+      const held = await lease.catch(() => null);
+      lease = null;
+      if (held) {
+        await semaphore.release(held);
+      }
+    },
+  };
+};
+
+const resolveRateLimiter = (
+  provider: string,
+  source: RateLimiterSourceContext,
+): IngestRateLimiter | undefined => {
+  if (provider === "google") {
+    return createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest");
   }
 
-  return createGoogleUserRateLimiter(refreshLockRedis, userId, "ingest");
+  if (provider === "outlook") {
+    if (!source.accountId) {
+      return;
+    }
+    return createSemaphoreRateLimiterAdapter(
+      createOutlookAccountSemaphore(leaseLockRedis, source.accountId),
+    );
+  }
+
+  if (provider === "caldav") {
+    const host = resolveTargetHost(source.serverUrl ?? null);
+    if (!host) {
+      return;
+    }
+    return createHostRateLimiter(refreshLockRedis, host);
+  }
+
+  if (provider !== "ical" && provider !== "ics") {
+    return;
+  }
+  const host = resolveTargetHost(source.url ?? null);
+  if (!host) {
+    return;
+  }
+  return createHostRateLimiter(refreshLockRedis, host);
 };
 
 const getRequiredSourceRanges = async (
@@ -966,12 +1063,16 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                 if (ingestionState.fullSyncReason) {
                   widelog.set("full_sync.reason", ingestionState.fullSyncReason);
                 }
+                const rateLimiter = resolveRateLimiter(currentSource.provider, {
+                  accountId: currentSource.accountId,
+                  userId: currentSource.userId,
+                });
                 const fetcher = resolveOAuthFetcher(currentSource.provider, {
                   accessToken: tokenState.accessToken,
                   calendarId: source.calendarId,
                   externalCalendarId: currentSource.externalCalendarId,
                   syncToken: ingestionState.syncToken,
-                  rateLimiter: resolveRateLimiter(currentSource.provider, currentSource.userId),
+                  rateLimiter,
                   signal,
                   plan: createSourceIngestionPlan(
                     ranges.historicRange,
@@ -981,26 +1082,30 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                 if (!fetcher) {
                   return createSkippedIngestionResult(currentSource.userId);
                 }
-                const ingestionResult = await ingestSource({
-                  calendarId: source.calendarId,
-                  fetchEvents: () => fetcher.fetchEvents(),
-                  isCurrent,
-                  withPersistenceTransaction:
-                    createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
-                  onIngestEvent: recordIngestWideEvent,
-                });
-                return {
-                  eventsAdded: ingestionResult.eventsAdded,
-                  eventsRemoved: ingestionResult.eventsRemoved,
-                  reauthentication: {
-                    accountId: currentSource.accountId,
-                    demand: "authenticated" as const,
-                  },
-                  shouldPush: ingestionState.authorityChanged
-                    || ingestionResult.eventsAdded > 0
-                    || ingestionResult.eventsRemoved > 0,
-                  userId: currentSource.userId,
-                };
+                try {
+                  const ingestionResult = await ingestSource({
+                    calendarId: source.calendarId,
+                    fetchEvents: () => fetcher.fetchEvents(),
+                    isCurrent,
+                    withPersistenceTransaction:
+                      createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
+                    onIngestEvent: recordIngestWideEvent,
+                  });
+                  return {
+                    eventsAdded: ingestionResult.eventsAdded,
+                    eventsRemoved: ingestionResult.eventsRemoved,
+                    reauthentication: {
+                      accountId: currentSource.accountId,
+                      demand: "authenticated" as const,
+                    },
+                    shouldPush: ingestionState.authorityChanged
+                      || ingestionResult.eventsAdded > 0
+                      || ingestionResult.eventsRemoved > 0,
+                    userId: currentSource.userId,
+                  };
+                } finally {
+                  await rateLimiter?.dispose?.();
+                }
               }, shouldApplyOAuthIngestBackoff),
             );
             if (!result) {
@@ -1407,5 +1512,5 @@ export default withCronWideEvent({
   overrunProtection: false,
 }) satisfies CronOptions;
 
-export { ingestOAuthSources };
+export { ingestOAuthSources, resolveRateLimiter };
 export type { IngestionBatchResult };
