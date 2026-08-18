@@ -29,6 +29,6 @@ We ask for 90 days from acknowledgement before public disclosure, and will usual
 
 In scope: this repository, the published container images, and the hosted service.
 
-Out of scope: findings that require access to the operator's own host or network, denial of service through ordinary rate limits, missing hardening headers with no demonstrated impact, and reports produced by a scanner without a working reproduction.
+Out of scope: findings that require access to the operator's own host or network, denial of service through ordinary rate limits, missing hardening headers with no demonstrated impact, and reports produced by a scanner without a working reproduction, and configurations with documented tradeoffs.
 
 Self-hosted installations vary in configuration. Please say which settings your report assumes, as some protections are opt-in and documented as such in the README.
