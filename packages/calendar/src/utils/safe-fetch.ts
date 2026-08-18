@@ -8,6 +8,7 @@ const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const STALE_SOCKET_ERROR_CODE = "ECONNRESET";
+const SITE_BOUNDARY_OPTIONS = { allowPrivateDomains: true };
 
 interface SafeFetchOptions {
   blockPrivateResolution?: boolean;
@@ -166,8 +167,8 @@ const isTransportDowngrade = (current: URL, next: URL): boolean =>
   current.protocol === "https:" && next.protocol !== "https:";
 
 const isDifferentSite = (current: URL, next: URL): boolean => {
-  const currentDomain = getDomain(current.hostname);
-  const nextDomain = getDomain(next.hostname);
+  const currentDomain = getDomain(current.hostname, SITE_BOUNDARY_OPTIONS);
+  const nextDomain = getDomain(next.hostname, SITE_BOUNDARY_OPTIONS);
   if (!currentDomain || !nextDomain) {
     return current.hostname !== next.hostname;
   }
@@ -252,6 +253,25 @@ const getHeadersForRedirect = (
   return headers;
 };
 
+const assertManualRedirectKeepsCredentials = (
+  currentUrl: string,
+  response: Response,
+  headers: Record<string, string>,
+): void => {
+  if (!headers.authorization) {
+    return;
+  }
+
+  const redirectUrl = resolveRedirectUrl(response, currentUrl);
+  if (!redirectUrl || !shouldWithholdAuthorization(currentUrl, redirectUrl)) {
+    return;
+  }
+
+  throw new UrlSafetyError(
+    `Redirect to ${redirectUrl} crosses a credential boundary and the caller follows redirects itself, so the credentials cannot be withheld from it.`,
+  );
+};
+
 const WITHHELD_CREDENTIALS = Symbol.for("keeper.sh/safe-fetch/withheld-credentials");
 
 interface WithheldCredentials {
@@ -275,7 +295,26 @@ const isStaleSocketError = (error: unknown): boolean => error instanceof Error &
 
 const isReplayableBody = (body: RequestInit["body"]): boolean => !body || typeof body === "string" || body instanceof URLSearchParams || body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body);
 
+const REPLAYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE", "PROPFIND", "REPORT"]);
+
+const requestMethod = (input: string | Request | URL, init: RequestInit | undefined): string => {
+  if (init?.method) {
+    return init.method.toUpperCase();
+  }
+  if (input instanceof Request) {
+    return input.method.toUpperCase();
+  }
+  return "GET";
+};
+
+/*
+ * A socket can reset after the server has already applied the write, so re-sending is not
+ * a retry but a second write. Replaying a create-only PUT also turns a success into a 412.
+ */
 const isReplayableRequest = (input: string | Request | URL, init: RequestInit | undefined): boolean => {
+  if (!REPLAYABLE_METHODS.has(requestMethod(input, init))) {
+    return false;
+  }
   if (input instanceof Request && input.body) {
     return false;
   }
@@ -456,7 +495,12 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     try {
       const response = await performFetch(input, { ...init, redirect: "manual", signal }, headers, connection);
 
-      if (callerWantsManual || !isRedirect(response)) {
+      if (!isRedirect(response)) {
+        return response;
+      }
+
+      if (callerWantsManual) {
+        assertManualRedirectKeepsCredentials(url, response, headers);
         return response;
       }
 
