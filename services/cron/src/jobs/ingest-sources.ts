@@ -68,7 +68,7 @@ import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
-const SOURCE_CONCURRENCY = 5;
+const SOURCE_CONCURRENCY = 20;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
 /*
