@@ -202,3 +202,39 @@ describe("safe-fetch follows a record that genuinely changed", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
+
+describe("safe-fetch pins an IPv6 answer", () => {
+  const originalFetch = globalThis.fetch;
+  const IPV6_ADDRESS = "2606:2800:220:1:248:1893:25c8:1946";
+
+  beforeEach(() => {
+    mockResolve4.mockReset();
+    mockResolve6.mockReset();
+    mockResolve4.mockRejectedValue(new Error("no A records"));
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("connects to the bracketed literal when only AAAA answers", async () => {
+    mockResolve6.mockResolvedValue([IPV6_ADDRESS]);
+    const fetchMock = vi.fn<FetchFn>(() => Promise.resolve(new Response("calendar", { status: 200 })));
+    installMockFetch(fetchMock);
+
+    await createSafeFetch(enabledOptions)("https://calendar.example.com/feed.ics");
+
+    const target = new URL(String(fetchMock.mock.calls[0]?.[0]));
+    expect(target.hostname).toBe(`[${IPV6_ADDRESS}]`);
+    expect(target.href).toContain(`[${IPV6_ADDRESS}]`);
+  });
+
+  it("refuses rather than falling back to the hostname when the address cannot be pinned", async () => {
+    mockResolve6.mockResolvedValue(["2606:2800:220:1:248:1893:25c8:1946%eth0"]);
+    const fetchMock = vi.fn<FetchFn>(() => Promise.resolve(new Response("calendar", { status: 200 })));
+    installMockFetch(fetchMock);
+
+    await expect(createSafeFetch(enabledOptions)("https://calendar.example.com/feed.ics")).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

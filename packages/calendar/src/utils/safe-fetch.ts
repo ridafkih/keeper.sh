@@ -96,7 +96,13 @@ const pinnedServerName = (parsed: URL): string | null => {
 
 const pinnedUrl = (parsed: URL, address: string): string => {
   const pinned = new URL(parsed.href);
-  pinned.hostname = formatAddressForUrl(address);
+  const literal = formatAddressForUrl(address);
+  pinned.hostname = literal;
+
+  if (pinned.hostname !== literal) {
+    throw new UrlSafetyError("The validated address could not be pinned to the request.");
+  }
+
   return pinned.href;
 };
 
