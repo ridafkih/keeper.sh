@@ -6,7 +6,7 @@ import { resolveWebhookConfig } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { Polar } from "@polar-sh/sdk";
 
-const database = await createDatabase(env.DATABASE_URL);
+const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 
 const premiumService = createPremiumService({

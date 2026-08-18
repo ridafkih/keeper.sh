@@ -1,11 +1,9 @@
 import { useCallback, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Cookie from "lucide-react/dist/esm/icons/cookie";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "@/lib/pluralize";
@@ -39,33 +37,17 @@ import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
 import { resolveErrorMessage } from "@/utils/errors";
 import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
-import { getCommercialMode } from "@/config/commercial";
-import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
-import { openCustomerPortal } from "@/utils/checkout";
-
-async function loadSubscription(context: { runtimeConfig: { commercialMode: boolean }; fetchApi: <T>(path: string, init?: RequestInit) => Promise<T> }) {
-  if (!context.runtimeConfig.commercialMode) return undefined;
-  try {
-    return await fetchSubscriptionStateWithApi(context.fetchApi);
-  } catch (error) {
-    console.error("[subscription] settings loader preload failed, deferring to the client read:", error);
-    return undefined;
-  }
-}
 
 export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({
   loader: async ({ context }) => {
-    const [authCapabilities, subscription] = await Promise.all([
-      fetchAuthCapabilitiesWithApi(context.fetchApi),
-      loadSubscription(context),
-    ]);
-    return { authCapabilities, subscription };
+    const authCapabilities = await fetchAuthCapabilitiesWithApi(context.fetchApi);
+    return { authCapabilities };
   },
   component: SettingsPage,
 });
 
 function SettingsPage() {
-  const { authCapabilities, subscription: loaderSubscription } = Route.useLoaderData();
+  const { authCapabilities } = Route.useLoaderData();
   const { user } = useSession();
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -77,11 +59,6 @@ function SettingsPage() {
       : (user?.email ?? "");
   const { data: apiTokens = [] } = useApiTokens();
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
-  const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
-    fallbackData: loaderSubscription,
-  });
-  const isPro = subscription?.plan === "pro";
-  const [isManaging, setIsManaging] = useState(false);
   const analyticsConsent = useEffectiveConsent();
   const handleAnalyticsToggle = useCallback((checked: boolean) => {
     track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
@@ -91,18 +68,6 @@ function SettingsPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const handleManagePlan = async () => {
-    if (!isPro) {
-      navigate({ to: "/dashboard/upgrade" });
-      return;
-    }
-    setIsManaging(true);
-    try {
-      await openCustomerPortal();
-    } catch {
-      setIsManaging(false);
-    }
-  };
 
 
   const handleDeleteAccount = async () => {
@@ -179,17 +144,6 @@ function SettingsPage() {
           <NavigationMenuItemLabel>Analytics Cookies</NavigationMenuItemLabel>
         </NavigationMenuToggleItem>
       </NavigationMenu>
-      {getCommercialMode() && (
-        <NavigationMenu variant={isPro ? "default" : "highlight"}>
-          <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
-            <NavigationMenuItemIcon>
-              {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuButtonItem>
-        </NavigationMenu>
-      )}
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
           <NavigationMenuItemIcon>

@@ -1,6 +1,7 @@
 import arkenv from "arkenv";
 
 const schema = {
+  DATABASE_POOL_MAX: "number?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",
   GOOGLE_CLIENT_ID: "string?",

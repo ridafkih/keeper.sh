@@ -17,7 +17,7 @@ import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
 
-const database = await createDatabase(env.DATABASE_URL);
+const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 const redis = new Redis(env.REDIS_URL, {
   commandTimeout: 10_000,
   maxRetriesPerRequest: 3,

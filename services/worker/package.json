@@ -5,7 +5,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "dev": "bun run --watch .",
+    "dev": "bun run .",
     "build": "bun scripts/build.ts",
     "start": "bun run dist/index.js",
     "types": "tsc --noEmit",

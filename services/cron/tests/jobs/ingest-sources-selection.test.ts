@@ -1,10 +1,17 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, desc, eq, inArray, isNull } from "drizzle-orm";
 import { calendarsTable } from "@keeper.sh/database/schema";
+import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/jobs/ingest-sources";
 
 const capturedPredicates: unknown[] = [];
+const capturedOrderings: unknown[] = [];
 
+/*
+ * A real resolved promise carrying an orderBy method comes back from where(): the
+ * listing queries chain into orderBy(), while other selects in the same job
+ * stop at where() or limit() and are awaited directly.
+ */
 const createQueryBuilder = () => {
   const builder: Record<string, unknown> = {};
   const chain = (): unknown => builder;
@@ -15,7 +22,12 @@ const createQueryBuilder = () => {
   builder.limit = () => Promise.resolve([]);
   builder.where = (predicate: unknown) => {
     capturedPredicates.push(predicate);
-    return Promise.resolve([]);
+    return Object.assign(Promise.resolve([]), {
+      orderBy: (ordering: unknown) => {
+        capturedOrderings.push(ordering);
+        return Promise.resolve([]);
+      },
+    });
   };
 
   return builder;
@@ -28,8 +40,10 @@ const fakeDatabase = {
 
 let ingestOAuthSources: typeof ingestOAuthSourcesFn = () =>
   Promise.reject(new Error("Module not loaded"));
+let job: typeof ingestSourcesJob | null = null;
 
-vi.mock("../../src/env", () => ({ default: {} }));
+/* ENCRYPTION_KEY set so the CalDAV family does not early-return before its listing. */
+vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
 vi.mock("../../src/context", () => ({
   database: fakeDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
@@ -53,11 +67,14 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 }));
 
 beforeAll(async () => {
-  ({ ingestOAuthSources } = await import("../../src/jobs/ingest-sources"));
+  const module = await import("../../src/jobs/ingest-sources");
+  ({ ingestOAuthSources } = module);
+  job = module.default;
 });
 
 beforeEach(() => {
   capturedPredicates.length = 0;
+  capturedOrderings.length = 0;
 });
 
 describe("ingestOAuthSources selection", () => {
@@ -86,5 +103,23 @@ describe("ingestOAuthSources selection", () => {
     await ingestOAuthSources([]);
 
     expect(capturedPredicates).toHaveLength(0);
+  });
+
+  it("puts calendars that have never completed an ingest at the front", async () => {
+    await ingestOAuthSources();
+
+    expect(capturedOrderings).toEqual([
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+    ]);
+  });
+
+  it("orders every source family the same way", async () => {
+    await job?.callback();
+
+    expect(capturedOrderings).toEqual([
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+    ]);
   });
 });

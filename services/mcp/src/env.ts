@@ -4,6 +4,7 @@ const schema = {
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
   COMMERCIAL_MODE: "boolean?",
+  DATABASE_POOL_MAX: "number?",
   DATABASE_URL: "string.url",
   MCP_API_URL: "string.url?",
   MCP_PORT: "number",
