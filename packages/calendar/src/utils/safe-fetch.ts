@@ -74,14 +74,59 @@ const validateProtocol = (protocol: string): void => {
   }
 };
 
-const validateHostResolution = async (host: string, hostname: string, options: SafeFetchOptions): Promise<void> => {
-  if (options.allowedPrivateHosts?.has(host)) {
-    return;
+interface PinnedConnection {
+  url: string;
+  host: string;
+  serverName: string | null;
+}
+
+const formatAddressForUrl = (address: string): string => {
+  if (ipaddr.parse(address).kind() === "ipv6") {
+    return `[${address}]`;
   }
+  return address;
+};
+
+const pinnedServerName = (parsed: URL): string | null => {
+  if (parsed.protocol === "https:") {
+    return parsed.hostname;
+  }
+  return null;
+};
+
+const buildPinnedConnection = (parsed: URL, address: string): PinnedConnection => {
+  const pinned = new URL(parsed.href);
+  pinned.hostname = formatAddressForUrl(address);
+
+  return {
+    host: parsed.host,
+    serverName: pinnedServerName(parsed),
+    url: pinned.href,
+  };
+};
+
+/*
+ * The validated address is carried into the connection because Bun resolves the
+ * hostname again at connect time; a rebinding resolver would otherwise answer a
+ * public address to the check and a private one to the socket (CVE-2026-75583).
+ */
+const resolveConnection = async (url: string, options?: SafeFetchOptions): Promise<PinnedConnection | null> => {
+  const parsed = new URL(url);
+  validateProtocol(parsed.protocol);
+
+  if (!options?.blockPrivateResolution) {
+    return null;
+  }
+
+  if (options.allowedPrivateHosts?.has(parsed.host)) {
+    return null;
+  }
+
+  const hostname = stripBrackets(parsed.hostname);
 
   if (ipaddr.isValid(hostname)) {
     assertUnicastAddress(hostname, "The provided URL points to a private or reserved network address.");
-    return;
+    return null;
   }
 
   const addresses = await resolveAllAddresses(hostname);
@@ -89,17 +134,17 @@ const validateHostResolution = async (host: string, hostname: string, options: S
   for (const address of addresses) {
     assertUnicastAddress(address, "The provided URL resolves to a private or reserved network address.");
   }
+
+  const pinned = addresses.at(0);
+  if (!pinned) {
+    throw new UrlSafetyError("The provided URL could not be resolved to any IP address.");
+  }
+
+  return buildPinnedConnection(parsed, pinned);
 };
 
 const validateUrlSafety = async (url: string, options?: SafeFetchOptions): Promise<void> => {
-  const parsed = new URL(url);
-  validateProtocol(parsed.protocol);
-
-  if (!options?.blockPrivateResolution) {
-    return;
-  }
-
-  await validateHostResolution(parsed.host, stripBrackets(parsed.hostname), options);
+  await resolveConnection(url, options);
 };
 
 const resolveRedirectUrl = (response: Response, originalUrl: string): string | null => {
@@ -142,6 +187,57 @@ const toHeaderRecord = (headers: RequestInit["headers"]): Record<string, string>
   }
 
   return record;
+};
+
+const mergeHeaderRecord = (input: string | Request | URL, init: RequestInit | undefined): Record<string, string> => {
+  const merged = new Headers();
+
+  if (input instanceof Request) {
+    for (const [key, value] of input.headers.entries()) {
+      merged.set(key, value);
+    }
+  }
+
+  for (const [key, value] of new Headers(init?.headers).entries()) {
+    merged.set(key, value);
+  }
+
+  return toHeaderRecord(merged);
+};
+
+const pinnedTlsOptions = (connection: PinnedConnection): Pick<BunFetchRequestInit, "tls"> => {
+  if (!connection.serverName) {
+    return {};
+  }
+  return { tls: { serverName: connection.serverName } };
+};
+
+const pinnedInput = (input: string | Request | URL, connection: PinnedConnection): string | Request => {
+  if (input instanceof Request) {
+    return new Request(connection.url, input);
+  }
+  return connection.url;
+};
+
+interface PinnedRequest {
+  input: string | Request | URL;
+  init: BunFetchRequestInit;
+}
+
+const buildRequest = (
+  input: string | Request | URL,
+  init: BunFetchRequestInit,
+  headers: Record<string, string>,
+  connection: PinnedConnection | null,
+): PinnedRequest => {
+  if (!connection) {
+    return { init, input };
+  }
+
+  return {
+    init: { ...init, headers: { ...headers, host: connection.host }, ...pinnedTlsOptions(connection) },
+    input: pinnedInput(input, connection),
+  };
 };
 
 const withoutAuthorization = (headers: Record<string, string>): Record<string, string> => Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== "authorization"));
@@ -213,10 +309,10 @@ const followRedirects = async (
   initialUrl: string,
   initialResponse: Response,
   init: RequestInit | undefined,
+  headers: Record<string, string>,
   options: SafeFetchOptions | undefined,
   signal: AbortSignal | null | undefined,
 ): Promise<Response> => {
-  const headers = toHeaderRecord(init?.headers);
   let currentUrl = initialUrl;
   let currentResponse = initialResponse;
   let currentHeaders = headers;
@@ -235,7 +331,7 @@ const followRedirects = async (
       return settle(currentResponse);
     }
 
-    await validateUrlSafety(redirectUrl, options);
+    const connection = await resolveConnection(redirectUrl, options);
 
     const nextHeaders = getHeadersForRedirect(currentHeaders, currentUrl, redirectUrl);
     if (!withheldAt && currentHeaders.authorization && !nextHeaders.authorization) {
@@ -244,12 +340,14 @@ const followRedirects = async (
     currentHeaders = nextHeaders;
     currentUrl = redirectUrl;
 
-    currentResponse = await fetchWithStaleSocketRetry(currentUrl, {
-      ...init,
-      headers: currentHeaders,
-      redirect: "manual",
-      signal,
-    });
+    const request = buildRequest(
+      currentUrl,
+      { ...init, headers: currentHeaders, redirect: "manual", signal },
+      currentHeaders,
+      connection,
+    );
+
+    currentResponse = await fetchWithStaleSocketRetry(request.input, request.init);
 
     if (!isRedirect(currentResponse)) {
       return settle(currentResponse);
@@ -309,26 +407,24 @@ const resolveExternalSignal = (
 
 const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input, init) => {
     const url = extractUrl(input);
-    await validateUrlSafety(url, options);
+    const connection = await resolveConnection(url, options);
 
     const callerWantsManual = init?.redirect === "manual";
 
     const externalSignal = resolveExternalSignal(input, init, options);
     const timeout = resolveTimeoutSignal(options, externalSignal);
     const signal = resolveRequestSignal(timeout, externalSignal);
+    const headers = mergeHeaderRecord(input, init);
 
     try {
-      const response = await fetchWithStaleSocketRetry(input, {
-        ...init,
-        redirect: "manual",
-        signal,
-      });
+      const request = buildRequest(input, { ...init, redirect: "manual", signal }, headers, connection);
+      const response = await fetchWithStaleSocketRetry(request.input, request.init);
 
       if (callerWantsManual || !isRedirect(response)) {
         return response;
       }
 
-      return await followRedirects(url, response, init, options, signal);
+      return await followRedirects(url, response, init, headers, options, signal);
     } catch (error) {
       if (timeout?.isTimeout() && options?.timeoutMs) {
         throw new RequestTimeoutError(options.timeoutMs);

@@ -368,3 +368,76 @@ describe("createSafeFetch", () => {
     await expect(request).rejects.toThrow("job deadline exceeded");
   });
 });
+
+const sentHeaders = (input: string | Request | URL, init: RequestInit | undefined): Headers => {
+  const merged = new Headers();
+  if (input instanceof Request) {
+    for (const [key, value] of input.headers.entries()) {
+      merged.set(key, value);
+    }
+  }
+  for (const [key, value] of new Headers(init?.headers).entries()) {
+    merged.set(key, value);
+  }
+  return merged;
+};
+
+describe("pinning leaves the existing guard behaviour unchanged", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  it("never resolves DNS when blockPrivateResolution is off", async () => {
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
+    installMockFetch(mockFetch);
+
+    const safeFetch = createSafeFetch();
+    await safeFetch("https://feeds.example.com/cal.ics");
+
+    expect(mockResolve4).not.toHaveBeenCalled();
+    expect(mockResolve6).not.toHaveBeenCalled();
+  });
+
+  it("does not pin or rewrite the request when blockPrivateResolution is off", async () => {
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
+    installMockFetch(mockFetch);
+
+    const safeFetch = createSafeFetch();
+    await safeFetch("https://feeds.example.com/cal.ics");
+
+    const [input, init] = mockFetch.mock.calls[0] ?? [];
+    expect(String(input)).toBe("https://feeds.example.com/cal.ics");
+    expect(sentHeaders(input ?? "", init).get("host")).toBeNull();
+    expect((init as BunFetchRequestInit | undefined)?.tls).toBeUndefined();
+  });
+
+  it("resolves no DNS and issues no request for a literal private IP when enabled", async () => {
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
+    installMockFetch(mockFetch);
+
+    const safeFetch = createSafeFetch(enabledOptions);
+    await expect(safeFetch("http://169.254.169.254/latest/meta-data/")).rejects.toThrow(UrlSafetyError);
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockResolve4).not.toHaveBeenCalled();
+  });
+
+  it("leaves a whitelisted private host unpinned and untouched", async () => {
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockResolvedValue(new Response("ok", { status: 200 }));
+    installMockFetch(mockFetch);
+
+    const safeFetch = createSafeFetch({ blockPrivateResolution: true, allowedPrivateHosts: new Set(["radicale.local:5232"]) });
+    await safeFetch("http://radicale.local:5232/cal.ics");
+
+    const [input, init] = mockFetch.mock.calls[0] ?? [];
+    expect(String(input)).toBe("http://radicale.local:5232/cal.ics");
+    expect(sentHeaders(input ?? "", init).get("host")).toBeNull();
+    expect(mockResolve4).not.toHaveBeenCalled();
+  });
+});
