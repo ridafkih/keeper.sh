@@ -30,7 +30,7 @@ import {
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
 import type { SemaphoreLease } from "@keeper.sh/calendar";
-import type { IngestionResult } from "@keeper.sh/calendar";
+import type { FlushReservation, IngestionResult } from "@keeper.sh/calendar";
 import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, OutlookAccountSemaphore, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
@@ -54,7 +54,7 @@ import {
   sourceDestinationMappingsTable,
   userSubscriptionsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, flushDatabase, refreshLockRedis, refreshLockStore } from "@/context";
@@ -71,16 +71,26 @@ import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
+import { WEIGHT_BUDGET, estimateIngestWeight } from "@/utils/ingest-weight";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
-const SOURCE_CONCURRENCY = 5;
+/*
+ * The real bounds are the weighted flush budget, the per-family provider
+ * limiters, and USER_CALENDAR_CONCURRENCY, so no global group throttle remains.
+ */
+const UNBOUNDED_USER_GROUPS = 1000;
 /*
  * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
  * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
  * independently, so combined traffic can still reach the provider limit.
  */
 const USER_CALENDAR_CONCURRENCY = 2;
+/*
+ * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
+ * the Bun event loop when run wide open — observed 2026-08-17.
+ */
+const ICS_PARSE_CONCURRENCY = 4;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
 /*
@@ -329,20 +339,59 @@ const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): 
  */
 const FLUSH_QUEUE_CAPACITY = 50;
 
+/*
+ * The budget makes the bound memory-weighted rather than item-counted: a
+ * source must reserve its estimated payload weight BEFORE its provider fetch
+ * begins, so a full budget stops fetches from starting and blocked collectors
+ * hold no payloads.
+ */
 const ingestFlushWriter = createSerialFlushWorker(
   (task: () => Promise<IngestionResult>) => task(),
-  { capacity: FLUSH_QUEUE_CAPACITY },
+  { budget: WEIGHT_BUDGET, capacity: FLUSH_QUEUE_CAPACITY },
 );
+
+type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, IngestionResult>;
+
+/*
+ * Acquires the weighted flush reservation for one source before its provider
+ * fetch is allowed to start. The wait is its own segment so "the budget was
+ * full" never masquerades as provider rate limiting.
+ */
+const reserveIngestFlushWeight = async (
+  calendarId: string,
+  hasEverIngested: boolean,
+  signal: AbortSignal,
+): Promise<IngestFlushReservation> => {
+  const weight = await estimateIngestWeight(
+    {
+      // The sizing read goes to the pooled database, never the flush writer.
+      countStoredEvents: async (targetCalendarId: string): Promise<number> => {
+        const rows = await database
+          .select({ count: count() })
+          .from(eventStatesTable)
+          .where(eq(eventStatesTable.calendarId, targetCalendarId));
+        return rows[0]?.count ?? 0;
+      },
+    },
+    calendarId,
+    hasEverIngested,
+  );
+  return await measureSegment(
+    "wait.flush_reserve_ms",
+    () => ingestFlushWriter.reserve(weight, signal),
+  );
+};
 
 const createIngestionPersistenceTransaction = (
   calendarId: string,
   signal: AbortSignal,
   deadlineAt: number,
+  reservation: IngestFlushReservation,
 ) =>
   (work: IngestionPersistenceWork) => {
     const ledger = createPersistenceLedger();
     const requestedAt = performance.now();
-    return ingestFlushWriter.submit(() => flushDatabase.transaction(async (transaction) => {
+    return reservation.submit(() => flushDatabase.transaction(async (transaction) => {
     ledger.grantedAt = performance.now();
     const setRemainingStatementTimeout = async (): Promise<void> => {
       signal.throwIfAborted();
@@ -475,7 +524,7 @@ const createIngestionPersistenceTransaction = (
       signal.throwIfAborted();
       ledger.callbackReturnedAt = performance.now();
       return result;
-    }), signal).finally(() => {
+    })).finally(() => {
       /*
        * This is the one instrumentation site whose own failure could rewrite the
        * ingest's result: a throw here would reject a committed transaction, or
@@ -1101,13 +1150,22 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                 if (!fetcher) {
                   return createSkippedIngestionResult(currentSource.userId);
                 }
+                const reservation = await reserveIngestFlushWeight(
+                  source.calendarId,
+                  currentSource.ingestWindowRecordedAt !== null,
+                  signal,
+                );
                 try {
                   const ingestionResult = await ingestSource({
                     calendarId: source.calendarId,
                     fetchEvents: () => fetcher.fetchEvents(),
                     isCurrent,
-                    withPersistenceTransaction:
-                      createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
+                    withPersistenceTransaction: createIngestionPersistenceTransaction(
+                      source.calendarId,
+                      signal,
+                      deadlineAt,
+                      reservation,
+                    ),
                     onIngestEvent: recordIngestWideEvent,
                   });
                   return {
@@ -1123,6 +1181,8 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                     userId: currentSource.userId,
                   };
                 } finally {
+                  /* A source that never submitted must not strand its weight. */
+                  reservation.release();
                   await rateLimiter?.dispose?.();
                 }
               }, shouldApplyOAuthIngestBackoff),
@@ -1172,7 +1232,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
       SOURCE_TIMEOUT_MS);
     }),
 oauthSources.map((source) => source.userId),
-    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: UNBOUNDED_USER_GROUPS, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1281,33 +1341,47 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     ranges.futureRange,
                   ),
                 });
-                const ingestionResult = await ingestSource({
-                  calendarId: source.calendarId,
-                  fetchEvents: async () => {
-                    const fetchResult = await fetcher.fetchEvents();
-                    recordSkippedResources(
-                      fetchResult.skippedResourceCount ?? 0,
-                      fetchResult.skippedResourceReasons ?? [],
-                    );
-                    return fetchResult;
-                  },
-                  isCurrent,
-                  withPersistenceTransaction:
-                    createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
-                  onIngestEvent: recordIngestWideEvent,
-                });
-                return {
-                  eventsAdded: ingestionResult.eventsAdded,
-                  eventsRemoved: ingestionResult.eventsRemoved,
-                  reauthentication: {
-                    accountId: source.accountId,
-                    demand: "authenticated" as const,
-                  },
-                  shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
-                    || ingestionResult.eventsAdded > 0
-                    || ingestionResult.eventsRemoved > 0,
-                  userId: currentSource.userId,
-                };
+                const reservation = await reserveIngestFlushWeight(
+                  source.calendarId,
+                  currentSource.ingestWindowRecordedAt !== null,
+                  signal,
+                );
+                try {
+                  const ingestionResult = await ingestSource({
+                    calendarId: source.calendarId,
+                    fetchEvents: async () => {
+                      const fetchResult = await fetcher.fetchEvents();
+                      recordSkippedResources(
+                        fetchResult.skippedResourceCount ?? 0,
+                        fetchResult.skippedResourceReasons ?? [],
+                      );
+                      return fetchResult;
+                    },
+                    isCurrent,
+                    withPersistenceTransaction: createIngestionPersistenceTransaction(
+                      source.calendarId,
+                      signal,
+                      deadlineAt,
+                      reservation,
+                    ),
+                    onIngestEvent: recordIngestWideEvent,
+                  });
+                  return {
+                    eventsAdded: ingestionResult.eventsAdded,
+                    eventsRemoved: ingestionResult.eventsRemoved,
+                    reauthentication: {
+                      accountId: source.accountId,
+                      demand: "authenticated" as const,
+                    },
+                    shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
+                      || ingestionResult.eventsAdded > 0
+                      || ingestionResult.eventsRemoved > 0,
+                    userId: currentSource.userId,
+                  };
+                } finally {
+                  /* A source that never submitted must not strand its weight. */
+                  reservation.release();
+                }
               }, (error) => !shouldTreatAsProviderAuthFailure(error)),
             );
             if (!result) {
@@ -1349,7 +1423,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
       SOURCE_TIMEOUT_MS);
     }),
 caldavSources.map((source) => source.userId),
-    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: UNBOUNDED_USER_GROUPS, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1433,30 +1507,44 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                     ranges.futureRange,
                   ),
                 });
-                const ingestionResult = await ingestSource({
-                  calendarId: source.calendarId,
-                  fetchEvents: () =>
-                    fetcher.fetchEvents({
-                      interpretEvents: (events, fetchContext) =>
-                        interpretFullDayTimedEventsAsAllDay(events, {
-                          calendarTimeZone: fetchContext.calendarTimeZone,
-                          enabled: currentSource.treatFullDayTimedEventsAsAllDay,
-                        }),
-                    }),
-                  isCurrent,
-                  withPersistenceTransaction:
-                    createIngestionPersistenceTransaction(source.calendarId, signal, deadlineAt),
-                  onIngestEvent: recordIngestWideEvent,
-                });
-                return {
-                  eventsAdded: ingestionResult.eventsAdded,
-                  eventsRemoved: ingestionResult.eventsRemoved,
-                  reauthentication: null,
-                  shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
-                    || ingestionResult.eventsAdded > 0
-                    || ingestionResult.eventsRemoved > 0,
-                  userId: currentSource.userId,
-                };
+                const reservation = await reserveIngestFlushWeight(
+                  source.calendarId,
+                  currentSource.ingestWindowRecordedAt !== null,
+                  signal,
+                );
+                try {
+                  const ingestionResult = await ingestSource({
+                    calendarId: source.calendarId,
+                    fetchEvents: () =>
+                      fetcher.fetchEvents({
+                        interpretEvents: (events, fetchContext) =>
+                          interpretFullDayTimedEventsAsAllDay(events, {
+                            calendarTimeZone: fetchContext.calendarTimeZone,
+                            enabled: currentSource.treatFullDayTimedEventsAsAllDay,
+                          }),
+                      }),
+                    isCurrent,
+                    withPersistenceTransaction: createIngestionPersistenceTransaction(
+                      source.calendarId,
+                      signal,
+                      deadlineAt,
+                      reservation,
+                    ),
+                    onIngestEvent: recordIngestWideEvent,
+                  });
+                  return {
+                    eventsAdded: ingestionResult.eventsAdded,
+                    eventsRemoved: ingestionResult.eventsRemoved,
+                    reauthentication: null,
+                    shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
+                      || ingestionResult.eventsAdded > 0
+                      || ingestionResult.eventsRemoved > 0,
+                    userId: currentSource.userId,
+                  };
+                } finally {
+                  /* A source that never submitted must not strand its weight. */
+                  reservation.release();
+                }
               }, () => true),
             );
             if (!result) {
@@ -1485,7 +1573,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
       SOURCE_TIMEOUT_MS);
     }),
 icsSources.map((source) => source.userId),
-    { groupConcurrency: SOURCE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: ICS_PARSE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
