@@ -17,6 +17,7 @@ import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
+import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
@@ -128,6 +129,7 @@ interface SyncConfig {
   oauthConfig: OAuthConfig;
   plan: Plan;
   refreshLockStore?: RefreshLockStore | null;
+  safeFetchOptions?: SafeFetchOptions;
   deadlineMs?: number;
   abortSignal?: AbortSignal;
 }
@@ -740,6 +742,7 @@ const syncDestinationsForUser = async (
           oauthConfig: config.oauthConfig,
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
+          safeFetchOptions: config.safeFetchOptions,
           rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
           signal: config.abortSignal,
         }));

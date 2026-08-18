@@ -1,4 +1,5 @@
 import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
+import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
   createGoogleTokenRefresher,
@@ -120,6 +121,7 @@ const resolveCalDAVProvider = async (
   database: BunSQLDatabase,
   calendarId: string,
   encryptionKey: string,
+  safeFetchOptions?: SafeFetchOptions,
   signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
@@ -148,7 +150,12 @@ const resolveCalDAVProvider = async (
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
     password,
-    safeFetchOptions: { timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS, signal },
+    safeFetchOptions: {
+      blockPrivateResolution: true,
+      ...safeFetchOptions,
+      timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+      signal,
+    },
   });
 };
 
@@ -162,6 +169,7 @@ interface ResolveProviderOptions {
   encryptionKey?: string;
   refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
+  safeFetchOptions?: SafeFetchOptions;
   signal?: AbortSignal;
 }
 
@@ -185,6 +193,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.database,
       options.calendarId,
       options.encryptionKey,
+      options.safeFetchOptions,
       options.signal,
     );
   }

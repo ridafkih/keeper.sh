@@ -18,6 +18,7 @@ import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
 import env from "./env";
+import { safeFetchOptions } from "./utils/safe-fetch-options";
 
 const resolveCount = (value: unknown): number => {
   if (typeof value === "number") {
@@ -235,6 +236,7 @@ const processJob = (
         deadlineMs,
         abortSignal,
         encryptionKey: env.ENCRYPTION_KEY,
+        safeFetchOptions,
         oauthConfig: {
           googleClientId: env.GOOGLE_CLIENT_ID,
           googleClientSecret: env.GOOGLE_CLIENT_SECRET,
