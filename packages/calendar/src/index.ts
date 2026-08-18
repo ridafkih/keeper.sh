@@ -145,6 +145,7 @@ export { createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccoun
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
+export { createSerialFlushWorker, type SerialFlushWorker, type SerialFlushWorkerOptions } from "./core/utils/serial-flush-worker";
 export {
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,

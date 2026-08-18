@@ -168,6 +168,12 @@ vi.mock("@/context", () => ({
     transaction: runTransaction,
     update: () => createQuery(() => []),
   },
+  flushDatabase: {
+    select: (projection: Record<string, unknown>) =>
+      createQuery(() => resolveSelect(projection)),
+    transaction: runTransaction,
+    update: () => createQuery(() => []),
+  },
   refreshLockRedis: {
     eval: async (): Promise<unknown> => {
       await Bun.sleep(redisCommandMs);
@@ -354,7 +360,7 @@ describe("ingest duration decomposition", () => {
     expect(event.work?.db_commit_ms).toBeUndefined();
   });
 
-  it("gives two concurrent ingests their own pool wait and neither the other's", async () => {
+  it("charges a queued source the writer wait it spends behind its peer's flush", async () => {
     sourceCount = 2;
     stagedPoolWaits = [POOL_WAIT_MS, SECOND_POOL_WAIT_MS];
 
@@ -364,9 +370,15 @@ describe("ingest duration decomposition", () => {
       .toSorted((first, second) => first - second);
 
     expect(events).toHaveLength(2);
-    expect(poolWaits[0]).toBeGreaterThanOrEqual(chargedAtLeast(SECOND_POOL_WAIT_MS));
-    expect(poolWaits[0]).toBeLessThan(POOL_WAIT_MS);
-    expect(poolWaits[1]).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
+    /*
+     * The flush writer serialises persistence: the first source pays only its own
+     * connection wait, while the queued one is charged the peer's whole flush on
+     * top of its own smaller wait.
+     */
+    expect(poolWaits[0]).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
+    expect(poolWaits[1]).toBeGreaterThanOrEqual(
+      chargedAtLeast(POOL_WAIT_MS + SECOND_POOL_WAIT_MS),
+    );
     for (const event of events) {
       expect(event.accounted_ms ?? 0).toBeLessThanOrEqual(event.duration_ms ?? 0);
     }

@@ -4,7 +4,6 @@ import { getAllJobs } from "./utils/get-jobs";
 import { injectJobs } from "./utils/inject-jobs";
 import { registerJobs } from "./utils/register-jobs";
 import {
-  closeDatabase,
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,
 } from "@keeper.sh/database";
@@ -18,7 +17,7 @@ const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
 await entry({
   main: async () => {
-    const { database, shutdownRefreshLockRedis } = await import("./context");
+    const { database, shutdownDatabases, shutdownRefreshLockRedis } = await import("./context");
     await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
 
     const jobs = await getAllJobs(jobsFolderPathname);
@@ -28,7 +27,7 @@ await entry({
     return () => {
       destroy();
       shutdownRefreshLockRedis();
-      closeDatabase(database);
+      shutdownDatabases();
     };
   },
   name: "cron",

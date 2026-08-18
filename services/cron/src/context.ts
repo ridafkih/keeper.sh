@@ -1,5 +1,5 @@
 import env from "./env";
-import { createDatabase } from "@keeper.sh/database";
+import { closeDatabase, createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { resolveWebhookConfig } from "@keeper.sh/calendar";
@@ -7,6 +7,17 @@ import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { Polar } from "@polar-sh/sdk";
 
 const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
+
+/*
+ * The flush writer gets its own single connection so ingest persistence
+ * cannot open concurrent write transactions no matter how many fetches run.
+ */
+const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1 });
+
+const shutdownDatabases = (): void => {
+  closeDatabase(database);
+  closeDatabase(flushDatabase);
+};
 const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 
 const premiumService = createPremiumService({
@@ -52,6 +63,8 @@ const polarClient = createPolarClient();
 
 export {
   database,
+  flushDatabase,
+  shutdownDatabases,
   premiumService,
   polarClient,
   refreshLockRedis,

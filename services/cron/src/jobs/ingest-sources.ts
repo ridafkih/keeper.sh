@@ -8,6 +8,7 @@ import {
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
   createGoogleUserRateLimiter,
+  createSerialFlushWorker,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
   ensureValidToken,
@@ -29,6 +30,7 @@ import {
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
 import type { SemaphoreLease } from "@keeper.sh/calendar";
+import type { IngestionResult } from "@keeper.sh/calendar";
 import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, OutlookAccountSemaphore, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
@@ -55,7 +57,7 @@ import {
 import { and, arrayContains, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
-import { database, refreshLockRedis, refreshLockStore } from "@/context";
+import { database, flushDatabase, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import {
@@ -315,6 +317,23 @@ const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): 
   }
 };
 
+/*
+ * Collection is concurrent but writing is not: every source's persistence flush
+ * runs through this bounded serial worker onto the dedicated single-connection
+ * flushDatabase, so high fetch concurrency can never open concurrent write
+ * transactions against Postgres. The bound matters as much as the serialization:
+ * a bare promise chain would also serialize, but with nothing to stop an
+ * unbounded backlog of fetched payloads queueing behind a slow flush. A failed
+ * flush settles only its own source; a source aborted while parked frees its
+ * slot without ever running.
+ */
+const FLUSH_QUEUE_CAPACITY = 50;
+
+const ingestFlushWriter = createSerialFlushWorker(
+  (task: () => Promise<IngestionResult>) => task(),
+  { capacity: FLUSH_QUEUE_CAPACITY },
+);
+
 const createIngestionPersistenceTransaction = (
   calendarId: string,
   signal: AbortSignal,
@@ -323,7 +342,7 @@ const createIngestionPersistenceTransaction = (
   (work: IngestionPersistenceWork) => {
     const ledger = createPersistenceLedger();
     const requestedAt = performance.now();
-    return database.transaction(async (transaction) => {
+    return ingestFlushWriter.submit(() => flushDatabase.transaction(async (transaction) => {
     ledger.grantedAt = performance.now();
     const setRemainingStatementTimeout = async (): Promise<void> => {
       signal.throwIfAborted();
@@ -456,7 +475,7 @@ const createIngestionPersistenceTransaction = (
       signal.throwIfAborted();
       ledger.callbackReturnedAt = performance.now();
       return result;
-    }).finally(() => {
+    }), signal).finally(() => {
       /*
        * This is the one instrumentation site whose own failure could rewrite the
        * ingest's result: a throw here would reject a committed transaction, or
