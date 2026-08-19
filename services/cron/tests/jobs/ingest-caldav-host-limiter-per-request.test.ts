@@ -1,5 +1,5 @@
 import { encryptPassword } from "@keeper.sh/database";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
@@ -12,8 +12,10 @@ import type ingestSourcesJob from "../../src/jobs/ingest-sources";
  * traffic and lets an unthrottled request herd through.
  *
  * The real createCalDAVSourceFetcher and CalDAVClient run here (including the
- * genuine 250-path batching); only tsdav is faked, so every fake client call
- * marks exactly one origin HTTP request.
+ * genuine 250-path batching); only tsdav is faked. The fake routes each
+ * operation through the fetch tsdav was constructed with, exactly as the real
+ * library does, because charging lives in that injected fetch — a fake that
+ * answered from its own state would bypass the charge and measure nothing.
  */
 const CALENDAR_URL = "https://caldav.example.net/calendars/user-1/personal/";
 
@@ -180,36 +182,46 @@ const harness = vi.hoisted(() => {
     (_unused, index) => `/calendars/user-1/personal/event-${index}.ics`,
   );
 
-  /* One fake tsdav client call per origin HTTP request. */
-  const fakeDAVClient = {
-    calendarQuery: (): Promise<{ href: string }[]> => {
-      state.providerRequests.push("calendar-query");
-      return Promise.resolve(objectPaths.map((path) => ({ href: path })));
+  /* One fake tsdav client call per origin HTTP request, each sent through the injected fetch. */
+  const buildFakeDAVClient = (
+    sendOriginRequest: (label: string) => Promise<void>,
+  ): Record<string, (params: never) => Promise<unknown>> => ({
+    calendarQuery: async (): Promise<{ href: string }[]> => {
+      await sendOriginRequest("calendar-query");
+      return objectPaths.map((path) => ({ href: path }));
     },
-    fetchCalendarObjects: (params: { objectUrls: string[] }): Promise<unknown[]> => {
-      state.providerRequests.push(`multiget:${params.objectUrls.length}`);
-      return Promise.resolve(params.objectUrls.map((url, index) => ({
+    fetchCalendarObjects: async (params: { objectUrls: string[] }): Promise<unknown[]> => {
+      await sendOriginRequest(`multiget:${params.objectUrls.length}`);
+      return params.objectUrls.map((url, index) => ({
         data: helpers.buildICalendarObject(index),
         url,
-      })));
+      }));
     },
-    fetchCalendars: (): Promise<unknown[]> => {
-      state.providerRequests.push("propfind-calendars");
-      return Promise.resolve([{
+    fetchCalendars: async (): Promise<unknown[]> => {
+      await sendOriginRequest("propfind-calendars");
+      return [{
         components: ["VEVENT"],
         ctag: "ctag-1",
         displayName: "Personal",
         url: calendarUrl,
-      }]);
+      }];
     },
-  };
+  }) as unknown as Record<string, (params: never) => Promise<unknown>>;
 
-  return { createHostRateLimiter, fakeDatabase, fakeDAVClient, ingestSource, state };
+  return { buildFakeDAVClient, createHostRateLimiter, fakeDatabase, ingestSource, state };
 });
 
 vi.mock("tsdav", () => ({
   DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve(harness.fakeDAVClient),
+  /*
+   * Real tsdav sends every operation through the fetch it was constructed
+   * with; the fake must too, because the host-limiter charge lives there.
+   */
+  createDAVClient: (options: { fetch: typeof globalThis.fetch }) =>
+    Promise.resolve(harness.buildFakeDAVClient(async (label: string) => {
+      harness.state.providerRequests.push(label);
+      await options.fetch(CALENDAR_URL, { method: "REPORT" });
+    })),
 }));
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
@@ -267,12 +279,22 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 
 let job: typeof ingestSourcesJob | null = null;
 
+let originalFetch: typeof globalThis.fetch = globalThis.fetch;
+
 beforeAll(async () => {
   const module = await import("../../src/jobs/ingest-sources");
   job = module.default;
 });
 
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
+
 beforeEach(() => {
+  /* The fake tsdav client's requests must terminate here, never on the network. */
+  originalFetch = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(new Response("", { status: 207 }))) as unknown as typeof globalThis.fetch;
   harness.state.acquiredPermits.length = 0;
   harness.state.caldavRows.length = 0;
   harness.state.hostFactoryHosts.length = 0;

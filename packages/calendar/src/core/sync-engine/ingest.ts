@@ -107,9 +107,19 @@ interface IngestionPersistence {
   flush: (changes: IngestionChanges) => Promise<void>;
 }
 
-type IngestionPersistenceWork = (
+/**
+ * The persist-time currency probe, offered separately from the work itself:
+ * a caller that queues the work behind a serial writer can settle the probe's
+ * Redis round trip before it takes the slot, and gets back a short-circuit
+ * result when the lease is gone or the probe could not answer.
+ */
+type IngestionPersistencePreflight = () => Promise<IngestionResult | null>;
+
+type IngestionPersistenceWork = ((
   persistence: IngestionPersistence,
-) => Promise<IngestionResult>;
+) => Promise<IngestionResult>) & {
+  preflight?: IngestionPersistencePreflight;
+};
 
 interface BaseIngestSourceOptions {
   calendarId: string;
@@ -174,6 +184,38 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
     }
   }
   return eventIds;
+};
+
+type CurrencyProbeResult = "current" | "currency-unconfirmed" | "superseded";
+
+/*
+ * The probe is Redis I/O on the sync lease, so it can fail for reasons that
+ * have nothing to do with the provider. A rejection is contained here rather
+ * than escaping: an unanswerable probe must neither commit a possibly-stale
+ * snapshot nor surface as an ingest error, which every family's backoff gate
+ * would charge to the provider. Mirrors resetIngestBackoffIfCurrent in
+ * services/cron/src/jobs/ingest-sources.ts.
+ */
+const probeCurrency = async (
+  wideEvent: IngestWideEventFields,
+  isCurrent?: () => Promise<boolean>,
+): Promise<CurrencyProbeResult> => {
+  if (!isCurrent) {
+    return "current";
+  }
+  try {
+    if (await isCurrent()) {
+      return "current";
+    }
+    return "superseded";
+  } catch (error) {
+    let message = String(error);
+    if (error instanceof Error) {
+      ({ message } = error);
+    }
+    wideEvent["currency_probe.error"] = message;
+    return "currency-unconfirmed";
+  }
 };
 
 const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResult> => {
@@ -257,23 +299,41 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       }
     }
 
-    if (isCurrent && !(await isCurrent())) {
-      wideEvent["outcome"] = "superseded";
+    const preEnqueueCurrency = await probeCurrency(wideEvent, isCurrent);
+    if (preEnqueueCurrency !== "current") {
+      wideEvent["outcome"] = preEnqueueCurrency;
       wideEvent["flushed"] = false;
       return EMPTY_RESULT;
     }
 
-    return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
-      /*
-       * Re-probe currency at persist time. The transaction thunk can sit in a
-       * serial flush queue long after the pre-enqueue probe above passed; if the
-       * sync lease was reclaimed in the meantime, a fresher holder may already
-       * have committed, and flushing this run's snapshot would revert it.
-       */
-      if (isCurrent && !(await isCurrent())) {
-        wideEvent["outcome"] = "superseded";
-        wideEvent["flushed"] = false;
-        return EMPTY_RESULT;
+    /*
+     * Re-probe currency at persist time. The transaction thunk can sit in a
+     * serial flush queue long after the pre-enqueue probe above passed; if the
+     * sync lease was reclaimed in the meantime, a fresher holder may already
+     * have committed, and flushing this run's snapshot would revert it.
+     *
+     * The probe is offered to the caller as `preflight` so a queueing caller can
+     * settle this Redis round trip off its writer slot; a caller that ignores it
+     * still gets the probe from inside the work callback below.
+     */
+    let persistProbePending = true;
+    const persistTimePreflight = async (): Promise<IngestionResult | null> => {
+      persistProbePending = false;
+      const currency = await probeCurrency(wideEvent, isCurrent);
+      if (currency === "current") {
+        return null;
+      }
+      wideEvent["outcome"] = currency;
+      wideEvent["flushed"] = false;
+      return EMPTY_RESULT;
+    };
+
+    const persistenceWork = async ({ readExistingEvents, flush }: IngestionPersistence) => {
+      if (persistProbePending) {
+        const superseded = await persistTimePreflight();
+        if (superseded) {
+          return superseded;
+        }
       }
 
       if (fetchResult.unchanged) {
@@ -402,7 +462,11 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         eventsAdded: eventsToAdd.length,
         eventsRemoved: eventStateIdsToRemove.length,
       };
-    });
+    };
+
+    return await withPersistenceTransaction(
+      Object.assign(persistenceWork, { preflight: persistTimePreflight }),
+    );
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
@@ -438,6 +502,7 @@ export type {
   IngestWideEventFields,
   IngestSourceOptions,
   IngestionPersistence,
+  IngestionPersistencePreflight,
   IngestionPersistenceWork,
   IngestionResult,
   IngestionChanges,

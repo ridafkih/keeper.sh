@@ -25,6 +25,12 @@ const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1
  * SIGKILLs it and the databases would never be closed.
  */
 const FLUSH_DRAIN_DEADLINE_MS = 2000;
+/*
+ * Pool teardown gets the same bound as the drain: Bun's unbounded close awaits
+ * the very in-flight query the drain deadline just gave up on, so leaving it
+ * unbounded would hand the wedged flush back the time the deadline removed.
+ */
+const CLOSE_GRACE_SECONDS = 2;
 
 const shutdownDatabases = async (): Promise<void> => {
   // The settled tags swallow a post-deadline rejection so it cannot become unhandled.
@@ -43,8 +49,8 @@ const shutdownDatabases = async (): Promise<void> => {
       clearTimeout(deadlineTimer);
     }
   }
-  closeDatabase(database);
-  closeDatabase(flushDatabase);
+  closeDatabase(database, { graceSeconds: CLOSE_GRACE_SECONDS });
+  closeDatabase(flushDatabase, { graceSeconds: CLOSE_GRACE_SECONDS });
 };
 const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 

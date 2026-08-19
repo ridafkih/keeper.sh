@@ -105,8 +105,13 @@ const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
     return sleep(delayMs);
   }
+  /*
+   * No park flag on an already-consumed deadline: it may have been eaten by a
+   * provider call that takes no signal, and stamping it would exempt a
+   * provider-consumed deadline from ingest backoff. Only the abort observed
+   * while actually parked below is pre-contact.
+   */
   if (signal.aborted) {
-    flagPacingParkAbortReason(signal.reason);
     return Promise.reject(signal.reason);
   }
   return new Promise((resolve, reject) => {

@@ -90,6 +90,25 @@ const resolveRunDeadlineMs = (item: unknown): number => {
   return DEFAULT_RUN_DEADLINE_MS;
 };
 
+/*
+ * An item may carry a `prepare` thunk: work that must run after this item's
+ * queue wait but before its run takes the serial writer slot — the ingest
+ * caller's persist-time Redis currency probe. Resolved the same way
+ * `deadlineAt` is, since items are plain objects or callable thunks. Returning
+ * a non-null value short-circuits the item: its submit settles with that value
+ * and `run` is never invoked.
+ */
+const resolvePrepare = (item: unknown): (() => unknown) | null => {
+  const carriesProperties = typeof item === "object" || typeof item === "function";
+  if (carriesProperties && item !== null && "prepare" in item) {
+    const { prepare } = item as { prepare: unknown };
+    if (typeof prepare === "function") {
+      return prepare as () => unknown;
+    }
+  }
+  return null;
+};
+
 interface SerialFlushWorkerOptions {
   budget?: number;
   capacity?: number;
@@ -147,6 +166,13 @@ const createSerialFlushWorker = <TItem, TResult>(
   const slotWaiters: SlotWaiter[] = [];
   const weightWaiters: WeightWaiter[] = [];
   const idleWaiters: (() => void)[] = [];
+  // Items queued for ownership of the single serial writer slot.
+  const writerSlotWaiters: (() => void)[] = [];
+  // The pump, waiting for that slot to go idle before dequeuing again.
+  const writerSlotFreeWaiters: (() => void)[] = [];
+  // Items dequeued but not yet settled: preparing, waiting for the slot, or running.
+  let inFlight = 0;
+  let writerSlotBusy = false;
   let outstandingWeight = 0;
   // Express grants that have overtaken the currently parked FIFO head.
   let expressOvertakes = 0;
@@ -223,33 +249,107 @@ const createSerialFlushWorker = <TItem, TResult>(
     }
   };
 
+  const notifyIfIdle = (): void => {
+    if (pumping || inFlight > 0 || queue.length > 0) {
+      return;
+    }
+    for (const notify of idleWaiters.splice(0)) {
+      notify();
+    }
+  };
+
+  const claimWriterSlot = (): boolean => {
+    if (writerSlotBusy) {
+      return false;
+    }
+    writerSlotBusy = true;
+    return true;
+  };
+
+  const whenWriterSlotOwned = (): Promise<void> => new Promise((resolve) => {
+    writerSlotWaiters.push(resolve);
+  });
+
+  const whenWriterSlotFree = (): Promise<void> => new Promise((resolve) => {
+    writerSlotFreeWaiters.push(resolve);
+  });
+
+  /*
+   * The slot is handed straight to the next owner in line, so runs stay
+   * strictly serial without a re-check race. It only goes idle — waking the
+   * pump to dequeue again — once nobody holds a claim on it.
+   */
+  const releaseWriterSlot = (): void => {
+    const nextOwner = writerSlotWaiters.shift();
+    if (nextOwner) {
+      nextOwner();
+      return;
+    }
+    writerSlotBusy = false;
+    for (const notify of writerSlotFreeWaiters.splice(0)) {
+      notify();
+    }
+  };
+
   /*
    * A half-open connection can leave `run` pending forever, making server-side
-   * timeouts unreachable. Racing each run against a client-side deadline keeps
+   * timeouts unreachable. Racing each item against a client-side deadline keeps
    * one wedged flush from stalling every family's persistence until restart.
    * The deadline only rejects the caller's promise: the run itself is awaited
    * to settlement, so a timed-out run keeps its reserved weight, keeps the
-   * pump blocked (runs stay strictly serial), and keeps close() waiting while
-   * its flushDatabase transaction is still live.
+   * writer slot held (runs stay strictly serial), and keeps close() waiting
+   * while its flushDatabase transaction is still live.
+   *
+   * The returned promise releases the pump, not the item: it settles once the
+   * item has either taken the writer slot or gone off-slot into its
+   * preparation, so a slow preparation never head-of-line stalls the runs
+   * behind it.
    */
-  const pump = async (): Promise<void> => {
-    if (pumping) {
-      return;
-    }
-    pumping = true;
-    while (queue.length > 0) {
-      const next = queue.shift();
-      if (!next) {
-        break;
+  const startItem = (next: QueuedItem<TItem, TResult>): Promise<unknown> => {
+    const admitted = Promise.withResolvers<null>();
+    const deadlineMs = resolveRunDeadlineMs(next.item);
+    let deadlineExpired = false;
+    const timer = setTimeout(() => {
+      deadlineExpired = true;
+      next.reject(new SerialFlushRunDeadlineError(deadlineMs));
+    }, deadlineMs);
+    const finish = (): void => {
+      clearTimeout(timer);
+      inFlight -= 1;
+      if (next.settle) {
+        next.settle();
       }
-      // Dequeuing frees a queue slot, so a parked submit may enqueue now.
-      grantSlot();
-      const deadlineMs = resolveRunDeadlineMs(next.item);
-      let deadlineExpired = false;
-      const timer = setTimeout(() => {
-        deadlineExpired = true;
-        next.reject(new SerialFlushRunDeadlineError(deadlineMs));
-      }, deadlineMs);
+      notifyIfIdle();
+    };
+    inFlight += 1;
+    const prepare = resolvePrepare(next.item);
+    const runLifecycle = async (): Promise<void> => {
+      if (prepare) {
+        try {
+          // A preparation that answers nothing may say so as either nullish value.
+          const prepared = await prepare() ?? null;
+          if (prepared !== null) {
+            // The preparation answered for the item; its run never happens.
+            if (!deadlineExpired) {
+              next.resolve(prepared as TResult);
+            }
+            admitted.resolve(null);
+            finish();
+            return;
+          }
+        } catch (error) {
+          if (!deadlineExpired) {
+            next.reject(error);
+          }
+          admitted.resolve(null);
+          finish();
+          return;
+        }
+      }
+      if (!claimWriterSlot()) {
+        await whenWriterSlotOwned();
+      }
+      admitted.resolve(null);
       try {
         const value = await run(next.item);
         if (!deadlineExpired) {
@@ -261,16 +361,41 @@ const createSerialFlushWorker = <TItem, TResult>(
           next.reject(error);
         }
       } finally {
-        clearTimeout(timer);
-        if (next.settle) {
-          next.settle();
-        }
+        releaseWriterSlot();
+        finish();
       }
+    };
+    runLifecycle().catch(next.reject);
+    /*
+     * An item whose preparation is already settled must claim the writer slot
+     * before the next item is dequeued: otherwise a whole backlog would prepare
+     * in one sweep and the last item's currency probe would predate its run by
+     * every run queued ahead of it. A preparation still outstanding resolves
+     * nothing here, so the immediate yield releases the pump instead.
+     */
+    return Promise.race([admitted.promise, Promise.resolve()]);
+  };
+
+  const pump = async (): Promise<void> => {
+    if (pumping) {
+      return;
+    }
+    pumping = true;
+    while (queue.length > 0) {
+      if (writerSlotBusy) {
+        await whenWriterSlotFree();
+        continue;
+      }
+      const next = queue.shift();
+      if (!next) {
+        break;
+      }
+      // Dequeuing frees a queue slot, so a parked submit may enqueue now.
+      grantSlot();
+      await startItem(next);
     }
     pumping = false;
-    for (const notify of idleWaiters.splice(0)) {
-      notify();
-    }
+    notifyIfIdle();
   };
 
   const submit = (item: TItem, signal?: AbortSignal): Promise<TResult> => {
@@ -410,8 +535,12 @@ const createSerialFlushWorker = <TItem, TResult>(
       return Promise.reject(new Error("reserve requires a budget"));
     }
     if (signal?.aborted) {
-      // The deadline burned out before the provider fetch could even be gated.
-      flagReserveAbortReason(signal.reason);
+      /*
+       * No park flag here: an already-consumed deadline may have been eaten by
+       * a provider call that takes no signal, and stamping it would exempt a
+       * provider-consumed deadline from ingest backoff. Only an abort observed
+       * while actually parked below is pre-contact.
+       */
       return Promise.reject(signal.reason);
     }
     /*
@@ -499,7 +628,7 @@ const createSerialFlushWorker = <TItem, TResult>(
     for (const waiter of weightWaiters.splice(0)) {
       waiter.reject(new SerialFlushWorkerClosedError());
     }
-    if (!pumping && queue.length === 0) {
+    if (!pumping && inFlight === 0 && queue.length === 0) {
       return Promise.resolve();
     }
     return new Promise((resolve) => {

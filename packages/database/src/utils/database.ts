@@ -97,9 +97,37 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
   return database;
 };
 
-const closeDatabase = (database: DatabaseInstance): void => {
+interface CloseDatabaseOptions {
+  graceSeconds?: number;
+}
+
+/*
+ * Monotonic because it exists to answer one question after the fact: did a
+ * connection error arrive because keeper force-closed its own pool during
+ * shutdown? Once a bounded close has begun the process is on its way down and
+ * every later connection failure is downstream of it, so the flag never
+ * clears.
+ */
+let boundedCloseBegun = false;
+
+const hasBoundedDatabaseCloseBegun = (): boolean => boundedCloseBegun;
+
+/*
+ * Bun's no-argument close() awaits every in-flight query before the pool
+ * settles, which is what a graceful shutdown wants: an API or worker request
+ * mid-transaction gets to commit. Only a caller with its own drain deadline
+ * (cron) passes graceSeconds, bounding teardown so a wedged query cannot hold
+ * the process open until the supervisor SIGKILLs it.
+ */
+const closeDatabase = (database: DatabaseInstance, options?: CloseDatabaseOptions): void => {
+  const graceSeconds = options?.graceSeconds;
+  if (typeof graceSeconds === "number") {
+    boundedCloseBegun = true;
+    database.$client.close({ timeout: graceSeconds });
+    return;
+  }
   database.$client.close();
 };
 
-export { createDatabase, closeDatabase, DEFAULT_STATEMENT_TIMEOUT_MS };
-export type { DatabasePoolOptions, DatabaseInstance };
+export { createDatabase, closeDatabase, hasBoundedDatabaseCloseBegun, DEFAULT_STATEMENT_TIMEOUT_MS };
+export type { DatabasePoolOptions, DatabaseInstance, CloseDatabaseOptions };

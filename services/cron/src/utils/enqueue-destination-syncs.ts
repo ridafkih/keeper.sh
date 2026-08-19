@@ -86,11 +86,17 @@ const enqueueDestinationSyncsForUsers = async (
     );
   } finally {
     /*
-     * A timed-out run may still hold a queue whose close() itself hangs on the
-     * dead connection; force-disconnect so ioredis stops reconnecting forever.
-     * Fire-and-forget: nothing after the deadline may block the serial pass.
+     * A timed-out run may still hold a queue on a connection that never became
+     * ready. BullMQ's disconnect() awaits the initializing promise first, which
+     * only settles on ioredis "ready"/"error"/"end", so against a black-hole
+     * socket it parks forever and the abandoned client keeps reconnecting.
+     * close() takes the status=="initializing" branch instead, disconnecting
+     * the raw client synchronously; disconnect() still covers the case where
+     * the connection did come up. Both are fire-and-forget, and each is a
+     * no-op in the other's scenario: nothing here may block the serial pass.
      */
     for (const queue of openQueues) {
+      queue.close().catch(() => null);
       queue.disconnect().catch(() => null);
     }
   }

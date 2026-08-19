@@ -89,7 +89,13 @@ describe("cron context flush database", () => {
     expect(typeof shutdownDatabases).toBe("function");
     await (shutdownDatabases as () => Promise<void> | void)();
 
-    expect(mocks.closeDatabase).toHaveBeenCalledWith(mocks.pooledInstance);
-    expect(mocks.closeDatabase).toHaveBeenCalledWith(mocks.flushInstance);
+    /*
+     * Cron bounds its own teardown so one wedged flush cannot hold a pool
+     * socket past the drain deadline and turn SIGTERM into a hang; every
+     * other service closes unbounded and keeps its in-flight transactions.
+     */
+    const boundedClose = { graceSeconds: 2 };
+    expect(mocks.closeDatabase).toHaveBeenCalledWith(mocks.pooledInstance, boundedClose);
+    expect(mocks.closeDatabase).toHaveBeenCalledWith(mocks.flushInstance, boundedClose);
   });
 });

@@ -199,9 +199,19 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
+      /*
+       * Charging in the fetch pipeline rather than at the operation call sites
+       * is what makes the invariant hold: tsdav issues an eager account
+       * discovery trio from createDAVClient, and the digest handshake retries
+       * each request, none of which pass through an operation method.
+       */
+      const chargedFetch: typeof safeFetch = async (...args) => {
+        await this.chargeRequest();
+        return safeFetch(...args);
+      };
       const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
-        baseFetch: safeFetch,
+        baseFetch: chargedFetch,
         knownAuthMethod: this.config.authMethod,
       });
       this.resolvedAuthMethod = getResolvedMethod;
@@ -220,7 +230,6 @@ class CalDAVClient {
   async discoverCalendars(): Promise<CalendarInfo[]> {
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
-      await this.chargeRequest();
       return measureProviderRequest(() => client.fetchCalendars());
     });
 
@@ -251,7 +260,6 @@ class CalDAVClient {
     iCalString: string;
   }): Promise<void> {
     const client = await this.getClient();
-    await this.chargeRequest();
 
     const response = await client.createCalendarObject({
       calendar: { url: params.calendarUrl },
@@ -282,7 +290,6 @@ class CalDAVClient {
     etag?: string;
   }): Promise<void> {
     const client = await this.getClient();
-    await this.chargeRequest();
 
     const response = await client.deleteCalendarObject({
       calendarObject: { url: params.objectUrl, etag: params.etag },
@@ -298,7 +305,6 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-      await this.chargeRequest();
       const objects = await client.fetchCalendarObjects({
         calendar: { url: params.calendarUrl },
         objectUrls: [objectUrl],
@@ -317,7 +323,6 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
-      await this.chargeRequest();
       const queryResponses = await measureProviderRequest(() => client.calendarQuery({
         depth: "1",
         filters: buildCalendarObjectFilters(params.timeRange),
@@ -341,7 +346,6 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
-        await this.chargeRequest();
         const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
           calendar: { url: params.calendarUrl },
           objectUrls,

@@ -1,4 +1,5 @@
-export { createDatabase, closeDatabase } from "./utils/database";
+export { createDatabase, closeDatabase, hasBoundedDatabaseCloseBegun } from "./utils/database";
+export type { CloseDatabaseOptions } from "./utils/database";
 export {
   classifyDatabaseError,
   getDatabaseErrorDetails,

@@ -610,7 +610,23 @@ const createIngestionPersistenceTransaction = (
       signal.throwIfAborted();
       ledger.callbackReturnedAt = performance.now();
       return result;
-    }), { deadlineAt })).finally(() => {
+    }), {
+      deadlineAt,
+      /*
+       * The persist-time currency probe is Redis I/O on the sync-lock client
+       * (10s commandTimeout). It must settle here — after the queue wait, but
+       * BEFORE flushDatabase.transaction opens — so a Redis brownout never
+       * parks the sole flush connection, the advisory lock, or the serial
+       * writer slot.
+       */
+      prepare: async (): Promise<IngestionResult | null> => {
+        const { preflight } = work;
+        if (!preflight) {
+          return null;
+        }
+        return await preflight();
+      },
+    })).finally(() => {
       /*
        * This is the one instrumentation site whose own failure could rewrite the
        * ingest's result: a throw here would reject a committed transaction, or
