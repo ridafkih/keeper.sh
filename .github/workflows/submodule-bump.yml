@@ -110,6 +110,14 @@ jobs:
             gh pr create --title "chore($NAME): bump to $PIN" --body "" --head "$BRANCH"
           fi
 
+          # One open bump PR per submodule. A newer pin supersedes the rest.
+          gh pr list --state open --json number,headRefName --jq \
+            ".[] | select(.headRefName | startswith(\"chore/bump-${NAME}-\")) | select(.headRefName != \"${BRANCH}\") | .number" \
+          | while read -r n; do
+              [ -n "$n" ] || continue
+              gh pr close "$n" --comment "Superseded by chore($NAME): bump to $PIN."
+            done
+
       - name: Report a failed bump
         if: failure()
         env:
