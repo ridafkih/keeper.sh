@@ -70,6 +70,8 @@ services:
   worker:
     image: ghcr.io/ridafkih/keeper-worker:2
     env_file: .env
+    deploy:
+      replicas: ${WORKER_REPLICAS:-1}
     environment:
       ENV: production
       DATABASE_POOL_MAX: "25"
