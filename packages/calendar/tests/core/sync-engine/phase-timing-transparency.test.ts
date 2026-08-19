@@ -267,8 +267,14 @@ describe("syncCalendar instrumentation transparency", () => {
 
     const fastPush = fast["sync.phase.provider_push.duration_ms"] as number;
     const slowPush = slow["sync.phase.provider_push.duration_ms"] as number;
+    /*
+     * The gap, not the ratio: a loaded runner adds its scheduling overhead to both phases,
+     * which leaves the difference between them intact while pulling the ratio toward one.
+     * Borrowing would make the two durations converge, so a gap near the delays' own
+     * distance is what rules it out.
+     */
     expect(slowPush).toBeGreaterThanOrEqual(35);
-    expect(slowPush).toBeGreaterThan(fastPush * 2);
+    expect(slowPush - fastPush).toBeGreaterThanOrEqual(15);
     expectPhaseArithmetic(fast);
     expectPhaseArithmetic(slow);
   });
