@@ -75,8 +75,9 @@ const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
  * one slot. A seventeen-calendar account occupies one slot instead of the whole
  * budget, so no user's backlog can starve another user's freshness. The per-user
  * cap is a per-pass budget against Graph's documented MailboxConcurrency of four,
- * not a hard ceiling: passes overlap (overrunProtection is off) and the skip-lock
- * is per calendar, so stacked slow passes can still reach the provider limit.
+ * not a hard ceiling: cron passes are serial (cronbake re-arms only after a pass
+ * completes), but webhook-driven syncs in the worker hit the same mailbox
+ * independently, so combined traffic can still reach the provider limit.
  */
 const SOURCE_CONCURRENCY = 5;
 const USER_CALENDAR_CONCURRENCY = 2;
