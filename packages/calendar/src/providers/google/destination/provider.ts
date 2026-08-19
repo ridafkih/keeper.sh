@@ -56,6 +56,32 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
 };
 
+const readCalendarTimeZone = (body: unknown): string => {
+  if (
+    typeof body === "object"
+    && body !== null
+    && "timeZone" in body
+    && typeof body.timeZone === "string"
+    && body.timeZone.length > 0
+  ) {
+    return body.timeZone;
+  }
+  return "";
+};
+
+const readSettingValue = (body: unknown): string => {
+  if (
+    typeof body === "object"
+    && body !== null
+    && "value" in body
+    && typeof body.value === "string"
+    && body.value.length > 0
+  ) {
+    return body.value;
+  }
+  return "";
+};
+
 const getImportedEventId = (body: unknown): string | null => {
   if (typeof body !== "object" || body === null || !("id" in body)) {
     return null;
@@ -232,22 +258,15 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
   let cachedDestinationTimeZone = "";
+  let hasResolvedDestinationTimeZone = false;
 
-  const resolveDestinationTimeZone = async (): Promise<string> => {
-    if (cachedDestinationTimeZone) {
-      return cachedDestinationTimeZone;
-    }
-
-    const timeZone = await withBackoff(async () => {
+  const fetchGoogleJson = (path: string): Promise<unknown> =>
+    withBackoff(async () => {
       if (config.rateLimiter) {
         await config.rateLimiter.acquire(1, config.signal);
       }
-      const url = new URL(
-        `calendars/${encodeURIComponent(config.externalCalendarId)}`,
-        GOOGLE_CALENDAR_API,
-      );
       const response = await fetchWithTimeout(
-        url,
+        new URL(path, GOOGLE_CALENDAR_API),
         {
           headers: { Authorization: `Bearer ${tokenState.accessToken}` },
           method: "GET",
@@ -259,24 +278,39 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         const errorBody = await response.text();
         throw new GoogleCalendarApiError(response.status, errorBody);
       }
-      const body: unknown = await response.json();
-      if (
-        typeof body === "object"
-        && body !== null
-        && "timeZone" in body
-        && typeof body.timeZone === "string"
-        && body.timeZone.length > 0
-      ) {
-        return body.timeZone;
-      }
-      return "UTC";
+      return response.json();
     }, {
       signal: config.signal,
       shouldRetry: (error) =>
         error instanceof GoogleCalendarApiError && isRateLimitApiError(error.status, error.apiError),
-    }).catch(() => "UTC");
+    });
+
+  const resolveDestinationTimeZone = async (): Promise<string> => {
+    if (hasResolvedDestinationTimeZone) {
+      return cachedDestinationTimeZone;
+    }
+
+    const calendarId = encodeURIComponent(config.externalCalendarId);
+    const sources: { path: string; read: (body: unknown) => string }[] = [
+      { path: `calendars/${calendarId}`, read: readCalendarTimeZone },
+      { path: `users/me/calendarList/${calendarId}`, read: readCalendarTimeZone },
+      { path: "users/me/settings/timezone", read: readSettingValue },
+    ];
+
+    let timeZone = "";
+    for (const source of sources) {
+      if (timeZone) {
+        break;
+      }
+      try {
+        timeZone = source.read(await fetchGoogleJson(source.path));
+      } catch {
+        // Try calendarList, then the account timezone setting.
+      }
+    }
 
     cachedDestinationTimeZone = timeZone;
+    hasResolvedDestinationTimeZone = true;
     return timeZone;
   };
 

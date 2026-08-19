@@ -172,10 +172,14 @@ describe("createGoogleSyncProvider", () => {
 
     expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]).toMatchObject({
       body: {
-        end: { dateTime: "2026-08-31T23:59:59", timeZone: "Europe/Berlin" },
         eventType: "outOfOffice",
-        start: { dateTime: "2026-08-22T00:00:00", timeZone: "Europe/Berlin" },
       },
+    });
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]?.body?.start).toEqual({
+      dateTime: "2026-08-22T00:00:00+02:00",
+    });
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]?.body?.end).toEqual({
+      dateTime: "2026-08-31T23:59:59+02:00",
     });
   });
 

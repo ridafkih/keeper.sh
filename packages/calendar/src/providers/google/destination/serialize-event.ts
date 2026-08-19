@@ -23,11 +23,13 @@ interface TimedOooDateOptions {
   timeZone: string;
 }
 
-const isUtcTimeZone = (timeZone: string | undefined): boolean =>
-  !timeZone
-  || timeZone === "UTC"
+const isExplicitUtcTimeZone = (timeZone: string | undefined): boolean =>
+  timeZone === "UTC"
   || timeZone === "Etc/UTC"
   || timeZone === "Etc/GMT";
+
+const isUtcTimeZone = (timeZone: string | undefined): boolean =>
+  !timeZone || isExplicitUtcTimeZone(timeZone);
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 
@@ -41,6 +43,37 @@ const inclusiveAllDayEndDate = (exclusiveEnd: Date): string =>
   shiftUtcDate(formatDateOnly(exclusiveEnd), -1);
 
 const utcMidnight = (dateOnly: string): Date => new Date(`${dateOnly}T00:00:00.000Z`);
+
+const OFFSET_NAME = /(?:GMT|UTC)([+-])(\d{1,2})(?::?(\d{2}))?/i;
+
+const formatRfc3339Offset = (sign: string, hours: string, minutes: string): string =>
+  `${sign}${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
+
+/** Offset at local noon on a DATE, e.g. Europe/Berlin in August → +02:00. */
+const rfc3339OffsetForTimeZone = (timeZone: string, dateOnly: string): string | null => {
+  try {
+    const probe = new Date(`${dateOnly}T12:00:00.000Z`);
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      timeZoneName: "longOffset",
+      year: "numeric",
+    }).formatToParts(probe);
+    const name = parts.find((part) => part.type === "timeZoneName")?.value;
+    if (!name) {
+      return null;
+    }
+    if (name === "GMT" || name === "UTC") {
+      return "+00:00";
+    }
+    const match = OFFSET_NAME.exec(name);
+    if (!match?.[1] || !match[2]) {
+      return null;
+    }
+    return formatRfc3339Offset(match[1], match[2], match[3] ?? "00");
+  } catch {
+    return null;
+  }
+};
 
 const exclusiveAllDayRange = (
   startDate: string,
@@ -93,10 +126,14 @@ const buildTimedOooDateField = (
     dateOnly = inclusiveAllDayEndDate(time);
     clock = "23:59:59";
   }
-  return {
-    dateTime: `${dateOnly}T${clock}`,
-    timeZone: options.timeZone,
-  };
+  let dateTime = `${dateOnly}T${clock}`;
+  if (!isUtcTimeZone(options.timeZone)) {
+    const offset = rfc3339OffsetForTimeZone(options.timeZone, dateOnly);
+    if (offset) {
+      dateTime = `${dateTime}${offset}`;
+    }
+  }
+  return { dateTime };
 };
 
 const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
@@ -120,7 +157,7 @@ const serializeGoogleEvent = (
   const { recurrenceRule, destinationTimeZone } = options;
 
   if (event.availability === "oof") {
-    const timeZone = destinationTimeZone || event.startTimeZone || "UTC";
+    const timeZone = destinationTimeZone || event.startTimeZone || "";
     let start = buildTimedOooDateField(event.startTime);
     let end = buildTimedOooDateField(event.endTime);
     if (isAllDay) {
@@ -165,7 +202,7 @@ const isLegacyUtcOooInstant = (
 ): boolean =>
   Boolean(startDateTime?.endsWith("Z") && endDateTime?.endsWith("Z"))
   && isUtcTimeZone(options?.startTimeZone)
-  && !isUtcTimeZone(options?.destinationTimeZone);
+  && !isExplicitUtcTimeZone(options?.destinationTimeZone);
 
 const wallClockInTimeZone = (
   instant: Date,

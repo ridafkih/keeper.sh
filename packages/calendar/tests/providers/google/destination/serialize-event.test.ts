@@ -76,18 +76,36 @@ describe("serializeGoogleEvent", () => {
       { destinationTimeZone: "Europe/Berlin" },
     );
 
-    expect(event).toMatchObject({
-      end: { dateTime: "2026-08-31T23:59:59", timeZone: "Europe/Berlin" },
-      eventType: "outOfOffice",
-      start: { dateTime: "2026-08-22T00:00:00", timeZone: "Europe/Berlin" },
-      summary: "Gamescom",
-    });
-    expect(event?.start).not.toHaveProperty("date");
-    expect(event?.end).not.toHaveProperty("date");
+    expect(event?.eventType).toBe("outOfOffice");
+    expect(event?.summary).toBe("Gamescom");
+    expect(event?.start).toEqual({ dateTime: "2026-08-22T00:00:00+02:00" });
+    expect(event?.end).toEqual({ dateTime: "2026-08-31T23:59:59+02:00" });
     expect(event?.iCalUID).toBeUndefined();
   });
 
-  it("falls back to UTC wall clock for all-day oof when no destination timezone is known", () => {
+  it("uses winter offset for all-day oof in Europe/Berlin", () => {
+    const event = serializeGoogleEvent(
+      {
+        availability: "oof",
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-01-16T00:00:00.000Z"),
+        id: "event-id",
+        isAllDay: true,
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-01-15T00:00:00.000Z"),
+        summary: "Winter block",
+      },
+      "destination-uid@keeper.sh",
+      { destinationTimeZone: "Europe/Berlin" },
+    );
+
+    expect(event?.start).toEqual({ dateTime: "2026-01-15T00:00:00+01:00" });
+    expect(event?.end).toEqual({ dateTime: "2026-01-15T23:59:59+01:00" });
+  });
+
+  it("omits timeZone for all-day oof when the destination timezone is unknown", () => {
     const event = serializeGoogleEvent(
       {
         availability: "oof",
@@ -104,10 +122,8 @@ describe("serializeGoogleEvent", () => {
       "destination-uid@keeper.sh",
     );
 
-    expect(event).toMatchObject({
-      end: { dateTime: "2026-08-31T23:59:59", timeZone: "UTC" },
-      start: { dateTime: "2026-08-22T00:00:00", timeZone: "UTC" },
-    });
+    expect(event?.start).toEqual({ dateTime: "2026-08-22T00:00:00" });
+    expect(event?.end).toEqual({ dateTime: "2026-08-31T23:59:59" });
   });
 });
 
@@ -140,6 +156,21 @@ describe("restoreAllDayOooTimes", () => {
       endTime: new Date("2026-09-01T00:00:00.000Z"),
       isAllDay: true,
       startTime: new Date("2026-08-22T00:00:00.000Z"),
+    });
+  });
+
+  it("leaves legacy UTC-Z all-day OOO unrestored when the destination timezone is unknown", () => {
+    const start = new Date("2026-08-22T00:00:00.000Z");
+    const end = new Date("2026-08-31T23:59:59.000Z");
+    expect(restoreAllDayOooTimes(
+      "2026-08-22T00:00:00.000Z",
+      "2026-08-31T23:59:59.000Z",
+      start,
+      end,
+    )).toEqual({
+      endTime: end,
+      isAllDay: true,
+      startTime: start,
     });
   });
 
