@@ -8,6 +8,7 @@ import { parse as parseYaml } from "yaml";
 const CONTENT_ROOT = join(import.meta.dirname, "../..", SEO_CONTENT_ROOT);
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
 const INTERNAL_LINK = /]\((\/[^)#]*)(?:#[^)]*)?\)/g;
+const STATIC_ASSET_LINK = /\.(avif|gif|ico|jpe?g|png|svg|webp)$/i;
 
 const SILO_DIRECTORIES = ["docs", "guides", "recipes"];
 const LINKED_DIRECTORIES = [...SILO_DIRECTORIES, "blog", "compare"];
@@ -87,7 +88,7 @@ describe.skipIf(!CONTENT_PRESENT)("content silos", () => {
   it.each(linkedPages)("links $path only to pages that exist", ({ content }) => {
     const broken = [...content.matchAll(INTERNAL_LINK)]
       .map((match) => match[1])
-      .filter((link) => !knownPaths.has(link));
+      .filter((link) => !STATIC_ASSET_LINK.test(link) && !knownPaths.has(link));
 
     expect(broken).toEqual([]);
   });
