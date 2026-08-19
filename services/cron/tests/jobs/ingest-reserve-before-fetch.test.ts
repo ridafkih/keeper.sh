@@ -328,7 +328,7 @@ const createIcsRow = (
 });
 
 /* Enough stored events that the estimated weight clamps to the whole budget. */
-const WHALE_EVENT_COUNT = 200_000;
+const WHALE_EVENT_COUNT = 1_000_000;
 
 let job: typeof ingestSourcesJob | null = null;
 

@@ -15,14 +15,13 @@ import {
  * magnitude, so a count-based limit cannot bound memory; a byte weight can.
  */
 
-const NEVER_INGESTED_DEFAULT = WEIGHT_BUDGET / 8;
+const NEVER_INGESTED_DEFAULT = 2048 * 1024;
 
 describe("estimateIngestWeight constants", () => {
   it("pins the named weight constants", () => {
     expect(BYTES_PER_EVENT).toBe(1024);
     expect(WEIGHT_FLOOR).toBe(16_384);
-    // 64MB: 64 * 1024 * 1024.
-    expect(WEIGHT_BUDGET).toBe(67_108_864);
+    expect(WEIGHT_BUDGET).toBe(536_870_912);
   });
 });
 
@@ -66,8 +65,7 @@ describe("estimateIngestWeight for calendars that have ingested before", () => {
 });
 
 describe("estimateIngestWeight for never-ingested calendars", () => {
-  it("returns an eighth of the budget regardless of stored count", async () => {
-    /* Budget/8 self-limits a flood of unknown-size first ingests to ~8 at a time. */
+  it("returns a fixed cold-start estimate regardless of stored count", async () => {
     const countStoredEventsMock = vi.fn(() => Promise.resolve(1_000_000));
 
     const weight = await estimateIngestWeight(

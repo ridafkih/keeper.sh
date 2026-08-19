@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { createSerialFlushWorker } from "@keeper.sh/calendar";
 import {
-  NEVER_INGESTED_WEIGHT,
   WEIGHT_BUDGET,
 } from "../../src/utils/ingest-weight";
 import { OperationTimeoutError, withAbortTimeout } from "../../src/utils/with-abort-timeout";
@@ -15,7 +14,6 @@ const shouldApplyCalDavIngestBackoff = (error: unknown): boolean =>
 const shouldApplyIcsIngestBackoff = (error: unknown): boolean =>
   !isIngestInfrastructureError(error);
 
-const COLD_START_SOURCES = 8;
 const SHORT_DEADLINE_MS = 50;
 
 const produceBudgetStarvationTimeout = async (): Promise<unknown> => {
@@ -23,22 +21,17 @@ const produceBudgetStarvationTimeout = async (): Promise<unknown> => {
     (task: () => Promise<number>) => task(),
     { budget: WEIGHT_BUDGET, capacity: 50 },
   );
-  const holds = await Promise.all(
-    Array.from({ length: COLD_START_SOURCES }, () =>
-      worker.reserve(NEVER_INGESTED_WEIGHT)),
-  );
+  const hold = await worker.reserve(WEIGHT_BUDGET);
   let caught: unknown = null;
   try {
     await withAbortTimeout(
-      (signal) => worker.reserve(NEVER_INGESTED_WEIGHT, signal),
+      (signal) => worker.reserve(WEIGHT_BUDGET, signal),
       SHORT_DEADLINE_MS,
     );
   } catch (error) {
     caught = error;
   }
-  for (const hold of holds) {
-    hold.release();
-  }
+  hold.release();
   await worker.close();
   return caught;
 };
@@ -48,20 +41,15 @@ const produceShutdownRejection = async (): Promise<unknown> => {
     (task: () => Promise<number>) => task(),
     { budget: WEIGHT_BUDGET, capacity: 50 },
   );
-  const holds = await Promise.all(
-    Array.from({ length: COLD_START_SOURCES }, () =>
-      worker.reserve(NEVER_INGESTED_WEIGHT)),
-  );
+  const hold = await worker.reserve(WEIGHT_BUDGET);
   let caught: unknown = null;
-  const parked = worker.reserve(NEVER_INGESTED_WEIGHT).catch((error: unknown) => {
+  const parked = worker.reserve(WEIGHT_BUDGET).catch((error: unknown) => {
     caught = error;
     return null;
   });
   await worker.close();
   await parked;
-  for (const hold of holds) {
-    hold.release();
-  }
+  hold.release();
   return caught;
 };
 

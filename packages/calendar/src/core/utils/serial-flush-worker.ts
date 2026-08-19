@@ -41,9 +41,9 @@ const isSerialFlushReserveAbortError = (error: unknown): boolean =>
   error instanceof Error &&
   (error as Error & Record<string, unknown>)[RESERVE_ABORT_FLAG] === true;
 /*
- * Cold-start fetches sized at an eighth of the budget can pin all of it while merely
- * sleeping in a provider rate limiter, parking every other caller. Reservations no heavier
- * than budget/64 skip the FIFO, capping worst-case memory at budget + budget/16.
+ * A heavy reservation sleeping in a provider rate limiter would otherwise park every other
+ * caller. Reservations no heavier than budget/64 skip the FIFO, capping worst-case memory
+ * at budget + budget/16.
  */
 const EXPRESS_WEIGHT_DIVISOR = 64;
 const EXPRESS_HEADROOM_DIVISOR = 16;

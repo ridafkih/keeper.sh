@@ -4,9 +4,9 @@ import { widelog } from "@/utils/logging";
 
 const BYTES_PER_EVENT = 1024;
 const WEIGHT_FLOOR = 16_384;
-const WEIGHT_BUDGET = 64 * 1024 * 1024;
-const COLD_START_CONCURRENT_FETCH_ALLOWANCE = 8;
-const NEVER_INGESTED_WEIGHT = WEIGHT_BUDGET / COLD_START_CONCURRENT_FETCH_ALLOWANCE;
+const WEIGHT_BUDGET = 512 * 1024 * 1024;
+const NEVER_INGESTED_EVENT_ESTIMATE = 2048;
+const NEVER_INGESTED_WEIGHT = NEVER_INGESTED_EVENT_ESTIMATE * BYTES_PER_EVENT;
 
 interface IngestWeightDependencies {
   countStoredEvents: (calendarId: string) => Promise<number>;

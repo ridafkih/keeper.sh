@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSerialFlushWorker } from "@keeper.sh/calendar";
 import {
-  NEVER_INGESTED_WEIGHT,
   WEIGHT_BUDGET,
 } from "../../src/utils/ingest-weight";
 import { OperationTimeoutError, withAbortTimeout } from "../../src/utils/with-abort-timeout";
@@ -17,7 +16,6 @@ import { requiresReauthentication } from "../../src/utils/error-flags";
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
   !requiresReauthentication(error);
 
-const COLD_START_SOURCES = 8;
 const SHORT_DEADLINE_MS = 50;
 
 describe("flush-budget infrastructure errors versus provider backoff", () => {
@@ -26,17 +24,12 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
       (task: () => Promise<number>) => task(),
       { budget: WEIGHT_BUDGET, capacity: 50 },
     );
-    const holds = await Promise.all(
-      Array.from({ length: COLD_START_SOURCES }, () =>
-        worker.reserve(NEVER_INGESTED_WEIGHT)),
-    );
-    expect(COLD_START_SOURCES * NEVER_INGESTED_WEIGHT).toBe(WEIGHT_BUDGET);
+    const hold = await worker.reserve(WEIGHT_BUDGET);
 
-    /* Budget/8 is far above the budget/64 express lane, so a ninth source parks. */
     let caught: unknown = null;
     try {
       await withAbortTimeout(
-        (signal) => worker.reserve(NEVER_INGESTED_WEIGHT, signal),
+        (signal) => worker.reserve(WEIGHT_BUDGET, signal),
         SHORT_DEADLINE_MS,
       );
     } catch (error) {
@@ -46,9 +39,7 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
 
     expect(shouldApplyOAuthIngestBackoff(caught)).toBe(false);
 
-    for (const hold of holds) {
-      hold.release();
-    }
+    hold.release();
     await worker.close();
   });
 
@@ -57,21 +48,16 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
       (task: () => Promise<number>) => task(),
       { budget: WEIGHT_BUDGET, capacity: 50 },
     );
-    const holds = await Promise.all(
-      Array.from({ length: COLD_START_SOURCES }, () =>
-        worker.reserve(NEVER_INGESTED_WEIGHT)),
-    );
+    const hold = await worker.reserve(WEIGHT_BUDGET);
 
     let caught: unknown = null;
-    const parked = worker.reserve(NEVER_INGESTED_WEIGHT).catch((error: unknown) => {
+    const parked = worker.reserve(WEIGHT_BUDGET).catch((error: unknown) => {
       caught = error;
       return null;
     });
     await worker.close();
     await parked;
-    for (const hold of holds) {
-      hold.release();
-    }
+    hold.release();
 
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toBe("serial flush worker is closed");
