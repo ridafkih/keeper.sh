@@ -111,7 +111,7 @@ describe("createGoogleSyncProvider", () => {
     expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]?.body?.iCalUID).toBeUndefined();
   });
 
-  it("resolves out-of-office insert conflicts by looking up the deterministic event id", async () => {
+  it("resolves out-of-office insert conflicts by updating the existing event", async () => {
     batchMocks.executeBatchChunked
       .mockResolvedValueOnce([
         batchResponse(409, { error: { message: "The requested identifier already exists." } }),
@@ -139,9 +139,14 @@ describe("createGoogleSyncProvider", () => {
     });
     expect(batchMocks.executeBatchChunked).toHaveBeenCalledTimes(2);
     expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]?.[0]).toMatchObject({
-      method: "GET",
+      method: "PUT",
       path: expect.stringMatching(/\/events\/[0-9a-f]{64}$/),
+      body: expect.objectContaining({
+        eventType: "outOfOffice",
+        summary: "Private block",
+      }),
     });
+    expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]?.[0]?.body?.id).toBeUndefined();
   });
 
   it("converges when import and listing use Google's two different identifiers", async () => {

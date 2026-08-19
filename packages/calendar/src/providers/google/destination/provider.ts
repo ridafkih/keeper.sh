@@ -180,7 +180,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   // Default events use events.import (upserts by iCalUID). Out-of-office requires events.insert.
   const buildPushRequest = (
     event: MaterializedSyncableEvent,
-  ): { uid: string; request: BatchSubRequest } | null => {
+  ): { uid: string; request: BatchSubRequest; updateBody?: Record<string, unknown> } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
     const resource = serializeGoogleEvent(event, uid);
     if (!resource) {
@@ -195,6 +195,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         headers: { "Content-Type": "application/json" },
         body: resource,
       },
+      ...(isOutOfOffice && { updateBody: resource as Record<string, unknown> }),
     };
   };
 
@@ -202,7 +203,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
-    const pending: { index: number; uid: string; batchIndex: number }[] = [];
+    const pending: {
+      index: number;
+      uid: string;
+      batchIndex: number;
+      updateBody?: Record<string, unknown>;
+    }[] = [];
     const requests: BatchSubRequest[] = [];
 
     for (let index = 0; index < events.length; index++) {
@@ -218,7 +224,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      pending.push({ index, uid: built.uid, batchIndex: requests.length });
+      pending.push({
+        index,
+        uid: built.uid,
+        batchIndex: requests.length,
+        ...(built.updateBody && { updateBody: built.updateBody }),
+      });
       requests.push(built.request);
     }
 
@@ -228,8 +239,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
-    const conflictLookups: { entryIndex: number; uid: string; batchIndex: number }[] = [];
-    const conflictLookupRequests: BatchSubRequest[] = [];
+    const conflictUpdates: { entryIndex: number; uid: string; batchIndex: number }[] = [];
+    const conflictUpdateRequests: BatchSubRequest[] = [];
 
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
@@ -246,16 +257,20 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           entry.uid,
           response.statusCode,
         );
-      } else if (response.statusCode === HTTP_STATUS.CONFLICT) {
-        // OOO insert uses a deterministic Google event id; 409 means that id already exists.
-        conflictLookups.push({
-          batchIndex: conflictLookupRequests.length,
+      } else if (response.statusCode === HTTP_STATUS.CONFLICT && entry.updateBody) {
+        // Deterministic OOO id already exists — PUT to refresh times/content.
+        const eventId = toGoogleEventId(entry.uid);
+        const { id: _ignoredId, ...updateBody } = entry.updateBody;
+        conflictUpdates.push({
+          batchIndex: conflictUpdateRequests.length,
           entryIndex: entry.index,
           uid: entry.uid,
         });
-        conflictLookupRequests.push({
-          method: "GET",
-          path: `${eventsPath}/${encodeURIComponent(toGoogleEventId(entry.uid))}`,
+        conflictUpdateRequests.push({
+          method: "PUT",
+          path: `${eventsPath}/${encodeURIComponent(eventId)}`,
+          headers: { "Content-Type": "application/json" },
+          body: updateBody,
         });
       } else {
         results[entry.index] = {
@@ -267,33 +282,30 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
     }
 
-    if (conflictLookupRequests.length > 0) {
-      const lookupResponses = await executeBatchChunked(
-        conflictLookupRequests,
+    if (conflictUpdateRequests.length > 0) {
+      const updateResponses = await executeBatchChunked(
+        conflictUpdateRequests,
         tokenState.accessToken,
         { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS },
       );
 
-      for (const lookup of conflictLookups) {
-        const response = lookupResponses[lookup.batchIndex];
-        const eventId = response && response.statusCode >= 200 && response.statusCode < 300
-          ? getImportedEventId(response.body)
-          : null;
-        if (eventId) {
-          results[lookup.entryIndex] = {
-            deleteId: eventId,
-            remoteId: lookup.uid,
+      for (const update of conflictUpdates) {
+        const response = updateResponses[update.batchIndex];
+        if (response && response.statusCode >= 200 && response.statusCode < 300) {
+          results[update.entryIndex] = {
+            deleteId: getImportedEventId(response.body) ?? toGoogleEventId(update.uid),
+            remoteId: update.uid,
             success: true,
           };
           continue;
         }
 
-        results[lookup.entryIndex] = {
+        results[update.entryIndex] = {
           error: response
             ? extractBatchErrorMessage(response.body, response.statusCode)
-            : "Google insert conflict but event was not found by id",
+            : "Google insert conflict update failed",
           errorType: "GoogleCalendarApiError",
-          statusCode: HTTP_STATUS.CONFLICT,
+          statusCode: response?.statusCode ?? HTTP_STATUS.CONFLICT,
           success: false,
         };
       }
