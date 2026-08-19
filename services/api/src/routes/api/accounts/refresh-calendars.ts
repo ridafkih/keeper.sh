@@ -46,11 +46,6 @@ const POST = withWideEvent(
           options,
           await createDefaultAccountCalendarRefreshDependencies(),
         );
-        /*
-         * Dropped after the walk, so the next ingest re-walks rather than reading a list
-         * this refresh just superseded. Someone who presses the button is telling us the
-         * cached answer is wrong.
-         */
         await invalidateCalendarDiscoveryCache(redis, options.accountId);
         return summary;
       },
