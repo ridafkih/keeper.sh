@@ -7,6 +7,7 @@ import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/desti
 
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
+  updateCalendarObjectByUrl: vi.fn(),
   deleteCalendarObject: vi.fn(),
   deleteCalendarObjectByUrl: vi.fn(),
   fetchCalendarObject: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
 
   class CalDAVClient {
     createCalendarObject = clientMocks.createCalendarObject;
+    updateCalendarObjectByUrl = clientMocks.updateCalendarObjectByUrl;
     deleteCalendarObject = clientMocks.deleteCalendarObject;
     deleteCalendarObjectByUrl = clientMocks.deleteCalendarObjectByUrl;
     fetchCalendarObject = clientMocks.fetchCalendarObject;
@@ -97,6 +99,7 @@ describe("CalDAV replace with an update-capable provider", () => {
 
   it("rewrites the existing object with a single PUT and no DELETE", async () => {
     clientMocks.createCalendarObject.mockResolvedValue(null);
+    clientMocks.updateCalendarObjectByUrl.mockResolvedValue(null);
     clientMocks.deleteCalendarObject.mockResolvedValue(null);
     clientMocks.deleteCalendarObjectByUrl.mockResolvedValue(null);
 
@@ -104,11 +107,11 @@ describe("CalDAV replace with an update-capable provider", () => {
 
     expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
     expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
-    expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(1);
-    expect(clientMocks.createCalendarObject.mock.calls[0]?.[0]).toMatchObject({
-      calendarUrl: "https://caldav.example.com/calendar/",
-      filename: `${uid}.ics`,
+    expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
+    expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(1);
+    expect(clientMocks.updateCalendarObjectByUrl.mock.calls[0]?.[0]).toMatchObject({
+      objectUrl: `https://caldav.example.com/calendar/${uid}.ics`,
     });
-    expect(clientMocks.createCalendarObject.mock.calls[0]?.[0]?.iCalString).toContain(`UID:${uid}`);
+    expect(clientMocks.updateCalendarObjectByUrl.mock.calls[0]?.[0]?.iCalString).toContain(`UID:${uid}`);
   });
 });

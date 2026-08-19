@@ -100,7 +100,7 @@ const resolveOutcome = (superseded: boolean): string => {
 };
 
 interface OperationError {
-  type: "add" | "remove";
+  type: "add" | "remove" | "update";
   error: string;
   errorType?: string;
   statusCode?: number;
@@ -315,6 +315,14 @@ const processUpdateResults = (
 
     if (!pushResult?.success) {
       unresolved.push(operation);
+      if (pushResult?.error) {
+        errors.push({
+          type: "update",
+          error: pushResult.error,
+          ...(pushResult.errorType && { errorType: pushResult.errorType }),
+          ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+        });
+      }
       continue;
     }
 

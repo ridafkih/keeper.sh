@@ -58,7 +58,7 @@ class CalDAVIncompleteMultiGetError extends Error {
   }
 }
 
-type CalDAVWriteOperation = "create" | "delete";
+type CalDAVWriteOperation = "create" | "delete" | "update";
 
 class CalDAVHttpError extends Error {
   readonly operation: CalDAVWriteOperation;
@@ -275,16 +275,13 @@ class CalDAVClient {
     calendarUrl: string;
     filename: string;
     iCalString: string;
-    overwrite?: boolean;
   }): Promise<void> {
     const client = await this.getClient();
 
-    // Without dropping If-None-Match the PUT is a create-only request and a rewrite answers 412.
     const response = await client.createCalendarObject({
       calendar: { url: params.calendarUrl },
       filename: params.filename,
       iCalString: params.iCalString,
-      ...(params.overwrite && { headersToExclude: ["If-None-Match"] }),
     });
 
     if (response.status === 412) {
@@ -303,6 +300,19 @@ class CalDAVClient {
       etag: params.etag,
       objectUrl: CalDAVClient.normalizeUrl(params.calendarUrl, params.filename),
     });
+  }
+
+  async updateCalendarObjectByUrl(params: {
+    objectUrl: string;
+    iCalString: string;
+  }): Promise<void> {
+    const client = await this.getClient();
+
+    const response = await client.updateCalendarObject({
+      calendarObject: { data: params.iCalString, url: params.objectUrl },
+    });
+
+    await assertSuccessfulResponse(response, "update");
   }
 
   async deleteCalendarObjectByUrl(params: {

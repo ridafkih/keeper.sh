@@ -163,6 +163,13 @@ const toListingDiagnostics = (listing: CalDAVListingStats): Record<string, numbe
   "remote_objects.unrequested_count": listing.unrequestedCount,
 });
 
+const toCalendarBaseUrl = (calendarUrl: string): string => {
+  if (calendarUrl.endsWith("/")) {
+    return calendarUrl;
+  }
+  return `${calendarUrl}/`;
+};
+
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const calendarHost = new URL(config.calendarUrl).hostname;
   const removeCounts: CalDAVRemoveCounts = {
@@ -247,20 +254,27 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       ),
     );
 
-  const toObjectHref = (deleteId: string): string => {
+  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
+
+  const toObjectUrl = (deleteId: string): string => {
     if (deleteId.includes("/")) {
-      return new URL(deleteId, config.calendarUrl).href;
+      return new URL(deleteId, calendarBaseUrl).href;
     }
-    return new URL(`${deleteId}.ics`, config.calendarUrl).href;
+    return new URL(`${deleteId}.ics`, calendarBaseUrl).href;
   };
 
-  /* A rewrite must land on the object the mapping already points at, or the PUT orphans a duplicate. */
-  const assertUpdateTargetsUid = (deleteId: string, uid: string): void => {
-    const target = toObjectHref(deleteId);
-    const expected = toObjectHref(uid);
-    if (target !== expected) {
-      throw new Error(`CalDAV update target ${target} does not match deterministic object ${expected}`);
+  /*
+   * Servers may return the href percent-encoded, and every Keeper UID contains an
+   * "@". Comparing decoded basenames keeps the write on the object the mapping
+   * already points at instead of a reconstructed href that never matches.
+   */
+  const resolveUpdateTargetUrl = (deleteId: string, uid: string): string => {
+    const objectUrl = toObjectUrl(deleteId);
+    const filename = decodeURIComponent(new URL(objectUrl).pathname.split("/").at(-1) ?? "");
+    if (filename !== `${uid}.ics`) {
+      throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
     }
+    return objectUrl;
   };
 
   const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
@@ -269,13 +283,11 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
             const uid = generateDeterministicEventUid(event.id);
-            assertUpdateTargetsUid(deleteId, uid);
+            const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
 
-            await client.createCalendarObject({
-              calendarUrl: config.calendarUrl,
-              filename: `${uid}.ics`,
+            await client.updateCalendarObjectByUrl({
               iCalString: eventToICalString(event, uid),
-              overwrite: true,
+              objectUrl,
             });
 
             return { deleteId, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
