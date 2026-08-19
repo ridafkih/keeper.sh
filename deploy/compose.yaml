@@ -56,7 +56,7 @@ services:
     env_file: .env
     environment:
       ENV: production
-      DATABASE_POOL_MAX: "25"
+      DATABASE_POOL_MAX: ${CRON_DATABASE_POOL_MAX:-100}
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
       WORKER_JOB_QUEUE_ENABLED: "true"
       BLOCK_PRIVATE_RESOLUTION: "true"
