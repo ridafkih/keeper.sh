@@ -49,12 +49,45 @@ const parseUrlWithCredentials = (url: string): ParsedUrl => {
 
 const ICS_USER_AGENT = "Keeper/1.0 (+https://www.keeper.sh)";
 
+/* Not in the shared HTTP_STATUS map; 206 is a fetch-integrity concern local to this fetcher. */
+const HTTP_STATUS_PARTIAL_CONTENT = 206;
+
+const CALENDAR_END_PATTERN = /(?:^|[\r\n])END:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
+
+/*
+ * VERSION and PRODID sit at the top of a feed, so a body truncated anywhere
+ * after the header still parses into a strictly smaller event set. Persisting
+ * that fragment as authoritative makes the snapshot diff delete the stored
+ * state of every event after the cut, then re-add them all on the next
+ * complete fetch. END:VCALENDAR is the only end-of-document marker iCalendar
+ * has; a body missing it is truncated, not smaller.
+ */
+const assertCalendarBodyComplete = (ical: string): void => {
+  if (!CALENDAR_END_PATTERN.test(ical)) {
+    throw new CalendarFetchError(
+      "Calendar feed is truncated: missing END:VCALENDAR terminator.",
+    );
+  }
+};
+
 const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise<string> => {
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
   const safeFetch = createSafeFetch(options);
   const response = await safeFetch(cleanUrl, {
     headers: { "User-Agent": ICS_USER_AGENT, ...headers },
   });
+
+  /*
+   * Response.ok is true for every 2xx status, 206 included. A range response
+   * body is a fragment of the feed; treating it as the whole feed would make
+   * the snapshot diff delete every stored event outside the range.
+   */
+  if (response.status === HTTP_STATUS_PARTIAL_CONTENT) {
+    throw new CalendarFetchError(
+      "Calendar server returned a partial (206) response; refusing to treat a fragment as the whole feed.",
+      response.status,
+    );
+  }
 
   if (!response.ok) {
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
@@ -120,6 +153,7 @@ async function pullRemoteCalendar(
   const outputs = normalizeOutputToArray(output);
   const normalizedUrl = normalizeCalendarUrl(url);
   const ical = await fetchRemoteText(normalizedUrl, options);
+  assertCalendarBodyComplete(ical);
   const json = parseIcsCalendarLenient({ icsString: ical, patches: [coerceCompliantDate] });
 
   if (!json.version || !json.prodId) {

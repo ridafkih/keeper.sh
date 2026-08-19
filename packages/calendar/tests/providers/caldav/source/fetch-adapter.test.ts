@@ -4,6 +4,7 @@ import {
   isCalDAVEventInSyncWindow,
 } from "../../../../src/providers/caldav/source/fetch-adapter";
 import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
+import { CalDAVUnreadableResourceError } from "../../../../src/providers/caldav/shared/ics";
 
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
@@ -168,7 +169,7 @@ describe("createCalDAVSourceFetcher against an unreadable resource", () => {
     davMocks.fetchCalendars.mockResolvedValue([]);
   });
 
-  it("ingests the readable resources and reports the skipped count", async () => {
+  it("fails the fetch instead of returning a partial snapshot", async () => {
     answerQueryWith(objectPaths(3));
     answerMultigetWith((objectUrls) =>
       objectUrls.map((path, index) => ({
@@ -176,12 +177,21 @@ describe("createCalDAVSourceFetcher against an unreadable resource", () => {
         url: `${SERVER_URL}${path}`,
       })));
 
-    const result = await createFetcher().fetchEvents();
+    /*
+     * Ingestion diffs stored state against the returned events, so a partial
+     * read persisted as authoritative would delete every event in the
+     * unreadable resource and re-add it next pass.
+     */
+    const failure = await createFetcher().fetchEvents().then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-    expect(result.events.map(({ uid }) => uid))
-      .toEqual(["native-0@example.com", "native-2@example.com"]);
-    expect(result.skippedResourceCount).toBe(1);
-    expect(result.skippedResourceReasons)
-      .toEqual(["Malformed ICS component boundary: missing END:VEVENT"]);
+    expect(failure).toBeInstanceOf(CalDAVUnreadableResourceError);
+    if (failure instanceof CalDAVUnreadableResourceError) {
+      expect(failure.skippedResourceCount).toBe(1);
+      expect(failure.skippedResourceReasons)
+        .toEqual(["Malformed ICS component boundary: missing END:VEVENT"]);
+    }
   });
 });

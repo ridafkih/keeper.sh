@@ -264,6 +264,18 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     }
 
     return await withPersistenceTransaction(async ({ readExistingEvents, flush }) => {
+      /*
+       * Re-probe currency at persist time. The transaction thunk can sit in a
+       * serial flush queue long after the pre-enqueue probe above passed; if the
+       * sync lease was reclaimed in the meantime, a fresher holder may already
+       * have committed, and flushing this run's snapshot would revert it.
+       */
+      if (isCurrent && !(await isCurrent())) {
+        wideEvent["outcome"] = "superseded";
+        wideEvent["flushed"] = false;
+        return EMPTY_RESULT;
+      }
+
       if (fetchResult.unchanged) {
         wideEvent["outcome"] = "unchanged";
         wideEvent["flushed"] = false;

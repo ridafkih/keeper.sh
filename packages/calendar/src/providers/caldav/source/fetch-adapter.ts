@@ -3,7 +3,7 @@ import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isCalDAVEventInSyncWindow, partitionCalDAVSourceEvents } from "./window";
 import { CalDAVClient } from "../shared/client";
-import { parseICalCalendarsToRemoteEvents } from "../shared/ics";
+import { assertAllResourcesRead, parseICalCalendarsToRemoteEvents } from "../shared/ics";
 import { measureSyncSegment } from "../../../core/telemetry/segments";
 
 interface CalDAVSourceFetcherConfig {
@@ -50,6 +50,12 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
       "work.transform_ms",
       () => {
         const parsed = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
+        /*
+         * Ingestion diffs stored event_states against this fetch, so a missing
+         * event means "absent" here: a partial read would delete every event in
+         * the unreadable resources and re-add them next pass. Fail instead.
+         */
+        assertAllResourcesRead(parsed);
         return {
           resources: parsed,
           ...partitionCalDAVSourceEvents(parsed.events, syncWindow),

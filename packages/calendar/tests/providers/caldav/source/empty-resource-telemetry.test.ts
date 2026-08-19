@@ -4,6 +4,7 @@ import type { IngestWideEventFields } from "../../../../src/core/sync-engine/ing
 import type { StoredSourceEventState } from "../../../../src/core/source/stored-event-state";
 import type { SourceEvent } from "../../../../src/core/types";
 import { createCalDAVSourceFetcher } from "../../../../src/providers/caldav/source/fetch-adapter";
+import { CalDAVUnreadableResourceError } from "../../../../src/providers/caldav/shared/ics";
 import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
 
 const davMocks = vi.hoisted(() => ({
@@ -163,25 +164,34 @@ describe("CalDAV resources returned with an empty body", () => {
     davMocks.fetchCalendars.mockResolvedValue([]);
   });
 
-  it("counts the resource it could not read when the body came back empty", async () => {
+  it("fails the run and keeps the stored event when the body came back empty", async () => {
     const store = createStore();
     const first = await ingestCollection(store, [resource(STANDUP), resource(DINNER)]);
     expect(first.inserts.toSorted()).toEqual(["state-dinner@example.com", "state-standup@example.com"]);
 
-    const run = await ingestCollection(store, [resource(STANDUP), ""]);
+    const failure = await ingestCollection(store, [resource(STANDUP), ""]).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-    expect(run.deletes).toEqual(["state-dinner@example.com"]);
-    expect(discardTotal(run.wideEvent)).toBeGreaterThan(0);
+    expect(failure).toBeInstanceOf(CalDAVUnreadableResourceError);
+    if (failure instanceof CalDAVUnreadableResourceError) {
+      expect(failure.skippedResourceCount).toBe(1);
+    }
+    expect(store.ids()).toEqual(["state-dinner@example.com", "state-standup@example.com"]);
   });
 
-  it("counts an href answered with whitespace instead of a calendar", async () => {
+  it("fails an href answered with whitespace instead of a calendar", async () => {
     const store = createStore();
     await ingestCollection(store, [resource(STANDUP), resource(DINNER)]);
 
-    const run = await ingestCollection(store, [resource(STANDUP), "   "]);
+    const failure = await ingestCollection(store, [resource(STANDUP), "   "]).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-    expect(run.deletes).toEqual(["state-dinner@example.com"]);
-    expect(discardTotal(run.wideEvent)).toBeGreaterThan(0);
+    expect(failure).toBeInstanceOf(CalDAVUnreadableResourceError);
+    expect(store.ids()).toEqual(["state-dinner@example.com", "state-standup@example.com"]);
   });
 
   it("reports nothing discarded when every resource is readable", async () => {
@@ -195,22 +205,20 @@ describe("CalDAV resources returned with an empty body", () => {
     expect(discardTotal(run.wideEvent)).toBe(0);
   });
 
-  it("settles instead of churning while the body stays empty", async () => {
+  it("keeps the stored state intact while the body stays empty", async () => {
     const store = createStore();
     await ingestCollection(store, [resource(STANDUP), resource(DINNER)]);
-    const timeline: { deletes: number; inserts: number }[] = [];
+    const outcomes: string[] = [];
 
     for (let poll = 0; poll < 4; poll += 1) {
-      const run = await ingestCollection(store, [resource(STANDUP), ""]);
-      timeline.push({ deletes: run.deletes.length, inserts: run.inserts.length });
+      const outcome = await ingestCollection(store, [resource(STANDUP), ""]).then(
+        () => "flushed",
+        () => "failed",
+      );
+      outcomes.push(outcome);
     }
 
-    expect(timeline).toEqual([
-      { deletes: 1, inserts: 0 },
-      { deletes: 0, inserts: 0 },
-      { deletes: 0, inserts: 0 },
-      { deletes: 0, inserts: 0 },
-    ]);
-    expect(store.ids()).toEqual(["state-standup@example.com"]);
+    expect(outcomes).toEqual(["failed", "failed", "failed", "failed"]);
+    expect(store.ids()).toEqual(["state-dinner@example.com", "state-standup@example.com"]);
   });
 });

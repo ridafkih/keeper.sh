@@ -4,6 +4,7 @@ import type { IngestWideEventFields, IngestionChanges } from "../../../src/core/
 import type { StoredSourceEventState } from "../../../src/core/source/stored-event-state";
 import { createGoogleSourceFetcher } from "../../../src/providers/google/source/fetch-adapter";
 import { createCalDAVSourceFetcher } from "../../../src/providers/caldav/source/fetch-adapter";
+import { CalDAVUnreadableResourceError } from "../../../src/providers/caldav/shared/ics";
 import { createSourceIngestionPlan } from "../../../src/core/sync/sync-range";
 
 const NOW = new Date("2026-06-15T00:00:00.000Z");
@@ -384,25 +385,31 @@ describe("CalDAV discards", () => {
     davMocks.fetchCalendars.mockResolvedValue([]);
   });
 
-  it("reports the unreadable resource whose stored event it deletes", async () => {
+  it("fails the run instead of deleting the stored event of an unreadable resource", async () => {
     answerWith([
       icsFor("readable@example.com", "20260620T090000Z", "20260620T100000Z"),
       TRUNCATED_ICS,
     ]);
     const fetcher = createCalDAVFetcher();
 
-    const run = await runIngest("caldav-calendar", () => fetcher.fetchEvents(), [
+    /*
+     * A partial multiget must never become the authoritative snapshot: the
+     * diff would delete the stored event of the unreadable resource and
+     * re-add it on the next pass.
+     */
+    const failure = await runIngest("caldav-calendar", () => fetcher.fetchEvents(), [
       storedEvent({ id: "state-readable", sourceEventUid: "readable@example.com" }),
       storedEvent({ id: "state-truncated", sourceEventUid: "truncated@example.com" }),
-    ]);
+    ]).then(
+      () => null,
+      (error: unknown) => error,
+    );
 
-    expect(run.changes[0]?.deletes).toEqual(["state-truncated"]);
-    const wideEvent = run.wideEvents[0] ?? {};
-    const discardKeys = Object.keys(wideEvent).filter((key) =>
-      key.includes("discard") || key.includes("skipped") || key.includes("unsupported"));
-    expect(discardKeys).not.toEqual([]);
-    expect(wideEvent["source_events.skipped_resources"]).toBe(1);
-    expect(wideEvent["source_events.skipped_resource_reasons"]).toContain("END:VEVENT");
+    expect(failure).toBeInstanceOf(CalDAVUnreadableResourceError);
+    if (failure instanceof CalDAVUnreadableResourceError) {
+      expect(failure.skippedResourceCount).toBe(1);
+      expect(failure.skippedResourceReasons.join("; ")).toContain("END:VEVENT");
+    }
   });
 
   it("counts a stored event dropped for falling outside the sync window", async () => {
