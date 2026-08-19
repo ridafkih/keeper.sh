@@ -22,6 +22,11 @@ const buildDateField = (
   };
 };
 
+/** Google OOO cannot be all-day; reuse the stored instants as timed dateTimes. */
+const buildTimedOooDateField = (time: Date): NonNullable<GoogleEvent["start"]> => ({
+  dateTime: time.toISOString(),
+});
+
 const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
   if (event.availability === "workingElsewhere") {
     return false;
@@ -40,33 +45,36 @@ const serializeGoogleEvent = (
   }
 
   const isAllDay = resolveIsAllDayEvent(event);
-  // Google out-of-office events must be timed; fall back to a normal busy event for all-day.
-  const asOutOfOffice = event.availability === "oof" && !isAllDay;
+  const asOutOfOffice = event.availability === "oof";
+
+  if (asOutOfOffice) {
+    return {
+      description: event.description,
+      end: buildTimedOooDateField(event.endTime),
+      eventType: "outOfOffice",
+      extendedProperties: {
+        private: { [KEEPER_EVENT_UID_PROPERTY]: uid },
+      },
+      id: toGoogleEventId(uid),
+      location: event.location,
+      outOfOfficeProperties: {
+        autoDeclineMode: "declineAllConflictingInvitations",
+      },
+      start: buildTimedOooDateField(event.startTime),
+      summary: event.summary,
+      transparency: "opaque",
+      ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
+    };
+  }
 
   return {
     description: event.description,
     end: buildDateField(event.endTime, isAllDay, event.startTimeZone, recurrenceRule),
+    iCalUID: uid,
     location: event.location,
     start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
-    // OOO cannot use events.import; iCalUID on insert leaves tombstones that 409 forever.
-    // Use a deterministic Google event id + private property instead.
-    ...(asOutOfOffice
-      ? {
-        eventType: "outOfOffice",
-        extendedProperties: {
-          private: { [KEEPER_EVENT_UID_PROPERTY]: uid },
-        },
-        id: toGoogleEventId(uid),
-        outOfOfficeProperties: {
-          autoDeclineMode: "declineAllConflictingInvitations",
-        },
-        transparency: "opaque",
-      }
-      : {
-        iCalUID: uid,
-        ...(event.availability === "free" && { transparency: "transparent" }),
-      }),
+    ...(event.availability === "free" && { transparency: "transparent" }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
 };

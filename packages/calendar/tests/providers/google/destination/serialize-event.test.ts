@@ -53,27 +53,31 @@ describe("serializeGoogleEvent", () => {
     expect(event?.iCalUID).toBeUndefined();
   });
 
-  it("does not mark all-day oof events as out-of-office", () => {
+  it("converts all-day oof events to timed Google out-of-office", () => {
     const event = serializeGoogleEvent(
       {
         availability: "oof",
         calendarId: "calendar-id",
         calendarName: "Calendar",
         calendarUrl: null,
-        endTime: new Date("2026-03-09T00:00:00.000Z"),
+        endTime: new Date("2026-09-01T00:00:00.000Z"),
         id: "event-id",
         isAllDay: true,
         sourceEventUid: "source-uid",
-        startTime: new Date("2026-03-08T00:00:00.000Z"),
-        summary: "All day away",
+        startTime: new Date("2026-08-22T00:00:00.000Z"),
+        summary: "Gamescom",
       },
-      "destination-uid",
+      "destination-uid@keeper.sh",
     );
 
     expect(event).toMatchObject({
-      summary: "All day away",
+      end: { dateTime: "2026-09-01T00:00:00.000Z" },
+      eventType: "outOfOffice",
+      start: { dateTime: "2026-08-22T00:00:00.000Z" },
+      summary: "Gamescom",
     });
-    expect(event?.eventType).toBeUndefined();
-    expect(event?.outOfOfficeProperties).toBeUndefined();
+    expect(event?.start).not.toHaveProperty("date");
+    expect(event?.end).not.toHaveProperty("date");
+    expect(event?.iCalUID).toBeUndefined();
   });
 });

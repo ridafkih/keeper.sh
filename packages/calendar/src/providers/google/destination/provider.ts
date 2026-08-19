@@ -20,6 +20,7 @@ import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
 import { readKeeperEventUid, toGoogleEventId } from "./ooo-identity";
+import { inferAllDayEvent } from "../../../core/events/all-day";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface GoogleSyncProviderConfig {
@@ -462,6 +463,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       } else if (event.transparency === "transparent") {
         availability = "free";
       }
+      // All-day source events are written as timed OOO (Google forbids all-day OOO).
+      // Treat midnight-aligned timed OOO as all-day for editable-hash stability.
+      const isAllDay = Boolean(event.start?.date)
+        || (event.eventType === "outOfOffice" && inferAllDayEvent({ endTime, startTime }));
       items.push({
         deleteId: event.id ?? keeperUid,
         editableAvailability: availability,
@@ -469,17 +474,15 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           availability,
           description: event.description,
           endTime,
-          isAllDay: Boolean(event.start?.date),
+          isAllDay,
           location: event.location,
           startTime,
           summary: event.summary ?? "",
         }),
         endTime,
         isKeeperEvent: true,
-        // OOO is only supported for timed Google events; all-day falls back to busy.
-        supportedAvailabilities: event.eventType === "outOfOffice"
-          ? ["busy", "free", "oof"]
-          : ["busy", "free"],
+        // Google destinations can create OOO via insert even when the listed event is default.
+        supportedAvailabilities: ["busy", "free", "oof"],
         startTime,
         uid: keeperUid,
       });
