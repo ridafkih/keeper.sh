@@ -1,3 +1,4 @@
+import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
 import env from "./env";
 import { createFlushDrainRegistry } from "./utils/flush-drains";
 import { closeDatabase, createDatabase } from "@keeper.sh/database";
@@ -13,7 +14,9 @@ const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DA
  * The flush writer gets its own single connection so ingest persistence
  * cannot open concurrent write transactions no matter how many fetches run.
  */
-const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1 });
+const flushDatabase = await createDatabase(env.DATABASE_URL, {
+  maxConnections: FLUSH_WRITER_CONNECTIONS,
+});
 
 const flushDrainRegistry = createFlushDrainRegistry();
 

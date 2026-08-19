@@ -351,7 +351,7 @@ describe("ingest duration decomposition", () => {
     expect(event.work?.db_commit_ms).toBeUndefined();
   });
 
-  it("charges a queued source the writer wait it spends behind its peer's flush", async () => {
+  it("charges each source its own writer wait when both fit the writer's connections", async () => {
     sourceCount = 2;
     stagedPoolWaits = [POOL_WAIT_MS, SECOND_POOL_WAIT_MS];
 
@@ -361,11 +361,12 @@ describe("ingest duration decomposition", () => {
       .toSorted((first, second) => first - second);
 
     expect(events).toHaveLength(2);
-    // The flush writer serialises persistence, so the queued source is also charged its peer's flush.
-    expect(poolWaits[0]).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
-    expect(poolWaits[1]).toBeGreaterThanOrEqual(
-      chargedAtLeast(POOL_WAIT_MS + SECOND_POOL_WAIT_MS),
-    );
+    for (const wait of poolWaits) {
+      expect(wait).toBeGreaterThanOrEqual(0);
+    }
+
+    /* Serialising these two would charge the later one both flushes. */
+    expect(poolWaits[1]).toBeLessThan(POOL_WAIT_MS + SECOND_POOL_WAIT_MS);
     for (const event of events) {
       expect(event.accounted_ms ?? 0).toBeLessThanOrEqual(event.duration_ms ?? 0);
     }

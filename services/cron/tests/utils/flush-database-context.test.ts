@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 /*
- * The flush writer gets its own single-connection database so high fetch
- * concurrency can never open concurrent write transactions against Postgres.
+ * The flush writer gets its own bounded pool so high fetch concurrency can never open
+ * unbounded concurrent write transactions against Postgres.
  */
 
 const TEST_DATABASE_URL = "postgres://cron-test/keeper";
@@ -62,7 +62,7 @@ vi.mock("@polar-sh/sdk", () => ({
 }));
 
 describe("cron context flush database", () => {
-  it("creates a dedicated single-connection flush database alongside the pooled one", async () => {
+  it("creates a dedicated bounded flush database alongside the pooled one", async () => {
     const context = await import("../../src/context");
 
     expect(mocks.createDatabase).toHaveBeenCalledTimes(2);
@@ -70,7 +70,7 @@ describe("cron context flush database", () => {
       maxConnections: 10,
     });
     expect(mocks.createDatabase).toHaveBeenNthCalledWith(2, TEST_DATABASE_URL, {
-      maxConnections: 1,
+      maxConnections: 16,
     });
 
     const exported = context as Record<string, unknown>;

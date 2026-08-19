@@ -84,6 +84,7 @@ import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syn
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 import { WEIGHT_BUDGET, estimateIngestWeight } from "@/utils/ingest-weight";
+import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
@@ -402,7 +403,11 @@ const FLUSH_QUEUE_CAPACITY = 50;
  */
 const ingestFlushWriter = createSerialFlushWorker(
   (task: () => Promise<IngestionResult>) => task(),
-  { budget: WEIGHT_BUDGET, capacity: FLUSH_QUEUE_CAPACITY },
+  {
+    budget: WEIGHT_BUDGET,
+    capacity: FLUSH_QUEUE_CAPACITY,
+    writerConcurrency: FLUSH_WRITER_CONNECTIONS,
+  },
 );
 
 flushDrainRegistry.register(() => ingestFlushWriter.close());

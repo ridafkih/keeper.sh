@@ -1,9 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import { FLUSH_WRITER_CONNECTIONS } from "../../src/utils/flush-writer";
 
 /*
- * Persistence must run one transaction at a time on the dedicated flushDatabase
- * while fetches stay concurrent, and each source must await its own flush.
+ * Persistence stays on the dedicated flushDatabase and within its connections while
+ * fetches stay concurrent, and each source must await its own flush.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -261,7 +262,7 @@ beforeEach(() => {
 });
 
 describe("ingest flush writer", () => {
-  it("never overlaps the persistence transactions of concurrently ingesting sources", async () => {
+  it("keeps concurrent persistence transactions within the flush writer's connections", async () => {
     harness.state.icsRows.push(
       createIcsRow("calendar-alpha", "user-alpha"),
       createIcsRow("calendar-beta", "user-beta"),
@@ -272,7 +273,9 @@ describe("ingest flush writer", () => {
     const totalTransactionCount = harness.state.transactionCounts.flush
       + harness.state.transactionCounts.pooled;
     expect(totalTransactionCount).toBe(2);
-    expect(harness.state.maxActiveTransactionCount).toBe(1);
+    expect(harness.state.maxActiveTransactionCount).toBeLessThanOrEqual(
+      FLUSH_WRITER_CONNECTIONS,
+    );
   });
 
   it("runs persistence against the flush database with timeouts and advisory locks inside", async () => {

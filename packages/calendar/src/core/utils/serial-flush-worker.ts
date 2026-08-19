@@ -1,4 +1,5 @@
 const DEFAULT_CAPACITY = 50;
+const DEFAULT_WRITER_CONCURRENCY = 1;
 
 /* Distinct class so error classifiers recognize a closed writer without matching message text. */
 class SerialFlushWorkerClosedError extends Error {
@@ -80,6 +81,7 @@ const resolvePrepare = (item: unknown): (() => unknown) | null => {
 interface SerialFlushWorkerOptions {
   budget?: number;
   capacity?: number;
+  writerConcurrency?: number;
 }
 
 interface FlushReservation<TItem, TResult> {
@@ -117,6 +119,7 @@ const createSerialFlushWorker = <TItem, TResult>(
   options?: SerialFlushWorkerOptions,
 ): SerialFlushWorker<TItem, TResult> => {
   const capacity = options?.capacity ?? DEFAULT_CAPACITY;
+  const writerConcurrency = options?.writerConcurrency ?? DEFAULT_WRITER_CONCURRENCY;
   const budget = options?.budget;
   const queue: QueuedItem<TItem, TResult>[] = [];
   const slotWaiters: SlotWaiter[] = [];
@@ -125,7 +128,7 @@ const createSerialFlushWorker = <TItem, TResult>(
   const writerSlotWaiters: (() => void)[] = [];
   const writerSlotFreeWaiters: (() => void)[] = [];
   let inFlight = 0;
-  let writerSlotBusy = false;
+  let writerSlotsInUse = 0;
   let outstandingWeight = 0;
   let expressOvertakes = 0;
   let closed = false;
@@ -199,10 +202,10 @@ const createSerialFlushWorker = <TItem, TResult>(
   };
 
   const claimWriterSlot = (): boolean => {
-    if (writerSlotBusy) {
+    if (writerSlotsInUse >= writerConcurrency) {
       return false;
     }
-    writerSlotBusy = true;
+    writerSlotsInUse += 1;
     return true;
   };
 
@@ -214,14 +217,14 @@ const createSerialFlushWorker = <TItem, TResult>(
     writerSlotFreeWaiters.push(resolve);
   });
 
-  /* Handed straight to the next owner so runs stay strictly serial without a re-check race. */
+  /* Handed straight to the next owner so the slot count cannot race a re-check. */
   const releaseWriterSlot = (): void => {
     const nextOwner = writerSlotWaiters.shift();
     if (nextOwner) {
       nextOwner();
       return;
     }
-    writerSlotBusy = false;
+    writerSlotsInUse -= 1;
     for (const notify of writerSlotFreeWaiters.splice(0)) {
       notify();
     }
@@ -305,7 +308,7 @@ const createSerialFlushWorker = <TItem, TResult>(
     }
     pumping = true;
     while (queue.length > 0) {
-      if (writerSlotBusy) {
+      if (writerSlotsInUse >= writerConcurrency) {
         await whenWriterSlotFree();
         continue;
       }
