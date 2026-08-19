@@ -6,6 +6,7 @@ import type {
   EventTimeSlot,
 } from "../types";
 import type { MicrosoftApiError, OutlookDateTime } from "../../types";
+import type { RedisRateLimiter } from "../../../../core/utils/redis-rate-limiter";
 import { MICROSOFT_GRAPH_API, GONE_STATUS } from "../../shared/api";
 import { isAuthError, isSimpleAuthError } from "../../shared/errors";
 import { parseEventTime } from "../../shared/date-time";
@@ -69,6 +70,7 @@ interface PageFetchOptions {
   timeMin?: Date;
   timeMax?: Date;
   nextLink?: string;
+  rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
 }
 
@@ -174,6 +176,12 @@ const fetchEventsPage = async (
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
   const { accessToken } = options;
   const url = getRequestUrl(options);
+
+  // Take the mailbox concurrency lease before every Graph request goes out.
+  if (options.rateLimiter) {
+    await options.rateLimiter.acquire(1, options.signal);
+  }
+
   const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
   const response = await measureProviderRequest(() => fetch(url.toString(), {
@@ -225,6 +233,7 @@ const fetchSeriesMasterInstances = async (
   timeMin: Date,
   timeMax: Date,
   signal?: AbortSignal,
+  rateLimiter?: RedisRateLimiter,
 ): Promise<OutlookCalendarEvent[]> => {
   const calendarPath = encodeURIComponent(calendarId);
   const masterPath = encodeURIComponent(masterId);
@@ -242,6 +251,7 @@ const fetchSeriesMasterInstances = async (
       accessToken,
       calendarId,
       nextLink,
+      rateLimiter,
       signal,
     });
     if (pageResult.fullSyncRequired) {
@@ -268,6 +278,7 @@ const expandSeriesMasters = async (
   timeMin: Date,
   timeMax: Date,
   signal?: AbortSignal,
+  rateLimiter?: RedisRateLimiter,
 ): Promise<ExpandedSeriesMasters> => {
   const expanded: OutlookCalendarEvent[] = [];
   let unexpandedSeriesMasterCount = 0;
@@ -283,6 +294,7 @@ const expandSeriesMasters = async (
       timeMin,
       timeMax,
       signal,
+      rateLimiter,
     );
     if (instances.length === 0) {
       unexpandedSeriesMasterCount += 1;
@@ -310,7 +322,7 @@ const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalend
 };
 
 const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
-  const { accessToken, calendarId, deltaLink, timeMin, timeMax, signal } = options;
+  const { accessToken, calendarId, deltaLink, timeMin, timeMax, rateLimiter, signal } = options;
 
   const changedEventsById = new Map<string, OutlookCalendarEvent>();
   const changedEventsWithoutId: OutlookCalendarEvent[] = [];
@@ -333,6 +345,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
     accessToken,
     calendarId,
     deltaLink,
+    rateLimiter,
     timeMax,
     timeMin,
     signal,
@@ -352,6 +365,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       accessToken,
       calendarId,
       nextLink,
+      rateLimiter,
       timeMax,
       timeMin,
       signal,
@@ -395,6 +409,7 @@ const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEv
       timeMin,
       timeMax,
       signal,
+      rateLimiter,
     );
     latestChangedEvents = deduplicateOutlookEvents(expansion.events);
     ({ unexpandedSeriesMasterCount } = expansion);

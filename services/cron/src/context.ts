@@ -1,4 +1,5 @@
 import env from "./env";
+import { drainFlushWriters } from "./utils/flush-drains";
 import { closeDatabase, createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
@@ -14,7 +15,34 @@ const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DA
  */
 const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1 });
 
-const shutdownDatabases = (): void => {
+/*
+ * Registered flush writers are drained first so queued and in-flight flushes
+ * settle before the dedicated single-connection flushDatabase is closed
+ * underneath them. The drain is bounded: a single wedged flush (a run that
+ * never settles, e.g. a half-open connection) would otherwise keep the pump
+ * busy forever, and entrykit's SIGTERM cleanup awaits this function with no
+ * timeout of its own — the process would linger until the supervisor
+ * SIGKILLs it and the databases would never be closed.
+ */
+const FLUSH_DRAIN_DEADLINE_MS = 2000;
+
+const shutdownDatabases = async (): Promise<void> => {
+  // The settled tags swallow a post-deadline rejection so it cannot become unhandled.
+  const drain = drainFlushWriters().then(
+    () => "drained",
+    () => "drain-failed",
+  );
+  let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+  const deadline = new Promise<void>((resolve) => {
+    deadlineTimer = setTimeout(resolve, FLUSH_DRAIN_DEADLINE_MS);
+  });
+  try {
+    await Promise.race([drain, deadline]);
+  } finally {
+    if (deadlineTimer !== null) {
+      clearTimeout(deadlineTimer);
+    }
+  }
   closeDatabase(database);
   closeDatabase(flushDatabase);
 };

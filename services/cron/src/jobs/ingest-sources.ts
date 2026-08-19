@@ -11,6 +11,7 @@ import {
   createSerialFlushWorker,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
+  isCalDAVProvider,
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
@@ -58,13 +59,18 @@ import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } fro
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, flushDatabase, refreshLockRedis, refreshLockStore } from "@/context";
+import { registerFlushDrain } from "@/utils/flush-drains";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import {
   resolveMissingCalendarFailure,
   shouldTreatAsProviderAuthFailure,
 } from "@/utils/provider-ingest-failure";
-import { hasErrorFlag, requiresReauthentication } from "@/utils/error-flags";
+import {
+  hasErrorFlag,
+  isIngestInfrastructureError,
+  requiresReauthentication,
+} from "@/utils/error-flags";
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
@@ -75,11 +81,23 @@ import { WEIGHT_BUDGET, estimateIngestWeight } from "@/utils/ingest-weight";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
+
 /*
- * The real bounds are the weighted flush budget, the per-family provider
- * limiters, and USER_CALENDAR_CONCURRENCY, so no global group throttle remains.
+ * Bound on how long a flush transaction may wait for its calendar's advisory
+ * lock while holding the single serial writer slot. The same (namespace,
+ * calendarId) lock is held minutes-scale by sync-user write-back and the API
+ * caldav persist, so a contended calendar must fail ITS flush quickly instead
+ * of parking every queued flush behind it until their deadlines expire.
  */
-const UNBOUNDED_USER_GROUPS = 1000;
+const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
+/*
+ * Sized to the shared cron pool (DATABASE_POOL_MAX 25 in deploy/compose.yaml):
+ * every launched source performs pooled reads before the weighted reserve() can
+ * park it, so this is the only bound on that pre-reserve read herd. Groups times
+ * USER_CALENDAR_CONCURRENCY must stay within the pool, leaving headroom for the
+ * other cron jobs sharing `database`.
+ */
+const USER_GROUP_CONCURRENCY = 12;
 /*
  * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
  * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
@@ -105,7 +123,18 @@ const instrumentedLockRedis = {
     measureRedisCommand(() => refreshLockRedis.get(key)),
 };
 
-const sourceIngestLock = createSyncLock(instrumentedLockRedis);
+/*
+ * Cron passes are serial (cronbake re-arms only after a pass completes), but a
+ * calendar's ingest can still be in flight when the next pass reaches it: a
+ * timeout-abandoned run keeps executing after withAbortTimeout frees its
+ * scheduler slot, and webhook-driven syncs contend for the same lock. That
+ * duplicate is a routine identical run, not a mapping mutation: it must acquire
+ * as "background" so IS_CURRENT stays true for the in-flight holder and its
+ * completed fetch persists. With the default "preempting" class every such
+ * overlap discarded the holder's finished work, and a source slower than its
+ * deadline never recorded its first ingest.
+ */
+const sourceIngestLock = createSyncLock(instrumentedLockRedis, "background");
 
 /*
  * The ioredis set overloads type expiry/condition tokens positionally, so the
@@ -350,6 +379,12 @@ const ingestFlushWriter = createSerialFlushWorker(
   { budget: WEIGHT_BUDGET, capacity: FLUSH_QUEUE_CAPACITY },
 );
 
+/*
+ * Shutdown must drain this writer before flushDatabase closes, or queued and
+ * in-flight flushes are stranded with their budget still reserved.
+ */
+registerFlushDrain(() => ingestFlushWriter.close());
+
 type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, IngestionResult>;
 
 /*
@@ -408,7 +443,20 @@ const createIngestionPersistenceTransaction = (
       ${String(initialRemainingMs + SOURCE_TIMEOUT_DATABASE_GRACE_MS)},
       true
     )`);
-    await setRemainingStatementTimeout();
+    /*
+     * The advisory-lock wait runs under a small constant statement_timeout,
+     * never the source's full remaining deadline: the lock can be held
+     * minutes-scale elsewhere, and this transaction occupies the single
+     * serial writer slot while it waits.
+     */
+    const boundedLockWaitMs = Math.max(
+      1,
+      Math.min(ADVISORY_LOCK_WAIT_BOUND_MS, Math.ceil(deadlineAt - Date.now())),
+    );
+    signal.throwIfAborted();
+    await transaction.execute(
+      sql`select set_config('statement_timeout', ${String(boundedLockWaitMs)}, true)`,
+    );
     const advisoryLockRequestedAt = performance.now();
     try {
       await transaction.execute(
@@ -418,6 +466,8 @@ const createIngestionPersistenceTransaction = (
       ledger.advisoryLockMs += performance.now() - advisoryLockRequestedAt;
     }
     signal.throwIfAborted();
+    /* Restore the deadline-derived timeout for the persistence work itself. */
+    await setRemainingStatementTimeout();
 
     const result = await work({
       readExistingEvents: async () => {
@@ -630,7 +680,8 @@ const resolveRateLimiter = (
     );
   }
 
-  if (provider === "caldav") {
+  /* CalDAV sources may be stored as 'caldav', 'fastmail', or 'icloud'. */
+  if (isCalDAVProvider(provider)) {
     const host = resolveTargetHost(source.serverUrl ?? null);
     if (!host) {
       return;
@@ -1183,7 +1234,16 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                 } finally {
                   /* A source that never submitted must not strand its weight. */
                   reservation.release();
-                  await rateLimiter?.dispose?.();
+                  /*
+                   * The lease TTL already reclaims the slot, so a failed release
+                   * must never clobber the ingest result with a rejection.
+                   */
+                  await rateLimiter?.dispose?.().catch((error: unknown) => {
+                    widelog.errorFields(error, {
+                      slug: "rate-limiter-dispose-failed",
+                      retriable: true,
+                    });
+                  });
                 }
               }, shouldApplyOAuthIngestBackoff),
             );
@@ -1232,7 +1292,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
       SOURCE_TIMEOUT_MS);
     }),
 oauthSources.map((source) => source.userId),
-    { groupConcurrency: UNBOUNDED_USER_GROUPS, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1330,6 +1390,10 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   return createSkippedIngestionResult(source.userId);
                 }
                 const ranges = await getRequiredSourceRanges(source.calendarId);
+                const rateLimiter = resolveRateLimiter(currentSource.provider, {
+                  serverUrl: currentSource.serverUrl,
+                  userId: currentSource.userId,
+                });
                 const fetcher = createCalDAVSourceFetcher({
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
                   serverUrl: currentSource.serverUrl,
@@ -1350,6 +1414,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   const ingestionResult = await ingestSource({
                     calendarId: source.calendarId,
                     fetchEvents: async () => {
+                      await rateLimiter?.acquire(1, signal);
                       const fetchResult = await fetcher.fetchEvents();
                       recordSkippedResources(
                         fetchResult.skippedResourceCount ?? 0,
@@ -1382,7 +1447,9 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   /* A source that never submitted must not strand its weight. */
                   reservation.release();
                 }
-              }, (error) => !shouldTreatAsProviderAuthFailure(error)),
+              }, (error) =>
+                !shouldTreatAsProviderAuthFailure(error)
+                && !isIngestInfrastructureError(error)),
             );
             if (!result) {
               widelog.set("outcome", "skipped");
@@ -1423,7 +1490,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
       SOURCE_TIMEOUT_MS);
     }),
 caldavSources.map((source) => source.userId),
-    { groupConcurrency: UNBOUNDED_USER_GROUPS, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
@@ -1497,6 +1564,10 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   return createSkippedIngestionResult(source.userId);
                 }
                 const ranges = await getRequiredSourceRanges(source.calendarId);
+                const rateLimiter = resolveRateLimiter("ical", {
+                  url: currentSource.url,
+                  userId: currentSource.userId,
+                });
                 const fetcher = createIcsSourceFetcher({
                   calendarId: source.calendarId,
                   url: currentSource.url,
@@ -1515,14 +1586,16 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                 try {
                   const ingestionResult = await ingestSource({
                     calendarId: source.calendarId,
-                    fetchEvents: () =>
-                      fetcher.fetchEvents({
+                    fetchEvents: async () => {
+                      await rateLimiter?.acquire(1, signal);
+                      return await fetcher.fetchEvents({
                         interpretEvents: (events, fetchContext) =>
                           interpretFullDayTimedEventsAsAllDay(events, {
                             calendarTimeZone: fetchContext.calendarTimeZone,
                             enabled: currentSource.treatFullDayTimedEventsAsAllDay,
                           }),
-                      }),
+                      });
+                    },
                     isCurrent,
                     withPersistenceTransaction: createIngestionPersistenceTransaction(
                       source.calendarId,
@@ -1545,7 +1618,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   /* A source that never submitted must not strand its weight. */
                   reservation.release();
                 }
-              }, () => true),
+              }, (error) => !isIngestInfrastructureError(error)),
             );
             if (!result) {
               widelog.set("outcome", "skipped");

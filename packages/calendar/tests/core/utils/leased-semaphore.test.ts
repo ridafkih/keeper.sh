@@ -131,6 +131,29 @@ describe("createLeasedSemaphore", () => {
     expect(waiter.status).toBe("resolved");
   });
 
+  it("does not let a stale holder's release destroy a lease reclaimed after TTL lapse", async () => {
+    const redis = new FakeRedis();
+    const semaphore = createLeasedSemaphore(redis, { capacity: 1, ttlMs: TTL_MS });
+
+    const stale = await semaphore.acquireLease("account-1");
+    // The stale holder's TTL lapses without a release, freeing the slot key.
+    await vi.advanceTimersByTimeAsync(TTL_MS + 1000);
+
+    // A second acquirer reclaims the same slot with a fresh token.
+    const fresh = await semaphore.acquireLease("account-1");
+    expect(fresh.slotKey).toBe(stale.slotKey);
+    expect(fresh.token).not.toBe(stale.token);
+
+    // The stale holder finally releases; it must not delete the fresh lease.
+    await semaphore.release(stale);
+    expect(redis.store.get(fresh.slotKey)?.value).toBe(fresh.token);
+
+    // Capacity bound: with the fresh lease still held, a third acquirer must park.
+    const waiter = probe(semaphore.acquireLease("account-1"));
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    expect(waiter.status).toBe("pending");
+  });
+
   it("stops a parked waiter with the abort reason when the signal aborts", async () => {
     const redis = new FakeRedis();
     const semaphore = createLeasedSemaphore(redis, { capacity: 1, ttlMs: TTL_MS });

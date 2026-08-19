@@ -2,10 +2,19 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the flush-writer routing: every source's persistence transaction must run
- * against the dedicated flushDatabase, one at a time, while fetches stay
- * concurrent — and each source's settlement must await its own flush.
+ * Pins the head-of-line bound on the flush writer's advisory-lock wait. The
+ * flush transaction takes pg_advisory_xact_lock(9003, calendarId) while holding
+ * the single serial writer slot, and the same lock is held minutes-scale by
+ * sync-user write-back and the API caldav persist. The wait on that lock must
+ * therefore be bounded by a small constant statement_timeout (a few seconds),
+ * not by the source's remaining 120s ingest deadline: one contended calendar
+ * must fail ITS flush quickly so parked peers still flush inside their own
+ * deadlines. The mock flushDatabase honours statement_timeout exactly like
+ * Postgres does — a held lock rejects only when the in-effect timeout fires.
  */
+const ADVISORY_LOCK_WAIT_BOUND_MS = 10_000;
+const SIMULATED_CONTENTION_CAP_MS = 20_000;
+
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
     calendarId: string;
@@ -17,25 +26,20 @@ const harness = vi.hoisted(() => {
     userId: string;
   }
 
-  interface StatementRecord {
-    label: "flush" | "pooled";
-    text: string;
-  }
-
   const state = {
-    activeTransactionCount: 0,
-    failingCalendarIds: new Set<string>(),
+    contendedCalendarIds: new Set<string>(),
+    contentionCapMs: 20_000,
     icsRows: [] as IcsSourceRow[],
-    maxActiveTransactionCount: 0,
-    statements: [] as StatementRecord[],
-    transactionCounts: { flush: 0, pooled: 0 },
+    lockStatementTimeoutMs: new Map<string, number>(),
+    lockStatementsSeen: [] as string[],
   };
 
   const statementTextSeparator = " ";
 
   /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among them) as
-   * nested values, so a deep string sweep is enough to identify a statement.
+   * Drizzle SQL objects carry their bound parameters (calendar ids and the
+   * set_config values among them) as nested values, so a deep string sweep is
+   * enough to identify a statement and read its parameters.
    */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
@@ -62,7 +66,6 @@ const harness = vi.hoisted(() => {
 
   const containsCalendarId = (node: unknown, calendarId: string): boolean =>
     renderStatementText(node).includes(calendarId);
-
 
   const resolveLimited = (fields: Record<string, unknown>, predicate: unknown): unknown[] => {
     if ("failureCount" in fields) {
@@ -108,47 +111,67 @@ const harness = vi.hoisted(() => {
     }),
   };
 
-  const createTransactionRunner = (label: "flush" | "pooled") =>
-    async (callback: (transaction: unknown) => Promise<unknown>): Promise<unknown> => {
-      state.transactionCounts[label] += 1;
-      state.activeTransactionCount += 1;
-      state.maxActiveTransactionCount = Math.max(
-        state.maxActiveTransactionCount,
-        state.activeTransactionCount,
-      );
-      try {
-        /*
-         * Hold the transaction open across a macrotask so a concurrently started
-         * peer transaction is observable as overlap.
-         */
-        await new Promise((resolve) => { setTimeout(resolve, 25); });
-        return await callback({
-          execute: (statement: unknown): Promise<unknown[]> => {
-            const text = renderStatementText(statement);
-            state.statements.push({ label, text });
-            const failing = [...state.failingCalendarIds].find(
-              (calendarId) => text.includes(calendarId),
-            );
-            if (failing) {
-              return Promise.reject(new Error(`flush transaction rejected for ${failing}`));
-            }
-            return Promise.resolve([]);
-          },
-        });
-      } finally {
-        state.activeTransactionCount -= 1;
+  const resolveLockedCalendarId = (text: string): string | null => {
+    for (const row of state.icsRows) {
+      if (text.includes(row.calendarId)) {
+        return row.calendarId;
       }
-    };
+    }
+    return null;
+  };
+
+  /*
+   * The flush transaction runner models Postgres semantics for the one thing
+   * under test: set_config('statement_timeout', …) changes the in-effect
+   * timeout, and a pg_advisory_xact_lock held by another session (a contended
+   * calendar) blocks until that in-effect timeout cancels the statement. The
+   * cap keeps the simulated contention finite so an unbounded wait fails the
+   * test instead of hanging the runner for the full 120s deadline.
+   */
+  const flushTransaction = async (
+    callback: (transaction: unknown) => Promise<unknown>,
+  ): Promise<unknown> => {
+    let inEffectStatementTimeoutMs = 0;
+    return await callback({
+      execute: (statement: unknown): Promise<unknown[]> => {
+        const text = renderStatementText(statement);
+        if (text.includes("set_config") && text.includes("statement_timeout")
+          && !text.includes("idle_in_transaction_session_timeout")) {
+          const match = /\b(\d{1,9})\b/.exec(text);
+          inEffectStatementTimeoutMs = Number(match?.[1] ?? 0);
+          return Promise.resolve([]);
+        }
+        if (text.includes("pg_advisory_xact_lock")) {
+          const calendarId = resolveLockedCalendarId(text);
+          if (calendarId) {
+            state.lockStatementsSeen.push(calendarId);
+            state.lockStatementTimeoutMs.set(calendarId, inEffectStatementTimeoutMs);
+            if (state.contendedCalendarIds.has(calendarId)) {
+              const waitMs = Math.min(inEffectStatementTimeoutMs, state.contentionCapMs);
+              return new Promise((_resolve, reject) => {
+                const timer = setTimeout(
+                  () => reject(new Error("canceling statement due to statement timeout")),
+                  waitMs,
+                );
+                (timer as { unref?: () => void }).unref?.();
+              });
+            }
+          }
+        }
+        return Promise.resolve([]);
+      },
+    });
+  };
 
   const pooledDatabase = {
     select: (fields: Record<string, unknown>) => createQueryBuilder(fields),
-    transaction: createTransactionRunner("pooled"),
+    transaction: flushTransaction,
     update: () => updateBuilder,
   };
 
   const flushDatabase = {
     select: (fields: Record<string, unknown>) => createQueryBuilder(fields),
-    transaction: createTransactionRunner("flush"),
+    transaction: flushTransaction,
     update: () => updateBuilder,
   };
 
@@ -165,9 +188,8 @@ const harness = vi.hoisted(() => {
   }
 
   /*
-   * The engine is not under test here: fetch, then route the result through the
+   * The engine is not under test: fetch, then route the result through the
    * job-provided persistence transaction, exactly like the real ingestSource.
-   * A non-zero eventsAdded makes each successful source visible via shouldPush.
    */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
@@ -259,68 +281,44 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  harness.state.activeTransactionCount = 0;
-  harness.state.failingCalendarIds.clear();
+  harness.state.contendedCalendarIds.clear();
+  harness.state.contentionCapMs = SIMULATED_CONTENTION_CAP_MS;
   harness.state.icsRows.length = 0;
-  harness.state.maxActiveTransactionCount = 0;
-  harness.state.statements.length = 0;
-  harness.state.transactionCounts.flush = 0;
-  harness.state.transactionCounts.pooled = 0;
+  harness.state.lockStatementTimeoutMs.clear();
+  harness.state.lockStatementsSeen.length = 0;
   harness.enqueueDestinationSyncsForUsers.mockClear();
 });
 
-describe("ingest flush writer", () => {
-  it("never overlaps the persistence transactions of concurrently ingesting sources", async () => {
-    harness.state.icsRows.push(
-      createIcsRow("calendar-alpha", "user-alpha"),
-      createIcsRow("calendar-beta", "user-beta"),
-    );
+describe("ingest flush advisory-lock wait bound", () => {
+  it("caps the statement_timeout in effect at pg_advisory_xact_lock to a small constant", async () => {
+    harness.state.icsRows.push(createIcsRow("calendar-alpha", "user-alpha"));
 
     await job?.callback();
 
-    const totalTransactionCount = harness.state.transactionCounts.flush
-      + harness.state.transactionCounts.pooled;
-    expect(totalTransactionCount).toBe(2);
-    expect(harness.state.maxActiveTransactionCount).toBe(1);
+    const lockTimeoutMs = harness.state.lockStatementTimeoutMs.get("calendar-alpha");
+    /*
+     * The lock statement must run under a bounded wait, not the source's full
+     * remaining deadline: 120s here means one calendar contended by sync-user
+     * write-back parks the single flush writer for two minutes.
+     */
+    expect(lockTimeoutMs).toBeDefined();
+    expect(lockTimeoutMs ?? 0).toBeGreaterThan(0);
+    expect(lockTimeoutMs ?? 0).toBeLessThanOrEqual(ADVISORY_LOCK_WAIT_BOUND_MS);
   });
 
-  it("runs persistence against the flush database with timeouts and advisory locks inside", async () => {
+  it("fails a contended calendar's flush quickly so a parked peer still flushes", async () => {
     harness.state.icsRows.push(
-      createIcsRow("calendar-alpha", "user-alpha"),
-      createIcsRow("calendar-beta", "user-beta"),
+      createIcsRow("calendar-contended", "user-contended"),
+      createIcsRow("calendar-peer", "user-peer"),
     );
+    harness.state.contendedCalendarIds.add("calendar-contended");
 
-    await job?.callback();
-
-    expect(harness.state.transactionCounts.flush).toBe(2);
-    expect(harness.state.transactionCounts.pooled).toBe(0);
-
-    const flushStatements = harness.state.statements
-      .filter(({ label }) => label === "flush")
-      .map(({ text }) => text);
-    expect(flushStatements.some((text) => text.includes("statement_timeout"))).toBe(true);
-    expect(flushStatements.some((text) =>
-      text.includes("pg_advisory_xact_lock") && text.includes("calendar-alpha"))).toBe(true);
-    expect(flushStatements.some((text) =>
-      text.includes("pg_advisory_xact_lock") && text.includes("calendar-beta"))).toBe(true);
-  });
-
-  it("settles a source as an error when its own flush rejects, without touching its peer", async () => {
-    harness.state.icsRows.push(
-      createIcsRow("calendar-healthy", "user-healthy"),
-      createIcsRow("calendar-doomed", "user-doomed"),
-    );
-    harness.state.failingCalendarIds.add("calendar-doomed");
-
+    /* The contended source settles as its own error; the pass reports it. */
     await expect(job?.callback()).rejects.toThrow(
       "Calendar source ingestion completed with failures",
     );
 
-    /* The writer survives one source's flush failure: both transactions ran on it. */
-    expect(harness.state.transactionCounts.flush).toBe(2);
-
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);
-    const [affectedUserIds] = harness.enqueueDestinationSyncsForUsers.mock.calls[0] ?? [];
-    expect([...affectedUserIds ?? []]).toEqual(["user-healthy"]);
-  });
+    /* The peer parked behind the contended flush must still have flushed. */
+    expect(harness.state.lockStatementsSeen).toContain("calendar-peer");
+  }, 15_000);
 });

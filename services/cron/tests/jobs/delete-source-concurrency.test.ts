@@ -88,20 +88,21 @@ beforeEach(() => {
 describe("global source throttle removal", () => {
   /*
    * Provider protection, fairness, write pressure, and memory each have a
-   * dedicated mechanism now, so the group budget at the oauth and caldav call
-   * sites is effectively unlimited for the fleet (UNBOUNDED_USER_GROUPS =
-   * 1000), while the per-account Graph budget within a pass stays at
-   * USER_CALENDAR_CONCURRENCY = 2. ICS keeps a small dedicated group budget
-   * (ICS_PARSE_CONCURRENCY = 4) because parsing is CPU-bound and starves the
-   * Bun event loop.
+   * dedicated mechanism now, so the oauth and caldav call sites share the
+   * user-group budget (USER_GROUP_CONCURRENCY = 12, sized so groups times
+   * USER_CALENDAR_CONCURRENCY stays within the 25-connection cron pool: every
+   * source performs pooled reads before reserve() can park it), while the
+   * per-account Graph budget within a pass stays at USER_CALENDAR_CONCURRENCY
+   * = 2. ICS keeps a small dedicated group budget (ICS_PARSE_CONCURRENCY = 4)
+   * because parsing is CPU-bound and starves the Bun event loop.
    */
-  it("runs oauth and caldav effectively unbounded and ics at parse concurrency", async () => {
+  it("runs oauth and caldav at the pool-sized user-group budget and ics at parse concurrency", async () => {
     await job?.callback();
 
     expect(capturedOptions).toHaveLength(3);
 
     const unboundedSites = capturedOptions.filter(
-      (options) => options.groupConcurrency === 1000,
+      (options) => options.groupConcurrency === 12,
     );
     const icsSites = capturedOptions.filter(
       (options) => options.groupConcurrency === 4,
@@ -124,7 +125,7 @@ describe("global source throttle removal", () => {
     const source = readFileSync(jobSourcePath, "utf8");
 
     expect(source).not.toContain("SOURCE_CONCURRENCY");
-    expect(source).toContain("UNBOUNDED_USER_GROUPS");
+    expect(source).toContain("USER_GROUP_CONCURRENCY");
     expect(source).toContain("ICS_PARSE_CONCURRENCY");
   });
 });

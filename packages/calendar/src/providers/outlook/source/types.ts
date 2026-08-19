@@ -1,3 +1,5 @@
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+
 interface OutlookCalendarListEntry {
   id: string;
   name: string;
@@ -57,6 +59,7 @@ interface FetchEventsOptions {
   deltaLink?: string;
   timeMin?: Date;
   timeMax?: Date;
+  rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
 }
 

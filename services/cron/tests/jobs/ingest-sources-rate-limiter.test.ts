@@ -118,6 +118,23 @@ describe("resolveRateLimiter", () => {
     expect(factorySpies.host.mock.calls[0]?.[1]).toBe("caldav.example.com");
   });
 
+  /*
+   * CalDAV sources are stored with provider 'caldav', 'fastmail', or 'icloud'
+   * (createCalDAVSourceSchema) — the branded variants must not fall through
+   * the family branch and lose their host politeness budget.
+   */
+  it("keys the branded caldav variants by server host like plain caldav", () => {
+    for (const provider of ["fastmail", "icloud"]) {
+      const limiter = resolveRateLimiter(provider, sourceContext);
+
+      expect(limiter).toBeDefined();
+      expect(typeof limiter?.acquire).toBe("function");
+    }
+    expect(factorySpies.host).toHaveBeenCalledTimes(2);
+    expect(factorySpies.host.mock.calls[0]?.[1]).toBe("caldav.example.com");
+    expect(factorySpies.host.mock.calls[1]?.[1]).toBe("caldav.example.com");
+  });
+
   it("returns a host limiter keyed by the ics feed host", () => {
     const limiter = resolveRateLimiter("ical", sourceContext);
 

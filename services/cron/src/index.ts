@@ -24,10 +24,10 @@ await entry({
     const injectedJobs = injectJobs(jobs);
     registerJobs(injectedJobs);
 
-    return () => {
+    return async (): Promise<void> => {
       destroy();
       shutdownRefreshLockRedis();
-      shutdownDatabases();
+      await shutdownDatabases();
     };
   },
   name: "cron",

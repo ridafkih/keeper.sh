@@ -305,7 +305,8 @@ vi.mock("../../src/context", () => ({
   database: harness.pooledDatabase,
   flushDatabase: harness.flushDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
-  refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },
+  /* The host limiter's acquire script expects [waitTimeMs, occupancy]; 0 wait grants. */
+  refreshLockRedis: { eval: () => Promise.resolve([0, 0]), get: () => Promise.resolve(null) },
   refreshLockStore: { release: () => Promise.resolve(), tryAcquire: () => Promise.resolve(true) },
 }));
 vi.mock("../../src/utils/logging", () => ({

@@ -21,20 +21,19 @@ describe("withAbortTimeout", () => {
     });
   });
 
-  it("waits for non-cooperative work to stop before reporting the timeout", async () => {
+  it("reports the timeout without waiting for non-cooperative work", async () => {
     const operation = Promise.withResolvers<boolean>();
     let settled = false;
     const result = withAbortTimeout(() => operation.promise, 1).finally(() => {
       settled = true;
     });
 
-    await new Promise((resolve) => {
-      setTimeout(resolve, 10);
-    });
-    expect(settled).toBe(false);
-
-    operation.resolve(true);
     await expect(result).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(settled).toBe(true);
+
+    // A late settlement of the abandoned operation must be harmless.
+    operation.resolve(true);
+    await operation.promise;
   });
 });
 

@@ -1,4 +1,5 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
@@ -12,6 +13,7 @@ interface OutlookSourceFetcherConfig {
   calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
+  rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
   plan: SourceIngestionPlan;
 }
@@ -25,6 +27,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
     const fetchOptions: Parameters<typeof fetchCalendarEvents>[0] = {
       accessToken: config.accessToken,
       calendarId: config.externalCalendarId,
+      rateLimiter: config.rateLimiter,
       signal: config.signal,
     };
     const { futureRange, historicRange, window: syncWindow } = config.plan;
