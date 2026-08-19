@@ -14,6 +14,8 @@ interface CalDAVSourceFetcherConfig {
   password: string;
   safeFetchOptions?: SafeFetchOptions;
   plan: SourceIngestionPlan;
+  /* Awaited before every HTTP request the fetch sends to the origin. */
+  onBeforeRequest?: () => Promise<void> | void;
 }
 
 interface CalDAVSourceFetcher {
@@ -24,6 +26,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
   const client = new CalDAVClient({
     authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
+    onBeforeRequest: config.onBeforeRequest,
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);
 

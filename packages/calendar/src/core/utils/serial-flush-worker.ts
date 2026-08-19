@@ -14,6 +14,22 @@ class SerialFlushWorkerClosedError extends Error {
 
 const isSerialFlushWorkerClosedError = (error: unknown): boolean =>
   error instanceof SerialFlushWorkerClosedError;
+
+/*
+ * Run-deadline rejections are likewise infrastructure: the pump's client-side
+ * deadline fired while a wedged flush held the writer, so the caller's
+ * provider was never at fault. Callers classifying errors must be able to
+ * recognize this without matching on message text.
+ */
+class SerialFlushRunDeadlineError extends Error {
+  constructor(deadlineMs: number) {
+    super(`serial flush run exceeded ${deadlineMs}ms deadline`);
+    this.name = "SerialFlushRunDeadlineError";
+  }
+}
+
+const isSerialFlushRunDeadlineError = (error: unknown): boolean =>
+  error instanceof SerialFlushRunDeadlineError;
 /*
  * Express lane for tiny reservations. Large reservations (cold-start fetches
  * sized at an eighth of the budget) can pin 100% of the budget while their
@@ -140,6 +156,8 @@ const createSerialFlushWorker = <TItem, TResult>(
       if (head.aborted()) {
         // An aborted waiter already rejected; drop it so it cannot block the line.
         weightWaiters.shift();
+        // Overtakes were counted against the dropped head; the lane reopens.
+        expressOvertakes = 0;
         continue;
       }
       if (outstandingWeight + head.weight > budget) {
@@ -171,6 +189,8 @@ const createSerialFlushWorker = <TItem, TResult>(
       if (head.aborted()) {
         // An aborted waiter already rejected; drop it so it cannot block the line.
         weightWaiters.shift();
+        // Overtakes were counted against the dropped head; the lane reopens.
+        expressOvertakes = 0;
         continue;
       }
       if (outstandingWeight + head.weight > ceiling) {
@@ -208,7 +228,7 @@ const createSerialFlushWorker = <TItem, TResult>(
       let deadlineExpired = false;
       const timer = setTimeout(() => {
         deadlineExpired = true;
-        next.reject(new Error(`serial flush run exceeded ${deadlineMs}ms deadline`));
+        next.reject(new SerialFlushRunDeadlineError(deadlineMs));
       }, deadlineMs);
       try {
         const value = await run(next.item);
@@ -303,6 +323,7 @@ const createSerialFlushWorker = <TItem, TResult>(
 
   const createReservation = (weight: number): FlushReservation<TItem, TResult> => {
     let freed = false;
+    let submitted = false;
     /*
      * A reservation's weight is freed exactly once: by release() or when its
      * submitted run settles. Further calls are no-ops so the budget never
@@ -316,7 +337,21 @@ const createSerialFlushWorker = <TItem, TResult>(
       outstandingWeight -= weight;
       grantWeight();
     };
+    /*
+     * Callers release() in a finally that also runs when submit() rejected on
+     * a deadline expiry, while the abandoned run still holds its payload and
+     * its flushDatabase transaction. After a submit, settle is therefore the
+     * ONLY path that may free the weight; release() only covers reservations
+     * that never submitted, so a fetch failure cannot strand weight forever.
+     */
+    const release = (): void => {
+      if (submitted) {
+        return;
+      }
+      free();
+    };
     const reservationSubmit = (item: TItem): Promise<TResult> => {
+      submitted = true;
       if (closed) {
         free();
         return Promise.reject(new SerialFlushWorkerClosedError());
@@ -341,7 +376,7 @@ const createSerialFlushWorker = <TItem, TResult>(
         });
       });
     };
-    return { release: free, submit: reservationSubmit };
+    return { release, submit: reservationSubmit };
   };
 
   const reserve = (
@@ -407,6 +442,12 @@ const createSerialFlushWorker = <TItem, TResult>(
       const onAbort = (): void => {
         abortedWhileParked = true;
         reject(signal?.reason);
+        /*
+         * Reap immediately: if this waiter is the FIFO head, waiting for the
+         * next release would leave a phantom head disabling the fast path and
+         * parking reservations that fit the budget right now.
+         */
+        grantWeight();
       };
       const waiter: WeightWaiter = {
         aborted: (): boolean => abortedWhileParked,
@@ -448,7 +489,9 @@ const createSerialFlushWorker = <TItem, TResult>(
 
 export {
   createSerialFlushWorker,
+  isSerialFlushRunDeadlineError,
   isSerialFlushWorkerClosedError,
+  SerialFlushRunDeadlineError,
   SerialFlushWorkerClosedError,
 };
 export type { FlushReservation, SerialFlushWorker, SerialFlushWorkerOptions };

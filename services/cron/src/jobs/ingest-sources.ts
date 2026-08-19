@@ -194,6 +194,28 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
   }
 };
 
+/*
+ * Runs after the ingest's work has already committed, so both the isCurrent
+ * probe and the backoff-reset write are best-effort bookkeeping: a Redis blip
+ * in the probe (or a failed DB write) must never clobber the committed result
+ * with a rejection, and must never feed the backoff escalator.
+ */
+const resetIngestBackoffIfCurrent = async (
+  calendarId: string,
+  isCurrent: () => Promise<boolean>,
+): Promise<void> => {
+  try {
+    if (await isCurrent()) {
+      await resetIngestBackoff(calendarId);
+    }
+  } catch (error) {
+    widelog.errorFields(error, {
+      slug: "ingest-backoff-reset-failed",
+      retriable: true,
+    });
+  }
+};
+
 const runSourceIngest = async <TResult>(
   calendarId: string,
   signal: AbortSignal,
@@ -223,8 +245,8 @@ const runSourceIngest = async <TResult>(
     }
     try {
       const result = await work(lockResult.handle.isCurrent);
-      if (attempt.failureCount > 0 && await lockResult.handle.isCurrent()) {
-        await resetIngestBackoff(calendarId);
+      if (attempt.failureCount > 0) {
+        await resetIngestBackoffIfCurrent(calendarId, lockResult.handle.isCurrent);
       }
       return result;
     } catch (error) {
@@ -234,7 +256,16 @@ const runSourceIngest = async <TResult>(
       throw error;
     }
   } finally {
-    await lockResult.handle.release();
+    /*
+     * The lock TTL already reclaims the hold, so a failed release must never
+     * clobber the ingest result with a rejection.
+     */
+    await lockResult.handle.release().catch((error: unknown) => {
+      widelog.errorFields(error, {
+        slug: "source-lock-release-failed",
+        retriable: true,
+      });
+    });
   }
 };
 
@@ -426,7 +457,12 @@ const createIngestionPersistenceTransaction = (
   (work: IngestionPersistenceWork) => {
     const ledger = createPersistenceLedger();
     const requestedAt = performance.now();
-    return reservation.submit(() => flushDatabase.transaction(async (transaction) => {
+    /*
+     * The submitted thunk carries the source's absolute deadline so the flush
+     * worker's resolveRunDeadlineMs bounds a wedged run by this source's own
+     * deadline instead of the generic ten-minute fallback.
+     */
+    return reservation.submit(Object.assign(() => flushDatabase.transaction(async (transaction) => {
     ledger.grantedAt = performance.now();
     const setRemainingStatementTimeout = async (): Promise<void> => {
       signal.throwIfAborted();
@@ -574,7 +610,7 @@ const createIngestionPersistenceTransaction = (
       signal.throwIfAborted();
       ledger.callbackReturnedAt = performance.now();
       return result;
-    })).finally(() => {
+    }), { deadlineAt })).finally(() => {
       /*
        * This is the one instrumentation site whose own failure could rewrite the
        * ingest's result: a throw here would reject a committed transaction, or
@@ -1396,6 +1432,14 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 });
                 const fetcher = createCalDAVSourceFetcher({
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
+                  /*
+                   * The host budget meters requests per minute, and a CalDAV
+                   * fetch issues discovery plus one REPORT per multiget batch,
+                   * so every origin request draws its own permit.
+                   */
+                  onBeforeRequest: async () => {
+                    await rateLimiter?.acquire(1, signal);
+                  },
                   serverUrl: currentSource.serverUrl,
                   username: currentSource.username,
                   password: decryptPassword(currentSource.encryptedPassword, encryptionKey),
@@ -1414,7 +1458,6 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   const ingestionResult = await ingestSource({
                     calendarId: source.calendarId,
                     fetchEvents: async () => {
-                      await rateLimiter?.acquire(1, signal);
                       const fetchResult = await fetcher.fetchEvents();
                       recordSkippedResources(
                         fetchResult.skippedResourceCount ?? 0,

@@ -8,6 +8,7 @@ import {
   waitForDatabaseMigrations,
 } from "@keeper.sh/database";
 import { destroy } from "./utils/logging";
+import { baker } from "./utils/baker";
 import { checkWorkerMigrationStatus } from "./migration-check";
 import env from "./env";
 
@@ -25,6 +26,7 @@ await entry({
     registerJobs(injectedJobs);
 
     return async (): Promise<void> => {
+      baker.stopAll();
       destroy();
       shutdownRefreshLockRedis();
       await shutdownDatabases();

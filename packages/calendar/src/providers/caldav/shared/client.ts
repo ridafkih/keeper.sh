@@ -188,6 +188,14 @@ class CalDAVClient {
     return this.resolvedAuthMethod?.() ?? null;
   }
 
+  /*
+   * The host rate limiter meters requests per minute, so every origin request
+   * must draw its own permit before it is sent.
+   */
+  private async chargeRequest(): Promise<void> {
+    await this.config.onBeforeRequest?.();
+  }
+
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
@@ -212,6 +220,7 @@ class CalDAVClient {
   async discoverCalendars(): Promise<CalendarInfo[]> {
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
+      await this.chargeRequest();
       return measureProviderRequest(() => client.fetchCalendars());
     });
 
@@ -242,6 +251,7 @@ class CalDAVClient {
     iCalString: string;
   }): Promise<void> {
     const client = await this.getClient();
+    await this.chargeRequest();
 
     const response = await client.createCalendarObject({
       calendar: { url: params.calendarUrl },
@@ -272,6 +282,7 @@ class CalDAVClient {
     etag?: string;
   }): Promise<void> {
     const client = await this.getClient();
+    await this.chargeRequest();
 
     const response = await client.deleteCalendarObject({
       calendarObject: { url: params.objectUrl, etag: params.etag },
@@ -287,6 +298,7 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
+      await this.chargeRequest();
       const objects = await client.fetchCalendarObjects({
         calendar: { url: params.calendarUrl },
         objectUrls: [objectUrl],
@@ -305,6 +317,7 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
 
+      await this.chargeRequest();
       const queryResponses = await measureProviderRequest(() => client.calendarQuery({
         depth: "1",
         filters: buildCalendarObjectFilters(params.timeRange),
@@ -328,6 +341,7 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
+        await this.chargeRequest();
         const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
           calendar: { url: params.calendarUrl },
           objectUrls,

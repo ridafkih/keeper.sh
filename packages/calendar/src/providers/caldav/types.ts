@@ -75,6 +75,8 @@ interface CalDAVClientConfig {
     password: string;
   };
   authMethod?: "basic" | "digest";
+  /* Awaited before every HTTP request the client sends to the origin. */
+  onBeforeRequest?: () => Promise<void> | void;
 }
 
 interface CalendarInfo {
