@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createHostRateLimiter } from "../../../src/core/utils/redis-rate-limiter";
 
-const DEFAULT_HOST_REQUESTS_PER_WINDOW = 30;
+const DEFAULT_HOST_REQUESTS_PER_WINDOW = 600;
 
 const acquireArguments = async (host: string): Promise<string[]> => {
   const redis = { eval: vi.fn(() => Promise.resolve([0, 0])) };
@@ -25,7 +25,7 @@ describe("createHostRateLimiter", () => {
     expect(fastmailKey).not.toBe(icloudKey);
   });
 
-  it("defaults to a modest budget of 30 requests per window", async () => {
+  it("defaults to a budget that spans many calendars on a shared host", async () => {
     const limitArguments = await acquireArguments("caldav.fastmail.com");
 
     expect(Number(limitArguments.at(-1))).toBe(DEFAULT_HOST_REQUESTS_PER_WINDOW);

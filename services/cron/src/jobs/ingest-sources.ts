@@ -94,18 +94,18 @@ const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
  */
 const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
 /*
- * Sized to the shared cron database pool (DATABASE_POOL_MAX 25 in deploy/compose.yaml):
- * every launched source performs pooled reads BEFORE the weighted reserve() can park it,
- * so groups times USER_CALENDAR_CONCURRENCY must stay within the pool with headroom for
- * the other cron jobs sharing `database`.
- */
-const USER_GROUP_CONCURRENCY = 12;
-/*
  * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
  * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
  * independently, so combined traffic can still reach the provider limit.
  */
 const USER_CALENDAR_CONCURRENCY = 2;
+const DEFAULT_DATABASE_POOL_MAX = 10;
+const CONCURRENTLY_RUNNING_INGEST_FAMILIES = 3;
+const CRON_DATABASE_POOL_MAX = env.DATABASE_POOL_MAX ?? DEFAULT_DATABASE_POOL_MAX;
+const USER_GROUP_CONCURRENCY = Math.floor(
+  CRON_DATABASE_POOL_MAX
+  / (CONCURRENTLY_RUNNING_INGEST_FAMILIES * USER_CALENDAR_CONCURRENCY),
+);
 /*
  * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
  * the Bun event loop when run wide open — observed 2026-08-17.

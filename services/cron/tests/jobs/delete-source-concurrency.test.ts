@@ -78,25 +78,27 @@ beforeEach(() => {
   capturedOptions.length = 0;
 });
 
+const CRON_DATABASE_POOL_MAX = 25;
+
 describe("global source throttle removal", () => {
   it("runs oauth and caldav at the pool-sized user-group budget and ics at parse concurrency", async () => {
     await job?.callback();
 
     expect(capturedOptions).toHaveLength(3);
 
-    const unboundedSites = capturedOptions.filter(
-      (options) => options.groupConcurrency === 12,
-    );
-    const icsSites = capturedOptions.filter(
-      (options) => options.groupConcurrency === 4,
-    );
+    const [oauthSite, caldavSite, icsSite] = capturedOptions;
 
-    expect(unboundedSites).toHaveLength(2);
-    expect(icsSites).toHaveLength(1);
+    expect(oauthSite?.groupConcurrency).toBe(caldavSite?.groupConcurrency);
+    expect(oauthSite?.taskConcurrency).toBe(2);
+    expect(caldavSite?.taskConcurrency).toBe(2);
+    expect(icsSite?.taskConcurrency).toBe(2);
 
-    for (const options of unboundedSites) {
-      expect(options.taskConcurrency).toBe(2);
+    let launchFrontSummedAcrossFamilies = 0;
+    for (const options of capturedOptions) {
+      launchFrontSummedAcrossFamilies
+        += Number(options.groupConcurrency) * Number(options.taskConcurrency);
     }
+    expect(launchFrontSummedAcrossFamilies).toBeLessThanOrEqual(CRON_DATABASE_POOL_MAX);
   });
 
   it("deletes SOURCE_CONCURRENCY from the job in favor of the named budgets", () => {

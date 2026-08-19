@@ -188,7 +188,7 @@ const createGoogleUserRateLimiter = (
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
 
-const HOST_REQUESTS_PER_MINUTE = 30;
+const HOST_REQUESTS_PER_MINUTE = 600;
 
 interface HostRateLimiterOptions {
   requestsPerMinute?: number;

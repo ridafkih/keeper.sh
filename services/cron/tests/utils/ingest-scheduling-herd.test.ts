@@ -23,6 +23,14 @@ const readProductionConstant = (source: string, name: string): number => {
   return Number(match[1].replaceAll("_", ""));
 };
 
+const readGroupConcurrency = (source: string): number => Math.floor(
+  readProductionConstant(source, "DEFAULT_DATABASE_POOL_MAX")
+  / (
+    readProductionConstant(source, "CONCURRENTLY_RUNNING_INGEST_FAMILIES")
+    * readProductionConstant(source, "USER_CALENDAR_CONCURRENCY")
+  ),
+);
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -31,7 +39,7 @@ const sleep = (ms: number): Promise<void> =>
 describe("per-pass ingest scheduling", () => {
   it("keeps concurrently launched source tasks within the database pool", async () => {
     const source = await Bun.file(INGEST_SOURCES_PATH).text();
-    const groupConcurrency = readProductionConstant(source, "USER_GROUP_CONCURRENCY");
+    const groupConcurrency = readGroupConcurrency(source);
     const taskConcurrency = readProductionConstant(source, "USER_CALENDAR_CONCURRENCY");
 
     /* Full groups at full width: the shape that maximises simultaneous launches. */
@@ -61,5 +69,11 @@ describe("per-pass ingest scheduling", () => {
     });
 
     expect(peakInFlight).toBeLessThanOrEqual(CRON_DATABASE_POOL_MAX);
+
+    const concurrentFamilies = readProductionConstant(
+      source,
+      "CONCURRENTLY_RUNNING_INGEST_FAMILIES",
+    );
+    expect(peakInFlight * concurrentFamilies).toBeLessThanOrEqual(CRON_DATABASE_POOL_MAX);
   });
 });
