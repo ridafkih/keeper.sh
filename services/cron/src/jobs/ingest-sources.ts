@@ -99,10 +99,6 @@ const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
 const USER_CALENDAR_CONCURRENCY = UNBOUNDED_USER_GROUPS;
-/*
- * ICS keeps its own: parsing is CPU-bound and starves the Bun event loop when run wide
- * open, and the group budget below bounds feeds across users, not within one.
- */
 const ICS_CALENDAR_CONCURRENCY = 2;
 
 /*
