@@ -21,10 +21,6 @@ const inFlightRefreshByCredentialId = new Map<string, Promise<CredentialRefreshR
 const ACQUIRE_RETRY_MS = 100;
 const ACQUIRE_BUDGET_MS = REFRESH_LOCK_TTL_SECONDS * 1000;
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => {
-  setTimeout(resolve, ms);
-});
-
 const adoptPeerCredential = async (
   readFreshCredential: ReadFreshCredential | null,
 ): Promise<CredentialRefreshResult | null> => {
@@ -34,6 +30,27 @@ const adoptPeerCredential = async (
   }
   widelog.set("token.refresh_adopted_peer", true);
   return persisted;
+};
+
+/* Resolves to the peer's credential, or to null once this caller holds the lock itself. */
+const acquireOrAdopt = async (
+  tryAcquire: () => Promise<boolean>,
+  readFreshCredential: ReadFreshCredential | null,
+): Promise<CredentialRefreshResult | null> => {
+  const deadlineAt = Date.now() + ACQUIRE_BUDGET_MS;
+  for (;;) {
+    if (await tryAcquire()) {
+      return null;
+    }
+    const adopted = await adoptPeerCredential(readFreshCredential);
+    if (adopted) {
+      return adopted;
+    }
+    if (Date.now() >= deadlineAt) {
+      throw new Error("Token refresh already in progress on another instance");
+    }
+    await Bun.sleep(ACQUIRE_RETRY_MS);
+  }
 };
 
 const executeWithDistributedLock = async (
@@ -50,18 +67,9 @@ const executeWithDistributedLock = async (
     .tryAcquire(lockKey, REFRESH_LOCK_TTL_SECONDS)
     .catch(() => false);
 
-  let holdsLock = await tryAcquire();
-  const deadlineAt = Date.now() + ACQUIRE_BUDGET_MS;
-  while (!holdsLock) {
-    const adopted = await adoptPeerCredential(readFreshCredential);
-    if (adopted) {
-      return adopted;
-    }
-    if (Date.now() >= deadlineAt) {
-      throw new Error("Token refresh already in progress on another instance");
-    }
-    await sleep(ACQUIRE_RETRY_MS);
-    holdsLock = await tryAcquire();
+  const adoptedWhileWaiting = await acquireOrAdopt(tryAcquire, readFreshCredential);
+  if (adoptedWhileWaiting) {
+    return adoptedWhileWaiting;
   }
 
   try {
