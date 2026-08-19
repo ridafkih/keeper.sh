@@ -96,14 +96,21 @@ const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
  * parking every queued flush behind it while it holds the single serial writer slot.
  */
 const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
-/*
- * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
- * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
- * independently, so combined traffic can still reach the provider limit.
- */
-const USER_CALENDAR_CONCURRENCY = 2;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
+/*
+ * Every provider family now meters itself: Google per user, iCloud and Fastmail per
+ * account, a self-hosted server per host, and Graph's MailboxConcurrency through the
+ * account semaphore, which is Redis-backed and so also covers the worker traffic a
+ * per-pass integer never could. A second ceiling here only decides which of one
+ * person's calendars waits for the others.
+ */
+const USER_CALENDAR_CONCURRENCY = UNBOUNDED_USER_GROUPS;
+/*
+ * ICS keeps its own: parsing is CPU-bound and starves the Bun event loop when run wide
+ * open, and the group budget below bounds feeds across users, not within one.
+ */
+const ICS_CALENDAR_CONCURRENCY = 2;
 
 /*
  * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
@@ -1719,7 +1726,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
       SOURCE_TIMEOUT_MS);
     }),
 icsSources.map((source) => source.userId),
-    { groupConcurrency: ICS_PARSE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: ICS_PARSE_CONCURRENCY, taskConcurrency: ICS_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
