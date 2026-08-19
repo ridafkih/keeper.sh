@@ -30,6 +30,26 @@ class SerialFlushRunDeadlineError extends Error {
 
 const isSerialFlushRunDeadlineError = (error: unknown): boolean =>
   error instanceof SerialFlushRunDeadlineError;
+
+/*
+ * A reserve abort fired while the caller was still parked on the worker's own
+ * budget — reserve-before-fetch ordering means the caller's provider was never
+ * contacted — so error classifiers must be able to tell this apart from the
+ * same deadline error class raised later, during a provider fetch. The abort
+ * reason is flagged in place (never wrapped) so its identity and class are
+ * preserved for callers that assert on either.
+ */
+const RESERVE_ABORT_FLAG = "serialFlushReserveAborted";
+
+const flagReserveAbortReason = (reason: unknown): void => {
+  if (reason instanceof Error) {
+    Object.assign(reason, { [RESERVE_ABORT_FLAG]: true });
+  }
+};
+
+const isSerialFlushReserveAbortError = (error: unknown): boolean =>
+  error instanceof Error &&
+  (error as Error & Record<string, unknown>)[RESERVE_ABORT_FLAG] === true;
 /*
  * Express lane for tiny reservations. Large reservations (cold-start fetches
  * sized at an eighth of the budget) can pin 100% of the budget while their
@@ -390,6 +410,8 @@ const createSerialFlushWorker = <TItem, TResult>(
       return Promise.reject(new Error("reserve requires a budget"));
     }
     if (signal?.aborted) {
+      // The deadline burned out before the provider fetch could even be gated.
+      flagReserveAbortReason(signal.reason);
       return Promise.reject(signal.reason);
     }
     /*
@@ -441,6 +463,7 @@ const createSerialFlushWorker = <TItem, TResult>(
       let abortedWhileParked = false;
       const onAbort = (): void => {
         abortedWhileParked = true;
+        flagReserveAbortReason(signal?.reason);
         reject(signal?.reason);
         /*
          * Reap immediately: if this waiter is the FIFO head, waiting for the
@@ -489,6 +512,7 @@ const createSerialFlushWorker = <TItem, TResult>(
 
 export {
   createSerialFlushWorker,
+  isSerialFlushReserveAbortError,
   isSerialFlushRunDeadlineError,
   isSerialFlushWorkerClosedError,
   SerialFlushRunDeadlineError,

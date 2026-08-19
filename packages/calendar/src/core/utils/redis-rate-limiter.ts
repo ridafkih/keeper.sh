@@ -5,6 +5,7 @@ import {
 import { widelog } from "widelogger";
 import { measureRedisCommand, recordSegment } from "../telemetry/segments";
 import { createLeasedSemaphore } from "./leased-semaphore";
+import { flagPacingParkAbortReason } from "./pacing-park";
 import type { RedisLeaseClient, SemaphoreLease } from "./leased-semaphore";
 
 const MS_PER_MINUTE = 60_000;
@@ -95,16 +96,23 @@ const sleep = (delayMs: number): Promise<void> =>
     setTimeout(resolve, delayMs);
   });
 
+/*
+ * Reached only after a throttled decision: the caller is parked on the shared
+ * pacing window, ahead of the provider request the permit would authorize, so
+ * an abort observed here is stamped as a pacing park (see pacing-park.ts).
+ */
 const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
     return sleep(delayMs);
   }
   if (signal.aborted) {
+    flagPacingParkAbortReason(signal.reason);
     return Promise.reject(signal.reason);
   }
   return new Promise((resolve, reject) => {
     const timeoutSignal = AbortSignal.timeout(delayMs);
     const onAbort = (): void => {
+      flagPacingParkAbortReason(signal.reason);
       reject(signal.reason);
     };
     const onTimeout = (): void => {

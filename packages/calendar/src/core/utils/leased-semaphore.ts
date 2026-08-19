@@ -1,4 +1,5 @@
 import { measureRedisCommand } from "../telemetry/segments";
+import { flagPacingParkAbortReason } from "./pacing-park";
 
 const RETRY_BASE_MS = 200;
 const RETRY_JITTER_MS = 150;
@@ -26,8 +27,15 @@ interface RedisLeaseClient {
   set(key: string, value: string, ...options: string[]): Promise<string | null>;
 }
 
+/*
+ * Reached only after every slot came back claimed: the caller is parked on
+ * keeper's own concurrency cap, ahead of any request the lease would
+ * authorize, so an abort observed here is stamped as a pacing park (see
+ * pacing-park.ts).
+ */
 const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (signal?.aborted) {
+    flagPacingParkAbortReason(signal.reason);
     return Promise.reject(signal.reason);
   }
   return new Promise((resolve, reject) => {
@@ -36,6 +44,7 @@ const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> =
       if (timer !== null) {
         clearTimeout(timer);
       }
+      flagPacingParkAbortReason(signal?.reason);
       reject(signal?.reason);
     };
     timer = setTimeout(() => {
