@@ -7,10 +7,17 @@ interface PushDestinationJob {
   name: string;
   opts: {
     jobId: string;
+    priority: number;
     removeOnComplete: true;
     removeOnFail: true;
   };
 }
+
+// BullMQ treats priority 0 as unprioritized and drains that FIFO ahead of the prioritized set, so both lanes must stay above zero to stay comparable.
+const jobPriorityByTrigger: Record<PushSyncTrigger, number> = {
+  push: 1,
+  cron: 2,
+};
 
 // The stable job id is load-bearing: BullMQ dedups enqueues on it.
 // A running sync therefore never gains a queued replacement that supersedes or cancels it, which used to livelock.
@@ -29,6 +36,7 @@ const buildPushDestinationJobs = (
     data: { calendarId, userId, plan, correlationId, trigger },
     opts: {
       jobId: `sync-${userId}-${calendarId}`,
+      priority: jobPriorityByTrigger[trigger],
       removeOnComplete: true,
       removeOnFail: true,
     },

@@ -8,8 +8,6 @@ import {
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
   createGoogleUserRateLimiter,
-  createConcurrencyGate,
-  createSerialFlushWorker,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
   isCalDAVProvider,
@@ -32,7 +30,7 @@ import {
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
 import type { SemaphoreLease } from "@keeper.sh/calendar";
-import type { FlushReservation, IngestionResult } from "@keeper.sh/calendar";
+import type { IngestionResult } from "@keeper.sh/calendar";
 import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, OutlookAccountSemaphore, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
@@ -62,7 +60,6 @@ import { context, widelog } from "@/utils/logging";
 import {
   database,
   flushDatabase,
-  flushDrainRegistry,
   refreshLockRedis,
   refreshLockStore,
 } from "@/context";
@@ -83,8 +80,9 @@ import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
-import { WEIGHT_BUDGET, estimateIngestWeight } from "@/utils/ingest-weight";
-import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
+import { estimateIngestWeight } from "@/utils/ingest-weight";
+import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
+import type { IngestFlushReservation, IngestLane } from "@/utils/ingest-lanes";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
@@ -101,20 +99,9 @@ const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
  * independently, so combined traffic can still reach the provider limit.
  */
 const USER_CALENDAR_CONCURRENCY = 2;
-const DEFAULT_DATABASE_POOL_MAX = 10;
-const CRON_DATABASE_POOL_MAX = env.DATABASE_POOL_MAX ?? DEFAULT_DATABASE_POOL_MAX;
-const POOL_CONNECTIONS_RESERVED_FOR_OTHER_JOBS = 5;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
 
-/*
- * Sources fan out unbounded and spend almost all of their time in provider I/O, but each
- * still makes a handful of short pooled reads before the weighted reserve can park it.
- * Gating those keeps concurrent queries inside the pool no matter how wide the fan-out.
- */
-const pooledQueryGate = createConcurrencyGate(
-  CRON_DATABASE_POOL_MAX - POOL_CONNECTIONS_RESERVED_FOR_OTHER_JOBS,
-);
 /*
  * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
  * the Bun event loop when run wide open — observed 2026-08-17.
@@ -153,27 +140,29 @@ const leaseLockRedis: RedisLeaseClient = {
 };
 
 const measureDatabaseRead = async <TResult>(
+  lane: IngestLane,
   read: () => PromiseLike<TResult>,
 ): Promise<TResult> => {
   widelog.count("db.read_count", 1);
   return await measureSegment(
     "work.db_read_ms",
-    async () => await pooledQueryGate.run(async () => await read()),
+    async () => await lane.pooledQueryGate.run(async () => await read()),
   );
 };
 
 const measureDatabaseWrite = async <TResult>(
+  lane: IngestLane,
   write: () => PromiseLike<TResult>,
 ): Promise<TResult> => {
   widelog.count("db.write_count", 1);
   return await measureSegment(
     "work.db_write_ms",
-    async () => await pooledQueryGate.run(async () => await write()),
+    async () => await lane.pooledQueryGate.run(async () => await write()),
   );
 };
 
-const resetIngestBackoff = async (calendarId: string): Promise<void> => {
-  await measureDatabaseWrite(() => database
+const resetIngestBackoff = async (lane: IngestLane, calendarId: string): Promise<void> => {
+  await measureDatabaseWrite(lane, () => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: 0,
@@ -184,11 +173,12 @@ const resetIngestBackoff = async (calendarId: string): Promise<void> => {
 };
 
 const applyIngestBackoff = async (
+  lane: IngestLane,
   calendarId: string,
   currentFailureCount: number,
 ): Promise<CalendarBackoffState> => {
   const state = buildCalendarBackoffState(currentFailureCount);
-  await measureDatabaseWrite(() => database
+  await measureDatabaseWrite(lane, () => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: state.failureCount,
@@ -211,12 +201,13 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
  * never clobber the committed result with a rejection, nor feed the backoff escalator.
  */
 const resetIngestBackoffIfCurrent = async (
+  lane: IngestLane,
   calendarId: string,
   isCurrent: () => Promise<boolean>,
 ): Promise<void> => {
   try {
     if (await isCurrent()) {
-      await resetIngestBackoff(calendarId);
+      await resetIngestBackoff(lane, calendarId);
     }
   } catch (error) {
     widelog.errorFields(error, {
@@ -227,6 +218,7 @@ const resetIngestBackoffIfCurrent = async (
 };
 
 const runSourceIngest = async <TResult>(
+  lane: IngestLane,
   calendarId: string,
   signal: AbortSignal,
   work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
@@ -242,7 +234,7 @@ const runSourceIngest = async <TResult>(
     return null;
   }
   try {
-    const [attempt] = await measureDatabaseRead(() => database
+    const [attempt] = await measureDatabaseRead(lane, () => database
       .select({
         failureCount: calendarsTable.ingestFailureCount,
         nextAttemptAt: calendarsTable.ingestNextAttemptAt,
@@ -256,12 +248,12 @@ const runSourceIngest = async <TResult>(
     try {
       const result = await work(lockResult.handle.isCurrent);
       if (attempt.failureCount > 0) {
-        await resetIngestBackoffIfCurrent(calendarId, lockResult.handle.isCurrent);
+        await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
       }
       return result;
     } catch (error) {
       if (shouldApplyBackoff(error)) {
-        logIngestBackoff(await applyIngestBackoff(calendarId, attempt.failureCount));
+        logIngestBackoff(await applyIngestBackoff(lane, calendarId, attempt.failureCount));
       }
       throw error;
     }
@@ -390,33 +382,9 @@ const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): 
   }
 };
 
-/*
- * Collection is concurrent but writing is not, so high fetch concurrency can never open
- * concurrent write transactions against Postgres. The bound matters as much as the
- * serialization: a bare promise chain would also serialize, but with nothing to stop an
- * unbounded backlog of fetched payloads queueing behind a slow flush.
- */
-const FLUSH_QUEUE_CAPACITY = 50;
-
-/*
- * Memory-weighted rather than item-counted: a source reserves its estimated payload weight
- * BEFORE its fetch begins, so a full budget stops fetches and blocked collectors hold nothing.
- */
-const ingestFlushWriter = createSerialFlushWorker(
-  (task: () => Promise<IngestionResult>) => task(),
-  {
-    budget: WEIGHT_BUDGET,
-    capacity: FLUSH_QUEUE_CAPACITY,
-    writerConcurrency: FLUSH_WRITER_CONNECTIONS,
-  },
-);
-
-flushDrainRegistry.register(() => ingestFlushWriter.close());
-
-type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, IngestionResult>;
-
 /* The wait is its own segment so "the budget was full" never masquerades as rate limiting. */
 const reserveIngestFlushWeight = async (
+  lane: IngestLane,
   calendarId: string,
   hasEverIngested: boolean,
   signal: AbortSignal,
@@ -424,7 +392,7 @@ const reserveIngestFlushWeight = async (
   const weight = await estimateIngestWeight(
     {
       countStoredEvents: async (targetCalendarId: string): Promise<number> => {
-        const rows = await measureDatabaseRead(() => database
+        const rows = await measureDatabaseRead(lane, () => database
           .select({ count: count() })
           .from(eventStatesTable)
           .where(eq(eventStatesTable.calendarId, targetCalendarId)));
@@ -436,7 +404,7 @@ const reserveIngestFlushWeight = async (
   );
   return await measureSegment(
     "wait.flush_reserve_ms",
-    () => ingestFlushWriter.reserve(weight, signal),
+    () => lane.flushWriter.reserve(weight, signal),
   );
 };
 
@@ -734,9 +702,10 @@ const resolveRateLimiter = (
 };
 
 const getRequiredSourceRanges = async (
+  lane: IngestLane,
   sourceCalendarId: string,
 ): Promise<RequiredSourceRanges> => {
-  const mappings = await measureDatabaseRead(() => database
+  const mappings = await measureDatabaseRead(lane, () => database
     .select({
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
@@ -918,6 +887,7 @@ const resolveRaiseSignal = (
 };
 
 const applyReauthenticationDemands = async (
+  lane: IngestLane,
   demands: ReauthenticationDemandRecord[],
   recordedDemandSources: Map<string, string | null>,
 ): Promise<void> => {
@@ -943,7 +913,7 @@ const applyReauthenticationDemands = async (
           widelog.set("outcome", "skipped");
           return;
         }
-        const written = await measureDatabaseWrite(() => database
+        const written = await measureDatabaseWrite(lane, () => database
           .update(calendarAccountsTable)
           .set({
             needsReauthentication,
@@ -1035,6 +1005,7 @@ const collectRecordedDemandSources = (
   );
 
 const summariseIngestionSettlements = async (
+  lane: IngestLane,
   settlements: PromiseSettledResult<IngestionSourceResult>[],
   accounts: SourceAccountContext[],
 ): Promise<IngestionBatchResult> => {
@@ -1044,6 +1015,7 @@ const summariseIngestionSettlements = async (
     .map(({ value }) => value);
 
   await applyReauthenticationDemands(
+    lane,
     collectReauthenticationDemands(settlements, accounts),
     collectRecordedDemandSources(accounts),
   );
@@ -1079,10 +1051,22 @@ const resolveIngestTrigger = (calendarIds: string[] | undefined): string => {
   return "cron";
 };
 
+/*
+ * A drain names the calendars a webhook woke, so its ingest runs in the push lane and
+ * cannot be parked behind a fleet pass that has fanned out over every source.
+ */
+const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
+  if (calendarIds) {
+    return pushIngestLane;
+  }
+  return fleetIngestLane;
+};
+
 const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatchResult> => {
   if (calendarIds && calendarIds.length === 0) {
     return createEmptyIngestionBatchResult();
   }
+  const lane = resolveIngestLane(calendarIds);
 
   const oauthSources = await database
     .select({
@@ -1140,8 +1124,8 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(() => database
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+                const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
@@ -1197,7 +1181,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                   );
                 }
 
-                const ranges = await getRequiredSourceRanges(source.calendarId);
+                const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const ingestionState = resolveOAuthIngestionState({
                   futureRange: currentSource.ingestFutureRange,
                   historicRange: currentSource.ingestHistoricRange,
@@ -1230,6 +1214,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                   return createSkippedIngestionResult(currentSource.userId);
                 }
                 const reservation = await reserveIngestFlushWeight(
+                  lane,
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
@@ -1319,6 +1304,7 @@ oauthSources.map((source) => source.userId),
   );
 
   return summariseIngestionSettlements(
+    lane,
     settlements,
     oauthSources.map(({ accountId, reauthenticationSource }) => ({
       accountId,
@@ -1327,7 +1313,7 @@ oauthSources.map((source) => source.userId),
   );
 };
 
-const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
+const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
   if (!env.ENCRYPTION_KEY) {
     return { added: 0, affectedUserIds: [], removed: 0, errors: 0 };
   }
@@ -1381,8 +1367,8 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(() => database
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+                const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -1412,7 +1398,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 if (!currentSource) {
                   return createSkippedIngestionResult(source.userId);
                 }
-                const ranges = await getRequiredSourceRanges(source.calendarId);
+                const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const rateLimiter = resolveRateLimiter(currentSource.provider, {
                   serverUrl: currentSource.serverUrl,
                   userId: currentSource.userId,
@@ -1432,6 +1418,7 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                   ),
                 });
                 const reservation = await reserveIngestFlushWeight(
+                  lane,
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
@@ -1518,6 +1505,7 @@ caldavSources.map((source) => source.userId),
   );
 
   return summariseIngestionSettlements(
+    lane,
     settlements,
     caldavSources.map(({ accountId, reauthenticationSource }) => ({
       accountId,
@@ -1526,7 +1514,7 @@ caldavSources.map((source) => source.userId),
   );
 };
 
-const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
+const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
   const icsSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -1566,8 +1554,8 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(() => database
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+                const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
@@ -1587,7 +1575,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                 if (!currentSource?.url) {
                   return createSkippedIngestionResult(source.userId);
                 }
-                const ranges = await getRequiredSourceRanges(source.calendarId);
+                const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const rateLimiter = resolveRateLimiter("ical", {
                   url: currentSource.url,
                   userId: currentSource.userId,
@@ -1603,6 +1591,7 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                   ),
                 });
                 const reservation = await reserveIngestFlushWeight(
+                  lane,
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
@@ -1673,6 +1662,7 @@ icsSources.map((source) => source.userId),
   );
 
   return summariseIngestionSettlements(
+    lane,
     settlements,
     icsSources.map(() => ({ accountId: null, recordedDemandSource: null })),
   );
@@ -1682,8 +1672,8 @@ export default withCronWideEvent({
   async callback() {
     const settlements = await Promise.allSettled([
       ingestOAuthSources(),
-      ingestCalDAVSources(),
-      ingestIcsSources(),
+      ingestCalDAVSources(fleetIngestLane),
+      ingestIcsSources(fleetIngestLane),
     ]);
     const failures: unknown[] = [];
     let failedSourceCount = 0;
