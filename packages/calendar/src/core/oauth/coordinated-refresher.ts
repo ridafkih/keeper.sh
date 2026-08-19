@@ -1,4 +1,4 @@
-import type { RefreshLockStore } from "./refresh-coordinator";
+import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 import { isOAuthReauthRequiredError } from "./error-classification";
 import {
@@ -63,8 +63,36 @@ interface CoordinatedRefresherOptions {
   }>;
 }
 
+const REFRESH_ADOPTION_SKEW_MS = 60_000;
+
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
   const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+
+  /*
+   * A peer that won the lock persists before releasing it, so its result is readable here.
+   * Refreshing again would rotate the refresh token out from under it.
+   */
+  const readFreshCredential = async (): Promise<CredentialRefreshResult | null> => {
+    const [stored] = await database
+      .select({
+        accessToken: oauthCredentialsTable.accessToken,
+        expiresAt: oauthCredentialsTable.expiresAt,
+      })
+      .from(oauthCredentialsTable)
+      .where(eq(oauthCredentialsTable.id, oauthCredentialId))
+      .limit(1);
+    if (!stored?.expiresAt || !stored.accessToken) {
+      return null;
+    }
+    const remainingMs = stored.expiresAt.getTime() - Date.now();
+    if (remainingMs <= REFRESH_ADOPTION_SKEW_MS) {
+      return null;
+    }
+    return {
+      access_token: stored.accessToken,
+      expires_in: Math.floor(remainingMs / MS_PER_SECOND),
+    };
+  };
 
   return (refreshToken: string) =>
     runWithCredentialRefreshLock(
@@ -112,6 +140,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
         }
       },
       refreshLockStore,
+      readFreshCredential,
     );
 };
 
