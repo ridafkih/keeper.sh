@@ -69,7 +69,6 @@ services:
 
   worker:
     image: ghcr.io/ridafkih/keeper-worker:2
-    container_name: keeper-worker
     env_file: .env
     environment:
       ENV: production
