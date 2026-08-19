@@ -19,10 +19,7 @@ import { recordSegment } from "../telemetry/segments";
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
-/*
- * Identifier lists are a capped sample; an uncapped one would push the line
- * past what the log pipeline keeps and take the counters with it.
- */
+/* Capped sample: an uncapped list would push the line past what the log pipeline keeps. */
 const WIDE_EVENT_LIST_LIMIT = 20;
 const WIDE_EVENT_LIST_MAX_LENGTH = 2048;
 
@@ -49,10 +46,7 @@ const summarizeWideEventList = (
   Math.max(values.length - WIDE_EVENT_LIST_LIMIT, 0),
 );
 
-/**
- * Events the provider reported that never reach the diff, so the diff removes
- * their stored state. These counts are the only trace that removal leaves.
- */
+/** These counts are the only trace that the removal leaves. */
 interface DiscardedSourceEventCounts {
   outsideSyncWindow: number;
   unrepresentable: number;
@@ -61,10 +55,7 @@ interface DiscardedSourceEventCounts {
 interface FetchEventsResult {
   events: SourceEvent[];
   discardedEventCounts?: DiscardedSourceEventCounts;
-  /**
-   * Keeper's own mirrored events, skipped on purpose. Kept out of
-   * `discardedEventCounts` so those stay zero on a healthy mirrored calendar.
-   */
+  /** Kept out of `discardedEventCounts` so those stay zero on a healthy mirrored calendar. */
   selfAuthoredEventCount?: number;
   changedEventIds?: string[];
   snapshot?: CalendarSnapshotChange;
@@ -75,11 +66,7 @@ interface FetchEventsResult {
   unchanged?: boolean;
   skippedResourceCount?: number;
   skippedResourceReasons?: string[];
-  /**
-   * Events the provider returned that Keeper cannot represent (an RDATE series,
-   * a timezone no runtime can interpret). They stay in `events` so removal stays
-   * computed against the full feed; only ingestion withholds them.
-   */
+  /** Stay in `events` so removal stays computed against the full feed; only ingestion withholds them. */
   unsupportedEventUids?: string[];
   syncWindow?: SyncWindow;
   coverage?: {
@@ -107,12 +94,7 @@ interface IngestionPersistence {
   flush: (changes: IngestionChanges) => Promise<void>;
 }
 
-/**
- * The persist-time currency probe, offered separately from the work itself:
- * a caller that queues the work behind a serial writer can settle the probe's
- * Redis round trip before it takes the slot, and gets back a short-circuit
- * result when the lease is gone or the probe could not answer.
- */
+/** Offered separately so a queueing caller can settle the Redis round trip off its writer slot. */
 type IngestionPersistencePreflight = () => Promise<IngestionResult | null>;
 
 type IngestionPersistenceWork = ((
@@ -161,11 +143,9 @@ interface IngestionResult {
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
 
 /*
- * Only delta sources need this. A snapshot source re-reports its whole coverage
- * every fetch, so the snapshot diff already removes whatever it stopped
- * reporting; pruning on top of that would delete the unbounded history an ICS
- * feed still reports. A delta source only reports changes, so a stored event
- * that fell outside a narrowed window would otherwise be stranded forever.
+ * Delta sources only: a snapshot source's diff already removes what it stopped reporting, so
+ * pruning on top would delete the unbounded history an ICS feed still reports. A delta
+ * source's stored event outside a narrowed window would otherwise be stranded forever.
  */
 const getNonRecurringStoredEventIdsOutsideWindow = (
   events: (Pick<StoredSourceEventState, "endTime" | "id" | "startTime"> & {
@@ -189,12 +169,9 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
 type CurrencyProbeResult = "current" | "currency-unconfirmed" | "superseded";
 
 /*
- * The probe is Redis I/O on the sync lease, so it can fail for reasons that
- * have nothing to do with the provider. A rejection is contained here rather
- * than escaping: an unanswerable probe must neither commit a possibly-stale
- * snapshot nor surface as an ingest error, which every family's backoff gate
- * would charge to the provider. Mirrors resetIngestBackoffIfCurrent in
- * services/cron/src/jobs/ingest-sources.ts.
+ * Redis I/O that can fail for reasons unrelated to the provider, so a rejection is contained:
+ * an unanswerable probe must neither commit a possibly-stale snapshot nor surface as an
+ * ingest error that the backoff gate would charge to the provider.
  */
 const probeCurrency = async (
   wideEvent: IngestWideEventFields,
@@ -231,10 +208,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
   let flushed = false;
 
   /*
-   * Part of the diff runs inside the persistence transaction's callback, which a
-   * pooled driver invokes in the async context of whoever released the connection.
-   * A widelog call there would land on another source's event, so the diff is
-   * accumulated locally and recorded once below, back in this function's context.
+   * A pooled driver invokes the transaction callback in the async context of whoever released
+   * the connection, so a widelog call there would land on another source's event.
    */
   let diffMs = 0;
   const measureDiff = <TResult>(operation: () => TResult): TResult => {
@@ -287,11 +262,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
           },
         ));
       if (overBudget.length > 0) {
-        /*
-         * A widened sync range can pull a pathological series over the occurrence
-         * budget. Drop those series and keep ingesting the rest, so one bad series
-         * cannot push the whole calendar into permanent ingestion backoff.
-         */
+        /* Dropped rather than failed, so one bad series cannot back off the whole calendar. */
         const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
         sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
         wideEvent["recurrence.over_budget_count"] = overBudget.length;
@@ -307,14 +278,9 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     }
 
     /*
-     * Re-probe currency at persist time. The transaction thunk can sit in a
-     * serial flush queue long after the pre-enqueue probe above passed; if the
-     * sync lease was reclaimed in the meantime, a fresher holder may already
-     * have committed, and flushing this run's snapshot would revert it.
-     *
-     * The probe is offered to the caller as `preflight` so a queueing caller can
-     * settle this Redis round trip off its writer slot; a caller that ignores it
-     * still gets the probe from inside the work callback below.
+     * The thunk can sit in a flush queue long after the pre-enqueue probe passed; if the lease
+     * was reclaimed meanwhile, a fresher holder may have committed and this snapshot would
+     * revert it.
      */
     let persistProbePending = true;
     const persistTimePreflight = async (): Promise<IngestionResult | null> => {
@@ -393,9 +359,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
               isDeltaSync,
             ),
             /*
-             * Removal is computed against the unfiltered fetch. An over-budget series is
-             * only withheld from ingestion; treating it as absent here would delete the
-             * states it already has, turning a stalled series into deleted user events.
+             * Removal is computed against the unfiltered fetch: treating a withheld
+             * over-budget series as absent would turn a stalled series into deleted events.
              */
             ...buildSourceEventStateIdsToRemove(
               existingEvents,

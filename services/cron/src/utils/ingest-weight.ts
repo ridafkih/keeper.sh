@@ -2,22 +2,14 @@ import { count, eq } from "drizzle-orm";
 import { eventStatesTable } from "@keeper.sh/database/schema";
 
 /*
- * Weighted-permit sizing for provider ingests. The permit must be sized
- * BEFORE the provider fetch begins, so the estimate comes from what we
- * already know: the stored event count from the previous ingest. Items vary
- * by two-plus orders of magnitude (a 12-event personal calendar vs a
- * 3,000-event ICS feed), so a byte-weight estimate bounds memory where a
- * count-based limit cannot.
+ * Sized BEFORE the fetch begins, so the estimate comes from the previous ingest's stored
+ * count. Payloads vary by two-plus orders of magnitude, so a byte-weight estimate bounds
+ * memory where a count-based limit cannot.
  */
 const BYTES_PER_EVENT = 1024;
 const WEIGHT_FLOOR = 16_384;
-// 64MB budget: 64 * 1024 * 1024 bytes.
-const WEIGHT_BUDGET = 67_108_864;
-/*
- * A never-ingested calendar has no history to size from. Claiming an eighth
- * of the budget self-limits a launch flood of unknown-size first ingests to
- * roughly eight concurrent fetches.
- */
+const WEIGHT_BUDGET = 64 * 1024 * 1024;
+/* No history to size from; an eighth of the budget self-limits a launch flood to ~8 fetches. */
 const NEVER_INGESTED_WEIGHT = WEIGHT_BUDGET / 8;
 
 interface IngestWeightDependencies {
@@ -39,7 +31,6 @@ const estimateIngestWeight = async (
       WEIGHT_BUDGET,
     );
   } catch {
-    // A failed count read must not fail the ingest; size it like an unknown.
     return NEVER_INGESTED_WEIGHT;
   }
 };
@@ -54,7 +45,6 @@ interface EventStateCountClient {
   };
 }
 
-// Reads go against the pooled database, never through the flush writer.
 const countStoredEvents = async (
   database: EventStateCountClient,
   calendarId: string,

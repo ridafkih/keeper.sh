@@ -3,17 +3,9 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
-/*
- * Every options argument handed to allSettledGroupedWithConcurrency across the
- * whole pass lands here, one record per call site, in call order.
- */
 const capturedOptions: Record<string, unknown>[] = [];
 
-/*
- * A real resolved promise carrying an orderBy method comes back from where():
- * the listing queries chain into orderBy(), while other selects in the same
- * job stop at where() or limit() and are awaited directly.
- */
+// Where() must be awaitable and chainable: listing queries add orderBy, others do not.
 const createQueryBuilder = () => {
   const builder: Record<string, unknown> = {};
   const chain = (): unknown => builder;
@@ -87,14 +79,10 @@ beforeEach(() => {
 
 describe("global source throttle removal", () => {
   /*
-   * Provider protection, fairness, write pressure, and memory each have a
-   * dedicated mechanism now, so the oauth and caldav call sites share the
-   * user-group budget (USER_GROUP_CONCURRENCY = 12, sized so groups times
-   * USER_CALENDAR_CONCURRENCY stays within the 25-connection cron pool: every
-   * source performs pooled reads before reserve() can park it), while the
-   * per-account Graph budget within a pass stays at USER_CALENDAR_CONCURRENCY
-   * = 2. ICS keeps a small dedicated group budget (ICS_PARSE_CONCURRENCY = 4)
-   * because parsing is CPU-bound and starves the Bun event loop.
+   * USER_GROUP_CONCURRENCY is 12 so groups times USER_CALENDAR_CONCURRENCY stays
+   * within the 25-connection cron pool; every source reads from the pool before
+   * reserve() can park it. ICS gets its own budget of 4 because parsing is
+   * CPU-bound and starves the Bun event loop.
    */
   it("runs oauth and caldav at the pool-sized user-group budget and ics at parse concurrency", async () => {
     await job?.callback();
@@ -116,11 +104,6 @@ describe("global source throttle removal", () => {
     }
   });
 
-  /*
-   * Grep-level pin: the global throttle constant is deleted outright, replaced
-   * by the named constants above. File-text assertion per repo precedent for
-   * existence pins.
-   */
   it("deletes SOURCE_CONCURRENCY from the job in favor of the named budgets", () => {
     const source = readFileSync(jobSourcePath, "utf8");
 

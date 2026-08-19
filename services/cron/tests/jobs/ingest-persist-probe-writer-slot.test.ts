@@ -2,15 +2,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins where the persist-time currency probe's Redis I/O runs relative to the
- * flush writer's critical section. The probe is a Redis command on the
- * sync-lock client (commandTimeout 10s); if it is awaited after
- * flushDatabase.transaction has opened and pg_advisory_xact_lock has been
- * taken, a Redis brownout parks the sole flushDatabase connection, the
- * advisory lock, and the single serial writer slot for up to 10s per flush,
- * head-of-line stalling every family's persistence. The probe must therefore
- * settle before the flush transaction opens — the same hazard the dedicated
- * ADVISORY_LOCK_WAIT_BOUND_MS exists for on the pg side.
+ * The currency probe is a Redis command with a 10s commandTimeout, so awaiting
+ * it inside the open flush transaction would let a Redis brownout hold the sole
+ * flushDatabase connection, the advisory lock, and the serial writer slot for
+ * 10s per flush. It must settle before the transaction opens.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -37,10 +32,6 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
-  /*
-   * Drizzle SQL objects carry their bound parameters as nested values, so a
-   * deep string sweep is enough to identify a statement.
-   */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -111,12 +102,6 @@ const harness = vi.hoisted(() => {
     }),
   };
 
-  /*
-   * The flush transaction runner tracks the critical section: while the
-   * callback is pending the sole flushDatabase connection is occupied, and
-   * once pg_advisory_xact_lock has executed the per-calendar advisory lock is
-   * held until settlement.
-   */
   const flushTransaction = async (
     callback: (transaction: unknown) => Promise<unknown>,
   ): Promise<unknown> => {
@@ -161,7 +146,6 @@ const harness = vi.hoisted(() => {
     (_userIds: Set<string>) => Promise.resolve(0),
   );
 
-  /* The lock handle's isCurrent is the Redis probe; record where it runs. */
   const isCurrent = vi.fn((): Promise<boolean> => {
     state.probeObservations.push({
       advisoryLocksHeld: state.advisoryLocksHeld,
@@ -260,20 +244,9 @@ describe("persist-time currency probe placement", () => {
 
     await job?.callback();
 
-    /*
-     * Sanity: the source ran both probes — pre-enqueue and persist-time. If
-     * this drops below 2 the persist-time re-probe was removed, which is a
-     * different regression (stale flushes), not a pass.
-     */
+    // Below 2 the persist-time re-probe is gone, which is a stale-flush regression, not a pass.
     expect(harness.isCurrent.mock.calls.length).toBeGreaterThanOrEqual(2);
 
-    /*
-     * The probe is a Redis command with a 10s commandTimeout. Awaiting it
-     * while the flush transaction is open (sole flushDatabase connection,
-     * pg_advisory_xact_lock held, serial writer slot occupied) lets a Redis
-     * brownout head-of-line stall every family's persistence at up to ~10s
-     * per flush. Every probe must observe zero open flush transactions.
-     */
     const probesInsideCriticalSection = harness.state.probeObservations.filter(
       (observation) => observation.openFlushTransactions > 0,
     );

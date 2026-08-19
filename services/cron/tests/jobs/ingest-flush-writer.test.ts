@@ -2,9 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the flush-writer routing: every source's persistence transaction must run
- * against the dedicated flushDatabase, one at a time, while fetches stay
- * concurrent — and each source's settlement must await its own flush.
+ * Persistence must run one transaction at a time on the dedicated flushDatabase
+ * while fetches stay concurrent, and each source must await its own flush.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -33,10 +32,6 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among them) as
-   * nested values, so a deep string sweep is enough to identify a statement.
-   */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -108,6 +103,8 @@ const harness = vi.hoisted(() => {
     }),
   };
 
+  const HOLD_OPEN_FOR_OVERLAP_OBSERVATION_MS = 25;
+
   const createTransactionRunner = (label: "flush" | "pooled") =>
     async (callback: (transaction: unknown) => Promise<unknown>): Promise<unknown> => {
       state.transactionCounts[label] += 1;
@@ -117,11 +114,9 @@ const harness = vi.hoisted(() => {
         state.activeTransactionCount,
       );
       try {
-        /*
-         * Hold the transaction open across a macrotask so a concurrently started
-         * peer transaction is observable as overlap.
-         */
-        await new Promise((resolve) => { setTimeout(resolve, 25); });
+        await new Promise((resolve) => {
+          setTimeout(resolve, HOLD_OPEN_FOR_OVERLAP_OBSERVATION_MS);
+        });
         return await callback({
           execute: (statement: unknown): Promise<unknown[]> => {
             const text = renderStatementText(statement);
@@ -164,11 +159,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test here: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   * A non-zero eventsAdded makes each successful source visible via shouldPush.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -316,7 +306,6 @@ describe("ingest flush writer", () => {
       "Calendar source ingestion completed with failures",
     );
 
-    /* The writer survives one source's flush failure: both transactions ran on it. */
     expect(harness.state.transactionCounts.flush).toBe(2);
 
     expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);

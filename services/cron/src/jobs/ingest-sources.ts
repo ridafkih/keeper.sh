@@ -83,19 +83,16 @@ const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
 
 /*
- * Bound on how long a flush transaction may wait for its calendar's advisory
- * lock while holding the single serial writer slot. The same (namespace,
- * calendarId) lock is held minutes-scale by sync-user write-back and the API
- * caldav persist, so a contended calendar must fail ITS flush quickly instead
- * of parking every queued flush behind it until their deadlines expire.
+ * The same (namespace, calendarId) lock is held minutes-scale by sync-user write-back and
+ * the API caldav persist, so a contended calendar must fail ITS flush quickly instead of
+ * parking every queued flush behind it while it holds the single serial writer slot.
  */
 const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
 /*
- * Sized to the shared cron pool (DATABASE_POOL_MAX 25 in deploy/compose.yaml):
- * every launched source performs pooled reads before the weighted reserve() can
- * park it, so this is the only bound on that pre-reserve read herd. Groups times
- * USER_CALENDAR_CONCURRENCY must stay within the pool, leaving headroom for the
- * other cron jobs sharing `database`.
+ * Sized to the shared cron database pool (DATABASE_POOL_MAX 25 in deploy/compose.yaml):
+ * every launched source performs pooled reads BEFORE the weighted reserve() can park it,
+ * so groups times USER_CALENDAR_CONCURRENCY must stay within the pool with headroom for
+ * the other cron jobs sharing `database`.
  */
 const USER_GROUP_CONCURRENCY = 12;
 /*
@@ -124,15 +121,10 @@ const instrumentedLockRedis = {
 };
 
 /*
- * Cron passes are serial (cronbake re-arms only after a pass completes), but a
- * calendar's ingest can still be in flight when the next pass reaches it: a
- * timeout-abandoned run keeps executing after withAbortTimeout frees its
- * scheduler slot, and webhook-driven syncs contend for the same lock. That
- * duplicate is a routine identical run, not a mapping mutation: it must acquire
- * as "background" so IS_CURRENT stays true for the in-flight holder and its
- * completed fetch persists. With the default "preempting" class every such
- * overlap discarded the holder's finished work, and a source slower than its
- * deadline never recorded its first ingest.
+ * An overlapping pass is a routine identical run, not a mapping mutation, so it must
+ * acquire as "background" to keep IS_CURRENT true for the in-flight holder. Under the
+ * default "preempting" class every overlap discarded the holder's finished work, and a
+ * source slower than its deadline never recorded its first ingest.
  */
 const sourceIngestLock = createSyncLock(instrumentedLockRedis, "background");
 
@@ -195,10 +187,8 @@ const logIngestBackoff = (state: CalendarBackoffState): void => {
 };
 
 /*
- * Runs after the ingest's work has already committed, so both the isCurrent
- * probe and the backoff-reset write are best-effort bookkeeping: a Redis blip
- * in the probe (or a failed DB write) must never clobber the committed result
- * with a rejection, and must never feed the backoff escalator.
+ * Runs after the work has committed, so a Redis blip in the probe or a failed write must
+ * never clobber the committed result with a rejection, nor feed the backoff escalator.
  */
 const resetIngestBackoffIfCurrent = async (
   calendarId: string,
@@ -256,10 +246,7 @@ const runSourceIngest = async <TResult>(
       throw error;
     }
   } finally {
-    /*
-     * The lock TTL already reclaims the hold, so a failed release must never
-     * clobber the ingest result with a rejection.
-     */
+    /* The lock TTL already reclaims the hold, so a failed release must not reject. */
     await lockResult.handle.release().catch((error: unknown) => {
       widelog.errorFields(error, {
         slug: "source-lock-release-failed",
@@ -314,9 +301,8 @@ const resolveIngestErrorSlug = (error: unknown): string => {
 
 /*
  * A queued transaction's callback runs in the async context of whoever released the
- * connection (see packages/database/src/utils/pool-telemetry.ts), so nothing inside
- * it may call widelog. Everything is measured into this ledger and emitted once the
- * transaction promise resolves, back in the per-source context.
+ * connection (see packages/database/src/utils/pool-telemetry.ts), so nothing inside it may
+ * call widelog. Measured here and emitted once the transaction resolves, back in context.
  */
 interface PersistenceLedger {
   advisoryLockMs: number;
@@ -363,11 +349,7 @@ const measureLedgerWrite = async <TResult>(
 };
 
 const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): void => {
-  /*
-   * A transaction that never got a connection is the pool-exhaustion case this
-   * exists to catch, so the wait still has to be charged; there is simply nothing
-   * after it to report.
-   */
+  /* Pool exhaustion is the case this exists to catch, so the wait is charged regardless. */
   if (ledger.grantedAt === 0) {
     recordSegment("wait.db_pool_ms", performance.now() - requestedAt);
     return;
@@ -388,41 +370,28 @@ const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): 
 };
 
 /*
- * Collection is concurrent but writing is not: every source's persistence flush
- * runs through this bounded serial worker onto the dedicated single-connection
- * flushDatabase, so high fetch concurrency can never open concurrent write
- * transactions against Postgres. The bound matters as much as the serialization:
- * a bare promise chain would also serialize, but with nothing to stop an
- * unbounded backlog of fetched payloads queueing behind a slow flush. A failed
- * flush settles only its own source; a source aborted while parked frees its
- * slot without ever running.
+ * Collection is concurrent but writing is not, so high fetch concurrency can never open
+ * concurrent write transactions against Postgres. The bound matters as much as the
+ * serialization: a bare promise chain would also serialize, but with nothing to stop an
+ * unbounded backlog of fetched payloads queueing behind a slow flush.
  */
 const FLUSH_QUEUE_CAPACITY = 50;
 
 /*
- * The budget makes the bound memory-weighted rather than item-counted: a
- * source must reserve its estimated payload weight BEFORE its provider fetch
- * begins, so a full budget stops fetches from starting and blocked collectors
- * hold no payloads.
+ * Memory-weighted rather than item-counted: a source reserves its estimated payload weight
+ * BEFORE its fetch begins, so a full budget stops fetches and blocked collectors hold nothing.
  */
 const ingestFlushWriter = createSerialFlushWorker(
   (task: () => Promise<IngestionResult>) => task(),
   { budget: WEIGHT_BUDGET, capacity: FLUSH_QUEUE_CAPACITY },
 );
 
-/*
- * Shutdown must drain this writer before flushDatabase closes, or queued and
- * in-flight flushes are stranded with their budget still reserved.
- */
+/* Shutdown must drain this writer before flushDatabase closes, or flushes strand their budget. */
 registerFlushDrain(() => ingestFlushWriter.close());
 
 type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, IngestionResult>;
 
-/*
- * Acquires the weighted flush reservation for one source before its provider
- * fetch is allowed to start. The wait is its own segment so "the budget was
- * full" never masquerades as provider rate limiting.
- */
+/* The wait is its own segment so "the budget was full" never masquerades as rate limiting. */
 const reserveIngestFlushWeight = async (
   calendarId: string,
   hasEverIngested: boolean,
@@ -430,7 +399,6 @@ const reserveIngestFlushWeight = async (
 ): Promise<IngestFlushReservation> => {
   const weight = await estimateIngestWeight(
     {
-      // The sizing read goes to the pooled database, never the flush writer.
       countStoredEvents: async (targetCalendarId: string): Promise<number> => {
         const rows = await database
           .select({ count: count() })
@@ -457,11 +425,7 @@ const createIngestionPersistenceTransaction = (
   (work: IngestionPersistenceWork) => {
     const ledger = createPersistenceLedger();
     const requestedAt = performance.now();
-    /*
-     * The submitted thunk carries the source's absolute deadline so the flush
-     * worker's resolveRunDeadlineMs bounds a wedged run by this source's own
-     * deadline instead of the generic ten-minute fallback.
-     */
+    /* Carries the source's own deadline so a wedged run is not bounded by the generic fallback. */
     return reservation.submit(Object.assign(() => flushDatabase.transaction(async (transaction) => {
     ledger.grantedAt = performance.now();
     const setRemainingStatementTimeout = async (): Promise<void> => {
@@ -480,10 +444,8 @@ const createIngestionPersistenceTransaction = (
       true
     )`);
     /*
-     * The advisory-lock wait runs under a small constant statement_timeout,
-     * never the source's full remaining deadline: the lock can be held
-     * minutes-scale elsewhere, and this transaction occupies the single
-     * serial writer slot while it waits.
+     * A small constant, never the source's full remaining deadline: the lock can be held
+     * minutes-scale elsewhere while this transaction occupies the single serial writer slot.
      */
     const boundedLockWaitMs = Math.max(
       1,
@@ -502,7 +464,6 @@ const createIngestionPersistenceTransaction = (
       ledger.advisoryLockMs += performance.now() - advisoryLockRequestedAt;
     }
     signal.throwIfAborted();
-    /* Restore the deadline-derived timeout for the persistence work itself. */
     await setRemainingStatementTimeout();
 
     const result = await work({
@@ -567,11 +528,7 @@ const createIngestionPersistenceTransaction = (
         if (changes.coverage) {
           const { futureRange, historicRange, window } = changes.coverage;
           await setRemainingStatementTimeout();
-          /*
-           * Snapshot sources report coverage on every run. The window is anchored to
-           * the start of the day, so rewriting it unconditionally would churn this row
-           * (and its updatedAt) once per tick rather than once per day.
-           */
+          /* The window is day-anchored, so an unconditional rewrite would churn updatedAt per tick. */
           ledger.writeCount += 1;
           await measureLedgerWrite(ledger, () => transaction
             .update(calendarsTable)
@@ -613,11 +570,8 @@ const createIngestionPersistenceTransaction = (
     }), {
       deadlineAt,
       /*
-       * The persist-time currency probe is Redis I/O on the sync-lock client
-       * (10s commandTimeout). It must settle here — after the queue wait, but
-       * BEFORE flushDatabase.transaction opens — so a Redis brownout never
-       * parks the sole flush connection, the advisory lock, or the serial
-       * writer slot.
+       * Redis I/O must settle after the queue wait but BEFORE the transaction opens, so a
+       * brownout never parks the sole flush connection, the advisory lock, or the writer slot.
        */
       prepare: async (): Promise<IngestionResult | null> => {
         const { preflight } = work;
@@ -627,11 +581,7 @@ const createIngestionPersistenceTransaction = (
         return await preflight();
       },
     })).finally(() => {
-      /*
-       * This is the one instrumentation site whose own failure could rewrite the
-       * ingest's result: a throw here would reject a committed transaction, or
-       * replace the real ingest error with a telemetry one.
-       */
+      /* A throw here would reject a committed transaction or mask the real ingest error. */
       try {
         emitPersistenceLedger(ledger, requestedAt);
       } catch (error) {
@@ -677,15 +627,12 @@ const resolveTargetHost = (target: string | null): string | null => {
 };
 
 /*
- * The semaphore's contract is per-run concurrency, not per-request pacing, so one
- * ingest run must hold exactly one lease: the first acquire takes it, later acquires
- * (pagination) reuse it. The lease TTL outlives the ingest timeout, so a crashed
- * holder frees its slot without an explicit release.
+ * Per-run concurrency, not per-request pacing: one ingest holds exactly one lease, and
+ * pagination reuses it. The TTL outlives the ingest timeout so a crashed holder still frees.
  */
 /*
- * One lease per source, released when the source's ingest finishes: leaving it to
- * the 150s TTL means an account's fourth calendar in a pass waits longer than its
- * own 120s deadline for a slot nobody is going to free.
+ * Released eagerly rather than at the 150s TTL: an account's fourth calendar in a pass
+ * would otherwise wait past its own 120s deadline for a slot nobody is going to free.
  */
 interface IngestRateLimiter extends RedisRateLimiter {
   dispose?: () => Promise<void>;
@@ -732,7 +679,6 @@ const resolveRateLimiter = (
     );
   }
 
-  /* CalDAV sources may be stored as 'caldav', 'fastmail', or 'icloud'. */
   if (isCalDAVProvider(provider)) {
     const host = resolveTargetHost(source.serverUrl ?? null);
     if (!host) {
@@ -1286,10 +1232,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                 } finally {
                   /* A source that never submitted must not strand its weight. */
                   reservation.release();
-                  /*
-                   * The lease TTL already reclaims the slot, so a failed release
-                   * must never clobber the ingest result with a rejection.
-                   */
+                  /* The lease TTL already reclaims the slot, so a failed release must not reject. */
                   await rateLimiter?.dispose?.().catch((error: unknown) => {
                     widelog.errorFields(error, {
                       slug: "rate-limiter-dispose-failed",
@@ -1449,9 +1392,8 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 const fetcher = createCalDAVSourceFetcher({
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
                   /*
-                   * The host budget meters requests per minute, and a CalDAV
-                   * fetch issues discovery plus one REPORT per multiget batch,
-                   * so every origin request draws its own permit.
+                   * The host budget meters requests per minute and a CalDAV fetch issues
+                   * discovery plus one REPORT per batch, so every origin request draws a permit.
                    */
                   onBeforeRequest: async () => {
                     await rateLimiter?.acquire(1, signal);

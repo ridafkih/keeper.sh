@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { withAbortTimeout } from "../../src/utils/with-abort-timeout";
 
 /*
- * A pooled database read that takes no AbortSignal and hangs on a half-open
- * connection never settles on its own. The scheduler worker in
- * packages/calendar/src/core/utils/concurrency.ts holds its slot by awaiting
- * task() to settlement, so withAbortTimeout must force the wrapped operation
- * to settle at the deadline or the slot is stranded for the whole pass.
+ * The scheduler worker holds its slot by awaiting task() to settlement, so
+ * withAbortTimeout must settle an operation that takes no AbortSignal —
+ * otherwise one half-open connection strands a slot for the whole pass.
  */
 const nonCooperativeHang = (): Promise<never> =>
   Promise.withResolvers<never>().promise;

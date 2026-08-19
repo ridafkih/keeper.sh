@@ -3,11 +3,9 @@ import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import { NEVER_INGESTED_WEIGHT, WEIGHT_BUDGET } from "../../src/utils/ingest-weight";
 
 /*
- * Pins the reserve-before-fetch wiring: the flush writer is constructed with a
- * weight budget, every source acquires a weighted reservation BEFORE its
- * provider fetch begins (measured as wait.flush_reserve_ms), the persistence
- * transaction is submitted through that reservation, and a source that fails
- * between reserve and submit releases its weight so the next source proceeds.
+ * Every source must take its weighted reservation before its provider fetch
+ * begins, and a source that fails between reserve and submit must release its
+ * weight, or one failure parks the budget and no later source ever fetches.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -44,10 +42,6 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among them)
-   * as nested values, so a deep string sweep is enough to identify a statement.
-   */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -74,7 +68,6 @@ const harness = vi.hoisted(() => {
   const containsCalendarId = (node: unknown, calendarId: string): boolean =>
     renderStatementText(node).includes(calendarId);
 
-  /* Queries awaited straight off .where() — the stored-event count read among them. */
   const resolveBare = (fields: Record<string, unknown>, predicate: unknown): unknown[] => {
     if ("count" in fields) {
       const entry = [...state.storedEventCounts.entries()].find(
@@ -142,7 +135,6 @@ const harness = vi.hoisted(() => {
         state.activeTransactionCount,
       );
       try {
-        /* A queued gate holds this flush open so the test controls interleaving. */
         const gate = state.flushGates.shift();
         if (gate) {
           await gate;
@@ -202,10 +194,6 @@ const harness = vi.hoisted(() => {
     },
   });
 
-  /*
-   * The real primitive does the work; this wrapper only records how the job
-   * constructs and drives it, so the pins stay at the wiring level.
-   */
   const wrapWorkerFactory = (factory: WorkerFactory): WorkerFactory =>
     (run, options) => {
       state.workerOptionsLog.push(options ?? null);
@@ -229,10 +217,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test here: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -372,7 +356,7 @@ beforeEach(() => {
 
 describe("reserve-before-fetch wiring", () => {
   it("constructs the flush writer with the weight budget", () => {
-    /* The worker is built at module load, so the log survives beforeEach resets. */
+    // The worker is built at module load, so the log survives beforeEach resets.
     const budgeted = harness.state.workerOptionsLog.some(
       (options) => options !== null && options.budget === WEIGHT_BUDGET,
     );
@@ -396,10 +380,6 @@ describe("reserve-before-fetch wiring", () => {
       await vi.waitFor(() => {
         expect(harness.state.transactionCounts.flush).toBeGreaterThan(0);
       });
-      /*
-       * The first source is mid-flush and still holds its full-budget weight,
-       * so the second source's reservation is parked and its fetch has not begun.
-       */
       expect(harness.state.fetchStarts).toHaveLength(1);
     } finally {
       gate.resolve(null);
@@ -408,7 +388,6 @@ describe("reserve-before-fetch wiring", () => {
 
     expect(harness.state.fetchStarts).toHaveLength(2);
     expect(harness.state.reserveRequests).toEqual([WEIGHT_BUDGET, WEIGHT_BUDGET]);
-    /* Both persistence transactions went through reservations, on the flush database. */
     expect(harness.state.reservationSubmitCount).toBe(2);
     expect(harness.state.transactionCounts.flush).toBe(2);
     expect(harness.state.transactionCounts.pooled).toBe(0);
@@ -425,11 +404,7 @@ describe("reserve-before-fetch wiring", () => {
     harness.state.storedEventCounts.set("calendar-healthy", WHALE_EVENT_COUNT);
     harness.state.failingFetchCalendarIds.add("calendar-doomed");
 
-    /*
-     * Each source reserves the whole budget, so the second reservation can only
-     * be granted if the failed source released its weight in a finally. Without
-     * the release this callback never settles.
-     */
+    // Both sources reserve the whole budget, so without the release this never settles.
     await expect(job?.callback()).rejects.toThrow(
       "Calendar source ingestion completed with failures",
     );
@@ -437,7 +412,6 @@ describe("reserve-before-fetch wiring", () => {
     expect(harness.state.fetchStarts).toContain("calendar-doomed");
     expect(harness.state.fetchStarts).toContain("calendar-healthy");
     expect(harness.state.reserveRequests).toEqual([WEIGHT_BUDGET, WEIGHT_BUDGET]);
-    /* Only the healthy source flushed; the doomed one released without submitting. */
     expect(harness.state.transactionCounts.flush).toBe(1);
     expect(harness.state.releaseCallCount).toBeGreaterThanOrEqual(1);
 
@@ -450,7 +424,7 @@ describe("reserve-before-fetch wiring", () => {
     harness.state.icsRows.push(
       createIcsRow("calendar-fresh", "user-fresh", null),
     );
-    /* A stale stored count must not shrink a first ingest's reservation. */
+    // A stale stored count must not shrink a first ingest's reservation.
     harness.state.storedEventCounts.set("calendar-fresh", 1);
 
     await job?.callback();

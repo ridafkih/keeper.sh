@@ -4,17 +4,13 @@ import { createOutlookAccountSemaphore } from "../../../src/core/utils/redis-rat
 // One under Graph's documented MailboxConcurrency of 4.
 const OUTLOOK_CAPACITY = 3;
 const SETTLE_MS = 500;
+const WELL_UNDER_LEASE_TTL_MS = 2000;
 
 interface FakeEntry {
   expiresAt: number;
   value: string;
 }
 
-/*
- * In-memory stand-in for the Redis lease client, same shape as the fake in
- * leased-semaphore.test.ts: honors SET NX PX against the fake-timer clock so
- * per-slot leases behave like independently expiring keys.
- */
 class FakeRedis {
   public store = new Map<string, FakeEntry>();
 
@@ -115,8 +111,7 @@ describe("createOutlookAccountSemaphore", () => {
     expect(waiter.status).toBe("pending");
 
     await semaphore.release(first);
-    // Well under the lease TTL in total, so admission can only come from the release.
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(WELL_UNDER_LEASE_TTL_MS);
     expect(waiter.status).toBe("resolved");
   });
 
@@ -125,7 +120,6 @@ describe("createOutlookAccountSemaphore", () => {
     const semaphoreA = createOutlookAccountSemaphore(redis, "account-a");
     const semaphoreB = createOutlookAccountSemaphore(redis, "account-b");
 
-    // Fill account-a to capacity so any shared state would starve account-b.
     for (let index = 0; index < OUTLOOK_CAPACITY; index += 1) {
       await semaphoreA.acquireLease();
     }
@@ -133,7 +127,6 @@ describe("createOutlookAccountSemaphore", () => {
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(parked.status).toBe("pending");
 
-    // Account-b must still get all three of its own slots without waiting.
     const grants = [];
     for (let index = 0; index < OUTLOOK_CAPACITY; index += 1) {
       grants.push(probe(semaphoreB.acquireLease()));

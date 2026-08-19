@@ -2,12 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the item-carried run deadline wiring the serial flush worker documents:
- * its resolveRunDeadlineMs probe states "the production ingest caller submits
- * `() => task()` functions with a `deadlineAt` attached", so every thunk the
- * ingest job hands to reservation.submit must carry a finite numeric
- * `deadlineAt`. Without it, a wedged production flush is bounded only by the
- * generic ten-minute fallback instead of the source's own deadline.
+ * Every thunk handed to reservation.submit must carry a finite deadlineAt: the
+ * worker's resolveRunDeadlineMs otherwise falls back to a generic ten minutes,
+ * silently unbounding a wedged flush from its source's own deadline.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -25,10 +22,6 @@ const harness = vi.hoisted(() => {
     submittedItems: [] as unknown[],
   };
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among them)
-   * as nested values, so a deep string sweep is enough to identify a statement.
-   */
   // eslint-disable-next-line @eslint-plugin-unicorn/consistent-function-scoping -- The vi.hoisted callback runs before module initialization, so this helper cannot live at module scope.
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
@@ -127,11 +120,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test here: fetch, then route the result through
-   * the job-provided persistence transaction, exactly like the real
-   * ingestSource, so the job's reservation.submit call site runs for real.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -164,10 +152,6 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
     run: (item: unknown) => Promise<unknown>,
     options?: unknown,
   ) => Worker;
-  /*
-   * Pass-through interception: the real worker runs unchanged, but every item
-   * production hands to reservation.submit is recorded for inspection.
-   */
   const createSerialFlushWorker = (
     run: (item: unknown) => Promise<unknown>,
     options?: unknown,
@@ -272,14 +256,8 @@ describe("ingest flush item-carried deadline wiring", () => {
 
     await job?.callback();
 
-    /* The source's flush went through reservation.submit for real. */
     expect(harness.state.submittedItems.length).toBeGreaterThan(0);
 
-    /*
-     * The worker's resolveRunDeadlineMs probe documents that production thunks
-     * carry `deadlineAt`; a bare thunk silently falls back to the generic
-     * ten-minute run deadline instead of the source's own deadline.
-     */
     for (const item of harness.state.submittedItems) {
       expect(item).toHaveProperty("deadlineAt");
       const { deadlineAt } = item as { deadlineAt: unknown };

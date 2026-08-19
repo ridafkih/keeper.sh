@@ -23,7 +23,6 @@ describe("createSerialFlushWorker deadline expiry vs caller release()", () => {
     const worker = createSerialFlushWorker(
       async (item: FlushItem): Promise<string> => {
         if (item.id === "wedge") {
-          // A half-open flushDatabase write: holds its transaction, never settles on its own.
           await new Promise<void>((resolve) => {
             releaseWedge = resolve;
           });
@@ -33,7 +32,6 @@ describe("createSerialFlushWorker deadline expiry vs caller release()", () => {
       { budget: BUDGET },
     );
 
-    // Reservation A takes the full budget, then its run wedges past its deadline.
     const reservationA = await worker.reserve(BUDGET);
     const submitA = reservationA.submit({
       deadlineAt: Date.now() + SHORT_DEADLINE_MS,
@@ -41,21 +39,9 @@ describe("createSerialFlushWorker deadline expiry vs caller release()", () => {
     });
     await expect(submitA).rejects.toThrow(/deadline/);
 
-    /*
-     * Production sequence (services/cron/src/jobs/ingest-sources.ts): every
-     * ingest family wraps its ingestSource call in
-     * `try { ... reservation.submit(...) ... } finally { reservation.release(); }`.
-     * The deadline rejection above propagates out of the try, so the finally
-     * runs release() while the abandoned run is still executing.
-     */
+    // Production wraps submit in try/finally, so release() runs while the abandoned run executes.
     reservationA.release();
 
-    /*
-     * Settle-only invariant: the abandoned run is still executing — its
-     * payload and its single flushDatabase connection are both still live —
-     * so a full-budget reservation for B must stay parked until A's run
-     * actually settles, release() or not.
-     */
     let grantedB: FlushReservation<FlushItem, string> | null = null;
     const reserveB = worker.reserve(BUDGET).then((reservation) => {
       grantedB = reservation;
@@ -64,7 +50,6 @@ describe("createSerialFlushWorker deadline expiry vs caller release()", () => {
     await sleep(SETTLE_WAIT_MS);
     expect(grantedB).toBeNull();
 
-    // Cleanup: settle the wedged run, then drain whatever the grant produced.
     if (releaseWedge !== null) {
       const settle = releaseWedge as () => void;
       settle();

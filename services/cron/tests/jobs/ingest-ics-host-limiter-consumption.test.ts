@@ -2,10 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the host rate limiter to its consumption point on the ICS family: an ICS
- * ingest must resolve the per-host limiter and acquire it before the feed's
- * HTTP fetch begins. resolveRateLimiter having a working "ical" branch is not
- * enough — the limiter has to be threaded into the actual ingest path.
+ * An ICS ingest must acquire the per-host limiter before its feed fetch begins:
+ * a working "ical" branch in resolveRateLimiter proves nothing unless the
+ * limiter is threaded into the ingest path itself.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -21,7 +20,6 @@ const harness = vi.hoisted(() => {
   const state = {
     hostFactoryHosts: [] as string[],
     icsRows: [] as IcsSourceRow[],
-    /* Interleaving log: "acquire:<host>" and "fetch:<calendarId>" entries in order. */
     orderedEvents: [] as string[],
   };
 
@@ -134,10 +132,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -239,13 +233,8 @@ describe("ICS host limiter consumption", () => {
 
     await job?.callback();
 
-    /* The ingest actually ran and fetched the feed. */
     expect(harness.state.orderedEvents).toContain("fetch:calendar-ics-1");
-
-    /* The ICS family resolved a limiter keyed by the feed host... */
     expect(harness.state.hostFactoryHosts).toEqual(["feeds.example.net"]);
-
-    /* ...and acquired it before the HTTP request. */
     expect(harness.state.orderedEvents).toEqual([
       "acquire:feeds.example.net",
       "fetch:calendar-ics-1",

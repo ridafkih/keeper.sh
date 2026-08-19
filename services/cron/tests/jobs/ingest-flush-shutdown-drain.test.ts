@@ -1,12 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 /*
- * Pins the shutdown ordering for the ingest flush writer: when the process
- * shuts down while a flush is queued on the serial writer, the writer must be
- * closed (draining its queue) BEFORE the dedicated single-connection
- * flushDatabase is closed. Closing the database first strands every queued or
- * in-flight flush: fetched payloads that already reserved budget are dropped
- * on deploy restarts.
+ * The flush writer must be closed and drained before the single-connection
+ * flushDatabase it writes through. Closing the database first strands every
+ * queued flush, dropping already-fetched payloads on every deploy restart.
  */
 const harness = vi.hoisted(() => {
   const events: string[] = [];
@@ -131,9 +128,12 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
   enqueueDestinationSyncsForUsers: () => Promise.resolve(0),
 }));
 
+const yieldToWriterPump = async (): Promise<void> => {
+  await new Promise((resolve) => { setTimeout(resolve, 0); });
+};
+
 describe("ingest flush writer shutdown drain", () => {
   it("closes and drains the flush writer before closing flushDatabase", async () => {
-    /* Loading the job module creates the module-level ingest flush writer. */
     await import("../../src/jobs/ingest-sources");
     const { shutdownDatabases } = await import("../../src/context");
 
@@ -143,10 +143,6 @@ describe("ingest flush writer shutdown drain", () => {
       return;
     }
 
-    /*
-     * Park one flush exactly as a live source would at deploy time: weight
-     * reserved, payload fetched, flush submitted and still in flight.
-     */
     let releaseFlush = (): void => { harness.events.push("flush-release-unwired"); };
     const reservation = await worker.reserve(1024);
     const inFlightFlush = reservation.submit(() => new Promise((resolve) => {
@@ -157,12 +153,10 @@ describe("ingest flush writer shutdown drain", () => {
       };
     }));
 
-    /* Let the writer's pump pick the flush up before shutdown begins. */
-    await new Promise((resolve) => { setTimeout(resolve, 0); });
+    await yieldToWriterPump();
     expect(harness.events).toContain("flush-started");
 
     const shutdownResult = (shutdownDatabases as () => Promise<void> | void)();
-    /* A draining shutdown completes once the in-flight flush settles. */
     releaseFlush();
     await shutdownResult;
     await inFlightFlush;
@@ -170,10 +164,6 @@ describe("ingest flush writer shutdown drain", () => {
     const writerCloseIndex = harness.events.indexOf("writer-close");
     const flushDatabaseCloseIndex = harness.events.indexOf("close-db:flush-database");
     expect(flushDatabaseCloseIndex).toBeGreaterThanOrEqual(0);
-    /*
-     * The writer must be closed, and drained of its in-flight flush, before
-     * the single-connection flush database goes away underneath it.
-     */
     expect(writerCloseIndex).toBeGreaterThanOrEqual(0);
     expect(writerCloseIndex).toBeLessThan(flushDatabaseCloseIndex);
     expect(harness.events.indexOf("flush-settled")).toBeLessThan(flushDatabaseCloseIndex);

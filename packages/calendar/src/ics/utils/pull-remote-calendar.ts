@@ -55,12 +55,9 @@ const HTTP_STATUS_PARTIAL_CONTENT = 206;
 const CALENDAR_END_PATTERN = /(?:^|[\r\n])END:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
 
 /*
- * VERSION and PRODID sit at the top of a feed, so a body truncated anywhere
- * after the header still parses into a strictly smaller event set. Persisting
- * that fragment as authoritative makes the snapshot diff delete the stored
- * state of every event after the cut, then re-add them all on the next
- * complete fetch. END:VCALENDAR is the only end-of-document marker iCalendar
- * has; a body missing it is truncated, not smaller.
+ * A body truncated after the header still parses into a strictly smaller event set, which
+ * the snapshot diff would treat as deletions. END:VCALENDAR is iCalendar's only
+ * end-of-document marker, so a body missing it is truncated, not smaller.
  */
 const assertCalendarBodyComplete = (ical: string): void => {
   if (!CALENDAR_END_PATTERN.test(ical)) {
@@ -77,11 +74,7 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
     headers: { "User-Agent": ICS_USER_AGENT, ...headers },
   });
 
-  /*
-   * Response.ok is true for every 2xx status, 206 included. A range response
-   * body is a fragment of the feed; treating it as the whole feed would make
-   * the snapshot diff delete every stored event outside the range.
-   */
+  /* Response.ok covers 206 too, and a range fragment would diff as deletions. */
   if (response.status === HTTP_STATUS_PARTIAL_CONTENT) {
     throw new CalendarFetchError(
       "Calendar server returned a partial (206) response; refusing to treat a fragment as the whole feed.",
@@ -142,9 +135,6 @@ async function pullRemoteCalendar(output: OutputJSON, url: string, options?: Saf
 
 async function pullRemoteCalendar(output: OutputICALOrJSON, url: string, options?: SafeFetchOptions): Promise<ICalOrJSON>;
 
-/**
- * @throws
- */
 async function pullRemoteCalendar(
   output: OutputJSON | OutputICal | OutputICALOrJSON,
   url: string,

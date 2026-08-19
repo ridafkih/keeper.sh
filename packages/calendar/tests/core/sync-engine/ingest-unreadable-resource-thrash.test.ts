@@ -80,12 +80,7 @@ const FLICKERING_ICS = buildIcs(
 const STABLE_URL = "/cal/stable-1.ics";
 const FLICKERING_URL = "/cal/flickering-1.ics";
 
-/*
- * The upstream calendar never changes across rounds. Only the readability of
- * the second resource flickers: on the second round the server transiently
- * returns an empty calendar-data body for it (e.g. mid-write), which the
- * client counts as returned, not missing.
- */
+// An empty calendar-data body counts as returned, not missing: unreadable looks deleted.
 const answerRound = (flickeringData: string): void => {
   const resources = [
     { data: STABLE_ICS, url: STABLE_URL },
@@ -146,19 +141,12 @@ describe("CalDAV ingest with a transiently unreadable resource", () => {
   it("does not delete then re-add events whose resource was transiently unreadable", async () => {
     const { runRound } = createRoundRunner();
 
-    // Round 1: both resources readable — both events ingested.
     answerRound(FLICKERING_ICS);
     const first = await runRound();
     expect(first.added).toBe(2);
     expect(first.removed).toBe(0);
 
-    /*
-     * Round 2: identical upstream state, but the second resource's body comes
-     * back empty (unreadable, not absent). Ingesting the same upstream state
-     * again must be a no-op: nothing changed upstream, so nothing may be
-     * removed. If the round cannot tell unreadable from absent it must fail,
-     * not persist the partial snapshot as authoritative.
-     */
+    // Upstream is unchanged, so the round must fail rather than persist a partial snapshot.
     answerRound("");
     let removedOnUnreadableRound = 0;
     try {
@@ -172,7 +160,6 @@ describe("CalDAV ingest with a transiently unreadable resource", () => {
       "steady-state upstream must never produce removals on a repeat ingest",
     ).toBe(0);
 
-    // Round 3: the resource reads normally again — still nothing changed upstream.
     answerRound(FLICKERING_ICS);
     const third = await runRound();
     expect(

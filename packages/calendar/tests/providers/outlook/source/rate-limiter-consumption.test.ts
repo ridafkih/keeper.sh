@@ -35,11 +35,7 @@ describe("createOutlookSourceFetcher rate limiter consumption", () => {
     queuedFetch.preconnect = originalFetch.preconnect;
     globalThis.fetch = queuedFetch;
 
-    /*
-     * Mirror the runtime shape ingest-sources builds: params travel through a
-     * widened variable carrying the rate limiter, exactly as OAuthFetcherParams
-     * does when the cron job wires the Outlook account semaphore adapter in.
-     */
+    // Production passes the rate limiter through a widened params type, not the published one.
     const params: Parameters<typeof createOutlookSourceFetcher>[0] & {
       rateLimiter?: RedisRateLimiter;
     } = {
@@ -55,7 +51,6 @@ describe("createOutlookSourceFetcher rate limiter consumption", () => {
     await fetcher.fetchEvents();
 
     expect(graphRequests).toBeGreaterThan(0);
-    // The mailbox concurrency lease must be taken before any Graph request.
     expect(acquireCalls.length).toBeGreaterThan(0);
     expect(graphRequestsBeforeFirstAcquire).toBe(0);
   });

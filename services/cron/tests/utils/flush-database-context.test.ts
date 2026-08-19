@@ -1,11 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 /*
- * The flush writer must persist through a dedicated single-connection database
- * so that high fetch concurrency can never open concurrent write transactions
- * against Postgres. This pins that the cron context constructs a second
- * database instance with { maxConnections: 1 } and that shutting the context
- * down closes both instances.
+ * The flush writer gets its own single-connection database so high fetch
+ * concurrency can never open concurrent write transactions against Postgres.
  */
 
 const TEST_DATABASE_URL = "postgres://cron-test/keeper";
@@ -90,9 +87,8 @@ describe("cron context flush database", () => {
     await (shutdownDatabases as () => Promise<void> | void)();
 
     /*
-     * Cron bounds its own teardown so one wedged flush cannot hold a pool
-     * socket past the drain deadline and turn SIGTERM into a hang; every
-     * other service closes unbounded and keeps its in-flight transactions.
+     * Cron alone bounds its close: one wedged flush must not hold a pool
+     * socket past the drain deadline and turn SIGTERM into a hang.
      */
     const boundedClose = { graceSeconds: 2 };
     expect(mocks.closeDatabase).toHaveBeenCalledWith(mocks.pooledInstance, boundedClose);

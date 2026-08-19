@@ -1,9 +1,6 @@
 /*
- * Writers parked on the dedicated single-connection flushDatabase register a
- * drain here so shutdown can close them (letting queued and in-flight flushes
- * settle) BEFORE that database is closed underneath them. The registry lives
- * outside context.ts so job modules can register without widening the
- * context surface.
+ * Writers register here so shutdown drains them BEFORE flushDatabase is closed underneath
+ * them. Kept outside context.ts so job modules can register without widening that surface.
  */
 type FlushDrain = () => Promise<void>;
 

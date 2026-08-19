@@ -3,19 +3,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the host rate limiter to the unit it is defined over on the CalDAV
- * family: the shared per-host budget meters requests per minute, so a CalDAV
- * ingest must draw one permit for every request it sends to the origin. The
- * real CalDAV fetcher issues one calendar-query REPORT plus one multiget
- * REPORT per 250-object batch (on top of discovery), so a run over a large
- * calendar that charges the limiter a single permit undercounts real origin
- * traffic and lets an unthrottled request herd through.
- *
- * The real createCalDAVSourceFetcher and CalDAVClient run here (including the
- * genuine 250-path batching); only tsdav is faked. The fake routes each
- * operation through the fetch tsdav was constructed with, exactly as the real
- * library does, because charging lives in that injected fetch — a fake that
- * answered from its own state would bypass the charge and measure nothing.
+ * The shared per-host budget meters requests per minute, so a CalDAV ingest
+ * must draw a permit per origin request. Charging once per run would undercount
+ * a multi-batch fetch and let an unthrottled request herd through.
  */
 const CALENDAR_URL = "https://caldav.example.net/calendars/user-1/personal/";
 
@@ -163,10 +153,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -182,7 +168,6 @@ const harness = vi.hoisted(() => {
     (_unused, index) => `/calendars/user-1/personal/event-${index}.ics`,
   );
 
-  /* One fake tsdav client call per origin HTTP request, each sent through the injected fetch. */
   const buildFakeDAVClient = (
     sendOriginRequest: (label: string) => Promise<void>,
   ): Record<string, (params: never) => Promise<unknown>> => ({
@@ -321,13 +306,9 @@ describe("CalDAV host limiter consumption", () => {
 
     await job?.callback();
 
-    /* The ingest resolved the shared limiter keyed by the CalDAV host. */
     expect(harness.state.hostFactoryHosts).toEqual(["caldav.example.net"]);
 
-    /*
-     * The real client listed 251 objects: one calendar-query REPORT plus
-     * ceil(251 / 250) = 2 multiget REPORTs, on top of one discovery PROPFIND.
-     */
+    // 251 objects: a discovery PROPFIND, a calendar-query, then ceil(251 / 250) multigets.
     expect(harness.state.providerRequests).toEqual([
       "propfind-calendars",
       "calendar-query",
@@ -335,10 +316,6 @@ describe("CalDAV host limiter consumption", () => {
       "multiget:1",
     ]);
 
-    /*
-     * The limiter budget is requests per minute per host, so the run must be
-     * charged at least one permit per request it actually sent to the origin.
-     */
     let chargedPermits = 0;
     for (const weight of harness.state.acquiredPermits) {
       chargedPermits += weight;

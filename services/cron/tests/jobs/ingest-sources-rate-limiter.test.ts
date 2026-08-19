@@ -17,11 +17,6 @@ type ResolveRateLimiter = (
   source: RateLimiterSourceContext,
 ) => FakeLimiter | undefined;
 
-/*
- * The factories are spied at the package boundary so each family's keying can be
- * asserted through the factory arguments: google by userId, outlook by accountId,
- * caldav/ical by target host.
- */
 const factorySpies = vi.hoisted(() => ({
   google: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
   host: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
@@ -118,11 +113,7 @@ describe("resolveRateLimiter", () => {
     expect(factorySpies.host.mock.calls[0]?.[1]).toBe("caldav.example.com");
   });
 
-  /*
-   * CalDAV sources are stored with provider 'caldav', 'fastmail', or 'icloud'
-   * (createCalDAVSourceSchema) — the branded variants must not fall through
-   * the family branch and lose their host politeness budget.
-   */
+  // CalDAV sources are stored as 'caldav', 'fastmail', or 'icloud', so all three need the host budget.
   it("keys the branded caldav variants by server host like plain caldav", () => {
     for (const provider of ["fastmail", "icloud"]) {
       const limiter = resolveRateLimiter(provider, sourceContext);
@@ -145,9 +136,8 @@ describe("resolveRateLimiter", () => {
   });
 
   /*
-   * The lease must be freed when the source finishes, not left to its 150s TTL:
-   * an account's fourth calendar in one pass would otherwise wait out a TTL that
-   * is longer than its own 120s ingest deadline.
+   * The lease's 150s TTL outlives a source's own 120s ingest deadline, so a
+   * lease left to expire would strand an account's next calendar in the pass.
    */
   it("releases the outlook lease on dispose", async () => {
     const limiter = resolveRateLimiter("outlook", sourceContext);

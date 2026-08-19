@@ -188,10 +188,7 @@ class CalDAVClient {
     return this.resolvedAuthMethod?.() ?? null;
   }
 
-  /*
-   * The host rate limiter meters requests per minute, so every origin request
-   * must draw its own permit before it is sent.
-   */
+  /* The host limiter meters requests per minute, so every origin request draws its own permit. */
   private async chargeRequest(): Promise<void> {
     await this.config.onBeforeRequest?.();
   }
@@ -200,10 +197,9 @@ class CalDAVClient {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
       /*
-       * Charging in the fetch pipeline rather than at the operation call sites
-       * is what makes the invariant hold: tsdav issues an eager account
-       * discovery trio from createDAVClient, and the digest handshake retries
-       * each request, none of which pass through an operation method.
+       * Charged in the fetch pipeline, not at operation call sites: tsdav issues an eager
+       * discovery trio from createDAVClient and the digest handshake retries each request,
+       * none of which pass through an operation method.
        */
       const chargedFetch: typeof safeFetch = async (...args) => {
         await this.chargeRequest();

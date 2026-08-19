@@ -37,10 +37,6 @@ const createDeferred = (): Deferred => {
   return { promise, reject, resolve };
 };
 
-/*
- * Instrumented run whose completion is held open per item by a deferred, so tests can
- * pin exactly when the worker is allowed to move on to the next item.
- */
 const createGatedRun = () => {
   const gates = new Map<number, Deferred>();
   const started: number[] = [];
@@ -106,16 +102,14 @@ describe("createSerialFlushWorker", () => {
     const gated = createGatedRun();
     const worker = createSerialFlushWorker(gated.run, { capacity: 2 });
 
-    // Item 1 is picked up by the worker; items 2 and 3 fill the queue to capacity.
+    // Capacity counts only queued items, so item 1 runs while 2 and 3 fill the queue.
     const first = worker.submit(1);
     const second = worker.submit(2);
     const third = worker.submit(3);
-    // Item 4 finds the queue full, so its enqueue must wait on backpressure.
     const fourth = worker.submit(4);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(gated.started).toEqual([1]);
 
-    // Finishing item 1 frees a slot: item 2 starts and item 4 may now enqueue.
     gated.open(1);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(gated.started).toEqual([1, 2]);
@@ -161,7 +155,6 @@ describe("createSerialFlushWorker", () => {
     const gated = createGatedRun();
     const worker = createSerialFlushWorker(gated.run, { capacity: 1 });
 
-    // Item 1 occupies the worker; item 2 fills the single queue slot.
     const first = worker.submit(1);
     const second = worker.submit(2);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
@@ -177,7 +170,6 @@ describe("createSerialFlushWorker", () => {
     expect(blockedProbe.status).toBe("rejected");
     await expect(blocked).rejects.toThrow("caller gave up waiting");
 
-    // The worker keeps going and the aborted item never reaches run.
     gated.open(1);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     gated.open(2);
@@ -199,7 +191,6 @@ describe("createSerialFlushWorker", () => {
     const closed = worker.close();
     const closedProbe = probe(closed);
 
-    // Only the first item has finished, so close must still be draining.
     await vi.advanceTimersByTimeAsync(RUN_MS + SETTLE_MS);
     expect(completions).toEqual([1]);
     expect(closedProbe.status).toBe("pending");

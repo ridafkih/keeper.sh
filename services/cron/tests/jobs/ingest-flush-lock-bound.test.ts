@@ -2,15 +2,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the head-of-line bound on the flush writer's advisory-lock wait. The
- * flush transaction takes pg_advisory_xact_lock(9003, calendarId) while holding
- * the single serial writer slot, and the same lock is held minutes-scale by
- * sync-user write-back and the API caldav persist. The wait on that lock must
- * therefore be bounded by a small constant statement_timeout (a few seconds),
- * not by the source's remaining 120s ingest deadline: one contended calendar
- * must fail ITS flush quickly so parked peers still flush inside their own
- * deadlines. The mock flushDatabase honours statement_timeout exactly like
- * Postgres does — a held lock rejects only when the in-effect timeout fires.
+ * The flush takes pg_advisory_xact_lock(9003, calendarId) while holding the single
+ * serial writer slot, and sync-user write-back holds that same lock minutes-scale.
+ * The wait must therefore be a small constant statement_timeout, not the source's
+ * remaining 120s deadline, or one contended calendar parks every peer behind it.
  */
 const ADVISORY_LOCK_WAIT_BOUND_MS = 10_000;
 const SIMULATED_CONTENTION_CAP_MS = 20_000;
@@ -36,11 +31,6 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids and the
-   * set_config values among them) as nested values, so a deep string sweep is
-   * enough to identify a statement and read its parameters.
-   */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -121,12 +111,9 @@ const harness = vi.hoisted(() => {
   };
 
   /*
-   * The flush transaction runner models Postgres semantics for the one thing
-   * under test: set_config('statement_timeout', …) changes the in-effect
-   * timeout, and a pg_advisory_xact_lock held by another session (a contended
-   * calendar) blocks until that in-effect timeout cancels the statement. The
-   * cap keeps the simulated contention finite so an unbounded wait fails the
-   * test instead of hanging the runner for the full 120s deadline.
+   * Postgres semantics for the statement under test: a lock held by another
+   * session blocks until the in-effect statement_timeout cancels it. The cap
+   * keeps an unbounded wait failing fast instead of hanging for the full deadline.
    */
   const flushTransaction = async (
     callback: (transaction: unknown) => Promise<unknown>,
@@ -187,10 +174,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -296,11 +279,6 @@ describe("ingest flush advisory-lock wait bound", () => {
     await job?.callback();
 
     const lockTimeoutMs = harness.state.lockStatementTimeoutMs.get("calendar-alpha");
-    /*
-     * The lock statement must run under a bounded wait, not the source's full
-     * remaining deadline: 120s here means one calendar contended by sync-user
-     * write-back parks the single flush writer for two minutes.
-     */
     expect(lockTimeoutMs).toBeDefined();
     expect(lockTimeoutMs ?? 0).toBeGreaterThan(0);
     expect(lockTimeoutMs ?? 0).toBeLessThanOrEqual(ADVISORY_LOCK_WAIT_BOUND_MS);
@@ -313,12 +291,10 @@ describe("ingest flush advisory-lock wait bound", () => {
     );
     harness.state.contendedCalendarIds.add("calendar-contended");
 
-    /* The contended source settles as its own error; the pass reports it. */
     await expect(job?.callback()).rejects.toThrow(
       "Calendar source ingestion completed with failures",
     );
 
-    /* The peer parked behind the contended flush must still have flushed. */
     expect(harness.state.lockStatementsSeen).toContain("calendar-peer");
   }, 15_000);
 });

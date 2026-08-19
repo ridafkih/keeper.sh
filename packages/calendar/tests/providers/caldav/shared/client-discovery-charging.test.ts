@@ -92,11 +92,6 @@ describe("CalDAV host-limiter charging during account discovery", () => {
 
     await client.discoverCalendars();
 
-    /*
-     * The invariant at client.ts ("every origin request must draw its own
-     * permit before it is sent") requires that no request ever leaves the
-     * process without a matching charge.
-     */
     expect(unchargedRequestPaths).toEqual([]);
   });
 });

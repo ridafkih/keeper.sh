@@ -24,10 +24,6 @@ const settle = async (): Promise<void> => {
   }
 };
 
-/*
- * The local reservation shape mirrors the exported contract; runtime calls go
- * through it as in the sibling weighted tests.
- */
 interface FlushReservation {
   release(): void;
   submit(item: number): Promise<number>;
@@ -47,31 +43,29 @@ const createWeightedWorker = (
 
 const neverRun = (item: number): Promise<number> => Promise.resolve(item);
 
+const BUDGET = 64;
+const PINNED_WEIGHT = 32;
+const WEIGHT_TOO_LARGE_TO_FIT_BESIDE_PINNED = 40;
+const WEIGHT_THAT_FITS_BESIDE_PINNED = 16;
+
 describe("aborted parked weight waiter is reaped immediately", () => {
   it("admits a fitting reservation after the parked head aborts, without waiting for a release", async () => {
-    const worker = createWeightedWorker(neverRun, 64);
+    const worker = createWeightedWorker(neverRun, BUDGET);
 
-    // Holder pins 32 of 64 and never releases.
-    await worker.reserve(32);
+    await worker.reserve(PINNED_WEIGHT);
 
-    // A 40-weight reservation cannot fit (32 + 40 > 64), so it parks FIFO.
     const controller = new AbortController();
-    const parked = probe(worker.reserve(40, controller.signal));
+    const parked = probe(
+      worker.reserve(WEIGHT_TOO_LARGE_TO_FIT_BESIDE_PINNED, controller.signal),
+    );
     await settle();
     expect(parked.status).toBe("pending");
 
-    // The parked waiter aborts: it rejected and must no longer block the line.
     controller.abort(new Error("caller gave up"));
     await settle();
     expect(parked.status).toBe("rejected");
 
-    /*
-     * A fresh 16-weight reservation fits right now (32 + 16 <= 64). The
-     * comment at grantWeight promises an aborted waiter is dropped "so it
-     * cannot block the line" — so this must be admitted immediately, not
-     * parked behind the phantom until some unrelated holder releases.
-     */
-    const fitting = probe(worker.reserve(16));
+    const fitting = probe(worker.reserve(WEIGHT_THAT_FITS_BESIDE_PINNED));
     await settle();
     expect(fitting.status).toBe("resolved");
   });

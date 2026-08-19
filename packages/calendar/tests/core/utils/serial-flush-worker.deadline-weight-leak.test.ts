@@ -28,7 +28,6 @@ describe("createSerialFlushWorker deadline expiry vs reserved weight", () => {
         maxConcurrentRuns = Math.max(maxConcurrentRuns, activeRuns);
         try {
           if (item.id === "wedge") {
-            // A half-open flushDatabase write: holds its transaction, never settles on its own.
             await new Promise<void>((resolve) => {
               releaseWedge = resolve;
             });
@@ -41,7 +40,6 @@ describe("createSerialFlushWorker deadline expiry vs reserved weight", () => {
       { budget: BUDGET },
     );
 
-    // Reservation A takes the full budget, then its run wedges past its deadline.
     const reservationA = await worker.reserve(BUDGET);
     const submitA = reservationA.submit({
       deadlineAt: Date.now() + SHORT_DEADLINE_MS,
@@ -49,11 +47,7 @@ describe("createSerialFlushWorker deadline expiry vs reserved weight", () => {
     });
     await expect(submitA).rejects.toThrow(/deadline/);
 
-    /*
-     * The abandoned run is still executing: its payload and its single
-     * flushDatabase connection are both still live. A full-budget reservation
-     * for B must therefore stay parked until A's run actually settles.
-     */
+    // The abandoned run still holds its payload and the single flushDatabase connection.
     let grantedB: FlushReservation<FlushItem, string> | null = null;
     const reserveB = worker.reserve(BUDGET).then((reservation) => {
       grantedB = reservation;
@@ -62,13 +56,8 @@ describe("createSerialFlushWorker deadline expiry vs reserved weight", () => {
     await sleep(SETTLE_WAIT_MS);
     expect(grantedB).toBeNull();
 
-    /*
-     * And the serial worker must never run two flushes concurrently: if B had
-     * been admitted and submitted, its run would overlap A's abandoned run.
-     */
     expect(maxConcurrentRuns).toBe(1);
 
-    // Cleanup: settle the wedged run, then drain whatever the grant produced.
     if (releaseWedge !== null) {
       const settle = releaseWedge as () => void;
       settle();

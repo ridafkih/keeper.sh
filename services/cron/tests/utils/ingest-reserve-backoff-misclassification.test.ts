@@ -8,27 +8,12 @@ import { OperationTimeoutError, withAbortTimeout } from "../../src/utils/with-ab
 import { requiresReauthentication } from "../../src/utils/error-flags";
 
 /*
- * The reserveIngestFlushWeight call is awaited INSIDE runSourceIngest's work callback
- * (ingest-sources.ts:1196-1200, 1400-1404, 1571-1575) under the source's
- * 120s abort signal. When the shared 64MB budget is pinned (eight
- * NEVER_INGESTED_WEIGHT holds of budget/8 while their fetches sleep in
- * provider throttles), a parked reserve() rejects with the source's
- * OperationTimeoutError at its deadline; on shutdown, close() rejects every
- * parked reserver with "serial flush worker is closed". Neither error ever
- * touched the calendar's provider.
- *
- * Both rejections propagate to runSourceIngest's catch (lines 219-223),
- * where shouldApplyOAuthIngestBackoff (line 230: !requiresReauthentication)
- * classifies EVERY non-reauth error as a provider failure and applies
- * exponential ingest backoff (5min doubling to a 6h cap) to the calendar.
- *
- * Desired property asserted here: an error produced purely by flush-budget
- * starvation or writer shutdown must NOT qualify a calendar for provider
- * backoff. On current code the classifier returns true for both, so these
- * tests FAIL, proving the misclassification.
+ * A reserve() that times out on a pinned flush budget, or is rejected by
+ * writer shutdown, never touched the calendar's provider — so it must not
+ * qualify the calendar for exponential provider backoff.
  */
 
-// Exact mirror of ingest-sources.ts:230-231 (the predicate is not exported).
+/* Mirror of the production gate, which is not exported. */
 const shouldApplyOAuthIngestBackoff = (error: unknown): boolean =>
   !requiresReauthentication(error);
 
@@ -41,18 +26,13 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
       (task: () => Promise<number>) => task(),
       { budget: WEIGHT_BUDGET, capacity: 50 },
     );
-    // Pin the budget exactly as eight concurrent cold-start sources do.
     const holds = await Promise.all(
       Array.from({ length: COLD_START_SOURCES }, () =>
         worker.reserve(NEVER_INGESTED_WEIGHT)),
     );
     expect(COLD_START_SOURCES * NEVER_INGESTED_WEIGHT).toBe(WEIGHT_BUDGET);
 
-    /*
-     * A ninth cold source parks in reserve()'s FIFO (budget/8 is far above
-     * the budget/64 express-lane ceiling) and hits its source deadline, the
-     * same withAbortTimeout mechanism that arms the production 120s signal.
-     */
+    /* Budget/8 is far above the budget/64 express lane, so a ninth source parks. */
     let caught: unknown = null;
     try {
       await withAbortTimeout(
@@ -64,12 +44,6 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
     }
     expect(caught).toBeInstanceOf(OperationTimeoutError);
 
-    /*
-     * The calendar's provider was never contacted. runSourceIngest's catch
-     * must not hand this error to applyIngestBackoff — yet the production
-     * classifier exempts only reauthentication errors, so this expect fails
-     * with true on current code.
-     */
     expect(shouldApplyOAuthIngestBackoff(caught)).toBe(false);
 
     for (const hold of holds) {
@@ -88,7 +62,6 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
         worker.reserve(NEVER_INGESTED_WEIGHT)),
     );
 
-    // A parked reserver caught by shutdown: close() rejects it outright.
     let caught: unknown = null;
     const parked = worker.reserve(NEVER_INGESTED_WEIGHT).catch((error: unknown) => {
       caught = error;
@@ -103,11 +76,6 @@ describe("flush-budget infrastructure errors versus provider backoff", () => {
     expect(caught).toBeInstanceOf(Error);
     expect((caught as Error).message).toBe("serial flush worker is closed");
 
-    /*
-     * Same misclassification on the shutdown path: a writer-closed rejection
-     * is infrastructure, not a provider failure, but the classifier returns
-     * true and the calendar is written an exponential backoff anyway.
-     */
     expect(shouldApplyOAuthIngestBackoff(caught)).toBe(false);
   });
 });

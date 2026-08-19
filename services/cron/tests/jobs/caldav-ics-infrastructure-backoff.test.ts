@@ -10,19 +10,14 @@ import { isIngestInfrastructureError } from "../../src/utils/error-flags";
 import { shouldTreatAsProviderAuthFailure } from "../../src/utils/provider-ingest-failure";
 
 /*
- * Flush-budget starvation (an OperationTimeoutError from a reserve parked on
- * the exhausted shared 64MB budget) and writer shutdown never contacted the
- * provider, so no family's backoff gate may punish the calendar with provider
- * exponential backoff. The gates live as inline lambdas in ingest-sources.ts;
- * they are mirrored here for behavioral assertion, and a source-text pin below
- * fails this suite if the production lambdas stop matching the mirrors.
+ * Budget starvation and writer shutdown never contacted the provider, so
+ * neither may trigger provider exponential backoff. The production gates are
+ * inline lambdas, so they are mirrored here and pinned by source text below.
  */
 
-// Mirror of the CalDAV gate in ingest-sources.ts (pinned below).
 const shouldApplyCalDavIngestBackoff = (error: unknown): boolean =>
   !shouldTreatAsProviderAuthFailure(error) && !isIngestInfrastructureError(error);
 
-// Mirror of the ICS gate in ingest-sources.ts (pinned below).
 const shouldApplyIcsIngestBackoff = (error: unknown): boolean =>
   !isIngestInfrastructureError(error);
 
@@ -84,10 +79,7 @@ describe("backoff gate source pins", () => {
     );
 
     const gateOccurrences = source.match(/!isIngestInfrastructureError\(error\)/gu) ?? [];
-    /*
-     * CalDAV and ICS gates inline the exemption; OAuth routes through
-     * requiresReauthentication, which folds the same predicate in.
-     */
+    // OAuth's third gate folds the predicate into requiresReauthentication.
     expect(gateOccurrences.length).toBeGreaterThanOrEqual(2);
     expect(source).toContain(
       "!shouldTreatAsProviderAuthFailure(error)\n                && !isIngestInfrastructureError(error)",

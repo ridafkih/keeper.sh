@@ -25,18 +25,9 @@ interface RedisScriptClient {
 }
 
 /**
- * Lua script for atomic sliding window rate limiting.
- *
  * KEYS[1] = sorted set key
- * ARGV[1] = window start (now - 60s) in ms
- * ARGV[2] = current time in ms
- * ARGV[3] = count of slots to acquire
- * ARGV[4] = max requests per minute
- *
- * Returns { waitTime, occupancy }:
- *   waitTime 0 = acquired successfully
- *   waitTime > 0 = wait time in ms before retrying
- *   occupancy = slots already held in the window when the decision was taken
+ * ARGV = [window start ms, now ms, slots to acquire, max requests per minute]
+ * Returns [waitTime, occupancy]; waitTime 0 means acquired.
  */
 const ACQUIRE_SCRIPT = `
   redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
@@ -96,20 +87,14 @@ const sleep = (delayMs: number): Promise<void> =>
     setTimeout(resolve, delayMs);
   });
 
-/*
- * Reached only after a throttled decision: the caller is parked on the shared
- * pacing window, ahead of the provider request the permit would authorize, so
- * an abort observed here is stamped as a pacing park (see pacing-park.ts).
- */
+/* Parked on the shared window, ahead of the request the permit would authorize. */
 const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   if (!signal) {
     return sleep(delayMs);
   }
   /*
-   * No park flag on an already-consumed deadline: it may have been eaten by a
-   * provider call that takes no signal, and stamping it would exempt a
-   * provider-consumed deadline from ingest backoff. Only the abort observed
-   * while actually parked below is pre-contact.
+   * No park flag on an already-consumed deadline: it may have been eaten by a provider call
+   * that takes no signal, and stamping it would exempt that from ingest backoff.
    */
   if (signal.aborted) {
     return Promise.reject(signal.reason);
@@ -190,10 +175,8 @@ const GOOGLE_LANE_REQUESTS_PER_MINUTE: Record<GoogleRateLimitLane, number> = {
 };
 
 /*
- * One key for both lanes: Google's quota is per user however it is spent, so separate
- * keys would let the two jobs together sail past the real limit. The lanes differ only
- * in how much of that shared key each may claim, which reserves headroom for ingestion
- * without raising the total.
+ * One key for both lanes: Google's quota is per user however it is spent, so separate keys
+ * would let the two jobs together sail past the real limit.
  */
 const createGoogleUserRateLimiter = (
   redis: RedisScriptClient,

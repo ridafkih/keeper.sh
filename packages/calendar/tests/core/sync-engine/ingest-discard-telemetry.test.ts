@@ -392,11 +392,6 @@ describe("CalDAV discards", () => {
     ]);
     const fetcher = createCalDAVFetcher();
 
-    /*
-     * A partial multiget must never become the authoritative snapshot: the
-     * diff would delete the stored event of the unreadable resource and
-     * re-add it on the next pass.
-     */
     const failure = await runIngest("caldav-calendar", () => fetcher.fetchEvents(), [
       storedEvent({ id: "state-readable", sourceEventUid: "readable@example.com" }),
       storedEvent({ id: "state-truncated", sourceEventUid: "truncated@example.com" }),

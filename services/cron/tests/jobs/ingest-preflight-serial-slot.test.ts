@@ -2,18 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the claim the persist-preflight comment in ingest-sources.ts makes: the
- * persist-time currency probe (Redis I/O on the sync-lock client, 10s
- * commandTimeout) "must settle here — after the queue wait, but BEFORE
- * flushDatabase.transaction opens — so a Redis brownout never parks the sole
- * flush connection, the advisory lock, or the serial writer slot".
- *
- * If that claim holds, a brownout-slow preflight on one source must not delay
- * another source's flush: the serial writer slot stays free while the probe
- * waits on Redis. This test drives two sources through the job's real
- * reservation.submit wiring and the real serial flush worker, makes source
- * alpha's preflight slow, and asserts source bravo's flush enters before
- * alpha's preflight settles.
+ * The persist-time currency probe runs after the queue wait but before the flush
+ * transaction opens, so the serial writer slot must stay free while it waits on
+ * Redis: a brownout on one source's probe may not delay another source's flush.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -39,10 +30,6 @@ const harness = vi.hoisted(() => {
     timeline: [] as string[],
   };
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among them)
-   * as nested values, so a deep string sweep is enough to identify a statement.
-   */
   // eslint-disable-next-line @eslint-plugin-unicorn/consistent-function-scoping -- The vi.hoisted callback runs before module initialization, so this helper cannot live at module scope.
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
@@ -148,15 +135,9 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test here: fetch, then route the result through
-   * the job-provided persistence transaction — carrying a persist-time
-   * preflight exactly like the real ingestSource does — so the job's
-   * reservation.submit call site and the real serial flush worker run for
-   * real. Alpha's preflight simulates a Redis brownout (a slow sync-lock
-   * isCurrent probe); bravo submits only after alpha's preflight has started,
-   * so the ordering between the two thunks is deterministic.
-   */
+  const SIMULATED_REDIS_BROWNOUT_MS = 1000;
+
+  // Bravo submits only once alpha's preflight has started, so the order is deterministic.
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -172,8 +153,7 @@ const harness = vi.hoisted(() => {
       state.timeline.push(`preflight-started:${options.calendarId}`);
       if (options.calendarId === "calendar-alpha") {
         state.signalAlphaPreflightStarted();
-        /* Simulated Redis brownout on the persist-time currency probe. */
-        await sleep(1000);
+        await sleep(SIMULATED_REDIS_BROWNOUT_MS);
       }
       state.timeline.push(`preflight-settled:${options.calendarId}`);
       return null;
@@ -275,18 +255,9 @@ describe("persist-time preflight and the serial writer slot", () => {
     await job?.callback();
 
     const { timeline } = harness.state;
-    /* Both sources reached persistence for real. */
     expect(timeline).toContain("flush-entered:calendar-alpha");
     expect(timeline).toContain("flush-entered:calendar-bravo");
 
-    /*
-     * The comment above the preflight in ingest-sources.ts promises the probe
-     * "never parks the sole flush connection, the advisory lock, or the
-     * serial writer slot". If the serial writer slot really stays free while
-     * alpha's probe waits on Redis, bravo's flush — submitted after alpha's
-     * preflight began — must enter before that probe settles, instead of
-     * queueing head-of-line behind the full brownout.
-     */
     const bravoFlushIndex = timeline.indexOf("flush-entered:calendar-bravo");
     const alphaPreflightSettledIndex = timeline.indexOf("preflight-settled:calendar-alpha");
     expect(

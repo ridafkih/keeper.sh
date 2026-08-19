@@ -1,13 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
- * Pins the outcome of a source whose ingest SUCCEEDS (flush committed, work()
- * returned) but whose post-work isCurrent() probe rejects — a renewal-tick
- * blip latched into SyncLockRenewalError, or a raw redis.eval failure. The
- * probe only gates the optional resetIngestBackoff write; its rejection
- * carries no information about the committed ingest, so it must not replace
- * the successful result with a failure, and it must never feed the provider
- * backoff escalator.
+ * The post-work isCurrent probe only gates the optional resetIngestBackoff
+ * write, so its rejection says nothing about the already-committed ingest and
+ * must never turn that success into a failure feeding the backoff escalator.
  */
 const harness = vi.hoisted(() => {
   const state = {
@@ -40,10 +36,7 @@ const harness = vi.hoisted(() => {
 
   const resolveLimited = (fields: Record<string, unknown>): unknown[] => {
     if ("failureCount" in fields) {
-      /*
-       * A prior pass failed once, so the success path wants to clear the
-       * backoff row — which routes it through the isCurrent() probe.
-       */
+      // A non-zero count is what routes the success path through the probe.
       return [{ failureCount: 1, nextAttemptAt: null }];
     }
     if ("accessToken" in fields) {
@@ -65,10 +58,6 @@ const harness = vi.hoisted(() => {
     builder.from = chain;
     builder.innerJoin = chain;
     builder.leftJoin = chain;
-    /*
-     * Bare awaits are the stored-event count and the destination-mapping read;
-     * zero rows mean weight from defaults and default required ranges.
-     */
     const resolveBare = (): unknown[] => {
       if ("count" in fields) {
         return [{ count: 0 }];
@@ -125,13 +114,7 @@ const harness = vi.hoisted(() => {
     return Promise.resolve({ eventsAdded: 3, eventsRemoved: 1 });
   });
 
-  /*
-   * The lock acquires and releases normally, but every isCurrent probe hits a
-   * Redis failure — the renewal-error latch and the eval-backed probe both
-   * surface exactly this way after a transient blip. The mocked ingestSource
-   * never consults isCurrent mid-run, so the ONLY caller is the success path's
-   * own post-commit probe at ingest-sources.ts line 232.
-   */
+  // The mocked engine never probes mid-run, so the post-commit probe is the only caller.
   const isCurrent = (): Promise<boolean> => {
     state.isCurrentCallCount += 1;
     return Promise.reject(new Error("redis eval timed out during isCurrent"));
@@ -232,15 +215,10 @@ describe("isCurrent rejection after a successful ingest with a prior failure", (
   it("keeps the successful result and applies no backoff", async () => {
     const result = await ingestOAuthSources();
 
-    /* The ingest itself ran to completion and the probe was actually hit. */
     expect(harness.state.fetchCallCount).toBe(1);
     expect(harness.state.ingestCallCount).toBe(1);
     expect(harness.state.isCurrentCallCount).toBeGreaterThan(0);
 
-    /*
-     * The rejected probe must not clobber the committed ingest: the source
-     * counts as a success with its events, and no backoff row is escalated.
-     */
     expect(result.errors).toBe(0);
     expect(result.added).toBe(3);
     expect(result.removed).toBe(1);

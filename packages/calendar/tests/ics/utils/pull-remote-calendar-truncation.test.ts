@@ -28,12 +28,7 @@ const FULL_ICS = [
   "END:VCALENDAR",
 ].join("\r\n");
 
-/*
- * The feed cut mid-body: VERSION and PRODID survive at the top, event-1 is
- * intact, events 2-3 and END:VCALENDAR are gone. This is what a size-capping
- * proxy, a partial origin write with valid HTTP framing, or a 206 response
- * body looks like.
- */
+// Header and event-1 survive but END:VCALENDAR is gone, as from a size-capping proxy.
 const TRUNCATED_ICS = FULL_ICS.slice(0, FULL_ICS.indexOf("BEGIN:VEVENT\r\nUID:event-2"));
 
 describe("pullRemoteCalendar truncated feed", () => {
@@ -42,11 +37,6 @@ describe("pullRemoteCalendar truncated feed", () => {
   });
 
   it("rejects a body truncated after the header instead of returning a partial event set", async () => {
-    /*
-     * If this resolves, the strictly-smaller event set is persisted as an
-     * authoritative snapshot and the ingest diff mass-deletes every stored
-     * event after the cut, then re-adds them all on the next complete fetch.
-     */
     const { pullRemoteCalendar } = await import("../../../src/ics/utils/pull-remote-calendar");
     mockSafeFetch.mockResolvedValueOnce(new Response(TRUNCATED_ICS, { status: 200 }));
 
@@ -56,10 +46,7 @@ describe("pullRemoteCalendar truncated feed", () => {
   });
 
   it("rejects a 206 Partial Content body instead of treating it as the whole feed", async () => {
-    /*
-     * Response.ok is true for every 2xx status, 206 included, so a range
-     * response passes the only status gate in fetchRemoteText.
-     */
+    // Response.ok is true for every 2xx status, 206 included, so it clears the status gate.
     const { pullRemoteCalendar } = await import("../../../src/ics/utils/pull-remote-calendar");
     mockSafeFetch.mockResolvedValueOnce(new Response(TRUNCATED_ICS, { status: 206 }));
 

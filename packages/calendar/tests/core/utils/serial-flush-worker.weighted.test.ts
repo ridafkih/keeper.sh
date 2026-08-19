@@ -31,10 +31,6 @@ const createDeferred = (): Deferred => {
   return { promise, reject, resolve };
 };
 
-/*
- * Instrumented run whose completion is held open per item by a deferred, so tests can
- * pin exactly when a reservation's weight is auto-freed by its run settling.
- */
 const createGatedRun = () => {
   const gates = new Map<number, Deferred>();
   const started: number[] = [];
@@ -53,10 +49,7 @@ const createGatedRun = () => {
   return { fail, open, run, started };
 };
 
-/*
- * The weighted API does not exist yet, so the exported type has no reserve member.
- * This local shape states the contract under test; the runtime calls go through it.
- */
+// The exported worker type carries no reserve member, hence the local shape and casts.
 interface FlushReservation {
   release(): void;
   submit(item: number): Promise<number>;
@@ -87,17 +80,14 @@ describe("createSerialFlushWorker weighted reservation", () => {
     const gated = createGatedRun();
     const worker = createWeightedWorker(gated.run, 10);
 
-    // Two 4-weight reservations fit inside a budget of 10.
     const firstReservation = await worker.reserve(4);
     const secondReservation = await worker.reserve(4);
 
-    // A third 4-weight reserve would take outstanding weight to 12 > 10, so it parks.
     const third = worker.reserve(4);
     const thirdProbe = probe(third);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(thirdProbe.status).toBe("pending");
 
-    // Releasing one 4-weight hold drops outstanding weight to 4, admitting the third.
     firstReservation.release();
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(thirdProbe.status).toBe("resolved");
@@ -117,7 +107,6 @@ describe("createSerialFlushWorker weighted reservation", () => {
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(whaleProbe.status).toBe("resolved");
 
-    // The clamped whale holds the full budget, so any further reserve parks behind it.
     const whaleReservation = await whale;
     const small = worker.reserve(1);
     const smallProbe = probe(small);
@@ -141,7 +130,6 @@ describe("createSerialFlushWorker weighted reservation", () => {
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(waitingProbe.status).toBe("pending");
 
-    // The fetch failed upstream: release() alone must return the weight.
     holder.release();
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(waitingProbe.status).toBe("resolved");
@@ -181,7 +169,6 @@ describe("createSerialFlushWorker weighted reservation", () => {
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(waitingProbe.status).toBe("pending");
 
-    // A failing flush still ends the reservation; its weight must not leak.
     gated.fail(1, new Error("flush transaction failed"));
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(flushedProbe.status).toBe("rejected");
@@ -195,12 +182,10 @@ describe("createSerialFlushWorker weighted reservation", () => {
     const gated = createGatedRun();
     const worker = createWeightedWorker(gated.run, 5);
 
-    // Double release: the second call must be a no-op, not a second credit of 5.
     const doubled = await worker.reserve(5);
     doubled.release();
     doubled.release();
 
-    // Release after the submitted run already settled (auto-free): also a no-op.
     const settled = await worker.reserve(5);
     const flushed = settled.submit(1);
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
@@ -240,8 +225,6 @@ describe("createSerialFlushWorker weighted reservation", () => {
     expect(blockedProbe.status).toBe("rejected");
     await expect(blocked).rejects.toThrow("collector gave up waiting");
 
-    // The aborted waiter acquired nothing, so once the holder releases exactly
-    // ONE full budget is available again: a 5-weight reserve fits, one more unit does not.
     holder.release();
     const exact = worker.reserve(5);
     const exactProbe = probe(exact);
@@ -265,7 +248,6 @@ describe("createSerialFlushWorker weighted reservation", () => {
     const gated = createGatedRun();
     const worker = createSerialFlushWorker(gated.run, { capacity: 1 });
 
-    // Item 1 occupies the worker; item 2 fills the single queue slot; item 3 parks.
     const first = worker.submit(1);
     const second = worker.submit(2);
     const third = worker.submit(3);

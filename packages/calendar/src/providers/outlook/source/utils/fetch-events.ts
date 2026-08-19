@@ -177,7 +177,6 @@ const fetchEventsPage = async (
   const { accessToken } = options;
   const url = getRequestUrl(options);
 
-  // Take the mailbox concurrency lease before every Graph request goes out.
   if (options.rateLimiter) {
     await options.rateLimiter.acquire(1, options.signal);
   }

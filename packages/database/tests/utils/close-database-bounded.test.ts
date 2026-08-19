@@ -4,20 +4,15 @@ import { closeDatabase, createDatabase } from "../../src/index";
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 
 /*
- * The cron shutdown path bounds the flush drain at 2s precisely so a wedged
- * flush cannot keep the process alive until the supervisor SIGKILLs it
- * (services/cron/src/context.ts). After that deadline it calls
- * closeDatabase(flushDatabase, { graceSeconds }). Bun's SQL close() with no
- * options awaits every in-flight query before closing the pool, so if the
- * wedged query is still running, pool teardown inherits the very unbounded
- * wait the drain deadline was added to remove. This pins the requirement that
- * closeDatabase with an explicit grace settles the pool within the shutdown
- * bound even with a query still in flight. The unbounded default is pinned
- * separately by close-database-api-shutdown.test.ts.
+ * Bun's SQL close() with no options awaits every in-flight query, so pool
+ * teardown would inherit the very unbounded wait cron's drain deadline exists
+ * to remove. An explicit grace must settle the pool within the shutdown bound.
+ * The unbounded default is pinned by close-database-api-shutdown.test.ts.
  */
 const WEDGED_QUERY_SECONDS = 8;
 const SHUTDOWN_BOUND_MS = 3000;
 const CLOSE_GRACE_SECONDS = 2;
+const STATEMENT_REACHES_SERVER_MS = 300;
 
 describe.skipIf(!TEST_DATABASE_URL)("closeDatabase with a wedged in-flight query", () => {
   it("settles pool teardown within the shutdown bound", async () => {
@@ -35,16 +30,14 @@ describe.skipIf(!TEST_DATABASE_URL)("closeDatabase with a wedged in-flight query
       return capturedClose;
     }) as typeof client.close;
 
-    // A flush wedged mid-statement on the dedicated single connection.
     const wedged = database
       .execute(`select pg_sleep(${WEDGED_QUERY_SECONDS})`)
       .then(
         () => "completed",
         () => "aborted",
       );
-    // Give the statement time to reach the server before shutdown begins.
     await new Promise((resolve) => {
-      setTimeout(resolve, 300);
+      setTimeout(resolve, STATEMENT_REACHES_SERVER_MS);
     });
 
     const closeStartedAt = Date.now();
@@ -69,7 +62,7 @@ describe.skipIf(!TEST_DATABASE_URL)("closeDatabase with a wedged in-flight query
     }
     const elapsedMs = Date.now() - closeStartedAt;
 
-    // Let the wedged query finish so the suite exits cleanly either way.
+    /* Let the wedged query finish so the suite exits cleanly either way. */
     await wedged;
     await (capturedClose as unknown as Promise<unknown>).catch(() => null);
 

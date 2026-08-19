@@ -1,11 +1,9 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
- * Pins the outcome of a source whose ingest SUCCEEDS but whose rate-limiter
- * dispose() rejects in the finally (outlook lease release hitting a Redis
- * error). The lease TTL already guarantees slot recovery, so a failed release
- * must not replace the successful result with a failure: the settlement should
- * stay fulfilled, count its events, and never feed the ingest backoff.
+ * The lease TTL already guarantees slot recovery, so a dispose() that rejects in
+ * the finally carries no information the run needs and must never turn a
+ * successful ingest into a failure feeding the backoff.
  */
 const harness = vi.hoisted(() => {
   const state = {
@@ -60,10 +58,6 @@ const harness = vi.hoisted(() => {
     builder.from = chain;
     builder.innerJoin = chain;
     builder.leftJoin = chain;
-    /*
-     * Bare awaits are the stored-event count and the destination-mapping read;
-     * zero rows mean weight from defaults and default required ranges.
-     */
     const resolveBare = (): unknown[] => {
       if ("count" in fields) {
         return [{ count: 0 }];
@@ -103,11 +97,6 @@ const harness = vi.hoisted(() => {
     update: () => updateBuilder,
   };
 
-  /*
-   * The semaphore's lease is granted normally, but the explicit release hits a
-   * Redis failure. The TTL still reclaims the slot, so this rejection carries
-   * no information the run needs to act on.
-   */
   const createOutlookAccountSemaphore = vi.fn(() => ({
     acquireLease: () => Promise.resolve({ key: "lease-key", token: "lease-token" }),
     release: (): Promise<void> => {
@@ -121,7 +110,7 @@ const harness = vi.hoisted(() => {
   ) => ({
     fetchEvents: async (): Promise<unknown> => {
       state.fetchCallCount += 1;
-      /* Pagination goes through the limiter, so the lease is genuinely held. */
+      // Pagination goes through the limiter, so the lease is genuinely held.
       await params.rateLimiter?.acquire(1);
       return { events: [] };
     },
@@ -226,15 +215,10 @@ describe("rate limiter dispose rejection after a successful ingest", () => {
   it("keeps the successful result and applies no backoff", async () => {
     const result = await ingestOAuthSources();
 
-    /* The ingest itself ran to completion and the lease release was attempted. */
     expect(harness.state.fetchCallCount).toBe(1);
     expect(harness.state.ingestCallCount).toBe(1);
     expect(harness.state.releaseCallCount).toBe(1);
 
-    /*
-     * The rejected dispose must not clobber the fulfilled ingest: the source
-     * counts as a success with its events, not as an error feeding backoff.
-     */
     expect(result.errors).toBe(0);
     expect(result.added).toBe(3);
     expect(result.removed).toBe(1);

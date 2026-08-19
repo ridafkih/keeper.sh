@@ -3,18 +3,14 @@ import { registerFlushDrain } from "../../src/utils/flush-drains";
 import { createSerialFlushWorker } from "../../../../packages/calendar/src/core/utils/serial-flush-worker";
 
 /*
- * SIGTERM triggers entrykit's cleanup, which awaits shutdownDatabases().
- * shutdownDatabases awaits drainFlushWriters() with no deadline, and the
- * registered drain in production is ingestFlushWriter.close(), which resolves
- * only when the pump goes idle. A single wedged flush (a run() that never
- * settles, e.g. a half-open connection) therefore turns graceful shutdown
- * into a permanent hang: closeDatabase never runs and the process lingers
- * until the supervisor SIGKILLs it. This test pins that shutdown must settle
- * within a bounded time even when one flush is wedged.
+ * The registered drain is ingestFlushWriter.close(), which resolves only when
+ * the pump goes idle, so without a deadline one wedged flush turns graceful
+ * shutdown into a permanent hang: closeDatabase never runs.
  */
 
 const TEST_DATABASE_URL = "postgres://cron-test/keeper";
 const SHUTDOWN_DEADLINE_MS = 3000;
+/* Outlives the shutdown bound, so the flush is still wedged when it is measured. */
 const WEDGED_ITEM_CLIENT_DEADLINE_MS = 5000;
 
 const mocks = vi.hoisted(() => {
@@ -70,24 +66,17 @@ describe("shutdown drain deadline", () => {
       shutdownDatabases: () => Promise<void>;
     };
 
-    /*
-     * A wedged flush: run() never settles, exactly the half-open-connection
-     * scenario the serial-flush-worker's own comments describe. The pump
-     * awaits it to settlement, so close() waits forever on idleWaiters.
-     */
     const wedgedWorker = createSerialFlushWorker<{ deadlineAt: number }, null>(
       () => new Promise<null>(() => {
-        // Never settles: models the half-open connection.
+        // Never settles: models a half-open connection.
       }),
     );
     const wedgedSubmit = wedgedWorker.submit({
-      // A short client deadline so the run's timer does not outlive the test.
       deadlineAt: Date.now() + WEDGED_ITEM_CLIENT_DEADLINE_MS,
     });
-    // The client-side deadline rejects the caller; the run stays wedged.
+    /* The client deadline rejects the caller while the run itself stays wedged. */
     wedgedSubmit.catch(() => null);
 
-    // Mirrors ingest-sources.ts: registerFlushDrain(() => ingestFlushWriter.close()).
     registerFlushDrain(() => wedgedWorker.close());
 
     let shutdownState = "still-draining";
@@ -101,11 +90,6 @@ describe("shutdown drain deadline", () => {
       setTimeout(resolve, SHUTDOWN_DEADLINE_MS);
     });
 
-    /*
-     * Graceful shutdown must complete within the bound: without a drain
-     * deadline this stays "still-draining" forever and closeDatabase is
-     * never reached for either database instance.
-     */
     expect(shutdownState).toBe("completed");
     expect(mocks.closeDatabase).toHaveBeenCalledTimes(2);
   });

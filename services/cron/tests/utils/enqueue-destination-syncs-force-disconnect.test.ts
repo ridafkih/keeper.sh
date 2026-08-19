@@ -4,17 +4,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { createPushSyncQueue } from "@keeper.sh/queue";
 
 /*
- * The enqueue's finally block fire-and-forgets queue.disconnect() so that a
- * timed-out run "force-disconnects" the ioredis connection and it "stops
- * reconnecting forever". But BullMQ's RedisConnection.disconnect() begins with
- * `const client = await this.client`, and `client` is the `initializing`
- * promise that only resolves once ioredis emits "ready". Against a Redis
- * endpoint that accepts TCP and never answers — exactly the scenario the 10s
- * enqueue timeout exists for — "ready" never fires, so the disconnect parks
- * forever before reaching client.disconnect(), and the abandoned ioredis
- * client keeps its reconnect loop alive. This suite drives the real enqueue
- * wiring at such an endpoint and requires the underlying ioredis client to
- * actually reach "end" shortly after the enqueue settles.
+ * BullMQ's RedisConnection.disconnect() starts with `await this.client`, a
+ * promise that only settles once ioredis emits "ready". Against an endpoint
+ * that accepts TCP and never answers — the case the enqueue timeout exists
+ * for — the disconnect parks before it ever closes the socket, leaving the
+ * abandoned client's reconnect loop running.
  */
 
 const testState = vi.hoisted(() => ({
@@ -40,11 +34,7 @@ vi.mock("@/utils/logging", () => ({
 vi.mock("@/context", () => ({
   database: {
     select: () => ({
-      /*
-       * A real promise (awaited directly by getPendingRequests: no pending
-       * requests) augmented with `where` (chained by getDestinations: one
-       * push-capable pro destination).
-       */
+      /* Awaited directly by getPendingRequests, chained with `where` by getDestinations. */
       from: () =>
         Object.assign(Promise.resolve([]), {
           where: () => Promise.resolve([{ calendarId: "cal-1", userId: "user-1" }]),
@@ -97,7 +87,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Abandon the leaked clients so vitest can exit even while the bug stands.
+  // Close leaked clients by hand, or vitest cannot exit while the bug stands.
   for (const queue of testState.createdQueues) {
     const client = (queue as QueueInternals).connection._client;
     (client as unknown as { disconnect?: () => void })?.disconnect?.();
@@ -127,11 +117,6 @@ describe("enqueue force-disconnect against an unresponsive Redis", () => {
 
     expect(testState.createdQueues.length).toBeGreaterThan(0);
 
-    /*
-     * The finally block has already fired queue.disconnect() by now. Give the
-     * teardown a generous grace window, then require every abandoned client to
-     * have actually left the connect/reconnect cycle.
-     */
     const deadline = Date.now() + 5000;
     let statuses: string[] = [];
     while (Date.now() < deadline) {

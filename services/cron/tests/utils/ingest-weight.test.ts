@@ -10,13 +10,9 @@ import {
 } from "../../src/utils/ingest-weight";
 
 /*
- * A weighted permit must be sized BEFORE the provider fetch begins, so the
- * estimate has to come from what we already know: the stored event count from
- * the previous ingest. Items vary by two-plus orders of magnitude (a 12-event
- * personal calendar vs a 3,000-event ICS feed), so a count-based limit cannot
- * bound memory — a byte-weight estimate can. These tests pin the estimator's
- * three rules (history-based clamp, never-ingested self-limit, fallback on a
- * failed count read) plus the real pooled-database count query.
+ * The permit is sized BEFORE the fetch, so the estimate can only come from the
+ * previous ingest's stored count. Calendars vary by two-plus orders of
+ * magnitude, so a count-based limit cannot bound memory; a byte weight can.
  */
 
 const NEVER_INGESTED_DEFAULT = WEIGHT_BUDGET / 8;
@@ -71,11 +67,7 @@ describe("estimateIngestWeight for calendars that have ingested before", () => {
 
 describe("estimateIngestWeight for never-ingested calendars", () => {
   it("returns an eighth of the budget regardless of stored count", async () => {
-    /*
-     * A launch flood of unknown-size first ingests must self-limit to ~8
-     * concurrent fetches, so the unknown case claims budget/8 even when a
-     * stale stored count exists.
-     */
+    /* Budget/8 self-limits a flood of unknown-size first ingests to ~8 at a time. */
     const countStoredEventsMock = vi.fn(() => Promise.resolve(1_000_000));
 
     const weight = await estimateIngestWeight(

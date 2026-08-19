@@ -27,18 +27,11 @@ interface RedisLeaseClient {
   set(key: string, value: string, ...options: string[]): Promise<string | null>;
 }
 
-/*
- * Reached only after every slot came back claimed: the caller is parked on
- * keeper's own concurrency cap, ahead of any request the lease would
- * authorize, so an abort observed here is stamped as a pacing park (see
- * pacing-park.ts).
- */
+/* Parked on keeper's own cap, ahead of any request the lease would authorize. */
 const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   /*
-   * No park flag on an already-consumed deadline: it may have been eaten by a
-   * provider call that takes no signal, and stamping it would exempt a
-   * provider-consumed deadline from ingest backoff. Only the abort observed
-   * while actually parked below is pre-contact.
+   * No park flag on an already-consumed deadline: it may have been eaten by a provider call
+   * that takes no signal, and stamping it would exempt that from ingest backoff.
    */
   if (signal?.aborted) {
     return Promise.reject(signal.reason);
@@ -61,9 +54,8 @@ const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> =
 };
 
 /*
- * Each slot is its own Redis key claimed with SET NX PX, so a crashed holder's
- * lease expires on its own instead of wedging the account the way a bare
- * INCR/DECR counter would.
+ * Each slot is its own key claimed with SET NX PX, so a crashed holder's lease expires on
+ * its own instead of wedging the account the way a bare INCR/DECR counter would.
  */
 const createLeasedSemaphore = (
   redis: RedisLeaseClient,
@@ -76,10 +68,8 @@ const createLeasedSemaphore = (
     for (let slot = 0; slot < capacity; slot += 1) {
       const slotKey = `semaphore:${key}:slot:${slot}`;
       /*
-       * Timestamped BEFORE the SET is sent: the server applies the PX expiry
-       * at some point at or after this instant, so the key cannot lapse before
-       * requestedAt + ttlMs. Inside that window (minus a safety margin) the
-       * slot provably still holds this token, making a bare DEL exact.
+       * Timestamped BEFORE the SET: the server applies PX at or after this instant, so the
+       * key cannot lapse before requestedAt + ttlMs, which is what makes a bare DEL exact.
        */
       const requestedAt = Date.now();
       const granted = await measureRedisCommand(() =>
@@ -105,11 +95,9 @@ const createLeasedSemaphore = (
   };
 
   /*
-   * The lease client exposes only SET/DEL (no GET, no EVAL), so ownership is
-   * fenced by time instead of a compare-and-delete script: once the lease's
-   * safe-delete window has passed, the slot may already have expired and been
-   * reclaimed by another holder, and deleting it would break the capacity
-   * bound. Past the window the DEL is skipped and the TTL reaps the key.
+   * The lease client exposes only SET/DEL (no GET, no EVAL), so ownership is fenced by time
+   * rather than a compare-and-delete script: past the safe window the slot may already have
+   * been reclaimed, and deleting it would break the capacity bound.
    */
   const release = async (lease: SemaphoreLease): Promise<void> => {
     if (Date.now() >= lease.safeToDeleteUntil) {

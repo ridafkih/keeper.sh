@@ -1,24 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 /*
- * Pins the OTHER half of the shutdown ordering. The flush drain
- * (context.ts:29-45) exists so "queued and in-flight flushes settle before
- * the dedicated single-connection flushDatabase is closed" — but a drained
- * flush only commits if its persist-time currency re-probe
- * (packages/calendar/src/core/sync-engine/ingest.ts:308-313) answers
- * "current". That probe is a redis.eval on the sync-lock handle backed by
- * refreshLockRedis (packages/sync/src/sync-lock.ts:224-236,
- * ingest-sources.ts:125-143). The cleanup in src/index.ts runs
- * shutdownRefreshLockRedis() BEFORE await shutdownDatabases(), so by the
- * time the drain pumps a queued flush the client rejects every command,
- * probeCurrency (ingest.ts:203-210) reports "currency-unconfirmed", and the
- * flush returns EMPTY_RESULT without flushing: the drain "succeeds" while
- * every payload it was built to persist is silently discarded. This test
- * drives the REAL src/index.ts cleanup, the REAL context/flush-drain
- * machinery, and the REAL ingestSource persist-time probe; only the
- * process-boundary pieces (entrykit, env, databases, ioredis, polar,
- * premium) are stubbed. On current code the parked flush is discarded as
- * currency-unconfirmed, so this test FAILS, proving the issue.
+ * A drained flush only commits if its persist-time currency re-probe answers
+ * "current", and that probe is a redis.eval on refreshLockRedis. Disconnect
+ * that client before the drain and the drain still "succeeds" while every
+ * payload it was built to persist is silently discarded.
  */
 
 interface HarnessState {
@@ -47,24 +33,23 @@ vi.mock("../src/env", () => ({
 
 vi.mock("../src/migration-check", () => ({
   checkWorkerMigrationStatus: (): void => {
-    // The real check may process.exit(1); the stub keeps the test alive.
+    // The real check may process.exit(1).
   },
 }));
 
 vi.mock("../src/utils/logging", () => ({
   destroy: (): void => {
-    // Logging teardown is out of scope here.
+    // Intentionally empty.
   },
 }));
 
 vi.mock("../src/utils/get-jobs", () => ({
-  // No scheduled jobs: the parked flush is injected through the drain registry.
   getAllJobs: (): Promise<unknown[]> => Promise.resolve([]),
 }));
 
 vi.mock("@keeper.sh/database", () => ({
   closeDatabase: (): void => {
-    // Pool teardown is out of scope here.
+    // Intentionally empty.
   },
   createDatabase: (): Promise<object> => Promise.resolve({}),
   createMigrationReadinessDatabase: (): object => ({}),
@@ -82,11 +67,7 @@ vi.mock("@polar-sh/sdk", () => ({
   },
 }));
 
-/*
- * Mirror of ioredis teardown semantics: after disconnect() the client
- * rejects every command with the bare "Connection is closed." Error — the
- * exact rejection the persist-time probe sees during shutdown.
- */
+/* Mirrors ioredis: after disconnect() every command rejects "Connection is closed." */
 vi.mock("ioredis", () => ({
   default: class FakeRedis {
     public closed = false;
@@ -113,11 +94,6 @@ describe("SIGTERM cleanup and the flush drain's currency probe", () => {
 
     expect(harness.cleanup).not.toBeNull();
 
-    /*
-     * Mirror of the sourceIngestLock handle's isCurrent
-     * (packages/sync/src/sync-lock.ts:224-236): a redis.eval round trip on
-     * the very client shutdownRefreshLockRedis disconnects.
-     */
     const isCurrent = async (): Promise<boolean> => {
       const current = await (refreshLockRedis as {
         eval: (...args: unknown[]) => Promise<unknown>;
@@ -125,11 +101,6 @@ describe("SIGTERM cleanup and the flush drain's currency probe", () => {
       return current === 1;
     };
 
-    /*
-     * Park one flush exactly as a live source would at deploy time: payload
-     * fully fetched, pre-enqueue probe passed, transaction thunk waiting in
-     * the serial flush queue for the drain to pump it.
-     */
     const queuedThunks: (() => void)[] = [];
     let flushCommitted = false;
     let recordedOutcome = "";
@@ -157,7 +128,6 @@ describe("SIGTERM cleanup and the flush drain's currency probe", () => {
       }),
     });
 
-    /* Let the fetch and the pre-enqueue probe settle so the thunk parks. */
     await new Promise((resolve) => { setTimeout(resolve, 0); });
     expect(queuedThunks).toHaveLength(1);
 
@@ -172,15 +142,9 @@ describe("SIGTERM cleanup and the flush drain's currency probe", () => {
 
     await harness.cleanup?.();
 
-    /* The drain itself completes either way — that is what masks the loss. */
+    /* The drain completes either way — that is what masks the loss. */
     expect(drained).toBe(true);
 
-    /*
-     * The whole point of draining before closing the flush database is that
-     * the queued flush PERSISTS. If refreshLockRedis was disconnected first,
-     * the persist-time probe answers "currency-unconfirmed" and the payload
-     * is silently discarded.
-     */
     expect(recordedOutcome).not.toBe("currency-unconfirmed");
     expect(flushCommitted).toBe(true);
   });

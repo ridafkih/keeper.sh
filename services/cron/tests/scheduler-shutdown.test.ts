@@ -1,17 +1,9 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 /*
- * Entrykit registers the cleanup returned by src/index.ts main() via
- * process.once("SIGTERM", cleanup) and never calls process.exit, so the only
- * way the cron service exits gracefully is for cleanup to leave the event
- * loop empty. Cronbake arms bare setTimeout/setInterval timers (never
- * unref'd), so cleanup must stop the baker: otherwise the armed schedulers
- * keep the process alive until the supervisor SIGKILLs it, and jobs whose
- * status is still "running" keep launching full ingest passes against the
- * already-closed flush writer, database pools, and disconnected Redis. This
- * test drives the real registerJobs/baker through index.ts with everything
- * else stubbed, invokes the captured cleanup, and pins that the scheduler is
- * stopped and fires no further ticks afterwards.
+ * Cleanup must stop the baker: cronbake's timers are never unref'd, so a
+ * still-"running" job both pins the event loop open and keeps launching
+ * ingest passes against closed pools and disconnected Redis.
  */
 
 interface HarnessState {
@@ -36,7 +28,7 @@ vi.mock("../src/env", () => ({
 
 vi.mock("../src/migration-check", () => ({
   checkWorkerMigrationStatus: (): void => {
-    // The real check may process.exit(1); the stub keeps the test alive.
+    // The real check may process.exit(1).
   },
 }));
 
@@ -44,7 +36,7 @@ vi.mock("../src/context", () => ({
   database: { name: "fake-database" },
   shutdownDatabases: (): Promise<void> => Promise.resolve(),
   shutdownRefreshLockRedis: (): void => {
-    // Redis is out of scope here; the stub records nothing.
+    // Intentionally empty.
   },
 }));
 
@@ -55,7 +47,7 @@ vi.mock("@keeper.sh/database", () => ({
 
 vi.mock("../src/utils/logging", () => ({
   destroy: (): void => {
-    // Logging teardown is out of scope here.
+    // Intentionally empty.
   },
 }));
 
@@ -74,7 +66,6 @@ vi.mock("../src/utils/get-jobs", () => ({
 
 describe("SIGTERM cleanup and the cronbake scheduler", () => {
   afterAll(async () => {
-    // Disarm any timers the test left behind so the runner can exit.
     const { baker } = await import("../src/utils/baker");
     baker.destroyAll();
   });
@@ -88,11 +79,6 @@ describe("SIGTERM cleanup and the cronbake scheduler", () => {
 
     await harness.cleanup?.();
 
-    /*
-     * After cleanup the scheduler must be stopped: a "running" job means
-     * armed timers pin the event loop open forever (cronbake never unrefs)
-     * and keep firing ingest passes against closed pools.
-     */
     expect(baker.getStatus("shutdown-probe")).toBe("stopped");
 
     const ticksAtCleanup = harness.tickCount;

@@ -16,24 +16,18 @@ const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DA
 const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1 });
 
 /*
- * Registered flush writers are drained first so queued and in-flight flushes
- * settle before the dedicated single-connection flushDatabase is closed
- * underneath them. The drain is bounded: a single wedged flush (a run that
- * never settles, e.g. a half-open connection) would otherwise keep the pump
- * busy forever, and entrykit's SIGTERM cleanup awaits this function with no
- * timeout of its own — the process would linger until the supervisor
- * SIGKILLs it and the databases would never be closed.
+ * Writers drain before flushDatabase closes underneath them. The drain is bounded because
+ * entrykit's SIGTERM cleanup awaits this with no timeout of its own: one wedged flush would
+ * keep the process alive until the supervisor SIGKILLs it, leaving the databases unclosed.
  */
 const FLUSH_DRAIN_DEADLINE_MS = 2000;
 /*
- * Pool teardown gets the same bound as the drain: Bun's unbounded close awaits
- * the very in-flight query the drain deadline just gave up on, so leaving it
- * unbounded would hand the wedged flush back the time the deadline removed.
+ * Bun's unbounded close awaits the very in-flight query the drain deadline just gave up on,
+ * so leaving teardown unbounded would hand the wedged flush back the time the deadline removed.
  */
 const CLOSE_GRACE_SECONDS = 2;
 
 const shutdownDatabases = async (): Promise<void> => {
-  // The settled tags swallow a post-deadline rejection so it cannot become unhandled.
   const drain = drainFlushWriters().then(
     () => "drained",
     () => "drain-failed",

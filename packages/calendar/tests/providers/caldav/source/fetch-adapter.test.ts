@@ -177,11 +177,6 @@ describe("createCalDAVSourceFetcher against an unreadable resource", () => {
         url: `${SERVER_URL}${path}`,
       })));
 
-    /*
-     * Ingestion diffs stored state against the returned events, so a partial
-     * read persisted as authoritative would delete every event in the
-     * unreadable resource and re-add it next pass.
-     */
     const failure = await createFetcher().fetchEvents().then(
       () => null,
       (error: unknown) => error,

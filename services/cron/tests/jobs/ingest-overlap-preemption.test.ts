@@ -2,18 +2,11 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Proves the cron self-preemption livelock. runSourceIngest builds its
- * per-calendar lock with createSyncLock(instrumentedLockRedis) and no second
- * argument, so every cron pass acquires with the default "preempting" class.
- * Cron passes are serial, but a timeout-abandoned run keeps executing after
- * withAbortTimeout frees its scheduler slot, so the next pass's task for a
- * calendar whose ingest is still in flight becomes a queued preempting waiter
- * instead of a skip. IS_CURRENT then reads 0 for the
- * in-flight holder, and ingest.ts discards the completed fetch before
- * persistence ("superseded"). A source slower than the cadence therefore
- * never flushes: this test interleaves two passes over one calendar through
- * the REAL sync lock and the REAL ingestSource engine and asserts the first
- * pass's finished fetch still persists.
+ * Cron passes take the per-calendar lock in the default preempting class, and a
+ * timeout-abandoned run keeps executing after its scheduler slot is freed. The
+ * next pass therefore queues as a preempting waiter, IS_CURRENT reads 0 for the
+ * in-flight holder, and its finished fetch is discarded as superseded — so a
+ * source slower than the cron cadence would never flush at all.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -35,12 +28,6 @@ const harness = vi.hoisted(() => {
     transactionCounts: { flush: 0, pooled: 0 },
   };
 
-  /*
-   * In-memory Redis implementing the sync-lock Lua scripts' semantics, so the
-   * real createSyncLock from @keeper.sh/sync runs unmodified. Dispatch mirrors
-   * packages/sync/tests/sync-lock.test.ts. Non-sync keys (the ICS host rate
-   * limiter) are granted immediately with [waitTimeMs, occupancy] = [0, 0].
-   */
   const strings = new Map<string, string>();
   const lists = new Map<string, string[]>();
   const BACKGROUND_HOLDER_PREFIX = "background:";
@@ -180,7 +167,6 @@ const harness = vi.hoisted(() => {
     get: (key: string): Promise<string | null> => Promise.resolve(readValue(key)),
   };
 
-  /* Minimal drizzle stand-ins, in the shape of ingest-reserve-before-fetch.test.ts. */
   const helpers = {
     resolveBare: (fields: Record<string, unknown>): unknown[] => {
       if ("count" in fields) {
@@ -195,7 +181,6 @@ const harness = vi.hoisted(() => {
       return [{ failureCount: 0, nextAttemptAt: null }];
     }
     if ("url" in fields) {
-      /* Drizzle predicates carry bound parameters as nested (cyclic) values. */
       const collected: string[] = [];
       const seen = new Set<object>();
       const visit = (node: unknown): void => {
@@ -279,11 +264,6 @@ const harness = vi.hoisted(() => {
   return { flushDatabase, lockRedis, pooledDatabase, state };
 });
 
-/*
- * The provider fetch is gated per call so the test controls how long each
- * pass's in-lock time lasts — the stand-in for a source slower than the 60s
- * cron cadence. Everything downstream of the fetch is the real engine.
- */
 vi.mock("@keeper.sh/calendar/ics", () => ({
   createIcsSourceFetcher: (options: { calendarId: string }) => ({
     fetchEvents: async (): Promise<unknown> => {
@@ -366,28 +346,20 @@ describe("overlapping cron passes on one calendar", () => {
     const secondFetchGate = Promise.withResolvers<null>();
     harness.state.fetchGates.push(firstFetchGate.promise, secondFetchGate.promise);
 
-    /* Pass 1 acquires the lock and parks inside its provider fetch. */
     const firstPass = Promise.resolve(job?.callback()).catch(() => null);
     await vi.waitFor(() => {
       expect(harness.state.fetchStarts).toHaveLength(1);
     }, { timeout: 5000 });
 
-    /* Pass 2 arrives on the 60s cadence while pass 1 is still fetching. */
     const secondPass = Promise.resolve(job?.callback()).catch(() => null);
     await vi.waitFor(() => {
       expect(harness.state.lockAcquireAttempts).toBeGreaterThanOrEqual(2);
     }, { timeout: 5000 });
 
     try {
-      /* The slow fetch completes while the next pass is present. */
       firstFetchGate.resolve(null);
       await firstPass;
 
-      /*
-       * The pass that did the work must persist it: an overlapping pass for the
-       * same calendar must not discard a completed fetch, or a source slower
-       * than the cadence never records its first ingest.
-       */
       expect(harness.state.transactionCounts.flush).toBe(1);
       expect(harness.state.snapshotPersistCount).toBe(1);
     } finally {

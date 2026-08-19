@@ -2,14 +2,10 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * When the bounded 5s statement_timeout fires on pg_advisory_xact_lock inside
- * the flush transaction, Postgres raises SQLSTATE 57014. That contention is
- * keeper's own write-back (sync-user, API caldav persist) holding the same
- * (namespace, calendarId) lock — the provider fetch already succeeded — so it
- * must be exempt from ingest backoff exactly like the other infrastructure
- * failures (reserve starvation, writer shutdown, pump deadline). This test
- * pins that exemption: a contended calendar whose flush loses the advisory
- * lock race must not have its ingestFailureCount escalated.
+ * A flush that loses the advisory-lock race lost it to keeper's own write-back,
+ * not to the provider, whose fetch already succeeded. Escalating
+ * ingestFailureCount there would push a healthy calendar's next attempt
+ * exponentially out, so the bounded lock timeout must be exempt from backoff.
  */
 
 const harness = vi.hoisted(() => {
@@ -31,11 +27,6 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
-  /*
-   * Drizzle SQL objects carry their bound parameters (calendar ids among
-   * them) as nested values, so a deep string sweep is enough to identify a
-   * statement and read its parameters.
-   */
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -98,7 +89,6 @@ const harness = vi.hoisted(() => {
     return builder;
   };
 
-  /* Every update's set payload is captured so backoff writes are observable. */
   const updateStub = () => ({
     set: (payload: Record<string, unknown>) => {
       state.backoffWrites.push(payload);
@@ -120,10 +110,8 @@ const harness = vi.hoisted(() => {
   };
 
   /*
-   * The one Postgres semantic under test: pg_advisory_xact_lock on a lock
-   * held by another session (sync-user write-back) is cancelled by the
-   * in-effect statement_timeout, raised to the client as SQLSTATE 57014 —
-   * the exact shape Bun's driver produces (errno carries the SQLSTATE).
+   * A statement_timeout cancellation reaches the client as SQLSTATE 57014, and
+   * Bun's Postgres driver carries that SQLSTATE in errno rather than in code.
    */
   const flushTransaction = async (
     callback: (transaction: unknown) => Promise<unknown>,
@@ -168,11 +156,6 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test: fetch succeeds (the provider is healthy),
-   * then the result routes through the job-provided persistence transaction,
-   * exactly like the real ingestSource.
-   */
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -274,16 +257,10 @@ describe("ingest flush advisory-lock statement timeout", () => {
     harness.state.icsRows.push(createIcsRow("calendar-wedged", "user-wedged"));
     harness.state.contendedCalendarIds.add("calendar-wedged");
 
-    /* The source still fails its pass; the pass reports the failure. */
     await expect(job?.callback()).rejects.toThrow(
       "Calendar source ingestion completed with failures",
     );
 
-    /*
-     * The provider fetch succeeded; only keeper's own write-back held the
-     * advisory lock past the 5s bound. Escalating ingestFailureCount here
-     * pushes ingestNextAttemptAt exponentially out for a healthy calendar.
-     */
     const escalations = harness.state.backoffWrites.filter(
       (payload) => typeof payload.ingestFailureCount === "number"
         && payload.ingestFailureCount >= 1,

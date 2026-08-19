@@ -4,17 +4,13 @@ import { createLeasedSemaphore } from "../../../src/core/utils/leased-semaphore"
 const CAPACITY = 2;
 const TTL_MS = 5000;
 const SETTLE_MS = 500;
+const WELL_UNDER_TTL_MS = 2000;
 
 interface FakeEntry {
   expiresAt: number;
   value: string;
 }
 
-/*
- * In-memory stand-in for the Redis lease client, mirroring the fake-redis style of
- * redis-rate-limiter.test.ts but stateful: leases must live as independently expiring
- * keys (SET NX PX per slot), so the fake honors NX and PX against the fake-timer clock.
- */
 class FakeRedis {
   public store = new Map<string, FakeEntry>();
 
@@ -111,8 +107,7 @@ describe("createLeasedSemaphore", () => {
     expect(waiter.status).toBe("pending");
 
     await semaphore.release(first);
-    // Well under TTL_MS in total, so admission can only come from the release.
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(WELL_UNDER_TTL_MS);
     expect(waiter.status).toBe("resolved");
   });
 
@@ -120,13 +115,11 @@ describe("createLeasedSemaphore", () => {
     const redis = new FakeRedis();
     const semaphore = createLeasedSemaphore(redis, { capacity: 1, ttlMs: TTL_MS });
 
-    // Acquired but never released, as if the holder crashed mid-flight.
     await semaphore.acquireLease("account-1");
     const waiter = probe(semaphore.acquireLease("account-1"));
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(waiter.status).toBe("pending");
 
-    // Past the lease TTL plus retry slack, the slot must come back on its own.
     await vi.advanceTimersByTimeAsync(TTL_MS + 3000);
     expect(waiter.status).toBe("resolved");
   });
@@ -136,19 +129,15 @@ describe("createLeasedSemaphore", () => {
     const semaphore = createLeasedSemaphore(redis, { capacity: 1, ttlMs: TTL_MS });
 
     const stale = await semaphore.acquireLease("account-1");
-    // The stale holder's TTL lapses without a release, freeing the slot key.
     await vi.advanceTimersByTimeAsync(TTL_MS + 1000);
 
-    // A second acquirer reclaims the same slot with a fresh token.
     const fresh = await semaphore.acquireLease("account-1");
     expect(fresh.slotKey).toBe(stale.slotKey);
     expect(fresh.token).not.toBe(stale.token);
 
-    // The stale holder finally releases; it must not delete the fresh lease.
     await semaphore.release(stale);
     expect(redis.store.get(fresh.slotKey)?.value).toBe(fresh.token);
 
-    // Capacity bound: with the fresh lease still held, a third acquirer must park.
     const waiter = probe(semaphore.acquireLease("account-1"));
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(waiter.status).toBe("pending");

@@ -45,10 +45,9 @@ const ADVISORY_LOCK_STATEMENT_INDEX = 3;
 const SECOND_POOL_WAIT_MS = 15;
 
 /*
- * Bun.sleep can return a fraction of a millisecond before the span measuring it elapses, so
- * an exact floor makes these assertions report timer granularity rather than attribution.
- * The slack is far smaller than any injected delay, so a segment charged to the wrong bucket
- * still fails.
+ * Bun.sleep can return a fraction of a millisecond early, so an exact floor would
+ * assert timer granularity. The slack stays far below every injected delay, so a
+ * segment charged to the wrong bucket still fails.
  */
 const TIMER_SLACK_MS = 5;
 
@@ -125,11 +124,6 @@ const createQuery = (resolve: () => unknown): unknown => {
   });
 };
 
-/*
- * The pool hands the callback over only after poolWaitMs, and the commit takes
- * commitMs after the callback returns — the two boundaries no in-callback timer
- * can see.
- */
 const nextPoolWaitMs = (): number => {
   if (stagedPoolWaits.length === 0) {
     return poolWaitMs;
@@ -213,10 +207,6 @@ vi.mock("@keeper.sh/database", async (importOriginal) => ({
   decryptPassword: () => "plaintext",
 }));
 
-/*
- * The real engine is replaced by one that drives the persistence transaction and
- * nothing else, so the only segments in play are the ones this file asserts.
- */
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
   return {
@@ -370,11 +360,7 @@ describe("ingest duration decomposition", () => {
       .toSorted((first, second) => first - second);
 
     expect(events).toHaveLength(2);
-    /*
-     * The flush writer serialises persistence: the first source pays only its own
-     * connection wait, while the queued one is charged the peer's whole flush on
-     * top of its own smaller wait.
-     */
+    // The flush writer serialises persistence, so the queued source is also charged its peer's flush.
     expect(poolWaits[0]).toBeGreaterThanOrEqual(chargedAtLeast(POOL_WAIT_MS));
     expect(poolWaits[1]).toBeGreaterThanOrEqual(
       chargedAtLeast(POOL_WAIT_MS + SECOND_POOL_WAIT_MS),

@@ -3,16 +3,11 @@ import type { Server, Socket } from "node:net";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
- * The ingest-sources cron callback awaits enqueueDestinationSyncsForUsers before
- * it returns, and cronbake re-arms the job only after the callback settles. The
- * production wiring opens a BullMQ queue with maxRetriesPerRequest: null and no
- * commandTimeout, so a Redis endpoint that accepts the TCP connection but never
- * answers (a half-open socket, or an outage behind a load balancer) leaves
- * queue.getJob / queue.addBulk pending forever — parking the serial ingest pass
- * with no bound. This suite points the real wiring at exactly such an endpoint
- * and requires the enqueue to settle (resolve OR reject) within a generous
- * bound far above the 10s commandTimeout every other Redis client in this
- * service already carries.
+ * Cronbake re-arms the ingest job only after its callback settles, so the
+ * enqueue must be bounded: with BullMQ's maxRetriesPerRequest: null and no
+ * commandTimeout, a Redis endpoint that accepts TCP but never answers parks
+ * the serial ingest pass forever. The 15s bound sits far above the 10s
+ * commandTimeout every other Redis client in this service carries.
  */
 
 const testState = vi.hoisted(() => ({ redisUrl: "" }));
@@ -35,11 +30,7 @@ vi.mock("@/utils/logging", () => ({
 vi.mock("@/context", () => ({
   database: {
     select: () => ({
-      /*
-       * A real promise (awaited directly by getPendingRequests: no pending
-       * requests) augmented with `where` (chained by getDestinations: one
-       * push-capable pro destination).
-       */
+      /* Awaited directly by getPendingRequests, chained with `where` by getDestinations. */
       from: () =>
         Object.assign(Promise.resolve([]), {
           where: () => Promise.resolve([{ calendarId: "cal-1", userId: "user-1" }]),

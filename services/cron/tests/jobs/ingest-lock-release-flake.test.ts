@@ -2,16 +2,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
 /*
- * Pins the invariant already stated at the rateLimiter dispose site in
- * ingest-sources.ts: a failed release must never clobber the ingest result.
- * runSourceIngest ends with `finally { await lockResult.handle.release(); }`,
- * and the sync lock's release is a bare redis.eval. A transient Redis failure
- * at release time therefore replaces a successful ingest with a rejection:
- * the settlement lands as outcome error, shouldPush is lost, and the user's
- * destination syncs are never enqueued despite persisted changes. This test
- * runs one ICS source through a fully successful ingest while the RELEASE
- * script alone flakes, and requires the pass to still settle as a success
- * with the destination sync enqueued.
+ * A failed lock release must never clobber the ingest result. The release runs
+ * in a finally as a bare redis.eval, so a transient Redis failure would settle a
+ * fully persisted ingest as an error and drop the user's destination syncs.
  */
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -99,7 +92,6 @@ const harness = vi.hoisted(() => {
     }),
   };
 
-  /* The flush transaction is not under test: every statement succeeds. */
   const flushTransaction = async (
     callback: (transaction: unknown) => Promise<unknown>,
   ): Promise<unknown> => await callback({
@@ -130,11 +122,7 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
-  /*
-   * The engine is not under test: fetch, then route the result through the
-   * job-provided persistence transaction, exactly like the real ingestSource.
-   * One event added makes shouldPush true, so a correct pass must enqueue.
-   */
+  // One event added makes shouldPush true, so a correct pass must enqueue.
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
@@ -145,11 +133,9 @@ const harness = vi.hoisted(() => {
   });
 
   /*
-   * Real @keeper.sh/sync lock semantics over a script-aware Redis stand-in.
-   * Every sync-lock script succeeds except RELEASE, which flakes exactly the
-   * way a transient ioredis failure surfaces: a rejected eval. The scripts are
-   * recognised by distinctive command tokens; PEXPIRE belongs only to the host
-   * rate limiter's acquire script, whose reply shape is [waitTimeMs, occupancy].
+   * Scripts are told apart by distinctive command tokens: PEXPIRE belongs only
+   * to the host limiter's acquire, whose reply is [waitTimeMs, occupancy], and
+   * DEL only to RELEASE, which flakes here as a transient ioredis rejection.
    */
   const redisEval = (script: string): Promise<unknown> => {
     if (script.includes("PEXPIRE")) {
@@ -256,16 +242,11 @@ describe("sync-lock release flake after a successful ingest", () => {
       userId: "user-alpha",
     });
 
-    /*
-     * The ingest itself succeeded and its changes are persisted; only the
-     * post-work lock release flaked. The pass must not report a failure.
-     */
     await job?.callback();
 
-    /* The flake must actually have fired for this run to prove anything. */
+    // The flake must actually have fired for this run to prove anything.
     expect(harness.state.releaseRejections).toBeGreaterThan(0);
 
-    /* ShouldPush survived, so the user's destination syncs were enqueued. */
     expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);
     const [enqueuedUsers] = harness.enqueueDestinationSyncsForUsers.mock.calls[0] ?? [];
     expect([...enqueuedUsers ?? []]).toContain("user-alpha");

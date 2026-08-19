@@ -14,12 +14,9 @@ const hasErrorFlag = (error: unknown, key: string): boolean =>
 const REAUTHENTICATION_FLAGS = ["authRequired", "oauthReauthRequired"];
 
 /*
- * The exact rejection ioredis raises on every command once disconnect() has
- * torn the client down. Shutdown (index.ts) disconnects refreshLockRedis
- * while the in-flight ingest pass is still running, so a mid-flight task's
- * next lock/limiter/lease round trip fails with this error — keeper closed
- * its own client; the provider was never contacted. ioredis exposes no error
- * class for this rejection, only a bare Error with this message.
+ * Shutdown disconnects refreshLockRedis while the ingest pass is still running, so a
+ * mid-flight round trip fails with this — keeper closed its own client, the provider was
+ * never contacted. ioredis exposes no error class for it, only a bare Error with this message.
  */
 const REDIS_CONNECTION_CLOSED_MESSAGE = "Connection is closed.";
 
@@ -27,25 +24,14 @@ const isRedisTeardownError = (error: unknown): boolean =>
   error instanceof Error && error.message === REDIS_CONNECTION_CLOSED_MESSAGE;
 
 /*
- * Errors produced by ingest infrastructure — a reserve parked on the shared
- * flush budget until the source deadline fired, the flush writer rejecting
- * parked reservers at shutdown, or the pump's client-side run deadline firing
- * on a wedged flush — never contacted the calendar's provider, so they must
- * not be treated as provider failures. A Postgres statement timeout (57014)
- * belongs here too: the bounded advisory-lock wait inside the flush
- * transaction fires it when keeper's own write-back (sync-user, API caldav
- * persist) holds the same (namespace, calendarId) lock past the 5s bound,
- * and every statement_timeout keeper sets bounds its own database — a
- * provider is never on the other side of that cancellation.
+ * These never contacted the provider, so they must not accrue provider backoff. A Postgres
+ * statement timeout (57014) belongs here because every statement_timeout keeper sets bounds
+ * its own database — no provider is on the other side of that cancellation.
  *
- * A source-deadline OperationTimeoutError is NOT infrastructure by itself:
- * withAbortTimeout raises the same class when a hung or persistently slow
- * provider overruns the 120s deadline, and that timeout must accrue ingest
- * backoff. Only a timeout observed while still parked on keeper's own
- * pacing, ahead of the provider request it gates — the flush worker's
- * reserve (reserve-before-fetch), the shared per-host or per-user rate
- * limiter, or an account concurrency semaphore — carries a park flag and
- * stays exempt.
+ * A source-deadline OperationTimeoutError is NOT infrastructure by itself: withAbortTimeout
+ * raises the same class when a slow provider overruns the deadline, which must accrue
+ * backoff. Only a timeout observed while still parked on keeper's own pacing, ahead of the
+ * request it gates, carries a park flag and stays exempt.
  */
 const SHUTDOWN_CLOSE_CONNECTION_SLUGS = new Set([
   "db-connection-terminated",
@@ -53,12 +39,9 @@ const SHUTDOWN_CLOSE_CONNECTION_SLUGS = new Set([
 ]);
 
 /*
- * Connection-class errors are infrastructure only once shutdown's bounded
- * close has begun, because from that point keeper is killing its own pool out
- * from under in-flight and queued flushes. During normal operation the same
- * slugs are genuine evidence of a failing provider pass and must keep
- * accruing backoff (see tests/jobs/caldav-pool-backoff-convergence.test.ts),
- * so this must never become a blanket slug exemption.
+ * Connection-class errors count as infrastructure only once shutdown's bounded close has
+ * begun and keeper is killing its own pool. During normal operation the same slugs are
+ * genuine evidence of a failing provider, so this must never become a blanket slug exemption.
  */
 const isShutdownForceCloseError = (error: unknown): boolean => {
   if (!hasBoundedDatabaseCloseBegun()) {
@@ -80,12 +63,6 @@ const isIngestInfrastructureError = (error: unknown): boolean =>
   || isRedisTeardownError(error)
   || resolveDatabaseErrorClassification(error)?.slug === "db-statement-timeout";
 
-/*
- * Every call site uses this predicate as an exemption gate for
- * provider-failure handling (ingest backoff, missing-calendar
- * classification). Infrastructure errors carry the same exemption as
- * reauthentication errors: neither is evidence the provider misbehaved.
- */
 const requiresReauthentication = (error: unknown): boolean =>
   REAUTHENTICATION_FLAGS.some((flag) => hasErrorFlag(error, flag))
   || isIngestInfrastructureError(error);

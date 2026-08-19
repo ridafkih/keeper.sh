@@ -1,10 +1,6 @@
 const DEFAULT_CAPACITY = 50;
 
-/*
- * Shutdown rejections are infrastructure, not payload or provider failures.
- * Callers that classify errors (for example provider ingest backoff) must be
- * able to recognize a closed writer without matching on message text.
- */
+/* Distinct class so error classifiers recognize a closed writer without matching message text. */
 class SerialFlushWorkerClosedError extends Error {
   constructor() {
     super("serial flush worker is closed");
@@ -15,12 +11,7 @@ class SerialFlushWorkerClosedError extends Error {
 const isSerialFlushWorkerClosedError = (error: unknown): boolean =>
   error instanceof SerialFlushWorkerClosedError;
 
-/*
- * Run-deadline rejections are likewise infrastructure: the pump's client-side
- * deadline fired while a wedged flush held the writer, so the caller's
- * provider was never at fault. Callers classifying errors must be able to
- * recognize this without matching on message text.
- */
+/* Infrastructure, not a provider fault: a wedged flush held the writer past the deadline. */
 class SerialFlushRunDeadlineError extends Error {
   constructor(deadlineMs: number) {
     super(`serial flush run exceeded ${deadlineMs}ms deadline`);
@@ -32,12 +23,10 @@ const isSerialFlushRunDeadlineError = (error: unknown): boolean =>
   error instanceof SerialFlushRunDeadlineError;
 
 /*
- * A reserve abort fired while the caller was still parked on the worker's own
- * budget — reserve-before-fetch ordering means the caller's provider was never
- * contacted — so error classifiers must be able to tell this apart from the
- * same deadline error class raised later, during a provider fetch. The abort
- * reason is flagged in place (never wrapped) so its identity and class are
- * preserved for callers that assert on either.
+ * Marks a deadline that expired while parked on the budget, before the provider was ever
+ * contacted, so classifiers can tell it from the same error class raised during a fetch.
+ * Flagged in place, never wrapped, so the reason's identity and class survive for callers
+ * that assert on either.
  */
 const RESERVE_ABORT_FLAG = "serialFlushReserveAborted";
 
@@ -51,34 +40,21 @@ const isSerialFlushReserveAbortError = (error: unknown): boolean =>
   error instanceof Error &&
   (error as Error & Record<string, unknown>)[RESERVE_ABORT_FLAG] === true;
 /*
- * Express lane for tiny reservations. Large reservations (cold-start fetches
- * sized at an eighth of the budget) can pin 100% of the budget while their
- * fetches merely sleep in a provider rate limiter, which would park every
- * other caller of the shared worker in the FIFO. A reservation no heavier
- * than budget/64 may instead be admitted immediately, oversubscribing the
- * budget by at most budget/16, so healthy small work keeps flowing while the
- * heavy holds drain. The oversubscription is bounded: once outstanding
- * weight reaches budget + budget/16, tiny reservations park like everyone else.
+ * Cold-start fetches sized at an eighth of the budget can pin all of it while merely
+ * sleeping in a provider rate limiter, parking every other caller. Reservations no heavier
+ * than budget/64 skip the FIFO, capping worst-case memory at budget + budget/16.
  */
 const EXPRESS_WEIGHT_DIVISOR = 64;
 const EXPRESS_HEADROOM_DIVISOR = 16;
-/*
- * Anti-starvation bound: at most this many express grants may overtake a
- * parked FIFO head. Once reached, the head is admitted under the same
- * oversubscription ceiling the express lane uses, so sustained tiny traffic
- * cannot park a cold-start or large-calendar reservation past its deadline
- * while worst-case memory stays within budget + budget/16.
- */
+/* Bounds the starvation the express lane can inflict on a parked FIFO head. */
 const EXPRESS_MAX_OVERTAKES = 16;
 // Client-side bound on a single flush: any sane server-side deadline is far below this.
 const DEFAULT_RUN_DEADLINE_MS = 600_000;
 
 const resolveRunDeadlineMs = (item: unknown): number => {
   /*
-   * Honor an item-carried absolute deadline when present; otherwise fall back.
-   * Items may be plain objects or callable thunks (the production ingest
-   * caller submits `() => task()` functions with a `deadlineAt` attached),
-   * so the probe must accept both typeof shapes.
+   * The ingest caller submits `() => task()` thunks with `deadlineAt` attached, so this
+   * probe must accept functions as well as plain objects.
    */
   const carriesProperties = typeof item === "object" || typeof item === "function";
   if (carriesProperties && item !== null && "deadlineAt" in item) {
@@ -90,14 +66,6 @@ const resolveRunDeadlineMs = (item: unknown): number => {
   return DEFAULT_RUN_DEADLINE_MS;
 };
 
-/*
- * An item may carry a `prepare` thunk: work that must run after this item's
- * queue wait but before its run takes the serial writer slot — the ingest
- * caller's persist-time Redis currency probe. Resolved the same way
- * `deadlineAt` is, since items are plain objects or callable thunks. Returning
- * a non-null value short-circuits the item: its submit settles with that value
- * and `run` is never invoked.
- */
 const resolvePrepare = (item: unknown): (() => unknown) | null => {
   const carriesProperties = typeof item === "object" || typeof item === "function";
   if (carriesProperties && item !== null && "prepare" in item) {
@@ -129,7 +97,6 @@ interface QueuedItem<TItem, TResult> {
   item: TItem;
   reject: (reason: unknown) => void;
   resolve: (value: TResult) => void;
-  // Runs when the item's run() actually settles, even after a deadline expiry.
   settle?: () => void;
 }
 
@@ -145,17 +112,6 @@ interface WeightWaiter {
   weight: number;
 }
 
-/*
- * Bounded serial worker: many callers may submit concurrently, but `run` is
- * invoked one item at a time in submission order. Once `capacity` items are
- * queued, further submits park until a slot frees, so queued memory stays
- * bounded no matter how fast producers go.
- *
- * When `budget` is set the worker also supports weighted reservations:
- * `reserve(weight)` acquires that many weight units BEFORE any payload
- * exists, parking FIFO when the budget is exhausted, so callers can gate
- * expensive fetches on available memory budget rather than item counts.
- */
 const createSerialFlushWorker = <TItem, TResult>(
   run: (item: TItem) => Promise<TResult>,
   options?: SerialFlushWorkerOptions,
@@ -166,21 +122,16 @@ const createSerialFlushWorker = <TItem, TResult>(
   const slotWaiters: SlotWaiter[] = [];
   const weightWaiters: WeightWaiter[] = [];
   const idleWaiters: (() => void)[] = [];
-  // Items queued for ownership of the single serial writer slot.
   const writerSlotWaiters: (() => void)[] = [];
-  // The pump, waiting for that slot to go idle before dequeuing again.
   const writerSlotFreeWaiters: (() => void)[] = [];
-  // Items dequeued but not yet settled: preparing, waiting for the slot, or running.
   let inFlight = 0;
   let writerSlotBusy = false;
   let outstandingWeight = 0;
-  // Express grants that have overtaken the currently parked FIFO head.
   let expressOvertakes = 0;
   let closed = false;
   let pumping = false;
 
   const grantSlot = (): void => {
-    // Skip waiters whose submits already aborted; the slot goes to the next live one.
     while (slotWaiters.length > 0) {
       const waiter = slotWaiters.shift();
       if (waiter && waiter.grant()) {
@@ -193,16 +144,13 @@ const createSerialFlushWorker = <TItem, TResult>(
     if (typeof budget !== "number") {
       return;
     }
-    // FIFO: only the head may be admitted, and only while it fits the budget.
     while (weightWaiters.length > 0) {
       const [head] = weightWaiters;
       if (!head) {
         return;
       }
       if (head.aborted()) {
-        // An aborted waiter already rejected; drop it so it cannot block the line.
         weightWaiters.shift();
-        // Overtakes were counted against the dropped head; the lane reopens.
         expressOvertakes = 0;
         continue;
       }
@@ -215,13 +163,7 @@ const createSerialFlushWorker = <TItem, TResult>(
     }
   };
 
-  /*
-   * Aged admission for a head the express lane has overtaken too many times:
-   * grant it under the express oversubscription ceiling instead of the plain
-   * budget, so express churn that keeps outstanding weight high cannot defer
-   * it forever. Admits at most the head; the rest of the FIFO still drains
-   * through grantWeight under the normal budget.
-   */
+  /* Admits the head above the plain budget so express churn cannot defer it forever. */
   const grantOvertakenHead = (): void => {
     if (typeof budget !== "number") {
       return;
@@ -233,9 +175,7 @@ const createSerialFlushWorker = <TItem, TResult>(
         return;
       }
       if (head.aborted()) {
-        // An aborted waiter already rejected; drop it so it cannot block the line.
         weightWaiters.shift();
-        // Overtakes were counted against the dropped head; the lane reopens.
         expressOvertakes = 0;
         continue;
       }
@@ -274,11 +214,7 @@ const createSerialFlushWorker = <TItem, TResult>(
     writerSlotFreeWaiters.push(resolve);
   });
 
-  /*
-   * The slot is handed straight to the next owner in line, so runs stay
-   * strictly serial without a re-check race. It only goes idle — waking the
-   * pump to dequeue again — once nobody holds a claim on it.
-   */
+  /* Handed straight to the next owner so runs stay strictly serial without a re-check race. */
   const releaseWriterSlot = (): void => {
     const nextOwner = writerSlotWaiters.shift();
     if (nextOwner) {
@@ -292,18 +228,10 @@ const createSerialFlushWorker = <TItem, TResult>(
   };
 
   /*
-   * A half-open connection can leave `run` pending forever, making server-side
-   * timeouts unreachable. Racing each item against a client-side deadline keeps
-   * one wedged flush from stalling every family's persistence until restart.
-   * The deadline only rejects the caller's promise: the run itself is awaited
-   * to settlement, so a timed-out run keeps its reserved weight, keeps the
-   * writer slot held (runs stay strictly serial), and keeps close() waiting
-   * while its flushDatabase transaction is still live.
-   *
-   * The returned promise releases the pump, not the item: it settles once the
-   * item has either taken the writer slot or gone off-slot into its
-   * preparation, so a slow preparation never head-of-line stalls the runs
-   * behind it.
+   * A half-open connection can leave `run` pending forever, making server-side timeouts
+   * unreachable. The deadline rejects only the caller's promise: the run is still awaited to
+   * settlement, so it keeps its weight, keeps the writer slot, and keeps close() waiting
+   * while its flushDatabase transaction is live.
    */
   const startItem = (next: QueuedItem<TItem, TResult>): Promise<unknown> => {
     const admitted = Promise.withResolvers<null>();
@@ -326,10 +254,8 @@ const createSerialFlushWorker = <TItem, TResult>(
     const runLifecycle = async (): Promise<void> => {
       if (prepare) {
         try {
-          // A preparation that answers nothing may say so as either nullish value.
           const prepared = await prepare() ?? null;
           if (prepared !== null) {
-            // The preparation answered for the item; its run never happens.
             if (!deadlineExpired) {
               next.resolve(prepared as TResult);
             }
@@ -356,7 +282,6 @@ const createSerialFlushWorker = <TItem, TResult>(
           next.resolve(value);
         }
       } catch (error) {
-        // A failing flush rejects only its own submit; the worker keeps going.
         if (!deadlineExpired) {
           next.reject(error);
         }
@@ -367,11 +292,9 @@ const createSerialFlushWorker = <TItem, TResult>(
     };
     runLifecycle().catch(next.reject);
     /*
-     * An item whose preparation is already settled must claim the writer slot
-     * before the next item is dequeued: otherwise a whole backlog would prepare
-     * in one sweep and the last item's currency probe would predate its run by
-     * every run queued ahead of it. A preparation still outstanding resolves
-     * nothing here, so the immediate yield releases the pump instead.
+     * A settled preparation must claim the writer slot before the next dequeue, or a whole
+     * backlog would prepare in one sweep and the last item's currency probe would predate
+     * its run by every run queued ahead of it.
      */
     return Promise.race([admitted.promise, Promise.resolve()]);
   };
@@ -390,7 +313,6 @@ const createSerialFlushWorker = <TItem, TResult>(
       if (!next) {
         break;
       }
-      // Dequeuing frees a queue slot, so a parked submit may enqueue now.
       grantSlot();
       await startItem(next);
     }
@@ -419,18 +341,12 @@ const createSerialFlushWorker = <TItem, TResult>(
             resolve(value);
           },
         };
-        /*
-         * A queued item must observe its signal: abort removes and rejects it
-         * at its deadline instead of waiting for the pump to drain to it.
-         */
         const onQueuedAbort = (): void => {
           const index = queue.indexOf(entry);
           if (index === -1) {
-            // Already dequeued by the pump; its own settlement handles cleanup.
             return;
           }
           queue.splice(index, 1);
-          // Removing a queued item frees a slot for a parked submit.
           grantSlot();
           reject(signal?.reason);
         };
@@ -469,11 +385,7 @@ const createSerialFlushWorker = <TItem, TResult>(
   const createReservation = (weight: number): FlushReservation<TItem, TResult> => {
     let freed = false;
     let submitted = false;
-    /*
-     * A reservation's weight is freed exactly once: by release() or when its
-     * submitted run settles. Further calls are no-ops so the budget never
-     * goes negative and admits unbounded reservations.
-     */
+    /* Idempotent: a double free would drive the budget negative and admit unbounded work. */
     const free = (): void => {
       if (freed) {
         return;
@@ -483,11 +395,9 @@ const createSerialFlushWorker = <TItem, TResult>(
       grantWeight();
     };
     /*
-     * Callers release() in a finally that also runs when submit() rejected on
-     * a deadline expiry, while the abandoned run still holds its payload and
-     * its flushDatabase transaction. After a submit, settle is therefore the
-     * ONLY path that may free the weight; release() only covers reservations
-     * that never submitted, so a fetch failure cannot strand weight forever.
+     * A no-op after submit, deliberately: callers release() in a finally that also runs when
+     * submit() rejected on a deadline, while the abandoned run still holds its payload and
+     * transaction. Past submit, only settle may free the weight.
      */
     const release = (): void => {
       if (submitted) {
@@ -501,14 +411,7 @@ const createSerialFlushWorker = <TItem, TResult>(
         free();
         return Promise.reject(new SerialFlushWorkerClosedError());
       }
-      // The weight already bounds this payload, so no item-count gating here.
       return new Promise<TResult>((resolve, reject) => {
-        /*
-         * The weight is freed by `settle`, which fires only when run() itself
-         * settles — a deadline expiry rejects the caller but must NOT return
-         * the weight to the budget while the abandoned run still holds its
-         * payload and its flushDatabase transaction.
-         */
         queue.push({
           item,
           reject,
@@ -543,10 +446,7 @@ const createSerialFlushWorker = <TItem, TResult>(
        */
       return Promise.reject(signal.reason);
     }
-    /*
-     * Whale rule: a payload heavier than the whole budget clamps to the full
-     * budget and is granted when the worker is otherwise idle, never deadlocking.
-     */
+    /* A payload heavier than the whole budget clamps to it rather than deadlocking forever. */
     const clamped = Math.min(weight, budget);
     return new Promise<FlushReservation<TItem, TResult>>((resolve, reject) => {
       const grantNow = (): void => {
@@ -557,18 +457,7 @@ const createSerialFlushWorker = <TItem, TResult>(
         grantNow();
         return;
       }
-      /*
-       * Express lane: a tiny reservation must not stall behind heavy holds
-       * that are only waiting on their providers. Bounded oversubscription
-       * keeps memory within budget + budget/16 in the worst case.
-       */
       const expressCeiling = budget + budget / EXPRESS_HEADROOM_DIVISOR;
-      /*
-       * Fairness: once the overtake bound is reached, the express lane pauses
-       * and tiny reservations park like everyone else, so releases drain
-       * outstanding weight until the parked head fits and is admitted (which
-       * resets the counter and reopens the lane).
-       */
       if (
         clamped <= budget / EXPRESS_WEIGHT_DIVISOR &&
         expressOvertakes < EXPRESS_MAX_OVERTAKES &&
@@ -578,27 +467,18 @@ const createSerialFlushWorker = <TItem, TResult>(
           expressOvertakes += 1;
         }
         grantNow();
-        // Fairness: after enough overtakes the parked head must be admitted.
         if (expressOvertakes >= EXPRESS_MAX_OVERTAKES) {
           grantOvertakenHead();
         }
         return;
       }
-      /*
-       * An abort while parked acquired nothing, so it must free nothing: the
-       * waiter marks itself aborted and grantWeight drops it from the FIFO
-       * without ever touching outstandingWeight.
-       */
+      /* A park abort acquired nothing, so it must free nothing. */
       let abortedWhileParked = false;
       const onAbort = (): void => {
         abortedWhileParked = true;
         flagReserveAbortReason(signal?.reason);
         reject(signal?.reason);
-        /*
-         * Reap immediately: if this waiter is the FIFO head, waiting for the
-         * next release would leave a phantom head disabling the fast path and
-         * parking reservations that fit the budget right now.
-         */
+        /* Reaped now: a phantom head would disable the fast path for reservations that fit. */
         grantWeight();
       };
       const waiter: WeightWaiter = {
@@ -620,11 +500,9 @@ const createSerialFlushWorker = <TItem, TResult>(
 
   const close = (): Promise<void> => {
     closed = true;
-    // Parked submits never made it into the queue; they cannot drain.
     for (const waiter of slotWaiters.splice(0)) {
       waiter.reject(new SerialFlushWorkerClosedError());
     }
-    // Parked reservers hold no weight yet; they cannot be granted after close.
     for (const waiter of weightWaiters.splice(0)) {
       waiter.reject(new SerialFlushWorkerClosedError());
     }

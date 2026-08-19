@@ -39,7 +39,6 @@ describe("serial flush worker queued abort", () => {
       return item;
     });
 
-    // The first item occupies the pump; the second parks in the queue.
     const first = worker.submit("first");
     const controller = new AbortController();
     const reason = new Error("source deadline hit");
@@ -49,7 +48,6 @@ describe("serial flush worker queued abort", () => {
     controller.abort(reason);
     await delay(SETTLE_MS);
 
-    // An aborted queued submit must settle at its deadline, not at queue drain.
     expect(secondProbe.status).toBe("rejected");
     expect(secondProbe.reason).toBe(reason);
 
@@ -57,7 +55,6 @@ describe("serial flush worker queued abort", () => {
     await first;
     await delay(SETTLE_MS);
 
-    // The aborted item must never have run.
     expect(ran).toEqual(["first"]);
 
     await worker.close();

@@ -29,12 +29,9 @@ await entry({
       baker.stopAll();
       destroy();
       /*
-       * Order is load-bearing: shutdownDatabases() begins with the registered
-       * flush drain, and every drained flush re-probes currency at persist
-       * time through a redis.eval on the sync-lock handle. Disconnecting
-       * refreshLockRedis first makes that probe reject, so the flush reports
-       * "currency-unconfirmed" and discards the payload the drain exists to
-       * persist. Redis must outlive the drain.
+       * Order is load-bearing: every drained flush re-probes currency through a redis.eval
+       * on the sync-lock handle, so disconnecting first makes that probe reject and the
+       * flush discards the very payload the drain exists to persist.
        */
       await shutdownDatabases();
       shutdownRefreshLockRedis();
