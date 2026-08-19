@@ -75,6 +75,7 @@ services:
       ENV: production
       DATABASE_POOL_MAX: "25"
       NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+      BLOCK_PRIVATE_RESOLUTION: "true"
     volumes:
       - ./global-bundle.pem:/certs/global-bundle.pem:ro
     depends_on:
