@@ -1,9 +1,66 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import type { MaterializedSyncableEvent } from "../../../core/types";
-import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { inferAllDayEvent, resolveIsAllDayEvent } from "../../../core/events/all-day";
 import { KEEPER_EVENT_UID_PROPERTY, toGoogleEventId } from "./ooo-identity";
 
+const HOURS_IN_DAY = 24;
+const WALL_CLOCK_ALL_DAY_START = /^(\d{4}-\d{2}-\d{2})T00:00:00/;
+const WALL_CLOCK_ALL_DAY_END = /^(\d{4}-\d{2}-\d{2})T23:59:59/;
+
+interface SerializeGoogleEventOptions {
+  destinationTimeZone?: string;
+  recurrenceRule?: string | null;
+}
+
+interface RestoreAllDayOooTimesOptions {
+  destinationTimeZone?: string;
+  startTimeZone?: string;
+}
+
+interface TimedOooDateOptions {
+  isAllDay: boolean;
+  isEnd: boolean;
+  timeZone: string;
+}
+
+const isUtcTimeZone = (timeZone: string | undefined): boolean =>
+  !timeZone
+  || timeZone === "UTC"
+  || timeZone === "Etc/UTC"
+  || timeZone === "Etc/GMT";
+
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
+
+const shiftUtcDate = (dateOnly: string, days: number): string => {
+  const shifted = new Date(`${dateOnly}T00:00:00.000Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return formatDateOnly(shifted);
+};
+
+const inclusiveAllDayEndDate = (exclusiveEnd: Date): string =>
+  shiftUtcDate(formatDateOnly(exclusiveEnd), -1);
+
+const utcMidnight = (dateOnly: string): Date => new Date(`${dateOnly}T00:00:00.000Z`);
+
+const exclusiveAllDayRange = (
+  startDate: string,
+  inclusiveEndDate: string,
+): { startTime: Date; endTime: Date; isAllDay: true } => ({
+  startTime: utcMidnight(startDate),
+  endTime: utcMidnight(shiftUtcDate(inclusiveEndDate, 1)),
+  isAllDay: true,
+});
+
+const matchWallClockDate = (value: string | undefined, pattern: RegExp): string | null => {
+  if (!value) {
+    return null;
+  }
+  const match = pattern.exec(value);
+  if (!match?.[1]) {
+    return null;
+  }
+  return match[1];
+};
 
 const buildDateField = (
   time: Date,
@@ -22,20 +79,24 @@ const buildDateField = (
   };
 };
 
-/** Google OOO cannot be all-day; reuse the stored instants as timed dateTimes. */
-const buildTimedOooDateField = (time: Date): NonNullable<GoogleEvent["start"]> => ({
-  dateTime: time.toISOString(),
-});
-
-/**
- * All-day ends are exclusive (Sep 1 00:00 = through Aug 31). Timed Google OOO with
- * that exclusive midnight displays as ending on Sep 1 — use the last second instead.
- */
-const toTimedOooEndTime = (endTime: Date, isAllDay: boolean): Date => {
-  if (!isAllDay) {
-    return endTime;
+const buildTimedOooDateField = (
+  time: Date,
+  options?: TimedOooDateOptions,
+): NonNullable<GoogleEvent["start"]> => {
+  if (!options?.isAllDay) {
+    return { dateTime: time.toISOString() };
   }
-  return new Date(endTime.getTime() - 1000);
+
+  let dateOnly = formatDateOnly(time);
+  let clock = "00:00:00";
+  if (options.isEnd) {
+    dateOnly = inclusiveAllDayEndDate(time);
+    clock = "23:59:59";
+  }
+  return {
+    dateTime: `${dateOnly}T${clock}`,
+    timeZone: options.timeZone,
+  };
 };
 
 const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
@@ -49,19 +110,26 @@ const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
 const serializeGoogleEvent = (
   event: MaterializedSyncableEvent,
   uid: string,
-  recurrenceRule?: string | null,
+  options: SerializeGoogleEventOptions = {},
 ): GoogleEvent | null => {
   if (!canSerializeGoogleEvent(event)) {
     return null;
   }
 
   const isAllDay = resolveIsAllDayEvent(event);
-  const asOutOfOffice = event.availability === "oof";
+  const { recurrenceRule, destinationTimeZone } = options;
 
-  if (asOutOfOffice) {
+  if (event.availability === "oof") {
+    const timeZone = destinationTimeZone || event.startTimeZone || "UTC";
+    let start = buildTimedOooDateField(event.startTime);
+    let end = buildTimedOooDateField(event.endTime);
+    if (isAllDay) {
+      start = buildTimedOooDateField(event.startTime, { isAllDay: true, isEnd: false, timeZone });
+      end = buildTimedOooDateField(event.endTime, { isAllDay: true, isEnd: true, timeZone });
+    }
     return {
       description: event.description,
-      end: buildTimedOooDateField(toTimedOooEndTime(event.endTime, isAllDay)),
+      end,
       eventType: "outOfOffice",
       extendedProperties: {
         private: { [KEEPER_EVENT_UID_PROPERTY]: uid },
@@ -71,7 +139,7 @@ const serializeGoogleEvent = (
       outOfOfficeProperties: {
         autoDeclineMode: "declineAllConflictingInvitations",
       },
-      start: buildTimedOooDateField(event.startTime),
+      start,
       summary: event.summary,
       transparency: "opaque",
       ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
@@ -90,4 +158,95 @@ const serializeGoogleEvent = (
   };
 };
 
-export { canSerializeGoogleEvent, serializeGoogleEvent, toTimedOooEndTime };
+const isLegacyUtcOooInstant = (
+  startDateTime: string | undefined,
+  endDateTime: string | undefined,
+  options: RestoreAllDayOooTimesOptions | undefined,
+): boolean =>
+  Boolean(startDateTime?.endsWith("Z") && endDateTime?.endsWith("Z"))
+  && isUtcTimeZone(options?.startTimeZone)
+  && !isUtcTimeZone(options?.destinationTimeZone);
+
+const wallClockInTimeZone = (
+  instant: Date,
+  timeZone: string,
+): { date: string; time: string } | null => {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+    const lookup = new Map<string, string>();
+    for (const part of formatter.formatToParts(instant)) {
+      lookup.set(part.type, part.value);
+    }
+    const read = (type: string): string => lookup.get(type) ?? "0";
+    let hour = Number.parseInt(read("hour"), 10);
+    if (hour === HOURS_IN_DAY) {
+      hour = 0;
+    }
+    return {
+      date: `${read("year")}-${read("month").padStart(2, "0")}-${read("day").padStart(2, "0")}`,
+      time: `${hour.toString().padStart(2, "0")}:${read("minute").padStart(2, "0")}:${read("second").padStart(2, "0")}`,
+    };
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Map timed Google OOO back to exclusive UTC all-day dates so mapping times match.
+ * Legacy UTC-Z writes on a non-UTC calendar are left unrestored so the next sync rewrites them.
+ */
+const restoreAllDayOooTimes = (
+  startDateTime: string | undefined,
+  endDateTime: string | undefined,
+  parsedStart: Date,
+  parsedEnd: Date,
+  options?: RestoreAllDayOooTimesOptions,
+): { startTime: Date; endTime: Date; isAllDay: boolean } => {
+  const startDate = matchWallClockDate(startDateTime, WALL_CLOCK_ALL_DAY_START);
+  const endDate = matchWallClockDate(endDateTime, WALL_CLOCK_ALL_DAY_END);
+  const skipLegacyUtc = isLegacyUtcOooInstant(startDateTime, endDateTime, options);
+
+  if (startDate && endDate && !skipLegacyUtc) {
+    return exclusiveAllDayRange(startDate, endDate);
+  }
+
+  const eventTimeZone = options?.startTimeZone;
+  if (eventTimeZone && !isUtcTimeZone(eventTimeZone)) {
+    const startWall = wallClockInTimeZone(parsedStart, eventTimeZone);
+    const endWall = wallClockInTimeZone(parsedEnd, eventTimeZone);
+    if (startWall?.time === "00:00:00" && endWall?.time === "23:59:59") {
+      return exclusiveAllDayRange(startWall.date, endWall.date);
+    }
+  }
+
+  if (skipLegacyUtc) {
+    return { startTime: parsedStart, endTime: parsedEnd, isAllDay: true };
+  }
+
+  const exclusiveEnd = new Date(parsedEnd.getTime() + 1000);
+  if (inferAllDayEvent({ endTime: exclusiveEnd, startTime: parsedStart })) {
+    return { startTime: parsedStart, endTime: exclusiveEnd, isAllDay: true };
+  }
+
+  return {
+    startTime: parsedStart,
+    endTime: parsedEnd,
+    isAllDay: inferAllDayEvent({ endTime: parsedEnd, startTime: parsedStart }),
+  };
+};
+
+export {
+  canSerializeGoogleEvent,
+  restoreAllDayOooTimes,
+  serializeGoogleEvent,
+};
+export type { RestoreAllDayOooTimesOptions, SerializeGoogleEventOptions };

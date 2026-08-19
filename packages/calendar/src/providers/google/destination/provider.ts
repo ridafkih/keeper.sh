@@ -9,7 +9,7 @@ import type {
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
-import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
+import { googleApiErrorSchema, googleEventListSchema, type GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
@@ -18,25 +18,10 @@ import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
-import { serializeGoogleEvent } from "./serialize-event";
+import { restoreAllDayOooTimes, serializeGoogleEvent } from "./serialize-event";
 import { readKeeperEventUid, toGoogleEventId } from "./ooo-identity";
-import { inferAllDayEvent } from "../../../core/events/all-day";
+import { inferAllDayEvent, resolveIsAllDayEvent } from "../../../core/events/all-day";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
-
-/** Reverse all-day→timed OOO end adjustment so mapping times still match. */
-const restoreExclusiveAllDayOooEnd = (startTime: Date, endTime: Date): {
-  endTime: Date;
-  isAllDay: boolean;
-} => {
-  const exclusiveEnd = new Date(endTime.getTime() + 1000);
-  if (inferAllDayEvent({ endTime: exclusiveEnd, startTime })) {
-    return { endTime: exclusiveEnd, isAllDay: true };
-  }
-  return {
-    endTime,
-    isAllDay: inferAllDayEvent({ endTime, startTime }),
-  };
-};
 
 interface GoogleSyncProviderConfig {
   accessToken: string;
@@ -162,6 +147,76 @@ const resolveDeleteLookup = (response: BatchSubResponse | undefined): DeleteLook
   return { eventId: items[0].id, kind: "found" };
 };
 
+const hasAllDayOutOfOffice = (events: (MaterializedSyncableEvent | undefined)[]): boolean => {
+  for (const event of events) {
+    if (event?.availability === "oof" && resolveIsAllDayEvent(event)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const pageHasOutOfOffice = (events: GoogleEvent[]): boolean => {
+  for (const event of events) {
+    if (event.eventType === "outOfOffice") {
+      return true;
+    }
+  }
+  return false;
+};
+
+const toListedRemoteEvent = (
+  event: GoogleEvent,
+  keeperUid: string,
+  startTime: Date,
+  endTime: Date,
+  destinationTimeZone: string,
+): RemoteEvent => {
+  let availability: MaterializedSyncableEvent["availability"] = "busy";
+  if (event.eventType === "outOfOffice") {
+    availability = "oof";
+  } else if (event.transparency === "transparent") {
+    availability = "free";
+  }
+
+  let restored = {
+    endTime,
+    isAllDay: Boolean(event.start?.date) || inferAllDayEvent({ endTime, startTime }),
+    startTime,
+  };
+  if (event.eventType === "outOfOffice") {
+    restored = restoreAllDayOooTimes(
+      event.start?.dateTime,
+      event.end?.dateTime,
+      startTime,
+      endTime,
+      {
+        destinationTimeZone,
+        startTimeZone: event.start?.timeZone,
+      },
+    );
+  }
+  const isAllDay = Boolean(event.start?.date) || restored.isAllDay;
+  return {
+    deleteId: event.id ?? keeperUid,
+    editableAvailability: availability,
+    editableContentHash: createEditableEventContentHash({
+      availability,
+      description: event.description,
+      endTime: restored.endTime,
+      isAllDay,
+      location: event.location,
+      startTime: restored.startTime,
+      summary: event.summary ?? "",
+    }),
+    endTime: restored.endTime,
+    isKeeperEvent: true,
+    supportedAvailabilities: ["busy", "free", "oof"],
+    startTime: restored.startTime,
+    uid: keeperUid,
+  };
+};
+
 const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -176,22 +231,75 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
+  let cachedDestinationTimeZone = "";
+
+  const resolveDestinationTimeZone = async (): Promise<string> => {
+    if (cachedDestinationTimeZone) {
+      return cachedDestinationTimeZone;
+    }
+
+    const timeZone = await withBackoff(async () => {
+      if (config.rateLimiter) {
+        await config.rateLimiter.acquire(1, config.signal);
+      }
+      const url = new URL(
+        `calendars/${encodeURIComponent(config.externalCalendarId)}`,
+        GOOGLE_CALENDAR_API,
+      );
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
+          method: "GET",
+        },
+        PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+        config.signal,
+      );
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new GoogleCalendarApiError(response.status, errorBody);
+      }
+      const body: unknown = await response.json();
+      if (
+        typeof body === "object"
+        && body !== null
+        && "timeZone" in body
+        && typeof body.timeZone === "string"
+        && body.timeZone.length > 0
+      ) {
+        return body.timeZone;
+      }
+      return "UTC";
+    }, {
+      signal: config.signal,
+      shouldRetry: (error) =>
+        error instanceof GoogleCalendarApiError && isRateLimitApiError(error.status, error.apiError),
+    }).catch(() => "UTC");
+
+    cachedDestinationTimeZone = timeZone;
+    return timeZone;
+  };
 
   // Default events use events.import (upserts by iCalUID). Out-of-office requires events.insert.
   const buildPushRequest = (
     event: MaterializedSyncableEvent,
+    destinationTimeZone?: string,
   ): { uid: string; request: BatchSubRequest; updateBody?: Record<string, unknown> } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
-    const resource = serializeGoogleEvent(event, uid);
+    const resource = serializeGoogleEvent(event, uid, { destinationTimeZone });
     if (!resource) {
       return null;
     }
     const isOutOfOffice = resource.eventType === "outOfOffice";
+    let path = `${eventsPath}/import`;
+    if (isOutOfOffice) {
+      path = eventsPath;
+    }
     return {
       uid,
       request: {
         method: "POST",
-        path: isOutOfOffice ? eventsPath : `${eventsPath}/import`,
+        path,
         headers: { "Content-Type": "application/json" },
         body: resource,
       },
@@ -201,6 +309,11 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
+
+    let destinationTimeZone = "";
+    if (hasAllDayOutOfOffice(events)) {
+      destinationTimeZone = await resolveDestinationTimeZone();
+    }
 
     const results: PushResult[] = Array.from({ length: events.length });
     const pending: {
@@ -218,7 +331,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         continue;
       }
 
-      const built = buildPushRequest(event);
+      const built = buildPushRequest(event, destinationTimeZone);
       if (!built) {
         results[index] = { success: true };
         continue;
@@ -300,12 +413,16 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           continue;
         }
 
+        let error = "Google insert conflict update failed";
+        let statusCode = HTTP_STATUS.CONFLICT;
+        if (response) {
+          error = extractBatchErrorMessage(response.body, response.statusCode);
+          ({ statusCode } = response);
+        }
         results[update.entryIndex] = {
-          error: response
-            ? extractBatchErrorMessage(response.body, response.statusCode)
-            : "Google insert conflict update failed",
+          error,
           errorType: "GoogleCalendarApiError",
-          statusCode: response?.statusCode ?? HTTP_STATUS.CONFLICT,
+          statusCode,
           success: false,
         };
       }
@@ -472,9 +589,14 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
     const body = await response.json();
     const data = googleEventListSchema.assert(body);
+    const pageItems = data.items ?? [];
+    let destinationTimeZone = "";
+    if (pageHasOutOfOffice(pageItems)) {
+      destinationTimeZone = await resolveDestinationTimeZone();
+    }
 
     const items: RemoteEvent[] = [];
-    for (const event of data.items ?? []) {
+    for (const event of pageItems) {
       const keeperUid = readKeeperEventUid(event);
       if (!keeperUid) {
         continue;
@@ -484,40 +606,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       if (!startTime || !endTime) {
         continue;
       }
-      let availability: MaterializedSyncableEvent["availability"] = "busy";
-      if (event.eventType === "outOfOffice") {
-        availability = "oof";
-      } else if (event.transparency === "transparent") {
-        availability = "free";
-      }
-      // All-day source events are written as timed OOO ending 1s before exclusive midnight.
-      const restored = event.eventType === "outOfOffice"
-        ? restoreExclusiveAllDayOooEnd(startTime, endTime)
-        : {
-          endTime,
-          isAllDay: Boolean(event.start?.date) || inferAllDayEvent({ endTime, startTime }),
-        };
-      const resolvedEndTime = restored.endTime;
-      const isAllDay = Boolean(event.start?.date) || restored.isAllDay;
-      items.push({
-        deleteId: event.id ?? keeperUid,
-        editableAvailability: availability,
-        editableContentHash: createEditableEventContentHash({
-          availability,
-          description: event.description,
-          endTime: resolvedEndTime,
-          isAllDay,
-          location: event.location,
-          startTime,
-          summary: event.summary ?? "",
-        }),
-        endTime: resolvedEndTime,
-        isKeeperEvent: true,
-        // Google destinations can create OOO via insert even when the listed event is default.
-        supportedAvailabilities: ["busy", "free", "oof"],
-        startTime,
-        uid: keeperUid,
-      });
+      items.push(toListedRemoteEvent(event, keeperUid, startTime, endTime, destinationTimeZone));
     }
 
     return { items, nextPageToken: data.nextPageToken ?? null };

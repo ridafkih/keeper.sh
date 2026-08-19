@@ -149,6 +149,66 @@ describe("createGoogleSyncProvider", () => {
     expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]?.[0]?.body?.id).toBeUndefined();
   });
 
+  it("writes all-day oof as destination-local wall-clock times", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(Response.json({
+      timeZone: "Europe/Berlin",
+    }, { status: 200 }))));
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(200, { id: "google-ooo-id" }),
+    ]);
+
+    await createProvider().pushEvents([{
+      availability: "oof",
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-09-01T00:00:00.000Z"),
+      id: "event-state-id",
+      isAllDay: true,
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-08-22T00:00:00.000Z"),
+      summary: "Gamescom",
+    }]);
+
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]).toMatchObject({
+      body: {
+        end: { dateTime: "2026-08-31T23:59:59", timeZone: "Europe/Berlin" },
+        eventType: "outOfOffice",
+        start: { dateTime: "2026-08-22T00:00:00", timeZone: "Europe/Berlin" },
+      },
+    });
+  });
+
+  it("lists destination-local all-day oof as exclusive UTC dates", async () => {
+    const fetchMock = vi.fn((input: URL | Request | string) => {
+      const href = String(input);
+      if (href.includes("/events")) {
+        return Promise.resolve(Response.json({
+          items: [{
+            end: { dateTime: "2026-08-31T23:59:59+02:00", timeZone: "Europe/Berlin" },
+            eventType: "outOfOffice",
+            extendedProperties: { private: { keeperEventUid: "ooo@keeper.sh" } },
+            id: "google-ooo-id",
+            start: { dateTime: "2026-08-22T00:00:00+02:00", timeZone: "Europe/Berlin" },
+            summary: "Gamescom",
+          }],
+        }, { status: 200 }));
+      }
+      return Promise.resolve(Response.json({ timeZone: "Europe/Berlin" }, { status: 200 }));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMin: new Date("2026-08-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents).toEqual([expect.objectContaining({
+      endTime: new Date("2026-09-01T00:00:00.000Z"),
+      startTime: new Date("2026-08-22T00:00:00.000Z"),
+      uid: "ooo@keeper.sh",
+    })]);
+  });
+
   it("converges when import and listing use Google's two different identifiers", async () => {
     const event: MaterializedSyncableEvent = {
       calendarId: "source-calendar",
