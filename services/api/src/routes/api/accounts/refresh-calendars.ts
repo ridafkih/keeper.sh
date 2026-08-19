@@ -1,4 +1,5 @@
 import { allSettledWithConcurrency } from "@keeper.sh/calendar";
+import { invalidateCalendarDiscoveryCache } from "@keeper.sh/calendar/caldav";
 import { handleRefreshCalendarsRoute } from "./refresh-calendars-route";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { redis, refreshLockStore } from "@/context";
@@ -40,11 +41,19 @@ const POST = withWideEvent(
       claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
       cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
       loadAccounts: loadRefreshableAccountsForUser,
-      refreshCalendars: async (options) =>
-        runAccountCalendarRefresh(
+      refreshCalendars: async (options) => {
+        const summary = await runAccountCalendarRefresh(
           options,
           await createDefaultAccountCalendarRefreshDependencies(),
-        ),
+        );
+        /*
+         * Dropped after the walk, so the next ingest re-walks rather than reading a list
+         * this refresh just superseded. Someone who presses the button is telling us the
+         * cached answer is wrong.
+         */
+        await invalidateCalendarDiscoveryCache(redis, options.accountId);
+        return summary;
+      },
       runConcurrently: (tasks) =>
         allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
     })),

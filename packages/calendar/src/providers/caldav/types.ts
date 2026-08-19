@@ -1,3 +1,4 @@
+import type { CalendarDiscoveryCache } from "./shared/discovery-cache";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 interface CalDAVProviderOptions {
@@ -77,6 +78,7 @@ interface CalDAVClientConfig {
   authMethod?: "basic" | "digest";
   /* Awaited before every HTTP request the client sends to the origin. */
   onBeforeRequest?: () => Promise<void> | void;
+  calendarDiscoveryCache?: CalendarDiscoveryCache;
 }
 
 interface CalendarInfo {

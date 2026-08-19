@@ -43,6 +43,7 @@ import {
   CalDAVIncompleteMultiGetError,
   CalDAVUnreadableResourceError,
   createCalDAVSourceFetcher,
+  createCalendarDiscoveryCache,
 } from "@keeper.sh/calendar/caldav";
 import { decryptPassword, resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import {
@@ -1419,6 +1420,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
               runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
+                    accountId: calendarAccountsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
@@ -1453,6 +1455,10 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                   userId: currentSource.userId,
                 });
                 const fetcher = createCalDAVSourceFetcher({
+                  calendarDiscoveryCache: createCalendarDiscoveryCache(
+                    refreshLockRedis,
+                    currentSource.accountId,
+                  ),
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
                   onBeforeRequest: async () => {
                     await rateLimiter?.acquire(1, signal);

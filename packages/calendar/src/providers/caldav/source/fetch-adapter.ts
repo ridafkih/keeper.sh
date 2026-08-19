@@ -1,5 +1,6 @@
 import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { CalendarDiscoveryCache } from "../shared/discovery-cache";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { isCalDAVEventInSyncWindow, partitionCalDAVSourceEvents } from "./window";
 import { CalDAVClient } from "../shared/client";
@@ -15,6 +16,7 @@ interface CalDAVSourceFetcherConfig {
   safeFetchOptions?: SafeFetchOptions;
   plan: SourceIngestionPlan;
   onBeforeRequest?: () => Promise<void> | void;
+  calendarDiscoveryCache?: CalendarDiscoveryCache;
 }
 
 interface CalDAVSourceFetcher {
@@ -24,6 +26,7 @@ interface CalDAVSourceFetcher {
 const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
   const client = new CalDAVClient({
     authMethod: config.authMethod,
+    calendarDiscoveryCache: config.calendarDiscoveryCache,
     credentials: { password: config.password, username: config.username },
     onBeforeRequest: config.onBeforeRequest,
     serverUrl: config.serverUrl,

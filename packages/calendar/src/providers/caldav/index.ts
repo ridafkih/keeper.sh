@@ -1,3 +1,10 @@
+export {
+  buildDiscoveryCacheKey,
+  CALDAV_DISCOVERY_TTL_SECONDS,
+  createCalendarDiscoveryCache,
+  invalidateCalendarDiscoveryCache,
+  type CalendarDiscoveryCache,
+} from "./shared/discovery-cache";
 export { createCalDAVSourceFetcher, type CalDAVSourceFetcherConfig } from "./source/fetch-adapter";
 export { isCalDAVAuthenticationError } from "./source/auth-error-classification";
 export { createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";

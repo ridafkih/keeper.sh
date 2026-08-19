@@ -245,18 +245,26 @@ class CalDAVClient {
   }
 
   async discoverCalendars(): Promise<CalendarInfo[]> {
+    const cached = await this.config.calendarDiscoveryCache?.read();
+    if (cached) {
+      return cached;
+    }
+
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       return measureProviderRequest(() => client.fetchCalendars());
     });
 
-    return calendars
+    const discovered = calendars
       .filter(({ components }) => components?.includes("VEVENT"))
       .map(({ url, displayName, ctag }) => ({
         ctag,
         displayName: getDisplayName(displayName),
         url: bindUrlToAccount(url, this.config.serverUrl),
       }));
+
+    await this.config.calendarDiscoveryCache?.write(discovered);
+    return discovered;
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {

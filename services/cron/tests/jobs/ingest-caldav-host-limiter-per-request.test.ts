@@ -236,7 +236,11 @@ vi.mock("../../src/context", () => ({
   database: harness.fakeDatabase,
   flushDatabase: harness.fakeDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
-  refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },
+  refreshLockRedis: {
+    eval: () => Promise.resolve(null),
+    get: () => Promise.resolve(null),
+    setex: () => Promise.resolve("OK"),
+  },
   refreshLockStore: { release: () => Promise.resolve(), tryAcquire: () => Promise.resolve(true) },
 }));
 vi.mock("../../src/utils/logging", () => ({
