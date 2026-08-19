@@ -13,26 +13,11 @@ const hasErrorFlag = (error: unknown, key: string): boolean =>
 
 const REAUTHENTICATION_FLAGS = ["authRequired", "oauthReauthRequired"];
 
-/*
- * Shutdown disconnects refreshLockRedis while the ingest pass is still running, so a
- * mid-flight round trip fails with this — keeper closed its own client, the provider was
- * never contacted. ioredis exposes no error class for it, only a bare Error with this message.
- */
 const REDIS_CONNECTION_CLOSED_MESSAGE = "Connection is closed.";
 
 const isRedisTeardownError = (error: unknown): boolean =>
   error instanceof Error && error.message === REDIS_CONNECTION_CLOSED_MESSAGE;
 
-/*
- * These never contacted the provider, so they must not accrue provider backoff. A Postgres
- * statement timeout (57014) belongs here because every statement_timeout keeper sets bounds
- * its own database — no provider is on the other side of that cancellation.
- *
- * A source-deadline OperationTimeoutError is NOT infrastructure by itself: withAbortTimeout
- * raises the same class when a slow provider overruns the deadline, which must accrue
- * backoff. Only a timeout observed while still parked on keeper's own pacing, ahead of the
- * request it gates, carries a park flag and stays exempt.
- */
 const SHUTDOWN_CLOSE_CONNECTION_SLUGS = new Set([
   "db-connection-terminated",
   "db-connection-unavailable",

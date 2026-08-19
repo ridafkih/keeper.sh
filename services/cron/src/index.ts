@@ -28,11 +28,6 @@ await entry({
     return async (): Promise<void> => {
       baker.stopAll();
       destroy();
-      /*
-       * Order is load-bearing: every drained flush re-probes currency through a redis.eval
-       * on the sync-lock handle, so disconnecting first makes that probe reject and the
-       * flush discards the very payload the drain exists to persist.
-       */
       await shutdownDatabases();
       shutdownRefreshLockRedis();
     };

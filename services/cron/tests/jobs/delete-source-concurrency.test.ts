@@ -32,6 +32,7 @@ let job: typeof ingestSourcesJob | null = null;
 /* ENCRYPTION_KEY set so the CalDAV family does not early-return before its call site. */
 vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: fakeDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },
@@ -78,12 +79,6 @@ beforeEach(() => {
 });
 
 describe("global source throttle removal", () => {
-  /*
-   * USER_GROUP_CONCURRENCY is 12 so groups times USER_CALENDAR_CONCURRENCY stays
-   * within the 25-connection cron pool; every source reads from the pool before
-   * reserve() can park it. ICS gets its own budget of 4 because parsing is
-   * CPU-bound and starves the Bun event loop.
-   */
   it("runs oauth and caldav at the pool-sized user-group budget and ics at parse concurrency", async () => {
     await job?.callback();
 

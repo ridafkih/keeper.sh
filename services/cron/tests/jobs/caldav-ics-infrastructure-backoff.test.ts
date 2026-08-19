@@ -9,12 +9,6 @@ import { OperationTimeoutError, withAbortTimeout } from "../../src/utils/with-ab
 import { isIngestInfrastructureError } from "../../src/utils/error-flags";
 import { shouldTreatAsProviderAuthFailure } from "../../src/utils/provider-ingest-failure";
 
-/*
- * Budget starvation and writer shutdown never contacted the provider, so
- * neither may trigger provider exponential backoff. The production gates are
- * inline lambdas, so they are mirrored here and pinned by source text below.
- */
-
 const shouldApplyCalDavIngestBackoff = (error: unknown): boolean =>
   !shouldTreatAsProviderAuthFailure(error) && !isIngestInfrastructureError(error);
 

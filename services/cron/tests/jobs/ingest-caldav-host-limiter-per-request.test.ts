@@ -2,11 +2,6 @@ import { encryptPassword } from "@keeper.sh/database";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
-/*
- * The shared per-host budget meters requests per minute, so a CalDAV ingest
- * must draw a permit per origin request. Charging once per run would undercount
- * a multi-batch fetch and let an unthrottled request herd through.
- */
 const CALENDAR_URL = "https://caldav.example.net/calendars/user-1/personal/";
 
 const harness = vi.hoisted(() => {
@@ -237,6 +232,7 @@ vi.mock("../../src/env", () => ({
   default: { ENCRYPTION_KEY: Buffer.alloc(32).toString("base64") },
 }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: harness.fakeDatabase,
   flushDatabase: harness.fakeDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },

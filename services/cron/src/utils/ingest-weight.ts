@@ -1,16 +1,12 @@
 import { count, eq } from "drizzle-orm";
 import { eventStatesTable } from "@keeper.sh/database/schema";
+import { widelog } from "@/utils/logging";
 
-/*
- * Sized BEFORE the fetch begins, so the estimate comes from the previous ingest's stored
- * count. Payloads vary by two-plus orders of magnitude, so a byte-weight estimate bounds
- * memory where a count-based limit cannot.
- */
 const BYTES_PER_EVENT = 1024;
 const WEIGHT_FLOOR = 16_384;
 const WEIGHT_BUDGET = 64 * 1024 * 1024;
-/* No history to size from; an eighth of the budget self-limits a launch flood to ~8 fetches. */
-const NEVER_INGESTED_WEIGHT = WEIGHT_BUDGET / 8;
+const COLD_START_CONCURRENT_FETCH_ALLOWANCE = 8;
+const NEVER_INGESTED_WEIGHT = WEIGHT_BUDGET / COLD_START_CONCURRENT_FETCH_ALLOWANCE;
 
 interface IngestWeightDependencies {
   countStoredEvents: (calendarId: string) => Promise<number>;
@@ -30,7 +26,11 @@ const estimateIngestWeight = async (
       Math.max(storedCount * BYTES_PER_EVENT, WEIGHT_FLOOR),
       WEIGHT_BUDGET,
     );
-  } catch {
+  } catch (error) {
+    widelog.errorFields(error, {
+      slug: "ingest-weight-estimate-failed",
+      retriable: true,
+    });
     return NEVER_INGESTED_WEIGHT;
   }
 };

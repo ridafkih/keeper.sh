@@ -1,5 +1,5 @@
 import env from "./env";
-import { drainFlushWriters } from "./utils/flush-drains";
+import { createFlushDrainRegistry } from "./utils/flush-drains";
 import { closeDatabase, createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
@@ -15,11 +15,8 @@ const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DA
  */
 const flushDatabase = await createDatabase(env.DATABASE_URL, { maxConnections: 1 });
 
-/*
- * Writers drain before flushDatabase closes underneath them. The drain is bounded because
- * entrykit's SIGTERM cleanup awaits this with no timeout of its own: one wedged flush would
- * keep the process alive until the supervisor SIGKILLs it, leaving the databases unclosed.
- */
+const flushDrainRegistry = createFlushDrainRegistry();
+
 const FLUSH_DRAIN_DEADLINE_MS = 2000;
 /*
  * Bun's unbounded close awaits the very in-flight query the drain deadline just gave up on,
@@ -28,7 +25,7 @@ const FLUSH_DRAIN_DEADLINE_MS = 2000;
 const CLOSE_GRACE_SECONDS = 2;
 
 const shutdownDatabases = async (): Promise<void> => {
-  const drain = drainFlushWriters().then(
+  const drain = flushDrainRegistry.drain().then(
     () => "drained",
     () => "drain-failed",
   );
@@ -92,6 +89,7 @@ const polarClient = createPolarClient();
 export {
   database,
   flushDatabase,
+  flushDrainRegistry,
   shutdownDatabases,
   premiumService,
   polarClient,

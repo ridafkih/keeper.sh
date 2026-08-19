@@ -162,6 +162,7 @@ vi.mock("@keeper.sh/sync", () => ({
 /* No client secrets, so the token-refresh branch is skipped entirely. */
 vi.mock("../../src/env", () => ({ default: {} }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: harness.database,
   flushDatabase: harness.flushDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },

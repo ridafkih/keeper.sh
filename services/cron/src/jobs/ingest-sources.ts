@@ -58,8 +58,13 @@ import {
 import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
-import { database, flushDatabase, refreshLockRedis, refreshLockStore } from "@/context";
-import { registerFlushDrain } from "@/utils/flush-drains";
+import {
+  database,
+  flushDatabase,
+  flushDrainRegistry,
+  refreshLockRedis,
+  refreshLockStore,
+} from "@/context";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import {
@@ -386,8 +391,7 @@ const ingestFlushWriter = createSerialFlushWorker(
   { budget: WEIGHT_BUDGET, capacity: FLUSH_QUEUE_CAPACITY },
 );
 
-/* Shutdown must drain this writer before flushDatabase closes, or flushes strand their budget. */
-registerFlushDrain(() => ingestFlushWriter.close());
+flushDrainRegistry.register(() => ingestFlushWriter.close());
 
 type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, IngestionResult>;
 
@@ -653,6 +657,7 @@ const createSemaphoreRateLimiterAdapter = (
       if (!lease) {
         return;
       }
+      /* Acquire() awaits this same promise, so a rejected lease already surfaced there. */
       const held = await lease.catch(() => null);
       lease = null;
       if (held) {
@@ -1078,12 +1083,6 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
         ...buildOAuthSourceIdFilter(calendarIds),
       ),
     )
-  /*
-   * Null ingestWindowRecordedAt means exactly "never ingested": it is written by
-   * the first successful ingest of every family. The plan is coalesced because most
-   * free users have no subscription row at all, and a bare NULL would sort ahead of
-   * 'pro' under DESC.
-   */
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
@@ -1230,9 +1229,7 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
                     userId: currentSource.userId,
                   };
                 } finally {
-                  /* A source that never submitted must not strand its weight. */
                   reservation.release();
-                  /* The lease TTL already reclaims the slot, so a failed release must not reject. */
                   await rateLimiter?.dispose?.().catch((error: unknown) => {
                     widelog.errorFields(error, {
                       slug: "rate-limiter-dispose-failed",
@@ -1391,10 +1388,6 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                 });
                 const fetcher = createCalDAVSourceFetcher({
                   calendarUrl: currentSource.calendarUrl ?? currentSource.serverUrl,
-                  /*
-                   * The host budget meters requests per minute and a CalDAV fetch issues
-                   * discovery plus one REPORT per batch, so every origin request draws a permit.
-                   */
                   onBeforeRequest: async () => {
                     await rateLimiter?.acquire(1, signal);
                   },
@@ -1445,7 +1438,6 @@ const ingestCalDAVSources = async (): Promise<IngestionBatchResult> => {
                     userId: currentSource.userId,
                   };
                 } finally {
-                  /* A source that never submitted must not strand its weight. */
                   reservation.release();
                 }
               }, (error) =>
@@ -1616,7 +1608,6 @@ const ingestIcsSources = async (): Promise<IngestionBatchResult> => {
                     userId: currentSource.userId,
                   };
                 } finally {
-                  /* A source that never submitted must not strand its weight. */
                   reservation.release();
                 }
               }, (error) => !isIngestInfrastructureError(error)),

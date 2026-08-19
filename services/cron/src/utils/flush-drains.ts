@@ -1,17 +1,21 @@
-/*
- * Writers register here so shutdown drains them BEFORE flushDatabase is closed underneath
- * them. Kept outside context.ts so job modules can register without widening that surface.
- */
 type FlushDrain = () => Promise<void>;
 
-const flushDrains: FlushDrain[] = [];
+interface FlushDrainRegistry {
+  drain: () => Promise<void>;
+  register: (drain: FlushDrain) => void;
+}
 
-const registerFlushDrain = (drain: FlushDrain): void => {
-  flushDrains.push(drain);
+const createFlushDrainRegistry = (): FlushDrainRegistry => {
+  const drains: FlushDrain[] = [];
+  return {
+    drain: async (): Promise<void> => {
+      await Promise.all(drains.map((flushDrain) => flushDrain()));
+    },
+    register: (flushDrain: FlushDrain): void => {
+      drains.push(flushDrain);
+    },
+  };
 };
 
-const drainFlushWriters = async (): Promise<void> => {
-  await Promise.all(flushDrains.map((drain) => drain()));
-};
-
-export { drainFlushWriters, registerFlushDrain };
+export { createFlushDrainRegistry };
+export type { FlushDrain, FlushDrainRegistry };

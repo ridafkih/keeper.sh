@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { registerFlushDrain } from "../../src/utils/flush-drains";
 import { createSerialFlushWorker } from "../../../../packages/calendar/src/core/utils/serial-flush-worker";
 
 /*
@@ -62,7 +61,8 @@ vi.mock("@polar-sh/sdk", () => ({
 describe("shutdown drain deadline", () => {
   it("settles shutdownDatabases within a bounded time even when one flush is wedged", async () => {
     const context = await import("../../src/context");
-    const { shutdownDatabases } = context as unknown as {
+    const { flushDrainRegistry, shutdownDatabases } = context as unknown as {
+      flushDrainRegistry: { register: (drain: () => Promise<void>) => void };
       shutdownDatabases: () => Promise<void>;
     };
 
@@ -77,7 +77,7 @@ describe("shutdown drain deadline", () => {
     /* The client deadline rejects the caller while the run itself stays wedged. */
     wedgedSubmit.catch(() => null);
 
-    registerFlushDrain(() => wedgedWorker.close());
+    flushDrainRegistry.register(() => wedgedWorker.close());
 
     let shutdownState = "still-draining";
     const shutdown = shutdownDatabases().then(() => {

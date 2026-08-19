@@ -35,10 +35,6 @@ const withAbortTimeout = async <TResult>(
   const timeout = setTimeout(() => controller.abort(timeoutError), timeoutMs);
 
   try {
-    /*
-     * Race the operation against the abort signal so a non-signal-aware hang
-     * still settles at the deadline instead of stranding the scheduler slot.
-     */
     const result = await raceAbortSignal(
       controller.signal,
       operation(controller.signal, deadlineAt),

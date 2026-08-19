@@ -147,6 +147,7 @@ const createUpdateQuery = (pending?: Record<string, unknown>): unknown => {
 };
 
 vi.mock("@/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: {
     select: (projection: Record<string, unknown>) =>
       createQuery(() => resolveSelect(projection)),

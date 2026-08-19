@@ -19,7 +19,6 @@ import { recordSegment } from "../telemetry/segments";
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
 
-/* Capped sample: an uncapped list would push the line past what the log pipeline keeps. */
 const WIDE_EVENT_LIST_LIMIT = 20;
 const WIDE_EVENT_LIST_MAX_LENGTH = 2048;
 

@@ -15,6 +15,7 @@ const lockControl = { acquires: true };
 const drainControl = { bodyDurationMs: 0 };
 
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: {

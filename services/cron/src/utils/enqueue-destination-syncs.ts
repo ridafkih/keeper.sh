@@ -6,6 +6,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import env from "@/env";
+import { widelog } from "@/utils/logging";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 
 import {
@@ -16,12 +17,14 @@ import {
 
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 
-/*
- * Bounds the serial pass, which cronbake re-arms only after the callback settles. BullMQ
- * holds every command until ioredis emits "ready", so a half-open socket would park the pass
- * forever: commandTimeout never fires for a connection that is never ready.
- */
 const ENQUEUE_TIMEOUT_MS = 10_000;
+
+const logQueueTeardownFailure = (error: unknown): void => {
+  widelog.errorFields(error, {
+    slug: "push-sync-queue-teardown-failed",
+    retriable: false,
+  });
+};
 
 const enqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
@@ -89,8 +92,8 @@ const enqueueDestinationSyncsForUsers = async (
      * covers a connection that did come up. Each is a no-op in the other's scenario.
      */
     for (const queue of openQueues) {
-      queue.close().catch(() => null);
-      queue.disconnect().catch(() => null);
+      queue.close().catch(logQueueTeardownFailure);
+      queue.disconnect().catch(logQueueTeardownFailure);
     }
   }
 };

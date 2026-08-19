@@ -23,6 +23,7 @@ vi.mock("@/env", () => ({
 
 vi.mock("@/utils/logging", () => ({
   widelog: {
+    errorFields: () => null,
     set: () => null,
   },
 }));

@@ -88,8 +88,7 @@ vi.mock("ioredis", () => ({
 describe("SIGTERM cleanup and the flush drain's currency probe", () => {
   it("keeps refreshLockRedis alive until drained flushes have committed", async () => {
     await import("../src/index");
-    const { refreshLockRedis } = await import("../src/context");
-    const { registerFlushDrain } = await import("../src/utils/flush-drains");
+    const { flushDrainRegistry, refreshLockRedis } = await import("../src/context");
     const { ingestSource } = await import("@keeper.sh/calendar");
 
     expect(harness.cleanup).not.toBeNull();
@@ -132,7 +131,7 @@ describe("SIGTERM cleanup and the flush drain's currency probe", () => {
     expect(queuedThunks).toHaveLength(1);
 
     let drained = false;
-    registerFlushDrain(async () => {
+    flushDrainRegistry.register(async () => {
       for (const runThunk of queuedThunks.splice(0)) {
         runThunk();
       }

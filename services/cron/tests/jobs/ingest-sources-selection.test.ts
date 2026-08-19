@@ -46,6 +46,7 @@ let job: typeof ingestSourcesJob | null = null;
 /* ENCRYPTION_KEY set so the CalDAV family does not early-return before its listing. */
 vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: fakeDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },

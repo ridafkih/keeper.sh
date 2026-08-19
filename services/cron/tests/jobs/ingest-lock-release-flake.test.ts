@@ -189,6 +189,7 @@ vi.mock("@keeper.sh/calendar/ics", () => ({
 /* No ENCRYPTION_KEY, so the CalDAV family early-returns and only ICS sources run. */
 vi.mock("../../src/env", () => ({ default: {} }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: harness.pooledDatabase,
   flushDatabase: harness.flushDatabase,
   premiumService: { getUserPlan: () => Promise.resolve("pro") },

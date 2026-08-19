@@ -39,6 +39,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
 
 vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
 vi.mock("../../src/context", () => ({
+  flushDrainRegistry: { register: (): null => null },
   database: { select: () => ({}), update: () => ({}) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },
