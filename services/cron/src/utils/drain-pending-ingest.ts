@@ -6,6 +6,7 @@ const DRAIN_BATCH_FAILED_SLUG = "push-drain-batch-failed";
 
 interface PendingIngestMember {
   calendarId: string;
+  correlationId?: string;
   score: number;
 }
 
@@ -18,8 +19,14 @@ interface DrainPendingIngestDependencies {
   claimPending: (limit: number) => Promise<PendingIngestMember[]>;
   countPending: () => Promise<number>;
   enabled: boolean;
-  enqueueDestinationSyncs: (userIds: string[]) => Promise<void>;
-  ingestCalendars: (calendarIds: string[]) => Promise<{ affectedUserIds: string[] }>;
+  enqueueDestinationSyncs: (
+    userIds: string[],
+    correlationIdByUserId: Record<string, string>,
+  ) => Promise<void>;
+  ingestCalendars: (
+    calendarIds: string[],
+    correlationIdByCalendarId: Record<string, string>,
+  ) => Promise<{ affectedUserIds: string[] }>;
   now: () => Date;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
@@ -75,6 +82,41 @@ const partitionByPlan = async (
   }
 
   return { errorUserCount, freeUserIds, proUserIds };
+};
+
+const collectCorrelationIds = (
+  members: PendingIngestMember[],
+): Record<string, string> => {
+  const correlationIdByCalendarId: Record<string, string> = {};
+  for (const member of members) {
+    const correlationId = member.correlationId ?? "";
+    if (correlationId.length > 0) {
+      correlationIdByCalendarId[member.calendarId] = correlationId;
+    }
+  }
+  return correlationIdByCalendarId;
+};
+
+/*
+ * A user can own several woken calendars, so the ids collide here. The earliest webhook
+ * wins because it is the one whose propagation latency the destination write closes.
+ */
+const attributeCorrelationIdsToUsers = (
+  members: PendingIngestMember[],
+  userIdByCalendarId: Map<string, string>,
+  affectedUserIds: string[],
+): Record<string, string> => {
+  const wanted = new Set(affectedUserIds);
+  const correlationIdByUserId: Record<string, string> = {};
+  for (const member of members) {
+    const userId = userIdByCalendarId.get(member.calendarId) ?? "";
+    const correlationId = member.correlationId ?? "";
+    if (!wanted.has(userId) || correlationId.length === 0) {
+      continue;
+    }
+    correlationIdByUserId[userId] ??= correlationId;
+  }
+  return correlationIdByUserId;
 };
 
 const abandonExhaustedMembers = async (
@@ -180,7 +222,10 @@ const runDrainPendingIngest = async (
 
   let affectedUserIds: string[] = [];
   try {
-    ({ affectedUserIds } = await dependencies.ingestCalendars(eligibleIds));
+    ({ affectedUserIds } = await dependencies.ingestCalendars(
+      eligibleIds,
+      collectCorrelationIds(eligible),
+    ));
   } catch (error) {
     dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);
     const abandonedBatchCount = await abandonExhaustedMembers(eligibleIds, dependencies);
@@ -197,7 +242,10 @@ const runDrainPendingIngest = async (
     "push_drain.retained_count": eligible.length - released.length,
   });
 
-  await dependencies.enqueueDestinationSyncs(affectedUserIds);
+  await dependencies.enqueueDestinationSyncs(
+    affectedUserIds,
+    attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, affectedUserIds),
+  );
 
   return eligible.length;
 };

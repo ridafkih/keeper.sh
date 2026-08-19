@@ -31,7 +31,7 @@ const runEgressJob = async (plan: Plan): Promise<void> => {
 
   try {
     await queue.addBulk(
-      buildPushDestinationJobs(destinations, plan, correlationId),
+      buildPushDestinationJobs(destinations, plan, () => correlationId),
     );
   } finally {
     await queue.close();

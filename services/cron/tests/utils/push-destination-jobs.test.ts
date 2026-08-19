@@ -7,7 +7,7 @@ describe("buildPushDestinationJobs", () => {
       { calendarId: "outlook", userId: "user-1" },
       { calendarId: "google", userId: "user-2" },
       { calendarId: "fastmail", userId: "user-1" },
-    ], "pro", "run-1");
+    ], "pro", () => "run-1");
 
     expect(jobs.map(({ data }) => data)).toEqual([
       { calendarId: "fastmail", correlationId: "run-1", plan: "pro", trigger: "cron", userId: "user-1" },

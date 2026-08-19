@@ -150,6 +150,8 @@ const createRedisRateLimiter = (
         widelog.count("ratelimit.throttled_count", 1);
         if (!queued) {
           queued = true;
+          /* Only a parked acquire names its key: an unthrottled one waited on nothing. */
+          widelog.set("wait.rate_limiter_key", key);
           widelog.max("ratelimit.queue_depth_max", enterRateLimiterQueue(key));
         }
 

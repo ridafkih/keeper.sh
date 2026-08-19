@@ -1,7 +1,11 @@
-import { PENDING_FAILURES_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
+import {
+  PENDING_CORRELATION_KEY,
+  PENDING_FAILURES_KEY,
+  PENDING_INGEST_KEY,
+} from "@keeper.sh/calendar";
 import type { PendingIngestMember } from "./drain-pending-ingest";
 
-const RELEASE_KEY_COUNT = 2;
+const RELEASE_KEY_COUNT = 3;
 
 const RELEASE_IF_UNCHANGED_SCRIPT = `
 local removed = {}
@@ -12,6 +16,7 @@ for index = 1, #ARGV, 2 do
   if currentScore and tonumber(currentScore) <= claimedScore then
     redis.call('ZREM', KEYS[1], member)
     redis.call('HDEL', KEYS[2], member)
+    redis.call('HDEL', KEYS[3], member)
     removed[#removed + 1] = member
   end
 end
@@ -39,6 +44,7 @@ const releaseUnchangedMembers = async (
     RELEASE_KEY_COUNT,
     PENDING_INGEST_KEY,
     PENDING_FAILURES_KEY,
+    PENDING_CORRELATION_KEY,
     ...args,
   );
 
@@ -50,6 +56,7 @@ const releaseUnchangedMembers = async (
 
 export {
   buildReleaseArguments,
+  PENDING_CORRELATION_KEY,
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
   RELEASE_IF_UNCHANGED_SCRIPT,

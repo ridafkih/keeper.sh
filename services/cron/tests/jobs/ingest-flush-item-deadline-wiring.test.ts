@@ -145,6 +145,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   }
   interface Worker {
     close: () => Promise<void>;
+    depth: () => { parkedOnBudget: number; queuedFlushes: number; writerSlotsInUse: number };
     reserve: (weight: number, signal?: AbortSignal) => Promise<Reservation>;
     submit: (item: unknown, signal?: AbortSignal) => Promise<unknown>;
   }
@@ -159,6 +160,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
     const worker = actualCreate(run, options);
     return {
       close: () => worker.close(),
+      depth: () => worker.depth(),
       reserve: async (weight: number, signal?: AbortSignal): Promise<Reservation> => {
         const reservation = await worker.reserve(weight, signal);
         return {

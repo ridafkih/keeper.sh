@@ -4,7 +4,7 @@ import { buildPushDestinationJobs } from "../../src/utils/push-destination-jobs"
 const destinations = [{ calendarId: "google", userId: "user-1" }];
 
 const prioritiesFor = (trigger: "cron" | "push"): (number | undefined)[] =>
-  buildPushDestinationJobs(destinations, "pro", "run-1", trigger)
+  buildPushDestinationJobs(destinations, "pro", () => "run-1", trigger)
     .map(({ opts }) => opts.priority);
 
 describe("buildPushDestinationJobs priority", () => {

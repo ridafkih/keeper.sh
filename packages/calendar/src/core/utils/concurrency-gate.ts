@@ -1,5 +1,6 @@
 interface ConcurrencyGate {
   run: <TResult>(operation: () => Promise<TResult>) => Promise<TResult>;
+  hasFreePermit: () => boolean;
   inFlight: () => number;
 }
 
@@ -27,6 +28,7 @@ const createConcurrencyGate = (limit: number): ConcurrencyGate => {
   };
 
   return {
+    hasFreePermit: () => inFlight < limit,
     inFlight: () => inFlight,
     run: async <TResult>(operation: () => Promise<TResult>): Promise<TResult> => {
       await acquire();

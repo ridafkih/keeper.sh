@@ -10,6 +10,7 @@ const SECRET = "b".repeat(64);
 const SECRET_HASH = "hash-of-b";
 const CHANNEL_KEY = "3f1b0e5a-1111-4f2a-9c22-000000000001";
 const WEBHOOK_URL = "https://www.example.com";
+const CORRELATION_ID = "correlation-1";
 
 const makeChannel = (
   overrides: Partial<StoredPushChannel> = {},
@@ -79,6 +80,7 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) =>
     Promise.resolve(true)),
   findChannel: vi.fn(() => Promise.resolve(makeChannel())),
+  generateCorrelationId: vi.fn(() => CORRELATION_ID),
   isUnknownChannelCached: vi.fn(() => Promise.resolve(false)),
   markPendingIngest: vi.fn(() => Promise.resolve()),
   observe: vi.fn(),
@@ -161,7 +163,7 @@ describe("handleGooglePushWebhook routing", () => {
 
     expect(response.status).toBe(200);
     expect(dependencies.markPendingIngest).toHaveBeenCalledOnce();
-    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"]);
+    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
     expect(dependencies.findChannel).toHaveBeenCalledWith("google", CHANNEL_KEY);
   });
 
@@ -200,7 +202,7 @@ describe("handleGooglePushWebhook verification", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"]);
+    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
     expect(observedFields(dependencies.observe)["webhook.channel_state"]).toBe("registering");
   });
 

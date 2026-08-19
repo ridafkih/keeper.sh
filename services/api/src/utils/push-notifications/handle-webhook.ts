@@ -34,9 +34,10 @@ interface PushWebhookDependencies {
     input: { channelKey: string | null; provider: string },
   ) => Promise<boolean>;
   findChannel: (provider: string, channelKey: string) => Promise<StoredPushChannel | null>;
+  generateCorrelationId: () => string;
   isUnknownChannelCached: (provider: string, channelKey: string) => Promise<boolean>;
   markChannelRemoved?: (channelId: string) => Promise<void>;
-  markPendingIngest: (calendarIds: string[]) => Promise<void>;
+  markPendingIngest: (calendarIds: string[], correlationId: string) => Promise<void>;
   markReauthorizeRequested?: (channelId: string) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError?: (error: unknown, slug: string) => void;
@@ -413,6 +414,7 @@ const readAdmittedBody = async (
 
 const processClaims = async (
   claims: PushClaim[],
+  correlationId: string,
   dependencies: PushWebhookDependencies,
   options: PushWebhookOptions,
 ): Promise<number> => {
@@ -442,7 +444,7 @@ const processClaims = async (
   }
 
   if (pendingCalendarIds.size > 0) {
-    await dependencies.markPendingIngest([...pendingCalendarIds]);
+    await dependencies.markPendingIngest([...pendingCalendarIds], correlationId);
   }
 
   dependencies.observe({
@@ -492,7 +494,11 @@ const runPushWebhook = async (
 
   const { claims } = result;
   const [firstClaim] = claims;
+  // Minted only once the delivery is a real notification.
+  // A handshake echo would otherwise burn an id no ingest ever carries.
+  const correlationId = dependencies.generateCorrelationId();
   dependencies.observe({
+    "correlation.id": correlationId,
     "webhook.event_type": firstClaim?.kind ?? "empty",
     "webhook.notification_count": claims.length,
   });
@@ -509,7 +515,7 @@ const runPushWebhook = async (
     }
   }
 
-  const rejectedCount = await processClaims(claims, dependencies, options);
+  const rejectedCount = await processClaims(claims, correlationId, dependencies, options);
 
   if (claims.length > 0 && rejectedCount === claims.length) {
     return ErrorResponse.unauthorized().toResponse();

@@ -174,6 +174,7 @@ const harness = vi.hoisted(() => {
 
   interface WorkerLike {
     close: () => Promise<void>;
+    depth: () => { parkedOnBudget: number; queuedFlushes: number; writerSlotsInUse: number };
     reserve: (weight: number, signal?: AbortSignal) => Promise<ReservationLike>;
     submit: (item: unknown, signal?: AbortSignal) => Promise<unknown>;
   }
@@ -200,6 +201,7 @@ const harness = vi.hoisted(() => {
       const worker = factory(run, options);
       return {
         close: worker.close,
+        depth: worker.depth,
         reserve: async (weight: number, signal?: AbortSignal): Promise<ReservationLike> => {
           state.reserveRequests.push(weight);
           const reservation = await worker.reserve(weight, signal);

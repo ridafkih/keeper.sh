@@ -96,6 +96,7 @@ export {
 export type { PushProviderProfile } from "./core/source/push-provider-profile";
 export {
   buildUnknownChannelKey,
+  PENDING_CORRELATION_KEY,
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
   UNKNOWN_CHANNEL_PREFIX,
@@ -146,7 +147,7 @@ export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
 export { getErrorMessage } from "./core/utils/error";
-export { createSerialFlushWorker, isSerialFlushReserveAbortError, isSerialFlushRunDeadlineError, isSerialFlushWorkerClosedError, SerialFlushRunDeadlineError, SerialFlushWorkerClosedError, type FlushReservation, type SerialFlushWorker, type SerialFlushWorkerOptions } from "./core/utils/serial-flush-worker";
+export { createSerialFlushWorker, isSerialFlushReserveAbortError, isSerialFlushRunDeadlineError, isSerialFlushWorkerClosedError, SerialFlushRunDeadlineError, SerialFlushWorkerClosedError, type FlushReservation, type FlushWorkerDepth, type SerialFlushWorker, type SerialFlushWorkerOptions } from "./core/utils/serial-flush-worker";
 export {
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,

@@ -7,6 +7,7 @@ let handleOutlookPushWebhook: typeof handleOutlookPushWebhookFn = () =>
 
 const NOW = new Date("2026-08-12T00:00:00.000Z");
 const WEBHOOK_URL = "https://www.example.com";
+const CORRELATION_ID = "correlation-1";
 
 const makeChannel = (
   overrides: Partial<StoredPushChannel> = {},
@@ -103,6 +104,7 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
     Promise.resolve(true)),
   findChannel: vi.fn((_provider: string, channelKey: string) =>
     Promise.resolve(channelsByKey.get(channelKey) ?? null)),
+  generateCorrelationId: vi.fn(() => CORRELATION_ID),
   isUnknownChannelCached: vi.fn(() => Promise.resolve(false)),
   markChannelRemoved: vi.fn(() => Promise.resolve()),
   markPendingIngest: vi.fn(() => Promise.resolve()),

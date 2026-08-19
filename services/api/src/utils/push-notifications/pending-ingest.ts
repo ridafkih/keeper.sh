@@ -2,6 +2,7 @@ import { and, arrayContains, eq } from "drizzle-orm";
 import { calendarPushChannelsTable, calendarsTable } from "@keeper.sh/database/schema";
 import {
   buildUnknownChannelKey,
+  PENDING_CORRELATION_KEY,
   PENDING_INGEST_KEY,
   resolveAffectedCalendarIds,
   resolvePushRegistrar,
@@ -63,6 +64,7 @@ const createPushWebhookDependencies = async (
     },
     claimPushAdmission: (input) => claimPushAdmission(redis, input),
     findChannel: (_provider, channelKey) => readChannel(channelKey),
+    generateCorrelationId: () => crypto.randomUUID(),
     isUnknownChannelCached: async (cachedProvider, channelKey) =>
       await redis.get(buildUnknownChannelKey(cachedProvider, channelKey)) !== null,
     markChannelRemoved: async (channelId) => {
@@ -71,7 +73,12 @@ const createPushWebhookDependencies = async (
         .set({ state: "removed" })
         .where(eq(calendarPushChannelsTable.id, channelId));
     },
-    markPendingIngest: async (calendarIds) => {
+    markPendingIngest: async (calendarIds, correlationId) => {
+      // The id lands first so the drain never sees a member without one.
+      await redis.hset(
+        PENDING_CORRELATION_KEY,
+        ...calendarIds.flatMap((calendarId) => [calendarId, correlationId]),
+      );
       const now = Date.now();
       await redis.zadd(
         PENDING_INGEST_KEY,

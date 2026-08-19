@@ -7,6 +7,7 @@ import {
   type PendingIngestMember,
 } from "@/utils/drain-pending-ingest";
 import {
+  PENDING_CORRELATION_KEY,
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
   releaseUnchangedMembers,
@@ -28,6 +29,17 @@ const parsePendingMembers = (entries: string[]): PendingIngestMember[] => {
   return members;
 };
 
+const attachCorrelationIds = (
+  members: PendingIngestMember[],
+  ids: (string | null)[],
+): PendingIngestMember[] => members.map((member, index) => {
+  const correlationId = ids[index] ?? "";
+  if (correlationId.length === 0) {
+    return member;
+  }
+  return { ...member, correlationId };
+});
+
 const createDefaultDependencies = async (): Promise<DrainPendingIngestDependencies> => {
   const { database, premiumService, refreshLockRedis } = await import("@/context");
   const { calendarsTable } = await import("@keeper.sh/database/schema");
@@ -37,16 +49,25 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
   const { default: environment } = await import("@/env");
 
   return {
-    claimPending: async (limit) => parsePendingMembers(
-      await refreshLockRedis.zrange(PENDING_INGEST_KEY, 0, limit - 1, "WITHSCORES"),
-    ),
+    claimPending: async (limit) => {
+      const members = parsePendingMembers(
+        await refreshLockRedis.zrange(PENDING_INGEST_KEY, 0, limit - 1, "WITHSCORES"),
+      );
+      if (members.length === 0) {
+        return members;
+      }
+      return attachCorrelationIds(members, await refreshLockRedis.hmget(
+        PENDING_CORRELATION_KEY,
+        ...members.map((member) => member.calendarId),
+      ));
+    },
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
-    enqueueDestinationSyncs: async (userIds) => {
-      await enqueueDestinationSyncsForUsers(userIds, "push");
+    enqueueDestinationSyncs: async (userIds, correlationIdByUserId) => {
+      await enqueueDestinationSyncsForUsers(userIds, "push", correlationIdByUserId);
     },
-    ingestCalendars: async (calendarIds) => {
-      const result = await ingestOAuthSources(calendarIds);
+    ingestCalendars: async (calendarIds, correlationIdByCalendarId) => {
+      const result = await ingestOAuthSources(calendarIds, correlationIdByCalendarId);
       return { affectedUserIds: result.affectedUserIds };
     },
     now: () => new Date(),
@@ -66,6 +87,7 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     releaseAbandoned: async (calendarIds) => {
       await refreshLockRedis.zrem(PENDING_INGEST_KEY, ...calendarIds);
       await refreshLockRedis.hdel(PENDING_FAILURES_KEY, ...calendarIds);
+      await refreshLockRedis.hdel(PENDING_CORRELATION_KEY, ...calendarIds);
     },
     releasePending: (members) => releaseUnchangedMembers(refreshLockRedis, members),
     resolveCalendars: (calendarIds) => database

@@ -29,6 +29,7 @@ const logQueueTeardownFailure = (error: unknown): void => {
 const enqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
   trigger: PushSyncTrigger = "cron",
+  correlationIdByUserId: Record<string, string> = {},
 ): Promise<number> => {
   const { database, premiumService } = await import("@/context");
   const openQueues = new Set<ReturnType<typeof createPushSyncQueue>>();
@@ -81,7 +82,12 @@ const enqueueDestinationSyncsForUsers = async (
   };
   try {
     return await withAbortTimeout(
-      () => runEnqueueDestinationSyncsForUsers(candidateUserIds, dependencies, trigger),
+      () => runEnqueueDestinationSyncsForUsers(
+        candidateUserIds,
+        dependencies,
+        trigger,
+        correlationIdByUserId,
+      ),
       ENQUEUE_TIMEOUT_MS,
     );
   } finally {

@@ -8,7 +8,7 @@ import {
 } from "../../src/utils/pending-ingest-release";
 
 const SCORE_STRIDE = 2;
-const EXPECTED_KEY_COUNT = 2;
+const EXPECTED_KEY_COUNT = 3;
 
 const createScriptRedis = (
   initialScores: [string, number][],

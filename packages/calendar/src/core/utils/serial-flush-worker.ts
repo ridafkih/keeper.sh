@@ -89,8 +89,15 @@ interface FlushReservation<TItem, TResult> {
   submit(item: TItem): Promise<TResult>;
 }
 
+interface FlushWorkerDepth {
+  parkedOnBudget: number;
+  queuedFlushes: number;
+  writerSlotsInUse: number;
+}
+
 interface SerialFlushWorker<TItem, TResult> {
   close(): Promise<void>;
+  depth(): FlushWorkerDepth;
   reserve(weight: number, signal?: AbortSignal): Promise<FlushReservation<TItem, TResult>>;
   submit(item: TItem, signal?: AbortSignal): Promise<TResult>;
 }
@@ -517,7 +524,13 @@ const createSerialFlushWorker = <TItem, TResult>(
     });
   };
 
-  return { close, reserve, submit };
+  const depth = (): FlushWorkerDepth => ({
+    parkedOnBudget: weightWaiters.length,
+    queuedFlushes: queue.length,
+    writerSlotsInUse,
+  });
+
+  return { close, depth, reserve, submit };
 };
 
 export {
@@ -528,4 +541,4 @@ export {
   SerialFlushRunDeadlineError,
   SerialFlushWorkerClosedError,
 };
-export type { FlushReservation, SerialFlushWorker, SerialFlushWorkerOptions };
+export type { FlushReservation, FlushWorkerDepth, SerialFlushWorker, SerialFlushWorkerOptions };

@@ -25,7 +25,7 @@ const jobPriorityByTrigger: Record<PushSyncTrigger, number> = {
 const buildPushDestinationJobs = (
   destinations: DestinationCalendarRef[],
   plan: Plan,
-  correlationId: string,
+  resolveCorrelationId: (userId: string) => string,
   trigger: PushSyncTrigger = "cron",
 ): PushDestinationJob[] => destinations
   .toSorted((first, second) =>
@@ -33,7 +33,7 @@ const buildPushDestinationJobs = (
     || first.calendarId.localeCompare(second.calendarId))
   .map(({ calendarId, userId }) => ({
     name: `sync-${userId}-${calendarId}`,
-    data: { calendarId, userId, plan, correlationId, trigger },
+    data: { calendarId, userId, plan, correlationId: resolveCorrelationId(userId), trigger },
     opts: {
       jobId: `sync-${userId}-${calendarId}`,
       priority: jobPriorityByTrigger[trigger],

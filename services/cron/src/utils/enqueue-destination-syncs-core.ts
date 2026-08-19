@@ -30,10 +30,20 @@ interface EnqueueDestinationSyncDependencies {
   resolvePlan: (userId: string) => Promise<Plan | null>;
 }
 
+// BullMQ resolves addBulk with only the jobs it created.
+// A deterministic id already in the queue comes back missing rather than as an error.
+const countAcceptedJobs = (created: unknown, requestedCount: number): number => {
+  if (Array.isArray(created)) {
+    return created.length;
+  }
+  return requestedCount;
+};
+
 const runEnqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
   dependencies: EnqueueDestinationSyncDependencies,
   trigger: PushSyncTrigger = "cron",
+  correlationIdByUserId: Record<string, string> = {},
 ): Promise<number> => {
   if (!dependencies.enabled) {
     return 0;
@@ -72,18 +82,32 @@ const runEnqueueDestinationSyncsForUsers = async (
   const eligibleDestinations = destinations.filter(({ userId }) =>
     pendingUserIds.has(userId) || plansByUserId.get(userId) === "pro");
 
-  const correlationId = dependencies.generateCorrelationId();
-  widelog.set("correlation.id", correlationId);
+  const mintedCorrelationId = dependencies.generateCorrelationId();
+  /*
+   * A user reached here through a webhook already carries that webhook's id, and keeping it
+   * is what makes receipt-to-destination-write one joinable trace rather than two.
+   */
+  const resolveCorrelationId = (userId: string): string =>
+    correlationIdByUserId[userId] ?? mintedCorrelationId;
+  const distinctCorrelationIds = new Set(userIds.map((userId) => resolveCorrelationId(userId)));
+  const [onlyCorrelationId] = [...distinctCorrelationIds];
+  let eventCorrelationId = mintedCorrelationId;
+  if (distinctCorrelationIds.size === 1) {
+    eventCorrelationId = onlyCorrelationId ?? mintedCorrelationId;
+  }
+  widelog.set("correlation.id", eventCorrelationId);
   const jobs = (["free", "pro"] as const).flatMap((plan) =>
     buildPushDestinationJobs(
       eligibleDestinations.filter(
         (destination) => plansByUserId.get(destination.userId) === plan,
       ),
       plan,
-      correlationId,
+      resolveCorrelationId,
       trigger,
     ));
+  widelog.set("push_drain.jobs_requested", jobs.length);
   widelog.set("push_drain.jobs_enqueued", jobs.length);
+  widelog.set("push_drain.jobs_deduplicated", 0);
   if (jobs.length === 0) {
     await dependencies.acknowledgePendingRequests?.(pendingRequests);
     return 0;
@@ -97,7 +121,9 @@ const runEnqueueDestinationSyncsForUsers = async (
     const existingJobs = await Promise.all(
       jobs.map((job) => queue.getJob(job.opts.jobId)),
     );
-    await queue.addBulk(jobs);
+    const acceptedCount = countAcceptedJobs(await queue.addBulk(jobs), jobs.length);
+    widelog.set("push_drain.jobs_enqueued", acceptedCount);
+    widelog.set("push_drain.jobs_deduplicated", jobs.length - acceptedCount);
     const requestedAtByUserId = new Map(pendingRequests.map(
       ({ requestedAt, userId }) => [userId, requestedAt.getTime()],
     ));

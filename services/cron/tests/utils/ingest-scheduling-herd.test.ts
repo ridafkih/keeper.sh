@@ -87,6 +87,7 @@ vi.mock("../../src/utils/logging", () => ({
     error: () => null,
     errorFields: () => null,
     flush: () => null,
+    max: () => null,
     set: () => null,
     setFields: () => null,
     time: { measure: (_key: string, callback: () => unknown) => callback() },

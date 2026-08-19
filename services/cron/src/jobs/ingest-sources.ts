@@ -139,6 +139,33 @@ const leaseLockRedis: RedisLeaseClient = {
     refreshLockRedis.call("set", key, value, ...options) as Promise<string | null>,
 };
 
+/*
+ * The lane gate, not the driver pool: a lane owns a fixed slice of the pool's connections,
+ * so its occupancy is what a source actually competed for, and a query admitted with no
+ * free permit is the one that paid for the contention.
+ */
+const countQueuedQuery = (hasFreePermit: boolean): number => {
+  if (hasFreePermit) {
+    return 0;
+  }
+  return 1;
+};
+
+const runPooledQuery = async <TResult>(
+  lane: IngestLane,
+  statement: () => PromiseLike<TResult>,
+): Promise<TResult> => {
+  widelog.count("database.queries.count", 1);
+  widelog.count(
+    "database.queries.queued_count",
+    countQueuedQuery(lane.pooledQueryGate.hasFreePermit()),
+  );
+  return await lane.pooledQueryGate.run(async () => {
+    widelog.max("database.pool.in_flight", lane.pooledQueryGate.inFlight());
+    return await statement();
+  });
+};
+
 const measureDatabaseRead = async <TResult>(
   lane: IngestLane,
   read: () => PromiseLike<TResult>,
@@ -146,7 +173,7 @@ const measureDatabaseRead = async <TResult>(
   widelog.count("db.read_count", 1);
   return await measureSegment(
     "work.db_read_ms",
-    async () => await lane.pooledQueryGate.run(async () => await read()),
+    async () => await runPooledQuery(lane, read),
   );
 };
 
@@ -157,7 +184,7 @@ const measureDatabaseWrite = async <TResult>(
   widelog.count("db.write_count", 1);
   return await measureSegment(
     "work.db_write_ms",
-    async () => await lane.pooledQueryGate.run(async () => await write()),
+    async () => await runPooledQuery(lane, write),
   );
 };
 
@@ -376,10 +403,20 @@ const emitPersistenceLedger = (ledger: PersistenceLedger, requestedAt: number): 
     widelog.count("db.write_count", ledger.writeCount);
     recordSegment("work.db_write_ms", ledger.writeMs);
   }
-  widelog.set("flush.slot_occupancy_ms", Math.round(performance.now() - ledger.grantedAt));
+  const releasedAt = performance.now();
+  const slotOccupancyMs = releasedAt - ledger.grantedAt;
+  widelog.set("flush.slot_occupancy_ms", Math.round(slotOccupancyMs));
+  let commitMs = 0;
   if (ledger.callbackReturnedAt > 0) {
-    recordSegment("work.db_commit_ms", performance.now() - ledger.callbackReturnedAt);
+    commitMs = releasedAt - ledger.callbackReturnedAt;
+    recordSegment("work.db_commit_ms", commitMs);
   }
+  const accountedMs = ledger.advisoryLockMs + ledger.readMs + ledger.writeMs + commitMs;
+  /*
+   * Overlaps the segments it is derived from, so it is an overlay: a segment here would be
+   * double-counted by the accounted_ms rollup.
+   */
+  widelog.set("flush.unattributed_ms", Math.round(Math.max(0, slotOccupancyMs - accountedMs)));
 };
 
 /* The wait is its own segment so "the budget was full" never masquerades as rate limiting. */
@@ -402,10 +439,15 @@ const reserveIngestFlushWeight = async (
     calendarId,
     hasEverIngested,
   );
-  return await measureSegment(
+  const reservation = await measureSegment(
     "wait.flush_reserve_ms",
     () => lane.flushWriter.reserve(weight, signal),
   );
+  const depth = lane.flushWriter.depth();
+  widelog.set("flush.queued_flushes", depth.queuedFlushes);
+  widelog.set("flush.parked_on_budget", depth.parkedOnBudget);
+  widelog.set("flush.writer_slots_in_use", depth.writerSlotsInUse);
+  return reservation;
 };
 
 const createIngestionPersistenceTransaction = (
@@ -1062,7 +1104,10 @@ const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
   return fleetIngestLane;
 };
 
-const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatchResult> => {
+const ingestOAuthSources = async (
+  calendarIds?: string[],
+  correlationIdByCalendarId: Record<string, string> = {},
+): Promise<IngestionBatchResult> => {
   if (calendarIds && calendarIds.length === 0) {
     return createEmptyIngestionBatchResult();
   }
@@ -1111,6 +1156,10 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
+          const inboundCorrelationId = correlationIdByCalendarId[source.calendarId] ?? "";
+          if (inboundCorrelationId.length > 0) {
+            widelog.set("correlation.id", inboundCorrelationId);
+          }
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");

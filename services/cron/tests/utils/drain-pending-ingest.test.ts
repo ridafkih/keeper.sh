@@ -117,8 +117,8 @@ describe("runDrainPendingIngest happy path", () => {
       "releasePending",
       "enqueueDestinationSyncs",
     ]);
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"]);
-    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(["user-1"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"], {});
+    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(["user-1"], {});
   });
 
   it("claims the oldest members up to the batch cap", async () => {
@@ -196,7 +196,7 @@ describe("runDrainPendingIngest release semantics", () => {
 
     await runDrainPendingIngest(dependencies);
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"], {});
     const released = dependencies.releasePending.mock.calls
       .flatMap(([members]) => (members as { calendarId: string }[]).map((member) => member.calendarId));
     expect(released).toContain("cal-gone");
@@ -225,7 +225,7 @@ describe("runDrainPendingIngest plan gating", () => {
 
     await runDrainPendingIngest(dependencies);
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-pro"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-pro"], {});
     expect(observedFields(dependencies.observe)["push_drain.skipped_plan_count"]).toBe(1);
   });
 
@@ -249,7 +249,7 @@ describe("runDrainPendingIngest plan gating", () => {
 
     await expect(runDrainPendingIngest(dependencies)).resolves.toBeGreaterThan(0);
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-good"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-good"], {});
     expect(observedFields(dependencies.observe)["push_drain.plan_error_count"]).toBe(1);
   });
 
@@ -275,7 +275,7 @@ describe("runDrainPendingIngest plan gating", () => {
 
     expect(dependencies.recordFailures).toHaveBeenCalledWith(["cal-broken"]);
     expect(dependencies.releaseAbandoned).not.toHaveBeenCalled();
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-good"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-good"], {});
   });
 
   it("abandons a persistently unresolvable member once it reaches the failure bound", async () => {
@@ -357,7 +357,7 @@ describe("runDrainPendingIngest plan gating", () => {
       await runDrainPendingIngest(dependencies);
     }
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-young"]);
+    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-young"], {});
     expect(pending.has("cal-young")).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { createConcurrencyGate, createSerialFlushWorker } from "@keeper.sh/calendar";
-import type { ConcurrencyGate, FlushReservation, IngestionResult, SerialFlushWorker } from "@keeper.sh/calendar";
+import type { ConcurrencyGate, FlushReservation, FlushWorkerDepth, IngestionResult, SerialFlushWorker } from "@keeper.sh/calendar";
 import { flushDrainRegistry } from "@/context";
 import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
 import { WEIGHT_BUDGET } from "@/utils/ingest-weight";
@@ -40,6 +40,7 @@ type IngestFlushReservation = FlushReservation<() => Promise<IngestionResult>, I
 
 interface IngestFlushWriter {
   close(): Promise<void>;
+  depth(): FlushWorkerDepth;
   reserve(weight: number, signal?: AbortSignal): Promise<IngestFlushReservation>;
   submit<TResult>(task: () => Promise<TResult>, signal?: AbortSignal): Promise<TResult>;
 }
