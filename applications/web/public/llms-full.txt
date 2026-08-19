@@ -49,7 +49,7 @@ Each calendar can be read from, written to, or both. A pasted iCal link can only
 
 Leaving detail behind is the default on both routes out of Keeper.sh: the copies written to your other calendars, and the links you share.
 
-A calendar you copy events from holds back their titles, descriptions and locations. The copy's title comes from a template that starts as `{{calendar_name}}`, so a colleague sees the calendar's name in the slot. Turning any of the three back on is a per-calendar setting, and a deliberate act.
+A calendar you copy events from holds back their titles, descriptions and locations. The copy's title comes from a template that starts as `{{calendar_name}}`, so a colleague sees the calendar's name in the slot. Turning any of the three back on is a per-calendar Pro setting, and a deliberate act.
 
 Shared iCal links hide event names, descriptions and locations too. They show time blocks labelled "Busy".
 
@@ -62,7 +62,7 @@ Per-calendar settings:
 - Skip all-day events
 - Skip Google's own event types (Focus Time, Working Location, Out of Office)
 
-Changing the title template, the event filters and the date range covered are Pro settings. Hiding titles, descriptions and locations is the default on every plan.
+Turning titles, descriptions or locations back on, changing the title template, the event filters and the date range covered are Pro settings. Hiding titles, descriptions and locations is the default on every plan.
 
 ### Shareable Calendar Link
 
@@ -85,7 +85,7 @@ A connection runs one way. If you want two calendars to match each other, that i
 ## Pricing
 
 - **Free**: 2 calendar accounts, 3 connections, 1 shared link, changes landing every 30 minutes, 25 API requests a day
-- **Pro ($5 a month, or $42 a year)**: Unlimited accounts, connections and shared links, Google and Outlook changes landing within seconds, event filters, link customization, uncapped API requests, priority support
+- **Pro ($5 a month, or $45 a year)**: Unlimited accounts, connections and shared links, Google and Outlook changes landing within seconds, event filters, link customization, uncapped API requests, priority support
 
 There is no cap on how many calendars an account holds. An account is one connected Google, Outlook, iCloud, Fastmail or CalDAV login, or one iCal subscription. A connection is one calendar wired into one other calendar.
 

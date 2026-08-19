@@ -26,7 +26,7 @@ import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 const breadcrumbs = breadcrumbTrail({ name: "Pricing", path: "/pricing" });
 
 const PAGE_DESCRIPTION =
-  "Keeper.sh is free for 2 calendar accounts and 3 connections. Pro is $5 a month, or $42 a year, for unlimited calendars and Google and Outlook changes that land within seconds.";
+  "Keeper.sh is free for 2 calendar accounts and 3 connections. Pro is $5 a month, or $45 a year, for unlimited calendars and Google and Outlook changes that land within seconds.";
 
 type FaqItem = {
   question: string;
@@ -48,7 +48,7 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "Is there a discount for paying annually?",
-    answer: "Pro is $5 per month, or $42 per year if you pay annually.",
+    answer: "Pro is $5 per month, or $45 per year if you pay annually (25% off $60).",
   },
   {
     question: "Is self-hosting free?",
@@ -90,7 +90,7 @@ function PricingPage() {
       <header className="flex flex-col gap-1.5">
         <Heading1>Pricing</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
-          Start free with two calendar accounts and three connections. Pro is $5 a month, or $42 a year, for as many
+          Start free with two calendar accounts and three connections. Pro is $5 a month, or $45 a year, for as many
           calendars as you want.
         </Text>
       </header>

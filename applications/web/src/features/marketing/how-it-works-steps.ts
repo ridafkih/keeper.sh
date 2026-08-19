@@ -13,7 +13,7 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   },
   {
     title: "Choose what each calendar shows",
-    body: "You set this per calendar. One can carry the full title, description and location while another shows a plain block. Pro adds filters to skip events.",
+    body: "Copies start as a busy block named after the source calendar. Pro lets you turn the title, description and location back on, and adds filters to skip events.",
   },
   {
     title: "Keeper.sh takes it from there",

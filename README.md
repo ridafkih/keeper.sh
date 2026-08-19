@@ -4,7 +4,7 @@
 
 Keeper.sh is a simple & open-source calendar syncing tool. It allows you to pull events from your Google Calendar, Outlook, iCloud, Fastmail, CalDAV server, or remotely hosted iCal and ICS links, and push them to one or many calendars so the time slots can align across them all. Google, Outlook, iCloud, Fastmail, and CalDAV are first-class integrations that can each be used as a source or as a destination, while iCal and ICS links are pull-only. It also serves as a global MCP server and API for you or your agents to manage all your calendars from one convenient interface.
 
-The recommended way to run it is the hosted version at [keeper.sh](https://keeper.sh/register): the same code, minus the server, the domain, the upgrades, the backups and the Google and Microsoft sign-in apps you would otherwise register yourself. Self-hosting is a first-class path and every Pro feature is included when you self-host — that is not a trial, and it is not going away. It costs you the upkeep instead of the $5.
+The recommended way to run it is the hosted version at [keeper.sh](https://www.keeper.sh/register): the same code, minus the server, the domain, the upgrades, the backups and the Google and Microsoft sign-in apps you would otherwise register yourself. Self-hosting is a first-class path and every Pro feature is included when you self-host — that is not a trial, and it is not going away. It costs you the upkeep instead of the $5.
 
 # Features
 
@@ -127,12 +127,12 @@ Neither half is schedule-only. `POST /api/v1/sync`, or `trigger_sync` over MCP, 
 
 This is the version I would point most people at, including people perfectly capable of running it themselves. It is the same engine on hardware I keep running, so the hours go into your calendar instead of your infrastructure — and paying for it is what funds the work on both versions.
 
-Head to [keeper.sh](https://keeper.sh/register) to get started with the cloud-hosted version.
+Head to [keeper.sh](https://www.keeper.sh/register) to get started with the cloud-hosted version.
 
 |                             | Free       | Pro (Cloud-Hosted) | Pro (Self-Hosted) |
 | --------------------------- | ---------- | ------------------ | ----------------- |
 | **Monthly Price**           | $0 USD     | $5 USD             | $0                |
-| **Annual Price**            | $0 USD     | $42 USD (-30%)     | $0                |
+| **Annual Price**            | $0 USD     | $45 USD (-25%)     | $0                |
 | **Refresh Interval**        | 30 minutes | 1 minute           | 1 minute          |
 | **Linked Account Limit**    | 2          | ∞                  | ∞                 |
 | **Sync Mapping Limit**      | 3          | ∞                  | ∞                 |

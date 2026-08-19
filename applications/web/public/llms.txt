@@ -7,14 +7,14 @@ Keeper.sh is for people whose commitments are split across accounts that cannot 
 ## Key Features
 
 - Works with Google Calendar, Outlook, Microsoft 365, iCloud, Fastmail, any CalDAV server, and calendar links you paste in. Pasted links are read-only
-- A copy carries the calendar's name in place of the event title. Descriptions and locations are left behind too, and you turn each one back on per calendar
+- A copy carries the calendar's name in place of the event title. Descriptions and locations are left behind too, and Pro lets you turn each one back on per calendar
 - Guest lists are never written to another calendar or to a shared link, on any plan
 - One shareable calendar link covering everything you connect, labelled "Busy" by default, and it opens in any calendar app
 - A REST API under `/api/v1` for calendars, accounts, events, invitations, free-time search and on-demand sync, using `kpr_` API tokens
 - An MCP server with fourteen tools over OAuth 2.1. An AI agent can read your week, book and amend events, RSVP, find open slots, and pause or force a sync
 - Open source under AGPL-3.0, with Docker Compose images you can run yourself
 - On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. iCloud, Fastmail and other CalDAV calendars are read on a timer, because Apple publishes no way to be told an event changed
-- Free covers 2 calendar accounts, 3 connections and 1 shared link, reading every minute and copying every 30. Pro is $5 a month or $42 a year, unlimited, with Google and Outlook changes copied within seconds
+- Free covers 2 calendar accounts, 3 connections and 1 shared link, reading every minute and copying every 30. Pro is $5 a month or $45 a year, unlimited, with Google and Outlook changes copied within seconds
 
 ## Links
 
