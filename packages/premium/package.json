@@ -15,7 +15,7 @@
   "dependencies": {
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "drizzle-orm": "^0.45.1"
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
