@@ -5,6 +5,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { normalizeDateRange } from "@/utils/date-range";
+import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
@@ -77,6 +78,7 @@ interface UserEventRow {
   description: string | null;
   endTime: Date;
   id: string;
+  isAllDay: boolean | null;
   location: string | null;
   startTime: Date;
   title: string | null;
@@ -181,6 +183,7 @@ const getEventsInRange = async (
       description: userEventsTable.description,
       endTime: userEventsTable.endTime,
       id: userEventsTable.id,
+      isAllDay: userEventsTable.isAllDay,
       location: userEventsTable.location,
       startTime: userEventsTable.startTime,
       title: userEventsTable.title,
@@ -191,7 +194,15 @@ const getEventsInRange = async (
 
   const allEvents: KeeperEventProjection[] = [
     ...syncedEvents,
-    ...userEvents.map((event) => ({ ...event, eventStateId: null })),
+    ...userEvents.map((event) => ({
+      ...event,
+      eventStateId: null,
+      isAllDay: resolveIsAllDayEvent({
+        endTime: event.endTime,
+        startTime: event.startTime,
+        ...(typeof event.isAllDay === "boolean" && { isAllDay: event.isAllDay }),
+      }),
+    })),
   ];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());
 

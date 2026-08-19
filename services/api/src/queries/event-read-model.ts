@@ -1,6 +1,7 @@
 import {
   materializeRecurrenceEvents,
   parseStoredRecurrenceForMaterialization,
+  resolveIsAllDayEvent,
 } from "@keeper.sh/calendar";
 import type { MaterializedSyncableEvent, SyncableEvent } from "@keeper.sh/calendar";
 
@@ -44,6 +45,7 @@ interface KeeperEventProjection {
   endTime: Date;
   eventStateId: string | null;
   id: string;
+  isAllDay: boolean;
   location: string | null;
   startTime: Date;
   title: string | null;
@@ -155,6 +157,7 @@ const toSyncedProjection = (
     endTime: occurrence.endTime,
     eventStateId,
     id,
+    isAllDay: resolveIsAllDayEvent(occurrence),
     location: occurrence.location ?? null,
     startTime: occurrence.startTime,
     title: occurrence.summary || null,
@@ -219,6 +222,7 @@ const toKeeperEvent = (
   endTime: event.endTime.toISOString(),
   eventStateId: event.eventStateId,
   id: event.id,
+  isAllDay: event.isAllDay,
   location: event.location,
   startTime: event.startTime.toISOString(),
   title: event.title,

@@ -12,6 +12,7 @@ const keeperEventSchema = z.object({
   calendarName: z.string(),
   calendarProvider: z.string(),
   calendarUrl: z.string().nullable(),
+  isAllDay: z.boolean(),
 });
 
 type KeeperEvent = z.infer<typeof keeperEventSchema>;

@@ -5,6 +5,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
+import { resolveIsAllDayEvent } from "@keeper.sh/calendar";
 
 import type { KeeperDatabase, KeeperEvent } from "@/types";
 import {
@@ -61,6 +62,7 @@ const getUserEvent = async (
       title: userEventsTable.title,
       description: userEventsTable.description,
       location: userEventsTable.location,
+      isAllDay: userEventsTable.isAllDay,
       calendarName: calendarsTable.name,
       calendarProvider: calendarAccountsTable.provider,
       calendarUrl: calendarsTable.url,
@@ -81,7 +83,15 @@ const getUserEvent = async (
   }
 
   return toKeeperEvent(
-    { ...result, eventStateId: null },
+    {
+      ...result,
+      eventStateId: null,
+      isAllDay: resolveIsAllDayEvent({
+        endTime: result.endTime,
+        startTime: result.startTime,
+        ...(typeof result.isAllDay === "boolean" && { isAllDay: result.isAllDay }),
+      }),
+    },
     {
       name: result.calendarName,
       provider: result.calendarProvider,
@@ -141,6 +151,11 @@ const toPersistedSyncedProjection = (row: SyncedEventRow): KeeperEventProjection
   endTime: row.endTime,
   eventStateId: row.id,
   id: row.id,
+  isAllDay: resolveIsAllDayEvent({
+    endTime: row.endTime,
+    startTime: row.startTime,
+    ...(typeof row.isAllDay === "boolean" && { isAllDay: row.isAllDay }),
+  }),
   location: row.location,
   startTime: row.startTime,
   title: row.title,

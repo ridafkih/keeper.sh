@@ -125,6 +125,8 @@ describe("flattenSyncedEvents", () => {
       resourceId: MASTER_ID,
     });
     expect(detachedOverride.id).toBe(OVERRIDE_ID);
+    expect(detachedOverride.isAllDay).toBe(true);
+    expect(generatedOccurrence.isAllDay).toBe(false);
 
     const exactProjection = projectSyncedEvents(
       rows,

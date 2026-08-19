@@ -78,3 +78,16 @@ export const formatDayHeader = (date: Date): string => {
     day: "numeric",
   });
 };
+
+/** Local calendar day for grouping. All-day events use the UTC date, not the shifted wall clock. */
+export const resolveEventDay = (startTime: Date, isAllDay: boolean): Date => {
+  if (isAllDay) {
+    return new Date(
+      startTime.getUTCFullYear(),
+      startTime.getUTCMonth(),
+      startTime.getUTCDate(),
+    );
+  }
+
+  return new Date(startTime.getFullYear(), startTime.getMonth(), startTime.getDate());
+};

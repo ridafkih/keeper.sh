@@ -8,6 +8,7 @@ export interface CalendarEvent {
   eventStateId: string | null;
   startTime: Date;
   endTime: Date;
+  isAllDay: boolean;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;
@@ -30,6 +31,7 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
     eventStateId: event.eventStateId,
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
+    isAllDay: event.isAllDay,
     calendarId: event.calendarId,
     calendarName: event.calendarName,
     calendarProvider: event.calendarProvider,

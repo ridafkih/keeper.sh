@@ -63,6 +63,7 @@ export interface ApiEvent {
   eventStateId: string | null;
   startTime: string;
   endTime: string;
+  isAllDay: boolean;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;

@@ -5,7 +5,7 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
-import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "@/lib/time";
+import { formatTime, formatTimeUntil, isEventPast, formatDayHeader, resolveEventDay } from "@/lib/time";
 import { useEvents, type CalendarEvent } from "@/hooks/use-events";
 import { cn } from "@/utils/cn";
 
@@ -37,7 +37,8 @@ const groupEventsByDay = (events: CalendarEvent[]): DayGroup[] => {
   const groups = new Map<string, CalendarEvent[]>();
 
   for (const event of events) {
-    const key = event.startTime.toDateString();
+    const day = resolveEventDay(event.startTime, event.isAllDay);
+    const key = day.toDateString();
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(event);
   }
@@ -140,8 +141,6 @@ function resolveEventRowClassName(past: boolean): string {
 
 const EventRow = memo(function EventRow({ event }: EventRowProps) {
   const past = isEventPast(event.endTime);
-  const startTime = formatTime(event.startTime);
-  const endTime = formatTime(event.endTime);
   const timeUntil = formatTimeUntil(event.startTime);
 
   return (
@@ -150,18 +149,26 @@ const EventRow = memo(function EventRow({ event }: EventRowProps) {
         <Text size="sm" tone="muted" className="truncate">
           {event.calendarName}
         </Text>
-        <Text size="sm" tone="muted" className="shrink-0">
-          from
-        </Text>
-        <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
-          {startTime}
-        </Text>
-        <Text size="sm" tone="muted" className="shrink-0">
-          to
-        </Text>
-        <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
-          {endTime}
-        </Text>
+        {event.isAllDay ? (
+          <Text size="sm" tone="default" className="font-medium shrink-0">
+            all day
+          </Text>
+        ) : (
+          <>
+            <Text size="sm" tone="muted" className="shrink-0">
+              from
+            </Text>
+            <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
+              {formatTime(event.startTime)}
+            </Text>
+            <Text size="sm" tone="muted" className="shrink-0">
+              to
+            </Text>
+            <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
+              {formatTime(event.endTime)}
+            </Text>
+          </>
+        )}
       </div>
       <Text size="sm" tone="muted" className="tabular-nums shrink-0 whitespace-nowrap">
         {timeUntil}

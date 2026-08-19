@@ -177,6 +177,7 @@ describe("resolveEventReadModel", () => {
       location: null,
       startTime: "2026-03-02T10:00:00.000Z",
       title: "User event",
+      isAllDay: false,
     };
     const { calls, repository } = createRepository({ owner: master, userEvent });
 

@@ -58,6 +58,7 @@ interface KeeperEvent {
   calendarName: string;
   calendarProvider: string;
   calendarUrl: string | null;
+  isAllDay: boolean;
 }
 
 interface KeeperSyncStatus {
