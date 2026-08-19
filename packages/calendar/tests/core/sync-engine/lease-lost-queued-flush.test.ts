@@ -93,14 +93,8 @@ describe("queued flush after the Redis lease is lost", () => {
     /* True while the cron run's Redis lease is held; flips on reclaim. */
     let leaseHeld = true;
 
-    let releaseGate: () => void = () => {};
-    const gate = new Promise<void>((resolve) => {
-      releaseGate = resolve;
-    });
-    let markEnqueued: () => void = () => {};
-    const enqueued = new Promise<void>((resolve) => {
-      markEnqueued = resolve;
-    });
+    const { promise: gate, resolve: releaseGate } = Promise.withResolvers<null>();
+    const { promise: enqueued, resolve: markEnqueued } = Promise.withResolvers<null>();
 
     /*
      * Cron run C fetches while upstream is [X]. Its pre-enqueue isCurrent probe
@@ -114,7 +108,7 @@ describe("queued flush after the Redis lease is lost", () => {
       fetchEvents: () => Promise.resolve({ events: [eventX] }),
       isCurrent: () => Promise.resolve(leaseHeld),
       withPersistenceTransaction: async (work) => {
-        markEnqueued();
+        markEnqueued(null);
         await gate;
         return work({
           readExistingEvents: () => Promise.resolve([...store.rows]),
@@ -143,7 +137,7 @@ describe("queued flush after the Redis lease is lost", () => {
       .toEqual(["event-x", "event-y"]);
 
     /* The pump dequeues C's stale thunk. Its lease is gone; it must not write. */
-    releaseGate();
+    releaseGate(null);
     await cronRun;
 
     /*
