@@ -1,6 +1,7 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { KEEPER_EVENT_UID_PROPERTY, toGoogleEventId } from "./ooo-identity";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 
@@ -45,18 +46,27 @@ const serializeGoogleEvent = (
   return {
     description: event.description,
     end: buildDateField(event.endTime, isAllDay, event.startTimeZone, recurrenceRule),
-    iCalUID: uid,
     location: event.location,
     start: buildDateField(event.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
-    ...(event.availability === "free" && { transparency: "transparent" }),
-    ...(asOutOfOffice && {
-      eventType: "outOfOffice",
-      outOfOfficeProperties: {
-        autoDeclineMode: "declineAllConflictingInvitations",
-      },
-      transparency: "opaque",
-    }),
+    // OOO cannot use events.import; iCalUID on insert leaves tombstones that 409 forever.
+    // Use a deterministic Google event id + private property instead.
+    ...(asOutOfOffice
+      ? {
+        eventType: "outOfOffice",
+        extendedProperties: {
+          private: { [KEEPER_EVENT_UID_PROPERTY]: uid },
+        },
+        id: toGoogleEventId(uid),
+        outOfOfficeProperties: {
+          autoDeclineMode: "declineAllConflictingInvitations",
+        },
+        transparency: "opaque",
+      }
+      : {
+        iCalUID: uid,
+        ...(event.availability === "free" && { transparency: "transparent" }),
+      }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
   };
 };

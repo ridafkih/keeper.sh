@@ -51,6 +51,10 @@ const googleEventSchema = type({
   "description?": "string",
   "end?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "eventType?": "string",
+  "extendedProperties?": {
+    "private?": "Record<string, string>",
+    "shared?": "Record<string, string>",
+  },
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",

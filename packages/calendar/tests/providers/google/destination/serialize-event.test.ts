@@ -35,17 +35,22 @@ describe("serializeGoogleEvent", () => {
         startTime: new Date("2026-03-08T09:00:00.000Z"),
         summary: "Private block",
       },
-      "destination-uid",
+      "destination-uid@keeper.sh",
     );
 
     expect(event).toMatchObject({
       eventType: "outOfOffice",
+      extendedProperties: {
+        private: { keeperEventUid: "destination-uid@keeper.sh" },
+      },
+      id: expect.stringMatching(/^[0-9a-f]{64}$/),
       outOfOfficeProperties: {
         autoDeclineMode: "declineAllConflictingInvitations",
       },
       summary: "Private block",
       transparency: "opaque",
     });
+    expect(event?.iCalUID).toBeUndefined();
   });
 
   it("does not mark all-day oof events as out-of-office", () => {

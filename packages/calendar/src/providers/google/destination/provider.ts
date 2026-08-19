@@ -1,4 +1,4 @@
-import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { generateDeterministicEventUid } from "../../../core/events/identity";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
@@ -19,6 +19,7 @@ import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { serializeGoogleEvent } from "./serialize-event";
+import { readKeeperEventUid, toGoogleEventId } from "./ooo-identity";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
 interface GoogleSyncProviderConfig {
@@ -230,7 +231,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           response.statusCode,
         );
       } else if (response.statusCode === HTTP_STATUS.CONFLICT) {
-        // events.insert cannot upsert; OOO events that already exist 409. Resolve via iCalUID.
+        // OOO insert uses a deterministic Google event id; 409 means that id already exists.
         conflictLookups.push({
           batchIndex: conflictLookupRequests.length,
           entryIndex: entry.index,
@@ -238,7 +239,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         });
         conflictLookupRequests.push({
           method: "GET",
-          path: `${eventsPath}?iCalUID=${encodeURIComponent(entry.uid)}`,
+          path: `${eventsPath}/${encodeURIComponent(toGoogleEventId(entry.uid))}`,
         });
       } else {
         results[entry.index] = {
@@ -258,10 +259,13 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       );
 
       for (const lookup of conflictLookups) {
-        const resolution = resolveDeleteLookup(lookupResponses[lookup.batchIndex]);
-        if (resolution.kind === "found") {
+        const response = lookupResponses[lookup.batchIndex];
+        const eventId = response && response.statusCode >= 200 && response.statusCode < 300
+          ? getImportedEventId(response.body)
+          : null;
+        if (eventId) {
           results[lookup.entryIndex] = {
-            deleteId: resolution.eventId,
+            deleteId: eventId,
             remoteId: lookup.uid,
             success: true,
           };
@@ -269,9 +273,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         }
 
         results[lookup.entryIndex] = {
-          error: resolution.kind === "failed"
-            ? resolution.result.error ?? "Failed to resolve Google insert conflict"
-            : "Google insert conflict but event was not found by iCalUID",
+          error: response
+            ? extractBatchErrorMessage(response.body, response.statusCode)
+            : "Google insert conflict but event was not found by id",
           errorType: "GoogleCalendarApiError",
           statusCode: HTTP_STATUS.CONFLICT,
           success: false,
@@ -443,7 +447,8 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
     const items: RemoteEvent[] = [];
     for (const event of data.items ?? []) {
-      if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
+      const keeperUid = readKeeperEventUid(event);
+      if (!keeperUid) {
         continue;
       }
       const startTime = parseEventTime(event.start);
@@ -458,7 +463,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         availability = "free";
       }
       items.push({
-        deleteId: event.id ?? event.iCalUID,
+        deleteId: event.id ?? keeperUid,
         editableAvailability: availability,
         editableContentHash: createEditableEventContentHash({
           availability,
@@ -476,7 +481,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           ? ["busy", "free", "oof"]
           : ["busy", "free"],
         startTime,
-        uid: event.iCalUID,
+        uid: keeperUid,
       });
     }
 

@@ -101,21 +101,23 @@ describe("createGoogleSyncProvider", () => {
     expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]).toMatchObject({
       body: {
         eventType: "outOfOffice",
+        id: expect.stringMatching(/^[0-9a-f]{64}$/),
         outOfOfficeProperties: {
           autoDeclineMode: "declineAllConflictingInvitations",
         },
       },
       path: expect.stringMatching(/\/events$/),
     });
+    expect(batchMocks.executeBatchChunked.mock.calls[0]?.[0]?.[0]?.body?.iCalUID).toBeUndefined();
   });
 
-  it("resolves out-of-office insert conflicts by looking up the existing iCalUID", async () => {
+  it("resolves out-of-office insert conflicts by looking up the deterministic event id", async () => {
     batchMocks.executeBatchChunked
       .mockResolvedValueOnce([
         batchResponse(409, { error: { message: "The requested identifier already exists." } }),
       ])
       .mockResolvedValueOnce([
-        batchResponse(200, { items: [{ id: "existing-ooo-id" }] }),
+        batchResponse(200, { id: "existing-ooo-id" }),
       ]);
 
     const [result] = await createProvider().pushEvents([{
@@ -138,7 +140,7 @@ describe("createGoogleSyncProvider", () => {
     expect(batchMocks.executeBatchChunked).toHaveBeenCalledTimes(2);
     expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]?.[0]).toMatchObject({
       method: "GET",
-      path: expect.stringContaining("iCalUID="),
+      path: expect.stringMatching(/\/events\/[0-9a-f]{64}$/),
     });
   });
 
