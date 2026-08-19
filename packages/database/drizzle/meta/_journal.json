@@ -547,6 +547,13 @@
       "when": 1785600000000,
       "tag": "0077_create_as_out_of_office",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1785600001000,
+      "tag": "0078_migrate_create_as_ooo_to_forced_availability",
+      "breakpoints": true
     }
   ]
 }

@@ -109,6 +109,39 @@ describe("createGoogleSyncProvider", () => {
     });
   });
 
+  it("resolves out-of-office insert conflicts by looking up the existing iCalUID", async () => {
+    batchMocks.executeBatchChunked
+      .mockResolvedValueOnce([
+        batchResponse(409, { error: { message: "The requested identifier already exists." } }),
+      ])
+      .mockResolvedValueOnce([
+        batchResponse(200, { items: [{ id: "existing-ooo-id" }] }),
+      ]);
+
+    const [result] = await createProvider().pushEvents([{
+      availability: "oof",
+      calendarId: "source-calendar",
+      calendarName: "Source",
+      calendarUrl: null,
+      endTime: new Date("2026-03-15T10:00:00Z"),
+      id: "event-state-id",
+      sourceEventUid: "source-event-uid",
+      startTime: new Date("2026-03-15T09:00:00Z"),
+      summary: "Private block",
+    }]);
+
+    expect(result).toMatchObject({
+      deleteId: "existing-ooo-id",
+      remoteId: expect.stringContaining("@keeper.sh"),
+      success: true,
+    });
+    expect(batchMocks.executeBatchChunked).toHaveBeenCalledTimes(2);
+    expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]?.[0]).toMatchObject({
+      method: "GET",
+      path: expect.stringContaining("iCalUID="),
+    });
+  });
+
   it("converges when import and listing use Google's two different identifiers", async () => {
     const event: MaterializedSyncableEvent = {
       calendarId: "source-calendar",

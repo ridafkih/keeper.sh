@@ -211,6 +211,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
+    const conflictLookups: { entryIndex: number; uid: string; batchIndex: number }[] = [];
+    const conflictLookupRequests: BatchSubRequest[] = [];
+
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
       if (!response) {
@@ -226,11 +229,51 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           entry.uid,
           response.statusCode,
         );
+      } else if (response.statusCode === HTTP_STATUS.CONFLICT) {
+        // events.insert cannot upsert; OOO events that already exist 409. Resolve via iCalUID.
+        conflictLookups.push({
+          batchIndex: conflictLookupRequests.length,
+          entryIndex: entry.index,
+          uid: entry.uid,
+        });
+        conflictLookupRequests.push({
+          method: "GET",
+          path: `${eventsPath}?iCalUID=${encodeURIComponent(entry.uid)}`,
+        });
       } else {
         results[entry.index] = {
           error: extractBatchErrorMessage(response.body, response.statusCode),
           errorType: "GoogleCalendarApiError",
           statusCode: response.statusCode,
+          success: false,
+        };
+      }
+    }
+
+    if (conflictLookupRequests.length > 0) {
+      const lookupResponses = await executeBatchChunked(
+        conflictLookupRequests,
+        tokenState.accessToken,
+        { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS },
+      );
+
+      for (const lookup of conflictLookups) {
+        const resolution = resolveDeleteLookup(lookupResponses[lookup.batchIndex]);
+        if (resolution.kind === "found") {
+          results[lookup.entryIndex] = {
+            deleteId: resolution.eventId,
+            remoteId: lookup.uid,
+            success: true,
+          };
+          continue;
+        }
+
+        results[lookup.entryIndex] = {
+          error: resolution.kind === "failed"
+            ? resolution.result.error ?? "Failed to resolve Google insert conflict"
+            : "Google insert conflict but event was not found by iCalUID",
+          errorType: "GoogleCalendarApiError",
+          statusCode: HTTP_STATUS.CONFLICT,
           success: false,
         };
       }
@@ -372,6 +415,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     );
     url.searchParams.set("maxResults", String(GOOGLE_CALENDAR_MAX_RESULTS));
     url.searchParams.set("timeMin", options.timeMin.toISOString());
+    // Explicitly include OOO; some Google responses omit them when eventTypes is unset.
+    url.searchParams.append("eventTypes", "default");
+    url.searchParams.append("eventTypes", "outOfOffice");
+    url.searchParams.append("eventTypes", "focusTime");
     if (pageToken) {
       url.searchParams.set("pageToken", pageToken);
     }
