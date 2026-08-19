@@ -162,12 +162,6 @@ const getDisplayName = (name: unknown): string => {
   return "Unnamed Calendar";
 };
 
-/*
- * A PROPFIND response can name any origin in a <d:href>, and tsdav resolves that href
- * into the collection url it then requests with the account credentials. Binding every
- * url the server hands back to the origin of the account's serverUrl keeps those
- * credentials, and the stored calendar url, on the server the user named.
- */
 const bindUrlToAccount = (url: string, serverUrl: string): string => {
   const target = new URL(url, serverUrl);
   const bound = new URL(serverUrl);
