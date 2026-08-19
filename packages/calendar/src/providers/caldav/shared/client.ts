@@ -188,7 +188,6 @@ class CalDAVClient {
     return this.resolvedAuthMethod?.() ?? null;
   }
 
-  /* The host limiter meters requests per minute, so every origin request draws its own permit. */
   private async chargeRequest(): Promise<void> {
     await this.config.onBeforeRequest?.();
   }
@@ -196,11 +195,6 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      /*
-       * Charged in the fetch pipeline, not at operation call sites: tsdav issues an eager
-       * discovery trio from createDAVClient and the digest handshake retries each request,
-       * none of which pass through an operation method.
-       */
       const chargedFetch: typeof safeFetch = async (...args) => {
         await this.chargeRequest();
         return safeFetch(...args);

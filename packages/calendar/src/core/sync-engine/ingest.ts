@@ -45,7 +45,6 @@ const summarizeWideEventList = (
   Math.max(values.length - WIDE_EVENT_LIST_LIMIT, 0),
 );
 
-/** These counts are the only trace that the removal leaves. */
 interface DiscardedSourceEventCounts {
   outsideSyncWindow: number;
   unrepresentable: number;
@@ -54,7 +53,6 @@ interface DiscardedSourceEventCounts {
 interface FetchEventsResult {
   events: SourceEvent[];
   discardedEventCounts?: DiscardedSourceEventCounts;
-  /** Kept out of `discardedEventCounts` so those stay zero on a healthy mirrored calendar. */
   selfAuthoredEventCount?: number;
   changedEventIds?: string[];
   snapshot?: CalendarSnapshotChange;
@@ -65,7 +63,6 @@ interface FetchEventsResult {
   unchanged?: boolean;
   skippedResourceCount?: number;
   skippedResourceReasons?: string[];
-  /** Stay in `events` so removal stays computed against the full feed; only ingestion withholds them. */
   unsupportedEventUids?: string[];
   syncWindow?: SyncWindow;
   coverage?: {
@@ -93,7 +90,6 @@ interface IngestionPersistence {
   flush: (changes: IngestionChanges) => Promise<void>;
 }
 
-/** Offered separately so a queueing caller can settle the Redis round trip off its writer slot. */
 type IngestionPersistencePreflight = () => Promise<IngestionResult | null>;
 
 type IngestionPersistenceWork = ((
@@ -167,11 +163,13 @@ const getNonRecurringStoredEventIdsOutsideWindow = (
 
 type CurrencyProbeResult = "current" | "currency-unconfirmed" | "superseded";
 
-/*
- * Redis I/O that can fail for reasons unrelated to the provider, so a rejection is contained:
- * an unanswerable probe must neither commit a possibly-stale snapshot nor surface as an
- * ingest error that the backoff gate would charge to the provider.
- */
+const resolveErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
 const probeCurrency = async (
   wideEvent: IngestWideEventFields,
   isCurrent?: () => Promise<boolean>,
@@ -185,11 +183,7 @@ const probeCurrency = async (
     }
     return "superseded";
   } catch (error) {
-    let message = String(error);
-    if (error instanceof Error) {
-      ({ message } = error);
-    }
-    wideEvent["currency_probe.error"] = message;
+    wideEvent["currency_probe.error"] = resolveErrorMessage(error);
     return "currency-unconfirmed";
   }
 };
@@ -261,7 +255,6 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
           },
         ));
       if (overBudget.length > 0) {
-        /* Dropped rather than failed, so one bad series cannot back off the whole calendar. */
         const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
         sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
         wideEvent["recurrence.over_budget_count"] = overBudget.length;
@@ -276,11 +269,6 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       return EMPTY_RESULT;
     }
 
-    /*
-     * The thunk can sit in a flush queue long after the pre-enqueue probe passed; if the lease
-     * was reclaimed meanwhile, a fresher holder may have committed and this snapshot would
-     * revert it.
-     */
     let persistProbePending = true;
     const persistTimePreflight = async (): Promise<IngestionResult | null> => {
       persistProbePending = false;

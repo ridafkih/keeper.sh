@@ -14,7 +14,6 @@ interface CalDAVSourceFetcherConfig {
   password: string;
   safeFetchOptions?: SafeFetchOptions;
   plan: SourceIngestionPlan;
-  /* Awaited before every HTTP request the fetch sends to the origin. */
   onBeforeRequest?: () => Promise<void> | void;
 }
 

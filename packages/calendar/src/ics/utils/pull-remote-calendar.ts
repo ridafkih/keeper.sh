@@ -49,16 +49,10 @@ const parseUrlWithCredentials = (url: string): ParsedUrl => {
 
 const ICS_USER_AGENT = "Keeper/1.0 (+https://www.keeper.sh)";
 
-/* Not in the shared HTTP_STATUS map; 206 is a fetch-integrity concern local to this fetcher. */
 const HTTP_STATUS_PARTIAL_CONTENT = 206;
 
 const CALENDAR_END_PATTERN = /(?:^|[\r\n])END:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
 
-/*
- * A body truncated after the header still parses into a strictly smaller event set, which
- * the snapshot diff would treat as deletions. END:VCALENDAR is iCalendar's only
- * end-of-document marker, so a body missing it is truncated, not smaller.
- */
 const assertCalendarBodyComplete = (ical: string): void => {
   if (!CALENDAR_END_PATTERN.test(ical)) {
     throw new CalendarFetchError(

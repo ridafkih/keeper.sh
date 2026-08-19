@@ -3,7 +3,6 @@ import { flagPacingParkAbortReason } from "./pacing-park";
 
 const RETRY_BASE_MS = 200;
 const RETRY_JITTER_MS = 150;
-// Margin guarding against DEL landing on a slot reclaimed right at the TTL edge.
 const RELEASE_SAFETY_MS = 1000;
 
 interface SemaphoreLease {
@@ -27,12 +26,7 @@ interface RedisLeaseClient {
   set(key: string, value: string, ...options: string[]): Promise<string | null>;
 }
 
-/* Parked on keeper's own cap, ahead of any request the lease would authorize. */
 const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> => {
-  /*
-   * No park flag on an already-consumed deadline: it may have been eaten by a provider call
-   * that takes no signal, and stamping it would exempt that from ingest backoff.
-   */
   if (signal?.aborted) {
     return Promise.reject(signal.reason);
   }
