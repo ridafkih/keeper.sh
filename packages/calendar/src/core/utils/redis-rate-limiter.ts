@@ -190,6 +190,21 @@ const createGoogleUserRateLimiter = (
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
 
+/*
+ * Apple publishes no figure, so this borrows the one comparable per-account rate that is
+ * documented: Microsoft allows four requests a second against a single mailbox.
+ */
+const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
+
+const createCalDAVAccountRateLimiter = (
+  redis: RedisScriptClient,
+  accountId: string,
+): RedisRateLimiter => createRedisRateLimiter(
+  redis,
+  `ratelimit:caldav-account:${accountId}`,
+  { requestsPerMinute: CALDAV_ACCOUNT_REQUESTS_PER_MINUTE },
+);
+
 const HOST_REQUESTS_PER_MINUTE = 600;
 
 interface HostRateLimiterOptions {
@@ -232,6 +247,8 @@ const createOutlookAccountSemaphore = (
 
 export {
   createGoogleUserRateLimiter,
+  CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
+  createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
   createRedisRateLimiter,

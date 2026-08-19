@@ -2,6 +2,8 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
+import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
+import { fetchHonouringRetryAfter } from "./throttle-retry";
 import {
   buildCalendarObjectFilters,
   CALDAV_MULTIGET_BATCH_SIZE,
@@ -219,10 +221,14 @@ class CalDAVClient {
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
       const safeFetch = createSafeFetch(this.safeFetchOptions);
-      const chargedFetch: typeof safeFetch = async (...args) => {
-        await this.chargeRequest();
-        return safeFetch(...args);
-      };
+      const chargedFetch: typeof safeFetch = (input, init) => fetchHonouringRetryAfter(
+        async (attempt) => {
+          await this.chargeRequest();
+          return safeFetch(attempt, init);
+        },
+        input,
+        { signal: init?.signal, sleep: sleepWithSignal },
+      );
       const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
         baseFetch: chargedFetch,

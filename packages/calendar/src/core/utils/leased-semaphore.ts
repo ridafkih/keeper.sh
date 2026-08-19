@@ -26,7 +26,7 @@ interface RedisLeaseClient {
   set(key: string, value: string, ...options: string[]): Promise<string | null>;
 }
 
-const sleepWithSignal = (delayMs: number, signal?: AbortSignal): Promise<void> => {
+const sleepWithSignal = (delayMs: number, signal?: AbortSignal | null): Promise<void> => {
   if (signal?.aborted) {
     return Promise.reject(signal.reason);
   }
@@ -103,7 +103,7 @@ const createLeasedSemaphore = (
   return { acquireLease, release };
 };
 
-export { createLeasedSemaphore };
+export { createLeasedSemaphore, sleepWithSignal };
 export type {
   LeasedSemaphore,
   LeasedSemaphoreConfig,

@@ -18,6 +18,7 @@ type ResolveRateLimiter = (
 ) => FakeLimiter | undefined;
 
 const factorySpies = vi.hoisted(() => ({
+  caldavAccount: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
   google: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
   host: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
   outlookRelease: vi.fn((_lease: unknown) => Promise.resolve()),
@@ -31,6 +32,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
+    createCalDAVAccountRateLimiter: factorySpies.caldavAccount,
     createGoogleUserRateLimiter: factorySpies.google,
     createHostRateLimiter: factorySpies.host,
     createOutlookAccountSemaphore: factorySpies.outlook,
@@ -79,6 +81,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  factorySpies.caldavAccount.mockClear();
   factorySpies.google.mockClear();
   factorySpies.host.mockClear();
   factorySpies.outlook.mockClear();
@@ -114,17 +117,33 @@ describe("resolveRateLimiter", () => {
     expect(factorySpies.host.mock.calls[0]?.[1]).toBe("caldav.example.com");
   });
 
-  // CalDAV sources are stored as 'caldav', 'fastmail', or 'icloud', so all three need the host budget.
-  it("keys the branded caldav variants by server host like plain caldav", () => {
+  it("keys the hosted caldav variants by account so customers never share a budget", () => {
     for (const provider of ["fastmail", "icloud"]) {
       const limiter = resolveRateLimiter(provider, sourceContext);
 
       expect(limiter).toBeDefined();
       expect(typeof limiter?.acquire).toBe("function");
     }
-    expect(factorySpies.host).toHaveBeenCalledTimes(2);
+    expect(factorySpies.caldavAccount).toHaveBeenCalledTimes(2);
+    expect(factorySpies.caldavAccount.mock.calls[0]?.[1]).toBe("account-7");
+    expect(factorySpies.host).not.toHaveBeenCalled();
+  });
+
+  it("keeps a self-hosted caldav server on its host budget, which is what protects it", () => {
+    const limiter = resolveRateLimiter("caldav", sourceContext);
+
+    expect(limiter).toBeDefined();
+    expect(factorySpies.host).toHaveBeenCalledTimes(1);
     expect(factorySpies.host.mock.calls[0]?.[1]).toBe("caldav.example.com");
-    expect(factorySpies.host.mock.calls[1]?.[1]).toBe("caldav.example.com");
+    expect(factorySpies.caldavAccount).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the host budget when a hosted source has no account to key on", () => {
+    const limiter = resolveRateLimiter("icloud", { ...sourceContext, accountId: "" });
+
+    expect(limiter).toBeDefined();
+    expect(factorySpies.host).toHaveBeenCalledTimes(1);
+    expect(factorySpies.caldavAccount).not.toHaveBeenCalled();
   });
 
   it("returns a host limiter keyed by the ics feed host", () => {

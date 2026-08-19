@@ -135,6 +135,19 @@ const isCalDAVProvider = (id: string): id is CalDAVProviderId => {
   return provider?.authType === "caldav";
 };
 
+/*
+ * Both iCloud and Fastmail put every customer on one hostname, so a host-keyed budget is a
+ * budget shared across the whole fleet. A self-hosted server keeps its own hostname and
+ * may be one person's box, where a host-keyed budget is the protection that matters.
+ */
+const isHostedCalDAVProvider = (id: string): boolean => {
+  const provider = getProvider(id);
+  if (provider?.authType !== "caldav") {
+    return false;
+  }
+  return (provider.caldav?.serverUrl ?? "").length > 0;
+};
+
 const isOAuthProvider = (id: string): id is OAuthProviderId => {
   const provider = getProvider(id);
   return provider?.authType === "oauth";
@@ -153,6 +166,7 @@ export {
   getOAuthProviders,
   getCalDAVProviders,
   isCalDAVProvider,
+  isHostedCalDAVProvider,
   isOAuthProvider,
   isProviderId,
   getActiveProviders,

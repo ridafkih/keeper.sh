@@ -22,6 +22,7 @@ const harness = vi.hoisted(() => {
   const state = {
     acquiredPermits: [] as number[],
     caldavRows: [] as CalDAVSourceRow[],
+    accountFactoryIds: [] as string[],
     hostFactoryHosts: [] as string[],
     providerRequests: [] as string[],
   };
@@ -130,6 +131,16 @@ const harness = vi.hoisted(() => {
     update: () => updateBuilder,
   };
 
+  const createCalDAVAccountRateLimiter = vi.fn((_redis: unknown, accountId: string) => {
+    state.accountFactoryIds.push(accountId);
+    return {
+      acquire: (weight: number): Promise<void> => {
+        state.acquiredPermits.push(weight);
+        return Promise.resolve();
+      },
+    };
+  });
+
   const createHostRateLimiter = vi.fn((_redis: unknown, host: string) => {
     state.hostFactoryHosts.push(host);
     return {
@@ -188,7 +199,14 @@ const harness = vi.hoisted(() => {
     },
   }) as unknown as Record<string, (params: never) => Promise<unknown>>;
 
-  return { buildFakeDAVClient, createHostRateLimiter, fakeDatabase, ingestSource, state };
+  return {
+    buildFakeDAVClient,
+    createCalDAVAccountRateLimiter,
+    createHostRateLimiter,
+    fakeDatabase,
+    ingestSource,
+    state,
+  };
 });
 
 vi.mock("tsdav", () => ({
@@ -208,6 +226,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
+    createCalDAVAccountRateLimiter: harness.createCalDAVAccountRateLimiter,
     createHostRateLimiter: harness.createHostRateLimiter,
     ingestSource: harness.ingestSource,
   };
@@ -278,14 +297,15 @@ beforeEach(() => {
     Promise.resolve(new Response("", { status: 207 }))) as unknown as typeof globalThis.fetch;
   harness.state.acquiredPermits.length = 0;
   harness.state.caldavRows.length = 0;
+  harness.state.accountFactoryIds.length = 0;
   harness.state.hostFactoryHosts.length = 0;
   harness.state.providerRequests.length = 0;
   harness.createHostRateLimiter.mockClear();
   harness.ingestSource.mockClear();
 });
 
-describe("CalDAV host limiter consumption", () => {
-  it("draws one host permit per origin request across a multi-batch fetch", async () => {
+describe("CalDAV limiter consumption", () => {
+  it("draws one account permit per origin request across a multi-batch fetch", async () => {
     harness.state.caldavRows.push({
       accountId: "account-caldav-1",
       calendarId: "calendar-caldav-1",
@@ -302,7 +322,8 @@ describe("CalDAV host limiter consumption", () => {
 
     await job?.callback();
 
-    expect(harness.state.hostFactoryHosts).toEqual(["caldav.example.net"]);
+    expect(harness.state.accountFactoryIds).toEqual(["account-caldav-1"]);
+    expect(harness.state.hostFactoryHosts).toEqual([]);
 
     // 251 objects: a discovery PROPFIND, a calendar-query, then ceil(251 / 250) multigets.
     expect(harness.state.providerRequests).toEqual([
@@ -311,6 +332,33 @@ describe("CalDAV host limiter consumption", () => {
       "multiget:250",
       "multiget:1",
     ]);
+
+    let chargedPermits = 0;
+    for (const weight of harness.state.acquiredPermits) {
+      chargedPermits += weight;
+    }
+    expect(chargedPermits).toBeGreaterThanOrEqual(harness.state.providerRequests.length);
+  });
+
+  it("charges a self-hosted server's own host budget rather than an account budget", async () => {
+    harness.state.caldavRows.push({
+      accountId: "account-caldav-2",
+      calendarId: "calendar-caldav-2",
+      calendarUrl: CALENDAR_URL,
+      encryptedPassword: encryptPassword("secret", ENCRYPTION_KEY),
+      ingestFutureRange: "6m",
+      ingestHistoricRange: "1m",
+      ingestWindowRecordedAt: new Date(),
+      provider: "caldav",
+      reauthenticationSource: null,
+      serverUrl: "https://caldav.example.net",
+      userId: "user-1",
+    });
+
+    await job?.callback();
+
+    expect(harness.state.hostFactoryHosts).toEqual(["caldav.example.net"]);
+    expect(harness.state.accountFactoryIds).toEqual([]);
 
     let chargedPermits = 0;
     for (const weight of harness.state.acquiredPermits) {

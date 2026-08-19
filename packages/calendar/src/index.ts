@@ -142,7 +142,7 @@ export {
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
-export { createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountSemaphore, createRedisRateLimiter, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountSemaphore, createRedisRateLimiter, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
@@ -338,6 +338,7 @@ export {
   getOAuthProviders,
   getCalDAVProviders,
   isCalDAVProvider,
+  isHostedCalDAVProvider,
   isOAuthProvider,
   isProviderId,
   getActiveProviders,
