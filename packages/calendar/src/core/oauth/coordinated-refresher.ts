@@ -9,7 +9,7 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { REAUTHENTICATION_TOKEN_REFRESH } from "@keeper.sh/constants";
+import { REAUTHENTICATION_TOKEN_REFRESH, TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { classifyDatabaseError } from "@keeper.sh/database";
 import { widelog } from "widelogger";
 import { abortableSleep } from "../utils/backoff";
@@ -63,8 +63,6 @@ interface CoordinatedRefresherOptions {
   }>;
 }
 
-const REFRESH_ADOPTION_SKEW_MS = 60_000;
-
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
   const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
 
@@ -84,8 +82,12 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     if (!stored?.expiresAt || !stored.accessToken) {
       return null;
     }
+    /*
+     * The caller refreshes whenever less than TOKEN_REFRESH_BUFFER_MS remains, so adopting
+     * anything shorter hands back a credential it will immediately try to refresh again.
+     */
     const remainingMs = stored.expiresAt.getTime() - Date.now();
-    if (remainingMs <= REFRESH_ADOPTION_SKEW_MS) {
+    if (remainingMs <= TOKEN_REFRESH_BUFFER_MS) {
       return null;
     }
     return {

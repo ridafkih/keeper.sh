@@ -14,12 +14,12 @@ interface RefreshLockStore {
 }
 
 const REFRESH_LOCK_PREFIX = "oauth:refresh-lock:";
-const REFRESH_LOCK_TTL_SECONDS = 30;
+const REFRESH_LOCK_TTL_SECONDS = 120;
 
 const inFlightRefreshByCredentialId = new Map<string, Promise<CredentialRefreshResult>>();
 
 const ACQUIRE_RETRY_MS = 100;
-const ACQUIRE_BUDGET_MS = REFRESH_LOCK_TTL_SECONDS * 1000;
+const ACQUIRE_BUDGET_MS = 45_000;
 
 const adoptPeerCredential = async (
   readFreshCredential: ReadFreshCredential | null,
@@ -39,15 +39,15 @@ const acquireOrAdopt = async (
 ): Promise<CredentialRefreshResult | null> => {
   const deadlineAt = Date.now() + ACQUIRE_BUDGET_MS;
   for (;;) {
+    if (Date.now() >= deadlineAt) {
+      throw new Error("Token refresh already in progress on another instance");
+    }
     if (await tryAcquire()) {
       return null;
     }
     const adopted = await adoptPeerCredential(readFreshCredential);
     if (adopted) {
       return adopted;
-    }
-    if (Date.now() >= deadlineAt) {
-      throw new Error("Token refresh already in progress on another instance");
     }
     await Bun.sleep(ACQUIRE_RETRY_MS);
   }
@@ -117,5 +117,5 @@ const runWithCredentialRefreshLock = (
   return refreshTask;
 };
 
-export { runWithCredentialRefreshLock };
+export { ACQUIRE_BUDGET_MS, REFRESH_LOCK_TTL_SECONDS, runWithCredentialRefreshLock };
 export type { CredentialRefreshResult, ReadFreshCredential, RefreshLockStore };

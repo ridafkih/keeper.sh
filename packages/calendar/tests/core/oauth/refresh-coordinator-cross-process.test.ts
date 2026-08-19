@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { runWithCredentialRefreshLock } from "../../../src/core/oauth/refresh-coordinator";
+import {
+  ACQUIRE_BUDGET_MS,
+  REFRESH_LOCK_TTL_SECONDS,
+  runWithCredentialRefreshLock,
+} from "../../../src/core/oauth/refresh-coordinator";
+import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import type { CredentialRefreshResult } from "../../../src/core/oauth/refresh-coordinator";
 
 /*
@@ -28,12 +33,48 @@ const createLockStore = () => {
   };
 };
 
+/* Mirrors coordinated-refresher's rule: only a credential the caller will accept is adoptable. */
+const adoptableOnlyWhenLongLived = (
+  candidate: CredentialRefreshResult,
+): CredentialRefreshResult | null => {
+  if (candidate.expires_in * 1000 <= TOKEN_REFRESH_BUFFER_MS) {
+    return null;
+  }
+  return candidate;
+};
+
 const freshCredential: CredentialRefreshResult = {
   access_token: "peer-persisted-token",
   expires_in: 3400,
 };
 
 describe("credential refresh across processes", () => {
+  it("keeps the waiting budget below the lock ttl so a waiter never outlives the holder", () => {
+    expect(ACQUIRE_BUDGET_MS).toBeLessThan(REFRESH_LOCK_TTL_SECONDS * 1000);
+  });
+
+  it("refreshes rather than adopting when the stored credential is what the caller wants replaced", async () => {
+    const lockStore = createLockStore();
+    let rawRefreshes = 0;
+    const nearlyExpired: CredentialRefreshResult = {
+      access_token: "caller-own-token",
+      expires_in: 120,
+    };
+
+    const result = await runWithCredentialRefreshLock(
+      CREDENTIAL_ID,
+      () => {
+        rawRefreshes += 1;
+        return Promise.resolve({ access_token: "refreshed-token", expires_in: 3600 });
+      },
+      lockStore,
+      () => Promise.resolve(adoptableOnlyWhenLongLived(nearlyExpired)),
+    );
+
+    expect(result.access_token).toBe("refreshed-token");
+    expect(rawRefreshes).toBe(1);
+  });
+
   it("adopts the peer's persisted credential instead of failing the job", async () => {
     const lockStore = createLockStore();
     lockStore.held.add("oauth:refresh-lock:credential-shared");
