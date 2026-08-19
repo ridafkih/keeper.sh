@@ -253,15 +253,13 @@ const getHeadersForRedirect = (
   return headers;
 };
 
-const assertManualRedirectKeepsCredentials = (
-  currentUrl: string,
-  response: Response,
-  headers: Record<string, string>,
-): void => {
-  if (!headers.authorization) {
-    return;
-  }
-
+/*
+ * A caller that follows the redirect itself takes the target as its new base URL and
+ * authenticates against it later, so a boundary-crossing hop leaks the credentials even
+ * when this request carried none: digest authentication sends its first request
+ * unauthenticated and only answers the challenge the target issues.
+ */
+const assertManualRedirectKeepsCredentials = (currentUrl: string, response: Response): void => {
   const redirectUrl = resolveRedirectUrl(response, currentUrl);
   if (!redirectUrl || !shouldWithholdAuthorization(currentUrl, redirectUrl)) {
     return;
@@ -500,7 +498,7 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
       }
 
       if (callerWantsManual) {
-        assertManualRedirectKeepsCredentials(url, response, headers);
+        assertManualRedirectKeepsCredentials(url, response);
         return response;
       }
 

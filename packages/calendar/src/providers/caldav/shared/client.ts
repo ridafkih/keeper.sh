@@ -162,6 +162,36 @@ const getDisplayName = (name: unknown): string => {
   return "Unnamed Calendar";
 };
 
+/*
+ * A PROPFIND response can name any origin in a <d:href>, and tsdav resolves that href
+ * into the collection url it then requests with the account credentials. Binding every
+ * url the server hands back to the origin of the account's serverUrl keeps those
+ * credentials, and the stored calendar url, on the server the user named.
+ */
+const bindUrlToAccount = (url: string, serverUrl: string): string => {
+  const target = new URL(url, serverUrl);
+  const bound = new URL(serverUrl);
+  if (target.origin === bound.origin) {
+    return target.href;
+  }
+
+  bound.pathname = target.pathname;
+  bound.search = target.search;
+  return bound.href;
+};
+
+const bindRequestToAccount = (input: string | Request | URL, serverUrl: string): string | Request => {
+  if (input instanceof Request) {
+    const bound = bindUrlToAccount(input.url, serverUrl);
+    if (bound === input.url) {
+      return input;
+    }
+    return new Request(bound, input);
+  }
+
+  return bindUrlToAccount(input.toString(), serverUrl);
+};
+
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
 
@@ -197,13 +227,16 @@ class CalDAVClient {
         knownAuthMethod: this.config.authMethod,
       });
       this.resolvedAuthMethod = getResolvedMethod;
+      const { serverUrl } = this.config;
+      const accountBoundFetch = (input: string | Request | URL, init?: RequestInit): Promise<Response> =>
+        digestAwareFetch(bindRequestToAccount(input, serverUrl), init);
       this.client = await createDAVClient({
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
         credentials: this.config.credentials,
         defaultAccountType: "caldav",
-        fetch: digestAwareFetch,
-        serverUrl: this.config.serverUrl,
+        fetch: accountBoundFetch,
+        serverUrl,
       });
     }
     return this.client;
@@ -220,7 +253,7 @@ class CalDAVClient {
       .map(({ url, displayName, ctag }) => ({
         ctag,
         displayName: getDisplayName(displayName),
-        url,
+        url: bindUrlToAccount(url, this.config.serverUrl),
       }));
   }
 
