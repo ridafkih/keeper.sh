@@ -75,7 +75,9 @@ interface RemoteStateChanges {
 
 interface MappingUpdate {
   deleteIdentifier: string;
+  endTime: Date;
   id: string;
+  startTime: Date;
   syncEventHash: string;
   syncEventId: string;
 }
@@ -692,7 +694,9 @@ const computeSyncOperations = (
     ) {
       mappingUpdatesById.set(mapping.id, {
         deleteIdentifier: remoteEvent.deleteId,
+        endTime: localEvent.endTime,
         id: mapping.id,
+        startTime: localEvent.startTime,
         syncEventHash: createSyncEventContentHash(localEvent),
         syncEventId: localEvent.id,
       });
@@ -705,7 +709,9 @@ const computeSyncOperations = (
     }
     mappingUpdatesById.set(mapping.id, {
       deleteIdentifier: remoteEvent.deleteId,
+      endTime: event.endTime,
       id: mapping.id,
+      startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
       syncEventId: event.id,
     });

@@ -259,7 +259,9 @@ describe("createGoogleSyncProvider", () => {
     )).toEqual({
       mappingUpdates: [{
         deleteIdentifier: remoteEvents[0]?.deleteId,
+        endTime: event.endTime,
         id: legacyMapping.id,
+        startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
       }],

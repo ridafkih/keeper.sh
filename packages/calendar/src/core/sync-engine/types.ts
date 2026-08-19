@@ -7,10 +7,16 @@ import type {
   RemoteEvent,
 } from "../types";
 
+interface EventUpdate {
+  deleteId: string;
+  event: MaterializedSyncableEvent;
+}
+
 interface CalendarSyncProvider {
   // Must run before reconciliation, not in the serializer, or mapping and remote disagree and churn forever.
   normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
+  updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
@@ -31,7 +37,9 @@ interface PendingInsert {
 
 interface PendingUpdate {
   deleteIdentifier: string;
+  endTime: Date;
   id: string;
+  startTime: Date;
   syncEventHash: string;
   syncEventId: string;
 }
@@ -42,4 +50,4 @@ interface PendingChanges {
   updates?: PendingUpdate[];
 }
 
-export type { CalendarSyncProvider, PendingChanges, PendingInsert, PendingUpdate };
+export type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingInsert, PendingUpdate };

@@ -784,7 +784,9 @@ describe("syncCalendar", () => {
       inserts: [],
       updates: [{
         deleteIdentifier: "google-provider-occurrence-id",
+        endTime: occurrence.endTime,
         id: mapping.id,
+        startTime: occurrence.startTime,
         syncEventHash: createSyncEventContentHash(occurrence),
         syncEventId: occurrence.id,
       }],
@@ -1244,7 +1246,9 @@ describe("createDatabaseFlush", () => {
       deletes: ["map-1", "map-2"],
       updates: [{
         deleteIdentifier: "google-provider-occurrence-id",
+        endTime: new Date("2026-03-15T10:00:00Z"),
         id: "019c0000-0000-7000-8000-000000000001",
+        startTime: new Date("2026-03-15T09:00:00Z"),
         syncEventHash: "occurrence-hash",
         syncEventId: "materialized-occurrence-id",
       }],
@@ -1280,13 +1284,17 @@ describe("createDatabaseFlush", () => {
       updates: [
         {
           deleteIdentifier: "remote-delete-1",
+          endTime: new Date("2026-03-15T10:00:00Z"),
           id: "019c0000-0000-7000-8000-000000000001",
+          startTime: new Date("2026-03-15T09:00:00Z"),
           syncEventHash: "hash-1",
           syncEventId: "recurrence-1",
         },
         {
           deleteIdentifier: "remote-delete-2",
+          endTime: new Date("2026-03-16T10:00:00Z"),
           id: "019c0000-0000-7000-8000-000000000002",
+          startTime: new Date("2026-03-16T09:00:00Z"),
           syncEventHash: "hash-2",
           syncEventId: "recurrence-2",
         },
@@ -1296,11 +1304,15 @@ describe("createDatabaseFlush", () => {
     expect(updateValues).toEqual([
       {
         deleteIdentifier: "remote-delete-1",
+        endTime: new Date("2026-03-15T10:00:00Z"),
+        startTime: new Date("2026-03-15T09:00:00Z"),
         syncEventHash: "hash-1",
         syncEventId: "recurrence-1",
       },
       {
         deleteIdentifier: "remote-delete-2",
+        endTime: new Date("2026-03-16T10:00:00Z"),
+        startTime: new Date("2026-03-16T09:00:00Z"),
         syncEventHash: "hash-2",
         syncEventId: "recurrence-2",
       },

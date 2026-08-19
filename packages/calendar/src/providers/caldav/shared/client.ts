@@ -275,13 +275,16 @@ class CalDAVClient {
     calendarUrl: string;
     filename: string;
     iCalString: string;
+    overwrite?: boolean;
   }): Promise<void> {
     const client = await this.getClient();
 
+    // Without dropping If-None-Match the PUT is a create-only request and a rewrite answers 412.
     const response = await client.createCalendarObject({
       calendar: { url: params.calendarUrl },
       filename: params.filename,
       iCalString: params.iCalString,
+      ...(params.overwrite && { headersToExclude: ["If-None-Match"] }),
     });
 
     if (response.status === 412) {

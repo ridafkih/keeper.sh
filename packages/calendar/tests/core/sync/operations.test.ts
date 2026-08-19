@@ -828,7 +828,9 @@ describe("computeSyncOperations", () => {
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
       mappingUpdates: [{
         deleteIdentifier: remoteEvent.deleteId,
+        endTime: event.endTime,
         id: mapping.id,
+        startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
       }],
@@ -878,7 +880,9 @@ describe("computeSyncOperations", () => {
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
       mappingUpdates: [{
         deleteIdentifier: remoteEvent.deleteId,
+        endTime: event.endTime,
         id: mapping.id,
+        startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
       }],
@@ -934,13 +938,17 @@ describe("computeSyncOperations", () => {
     expect(result.mappingUpdates).toEqual([
       {
         deleteIdentifier: remoteEvents[0]?.deleteId,
+        endTime: first.endTime,
         id: "legacy-mapping-0",
+        startTime: first.startTime,
         syncEventHash: createSyncEventContentHash(first),
         syncEventId: first.id,
       },
       {
         deleteIdentifier: remoteEvents[2]?.deleteId,
+        endTime: third.endTime,
         id: "legacy-mapping-2",
+        startTime: third.startTime,
         syncEventHash: createSyncEventContentHash(third),
         syncEventId: third.id,
       },

@@ -59,6 +59,8 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
                 deleteIdentifier: update.deleteIdentifier,
                 syncEventHash: update.syncEventHash,
                 syncEventId: update.syncEventId,
+                startTime: update.startTime,
+                endTime: update.endTime,
               })
               .where(eq(eventMappingsTable.id, update.id));
           }

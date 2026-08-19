@@ -23,6 +23,7 @@ import {
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
 } from "../shared/ics";
+import type { EventUpdate } from "../../../core/sync-engine/types";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
 
@@ -246,6 +247,48 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       ),
     );
 
+  const toObjectHref = (deleteId: string): string => {
+    if (deleteId.includes("/")) {
+      return new URL(deleteId, config.calendarUrl).href;
+    }
+    return new URL(`${deleteId}.ics`, config.calendarUrl).href;
+  };
+
+  /* A rewrite must land on the object the mapping already points at, or the PUT orphans a duplicate. */
+  const assertUpdateTargetsUid = (deleteId: string, uid: string): void => {
+    const target = toObjectHref(deleteId);
+    const expected = toObjectHref(uid);
+    if (target !== expected) {
+      throw new Error(`CalDAV update target ${target} does not match deterministic object ${expected}`);
+    }
+  };
+
+  const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
+    Promise.all(
+      updates.map(({ deleteId, event }) =>
+        rateLimiter.execute(async (): Promise<PushResult> => {
+          try {
+            const uid = generateDeterministicEventUid(event.id);
+            assertUpdateTargetsUid(deleteId, uid);
+
+            await client.createCalendarObject({
+              calendarUrl: config.calendarUrl,
+              filename: `${uid}.ics`,
+              iCalString: eventToICalString(event, uid),
+              overwrite: true,
+            });
+
+            return { deleteId, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
+          } catch (error) {
+            if (config.safeFetchOptions?.signal?.aborted) {
+              throw error;
+            }
+            return createFailureResult(error);
+          }
+        }, config.safeFetchOptions?.signal),
+      ),
+    );
+
   const recordRemoveFailure = (error: unknown): void => {
     const httpError = findCalDAVHttpError(error);
     if (!httpError) {
@@ -369,6 +412,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   return {
     pushEvents,
+    updateEvents,
     deleteEvents,
     getSyncDiagnostics,
     listRemoteEvents,

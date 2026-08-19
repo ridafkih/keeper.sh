@@ -14,7 +14,7 @@ import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
-import type { CalendarSyncProvider, PendingChanges } from "./types";
+import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -81,11 +81,12 @@ const createTimedProvider = (
   provider: CalendarSyncProvider,
   timer: ReturnType<typeof createPhaseTimer>,
 ): CalendarSyncProvider => {
-  const { getSyncDiagnostics, getThrottleMetrics } = provider;
+  const { getSyncDiagnostics, getThrottleMetrics, updateEvents } = provider;
   return {
     deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
     listRemoteEvents: (options) => provider.listRemoteEvents(options),
     pushEvents: (events) => timer.measure("provider_push", () => provider.pushEvents(events)),
+    ...(updateEvents && { updateEvents: (updates: EventUpdate[]) => timer.measure("provider_push", () => updateEvents(updates)) }),
     ...(getSyncDiagnostics && { getSyncDiagnostics: () => getSyncDiagnostics() }),
     ...(getThrottleMetrics && { getThrottleMetrics: () => getThrottleMetrics() }),
   };
@@ -288,6 +289,52 @@ const processAddResults = (
   return { changes, added, addFailed, conflictsResolved, errors };
 };
 
+const processUpdateResults = (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  pushResults: PushResult[],
+): {
+  changes: PendingChanges;
+  updated: number;
+  conflictsResolved: number;
+  errors: OperationError[];
+  unresolved: Extract<SyncOperation, { type: "replace" }>[];
+} => {
+  const updates: PendingUpdate[] = [];
+  const errors: OperationError[] = [];
+  const unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
+  let updated = 0;
+  let conflictsResolved = 0;
+
+  for (let index = 0; index < replacements.length; index++) {
+    const operation = replacements[index];
+    const pushResult = pushResults[index];
+
+    if (!operation) {
+      continue;
+    }
+
+    if (!pushResult?.success) {
+      unresolved.push(operation);
+      continue;
+    }
+
+    updated += 1;
+    if (pushResult.conflictResolved) {
+      conflictsResolved += 1;
+    }
+    updates.push({
+      deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId ?? operation.deleteId,
+      endTime: operation.event.endTime,
+      id: operation.staleMappingId,
+      startTime: operation.event.startTime,
+      syncEventHash: createSyncEventContentHash(operation.event),
+      syncEventId: operation.event.id,
+    });
+  }
+
+  return { changes: { inserts: [], deletes: [], updates }, updated, conflictsResolved, errors, unresolved };
+};
+
 const processDeleteResults = (
   removeOperations: Extract<SyncOperation, { type: "remove" }>[],
   deleteResults: DeleteResult[],
@@ -334,6 +381,7 @@ interface ExecuteRemoteResult {
   pushEcho: PushEchoCounts;
   superseded: boolean;
   checkpointRejected: boolean;
+  updateFallbacks: number;
 }
 
 interface RunResult {
@@ -342,6 +390,11 @@ interface RunResult {
   conflictsResolved: number;
   errors: OperationError[];
   pushEcho?: PushEchoCounts;
+}
+
+interface UpdateRunResult {
+  runResult: RunResult;
+  unresolved: Extract<SyncOperation, { type: "replace" }>[];
 }
 
 const executeAddRun = async (
@@ -360,6 +413,30 @@ const executeAddRun = async (
     conflictsResolved,
     errors,
     pushEcho,
+  };
+};
+
+const executeUpdateRun = async (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
+): Promise<UpdateRunResult> => {
+  const updates: EventUpdate[] = replacements.map((operation) => ({
+    deleteId: operation.deleteId,
+    event: operation.event,
+  }));
+  const pushResults = await updateEvents(updates);
+  const { updated, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults);
+  const pushEcho = createPushEchoCounts();
+  tallyPushEcho(pushEcho, pushResults);
+  return {
+    runResult: {
+      changes,
+      result: { added: updated, addFailed: 0, removed: 0, removeFailed: 0 },
+      conflictsResolved,
+      errors,
+      pushEcho,
+    },
+    unresolved,
   };
 };
 
@@ -387,6 +464,9 @@ const mergeRunResult = (
   if (includeChanges) {
     state.changes.inserts.push(...runResult.changes.inserts);
     state.changes.deletes.push(...runResult.changes.deletes);
+    if (runResult.changes.updates) {
+      state.changes.updates = [...(state.changes.updates ?? []), ...runResult.changes.updates];
+    }
   }
   state.result = {
     added: state.result.added + runResult.result.added,
@@ -431,6 +511,7 @@ interface ChunkedExecutionState {
   superseded: boolean;
   checkpointRejected: boolean;
   protectedRemoteUids: Set<string>;
+  updateFallbacks: number;
 }
 
 const checkpointRun = async (
@@ -438,7 +519,8 @@ const checkpointRun = async (
   changes: PendingChanges,
   checkpoint?: CheckpointCallback,
 ): Promise<boolean> => {
-  if (!checkpoint || (changes.inserts.length === 0 && changes.deletes.length === 0)) {
+  const updateCount = changes.updates?.length ?? 0;
+  if (!checkpoint || (changes.inserts.length === 0 && changes.deletes.length === 0 && updateCount === 0)) {
     return true;
   }
 
@@ -516,21 +598,14 @@ const executeRemoves = async (
   await checkSuperseded(state, isCurrent);
 };
 
-const executeReplacements = async (
+const replaceViaDeleteThenAdd = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
   mappingsByRemoteIdentity: Map<string, EventMapping>,
   state: ChunkedExecutionState,
-  totalOperations: number,
-  isCurrent?: () => Promise<boolean>,
-  onRunComplete?: ProgressCallback,
   checkpoint?: CheckpointCallback,
-): Promise<void> => {
-  if (replacements.length === 0) {
-    return;
-  }
-
+): Promise<boolean> => {
   const removes: Extract<SyncOperation, { type: "remove" }>[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
     startTime: operation.event.startTime,
@@ -569,8 +644,70 @@ const executeReplacements = async (
     const addResult = await executeAddRun(adds, calendarId, provider);
     mergeRunResult(state, addResult);
     if (!(await checkpointRun(state, addResult.changes, checkpoint))) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
+const executeReplacements = async (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
+  state: ChunkedExecutionState,
+  totalOperations: number,
+  isCurrent?: () => Promise<boolean>,
+  onRunComplete?: ProgressCallback,
+  checkpoint?: CheckpointCallback,
+): Promise<void> => {
+  if (replacements.length === 0) {
+    return;
+  }
+
+  const { updateEvents } = provider;
+  if (updateEvents) {
+    const { runResult, unresolved } = await executeUpdateRun(replacements, updateEvents);
+    mergeRunResult(state, runResult);
+    const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
+    for (const replacement of replacements) {
+      if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
+        state.protectedRemoteUids.add(replacement.uid);
+      }
+    }
+    state.updateFallbacks += unresolved.length;
+    if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
       return;
     }
+    if (unresolved.length > 0) {
+      const recovered = await replaceViaDeleteThenAdd(
+        unresolved,
+        calendarId,
+        provider,
+        mappingsByRemoteIdentity,
+        state,
+        checkpoint,
+      );
+      if (!recovered) {
+        return;
+      }
+    }
+    state.processed += replacements.length * 2;
+    onRunComplete?.(state.processed, totalOperations);
+    await checkSuperseded(state, isCurrent);
+    return;
+  }
+
+  if (!(await replaceViaDeleteThenAdd(
+    replacements,
+    calendarId,
+    provider,
+    mappingsByRemoteIdentity,
+    state,
+    checkpoint,
+  ))) {
+    return;
   }
 
   state.processed += replacements.length * 2;
@@ -608,7 +745,7 @@ const executeRemoteOperations = async (
   const operationChunks = chunkOperations(operations, OPERATION_CHUNK_SIZE);
   const totalOperations = getTotalOperationCount(operations);
   const state: ChunkedExecutionState = {
-    changes: { inserts: [], deletes: [] },
+    changes: { inserts: [], deletes: [], updates: [] },
     result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
     errors: [],
@@ -617,6 +754,7 @@ const executeRemoteOperations = async (
     superseded: false,
     checkpointRejected: false,
     protectedRemoteUids: new Set<string>(),
+    updateFallbacks: 0,
   };
 
   for (const chunk of operationChunks) {
@@ -684,6 +822,7 @@ const executeRemoteOperations = async (
     pushEcho: state.pushEcho,
     superseded: state.superseded,
     checkpointRejected: state.checkpointRejected,
+    updateFallbacks: state.updateFallbacks,
   };
 };
 
@@ -931,6 +1070,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
     wideEvent["events.conflicts_resolved"] = outcome.conflictsResolved;
+    wideEvent["events.update_fallbacks"] = outcome.updateFallbacks;
     wideEvent["superseded"] = outcome.superseded;
     appendPushEchoFields(wideEvent, outcome.pushEcho);
 
