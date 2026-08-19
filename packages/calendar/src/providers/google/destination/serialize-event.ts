@@ -27,6 +27,17 @@ const buildTimedOooDateField = (time: Date): NonNullable<GoogleEvent["start"]> =
   dateTime: time.toISOString(),
 });
 
+/**
+ * All-day ends are exclusive (Sep 1 00:00 = through Aug 31). Timed Google OOO with
+ * that exclusive midnight displays as ending on Sep 1 — use the last second instead.
+ */
+const toTimedOooEndTime = (endTime: Date, isAllDay: boolean): Date => {
+  if (!isAllDay) {
+    return endTime;
+  }
+  return new Date(endTime.getTime() - 1000);
+};
+
 const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
   if (event.availability === "workingElsewhere") {
     return false;
@@ -50,7 +61,7 @@ const serializeGoogleEvent = (
   if (asOutOfOffice) {
     return {
       description: event.description,
-      end: buildTimedOooDateField(event.endTime),
+      end: buildTimedOooDateField(toTimedOooEndTime(event.endTime, isAllDay)),
       eventType: "outOfOffice",
       extendedProperties: {
         private: { [KEEPER_EVENT_UID_PROPERTY]: uid },
@@ -79,4 +90,4 @@ const serializeGoogleEvent = (
   };
 };
 
-export { canSerializeGoogleEvent, serializeGoogleEvent };
+export { canSerializeGoogleEvent, serializeGoogleEvent, toTimedOooEndTime };

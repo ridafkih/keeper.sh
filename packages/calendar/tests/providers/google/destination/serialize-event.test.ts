@@ -71,7 +71,8 @@ describe("serializeGoogleEvent", () => {
     );
 
     expect(event).toMatchObject({
-      end: { dateTime: "2026-09-01T00:00:00.000Z" },
+      // Exclusive all-day end Sep 1 → last second of Aug 31 for Google display
+      end: { dateTime: "2026-08-31T23:59:59.000Z" },
       eventType: "outOfOffice",
       start: { dateTime: "2026-08-22T00:00:00.000Z" },
       summary: "Gamescom",

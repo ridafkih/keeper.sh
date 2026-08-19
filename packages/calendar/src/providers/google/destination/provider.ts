@@ -23,6 +23,21 @@ import { readKeeperEventUid, toGoogleEventId } from "./ooo-identity";
 import { inferAllDayEvent } from "../../../core/events/all-day";
 import { createEditableEventContentHash } from "../../../core/events/content-hash";
 
+/** Reverse all-day→timed OOO end adjustment so mapping times still match. */
+const restoreExclusiveAllDayOooEnd = (startTime: Date, endTime: Date): {
+  endTime: Date;
+  isAllDay: boolean;
+} => {
+  const exclusiveEnd = new Date(endTime.getTime() + 1000);
+  if (inferAllDayEvent({ endTime: exclusiveEnd, startTime })) {
+    return { endTime: exclusiveEnd, isAllDay: true };
+  }
+  return {
+    endTime,
+    isAllDay: inferAllDayEvent({ endTime, startTime }),
+  };
+};
+
 interface GoogleSyncProviderConfig {
   accessToken: string;
   refreshToken: string;
@@ -463,23 +478,28 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       } else if (event.transparency === "transparent") {
         availability = "free";
       }
-      // All-day source events are written as timed OOO (Google forbids all-day OOO).
-      // Treat midnight-aligned timed OOO as all-day for editable-hash stability.
-      const isAllDay = Boolean(event.start?.date)
-        || (event.eventType === "outOfOffice" && inferAllDayEvent({ endTime, startTime }));
+      // All-day source events are written as timed OOO ending 1s before exclusive midnight.
+      const restored = event.eventType === "outOfOffice"
+        ? restoreExclusiveAllDayOooEnd(startTime, endTime)
+        : {
+          endTime,
+          isAllDay: Boolean(event.start?.date) || inferAllDayEvent({ endTime, startTime }),
+        };
+      const resolvedEndTime = restored.endTime;
+      const isAllDay = Boolean(event.start?.date) || restored.isAllDay;
       items.push({
         deleteId: event.id ?? keeperUid,
         editableAvailability: availability,
         editableContentHash: createEditableEventContentHash({
           availability,
           description: event.description,
-          endTime,
+          endTime: resolvedEndTime,
           isAllDay,
           location: event.location,
           startTime,
           summary: event.summary ?? "",
         }),
-        endTime,
+        endTime: resolvedEndTime,
         isKeeperEvent: true,
         // Google destinations can create OOO via insert even when the listed event is default.
         supportedAvailabilities: ["busy", "free", "oof"],
