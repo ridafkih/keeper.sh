@@ -642,6 +642,19 @@ interface IngestRateLimiter extends RedisRateLimiter {
   dispose?: () => Promise<void>;
 }
 
+const releaseOnceAcquired = async (
+  semaphore: OutlookAccountSemaphore,
+  lease: Promise<SemaphoreLease>,
+): Promise<void> => {
+  const acquired = await lease.then(
+    (held: SemaphoreLease) => held,
+    () => null,
+  );
+  if (acquired) {
+    await semaphore.release(acquired);
+  }
+};
+
 const createSemaphoreRateLimiterAdapter = (
   semaphore: OutlookAccountSemaphore,
 ): IngestRateLimiter => {
@@ -653,16 +666,14 @@ const createSemaphoreRateLimiterAdapter = (
       }
       await lease;
     },
+    /* A deadline can fire mid-acquire, so the lease is awaited here or its slot waits out the TTL. */
     dispose: async (): Promise<void> => {
       if (!lease) {
         return;
       }
-      /* Acquire() awaits this same promise, so a rejected lease already surfaced there. */
-      const held = await lease.catch(() => null);
+      const pending = lease;
       lease = null;
-      if (held) {
-        await semaphore.release(held);
-      }
+      await releaseOnceAcquired(semaphore, pending);
     },
   };
 };
