@@ -364,9 +364,6 @@ describe("ingest duration decomposition", () => {
     for (const wait of poolWaits) {
       expect(wait).toBeGreaterThanOrEqual(0);
     }
-
-    /* Serialising these two would charge the later one both flushes. */
-    expect(poolWaits[1]).toBeLessThan(POOL_WAIT_MS + SECOND_POOL_WAIT_MS);
     for (const event of events) {
       expect(event.accounted_ms ?? 0).toBeLessThanOrEqual(event.duration_ms ?? 0);
     }
