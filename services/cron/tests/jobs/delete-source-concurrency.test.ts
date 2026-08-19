@@ -87,9 +87,9 @@ describe("global source throttle removal", () => {
     expect(Number(oauthSite?.groupConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
     expect(Number(icsSite?.groupConcurrency)).toBeLessThan(UNBOUNDED_USER_GROUPS);
 
-    for (const options of capturedOptions) {
-      expect(options.taskConcurrency).toBe(2);
-    }
+    expect(Number(oauthSite?.taskConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
+    expect(Number(caldavSite?.taskConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
+    expect(Number(icsSite?.taskConcurrency)).toBeLessThan(UNBOUNDED_USER_GROUPS);
   });
 
 

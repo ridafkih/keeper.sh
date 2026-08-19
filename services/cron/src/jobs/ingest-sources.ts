@@ -96,14 +96,10 @@ const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
  * parking every queued flush behind it while it holds the single serial writer slot.
  */
 const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
-/*
- * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
- * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
- * independently, so combined traffic can still reach the provider limit.
- */
-const USER_CALENDAR_CONCURRENCY = 2;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
+const USER_CALENDAR_CONCURRENCY = UNBOUNDED_USER_GROUPS;
+const ICS_CALENDAR_CONCURRENCY = 2;
 
 /*
  * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
@@ -1719,7 +1715,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
       SOURCE_TIMEOUT_MS);
     }),
 icsSources.map((source) => source.userId),
-    { groupConcurrency: ICS_PARSE_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+    { groupConcurrency: ICS_PARSE_CONCURRENCY, taskConcurrency: ICS_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
