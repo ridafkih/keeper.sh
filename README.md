@@ -278,7 +278,7 @@ The following will generate a `.env` file that contains the key used to generate
 ```bash
 cat > .env << EOF
 # BETTER_AUTH_SECRET and ENCRYPTION_KEY are required.
-# TRUSTED_ORIGINS is required if you plan on accessing Keeper from an
+# TRUSTED_ORIGINS is required if you plan on accessing keeper.sh from an
 # origin other than http://localhost/
 BETTER_AUTH_SECRET=$(openssl rand -base64 32)
 ENCRYPTION_KEY=$(openssl rand -base64 32)
@@ -594,7 +594,7 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 
 | Tool                  | Description                                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_calendars`      | List all calendars connected to Keeper, including provider name and account.                                                                   |
+| `list_calendars`      | List all calendars connected to keeper.sh, including provider name and account.                                                                   |
 | `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
 | `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
