@@ -113,11 +113,6 @@ const buildPinnedConnection = (parsed: URL, addresses: string[]): PinnedConnecti
   urls: addresses.map((address) => pinnedUrl(parsed, address)),
 });
 
-/*
- * The validated address is carried into the connection because Bun resolves the
- * hostname again at connect time; a rebinding resolver would otherwise answer a
- * public address to the check and a private one to the socket (CVE-2026-75583).
- */
 const resolveConnection = async (url: string, options?: SafeFetchOptions): Promise<PinnedConnection | null> => {
   const parsed = new URL(url);
   validateProtocol(parsed.protocol);
