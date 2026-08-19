@@ -190,10 +190,6 @@ const createGoogleUserRateLimiter = (
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
 
-/*
- * Apple publishes no figure, so this borrows the one comparable per-account rate that is
- * documented: Microsoft allows four requests a second against a single mailbox.
- */
 const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 
 const createCalDAVAccountRateLimiter = (
