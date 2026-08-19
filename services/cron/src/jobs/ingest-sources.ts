@@ -69,17 +69,12 @@ import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
 const SOURCE_TIMEOUT_DATABASE_GRACE_MS = 5000;
+const SOURCE_CONCURRENCY = 5;
 /*
- * The unit of scheduling is the user: SOURCE_CONCURRENCY users ingest at once per
- * family, and each user's calendars run at USER_CALENDAR_CONCURRENCY within that
- * one slot. A seventeen-calendar account occupies one slot instead of the whole
- * budget, so no user's backlog can starve another user's freshness. The per-user
- * cap is a per-pass budget against Graph's documented MailboxConcurrency of four,
- * not a hard ceiling: cron passes are serial (cronbake re-arms only after a pass
- * completes), but webhook-driven syncs in the worker hit the same mailbox
+ * A per-pass budget against Graph's documented MailboxConcurrency of four, not a
+ * hard ceiling: webhook-driven syncs in the worker hit the same mailbox
  * independently, so combined traffic can still reach the provider limit.
  */
-const SOURCE_CONCURRENCY = 5;
 const USER_CALENDAR_CONCURRENCY = 2;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
@@ -870,14 +865,10 @@ const ingestOAuthSources = async (calendarIds?: string[]): Promise<IngestionBatc
       ),
     )
   /*
-   * Two tiers, unordered within each: calendars that have never completed an
-   * ingest go first — a new user's first ingest is the one wait they judge the
-   * product by, and ingestWindowRecordedAt is written by the first successful
-   * ingest of every family, so null means exactly "never ingested". Pro users
-   * come next, so a pro calendar whose push notification was dropped is repaired
-   * within one pass rather than after the whole rotation. The plan is coalesced
-   * because most free users have no subscription row at all, and a bare NULL
-   * would sort ahead of 'pro' under DESC.
+   * Null ingestWindowRecordedAt means exactly "never ingested": it is written by
+   * the first successful ingest of every family. The plan is coalesced because most
+   * free users have no subscription row at all, and a bare NULL would sort ahead of
+   * 'pro' under DESC.
    */
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),

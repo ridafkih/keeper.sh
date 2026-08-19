@@ -116,10 +116,8 @@ describe("ingestOAuthSources selection", () => {
   });
 
   /*
-   * Rendered SQL, not the AST: a user with no subscription row yields a NULL plan,
-   * and a bare `plan = 'pro' DESC` sorts those NULLs ahead of every pro user —
-   * inverting the priority for exactly the majority case. The coalesce is what
-   * makes the ordering mean what it says, so its presence is pinned as text.
+   * Pinned as rendered SQL, not AST: without the coalesce, NULL plans sort ahead
+   * of every pro user, inverting the priority for the majority case.
    */
   it("renders a null-safe pro ordering", async () => {
     await ingestOAuthSources();

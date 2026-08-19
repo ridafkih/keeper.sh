@@ -51,13 +51,6 @@ interface AllSettledGroupedOptions {
   taskConcurrency?: number;
 }
 
-/*
- * Like allSettledWithConcurrency, but the unit of scheduling is the group: up to
- * groupConcurrency groups run at once, and each group runs its own tasks at
- * taskConcurrency. One group with many tasks occupies one group slot rather than
- * the whole budget, so no key can starve the others. Results come back in the
- * original task order, because callers pair settlements to inputs by index.
- */
 const allSettledGroupedWithConcurrency = async <TResult>(
   tasks: (() => Promise<TResult>)[],
   groupKeys: string[],
@@ -76,10 +69,7 @@ const allSettledGroupedWithConcurrency = async <TResult>(
 
   const results: PromiseSettledResult<TResult>[] = Array.from({ length: tasks.length });
   const groupTasks = [...groupedIndexes.values()].map((indexes) => async () => {
-    /*
-     * Kept indexes and tasks stay paired: filtering tasks alone would shift every
-     * later settlement onto the wrong index, and callers attribute by index.
-     */
+    /* Callers attribute by index, so settlements must stay paired to their input index. */
     const keptIndexes = indexes.filter((index) => Boolean(tasks[index]));
     const settled = await allSettledWithConcurrency(
       keptIndexes.flatMap((index) => {
