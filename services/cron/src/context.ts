@@ -73,6 +73,20 @@ const refreshLockRedis = new Redis(env.REDIS_URL, {
 
 const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);
 
+/*
+ * Its own connection with no command timeout: a blocking read occupies the connection for
+ * as long as it waits, so sharing one would stall every other command behind it, and a
+ * command timeout would abort the wait it exists to perform.
+ */
+const signalReaderRedis = new Redis(env.REDIS_URL, {
+  maxRetriesPerRequest: null,
+  lazyConnect: true,
+});
+
+const shutdownSignalReaderRedis = (): void => {
+  signalReaderRedis.disconnect();
+};
+
 const shutdownRefreshLockRedis = (): void => {
   refreshLockRedis.disconnect();
 };
@@ -99,5 +113,7 @@ export {
   refreshLockRedis,
   refreshLockStore,
   shutdownRefreshLockRedis,
+  shutdownSignalReaderRedis,
+  signalReaderRedis,
   webhookConfig,
 };

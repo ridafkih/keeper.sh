@@ -12,6 +12,7 @@ import {
   PENDING_INGEST_KEY,
   releaseUnchangedMembers,
 } from "@/utils/pending-ingest-release";
+import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
 
 const DRAIN_LOCK_KEY = "push-drain:tick";
 const DRAIN_LOCK_TTL_SECONDS = 60;
@@ -28,17 +29,6 @@ const parsePendingMembers = (entries: string[]): PendingIngestMember[] => {
   }
   return members;
 };
-
-const attachCorrelationIds = (
-  members: PendingIngestMember[],
-  ids: (string | null)[],
-): PendingIngestMember[] => members.map((member, index) => {
-  const correlationId = ids[index] ?? "";
-  if (correlationId.length === 0) {
-    return member;
-  }
-  return { ...member, correlationId };
-});
 
 const createDefaultDependencies = async (): Promise<DrainPendingIngestDependencies> => {
   const { database, premiumService, refreshLockRedis } = await import("@/context");
@@ -141,6 +131,8 @@ const observedDrain = withCronWideEvent({
   name: import.meta.file,
   overrunProtection: true,
 }) satisfies CronOptions;
+
+export { createDefaultDependencies };
 
 export default {
   ...observedDrain,

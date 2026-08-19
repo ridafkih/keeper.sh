@@ -18,18 +18,34 @@ const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
 await entry({
   main: async () => {
-    const { database, shutdownDatabases, shutdownRefreshLockRedis } = await import("./context");
+    const {
+      database,
+      shutdownDatabases,
+      shutdownRefreshLockRedis,
+      shutdownSignalReaderRedis,
+      signalReaderRedis,
+      refreshLockRedis,
+    } = await import("./context");
+    const { startPendingSignalReader } = await import("./utils/start-pending-signal-reader");
     await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
 
     const jobs = await getAllJobs(jobsFolderPathname);
     const injectedJobs = injectJobs(jobs);
     registerJobs(injectedJobs);
 
+    const signalReader = startPendingSignalReader({
+      blockingRedis: signalReaderRedis,
+      enabled: Boolean(env.WEBHOOK_PUBLIC_URL),
+      scoreRedis: refreshLockRedis,
+    });
+
     return async (): Promise<void> => {
       baker.stopAll();
+      await signalReader?.stop();
       destroy();
       await shutdownDatabases();
       shutdownRefreshLockRedis();
+      shutdownSignalReaderRedis();
     };
   },
   name: "cron",
