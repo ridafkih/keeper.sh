@@ -16,7 +16,7 @@
     "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.45.2",
     "ioredis": "^5.6.1"
   },
   "devDependencies": {

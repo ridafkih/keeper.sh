@@ -23,7 +23,7 @@
     "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/digest-fetch": "workspace:*",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.45.2",
     "entities": "^7.0.1",
     "fast-json-stable-stringify": "^2.1.0",
     "htmlparser2": "^10.1.0",
