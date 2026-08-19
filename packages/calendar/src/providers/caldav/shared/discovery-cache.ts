@@ -1,11 +1,5 @@
 import type { CalendarInfo } from "../types";
 
-/*
- * Long enough that a fleet pass every minute stops re-walking principal, home-set and
- * collection listing for every calendar it touches, short enough that a calendar added
- * elsewhere appears without anyone pressing anything. Pressing Refresh calendars drops
- * the entry outright, so the wait is only ever for someone who does not ask.
- */
 const CALDAV_DISCOVERY_TTL_SECONDS = 900;
 
 const buildDiscoveryCacheKey = (accountId: string): string => `caldav:calendars:${accountId}`;
