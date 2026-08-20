@@ -2,7 +2,8 @@ import { createDefaultDependencies } from "@/jobs/drain-pending-ingest";
 import { createPendingSignalReader } from "@/utils/pending-signal-consumer";
 import { createScopedClaimPending } from "@/utils/scoped-drain-pending-ingest";
 import { runDrainPendingIngest } from "@/utils/drain-pending-ingest";
-import { context, widelog } from "@/utils/logging";
+import { widelog } from "@/utils/logging";
+import { withWideEvent } from "@/utils/with-wide-event";
 import { recordSignalReaderHeartbeat } from "@/utils/signal-reader-heartbeat";
 import type { BlockingSignalRedis, PendingSignalConsumer } from "@/utils/pending-signal-consumer";
 import type { HeartbeatWriter } from "@/utils/signal-reader-heartbeat";
@@ -25,23 +26,20 @@ interface PendingSignalReaderContext {
 const drainSignalledCalendars = (
   scoreRedis: ScopedClaimRedis,
   calendarIds: string[],
-): Promise<void> => context(async () => {
-  widelog.set("operation.name", "drain-signalled-calendars");
-  widelog.set("operation.type", "job");
-  widelog.set("push_drain.signalled_count", calendarIds.length);
-  try {
-    await widelog.time.measure("duration_ms", async () => {
-      const dependencies = await createDefaultDependencies();
-      await runDrainPendingIngest({
-        ...dependencies,
-        claimPending: createScopedClaimPending(scoreRedis, calendarIds),
-      });
-    });
-    widelog.set("outcome", "success");
-  } catch (error) {
-    widelog.set("outcome", "error");
+): Promise<void> => withWideEvent({
+  fields: { push_drain: { signalled_count: calendarIds.length } },
+  name: "drain-signalled-calendars",
+  /* Swallowed: the reader loop must survive one bad drain. */
+  onError: (error) => {
     widelog.errorFields(error, { retriable: true, slug: SIGNAL_DRAIN_FAILED_SLUG });
-  }
+  },
+  run: async () => {
+    const dependencies = await createDefaultDependencies();
+    await runDrainPendingIngest({
+      ...dependencies,
+      claimPending: createScopedClaimPending(scoreRedis, calendarIds),
+    });
+  },
 });
 
 const startPendingSignalReader = (
