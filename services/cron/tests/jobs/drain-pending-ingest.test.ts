@@ -16,6 +16,7 @@ vi.mock("../../src/context", () => ({
   database: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: {
+    get: (): Promise<null> => Promise.resolve(null),
     eval: () => Promise.resolve([]),
     hdel: () => Promise.resolve(0),
     hincrby: () => Promise.resolve(1),

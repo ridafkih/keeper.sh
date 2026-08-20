@@ -36,6 +36,7 @@ await entry({
     const signalReader = startPendingSignalReader({
       blockingRedis: signalReaderRedis,
       enabled: Boolean(env.WEBHOOK_PUBLIC_URL),
+      heartbeatRedis: refreshLockRedis,
       scoreRedis: refreshLockRedis,
     });
 

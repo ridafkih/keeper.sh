@@ -1,7 +1,7 @@
 import type { CronOptions } from "cronbake";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
-import { describeSignalReader } from "@/utils/signal-reader-state";
+import { describeSignalReader } from "@/utils/signal-reader-heartbeat";
 import {
   runDrainPendingIngest,
   type DrainPendingIngestDependencies,
@@ -114,7 +114,8 @@ const observedDrain = withCronWideEvent({
       widelog.set("push_drain.tick_gap_ms", tickStartedAt - lastTickStartedAt);
     }
     lastTickStartedAt = tickStartedAt;
-    const signalReader = describeSignalReader();
+    const { refreshLockRedis: heartbeatRedis } = await import("@/context");
+    const signalReader = await describeSignalReader(heartbeatRedis);
     widelog.set("push_drain.signal_reader_running", signalReader.running);
     widelog.set("push_drain.signal_reads", signalReader.reads);
     const dependencies = await createDefaultDependencies();

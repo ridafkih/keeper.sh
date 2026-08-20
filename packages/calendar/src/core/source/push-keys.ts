@@ -5,6 +5,8 @@ const PENDING_FAILURES_KEY = "push:pending-failures";
 const PENDING_CORRELATION_KEY = "push:pending-correlation";
 // A lossy nudge, not a queue: the sorted set above stays the durable record.
 const PENDING_SIGNAL_KEY = "push:pending-signal";
+// Written by whichever process reads signals, so liveness survives the process boundary.
+const SIGNAL_READER_HEARTBEAT_KEY = "push:signal-reader";
 const UNKNOWN_CHANNEL_PREFIX = "push:nochan";
 
 const buildUnknownChannelKey = (provider: string, channelKey: string): string =>
@@ -16,5 +18,6 @@ export {
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
   PENDING_SIGNAL_KEY,
+  SIGNAL_READER_HEARTBEAT_KEY,
   UNKNOWN_CHANNEL_PREFIX,
 };

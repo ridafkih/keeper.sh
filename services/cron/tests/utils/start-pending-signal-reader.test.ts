@@ -39,12 +39,13 @@ const blockingRedisDouble = () => {
 };
 
 const scoreRedis = { hmget: () => Promise.resolve([]), zscore: () => Promise.resolve(null) };
+const heartbeatRedis = { setex: () => Promise.resolve("OK") };
 
 describe("starting the signal reader", () => {
   it("does not read when push is unconfigured, so no connection is held open", () => {
     const blockingRedis = blockingRedisDouble();
 
-    const reader = startPendingSignalReader({ blockingRedis, enabled: false, scoreRedis });
+    const reader = startPendingSignalReader({ blockingRedis, enabled: false, heartbeatRedis, scoreRedis });
 
     expect(reader).toBeNull();
     expect(blockingRedis.blpop).not.toHaveBeenCalled();
@@ -53,7 +54,7 @@ describe("starting the signal reader", () => {
   it("begins reading as soon as push is configured", async () => {
     const blockingRedis = blockingRedisDouble();
 
-    const reader = startPendingSignalReader({ blockingRedis, enabled: true, scoreRedis });
+    const reader = startPendingSignalReader({ blockingRedis, enabled: true, heartbeatRedis, scoreRedis });
     await Promise.resolve();
 
     expect(reader).not.toBeNull();
@@ -62,7 +63,7 @@ describe("starting the signal reader", () => {
 
   it("closes its connection when the process shuts down", async () => {
     const blockingRedis = blockingRedisDouble();
-    const reader = startPendingSignalReader({ blockingRedis, enabled: true, scoreRedis });
+    const reader = startPendingSignalReader({ blockingRedis, enabled: true, heartbeatRedis, scoreRedis });
     await Promise.resolve();
 
     await reader?.stop();
