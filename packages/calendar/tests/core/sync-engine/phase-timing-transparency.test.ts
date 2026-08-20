@@ -252,11 +252,6 @@ describe("syncCalendar instrumentation transparency", () => {
     expect(Math.abs(reconcile - durationMs)).toBeLessThanOrEqual(2);
   });
 
-  /*
-   * A fake clock, because the invariant is attribution and not speed: the engine reads
-   * performance.now(), so driving that directly makes the measured phases exact instead
-   * of a race between two sleeps and whatever else the machine is doing.
-   */
   it("does not let concurrent runs sharing one provider borrow each other's phase time", async () => {
     vi.useFakeTimers();
     try {

@@ -1,11 +1,4 @@
 import { PENDING_SIGNAL_KEY } from "./push-keys";
-
-/*
- * A producer must stay safe when its consumer is absent — one shipped without the other
- * during rollout and the list grew unread. Dropping the oldest is the right loss: the
- * sorted set still holds every calendar, so a dropped nudge costs the periodic tick's
- * latency and nothing else, where an unbounded list costs Redis.
- */
 const PENDING_SIGNAL_MAX_LENGTH = 10_000;
 const PENDING_SIGNAL_TTL_SECONDS = 3600;
 
