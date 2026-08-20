@@ -18,6 +18,7 @@ import {
   buildCalendarBackoffState,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
+  PENDING_INGEST_KEY,
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
   createSourceIngestionPlan,
@@ -81,7 +82,6 @@ import {
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
-import type { SyncLockAcquisition } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
@@ -127,19 +127,12 @@ const instrumentedLockRedis = {
 };
 
 /*
- * An overlapping fleet pass is a routine identical run, not a mapping mutation, so it must
+ * An overlapping pass is a routine identical run, not a mapping mutation, so it must
  * acquire as "background" to keep IS_CURRENT true for the in-flight holder. Under the
  * default "preempting" class every overlap discarded the holder's finished work, and a
  * source slower than its deadline never recorded its first ingest.
- *
- * A webhook ingest is the exception: a user is waiting on it, and queueing politely behind a
- * 45s fleet ingest of the same calendar was 88% of its webhook-to-destination latency. It
- * trades the holder's paid-for provider reads for that latency, so only it preempts.
  */
-const sourceIngestLocks: Record<SyncLockAcquisition, ReturnType<typeof createSyncLock>> = {
-  background: createSyncLock(instrumentedLockRedis, "background"),
-  preempting: createSyncLock(instrumentedLockRedis, "preempting"),
-};
+const sourceIngestLock = createSyncLock(instrumentedLockRedis, "background");
 
 /*
  * The ioredis set overloads type expiry/condition tokens positionally, so the
@@ -256,40 +249,17 @@ const resetIngestBackoffIfCurrent = async (
   }
 };
 
-/*
- * The engine returns the same empty result whether a preempting waiter took the lock away or
- * the source genuinely had nothing new, so only the lock handle tells the two apart. A probe
- * that fails reads as current: the work has already committed, and a Redis blip must not
- * discard a pass that really happened.
- */
-const wasSuperseded = async (isCurrent: () => Promise<boolean>): Promise<boolean> => {
-  try {
-    const current = await isCurrent();
-    return !current;
-  } catch (error) {
-    widelog.errorFields(error, {
-      slug: "ingest-currency-probe-failed",
-      retriable: true,
-    });
-    return false;
-  }
-};
-
 const runSourceIngest = async <TResult>(
   lane: IngestLane,
-  acquisition: SyncLockAcquisition,
   calendarId: string,
   signal: AbortSignal,
   work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
 ): Promise<TResult | null> => {
-  const lockResult = await measureSegment("wait.source_lock_ms", () =>
-    sourceIngestLocks[acquisition].acquire(
-      `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
-      signal,
-    ));
-  /* Pairs with ingest.superseded to price preemption: reads discarded per push saved. */
-  widelog.set("ingest.lock_acquisition", acquisition);
+  const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
+    signal,
+  ));
   widelog.set("ingest.lock_acquired", lockResult.acquired);
   if (!lockResult.acquired) {
     signal.throwIfAborted();
@@ -309,15 +279,6 @@ const runSourceIngest = async <TResult>(
     }
     try {
       const result = await work(lockResult.handle.isCurrent);
-      /*
-       * A superseded pass flushed nothing, so it is neither a pass over the calendar nor a
-       * provider failure: it takes the skipped path, leaving the coverage bookkeeping and the
-       * backoff counter for the waiter that took the lock.
-       */
-      if (await wasSuperseded(lockResult.handle.isCurrent)) {
-        widelog.set("ingest.superseded", true);
-        return null;
-      }
       if (attempt.failureCount > 0) {
         await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
       }
@@ -1158,13 +1119,58 @@ const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
   return fleetIngestLane;
 };
 
-const resolveIngestAcquisition = (
-  calendarIds: string[] | undefined,
-): SyncLockAcquisition => {
-  if (calendarIds) {
-    return "preempting";
+/*
+ * The drain ticks every 10s, so an entry older than this is no longer evidence that anyone is
+ * about to read the calendar. Without the bound a wedged drain would hold the fleet off its
+ * own calendars indefinitely, and the calendar would silently stop syncing altogether.
+ */
+const PENDING_INGEST_YIELD_BOUND_MS = 60_000;
+
+const isRecentPendingScore = (score: string | null, receivedAfter: number): boolean => {
+  if (score === null) {
+    return false;
   }
-  return "background";
+  return Number(score) >= receivedAfter;
+};
+
+/*
+ * The webhook drain is about to ingest whatever it holds a fresh receipt for, so the fleet
+ * hands those calendars over rather than duplicating the read behind the same lock. Yielding
+ * is safe because the fleet is the reconciliation pass: a missed webhook leaves the calendar
+ * out of the pending set, so the next fleet pass takes it.
+ */
+const resolveFleetYieldedCalendarIds = async (
+  sourceCalendarIds: string[],
+): Promise<Set<string>> => {
+  if (sourceCalendarIds.length === 0) {
+    return new Set<string>();
+  }
+  try {
+    const scores = await refreshLockRedis.zmscore(PENDING_INGEST_KEY, ...sourceCalendarIds);
+    const receivedAfter = Date.now() - PENDING_INGEST_YIELD_BOUND_MS;
+    return new Set(sourceCalendarIds.filter((_calendarId, index) =>
+      isRecentPendingScore(scores[index] ?? null, receivedAfter)));
+  } catch (error) {
+    /* Yielding is an optimisation, so an unreadable pending set costs the pass nothing. */
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "pending-ingest-yield-lookup-failed",
+    });
+    return new Set<string>();
+  }
+};
+
+const resolveYieldedCalendarIds = async (
+  calendarIds: string[] | undefined,
+  sourceCalendarIds: string[],
+): Promise<Set<string>> => {
+  /* The webhook path owns the calendars it names, so it never yields one. */
+  if (calendarIds) {
+    return new Set<string>();
+  }
+  const yielded = await resolveFleetYieldedCalendarIds(sourceCalendarIds);
+  widelog.set("ingest.yielded_count", yielded.size);
+  return yielded;
 };
 
 const ingestOAuthSources = async (
@@ -1175,7 +1181,6 @@ const ingestOAuthSources = async (
     return createEmptyIngestionBatchResult();
   }
   const lane = resolveIngestLane(calendarIds);
-  const acquisition = resolveIngestAcquisition(calendarIds);
 
   const oauthSources = await database
     .select({
@@ -1212,8 +1217,16 @@ const ingestOAuthSources = async (
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
     );
 
+  const yieldedCalendarIds = await resolveYieldedCalendarIds(
+    calendarIds,
+    oauthSources.map(({ calendarId }) => calendarId),
+  );
+  const selectedSources = oauthSources.filter(
+    ({ calendarId }) => !yieldedCalendarIds.has(calendarId),
+  );
+
   const settlements = await allSettledGroupedWithConcurrency(
-    oauthSources.map((source) => {
+    selectedSources.map((source) => {
       const enqueuedAt = Date.now();
       return () =>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
@@ -1237,7 +1250,7 @@ const ingestOAuthSources = async (
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, acquisition, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1413,14 +1426,14 @@ const ingestOAuthSources = async (
         }),
       SOURCE_TIMEOUT_MS);
     }),
-oauthSources.map((source) => source.userId),
+selectedSources.map((source) => source.userId),
     { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
 
   return summariseIngestionSettlements(
     lane,
     settlements,
-    oauthSources.map(({ accountId, reauthenticationSource }) => ({
+    selectedSources.map(({ accountId, reauthenticationSource }) => ({
       accountId,
       recordedDemandSource: reauthenticationSource,
     })),
@@ -1481,7 +1494,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, "background", source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1675,7 +1688,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, "background", source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     ingestFutureRange: calendarsTable.ingestFutureRange,
