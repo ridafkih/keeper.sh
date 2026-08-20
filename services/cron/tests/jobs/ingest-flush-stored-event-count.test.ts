@@ -31,11 +31,12 @@ const harness = vi.hoisted(() => {
   };
 
   const resolveLimited = (fields: Record<string, unknown>): unknown[] => {
-    if ("failureCount" in fields) {
-      return [{ failureCount: 0, nextAttemptAt: null }];
-    }
     if ("url" in fields) {
-      return state.icsRows.slice(0, 1);
+      return state.icsRows.slice(0, 1).map((row) => ({
+        failureCount: 0,
+        nextAttemptAt: null,
+        ...row,
+      }));
     }
     return [];
   };

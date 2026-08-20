@@ -36,11 +36,8 @@ const harness = vi.hoisted(() => {
   };
 
   const resolveLimited = (fields: Record<string, unknown>): unknown[] => {
-    if ("failureCount" in fields) {
-      return [{ failureCount: 0, nextAttemptAt: null }];
-    }
     if ("accessToken" in fields) {
-      return [sourceRow];
+      return [{ failureCount: 0, nextAttemptAt: null, ...sourceRow }];
     }
     return [];
   };

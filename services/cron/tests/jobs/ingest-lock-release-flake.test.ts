@@ -49,9 +49,6 @@ const harness = vi.hoisted(() => {
   };
 
   const resolveLimited = (fields: Record<string, unknown>, predicate: unknown): unknown[] => {
-    if ("failureCount" in fields) {
-      return [{ failureCount: 0, nextAttemptAt: null }];
-    }
     if ("url" in fields) {
       const row = state.icsRows.find(
         (candidate) => containsCalendarId(predicate, candidate.calendarId),
@@ -59,7 +56,7 @@ const harness = vi.hoisted(() => {
       if (!row) {
         return [];
       }
-      return [row];
+      return [{ failureCount: 0, nextAttemptAt: null, ...row }];
     }
     return [];
   };

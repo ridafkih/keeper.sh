@@ -81,9 +81,6 @@ const harness = vi.hoisted(() => {
     helpers.renderStatementText(node).includes(calendarId);
 
   const resolveLimited = (fields: Record<string, unknown>, predicate: unknown): unknown[] => {
-    if ("failureCount" in fields) {
-      return [{ failureCount: 0, nextAttemptAt: null }];
-    }
     if ("encryptedPassword" in fields) {
       const row = state.caldavRows.find(
         (candidate) => containsCalendarId(predicate, candidate.calendarId),
@@ -91,7 +88,7 @@ const harness = vi.hoisted(() => {
       if (!row) {
         return [];
       }
-      return [row];
+      return [{ failureCount: 0, nextAttemptAt: null, ...row }];
     }
     return [];
   };

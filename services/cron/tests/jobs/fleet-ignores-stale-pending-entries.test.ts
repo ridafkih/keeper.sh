@@ -65,15 +65,20 @@ const OAUTH_SOURCES = [buildOAuthSource("wedged-drain"), buildOAuthSource("live-
  * The inner re-read carries no calendarId column, so an empty row there ends the work as
  * skipped once the source lock is taken — the lock keys are what this suite observes.
  */
-const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
-  if (keys.has("failureCount") && keys.has("nextAttemptAt")) {
-    return [{ failureCount: 0, nextAttemptAt: null }];
-  }
   if (keys.has("oauthCredentialId") && keys.has("calendarId")) {
     return OAUTH_SOURCES;
   }
   return [];
+};
+
+const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+  const rows = resolveSourceRows(projection);
+  if (!("failureCount" in projection)) {
+    return rows;
+  }
+  return rows.map((row) => ({ ...(row as Record<string, unknown>), failureCount: 0, nextAttemptAt: null }));
 };
 
 const createQuery = (resolve: () => unknown): unknown =>

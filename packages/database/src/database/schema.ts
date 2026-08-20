@@ -140,13 +140,6 @@ const calendarsTable = pgTable(
     name: text().notNull(),
     originalName: text(),
     syncToken: text(),
-    /*
-     * Cached count of event_states rows for this calendar, maintained by the
-     * ingest flush transaction so the pre-fetch weight estimate needs no
-     * count(*). Null means "not yet cached"; readers fall back to counting.
-     * May over-count (inserts use ON CONFLICT DO UPDATE), which is harmless:
-     * the weight estimate it feeds is clamped and deliberately conservative.
-     */
     storedEventCount: integer(),
     syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),

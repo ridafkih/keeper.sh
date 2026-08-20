@@ -201,11 +201,20 @@ const resetIngestBackoffIfCurrent = async (
   }
 };
 
-const runSourceIngest = async <TResult>(
+interface SourceIngestAttempt {
+  failureCount: number;
+  nextAttemptAt: Date | null;
+}
+
+const isIngestBackoffActive = (attempt: SourceIngestAttempt): boolean =>
+  attempt.nextAttemptAt !== null && attempt.nextAttemptAt > new Date();
+
+const runSourceIngest = async <TSource extends SourceIngestAttempt, TResult>(
   lane: IngestLane,
   calendarId: string,
   signal: AbortSignal,
-  work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
+  readSource: () => Promise<TSource | undefined>,
+  work: (source: TSource, isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
 ): Promise<TResult | null> => {
   const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
@@ -218,26 +227,19 @@ const runSourceIngest = async <TResult>(
     return null;
   }
   try {
-    const [attempt] = await measureDatabaseRead(lane.pooledQueryGate,() => database
-      .select({
-        failureCount: calendarsTable.ingestFailureCount,
-        nextAttemptAt: calendarsTable.ingestNextAttemptAt,
-      })
-      .from(calendarsTable)
-      .where(eq(calendarsTable.id, calendarId))
-      .limit(1));
-    if (!attempt || attempt.nextAttemptAt && attempt.nextAttemptAt > new Date()) {
+    const source = await readSource();
+    if (!source || isIngestBackoffActive(source)) {
       return null;
     }
     try {
-      const result = await work(lockResult.handle.isCurrent);
-      if (attempt.failureCount > 0) {
+      const result = await work(source, lockResult.handle.isCurrent);
+      if (source.failureCount > 0) {
         await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
       }
       return result;
     } catch (error) {
       if (shouldApplyBackoff(error)) {
-        logIngestBackoff(await applyIngestBackoff(lane, calendarId, attempt.failureCount));
+        logIngestBackoff(await applyIngestBackoff(lane, calendarId, source.failureCount));
       }
       throw error;
     }
@@ -382,10 +384,6 @@ const reserveIngestFlushWeight = async (
   calendarId: string,
   hasEverIngested: boolean,
   signal: AbortSignal,
-  /*
-   * Comes from the family's existing currentSource read of calendars, so the
-   * steady state (count cached by a prior flush) issues no count query at all.
-   */
   cachedStoredEventCount: number | null,
 ): Promise<IngestFlushReservation> => {
   const weight = await estimateIngestWeight(
@@ -463,11 +461,6 @@ const createIngestionPersistenceTransaction = (
     signal.throwIfAborted();
     await setRemainingStatementTimeout();
 
-    /*
-     * E in the cached stored-event count: only a flush that actually read the
-     * existing events knows it. Token-only / full-sync-required flushes leave it
-     * null, and the column stays untouched rather than receiving a bogus count.
-     */
     let existingEventCount: number | null = null;
     const result = await work({
       readExistingEvents: async () => {
@@ -1229,18 +1222,20 @@ const ingestOAuthSources = async (
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
                     expiresAt: oauthCredentialsTable.expiresAt,
                     externalCalendarId: calendarsTable.externalCalendarId,
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
                     ingestWindowEnd: calendarsTable.ingestWindowEnd,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
                     ingestWindowStart: calendarsTable.ingestWindowStart,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
                     oauthCredentialId: oauthCredentialsTable.id,
                     provider: calendarAccountsTable.provider,
                     refreshToken: oauthCredentialsTable.refreshToken,
@@ -1263,7 +1258,9 @@ const ingestOAuthSources = async (
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
                   .limit(1));
-                if (!currentSource?.externalCalendarId) {
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
+                if (!currentSource.externalCalendarId) {
                   return createSkippedIngestionResult(source.userId);
                 }
 
@@ -1475,15 +1472,17 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
                     provider: calendarAccountsTable.provider,
                     serverUrl: caldavCredentialsTable.serverUrl,
                     storedEventCount: calendarsTable.storedEventCount,
@@ -1505,9 +1504,8 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
                   .limit(1));
-                if (!currentSource) {
-                  return createSkippedIngestionResult(source.userId);
-                }
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
                 const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const rateLimiter = resolveRateLimiter(currentSource.provider, {
                   accountId: currentSource.accountId,
@@ -1671,12 +1669,14 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
                     storedEventCount: calendarsTable.storedEventCount,
                     treatFullDayTimedEventsAsAllDay:
                       calendarsTable.treatFullDayTimedEventsAsAllDay,
@@ -1690,7 +1690,9 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                     eq(calendarsTable.disabled, false),
                   ))
                   .limit(1));
-                if (!currentSource?.url) {
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
+                if (!currentSource.url) {
                   return createSkippedIngestionResult(source.userId);
                 }
                 const ranges = await getRequiredSourceRanges(lane, source.calendarId);
