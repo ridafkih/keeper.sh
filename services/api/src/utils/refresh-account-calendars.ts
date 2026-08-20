@@ -6,7 +6,10 @@ import {
 import { and, eq } from "drizzle-orm";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
-import { applySourceSyncDefaults } from "./source-sync-defaults";
+import {
+  createSourceCalendarInsertDependencies,
+  insertSourceCalendars,
+} from "./source-calendar-insert";
 
 const OAUTH_CALENDAR_TYPE = "oauth";
 const FIRST_RESULT_LIMIT = 1;
@@ -188,19 +191,19 @@ const refreshAccountCalendars = async (
   );
 
   if (toInsert.length > 0) {
-    await database
-      .insert(calendarsTable)
-      .values(
-        toInsert.map((calendar) => applySourceSyncDefaults({
-          accountId,
-          calendarType: OAUTH_CALENDAR_TYPE,
-          capabilities: ["pull", "push"],
-          externalCalendarId: calendar.externalId,
-          name: calendar.name,
-          originalName: calendar.name,
-          userId,
-        })),
-      );
+    await insertSourceCalendars(
+      createSourceCalendarInsertDependencies(database),
+      userId,
+      toInsert.map((calendar) => ({
+        accountId,
+        calendarType: OAUTH_CALENDAR_TYPE,
+        capabilities: ["pull", "push"],
+        externalCalendarId: calendar.externalId,
+        name: calendar.name,
+        originalName: calendar.name,
+        userId,
+      })),
+    );
   }
 
   for (const calendarId of toMarkMissing) {
