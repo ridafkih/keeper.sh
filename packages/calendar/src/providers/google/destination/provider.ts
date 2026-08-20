@@ -541,7 +541,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         throw new Error("Missing batch response for Google event lookup");
       }
 
-      // 404 and 410 are the only statuses that mean the event is gone; anything else is a failed read.
       if (
         response.statusCode === HTTP_STATUS.NOT_FOUND
         || response.statusCode === GONE_STATUS
