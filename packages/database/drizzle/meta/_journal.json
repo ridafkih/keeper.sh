@@ -624,6 +624,13 @@
       "when": 1786908806399,
       "tag": "0088_messy_blur",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1787258781071,
+      "tag": "0089_cache_calendar_stored_event_count",
+      "breakpoints": true
     }
   ]
 }

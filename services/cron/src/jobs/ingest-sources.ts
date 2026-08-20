@@ -382,6 +382,11 @@ const reserveIngestFlushWeight = async (
   calendarId: string,
   hasEverIngested: boolean,
   signal: AbortSignal,
+  /*
+   * Comes from the family's existing currentSource read of calendars, so the
+   * steady state (count cached by a prior flush) issues no count query at all.
+   */
+  cachedStoredEventCount: number | null,
 ): Promise<IngestFlushReservation> => {
   const weight = await estimateIngestWeight(
     {
@@ -395,6 +400,7 @@ const reserveIngestFlushWeight = async (
     },
     calendarId,
     hasEverIngested,
+    cachedStoredEventCount,
   );
   const reservation = await measureSegment(
     "wait.flush_reserve_ms",
@@ -457,6 +463,12 @@ const createIngestionPersistenceTransaction = (
     signal.throwIfAborted();
     await setRemainingStatementTimeout();
 
+    /*
+     * E in the cached stored-event count: only a flush that actually read the
+     * existing events knows it. Token-only / full-sync-required flushes leave it
+     * null, and the column stays untouched rather than receiving a bogus count.
+     */
+    let existingEventCount: number | null = null;
     const result = await work({
       readExistingEvents: async () => {
         await setRemainingStatementTimeout();
@@ -481,6 +493,7 @@ const createIngestionPersistenceTransaction = (
         .from(eventStatesTable)
           .where(eq(eventStatesTable.calendarId, calendarId)));
         signal.throwIfAborted();
+        existingEventCount = events.length;
         return events;
       },
       flush: async (changes) => {
@@ -503,6 +516,20 @@ const createIngestionPersistenceTransaction = (
             changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
             () => { ledger.writeCount += 1; },
           ));
+          signal.throwIfAborted();
+        }
+
+        if (existingEventCount !== null) {
+          const storedEventCount = Math.max(
+            0,
+            existingEventCount + changes.inserts.length - changes.deletes.length,
+          );
+          await setRemainingStatementTimeout();
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () => transaction
+            .update(calendarsTable)
+            .set({ storedEventCount })
+            .where(eq(calendarsTable.id, calendarId)));
           signal.throwIfAborted();
         }
 
@@ -1217,6 +1244,7 @@ const ingestOAuthSources = async (
                     oauthCredentialId: oauthCredentialsTable.id,
                     provider: calendarAccountsTable.provider,
                     refreshToken: oauthCredentialsTable.refreshToken,
+                    storedEventCount: calendarsTable.storedEventCount,
                     syncToken: calendarsTable.syncToken,
                     userId: calendarsTable.userId,
                   })
@@ -1296,6 +1324,7 @@ const ingestOAuthSources = async (
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
@@ -1457,6 +1486,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
                     provider: calendarAccountsTable.provider,
                     serverUrl: caldavCredentialsTable.serverUrl,
+                    storedEventCount: calendarsTable.storedEventCount,
                     userId: calendarsTable.userId,
                     username: caldavCredentialsTable.username,
                   })
@@ -1507,6 +1537,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
@@ -1646,6 +1677,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    storedEventCount: calendarsTable.storedEventCount,
                     treatFullDayTimedEventsAsAllDay:
                       calendarsTable.treatFullDayTimedEventsAsAllDay,
                     url: calendarsTable.url,
@@ -1681,6 +1713,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
