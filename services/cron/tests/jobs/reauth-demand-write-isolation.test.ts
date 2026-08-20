@@ -159,6 +159,9 @@ const createUpdateQuery = (pending?: Record<string, unknown>): unknown => {
 vi.mock("@/context", () => ({
   flushDrainRegistry: { register: (): null => null },
   database: {
+    insert: () => ({
+      values: () => ({ onConflictDoUpdate: (): Promise<unknown[]> => Promise.resolve([]) }),
+    }),
     select: (projection: Record<string, unknown>) =>
       createQuery(() => resolveSelect(projection)),
     transaction: (work: (transaction: unknown) => Promise<unknown>) => work({}),

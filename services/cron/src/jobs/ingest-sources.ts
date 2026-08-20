@@ -56,6 +56,7 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
   userSubscriptionsTable,
+  userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
@@ -849,6 +850,7 @@ const resolveRecordedDemandSource = (needsReauthentication: boolean): string | n
 interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
+  firstIngest: boolean;
   reauthentication: ReauthenticationDemandRecord | null;
   shouldPush: boolean;
   userId: string;
@@ -995,12 +997,14 @@ interface IngestionBatchResult {
   added: number;
   affectedUserIds: string[];
   errors: number;
+  firstIngestUserIds: string[];
   removed: number;
 }
 
 const createSkippedIngestionResult = (userId: string): IngestionSourceResult => ({
   eventsAdded: 0,
   eventsRemoved: 0,
+  firstIngest: false,
   reauthentication: null,
   shouldPush: false,
   userId,
@@ -1070,6 +1074,9 @@ const summariseIngestionSettlements = async (
       ...new Set(results.filter(({ shouldPush }) => shouldPush).map(({ userId }) => userId)),
     ],
     errors: settlements.length - results.length,
+    firstIngestUserIds: [
+      ...new Set(results.filter(({ firstIngest }) => firstIngest).map(({ userId }) => userId)),
+    ],
     removed: results.reduce((total, { eventsRemoved }) => total + eventsRemoved, 0),
   };
 };
@@ -1078,6 +1085,7 @@ const createEmptyIngestionBatchResult = (): IngestionBatchResult => ({
   added: 0,
   affectedUserIds: [],
   errors: 0,
+  firstIngestUserIds: [],
   removed: 0,
 });
 
@@ -1286,6 +1294,7 @@ const ingestOAuthSources = async (
                   return {
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
+                    firstIngest: currentSource.ingestWindowRecordedAt === null,
                     reauthentication: {
                       accountId: currentSource.accountId,
                       demand: "authenticated" as const,
@@ -1366,7 +1375,7 @@ oauthSources.map((source) => source.userId),
 
 const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
   if (!env.ENCRYPTION_KEY) {
-    return { added: 0, affectedUserIds: [], removed: 0, errors: 0 };
+    return createEmptyIngestionBatchResult();
   }
 
   const encryptionKey = env.ENCRYPTION_KEY;
@@ -1503,6 +1512,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                   return {
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
+                    firstIngest: currentSource.ingestWindowRecordedAt === null,
                     reauthentication: {
                       accountId: source.accountId,
                       demand: "authenticated" as const,
@@ -1678,6 +1688,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                   return {
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
+                    firstIngest: currentSource.ingestWindowRecordedAt === null,
                     reauthentication: null,
                     shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                       || ingestionResult.eventsAdded > 0
@@ -1725,6 +1736,34 @@ icsSources.map((source) => source.userId),
   );
 };
 
+/*
+ * The enqueue filters a free user's destinations out unless a request is pending, so a
+ * calendar's first ingest would otherwise wait out the 30 minute free cadence. Recording
+ * the request rather than bypassing the filter also survives a failed enqueue: the row
+ * stays and the next pass honours it.
+ */
+const recordFirstIngestSyncRequests = async (userIds: Set<string>): Promise<void> => {
+  const settlements = await Promise.allSettled([...userIds].map((userId) => {
+    const request = { requestId: crypto.randomUUID(), requestedAt: new Date() };
+    return database
+      .insert(userSyncRequestsTable)
+      .values({ ...request, userId })
+      .onConflictDoUpdate({ target: userSyncRequestsTable.userId, set: request });
+  }));
+  /*
+   * Recording is a head start, so it must not cost the pass its enqueue: a throw here would
+   * strand every established user in the batch to hurry one new calendar.
+   */
+  for (const settlement of settlements) {
+    if (settlement.status === "rejected") {
+      widelog.errorFields(settlement.reason, {
+        retriable: true,
+        slug: "first-ingest-sync-request-failed",
+      });
+    }
+  }
+};
+
 export default withCronWideEvent({
   async callback() {
     const settlements = await Promise.allSettled([
@@ -1735,6 +1774,7 @@ export default withCronWideEvent({
     const failures: unknown[] = [];
     let failedSourceCount = 0;
     const affectedUserIds = new Set<string>();
+    const firstIngestUserIds = new Set<string>();
 
     for (const settlement of settlements) {
       if (settlement.status === "rejected") {
@@ -1745,8 +1785,12 @@ export default withCronWideEvent({
       for (const userId of settlement.value.affectedUserIds) {
         affectedUserIds.add(userId);
       }
+      for (const userId of settlement.value.firstIngestUserIds) {
+        firstIngestUserIds.add(userId);
+      }
     }
 
+    await recordFirstIngestSyncRequests(firstIngestUserIds);
     await enqueueDestinationSyncsForUsers(affectedUserIds);
 
     if (failedSourceCount > 0) {

@@ -151,13 +151,19 @@ const harness = vi.hoisted(() => {
       }
     };
 
+  const insertBuilder = {
+    values: () => ({ onConflictDoUpdate: (): Promise<unknown[]> => Promise.resolve([]) }),
+  };
+
   const pooledDatabase = {
+    insert: () => insertBuilder,
     select: (fields: Record<string, unknown>) => createQueryBuilder(fields),
     transaction: createTransactionRunner("pooled"),
     update: () => updateBuilder,
   };
 
   const flushDatabase = {
+    insert: () => insertBuilder,
     select: (fields: Record<string, unknown>) => createQueryBuilder(fields),
     transaction: createTransactionRunner("flush"),
     update: () => updateBuilder,
