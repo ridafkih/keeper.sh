@@ -28,6 +28,7 @@ interface PendingSignalConsumerOptions {
 }
 
 interface PendingSignalConsumer {
+  readCount: () => number;
   start: () => void;
   stop: () => Promise<void>;
 }
@@ -38,6 +39,7 @@ const createPendingSignalConsumer = (
   const gate = createConcurrencyGate(options.concurrencyLimit);
   const inFlight = new Set<Promise<void>>();
   let running = false;
+  let readCount = 0;
   let loop: Promise<void> = Promise.resolve();
 
   /*
@@ -48,6 +50,7 @@ const createPendingSignalConsumer = (
     onPermit();
     try {
       const calendarIds = await options.takeSignal();
+      readCount += 1;
       if (calendarIds === null || calendarIds.length === 0) {
         return;
       }
@@ -76,6 +79,7 @@ const createPendingSignalConsumer = (
   };
 
   return {
+    readCount: (): number => readCount,
     start: (): void => {
       if (running) {
         return;

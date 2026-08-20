@@ -1,6 +1,7 @@
 import type { CronOptions } from "cronbake";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
+import { describeSignalReader } from "@/utils/signal-reader-state";
 import {
   runDrainPendingIngest,
   type DrainPendingIngestDependencies,
@@ -113,6 +114,9 @@ const observedDrain = withCronWideEvent({
       widelog.set("push_drain.tick_gap_ms", tickStartedAt - lastTickStartedAt);
     }
     lastTickStartedAt = tickStartedAt;
+    const signalReader = describeSignalReader();
+    widelog.set("push_drain.signal_reader_running", signalReader.running);
+    widelog.set("push_drain.signal_reads", signalReader.reads);
     const dependencies = await createDefaultDependencies();
 
     const { refreshLockStore } = await import("@/context");

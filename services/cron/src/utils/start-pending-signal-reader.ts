@@ -3,6 +3,7 @@ import { createPendingSignalReader } from "@/utils/pending-signal-consumer";
 import { createScopedClaimPending } from "@/utils/scoped-drain-pending-ingest";
 import { runDrainPendingIngest } from "@/utils/drain-pending-ingest";
 import { context, widelog } from "@/utils/logging";
+import { recordStartedSignalReader } from "@/utils/signal-reader-state";
 import type { BlockingSignalRedis, PendingSignalConsumer } from "@/utils/pending-signal-consumer";
 import type { ScopedClaimRedis } from "@/utils/scoped-drain-pending-ingest";
 
@@ -57,17 +58,7 @@ const startPendingSignalReader = (
     },
   });
   reader.start();
-  /*
-   * Without this, a reader that never started and a reader that started and wedged look
-   * identical from the outside: both are simply an absence of drains.
-   */
-  context(async () => {
-    widelog.set("operation.name", "push-signal-reader-started");
-    widelog.set("operation.type", "job");
-    widelog.set("push_signal.concurrency", SIGNAL_DRAIN_CONCURRENCY);
-    widelog.set("outcome", "success");
-    await Promise.resolve();
-  }).catch(() => null);
+  recordStartedSignalReader(reader);
   return reader;
 };
 
