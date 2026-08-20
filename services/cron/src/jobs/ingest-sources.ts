@@ -86,6 +86,7 @@ import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syn
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 import { estimateIngestWeight } from "@/utils/ingest-weight";
+import { measureDatabaseRead, measureDatabaseWrite } from "@/utils/measured-database";
 import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
 import type { IngestFlushReservation, IngestLane } from "@/utils/ingest-lanes";
 
@@ -144,57 +145,8 @@ const leaseLockRedis: RedisLeaseClient = {
     refreshLockRedis.call("set", key, value, ...options) as Promise<string | null>,
 };
 
-/*
- * The lane gate, not the driver pool: a lane owns a fixed slice of the pool's connections,
- * so its occupancy is what a source actually competed for, and a query admitted with no
- * free permit is the one that paid for the contention.
- */
-const countQueuedQuery = (hasFreePermit: boolean): number => {
-  if (hasFreePermit) {
-    return 0;
-  }
-  return 1;
-};
-
-const runPooledQuery = async <TResult>(
-  lane: IngestLane,
-  statement: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("database.queries.count", 1);
-  widelog.count(
-    "database.queries.queued_count",
-    countQueuedQuery(lane.pooledQueryGate.hasFreePermit()),
-  );
-  return await lane.pooledQueryGate.run(async () => {
-    widelog.max("database.pool.in_flight", lane.pooledQueryGate.inFlight());
-    return await statement();
-  });
-};
-
-const measureDatabaseRead = async <TResult>(
-  lane: IngestLane,
-  read: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("db.read_count", 1);
-  return await measureSegment(
-    "work.db_read_ms",
-    async () => await runPooledQuery(lane, read),
-  );
-};
-
-const measureDatabaseWrite = async <TResult>(
-  lane: IngestLane,
-  write: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("db.write_count", 1);
-  return await measureSegment(
-    "work.db_write_ms",
-    async () => await runPooledQuery(lane, write),
-  );
-};
-
 const resetIngestBackoff = async (lane: IngestLane, calendarId: string): Promise<void> => {
-  await measureDatabaseWrite(lane, () => database
+  await measureDatabaseWrite(lane.pooledQueryGate,() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: 0,
@@ -210,7 +162,7 @@ const applyIngestBackoff = async (
   currentFailureCount: number,
 ): Promise<CalendarBackoffState> => {
   const state = buildCalendarBackoffState(currentFailureCount);
-  await measureDatabaseWrite(lane, () => database
+  await measureDatabaseWrite(lane.pooledQueryGate,() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: state.failureCount,
@@ -266,7 +218,7 @@ const runSourceIngest = async <TResult>(
     return null;
   }
   try {
-    const [attempt] = await measureDatabaseRead(lane, () => database
+    const [attempt] = await measureDatabaseRead(lane.pooledQueryGate,() => database
       .select({
         failureCount: calendarsTable.ingestFailureCount,
         nextAttemptAt: calendarsTable.ingestNextAttemptAt,
@@ -434,7 +386,7 @@ const reserveIngestFlushWeight = async (
   const weight = await estimateIngestWeight(
     {
       countStoredEvents: async (targetCalendarId: string): Promise<number> => {
-        const rows = await measureDatabaseRead(lane, () => database
+        const rows = await measureDatabaseRead(lane.pooledQueryGate,() => database
           .select({ count: count() })
           .from(eventStatesTable)
           .where(eq(eventStatesTable.calendarId, targetCalendarId)));
@@ -755,7 +707,7 @@ const getRequiredSourceRanges = async (
   lane: IngestLane,
   sourceCalendarId: string,
 ): Promise<RequiredSourceRanges> => {
-  const mappings = await measureDatabaseRead(lane, () => database
+  const mappings = await measureDatabaseRead(lane.pooledQueryGate,() => database
     .select({
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
@@ -964,7 +916,7 @@ const applyReauthenticationDemands = async (
           widelog.set("outcome", "skipped");
           return;
         }
-        const written = await measureDatabaseWrite(lane, () => database
+        const written = await measureDatabaseWrite(lane.pooledQueryGate,() => database
           .update(calendarAccountsTable)
           .set({
             needsReauthentication,
@@ -1251,7 +1203,7 @@ const ingestOAuthSources = async (
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
@@ -1495,7 +1447,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
@@ -1689,7 +1641,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
           try {
             const result = await widelog.time.measure("duration_ms", () =>
               runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
