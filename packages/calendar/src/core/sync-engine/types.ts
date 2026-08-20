@@ -19,11 +19,6 @@ interface CalendarSyncProvider {
   updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
-  /*
-   * An id missing from the result means the destination no longer has that event; a
-   * transport failure rejects. Callers may only treat the returned set as authoritative
-   * over the ids they asked for.
-   */
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
