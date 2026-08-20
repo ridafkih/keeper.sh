@@ -240,6 +240,18 @@
         "vitest": "^4.1.4",
       },
     },
+    "packages/sync-kit/conformance": {
+      "name": "@keeper.sh/sync-conformance",
+      "dependencies": {
+        "@keeper.sh/sync-protocol": "workspace:*",
+      },
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+        "vitest": "^4.1.4",
+      },
+    },
     "packages/sync-kit/ical": {
       "name": "@keeper.sh/sync-ical",
       "dependencies": {
@@ -631,6 +643,8 @@
     "@keeper.sh/queue": ["@keeper.sh/queue@workspace:packages/queue"],
 
     "@keeper.sh/sync": ["@keeper.sh/sync@workspace:packages/sync"],
+
+    "@keeper.sh/sync-conformance": ["@keeper.sh/sync-conformance@workspace:packages/sync-kit/conformance"],
 
     "@keeper.sh/sync-ical": ["@keeper.sh/sync-ical@workspace:packages/sync-kit/ical"],
 
