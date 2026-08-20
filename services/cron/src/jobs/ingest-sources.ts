@@ -100,13 +100,17 @@ const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
 const USER_CALENDAR_CONCURRENCY = UNBOUNDED_USER_GROUPS;
-const ICS_CALENDAR_CONCURRENCY = 2;
+const ICS_CALENDAR_CONCURRENCY = 8;
 
 /*
- * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
- * the Bun event loop when run wide open — observed 2026-08-17.
+ * ICS keeps a dedicated group budget: parsing is CPU-bound and starves the Bun event loop
+ * when run wide open — observed 2026-08-17, when a parse took 30,133ms.
+ *
+ * What bounds the loop is parse-seconds in flight, not calendars in flight, and that parse
+ * is now 457ms. The 2026-08-17 budget of 4x2 held 241 parse-seconds; 16x8 holds 59, so the
+ * wider budget still sits four times under the occupancy that caused the incident.
  */
-const ICS_PARSE_CONCURRENCY = 4;
+const ICS_PARSE_CONCURRENCY = 16;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
 /*
