@@ -81,6 +81,7 @@ import {
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
+import type { SyncLockAcquisition } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
@@ -126,12 +127,19 @@ const instrumentedLockRedis = {
 };
 
 /*
- * An overlapping pass is a routine identical run, not a mapping mutation, so it must
+ * An overlapping fleet pass is a routine identical run, not a mapping mutation, so it must
  * acquire as "background" to keep IS_CURRENT true for the in-flight holder. Under the
  * default "preempting" class every overlap discarded the holder's finished work, and a
  * source slower than its deadline never recorded its first ingest.
+ *
+ * A webhook ingest is the exception: a user is waiting on it, and queueing politely behind a
+ * 45s fleet ingest of the same calendar was 88% of its webhook-to-destination latency. It
+ * trades the holder's paid-for provider reads for that latency, so only it preempts.
  */
-const sourceIngestLock = createSyncLock(instrumentedLockRedis, "background");
+const sourceIngestLocks: Record<SyncLockAcquisition, ReturnType<typeof createSyncLock>> = {
+  background: createSyncLock(instrumentedLockRedis, "background"),
+  preempting: createSyncLock(instrumentedLockRedis, "preempting"),
+};
 
 /*
  * The ioredis set overloads type expiry/condition tokens positionally, so the
@@ -248,17 +256,40 @@ const resetIngestBackoffIfCurrent = async (
   }
 };
 
+/*
+ * The engine returns the same empty result whether a preempting waiter took the lock away or
+ * the source genuinely had nothing new, so only the lock handle tells the two apart. A probe
+ * that fails reads as current: the work has already committed, and a Redis blip must not
+ * discard a pass that really happened.
+ */
+const wasSuperseded = async (isCurrent: () => Promise<boolean>): Promise<boolean> => {
+  try {
+    const current = await isCurrent();
+    return !current;
+  } catch (error) {
+    widelog.errorFields(error, {
+      slug: "ingest-currency-probe-failed",
+      retriable: true,
+    });
+    return false;
+  }
+};
+
 const runSourceIngest = async <TResult>(
   lane: IngestLane,
+  acquisition: SyncLockAcquisition,
   calendarId: string,
   signal: AbortSignal,
   work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
 ): Promise<TResult | null> => {
-  const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
-    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
-    signal,
-  ));
+  const lockResult = await measureSegment("wait.source_lock_ms", () =>
+    sourceIngestLocks[acquisition].acquire(
+      `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
+      signal,
+    ));
+  /* Pairs with ingest.superseded to price preemption: reads discarded per push saved. */
+  widelog.set("ingest.lock_acquisition", acquisition);
   widelog.set("ingest.lock_acquired", lockResult.acquired);
   if (!lockResult.acquired) {
     signal.throwIfAborted();
@@ -278,6 +309,15 @@ const runSourceIngest = async <TResult>(
     }
     try {
       const result = await work(lockResult.handle.isCurrent);
+      /*
+       * A superseded pass flushed nothing, so it is neither a pass over the calendar nor a
+       * provider failure: it takes the skipped path, leaving the coverage bookkeeping and the
+       * backoff counter for the waiter that took the lock.
+       */
+      if (await wasSuperseded(lockResult.handle.isCurrent)) {
+        widelog.set("ingest.superseded", true);
+        return null;
+      }
       if (attempt.failureCount > 0) {
         await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
       }
@@ -1118,6 +1158,15 @@ const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
   return fleetIngestLane;
 };
 
+const resolveIngestAcquisition = (
+  calendarIds: string[] | undefined,
+): SyncLockAcquisition => {
+  if (calendarIds) {
+    return "preempting";
+  }
+  return "background";
+};
+
 const ingestOAuthSources = async (
   calendarIds?: string[],
   correlationIdByCalendarId: Record<string, string> = {},
@@ -1126,6 +1175,7 @@ const ingestOAuthSources = async (
     return createEmptyIngestionBatchResult();
   }
   const lane = resolveIngestLane(calendarIds);
+  const acquisition = resolveIngestAcquisition(calendarIds);
 
   const oauthSources = await database
     .select({
@@ -1187,7 +1237,7 @@ const ingestOAuthSources = async (
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, acquisition, source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1431,7 +1481,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, "background", source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1625,7 +1675,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
+              runSourceIngest(lane, "background", source.calendarId, signal, async (isCurrent) => {
                 const [currentSource] = await measureDatabaseRead(lane, () => database
                   .select({
                     ingestFutureRange: calendarsTable.ingestFutureRange,
