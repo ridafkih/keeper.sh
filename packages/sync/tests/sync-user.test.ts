@@ -53,13 +53,6 @@ describe("resolveStoredSourceCoverage", () => {
 });
 
 describe("readDestinationReconciliationState", () => {
-  /*
-   * Reversed deliberately. The remote read used to run first so a failing provider cost no
-   * local transaction, but which events the plan touches is only known after comparing
-   * local state to our own mappings, and narrowing the remote read from a whole calendar
-   * to a handful of events is worth far more than the local read a rare remote failure
-   * now wastes.
-   */
   it("takes the local snapshot first, so the remote read can be narrowed to it", async () => {
     const order: string[] = [];
 
