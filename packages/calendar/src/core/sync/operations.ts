@@ -13,11 +13,6 @@ import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
 
 interface ReconciliationScope {
-  /*
-   * Set when the remote list was targeted at specific mappings rather than paged over
-   * a window. Such a read proves nothing about any mapping outside the set, so absence
-   * from it must never read as remoteMissing — that would delete the whole mirror.
-   */
   authoritativeMappingIds?: ReadonlySet<string>;
   authoritativeWindow: SyncWindow | null;
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
