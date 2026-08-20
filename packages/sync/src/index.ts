@@ -4,7 +4,7 @@ export {
   createMappingMutationLockId,
   SyncLockRenewalError,
 } from "./sync-lock";
-export type { SyncLockAcquisition, SyncLockHandle } from "./sync-lock";
+export type { SyncLockHandle } from "./sync-lock";
 export type {
   CalendarSyncCompletion,
   CalendarSyncFailure,
