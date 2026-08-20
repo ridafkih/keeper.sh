@@ -878,12 +878,6 @@ const syncDestinationsForUser = async (
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
         let sourceCalendarsChangedDuringRemoteRead = false;
         let authoritativeMappingIds: ReadonlySet<string> | null = null;
-        /*
-         * Local first, then remote: which events the plan touches falls out of comparing
-         * local state to our own mappings, so the remote read cannot be narrowed until
-         * that comparison exists. The source set is re-checked afterwards because the
-         * remote read still happens outside the locks.
-         */
         const reconciliationState = await readDestinationReconciliationState(
           async (localState) => {
             const startedAt = performance.now();
