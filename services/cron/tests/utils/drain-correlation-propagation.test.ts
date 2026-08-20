@@ -65,9 +65,9 @@ describe("drain propagation of the webhook correlation id", () => {
 
     await runDrainPendingIngest(dependencies);
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(
-      ["cal-1", "cal-2"],
-      { "cal-1": "correlation-a", "cal-2": "correlation-b" },
-    );
+    expect(dependencies.ingestCalendars.mock.calls).toEqual([
+      [["cal-1"], { "cal-1": "correlation-a" }],
+      [["cal-2"], { "cal-2": "correlation-b" }],
+    ]);
   });
 });

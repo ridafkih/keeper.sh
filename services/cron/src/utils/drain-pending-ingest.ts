@@ -218,36 +218,57 @@ const runDrainPendingIngest = async (
     return 0;
   }
 
-  const eligibleIds = eligible.map((member) => member.calendarId);
+  /*
+   * One calendar per ingest call so a member's destination write leaves as soon as ITS
+   * ingest lands: a 29s sibling used to hold a 200ms calendar's sync for the whole batch.
+   * The fan-out costs no extra concurrency because the push ingest lane's pool permits and
+   * serial flush writer are process-wide, not per call.
+   */
+  const outcomes = await Promise.all(eligible.map(async (member) => {
+    try {
+      const { affectedUserIds } = await dependencies.ingestCalendars(
+        [member.calendarId],
+        collectCorrelationIds([member]),
+      );
+      const released = await dependencies.releasePending([member]);
+      /*
+       * Attribution scans the whole eligible set, not just this member: a user with an
+       * untagged and a tagged calendar in the same batch would otherwise enqueue untagged
+       * first, and BullMQ's dedupe on the deterministic job id drops the tagged retry.
+       */
+      await dependencies.enqueueDestinationSyncs(
+        affectedUserIds,
+        attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, affectedUserIds),
+      );
+      return { affectedUserIds, failedId: "", releasedCount: released.length };
+    } catch (error) {
+      dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);
+      return { affectedUserIds: [], failedId: member.calendarId, releasedCount: 0 };
+    }
+  }));
 
-  let affectedUserIds: string[] = [];
-  try {
-    ({ affectedUserIds } = await dependencies.ingestCalendars(
-      eligibleIds,
-      collectCorrelationIds(eligible),
-    ));
-  } catch (error) {
-    dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);
-    const abandonedBatchCount = await abandonExhaustedMembers(eligibleIds, dependencies);
-    dependencies.observe({
-      "push_drain.abandoned": abandonedBlockedCount + abandonedBatchCount,
-    });
-    return 0;
+  const affectedUserIds = new Set<string>();
+  const failedIds: string[] = [];
+  let releasedCount = 0;
+  for (const outcome of outcomes) {
+    for (const userId of outcome.affectedUserIds) {
+      affectedUserIds.add(userId);
+    }
+    if (outcome.failedId.length > 0) {
+      failedIds.push(outcome.failedId);
+    }
+    releasedCount += outcome.releasedCount;
   }
 
-  const released = await dependencies.releasePending(eligible);
+  const abandonedBatchCount = await abandonExhaustedMembers(failedIds, dependencies);
+  const ingestedCount = eligible.length - failedIds.length;
   dependencies.observe({
-    "push_drain.abandoned": abandonedBlockedCount,
-    "push_drain.affected_user_count": affectedUserIds.length,
-    "push_drain.retained_count": eligible.length - released.length,
+    "push_drain.abandoned": abandonedBlockedCount + abandonedBatchCount,
+    "push_drain.affected_user_count": affectedUserIds.size,
+    "push_drain.retained_count": ingestedCount - releasedCount,
   });
 
-  await dependencies.enqueueDestinationSyncs(
-    affectedUserIds,
-    attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, affectedUserIds),
-  );
-
-  return eligible.length;
+  return ingestedCount;
 };
 
 export {

@@ -136,7 +136,8 @@ describe("runDrainPendingIngest happy path", () => {
     await runDrainPendingIngest(dependencies);
 
     expect(dependencies.claimPending).toHaveBeenCalledWith(MAX_DRAIN_BATCH);
-    expect(dependencies.ingestCalendars.mock.calls[0]?.[0]).toHaveLength(MAX_DRAIN_BATCH);
+    expect(dependencies.ingestCalendars.mock.calls.flatMap(([calendarIds]) => calendarIds))
+      .toHaveLength(MAX_DRAIN_BATCH);
   });
 
   it("does nothing when there is nothing pending", async () => {

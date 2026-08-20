@@ -62,10 +62,10 @@ describe("scoped drain claims only the named calendars", () => {
 
     await runDrainPendingIngest(dependencies);
 
-    expect(dependencies.ingestCalendars).toHaveBeenCalledWith(
-      ["cal-a", "cal-c"],
-      { "cal-a": "corr-a", "cal-c": "corr-c" },
-    );
+    expect(dependencies.ingestCalendars.mock.calls).toEqual([
+      [["cal-a"], { "cal-a": "corr-a" }],
+      [["cal-c"], { "cal-c": "corr-c" }],
+    ]);
     expect(releasedCalendarIds(dependencies.releasePending)).not.toContain("cal-b");
   });
 
