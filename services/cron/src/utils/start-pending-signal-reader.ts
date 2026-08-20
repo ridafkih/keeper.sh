@@ -3,8 +3,9 @@ import { createPendingSignalReader } from "@/utils/pending-signal-consumer";
 import { createScopedClaimPending } from "@/utils/scoped-drain-pending-ingest";
 import { runDrainPendingIngest } from "@/utils/drain-pending-ingest";
 import { context, widelog } from "@/utils/logging";
-import { recordStartedSignalReader } from "@/utils/signal-reader-state";
+import { recordSignalReaderHeartbeat } from "@/utils/signal-reader-heartbeat";
 import type { BlockingSignalRedis, PendingSignalConsumer } from "@/utils/pending-signal-consumer";
+import type { HeartbeatWriter } from "@/utils/signal-reader-heartbeat";
 import type { ScopedClaimRedis } from "@/utils/scoped-drain-pending-ingest";
 
 const SIGNAL_DRAIN_CONCURRENCY = 4;
@@ -13,6 +14,7 @@ const SIGNAL_DRAIN_FAILED_SLUG = "push-signal-drain-failed";
 interface PendingSignalReaderContext {
   blockingRedis: BlockingSignalRedis;
   enabled: boolean;
+  heartbeatRedis: HeartbeatWriter;
   scoreRedis: ScopedClaimRedis;
 }
 
@@ -56,9 +58,11 @@ const startPendingSignalReader = (
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: true, slug });
     },
+    reportRead: (reads) => recordSignalReaderHeartbeat(readerContext.heartbeatRedis, reads),
   });
   reader.start();
-  recordStartedSignalReader(reader);
+  /* Beat once at startup so a reader that has not yet completed a read still reads as alive. */
+  recordSignalReaderHeartbeat(readerContext.heartbeatRedis, 0).catch(() => null);
   return reader;
 };
 

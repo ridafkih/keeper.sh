@@ -17,12 +17,14 @@ interface PendingSignalReaderOptions {
   concurrencyLimit: number;
   drainCalendars: (calendarIds: string[]) => Promise<void>;
   recordError: (error: unknown, slug: string) => void;
+  reportRead?: (reads: number) => Promise<void>;
 }
 
 interface PendingSignalConsumerOptions {
   concurrencyLimit: number;
   drainCalendars: (calendarIds: string[]) => Promise<void>;
   recordError: (error: unknown, slug: string) => void;
+  reportRead?: (reads: number) => Promise<void>;
   stopReading: () => Promise<void>;
   takeSignal: () => Promise<string[] | null>;
 }
@@ -51,6 +53,7 @@ const createPendingSignalConsumer = (
     try {
       const calendarIds = await options.takeSignal();
       readCount += 1;
+      await options.reportRead?.(readCount);
       if (calendarIds === null || calendarIds.length === 0) {
         return;
       }
@@ -102,6 +105,7 @@ const createPendingSignalReader = (
   concurrencyLimit: options.concurrencyLimit,
   drainCalendars: options.drainCalendars,
   recordError: options.recordError,
+  reportRead: options.reportRead,
   stopReading: (): Promise<void> => {
     options.blockingRedis.disconnect();
     return Promise.resolve();

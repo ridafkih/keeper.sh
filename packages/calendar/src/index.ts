@@ -100,6 +100,7 @@ export {
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
   PENDING_SIGNAL_KEY,
+  SIGNAL_READER_HEARTBEAT_KEY,
   UNKNOWN_CHANNEL_PREFIX,
 } from "./core/source/push-keys";
 export {
