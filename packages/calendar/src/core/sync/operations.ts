@@ -604,10 +604,6 @@ const buildRemoveOperations = (
       continue;
     }
 
-    /*
-     * An id-scoped read never enumerated the window, so an unmatched keeper event says
-     * only that this read did not ask for its mapping, not that it is orphaned.
-     */
     if (scope.authoritativeMappingIds) {
       continue;
     }
