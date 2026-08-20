@@ -102,6 +102,12 @@ export {
   PENDING_SIGNAL_KEY,
   UNKNOWN_CHANNEL_PREFIX,
 } from "./core/source/push-keys";
+export {
+  PENDING_SIGNAL_MAX_LENGTH,
+  PENDING_SIGNAL_TTL_SECONDS,
+  signalPendingCalendars,
+  type PendingSignalRedis,
+} from "./core/source/pending-signal";
 export { resolvePushRegistrar } from "./core/source/push-registry";
 export {
   generatePushSecret,

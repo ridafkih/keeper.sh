@@ -57,6 +57,17 @@ const startPendingSignalReader = (
     },
   });
   reader.start();
+  /*
+   * Without this, a reader that never started and a reader that started and wedged look
+   * identical from the outside: both are simply an absence of drains.
+   */
+  context(async () => {
+    widelog.set("operation.name", "push-signal-reader-started");
+    widelog.set("operation.type", "job");
+    widelog.set("push_signal.concurrency", SIGNAL_DRAIN_CONCURRENCY);
+    widelog.set("outcome", "success");
+    await Promise.resolve();
+  }).catch(() => null);
   return reader;
 };
 

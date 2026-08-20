@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type {
   DeleteResult,
@@ -252,31 +252,35 @@ describe("syncCalendar instrumentation transparency", () => {
     expect(Math.abs(reconcile - durationMs)).toBeLessThanOrEqual(2);
   });
 
+  /*
+   * A fake clock, because the invariant is attribution and not speed: the engine reads
+   * performance.now(), so driving that directly makes the measured phases exact instead
+   * of a race between two sleeps and whatever else the machine is doing.
+   */
   it("does not let concurrent runs sharing one provider borrow each other's phase time", async () => {
-    const provider = makeProvider({
-      pushEvents: async (events) => {
-        await delay((events[0]?.id.length ?? 1) * 10);
-        return events.map((event) => ({ remoteId: `remote-${event.id}`, success: true }));
-      },
-    });
+    vi.useFakeTimers();
+    try {
+      const provider = makeProvider({
+        pushEvents: async (events) => {
+          await vi.advanceTimersByTimeAsync((events[0]?.id.length ?? 1) * 10);
+          return events.map((event) => ({ remoteId: `remote-${event.id}`, success: true }));
+        },
+      });
 
-    const [fast, slow] = await Promise.all([
-      runSync({ localEvents: [makeEvent("a")], provider }),
-      runSync({ localEvents: [makeEvent("abcd")], provider }),
-    ]);
+      const [fast, slow] = await Promise.all([
+        runSync({ localEvents: [makeEvent("a")], provider }),
+        runSync({ localEvents: [makeEvent("abcd")], provider }),
+      ]);
 
-    const fastPush = fast["sync.phase.provider_push.duration_ms"] as number;
-    const slowPush = slow["sync.phase.provider_push.duration_ms"] as number;
-    /*
-     * The gap, not the ratio: a loaded runner adds its scheduling overhead to both phases,
-     * which leaves the difference between them intact while pulling the ratio toward one.
-     * Borrowing would make the two durations converge, so a gap near the delays' own
-     * distance is what rules it out.
-     */
-    expect(slowPush).toBeGreaterThanOrEqual(35);
-    expect(slowPush - fastPush).toBeGreaterThanOrEqual(15);
-    expectPhaseArithmetic(fast);
-    expectPhaseArithmetic(slow);
+      const fastPush = fast["sync.phase.provider_push.duration_ms"] as number;
+      const slowPush = slow["sync.phase.provider_push.duration_ms"] as number;
+      expect(slowPush).toBeGreaterThanOrEqual(35);
+      expect(slowPush - fastPush).toBeGreaterThanOrEqual(15);
+      expectPhaseArithmetic(fast);
+      expectPhaseArithmetic(slow);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("attributes a nested sync run inside the flush without corrupting either event", async () => {

@@ -4,7 +4,7 @@ import {
   buildUnknownChannelKey,
   PENDING_CORRELATION_KEY,
   PENDING_INGEST_KEY,
-  PENDING_SIGNAL_KEY,
+  signalPendingCalendars,
   resolveAffectedCalendarIds,
   resolvePushRegistrar,
   toPushChannelState,
@@ -144,9 +144,7 @@ const createPushWebhookDependencies = async (
           )),
       });
     },
-    signalPendingIngest: async (calendarIds) => {
-      await redis.rpush(PENDING_SIGNAL_KEY, ...calendarIds);
-    },
+    signalPendingIngest: (calendarIds) => signalPendingCalendars(redis, calendarIds),
     verifySecret: verifyPushSecret,
     webhookPublicUrl: resolveConfiguredPublicUrl(webhookConfig, env.WEBHOOK_PUBLIC_URL),
   };
