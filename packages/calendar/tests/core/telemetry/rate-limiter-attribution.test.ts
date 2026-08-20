@@ -73,6 +73,44 @@ const createThrottlingRedis = (throttles: number, evalDelayMs = 0) => {
   };
 };
 
+/*
+ * One Redis behind every waiter on the key, because depth is now the shared queue's
+ * cardinality: separate fakes would each see a queue of one and prove nothing.
+ */
+const createHerdRedis = (waiterCount: number) => {
+  const queue: string[] = [];
+  let herdAssembled = false;
+  return {
+    eval: async (
+      _script: string,
+      _keyCount: number,
+      _key: string,
+      _windowStart: string,
+      _now: string,
+      _count: string,
+      _limit: string,
+      token?: string,
+    ): Promise<unknown> => {
+      await Bun.sleep(0);
+      if (!token) {
+        return [THROTTLE_WAIT_MS, OCCUPANCY_WHEN_FULL];
+      }
+      if (!queue.includes(token)) {
+        queue.push(token);
+      }
+      if (queue.length >= waiterCount) {
+        herdAssembled = true;
+      }
+      /* Latched, so draining the queue does not re-block the waiters still in it. */
+      if (herdAssembled && queue[0] === token) {
+        queue.shift();
+        return [0, 1, queue.length];
+      }
+      return [THROTTLE_WAIT_MS, OCCUPANCY_WHEN_FULL, queue.length];
+    },
+  };
+};
+
 const runInEvent = async (source: string, run: () => Promise<void>): Promise<void> => {
   await context(async () => {
     widelog.set("source", source);
@@ -101,7 +139,8 @@ describe("rate limiter wait attribution", () => {
     expect(event.wait?.rate_limiter_ms).toBeGreaterThanOrEqual(chargedAtLeast(THROTTLE_WAIT_MS));
     expect(event.ratelimit?.acquire_count).toBe(1);
     expect(event.ratelimit?.throttled_count).toBe(1);
-    expect(event.ratelimit?.queue_depth_max).toBe(1);
+    /* Refused once, then admitted straight off the empty queue — it never became a waiter. */
+    expect(event.ratelimit?.queue_depth_max).toBeUndefined();
     expect(event.ratelimit?.window_occupancy_max).toBe(OCCUPANCY_WHEN_FULL);
   });
 
@@ -152,8 +191,9 @@ describe("rate limiter wait attribution", () => {
 
   it("reports the shared-key herd depth on every waiter of the same user", async () => {
     const key = "ratelimit:user-5:google";
+    const herdRedis = createHerdRedis(3);
     const limiters = [1, 2, 3].map(() =>
-      createRedisRateLimiter(createThrottlingRedis(1), key, { requestsPerMinute: 30 }));
+      createRedisRateLimiter(herdRedis, key, { requestsPerMinute: 30 }));
 
     await Promise.all(limiters.map((limiter, index) =>
       runInEvent(`herd-${index}`, () => limiter.acquire(1))));
