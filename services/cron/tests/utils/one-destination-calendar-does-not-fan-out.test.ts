@@ -85,6 +85,7 @@ describe("one destination calendar does not fan out into many jobs", () => {
         Promise.resolve(
           Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])),
         )),
+      releaseClaims: vi.fn(() => Promise.resolve()),
       releaseAbandoned: vi.fn(() => Promise.resolve()),
       releasePending: vi.fn((members: { calendarId: string }[]) =>
         Promise.resolve(members.map((member) => member.calendarId))),

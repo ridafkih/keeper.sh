@@ -33,6 +33,7 @@ interface DrainPendingIngestDependencies {
   recordError: (error: unknown, slug: string) => void;
   recordFailures: (calendarIds: string[]) => Promise<Record<string, number>>;
   releaseAbandoned: (calendarIds: string[]) => Promise<void>;
+  releaseClaims: (calendarIds: string[]) => Promise<void>;
   releasePending: (members: PendingIngestMember[]) => Promise<string[]>;
   resolveCalendars: (calendarIds: string[]) => Promise<ResolvedPendingCalendar[]>;
   resolvePlan: (userId: string) => Promise<Plan>;
@@ -172,22 +173,10 @@ const abandonExhaustedMembers = async (
   return abandoned.length;
 };
 
-const runDrainPendingIngest = async (
+const drainClaimedMembers = async (
+  claimed: PendingIngestMember[],
   dependencies: DrainPendingIngestDependencies,
 ): Promise<number> => {
-  if (!dependencies.enabled) {
-    return 0;
-  }
-
-  const pendingCount = await dependencies.countPending();
-  dependencies.observe({ "push_drain.pending_count": pendingCount });
-
-  const claimed = await dependencies.claimPending(MAX_DRAIN_BATCH);
-  if (claimed.length === 0) {
-    dependencies.observe({ "push_drain.batch_count": 0 });
-    return 0;
-  }
-
   const nowMs = dependencies.now().getTime();
   const queueAges = resolveQueueAges(claimed, nowMs);
   dependencies.observe({
@@ -341,6 +330,30 @@ const runDrainPendingIngest = async (
   });
 
   return ingestedCount;
+};
+
+const runDrainPendingIngest = async (
+  dependencies: DrainPendingIngestDependencies,
+): Promise<number> => {
+  if (!dependencies.enabled) {
+    return 0;
+  }
+
+  const pendingCount = await dependencies.countPending();
+  dependencies.observe({ "push_drain.pending_count": pendingCount });
+
+  const claimed = await dependencies.claimPending(MAX_DRAIN_BATCH);
+  if (claimed.length === 0) {
+    dependencies.observe({ "push_drain.batch_count": 0 });
+    return 0;
+  }
+
+  try {
+    return await drainClaimedMembers(claimed, dependencies);
+  } catch (error) {
+    await dependencies.releaseClaims(claimed.map((member) => member.calendarId));
+    throw error;
+  }
 };
 
 export {

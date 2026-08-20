@@ -10,19 +10,29 @@ interface PendingFixture {
   scores: Map<string, number>;
 }
 
-const createFakeRedis = (fixture: PendingFixture) => ({
-  hmget: vi.fn((key: string, ...members: string[]) => {
-    expect(key).toBe(PENDING_CORRELATION_KEY);
-    return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
-  }),
-  zscore: vi.fn((key: string, member: string) => {
-    expect(key).toBe(PENDING_INGEST_KEY);
-    if (!fixture.scores.has(member)) {
-      return Promise.resolve(null);
-    }
-    return Promise.resolve(String(fixture.scores.get(member)));
-  }),
-});
+const createFakeRedis = (fixture: PendingFixture) => {
+  const reserved = new Set<string>();
+  return {
+    hmget: vi.fn((key: string, ...members: string[]) => {
+      expect(key).toBe(PENDING_CORRELATION_KEY);
+      return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
+    }),
+    set: vi.fn((key: string) => {
+      if (reserved.has(key)) {
+        return Promise.resolve(null);
+      }
+      reserved.add(key);
+      return Promise.resolve("OK");
+    }),
+    zscore: vi.fn((key: string, member: string) => {
+      expect(key).toBe(PENDING_INGEST_KEY);
+      if (!fixture.scores.has(member)) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(String(fixture.scores.get(member)));
+    }),
+  };
+};
 
 const makeDependencies = (
   fixture: PendingFixture,
@@ -40,6 +50,7 @@ const makeDependencies = (
   recordFailures: vi.fn((calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])))),
   releaseAbandoned: vi.fn(() => Promise.resolve()),
+  releaseClaims: vi.fn(() => Promise.resolve()),
   releasePending: vi.fn((members: { calendarId: string; score: number }[]) =>
     Promise.resolve(members.map((member) => member.calendarId))),
   resolveCalendars: vi.fn((calendarIds: string[]) =>

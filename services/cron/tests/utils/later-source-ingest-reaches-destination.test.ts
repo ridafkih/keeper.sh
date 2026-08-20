@@ -141,6 +141,7 @@ describe("a later source ingest still reaches the destination", () => {
         Promise.resolve(
           Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])),
         )),
+      releaseClaims: vi.fn(() => Promise.resolve()),
       releaseAbandoned: vi.fn(() => Promise.resolve()),
       releasePending: vi.fn((members: { calendarId: string }[]) =>
         Promise.resolve(members.map((member) => member.calendarId))),

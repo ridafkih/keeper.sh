@@ -108,20 +108,30 @@ interface PendingFixture {
   scores: Map<string, number>;
 }
 
-const createFakePendingRedis = (fixture: PendingFixture) => ({
-  hmget: (key: string, ...members: string[]) => {
-    expect(key).toBe(PENDING_CORRELATION_KEY);
-    return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
-  },
-  zscore: (key: string, member: string) => {
-    expect(key).toBe(PENDING_INGEST_KEY);
-    const score = fixture.scores.get(member) ?? null;
-    if (score === null) {
-      return Promise.resolve(null);
-    }
-    return Promise.resolve(String(score));
-  },
-});
+const createFakePendingRedis = (fixture: PendingFixture) => {
+  const reserved = new Set<string>();
+  return {
+    hmget: (key: string, ...members: string[]) => {
+      expect(key).toBe(PENDING_CORRELATION_KEY);
+      return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
+    },
+    set: (key: string) => {
+      if (reserved.has(key)) {
+        return Promise.resolve(null);
+      }
+      reserved.add(key);
+      return Promise.resolve("OK");
+    },
+    zscore: (key: string, member: string) => {
+      expect(key).toBe(PENDING_INGEST_KEY);
+      const score = fixture.scores.get(member) ?? null;
+      if (score === null) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(String(score));
+    },
+  };
+};
 
 const makeScopedDependencies = (
   fixture: PendingFixture,
@@ -143,6 +153,7 @@ const makeScopedDependencies = (
   recordFailures: (calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1]))),
   releaseAbandoned: () => Promise.resolve(),
+  releaseClaims: () => Promise.resolve(),
   releasePending: (members) => Promise.resolve(members.map((member) => member.calendarId)),
   resolveCalendars: (calendarIds: string[]) =>
     Promise.resolve(calendarIds.map((calendarId) => ({ calendarId, userId: "user-1" }))),

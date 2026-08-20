@@ -49,7 +49,11 @@ afterEach(() => {
   process.stdout.write = originalWrite;
 });
 
-const scoreRedis = { hmget: () => Promise.resolve([]), zscore: () => Promise.resolve(null) };
+const scoreRedis = {
+  hmget: () => Promise.resolve([]),
+  set: () => Promise.resolve("OK"),
+  zscore: () => Promise.resolve(null),
+};
 
 describe("a signalled drain emits its wide event", () => {
   it("hands the successful drain's event to the transport", async () => {

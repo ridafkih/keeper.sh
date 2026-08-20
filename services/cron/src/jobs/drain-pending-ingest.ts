@@ -14,6 +14,10 @@ import {
   releaseUnchangedMembers,
 } from "@/utils/pending-ingest-release";
 import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
+import {
+  releaseClaimedCalendars,
+  reserveClaimedMembers,
+} from "@/utils/pending-ingest-claim";
 
 const DRAIN_LOCK_KEY = "push-drain:tick";
 const DRAIN_LOCK_TTL_SECONDS = 60;
@@ -41,9 +45,9 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
 
   return {
     claimPending: async (limit) => {
-      const members = parsePendingMembers(
+      const members = await reserveClaimedMembers(refreshLockRedis, parsePendingMembers(
         await refreshLockRedis.zrange(PENDING_INGEST_KEY, 0, limit - 1, "WITHSCORES"),
-      );
+      ));
       if (members.length === 0) {
         return members;
       }
@@ -80,6 +84,7 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     recordFailures: async (calendarIds) => {
       const counts = await Promise.all(calendarIds.map((calendarId) =>
         refreshLockRedis.hincrby(PENDING_FAILURES_KEY, calendarId, 1)));
+      await releaseClaimedCalendars(refreshLockRedis, calendarIds);
       return Object.fromEntries(
         calendarIds.map((calendarId, index) => [calendarId, counts[index] ?? 0]),
       );
@@ -89,7 +94,16 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
       await refreshLockRedis.hdel(PENDING_FAILURES_KEY, ...calendarIds);
       await refreshLockRedis.hdel(PENDING_CORRELATION_KEY, ...calendarIds);
     },
-    releasePending: (members) => releaseUnchangedMembers(refreshLockRedis, members),
+    releaseClaims: (calendarIds) =>
+      releaseClaimedCalendars(refreshLockRedis, calendarIds),
+    releasePending: async (members) => {
+      const removed = await releaseUnchangedMembers(refreshLockRedis, members);
+      await releaseClaimedCalendars(
+        refreshLockRedis,
+        members.map((member) => member.calendarId),
+      );
+      return removed;
+    },
     resolveCalendars: (calendarIds) => database
       .select({ calendarId: calendarsTable.id, userId: calendarsTable.userId })
       .from(calendarsTable)
