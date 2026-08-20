@@ -22,6 +22,7 @@ interface DrainPendingIngestDependencies {
   enqueueDestinationSyncs: (
     userIds: string[],
     correlationIdByUserId: Record<string, string>,
+    webhookReceivedAtByUserId: Record<string, number>,
   ) => Promise<void>;
   ingestCalendars: (
     calendarIds: string[],
@@ -100,6 +101,9 @@ const collectCorrelationIds = (
 /*
  * A user can own several woken calendars, so the ids collide here. The earliest webhook
  * wins because it is the one whose propagation latency the destination write closes.
+ * Ranked by score rather than by claim order, because a signalled drain claims in signal
+ * arrival order; taking the first claimed would name a different webhook than the receipt
+ * stamp travelling beside it.
  */
 const attributeCorrelationIdsToUsers = (
   members: PendingIngestMember[],
@@ -108,15 +112,46 @@ const attributeCorrelationIdsToUsers = (
 ): Record<string, string> => {
   const wanted = new Set(affectedUserIds);
   const correlationIdByUserId: Record<string, string> = {};
+  const scoreByUserId = new Map<string, number>();
   for (const member of members) {
     const userId = userIdByCalendarId.get(member.calendarId) ?? "";
     const correlationId = member.correlationId ?? "";
     if (!wanted.has(userId) || correlationId.length === 0) {
       continue;
     }
-    correlationIdByUserId[userId] ??= correlationId;
+    const incumbent = scoreByUserId.get(userId) ?? Number.POSITIVE_INFINITY;
+    if (incumbent <= member.score) {
+      continue;
+    }
+    scoreByUserId.set(userId, member.score);
+    correlationIdByUserId[userId] = correlationId;
   }
   return correlationIdByUserId;
+};
+
+/*
+ * The score is the webhook receipt stamp the API zadded. A user with several woken
+ * calendars reports the earliest of them: the metric answers what the worst-served
+ * webhook waited, and the freshest score would hide exactly the lag it exists to show.
+ * Taken by score rather than by claim order, because a signalled drain claims in signal
+ * arrival order rather than score order.
+ */
+const attributeWebhookReceiptToUsers = (
+  members: PendingIngestMember[],
+  userIdByCalendarId: Map<string, string>,
+  affectedUserIds: string[],
+): Record<string, number> => {
+  const wanted = new Set(affectedUserIds);
+  const webhookReceivedAtByUserId: Record<string, number> = {};
+  for (const member of members) {
+    const userId = userIdByCalendarId.get(member.calendarId) ?? "";
+    if (!wanted.has(userId)) {
+      continue;
+    }
+    const earliest = webhookReceivedAtByUserId[userId] ?? member.score;
+    webhookReceivedAtByUserId[userId] = Math.min(earliest, member.score);
+  }
+  return webhookReceivedAtByUserId;
 };
 
 const abandonExhaustedMembers = async (
@@ -239,6 +274,7 @@ const runDrainPendingIngest = async (
       await dependencies.enqueueDestinationSyncs(
         affectedUserIds,
         attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, affectedUserIds),
+        attributeWebhookReceiptToUsers(eligible, userIdByCalendarId, affectedUserIds),
       );
       return { affectedUserIds, failedId: "", releasedCount: released.length };
     } catch (error) {

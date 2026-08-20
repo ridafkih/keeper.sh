@@ -219,6 +219,21 @@ const processJob = (
 
     widelog.errors(classifySyncError);
 
+    /*
+     * Read at completion, never at job start: the number this answers for is how long the
+     * user waited for the change to appear in the destination calendar, so the provider
+     * write is inside it. queue_wait_ms stops one step earlier and is not this.
+     * The webhook stamp is taken on another host, so the delta crosses a clock boundary;
+     * skew is left uncorrected but floored, since a negative latency reads as a bug.
+     */
+    const recordReflectMs = (): void => {
+      const { webhookReceivedAt } = job.data;
+      if (typeof webhookReceivedAt !== "number") {
+        return;
+      }
+      widelog.set("push_sync.reflect_ms", Math.max(0, Date.now() - webhookReceivedAt));
+    };
+
     const deadlineMs = Date.now() + USER_TIMEOUT_MS;
 
     const deadlineController = new AbortController();
@@ -315,6 +330,7 @@ const processJob = (
             outcome = syncOutcome;
           }
           widelog.set("outcome", outcome);
+          recordReflectMs();
           widelog.flush();
           needsFlush = false;
         },
@@ -377,6 +393,7 @@ const processJob = (
         needsFlush = true;
       }
       if (needsFlush) {
+        recordReflectMs();
         widelog.flush();
       }
     }

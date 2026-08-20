@@ -118,7 +118,11 @@ describe("runDrainPendingIngest happy path", () => {
       "enqueueDestinationSyncs",
     ]);
     expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"], {});
-    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(["user-1"], {});
+    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(
+      ["user-1"],
+      {},
+      { "user-1": NOW_MS },
+    );
   });
 
   it("claims the oldest members up to the batch cap", async () => {

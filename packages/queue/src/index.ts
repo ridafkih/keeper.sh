@@ -8,9 +8,12 @@ const USER_TIMEOUT_MS = 300_000;
 type PushSyncTrigger = "cron" | "push";
 
 /*
- * `trigger` reflects the FIRST enqueue: the stable jobId makes addBulk a no-op when
- * a job with that id already exists, exactly like BullMQ's own job.timestamp, so the
- * two fields stay mutually consistent.
+ * `trigger` and `webhookReceivedAt` reflect the FIRST enqueue: the stable jobId makes
+ * addBulk a no-op when a job with that id already exists, exactly like BullMQ's own
+ * job.timestamp, so the fields stay mutually consistent.
+ *
+ * `webhookReceivedAt` is absent for a cron sync, which has no originating webhook. A zero
+ * would read as a real measurement and drag every latency quantile to the floor.
  */
 interface PushSyncJobPayload {
   calendarId: string;
@@ -18,6 +21,7 @@ interface PushSyncJobPayload {
   plan: Plan;
   correlationId: string;
   trigger?: PushSyncTrigger;
+  webhookReceivedAt?: number;
 }
 
 interface PushSyncJobResult {

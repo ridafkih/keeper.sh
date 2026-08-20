@@ -27,20 +27,35 @@ const buildPushDestinationJobs = (
   plan: Plan,
   resolveCorrelationId: (userId: string) => string,
   trigger: PushSyncTrigger = "cron",
+  webhookReceivedAtByUserId: Record<string, number> = {},
 ): PushDestinationJob[] => destinations
   .toSorted((first, second) =>
     first.userId.localeCompare(second.userId)
     || first.calendarId.localeCompare(second.calendarId))
-  .map(({ calendarId, userId }) => ({
-    name: `sync-${userId}-${calendarId}`,
-    data: { calendarId, userId, plan, correlationId: resolveCorrelationId(userId), trigger },
-    opts: {
-      jobId: `sync-${userId}-${calendarId}`,
-      priority: jobPriorityByTrigger[trigger],
-      removeOnComplete: true,
-      removeOnFail: true,
-    },
-  }));
+  .map(({ calendarId, userId }) => {
+    const data: PushSyncJobPayload = {
+      calendarId,
+      userId,
+      plan,
+      correlationId: resolveCorrelationId(userId),
+      trigger,
+    };
+    // A cron destination has no webhook behind it, so the key stays off the payload entirely.
+    const webhookReceivedAt = webhookReceivedAtByUserId[userId];
+    if (typeof webhookReceivedAt === "number") {
+      data.webhookReceivedAt = webhookReceivedAt;
+    }
+    return {
+      name: `sync-${userId}-${calendarId}`,
+      data,
+      opts: {
+        jobId: `sync-${userId}-${calendarId}`,
+        priority: jobPriorityByTrigger[trigger],
+        removeOnComplete: true,
+        removeOnFail: true,
+      },
+    };
+  });
 
 export { buildPushDestinationJobs };
 export type { PushDestinationJob };

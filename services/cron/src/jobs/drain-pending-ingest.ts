@@ -54,8 +54,17 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     },
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
-    enqueueDestinationSyncs: async (userIds, correlationIdByUserId) => {
-      await enqueueDestinationSyncsForUsers(userIds, "push", correlationIdByUserId);
+    enqueueDestinationSyncs: async (
+      userIds,
+      correlationIdByUserId,
+      webhookReceivedAtByUserId,
+    ) => {
+      await enqueueDestinationSyncsForUsers(
+        userIds,
+        "push",
+        correlationIdByUserId,
+        webhookReceivedAtByUserId,
+      );
     },
     ingestCalendars: async (calendarIds, correlationIdByCalendarId) => {
       const result = await ingestOAuthSources(calendarIds, correlationIdByCalendarId);
