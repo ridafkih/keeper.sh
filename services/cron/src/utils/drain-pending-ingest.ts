@@ -260,16 +260,6 @@ const runDrainPendingIngest = async (
   }
   const awaitingUserIds = new Set<string>();
 
-  /*
-   * The destination job id is deterministic per user and destination calendar, so BullMQ keeps
-   * the first enqueue and drops every later one while that job is queued or running. An enqueue
-   * fired the moment one source lands would therefore be the one that survives, and a sibling
-   * source committing afterwards would never reach the destination at all. So a user's enqueue
-   * waits until none of that user's own members in this batch are still ingesting: the job is
-   * created strictly after the last of their commits, which is the ordering that makes the sync
-   * read all of the batch's source rows for that user. Coalescing per user, not per batch, keeps
-   * one job per destination however many calendars woke, and leaves users independent.
-   */
   const takeSyncableUserIds = (ownerId: string, affectedUserIds: string[]): string[] => {
     for (const userId of affectedUserIds) {
       awaitingUserIds.add(userId);
