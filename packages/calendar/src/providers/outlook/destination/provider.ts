@@ -382,7 +382,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         method: "GET",
       });
 
-      // Only a 404 means the event is gone; every other failure must not read as a deletion.
       if (response.status === HTTP_STATUS.NOT_FOUND) {
         await response.body?.cancel?.();
         continue;
