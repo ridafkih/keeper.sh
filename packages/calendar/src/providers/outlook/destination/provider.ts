@@ -112,6 +112,37 @@ const buildOutlookEchoObservation = (resource: OutlookEvent): PushEchoObservatio
   };
 };
 
+const toOutlookRemoteEvent = (event: OutlookEvent): RemoteEvent | null => {
+  const startTime = parseEventTime(event.start, event.isAllDay);
+  const endTime = parseEventTime(event.end, event.isAllDay);
+
+  if (!event.id || !event.iCalUId || !startTime || !endTime) {
+    return null;
+  }
+
+  const availability = parseRemoteAvailability(event.showAs);
+  const editableContent = createEditableEventContentSnapshot({
+    availability,
+    description: event.body?.content,
+    endTime,
+    isAllDay: event.isAllDay,
+    location: event.location?.displayName,
+    startTime,
+    summary: event.subject ?? "",
+  });
+  return {
+    deleteId: event.id,
+    editableAvailability: availability,
+    editableContent,
+    editableContentHash: hashEditableEventContentSnapshot(editableContent),
+    endTime,
+    isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
+    startTime,
+    supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
+    uid: event.iCalUId,
+  };
+};
+
 const compareOutlookCreateEcho = (
   sent: OutlookEvent,
   echo: OutlookEvent,
@@ -320,34 +351,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       const data = outlookEventListSchema.assert(body);
 
       for (const event of data.value ?? []) {
-        const startTime = parseEventTime(event.start, event.isAllDay);
-        const endTime = parseEventTime(event.end, event.isAllDay);
-
-        if (!event.id || !event.iCalUId || !startTime || !endTime) {
-          continue;
+        const remoteEvent = toOutlookRemoteEvent(event);
+        if (remoteEvent) {
+          remoteEvents.push(remoteEvent);
         }
-
-        const availability = parseRemoteAvailability(event.showAs);
-        const editableContent = createEditableEventContentSnapshot({
-          availability,
-          description: event.body?.content,
-          endTime,
-          isAllDay: event.isAllDay,
-          location: event.location?.displayName,
-          startTime,
-          summary: event.subject ?? "",
-        });
-        remoteEvents.push({
-          deleteId: event.id,
-          editableAvailability: availability,
-          editableContent,
-          editableContentHash: hashEditableEventContentSnapshot(editableContent),
-          endTime,
-          isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
-          supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
-          startTime,
-          uid: event.iCalUId,
-        });
       }
 
       nextLink = data["@odata.nextLink"] ?? null;
@@ -356,10 +363,50 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const getRemoteEventsByIds = async (eventIds: string[]): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
+    const remoteEvents: RemoteEvent[] = [];
+
+    for (const eventId of eventIds) {
+      const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
+      url.searchParams.set(
+        "$select",
+        "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      );
+
+      const response = await sendRequestWithRetry(url, {
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: `outlook.body-content-type="text"`,
+        },
+        method: "GET",
+      });
+
+      // Only a 404 means the event is gone; every other failure must not read as a deletion.
+      if (response.status === HTTP_STATUS.NOT_FOUND) {
+        await response.body?.cancel?.();
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(await readGraphErrorMessage(response));
+      }
+
+      const body = await response.json();
+      const remoteEvent = toOutlookRemoteEvent(outlookEventSchema.assert(body));
+      if (remoteEvent) {
+        remoteEvents.push(remoteEvent);
+      }
+    }
+
+    return remoteEvents;
+  };
+
   const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
 
   return {
     deleteEvents,
+    getRemoteEventsByIds,
     getThrottleMetrics,
     listRemoteEvents,
     normalizeEvent: normalizeOutlookEvent,

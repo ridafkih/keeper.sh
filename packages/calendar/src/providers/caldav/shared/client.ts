@@ -358,6 +358,33 @@ class CalDAVClient {
     });
   }
 
+  /*
+   * A multiget omits hrefs the calendar no longer holds. For a named lookup that omission
+   * is the answer, so — unlike the windowed listing — it is not an incompleteness error.
+   */
+  fetchCalendarObjectsByUrls(params: {
+    calendarUrl: string;
+    objectUrls: string[];
+  }): Promise<CalendarObject[]> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const objects: CalendarObject[] = [];
+
+      for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
+        const batch = await measureProviderRequest(() => client.fetchCalendarObjects({
+          calendar: { url: params.calendarUrl },
+          objectUrls,
+          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+        }));
+        objects.push(
+          ...batch.filter((object): object is CalendarObject => typeof object.data === "string"),
+        );
+      }
+
+      return objects;
+    });
+  }
+
   fetchCalendarObjects(params: {
     calendarUrl: string;
     onListing?: (stats: CalDAVListingStats) => void;

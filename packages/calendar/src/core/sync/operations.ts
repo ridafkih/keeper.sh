@@ -13,6 +13,12 @@ import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
 
 interface ReconciliationScope {
+  /*
+   * Set when the remote list was targeted at specific mappings rather than paged over
+   * a window. Such a read proves nothing about any mapping outside the set, so absence
+   * from it must never read as remoteMissing — that would delete the whole mirror.
+   */
+  authoritativeMappingIds?: ReadonlySet<string>;
   authoritativeWindow: SyncWindow | null;
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
@@ -392,6 +398,7 @@ const identifyStaleMappings = (
   localEventIds: Set<string>,
   remoteEventsByMappingId: Map<string, RemoteEvent>,
   localEventsById: Map<string, MaterializedSyncableEvent>,
+  authoritativeMappingIds?: ReadonlySet<string>,
 ): StaleMappingResult => {
   const staleMappingIds: string[] = [];
   const staleMappedEventIds = new Set<string>();
@@ -402,7 +409,9 @@ const identifyStaleMappings = (
     const syncEventId = getMappingSyncEventId(mapping);
     const localEventExists = localEventIds.has(syncEventId);
     const remoteEvent = remoteEventsByMappingId.get(mapping.id);
-    if (localEventExists && !remoteEvent) {
+    const remoteReadCoversMapping = !authoritativeMappingIds
+      || authoritativeMappingIds.has(mapping.id);
+    if (localEventExists && !remoteEvent && remoteReadCoversMapping) {
       staleReasonCounts.remoteMissing += 1;
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
@@ -600,6 +609,14 @@ const buildRemoveOperations = (
       continue;
     }
 
+    /*
+     * An id-scoped read never enumerated the window, so an unmatched keeper event says
+     * only that this read did not ask for its mapping, not that it is orphaned.
+     */
+    if (scope.authoritativeMappingIds) {
+      continue;
+    }
+
     if (!scope.authoritativeWindow || !overlapsTimeWindow(
       remoteEvent,
       scope.authoritativeWindow.timeMin,
@@ -679,6 +696,7 @@ const computeSyncOperations = (
       localEventIds,
       remoteEventsByMappingId,
       localEventsById,
+      scope.authoritativeMappingIds,
     );
   const staleMappingIdSet = new Set(staleMappingIds);
   const mappingUpdatesById = new Map<string, MappingUpdate>();

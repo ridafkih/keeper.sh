@@ -96,7 +96,28 @@ const buildGoogleEchoObservation = (resource: GoogleEvent): PushEchoObservation 
   };
 };
 
-const compareGoogleImportEcho = (sent: GoogleEvent, body: unknown): PushEchoComparison => {
+const toGoogleRemoteEvent = (event: GoogleEvent): RemoteEvent | null => {
+  if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
+    return null;
+  }
+  const observation = buildGoogleEchoObservation(event);
+  if (!observation) {
+    return null;
+  }
+  return {
+    deleteId: event.id ?? event.iCalUID,
+    editableAvailability: parseGoogleAvailability(event),
+    editableContent: observation.content,
+    editableContentHash: hashEditableEventContentSnapshot(observation.content),
+    endTime: observation.endTime,
+    isKeeperEvent: true,
+    startTime: observation.startTime,
+    supportedAvailabilities: ["busy", "free"],
+    uid: event.iCalUID,
+  };
+};
+
+const compareGoogleImportEcho =(sent: GoogleEvent, body: unknown): PushEchoComparison => {
   if (!googleEventSchema.allows(body)) {
     return { comparable: false, reason: "echo-not-parseable" };
   }
@@ -466,24 +487,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
 
     const items: RemoteEvent[] = [];
     for (const event of data.items ?? []) {
-      if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
-        continue;
+      const remoteEvent = toGoogleRemoteEvent(event);
+      if (remoteEvent) {
+        items.push(remoteEvent);
       }
-      const observation = buildGoogleEchoObservation(event);
-      if (!observation) {
-        continue;
-      }
-      items.push({
-        deleteId: event.id ?? event.iCalUID,
-        editableAvailability: parseGoogleAvailability(event),
-        editableContent: observation.content,
-        editableContentHash: hashEditableEventContentSnapshot(observation.content),
-        endTime: observation.endTime,
-        isKeeperEvent: true,
-        supportedAvailabilities: ["busy", "free"],
-        startTime: observation.startTime,
-        uid: event.iCalUID,
-      });
     }
 
     return { items, nextPageToken: data.nextPageToken ?? null };
@@ -513,7 +520,55 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  return { deleteEvents, listRemoteEvents, normalizeEvent: normalizeGoogleEvent, pushEvents };
+  const getRemoteEventsByIds = async (eventIds: string[]): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
+
+    if (eventIds.length === 0) {
+      return [];
+    }
+
+    const requests: BatchSubRequest[] = eventIds.map((eventId) => ({
+      method: "GET",
+      path: `${eventsPath}/${encodeURIComponent(eventId)}`,
+    }));
+
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+
+    const remoteEvents: RemoteEvent[] = [];
+    for (let index = 0; index < eventIds.length; index++) {
+      const response = responses[index];
+      if (!response) {
+        throw new Error("Missing batch response for Google event lookup");
+      }
+
+      // 404 and 410 are the only statuses that mean the event is gone; anything else is a failed read.
+      if (
+        response.statusCode === HTTP_STATUS.NOT_FOUND
+        || response.statusCode === GONE_STATUS
+      ) {
+        continue;
+      }
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new GoogleCalendarApiError(response.statusCode, JSON.stringify(response.body));
+      }
+
+      const remoteEvent = toGoogleRemoteEvent(googleEventSchema.assert(response.body));
+      if (remoteEvent) {
+        remoteEvents.push(remoteEvent);
+      }
+    }
+
+    return remoteEvents;
+  };
+
+  return {
+    deleteEvents,
+    getRemoteEventsByIds,
+    listRemoteEvents,
+    normalizeEvent: normalizeGoogleEvent,
+    pushEvents,
+  };
 };
 
 export { createGoogleSyncProvider };

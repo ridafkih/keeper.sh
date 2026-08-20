@@ -21,6 +21,7 @@ import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type {
   EventMapping,
   DestinationEventReadDiagnostics,
+  ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ReconciliationScope,
   RefreshLockStore,
@@ -347,6 +348,7 @@ const haveSourceCalendarsChanged = (
 const OVER_BUDGET_SERIES_UID_SAMPLE_SIZE = 20;
 
 interface DestinationReconciliationScopeContext {
+  authoritativeMappingIds: ReadonlySet<string> | null;
   authoritativeSourceWindows: ReadonlyMap<string, SyncWindow>;
   authoritativeWindow: SyncWindow | null;
   eventReadDiagnostics: DestinationEventReadDiagnostics;
@@ -363,6 +365,9 @@ interface DestinationReconciliationScopeContext {
 const createDestinationReconciliationScope = (
   context: DestinationReconciliationScopeContext,
 ): ReconciliationScope => ({
+  ...(context.authoritativeMappingIds && {
+    authoritativeMappingIds: context.authoritativeMappingIds,
+  }),
   authoritativeSourceWindows: context.authoritativeSourceWindows,
   authoritativeWindow: context.authoritativeWindow,
   configuredSourceCalendarIds: new Set(context.sourceCalendarIdsAtLocalRead),
@@ -432,12 +437,90 @@ const createDestinationAttemptWideEventFields = (
   };
 };
 
+/*
+ * Each targeted lookup is its own round trip, while the windowed list is one request
+ * whatever it enumerates. Past this many mappings the round trips cost more than the
+ * page they replace, so the read reverts to the single listing.
+ */
+const TARGETED_DESTINATION_READ_LIMIT = 25;
+
+interface TargetedDestinationReadProvider {
+  getRemoteEventsByIds?: (ids: string[]) => Promise<RemoteEvent[]>;
+  listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
+}
+
+interface DestinationRemoteReadContext {
+  existingMappings: EventMapping[];
+  localEvents: MaterializedSyncableEvent[];
+  provider: TargetedDestinationReadProvider;
+  requestedWindow: SyncWindow;
+}
+
+interface DestinationRemoteRead {
+  /*
+   * Null means the read paged the window and so speaks for every mapping in it. A set
+   * names the only mappings whose absence from remoteEvents is evidence of anything.
+   */
+  authoritativeMappingIds: ReadonlySet<string> | null;
+  remoteEvents: RemoteEvent[];
+}
+
+interface TargetedDestinationReadPlan {
+  deleteIdentifiers: string[];
+  mappingIds: Set<string>;
+}
+
+const planTargetedDestinationRead = (
+  localEvents: MaterializedSyncableEvent[],
+  existingMappings: EventMapping[],
+): TargetedDestinationReadPlan => {
+  const mappingsBySyncEventId = new Map<string, EventMapping[]>();
+  for (const mapping of existingMappings) {
+    const mappings = mappingsBySyncEventId.get(mapping.syncEventId) ?? [];
+    mappings.push(mapping);
+    mappingsBySyncEventId.set(mapping.syncEventId, mappings);
+  }
+  const deleteIdentifiers = new Set<string>();
+  const mappingIds = new Set<string>();
+  for (const localEvent of localEvents) {
+    for (const mapping of mappingsBySyncEventId.get(localEvent.id) ?? []) {
+      deleteIdentifiers.add(mapping.deleteIdentifier);
+      mappingIds.add(mapping.id);
+    }
+  }
+  return { deleteIdentifiers: [...deleteIdentifiers], mappingIds };
+};
+
+const readDestinationRemoteEvents = async (
+  context: DestinationRemoteReadContext,
+): Promise<DestinationRemoteRead> => {
+  const plan = planTargetedDestinationRead(context.localEvents, context.existingMappings);
+  const { getRemoteEventsByIds: lookUpByIds } = context.provider;
+  /*
+   * A provider without the lookup, or a change set too large for one to be cheaper than a
+   * single page, keeps the windowed listing and its full authority.
+   */
+  if (!lookUpByIds || plan.deleteIdentifiers.length > TARGETED_DESTINATION_READ_LIMIT) {
+    return {
+      authoritativeMappingIds: null,
+      remoteEvents: await context.provider.listRemoteEvents({
+        timeMax: context.requestedWindow.timeMax,
+        timeMin: context.requestedWindow.timeMin,
+      }),
+    };
+  }
+  return {
+    authoritativeMappingIds: plan.mappingIds,
+    remoteEvents: await lookUpByIds(plan.deleteIdentifiers),
+  };
+};
+
 const readDestinationReconciliationState = async (
-  readRemoteEvents: () => Promise<RemoteEvent[]>,
+  readRemoteEvents: (localState: DestinationLocalState) => Promise<RemoteEvent[]>,
   readLocalState: () => Promise<DestinationLocalState>,
 ): Promise<DestinationLocalState & { remoteEvents: RemoteEvent[] }> => {
-  const remoteEvents = await readRemoteEvents();
   const localState = await readLocalState();
+  const remoteEvents = await readRemoteEvents(localState);
   return { ...localState, remoteEvents };
 };
 
@@ -794,14 +877,25 @@ const syncDestinationsForUser = async (
         let remoteReadDurationMs = 0;
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
         let sourceCalendarsChangedDuringRemoteRead = false;
+        let authoritativeMappingIds: ReadonlySet<string> | null = null;
+        /*
+         * Local first, then remote: which events the plan touches falls out of comparing
+         * local state to our own mappings, so the remote read cannot be narrowed until
+         * that comparison exists. The source set is re-checked afterwards because the
+         * remote read still happens outside the locks.
+         */
         const reconciliationState = await readDestinationReconciliationState(
-          async () => {
+          async (localState) => {
             const startedAt = performance.now();
             try {
-              return await providerRef.listRemoteEvents({
-                timeMax: requestedWindow.timeMax,
-                timeMin: requestedWindow.timeMin,
+              const read = await readDestinationRemoteEvents({
+                existingMappings: localState.existingMappings,
+                localEvents: localState.localEvents,
+                provider: providerRef,
+                requestedWindow,
               });
+              ({ authoritativeMappingIds } = read);
+              return read.remoteEvents;
             } finally {
               remoteReadDurationMs = roundDuration(performance.now() - startedAt);
             }
@@ -928,6 +1022,7 @@ const syncDestinationsForUser = async (
             }
           },
           reconciliationScope: createDestinationReconciliationScope({
+            authoritativeMappingIds,
             authoritativeSourceWindows,
             authoritativeWindow,
             eventReadDiagnostics,
@@ -1004,7 +1099,9 @@ export {
   createDestinationReconciliationScope,
   createDestinationReconciliationWideEventFields,
   OVER_BUDGET_SERIES_UID_SAMPLE_SIZE,
+  TARGETED_DESTINATION_READ_LIMIT,
   readDestinationReconciliationState,
+  readDestinationRemoteEvents,
   resolveSourceAuthority,
   resolveStoredSourceCoverage,
   syncDestinationsForUser,

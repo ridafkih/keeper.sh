@@ -23,6 +23,7 @@ import {
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
 } from "../shared/ics";
+import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
@@ -168,6 +169,36 @@ const toCalendarBaseUrl = (calendarUrl: string): string => {
     return calendarUrl;
   }
   return `${calendarUrl}/`;
+};
+
+const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
+  const resources = parseICalCalendarsToRemoteEvents(
+    [data],
+    { rejectUnsupportedRecurrenceDates: false },
+  );
+  assertAllResourcesRead(resources);
+  assertAllEventsSupported(resources);
+  return resources.events;
+};
+
+const toCalDAVRemoteEvent = (parsed: ParsedCalendarEvent, objectPath: string): RemoteEvent => {
+  const editableContent = createEditableEventContentSnapshot({
+    availability: parsed.availability,
+    description: parsed.description,
+    endTime: parsed.endTime,
+    isAllDay: parsed.isAllDay,
+    location: parsed.location,
+    startTime: parsed.startTime,
+    summary: parsed.title ?? "",
+  });
+  return {
+    ...parsed,
+    deleteId: objectPath,
+    editableAvailability: parsed.availability,
+    editableContent,
+    editableContentHash: hashEditableEventContentSnapshot(editableContent),
+    supportedAvailabilities: ["busy", "free"],
+  };
 };
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
@@ -382,14 +413,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       return [{ data, url }];
     });
     for (const { data, url } of keeperObjects) {
-      const resources = parseICalCalendarsToRemoteEvents(
-        [data],
-        { rejectUnsupportedRecurrenceDates: false },
-      );
-      assertAllResourcesRead(resources);
-      assertAllEventsSupported(resources);
       const objectPath = new URL(url, calendarUrl).pathname;
-      for (const parsed of resources.events) {
+      for (const parsed of parseCalendarObjectEvents(data)) {
         const beyondHorizon = parsed.startTime > options.timeMax;
         if (
           !isKeeperEvent(parsed.uid)
@@ -399,23 +424,35 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           continue;
         }
 
-        const editableContent = createEditableEventContentSnapshot({
-          availability: parsed.availability,
-          description: parsed.description,
-          endTime: parsed.endTime,
-          isAllDay: parsed.isAllDay,
-          location: parsed.location,
-          startTime: parsed.startTime,
-          summary: parsed.title ?? "",
-        });
-        remoteEvents.push({
-          ...parsed,
-          deleteId: objectPath,
-          editableAvailability: parsed.availability,
-          editableContent,
-          editableContentHash: hashEditableEventContentSnapshot(editableContent),
-          supportedAvailabilities: ["busy", "free"],
-        });
+        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath));
+      }
+    }
+
+    return remoteEvents;
+  };
+
+  const getRemoteEventsByIds = async (deleteIds: string[]): Promise<RemoteEvent[]> => {
+    if (deleteIds.length === 0) {
+      return [];
+    }
+
+    const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+    const objects = await client.fetchCalendarObjectsByUrls({
+      calendarUrl,
+      objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
+    });
+
+    const remoteEvents: RemoteEvent[] = [];
+    for (const { data, url } of objects) {
+      if (!data || !isKeeperCalendarObjectUrl(url)) {
+        continue;
+      }
+      const objectPath = new URL(url, calendarUrl).pathname;
+      for (const parsed of parseCalendarObjectEvents(data)) {
+        if (!isKeeperEvent(parsed.uid)) {
+          continue;
+        }
+        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath));
       }
     }
 
@@ -426,6 +463,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     pushEvents,
     updateEvents,
     deleteEvents,
+    getRemoteEventsByIds,
     getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeCalDAVEvent,
