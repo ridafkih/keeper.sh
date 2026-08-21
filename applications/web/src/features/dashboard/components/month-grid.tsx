@@ -33,7 +33,7 @@ export function MonthGrid({ anchor, days }: MonthGridProps) {
           </Text>
         ))}
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 border-t border-l border-border-elevated">
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 border-t border-border-elevated">
         {days.map((day) => {
           const inMonth = isSameMonth(day, anchor);
           const isToday = isSameDay(day, today);
@@ -41,7 +41,7 @@ export function MonthGrid({ anchor, days }: MonthGridProps) {
             <div
               key={day.getTime()}
               className={cn(
-                "flex min-h-0 flex-col gap-0.5 overflow-hidden border-r border-b border-border-elevated p-1.5",
+                "flex min-h-0 flex-col gap-0.5 overflow-hidden border-r border-b border-border-elevated p-1.5 [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0",
                 !inMonth && "bg-background-hover/40",
               )}
             >
