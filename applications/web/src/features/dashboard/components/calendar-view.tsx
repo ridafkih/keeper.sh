@@ -11,7 +11,6 @@ import {
   formatMonthTitle,
   formatWeekTitle,
   getMonthGridDays,
-  getWeekDays,
 } from "./calendar-helpers";
 
 type CalendarViewMode = "week" | "month";
@@ -31,7 +30,6 @@ export function CalendarView() {
   const [anchor, setAnchor] = useState(() => new Date());
 
   const monthDays = useMemo(() => getMonthGridDays(anchor), [anchor]);
-  const weekDays = useMemo(() => getWeekDays(anchor), [anchor]);
 
   const title = view === "month" ? formatMonthTitle(anchor) : formatWeekTitle(anchor);
 
@@ -95,7 +93,7 @@ export function CalendarView() {
       {view === "month" ? (
         <MonthGrid anchor={anchor} days={monthDays} />
       ) : (
-        <WeekGrid days={weekDays} />
+        <WeekGrid anchor={anchor} onVisibleWeekChange={setAnchor} />
       )}
     </div>
   );
