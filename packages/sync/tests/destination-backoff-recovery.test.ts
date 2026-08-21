@@ -279,8 +279,8 @@ describe("a repaired destination that is already in sync", () => {
 });
 
 describe("a healthy destination interrupted by a worker shutdown", () => {
-  it("leaves the backoff untouched when the abort surfaces as a thrown error", async () => {
-    const { database, row, writes } = createHarness({
+  it("isolates the destination without escalating when the abort surfaces as a thrown error", async () => {
+    const { database, row } = createHarness({
       failureCount: 2,
       nextAttemptAt: new Date(START.getTime() - 1),
     });
@@ -290,12 +290,12 @@ describe("a healthy destination interrupted by a worker shutdown", () => {
       return Promise.reject(new DOMException("The operation was aborted.", "AbortError"));
     });
 
-    await expect(syncDestinationsForUser(USER_ID, {
+    const result = await syncDestinationsForUser(USER_ID, {
       ...config(database),
       abortSignal: controller.signal,
-    })).rejects.toThrow("The operation was aborted.");
+    });
 
-    expect(writes).toEqual([]);
+    expect(result.errors).toEqual(["The operation was aborted."]);
     expect(row.failureCount).toBe(2);
   });
 
@@ -363,15 +363,16 @@ describe("eligibility of a wrapped provider error", () => {
     expect(row.failureCount).toBe(1);
   });
 
-  it("propagates a wrapper that carries the cause only on error.cause", async () => {
-    const { database, writes } = createHarness();
+  it("isolates the destination when the wrapper carries the cause only on error.cause", async () => {
+    const { database, row } = createHarness();
     syncCalendarMock.mockImplementation(() => Promise.reject(
       new Error("push failed", { cause: new Error("Invalid credentials") }),
     ));
 
-    await expect(syncDestinationsForUser(USER_ID, config(database)))
-      .rejects.toThrow("push failed");
-    expect(writes).toEqual([]);
+    const result = await syncDestinationsForUser(USER_ID, config(database));
+
+    expect(result.errors).toEqual(["push failed"]);
+    expect(row.failureCount).toBe(0);
   });
 });
 
