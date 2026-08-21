@@ -28,7 +28,7 @@ export function CalendarFrame({
   children,
 }: CalendarFrameProps) {
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-3">
+    <div className="flex h-full min-h-0 w-full flex-col gap-1.5">
       <header className="flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs">
         <div className="flex items-center justify-between gap-3 px-4 py-3">{toolbar}</div>
         {columnHeader}
