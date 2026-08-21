@@ -6,6 +6,7 @@ import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "@/state/popover-overlay";
 import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
+import { CalendarView } from "@/features/dashboard/components/calendar-view";
 
 export const Route = createFileRoute("/(dashboard)")({
   beforeLoad: ({ context }) => {
@@ -33,8 +34,9 @@ function DashboardLayout() {
   const overlayActive = useAtomValue(popoverOverlayAtom);
 
   return (
-    <div className="relative flex flex-col items-center min-h-dvh px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)]">
-      <div className="relative flex flex-col gap-3 w-full max-w-sm">
+    <div className="relative flex min-h-dvh justify-center lg:justify-start lg:gap-4 lg:p-4">
+      {/* Sidebar — the existing centered dashboard column. */}
+      <div className="relative flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:px-1 lg:pt-6">
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence>
             {overlayActive && (
@@ -50,6 +52,10 @@ function DashboardLayout() {
         </LazyMotion>
         <SyncProvider />
         <Outlet />
+      </div>
+      {/* Calendar pane — desktop only. */}
+      <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1">
+        <CalendarView />
       </div>
     </div>
   );
