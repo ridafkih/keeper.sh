@@ -1189,17 +1189,48 @@ const resolveFleetYieldedCalendarIds = async (
   }
 };
 
-const resolveYieldedCalendarIds = async (
+const resolveYieldedCalendarIds = (
   calendarIds: string[] | undefined,
   sourceCalendarIds: string[],
 ): Promise<Set<string>> => {
   /* The webhook path owns the calendars it names, so it never yields one. */
   if (calendarIds) {
-    return new Set<string>();
+    return Promise.resolve(new Set<string>());
   }
-  const yielded = await resolveFleetYieldedCalendarIds(sourceCalendarIds);
-  widelog.set("ingest.yielded_count", yielded.size);
-  return yielded;
+  return resolveFleetYieldedCalendarIds(sourceCalendarIds);
+};
+
+const hasFreshPendingReceipt = async (calendarId: string): Promise<boolean> => {
+  try {
+    const score = await refreshLockRedis.zscore(PENDING_INGEST_KEY, calendarId);
+    return isRecentPendingScore(score, Date.now() - PENDING_INGEST_YIELD_BOUND_MS);
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "pending-ingest-yield-lookup-failed",
+    });
+    return false;
+  }
+};
+
+const shouldYieldSource = (
+  calendarIds: string[] | undefined,
+  calendarId: string,
+): Promise<boolean> => {
+  if (calendarIds) {
+    return Promise.resolve(false);
+  }
+  return hasFreshPendingReceipt(calendarId);
+};
+
+const recordYieldedCount = (
+  calendarIds: string[] | undefined,
+  yieldedCalendarIds: Set<string>,
+): void => {
+  if (calendarIds) {
+    return;
+  }
+  widelog.set("ingest.yielded_count", yieldedCalendarIds.size);
 };
 
 const ingestOAuthSources = async (
@@ -1257,8 +1288,12 @@ const ingestOAuthSources = async (
   const settlements = await allSettledGroupedWithConcurrency(
     selectedSources.map((source) => {
       const enqueuedAt = Date.now();
-      return () =>
-      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
+      return async (): Promise<IngestionSourceResult> => {
+        if (await shouldYieldSource(calendarIds, source.calendarId)) {
+          yieldedCalendarIds.add(source.calendarId);
+          return createSkippedIngestionResult(source.userId);
+        }
+        return withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
@@ -1465,10 +1500,13 @@ const ingestOAuthSources = async (
           }
         }),
       SOURCE_TIMEOUT_MS);
+      };
     }),
 selectedSources.map((source) => source.userId),
     { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
+
+  recordYieldedCount(calendarIds, yieldedCalendarIds);
 
   return summariseIngestionSettlements(
     lane,
