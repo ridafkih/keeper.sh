@@ -44,6 +44,7 @@ const emptyPlan = {
   crossAccountSkippedCount: 0,
   duplicateCount: 0,
   inserted: [] as { id: string; name: string }[],
+  removedSkippedCount: 0,
   suppressed: false,
   toInsert: [] as DiscoveredCalendar[],
   toMarkUnavailable: [] as string[],

@@ -591,13 +591,24 @@ const createOAuthSource = async (
       ...dependencies,
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
+      /*
+       * An accountId is unique per (userId, provider). This path has no provider-fetched
+       * account identifier to store there (unlike the import flow's adoptProviderAccountId),
+       * so a row created here would otherwise sit with accountId null/empty until a later
+       * reconnect backfills it - colliding with any other such row for the same user and
+       * provider under the unique index. Seeding the row's own id closes that gap: it is
+       * guaranteed unique and gets superseded the moment a real providerAccountId is adopted.
+       */
       createCalendarAccount: async ({ displayName, email, oauthCredentialId, provider, userId }) => {
+        const accountId = crypto.randomUUID();
         const [insertedAccount] = await tx
           .insert(calendarAccountsTable)
           .values({
+            accountId,
             authType: "oauth",
             displayName: email ?? displayName,
             email: email ?? displayName,
+            id: accountId,
             oauthCredentialId,
             provider,
             userId,
@@ -636,7 +647,7 @@ interface ImportOAuthAccountDependencies {
     accountId: string,
     calendars: ExternalCalendar[],
   ) => Promise<void>;
-  listCalendars: (provider: string, accessToken: string) => Promise<ExternalCalendar[]>;
+  listCalendars: (provider: string, accessToken: string, ownerEmail: string | null) => Promise<ExternalCalendar[]>;
   triggerSync: (userId: string, provider: string, accountId: string) => void;
 }
 
@@ -712,14 +723,14 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       })),
     );
   },
-  listCalendars: async (provider, accessToken) => {
+  listCalendars: async (provider, accessToken, ownerEmail) => {
     try {
       if (provider === "google") {
         const calendars = await listGoogleCalendars(accessToken);
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
       }
       if (provider === "outlook") {
-        const calendars = await listOutlookCalendars(accessToken);
+        const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
       }
       throw new Error(`No calendar listing support for provider: ${provider}`);
@@ -778,7 +789,7 @@ const importOAuthAccountCalendarsWithDependencies = async (
     });
   }
 
-  const externalCalendars = await dependencies.listCalendars(provider, accessToken);
+  const externalCalendars = await dependencies.listCalendars(provider, accessToken, email);
   const newCalendars = await dependencies.getUnimportedExternalCalendars(
     userId,
     accountId,
@@ -896,7 +907,7 @@ const importOAuthAccountCalendars = async (
   const dependencies = createDefaultImportOAuthAccountDependencies();
 
   const plan = await premiumService.getUserPlan(options.userId);
-  const externalCalendars = await dependencies.listCalendars(options.provider, options.accessToken);
+  const externalCalendars = await dependencies.listCalendars(options.provider, options.accessToken, options.email);
 
   return database.transaction(async (tx) => {
     await tx.execute(

@@ -208,6 +208,8 @@ export {
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
   toExistingCalendars,
+  toRemovedIdentityKeys,
+  type CalendarIdentityRow,
   type CalendarRediscoveryPlan,
   type CalendarRetarget,
   type DiscoveredCalendar,

@@ -18,6 +18,7 @@ export const excludeAllDayEventsAtom = selectAtom(calendarDetailAtom, (detail) =
 export const excludeFocusTimeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeFocusTime ?? false);
 export const excludeOutOfOfficeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeOutOfOffice ?? false);
 export const treatFullDayTimedEventsAsAllDayAtom = selectAtom(calendarDetailAtom, (detail) => detail?.treatFullDayTimedEventsAsAllDay ?? false);
+export const calendarProviderMissingSinceAtom = selectAtom(calendarDetailAtom, (detail) => detail?.providerMissingSince ?? null);
 export type ExcludeField = keyof Pick<
   CalendarDetail,
   | "excludeAllDayEvents"

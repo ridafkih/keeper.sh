@@ -130,10 +130,31 @@ const fetchCalendarPage = async (
   return parsedResponse;
 };
 
+/**
+ * /me/calendars also returns calendars a colleague has shared or delegated to the account,
+ * alongside the account's own. Graph reports each calendar's owner, so anything owned by a
+ * different mailbox is excluded here rather than being imported as if it were the connected
+ * account's own calendar. A calendar with no owner info at all is kept (some tenants omit it
+ * for the account's own default calendar).
+ */
+const belongsToOwner = (calendar: OutlookCalendarListEntry, ownerEmail: string): boolean => {
+  const address = calendar.owner?.address;
+  if (!address) {
+    return true;
+  }
+  return address.toLowerCase() === ownerEmail.toLowerCase();
+};
+
+interface ListUserCalendarsOptions {
+  signal?: AbortSignal;
+  ownerEmail?: string | null;
+}
+
 const listUserCalendars = async (
   accessToken: string,
-  signal?: AbortSignal,
+  options?: ListUserCalendarsOptions,
 ): Promise<OutlookCalendarListEntry[]> => {
+  const { signal, ownerEmail } = options ?? {};
   const calendars: OutlookCalendarListEntry[] = [];
   let response = await fetchCalendarPage(accessToken, signal);
   calendars.push(...response.value);
@@ -144,7 +165,11 @@ const listUserCalendars = async (
     calendars.push(...response.value);
   }
 
-  return calendars;
+  if (!ownerEmail) {
+    return calendars;
+  }
+
+  return calendars.filter((calendar) => belongsToOwner(calendar, ownerEmail));
 };
 
 export { listUserCalendars, CalendarListError };
