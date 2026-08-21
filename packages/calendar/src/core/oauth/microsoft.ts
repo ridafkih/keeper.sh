@@ -91,7 +91,7 @@ const createMicrosoftOAuthService = (
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", scopes.join(" "));
     url.searchParams.set("response_mode", "query");
-    url.searchParams.set("prompt", "consent");
+    url.searchParams.set("prompt", "select_account");
     url.searchParams.set("state", state);
 
     return url.toString();
