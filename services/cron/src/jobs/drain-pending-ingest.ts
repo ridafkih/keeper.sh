@@ -14,10 +14,27 @@ import {
   releaseUnchangedMembers,
 } from "@/utils/pending-ingest-release";
 import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
+import { IngestBaselineMovedAbortError } from "@/utils/ingest-baseline";
+import {
+  releaseClaimedCalendars,
+  releaseClaimsOnFailure,
+  reserveClaimedMembers,
+} from "@/utils/pending-ingest-claim";
 
 const DRAIN_LOCK_KEY = "push-drain:tick";
 const DRAIN_LOCK_TTL_SECONDS = 60;
 const SCORE_STRIDE = 2;
+
+const drainWithLockRelease = async (
+  dependencies: DrainPendingIngestDependencies,
+  releaseLock: () => Promise<void>,
+): Promise<void> => {
+  try {
+    await runDrainPendingIngest(dependencies);
+  } finally {
+    await releaseLock();
+  }
+};
 
 const parsePendingMembers = (entries: string[]): PendingIngestMember[] => {
   const members: PendingIngestMember[] = [];
@@ -41,25 +58,39 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
 
   return {
     claimPending: async (limit) => {
-      const members = parsePendingMembers(
+      const members = await reserveClaimedMembers(refreshLockRedis, parsePendingMembers(
         await refreshLockRedis.zrange(PENDING_INGEST_KEY, 0, limit - 1, "WITHSCORES"),
-      );
+      ));
       if (members.length === 0) {
         return members;
       }
-      return attachCorrelationIds(members, await refreshLockRedis.hmget(
-        PENDING_CORRELATION_KEY,
-        ...members.map((member) => member.calendarId),
-      ));
+      return releaseClaimsOnFailure(refreshLockRedis, members, async () =>
+        attachCorrelationIds(members, await refreshLockRedis.hmget(
+          PENDING_CORRELATION_KEY,
+          ...members.map((member) => member.calendarId),
+        )));
     },
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
-    enqueueDestinationSyncs: async (userIds, correlationIdByUserId) => {
-      await enqueueDestinationSyncsForUsers(userIds, "push", correlationIdByUserId);
+    enqueueDestinationSyncs: async (
+      userIds,
+      correlationIdByUserId,
+      webhookReceivedAtByUserId,
+    ) => {
+      await enqueueDestinationSyncsForUsers(
+        userIds,
+        "push",
+        correlationIdByUserId,
+        webhookReceivedAtByUserId,
+      );
     },
     ingestCalendars: async (calendarIds, correlationIdByCalendarId) => {
       const result = await ingestOAuthSources(calendarIds, correlationIdByCalendarId);
-      return { affectedUserIds: result.affectedUserIds };
+      const { abortedCalendarIds, affectedUserIds } = result;
+      if (abortedCalendarIds.length > 0 && affectedUserIds.length === 0) {
+        throw new IngestBaselineMovedAbortError(abortedCalendarIds);
+      }
+      return { affectedUserIds };
     },
     now: () => new Date(),
     observe: (fields) => {
@@ -71,6 +102,7 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     recordFailures: async (calendarIds) => {
       const counts = await Promise.all(calendarIds.map((calendarId) =>
         refreshLockRedis.hincrby(PENDING_FAILURES_KEY, calendarId, 1)));
+      await releaseClaimedCalendars(refreshLockRedis, calendarIds);
       return Object.fromEntries(
         calendarIds.map((calendarId, index) => [calendarId, counts[index] ?? 0]),
       );
@@ -80,7 +112,16 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
       await refreshLockRedis.hdel(PENDING_FAILURES_KEY, ...calendarIds);
       await refreshLockRedis.hdel(PENDING_CORRELATION_KEY, ...calendarIds);
     },
-    releasePending: (members) => releaseUnchangedMembers(refreshLockRedis, members),
+    releaseClaims: (calendarIds) =>
+      releaseClaimedCalendars(refreshLockRedis, calendarIds),
+    releasePending: async (members) => {
+      const removed = await releaseUnchangedMembers(refreshLockRedis, members);
+      await releaseClaimedCalendars(
+        refreshLockRedis,
+        members.map((member) => member.calendarId),
+      );
+      return removed;
+    },
     resolveCalendars: (calendarIds) => database
       .select({ calendarId: calendarsTable.id, userId: calendarsTable.userId })
       .from(calendarsTable)
@@ -126,11 +167,13 @@ const observedDrain = withCronWideEvent({
       return;
     }
 
-    try {
-      await runDrainPendingIngest(dependencies);
-    } finally {
-      await refreshLockStore.release(DRAIN_LOCK_KEY);
-    }
+    const { inFlightDrainRegistry } = await import("@/context");
+    const tick = drainWithLockRelease(
+      dependencies,
+      () => refreshLockStore.release(DRAIN_LOCK_KEY),
+    );
+    inFlightDrainRegistry.register(tick);
+    await tick;
   },
   cron: "*/10 * * * * *",
   name: import.meta.file,

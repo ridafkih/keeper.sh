@@ -1,7 +1,9 @@
 import { PENDING_CORRELATION_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
+import { releaseClaimsOnFailure, reserveClaimedMembers } from "./pending-ingest-claim";
+import type { ClaimReleaseRedis, ClaimReserveRedis } from "./pending-ingest-claim";
 import type { PendingIngestMember } from "./drain-pending-ingest";
 
-interface ScopedClaimRedis {
+interface ScopedClaimRedis extends ClaimReleaseRedis, ClaimReserveRedis {
   hmget: (key: string, ...members: string[]) => Promise<(string | null)[]>;
   zscore: (key: string, member: string) => Promise<string | null>;
 }
@@ -31,22 +33,24 @@ const createScopedClaimPending = (
     scoped.map((calendarId) => redis.zscore(PENDING_INGEST_KEY, calendarId)),
   );
 
-  const members: PendingIngestMember[] = [];
+  const woken: PendingIngestMember[] = [];
   for (const [index, calendarId] of scoped.entries()) {
     const score = Number(scores[index]);
     if (scores[index] !== null && Number.isFinite(score)) {
-      members.push({ calendarId, score });
+      woken.push({ calendarId, score });
     }
   }
 
+  const members = await reserveClaimedMembers(redis, woken);
   if (members.length === 0) {
     return members;
   }
 
-  return attachCorrelationIds(members, await redis.hmget(
-    PENDING_CORRELATION_KEY,
-    ...members.map((member) => member.calendarId),
-  ));
+  return releaseClaimsOnFailure(redis, members, async () =>
+    attachCorrelationIds(members, await redis.hmget(
+      PENDING_CORRELATION_KEY,
+      ...members.map((member) => member.calendarId),
+    )));
 };
 
 export { attachCorrelationIds, createScopedClaimPending };

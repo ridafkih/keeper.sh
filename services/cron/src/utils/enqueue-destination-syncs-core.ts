@@ -44,6 +44,7 @@ const runEnqueueDestinationSyncsForUsers = async (
   dependencies: EnqueueDestinationSyncDependencies,
   trigger: PushSyncTrigger = "cron",
   correlationIdByUserId: Record<string, string> = {},
+  webhookReceivedAtByUserId: Record<string, number> = {},
 ): Promise<number> => {
   if (!dependencies.enabled) {
     return 0;
@@ -104,6 +105,7 @@ const runEnqueueDestinationSyncsForUsers = async (
       plan,
       resolveCorrelationId,
       trigger,
+      webhookReceivedAtByUserId,
     ));
   widelog.set("push_drain.jobs_requested", jobs.length);
   widelog.set("push_drain.jobs_enqueued", jobs.length);

@@ -18,6 +18,7 @@ import {
   buildCalendarBackoffState,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
+  PENDING_INGEST_KEY,
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
   createSourceIngestionPlan,
@@ -58,7 +59,7 @@ import {
   userSubscriptionsTable,
   userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import {
@@ -79,12 +80,18 @@ import {
   requiresReauthentication,
 } from "@/utils/error-flags";
 import { resolveOAuthIngestionState } from "@/utils/oauth-ingestion-state";
+import {
+  INGEST_BASELINE_MOVED_SLUG,
+  IngestBaselineMovedError,
+  isIngestBaselineMovedError,
+} from "@/utils/ingest-baseline";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 import { estimateIngestWeight } from "@/utils/ingest-weight";
+import { measureDatabaseRead, measureDatabaseWrite } from "@/utils/measured-database";
 import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
 import type { IngestFlushReservation, IngestLane } from "@/utils/ingest-lanes";
 
@@ -100,13 +107,17 @@ const ADVISORY_LOCK_WAIT_BOUND_MS = 5000;
 const UNBOUNDED_USER_GROUPS = 100_000;
 const USER_GROUP_CONCURRENCY = UNBOUNDED_USER_GROUPS;
 const USER_CALENDAR_CONCURRENCY = UNBOUNDED_USER_GROUPS;
-const ICS_CALENDAR_CONCURRENCY = 2;
+const ICS_CALENDAR_CONCURRENCY = 8;
 
 /*
- * ICS keeps a small dedicated group budget: parsing is CPU-bound and starves
- * the Bun event loop when run wide open — observed 2026-08-17.
+ * ICS keeps a dedicated group budget: parsing is CPU-bound and starves the Bun event loop
+ * when run wide open — observed 2026-08-17, when a parse took 30,133ms.
+ *
+ * What bounds the loop is parse-seconds in flight, not calendars in flight, and that parse
+ * is now 457ms. The 2026-08-17 budget of 4x2 held 241 parse-seconds; 16x8 holds 59, so the
+ * wider budget still sits four times under the occupancy that caused the incident.
  */
-const ICS_PARSE_CONCURRENCY = 4;
+const ICS_PARSE_CONCURRENCY = 16;
 const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
 
 /*
@@ -139,57 +150,8 @@ const leaseLockRedis: RedisLeaseClient = {
     refreshLockRedis.call("set", key, value, ...options) as Promise<string | null>,
 };
 
-/*
- * The lane gate, not the driver pool: a lane owns a fixed slice of the pool's connections,
- * so its occupancy is what a source actually competed for, and a query admitted with no
- * free permit is the one that paid for the contention.
- */
-const countQueuedQuery = (hasFreePermit: boolean): number => {
-  if (hasFreePermit) {
-    return 0;
-  }
-  return 1;
-};
-
-const runPooledQuery = async <TResult>(
-  lane: IngestLane,
-  statement: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("database.queries.count", 1);
-  widelog.count(
-    "database.queries.queued_count",
-    countQueuedQuery(lane.pooledQueryGate.hasFreePermit()),
-  );
-  return await lane.pooledQueryGate.run(async () => {
-    widelog.max("database.pool.in_flight", lane.pooledQueryGate.inFlight());
-    return await statement();
-  });
-};
-
-const measureDatabaseRead = async <TResult>(
-  lane: IngestLane,
-  read: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("db.read_count", 1);
-  return await measureSegment(
-    "work.db_read_ms",
-    async () => await runPooledQuery(lane, read),
-  );
-};
-
-const measureDatabaseWrite = async <TResult>(
-  lane: IngestLane,
-  write: () => PromiseLike<TResult>,
-): Promise<TResult> => {
-  widelog.count("db.write_count", 1);
-  return await measureSegment(
-    "work.db_write_ms",
-    async () => await runPooledQuery(lane, write),
-  );
-};
-
 const resetIngestBackoff = async (lane: IngestLane, calendarId: string): Promise<void> => {
-  await measureDatabaseWrite(lane, () => database
+  await measureDatabaseWrite(lane.pooledQueryGate,() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: 0,
@@ -205,7 +167,7 @@ const applyIngestBackoff = async (
   currentFailureCount: number,
 ): Promise<CalendarBackoffState> => {
   const state = buildCalendarBackoffState(currentFailureCount);
-  await measureDatabaseWrite(lane, () => database
+  await measureDatabaseWrite(lane.pooledQueryGate,() => database
     .update(calendarsTable)
     .set({
       ingestFailureCount: state.failureCount,
@@ -244,11 +206,20 @@ const resetIngestBackoffIfCurrent = async (
   }
 };
 
-const runSourceIngest = async <TResult>(
+interface SourceIngestAttempt {
+  failureCount: number;
+  nextAttemptAt: Date | null;
+}
+
+const isIngestBackoffActive = (attempt: SourceIngestAttempt): boolean =>
+  attempt.nextAttemptAt !== null && attempt.nextAttemptAt > new Date();
+
+const runSourceIngest = async <TSource extends SourceIngestAttempt, TResult>(
   lane: IngestLane,
   calendarId: string,
   signal: AbortSignal,
-  work: (isCurrent: () => Promise<boolean>) => Promise<TResult>,
+  readSource: () => Promise<TSource | undefined>,
+  work: (source: TSource, isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
 ): Promise<TResult | null> => {
   const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
@@ -261,26 +232,19 @@ const runSourceIngest = async <TResult>(
     return null;
   }
   try {
-    const [attempt] = await measureDatabaseRead(lane, () => database
-      .select({
-        failureCount: calendarsTable.ingestFailureCount,
-        nextAttemptAt: calendarsTable.ingestNextAttemptAt,
-      })
-      .from(calendarsTable)
-      .where(eq(calendarsTable.id, calendarId))
-      .limit(1));
-    if (!attempt || attempt.nextAttemptAt && attempt.nextAttemptAt > new Date()) {
+    const source = await readSource();
+    if (!source || isIngestBackoffActive(source)) {
       return null;
     }
     try {
-      const result = await work(lockResult.handle.isCurrent);
-      if (attempt.failureCount > 0) {
+      const result = await work(source, lockResult.handle.isCurrent);
+      if (source.failureCount > 0) {
         await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
       }
       return result;
     } catch (error) {
-      if (shouldApplyBackoff(error)) {
-        logIngestBackoff(await applyIngestBackoff(lane, calendarId, attempt.failureCount));
+      if (shouldApplyBackoff(error) && !isIngestBaselineMovedError(error)) {
+        logIngestBackoff(await applyIngestBackoff(lane, calendarId, source.failureCount));
       }
       throw error;
     }
@@ -425,11 +389,12 @@ const reserveIngestFlushWeight = async (
   calendarId: string,
   hasEverIngested: boolean,
   signal: AbortSignal,
+  cachedStoredEventCount: number | null,
 ): Promise<IngestFlushReservation> => {
   const weight = await estimateIngestWeight(
     {
       countStoredEvents: async (targetCalendarId: string): Promise<number> => {
-        const rows = await measureDatabaseRead(lane, () => database
+        const rows = await measureDatabaseRead(lane.pooledQueryGate,() => database
           .select({ count: count() })
           .from(eventStatesTable)
           .where(eq(eventStatesTable.calendarId, targetCalendarId)));
@@ -438,6 +403,7 @@ const reserveIngestFlushWeight = async (
     },
     calendarId,
     hasEverIngested,
+    cachedStoredEventCount,
   );
   const reservation = await measureSegment(
     "wait.flush_reserve_ms",
@@ -455,6 +421,7 @@ const createIngestionPersistenceTransaction = (
   signal: AbortSignal,
   deadlineAt: number,
   reservation: IngestFlushReservation,
+  baselineIngestSeq: number,
 ) =>
   (work: IngestionPersistenceWork) => {
     const ledger = createPersistenceLedger();
@@ -500,6 +467,19 @@ const createIngestionPersistenceTransaction = (
     signal.throwIfAborted();
     await setRemainingStatementTimeout();
 
+    ledger.readCount += 1;
+    const [baseline] = await measureLedgerRead(ledger, () => transaction
+      .select({ ingestSeq: calendarsTable.ingestSeq })
+      .from(calendarsTable)
+      .where(eq(calendarsTable.id, calendarId))
+      .limit(1));
+    const storedIngestSeq = baseline?.ingestSeq ?? null;
+    signal.throwIfAborted();
+    if (storedIngestSeq !== null && storedIngestSeq !== baselineIngestSeq) {
+      throw new IngestBaselineMovedError(calendarId, baselineIngestSeq, storedIngestSeq);
+    }
+
+    let existingEventCount: number | null = null;
     const result = await work({
       readExistingEvents: async () => {
         await setRemainingStatementTimeout();
@@ -524,6 +504,7 @@ const createIngestionPersistenceTransaction = (
         .from(eventStatesTable)
           .where(eq(eventStatesTable.calendarId, calendarId)));
         signal.throwIfAborted();
+        existingEventCount = events.length;
         return events;
       },
       flush: async (changes) => {
@@ -546,6 +527,20 @@ const createIngestionPersistenceTransaction = (
             changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
             () => { ledger.writeCount += 1; },
           ));
+          signal.throwIfAborted();
+        }
+
+        if (existingEventCount !== null) {
+          const storedEventCount = Math.max(
+            0,
+            existingEventCount + changes.inserts.length - changes.deletes.length,
+          );
+          await setRemainingStatementTimeout();
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () => transaction
+            .update(calendarsTable)
+            .set({ storedEventCount })
+            .where(eq(calendarsTable.id, calendarId)));
           signal.throwIfAborted();
         }
 
@@ -596,6 +591,14 @@ const createIngestionPersistenceTransaction = (
             persistCalendarSnapshot(transaction, calendarId, snapshot));
           signal.throwIfAborted();
         }
+
+        await setRemainingStatementTimeout();
+        ledger.writeCount += 1;
+        await measureLedgerWrite(ledger, () => transaction
+          .update(calendarsTable)
+          .set({ ingestSeq: sql`${calendarsTable.ingestSeq} + 1` })
+          .where(eq(calendarsTable.id, calendarId)));
+        signal.throwIfAborted();
       },
     });
       signal.throwIfAborted();
@@ -750,7 +753,7 @@ const getRequiredSourceRanges = async (
   lane: IngestLane,
   sourceCalendarId: string,
 ): Promise<RequiredSourceRanges> => {
-  const mappings = await measureDatabaseRead(lane, () => database
+  const mappings = await measureDatabaseRead(lane.pooledQueryGate,() => database
     .select({
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
@@ -959,7 +962,7 @@ const applyReauthenticationDemands = async (
           widelog.set("outcome", "skipped");
           return;
         }
-        const written = await measureDatabaseWrite(lane, () => database
+        const written = await measureDatabaseWrite(lane.pooledQueryGate,() => database
           .update(calendarAccountsTable)
           .set({
             needsReauthentication,
@@ -994,6 +997,7 @@ const applyReauthenticationDemands = async (
 };
 
 interface IngestionBatchResult {
+  abortedCalendarIds: string[];
   added: number;
   affectedUserIds: string[];
   errors: number;
@@ -1009,6 +1013,18 @@ const createSkippedIngestionResult = (userId: string): IngestionSourceResult => 
   shouldPush: false,
   userId,
 });
+
+const recordBaselineMovedAbort = (error: unknown): boolean => {
+  if (!isIngestBaselineMovedError(error)) {
+    return false;
+  }
+  widelog.set("outcome", "aborted");
+  widelog.set("ingest.baseline_moved", true);
+  widelog.set("ingest.baseline_seq", error.expectedIngestSeq);
+  widelog.set("ingest.observed_seq", error.observedIngestSeq);
+  widelog.errorFields(error, { retriable: true, slug: INGEST_BASELINE_MOVED_SLUG });
+  return true;
+};
 
 const recordIngestWideEvent = (event: IngestWideEventFields): void => {
   for (const [key, value] of Object.entries(selectIngestWideEventFields(event))) {
@@ -1052,10 +1068,26 @@ const collectRecordedDemandSources = (
     }),
   );
 
+const collectAbortedCalendarIds = (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+  calendarIds: string[],
+): string[] =>
+  settlements.flatMap((settlement, index): string[] => {
+    if (settlement.status !== "rejected" || !isIngestBaselineMovedError(settlement.reason)) {
+      return [];
+    }
+    const calendarId = calendarIds[index];
+    if (!calendarId) {
+      return [];
+    }
+    return [calendarId];
+  });
+
 const summariseIngestionSettlements = async (
   lane: IngestLane,
   settlements: PromiseSettledResult<IngestionSourceResult>[],
   accounts: SourceAccountContext[],
+  calendarIds: string[],
 ): Promise<IngestionBatchResult> => {
   const results = settlements
     .filter((settlement): settlement is PromiseFulfilledResult<IngestionSourceResult> =>
@@ -1069,6 +1101,7 @@ const summariseIngestionSettlements = async (
   );
 
   return {
+    abortedCalendarIds: collectAbortedCalendarIds(settlements, calendarIds),
     added: results.reduce((total, { eventsAdded }) => total + eventsAdded, 0),
     affectedUserIds: [
       ...new Set(results.filter(({ shouldPush }) => shouldPush).map(({ userId }) => userId)),
@@ -1082,6 +1115,7 @@ const summariseIngestionSettlements = async (
 };
 
 const createEmptyIngestionBatchResult = (): IngestionBatchResult => ({
+  abortedCalendarIds: [],
   added: 0,
   affectedUserIds: [],
   errors: 0,
@@ -1114,16 +1148,141 @@ const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
   return fleetIngestLane;
 };
 
-const ingestOAuthSources = async (
-  calendarIds?: string[],
-  correlationIdByCalendarId: Record<string, string> = {},
-): Promise<IngestionBatchResult> => {
-  if (calendarIds && calendarIds.length === 0) {
-    return createEmptyIngestionBatchResult();
-  }
-  const lane = resolveIngestLane(calendarIds);
+/*
+ * The drain ticks every 10s, so an entry older than this is no longer evidence that anyone is
+ * about to read the calendar. Without the bound a wedged drain would hold the fleet off its
+ * own calendars indefinitely, and the calendar would silently stop syncing altogether.
+ */
+const PENDING_INGEST_YIELD_BOUND_MS = 60_000;
 
-  const oauthSources = await database
+const isRecentPendingScore = (score: string | null, receivedAfter: number): boolean => {
+  if (score === null) {
+    return false;
+  }
+  return Number(score) >= receivedAfter;
+};
+
+/*
+ * The webhook drain is about to ingest whatever it holds a fresh receipt for, so the fleet
+ * hands those calendars over rather than duplicating the read behind the same lock. Yielding
+ * is safe because the fleet is the reconciliation pass: a missed webhook leaves the calendar
+ * out of the pending set, so the next fleet pass takes it.
+ */
+const resolveFleetYieldedCalendarIds = async (
+  sourceCalendarIds: string[],
+): Promise<Set<string>> => {
+  if (sourceCalendarIds.length === 0) {
+    return new Set<string>();
+  }
+  try {
+    const scores = await refreshLockRedis.zmscore(PENDING_INGEST_KEY, ...sourceCalendarIds);
+    const receivedAfter = Date.now() - PENDING_INGEST_YIELD_BOUND_MS;
+    return new Set(sourceCalendarIds.filter((_calendarId, index) =>
+      isRecentPendingScore(scores[index] ?? null, receivedAfter)));
+  } catch (error) {
+    /* Yielding is an optimisation, so an unreadable pending set costs the pass nothing. */
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "pending-ingest-yield-lookup-failed",
+    });
+    return new Set<string>();
+  }
+};
+
+const FLEET_PASS_SOURCE_BOUND = 250;
+
+const FLEET_PASS_PRO_HEAD_START = "10 minutes";
+
+const buildFleetPriorityOrder = () => [
+  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '${sql.raw(FLEET_PASS_PRO_HEAD_START)}' else interval '0' end asc`,
+  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
+  desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+  asc(calendarsTable.id),
+];
+
+interface FleetPassWindow<TSource> {
+  scanned: number;
+  taken: TSource[];
+}
+
+const takeFleetPassWindow = <TSource extends { calendarId: string }>(
+  windowSources: TSource[],
+  yieldedCalendarIds: Set<string>,
+): FleetPassWindow<TSource> => {
+  const taken: TSource[] = [];
+  let scanned = 0;
+  for (const source of windowSources) {
+    if (taken.length >= FLEET_PASS_SOURCE_BOUND) {
+      break;
+    }
+    scanned += 1;
+    if (!yieldedCalendarIds.has(source.calendarId)) {
+      taken.push(source);
+    }
+  }
+  return { scanned, taken };
+};
+
+const resolveYieldedCalendarIds = (
+  calendarIds: string[] | undefined,
+  sourceCalendarIds: string[],
+): Promise<Set<string>> => {
+  /* The webhook path owns the calendars it names, so it never yields one. */
+  if (calendarIds) {
+    return Promise.resolve(new Set<string>());
+  }
+  return resolveFleetYieldedCalendarIds(sourceCalendarIds);
+};
+
+const hasFreshPendingReceipt = async (calendarId: string): Promise<boolean> => {
+  try {
+    const score = await refreshLockRedis.zscore(PENDING_INGEST_KEY, calendarId);
+    return isRecentPendingScore(score, Date.now() - PENDING_INGEST_YIELD_BOUND_MS);
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "pending-ingest-yield-lookup-failed",
+    });
+    return false;
+  }
+};
+
+const shouldYieldSource = (
+  calendarIds: string[] | undefined,
+  calendarId: string,
+): Promise<boolean> => {
+  if (calendarIds) {
+    return Promise.resolve(false);
+  }
+  return hasFreshPendingReceipt(calendarId);
+};
+
+const recordYieldedCount = (
+  calendarIds: string[] | undefined,
+  yieldedCalendarIds: Set<string>,
+): void => {
+  if (calendarIds) {
+    return;
+  }
+  widelog.set("ingest.yielded_count", yieldedCalendarIds.size);
+};
+
+const resolveSelectedSources = <TSource extends { calendarId: string }>(
+  calendarIds: string[] | undefined,
+  windowSources: TSource[],
+  yieldedCalendarIds: Set<string>,
+): TSource[] => {
+  if (calendarIds) {
+    return windowSources.filter(({ calendarId }) => !yieldedCalendarIds.has(calendarId));
+  }
+  const { scanned, taken } = takeFleetPassWindow(windowSources, yieldedCalendarIds);
+  widelog.set("ingest.taken_count", taken.length);
+  widelog.set("ingest.deferred_count", windowSources.length - scanned);
+  return taken;
+};
+
+const buildOAuthSourceQuery = (calendarIds: string[] | undefined) =>
+  database
     .select({
       accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
@@ -1153,16 +1312,38 @@ const ingestOAuthSources = async (
         ...buildOAuthSourceIdFilter(calendarIds),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    );
+    .orderBy(...buildFleetPriorityOrder());
+
+const ingestOAuthSources = async (
+  calendarIds?: string[],
+  correlationIdByCalendarId: Record<string, string> = {},
+): Promise<IngestionBatchResult> => {
+  if (calendarIds && calendarIds.length === 0) {
+    return createEmptyIngestionBatchResult();
+  }
+  const lane = resolveIngestLane(calendarIds);
+
+  const oauthSources = await buildOAuthSourceQuery(calendarIds);
+
+  const yieldedCalendarIds = await resolveYieldedCalendarIds(
+    calendarIds,
+    oauthSources.map(({ calendarId }) => calendarId),
+  );
+  const selectedSources = resolveSelectedSources(
+    calendarIds,
+    oauthSources,
+    yieldedCalendarIds,
+  );
 
   const settlements = await allSettledGroupedWithConcurrency(
-    oauthSources.map((source) => {
+    selectedSources.map((source) => {
       const enqueuedAt = Date.now();
-      return () =>
-      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
+      return async (): Promise<IngestionSourceResult> => {
+        if (await shouldYieldSource(calendarIds, source.calendarId)) {
+          yieldedCalendarIds.add(source.calendarId);
+          return createSkippedIngestionResult(source.userId);
+        }
+        return withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
           widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
@@ -1183,21 +1364,25 @@ const ingestOAuthSources = async (
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+              runSourceIngest(lane, source.calendarId, signal, async () => {
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
                     expiresAt: oauthCredentialsTable.expiresAt,
                     externalCalendarId: calendarsTable.externalCalendarId,
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
+                    ingestSeq: calendarsTable.ingestSeq,
                     ingestWindowEnd: calendarsTable.ingestWindowEnd,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
                     ingestWindowStart: calendarsTable.ingestWindowStart,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
                     oauthCredentialId: oauthCredentialsTable.id,
                     provider: calendarAccountsTable.provider,
                     refreshToken: oauthCredentialsTable.refreshToken,
+                    storedEventCount: calendarsTable.storedEventCount,
                     syncToken: calendarsTable.syncToken,
                     userId: calendarsTable.userId,
                   })
@@ -1216,7 +1401,9 @@ const ingestOAuthSources = async (
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
                   .limit(1));
-                if (!currentSource?.externalCalendarId) {
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
+                if (!currentSource.externalCalendarId) {
                   return createSkippedIngestionResult(source.userId);
                 }
 
@@ -1277,6 +1464,7 @@ const ingestOAuthSources = async (
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
@@ -1288,6 +1476,7 @@ const ingestOAuthSources = async (
                       signal,
                       deadlineAt,
                       reservation,
+                      currentSource.ingestSeq,
                     ),
                     onIngestEvent: recordIngestWideEvent,
                   });
@@ -1327,6 +1516,9 @@ const ingestOAuthSources = async (
 
             return result;
           } catch (error) {
+            if (recordBaselineMovedAbort(error)) {
+              throw error;
+            }
 
             widelog.set("outcome", "error");
 
@@ -1358,18 +1550,22 @@ const ingestOAuthSources = async (
           }
         }),
       SOURCE_TIMEOUT_MS);
+      };
     }),
-oauthSources.map((source) => source.userId),
+selectedSources.map((source) => source.userId),
     { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
+
+  recordYieldedCount(calendarIds, yieldedCalendarIds);
 
   return summariseIngestionSettlements(
     lane,
     settlements,
-    oauthSources.map(({ accountId, reauthenticationSource }) => ({
+    selectedSources.map(({ accountId, reauthenticationSource }) => ({
       accountId,
       recordedDemandSource: reauthenticationSource,
     })),
+    selectedSources.map(({ calendarId }) => calendarId),
   );
 };
 
@@ -1405,10 +1601,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    );
+    .orderBy(...buildFleetPriorityOrder());
 
   const settlements = await allSettledGroupedWithConcurrency(
     caldavSources.map((source) => {
@@ -1427,17 +1620,21 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+              runSourceIngest(lane, source.calendarId, signal, async () => {
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
+                    ingestSeq: calendarsTable.ingestSeq,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
                     provider: calendarAccountsTable.provider,
                     serverUrl: caldavCredentialsTable.serverUrl,
+                    storedEventCount: calendarsTable.storedEventCount,
                     userId: calendarsTable.userId,
                     username: caldavCredentialsTable.username,
                   })
@@ -1456,9 +1653,8 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                     arrayContains(calendarsTable.capabilities, ["pull"]),
                   ))
                   .limit(1));
-                if (!currentSource) {
-                  return createSkippedIngestionResult(source.userId);
-                }
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
                 const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const rateLimiter = resolveRateLimiter(currentSource.provider, {
                   accountId: currentSource.accountId,
@@ -1488,6 +1684,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
@@ -1506,6 +1703,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                       signal,
                       deadlineAt,
                       reservation,
+                      currentSource.ingestSeq,
                     ),
                     onIngestEvent: recordIngestWideEvent,
                   });
@@ -1541,6 +1739,9 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
 
             return result;
           } catch (error) {
+            if (recordBaselineMovedAbort(error)) {
+              throw error;
+            }
 
             widelog.set("outcome", "error");
 
@@ -1578,6 +1779,7 @@ caldavSources.map((source) => source.userId),
       accountId,
       recordedDemandSource: reauthenticationSource,
     })),
+    caldavSources.map(({ calendarId }) => calendarId),
   );
 };
 
@@ -1600,10 +1802,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    );
+    .orderBy(...buildFleetPriorityOrder());
 
   const settlements = await allSettledGroupedWithConcurrency(
     icsSources.map((source) => {
@@ -1621,12 +1820,16 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
 
           try {
             const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async (isCurrent) => {
-                const [currentSource] = await measureDatabaseRead(lane, () => database
+              runSourceIngest(lane, source.calendarId, signal, async () => {
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
+                    failureCount: calendarsTable.ingestFailureCount,
                     ingestFutureRange: calendarsTable.ingestFutureRange,
                     ingestHistoricRange: calendarsTable.ingestHistoricRange,
+                    ingestSeq: calendarsTable.ingestSeq,
                     ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
+                    storedEventCount: calendarsTable.storedEventCount,
                     treatFullDayTimedEventsAsAllDay:
                       calendarsTable.treatFullDayTimedEventsAsAllDay,
                     url: calendarsTable.url,
@@ -1639,7 +1842,9 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                     eq(calendarsTable.disabled, false),
                   ))
                   .limit(1));
-                if (!currentSource?.url) {
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
+                if (!currentSource.url) {
                   return createSkippedIngestionResult(source.userId);
                 }
                 const ranges = await getRequiredSourceRanges(lane, source.calendarId);
@@ -1662,6 +1867,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                   source.calendarId,
                   currentSource.ingestWindowRecordedAt !== null,
                   signal,
+                  currentSource.storedEventCount,
                 );
                 try {
                   const ingestionResult = await ingestSource({
@@ -1682,6 +1888,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                       signal,
                       deadlineAt,
                       reservation,
+                      currentSource.ingestSeq,
                     ),
                     onIngestEvent: recordIngestWideEvent,
                   });
@@ -1712,6 +1919,9 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
 
             return result;
           } catch (error) {
+            if (recordBaselineMovedAbort(error)) {
+              throw error;
+            }
 
             widelog.set("outcome", "error");
             widelog.errorFields(error, {
@@ -1733,6 +1943,7 @@ icsSources.map((source) => source.userId),
     lane,
     settlements,
     icsSources.map(() => ({ accountId: null, recordedDemandSource: null })),
+    icsSources.map(({ calendarId }) => calendarId),
   );
 };
 
@@ -1806,5 +2017,5 @@ export default withCronWideEvent({
   overrunProtection: false,
 }) satisfies CronOptions;
 
-export { ingestOAuthSources, resolveRateLimiter };
+export { FLEET_PASS_SOURCE_BOUND, ingestOAuthSources, resolveRateLimiter };
 export type { IngestionBatchResult };

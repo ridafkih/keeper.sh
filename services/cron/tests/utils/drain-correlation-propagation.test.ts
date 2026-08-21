@@ -21,6 +21,7 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   recordFailures: vi.fn((calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])))),
   releaseAbandoned: vi.fn(() => Promise.resolve()),
+  releaseClaims: vi.fn(() => Promise.resolve()),
   releasePending: vi.fn((members: { calendarId: string }[]) =>
     Promise.resolve(members.map((member) => member.calendarId))),
   resolveCalendars: vi.fn(() => Promise.resolve([{ calendarId: "cal-1", userId: "user-1" }])),
@@ -48,6 +49,7 @@ describe("drain propagation of the webhook correlation id", () => {
     expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(
       ["user-1"],
       { "user-1": WEBHOOK_CORRELATION_ID },
+      { "user-1": NOW_MS },
     );
   });
 

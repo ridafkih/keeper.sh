@@ -11,6 +11,10 @@ import type { RedisLeaseClient, SemaphoreLease } from "./leased-semaphore";
 const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
 const ACQUIRE_RESULT_LENGTH = 2;
+const QUEUE_DEPTH_INDEX = 2;
+const QUEUE_ENTRY_TTL_MS = 180_000;
+const QUEUE_HEAD_GRACE_MS = 15_000;
+const QUEUE_POLL_CEILING_MS = 5000;
 
 interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
@@ -24,37 +28,112 @@ interface RedisScriptClient {
   eval(script: string, numberOfKeys: number, ...arguments_: string[]): Promise<unknown>;
 }
 
-/**
- * KEYS[1] = sorted set key
- * ARGV = [window start ms, now ms, slots to acquire, max requests per minute]
- * Returns [waitTime, occupancy]; waitTime 0 means acquired.
- */
 const ACQUIRE_SCRIPT = `
+  -- The head is dropped for staying silent while it blocks someone, never for its join score:
+  -- eviction by join score would re-queue a still-polling waiter behind every later arrival.
+  local function headAfterReaping(queueKey, blockedKey, token, now)
+    local head = redis.call('ZRANGE', queueKey, 0, 0)[1]
+    if head == nil or head == token then
+      return head
+    end
+    local blockedSince = redis.call('ZSCORE', blockedKey, head)
+    if blockedSince == false then
+      redis.call('ZADD', blockedKey, now, head)
+      redis.call('PEXPIRE', blockedKey, ${QUEUE_ENTRY_TTL_MS})
+      return head
+    end
+    if now - tonumber(blockedSince) >= ${QUEUE_HEAD_GRACE_MS} then
+      redis.call('ZREM', queueKey, head)
+      redis.call('ZREM', blockedKey, head)
+      return redis.call('ZRANGE', queueKey, 0, 0)[1]
+    end
+    return head
+  end
+
   redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
   local current = redis.call('ZCARD', KEYS[1])
   local count = tonumber(ARGV[3])
   local limit = tonumber(ARGV[4])
   local now = tonumber(ARGV[2])
+  local token = ARGV[5]
 
-  if current + count <= limit then
+  if token == nil or token == '' then
+    if current + count <= limit then
+      -- The queue binds newcomers too, or a fresh acquire would take the slot a parked
+      -- waiter has been queueing for; the reaping above keeps a gone head from wedging them.
+      local freshQueueKey = KEYS[1] .. ':queue'
+      local aheadOfUs = headAfterReaping(freshQueueKey, freshQueueKey .. ':blocked', '', now)
+      if aheadOfUs ~= nil then
+        return {${RETRY_POLL_MS}, current}
+      end
+
+      for i = 1, count do
+        redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
+      end
+      redis.call('PEXPIRE', KEYS[1], 60000)
+      return {0, current}
+    end
+
+    local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+    if #oldest >= 2 then
+      local oldestScore = tonumber(oldest[2])
+      return {oldestScore + 60000 - now, current}
+    end
+
+    return {1000, current}
+  end
+
+  local queueKey = KEYS[1] .. ':queue'
+  local blockedKey = queueKey .. ':blocked'
+  local queueTtl = tonumber(ARGV[6])
+  local head = headAfterReaping(queueKey, blockedKey, token, now)
+
+  -- This poll is the head's proof of life, whatever it is about to be told.
+  if head == token then
+    redis.call('ZREM', blockedKey, token)
+  end
+
+  local atHead = head == nil or head == token
+  local hasRoom = current + count <= limit
+
+  if atHead and hasRoom then
     for i = 1, count do
       redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
     end
     redis.call('PEXPIRE', KEYS[1], 60000)
-    return {0, current}
+    redis.call('ZREM', queueKey, token)
+    return {0, current, redis.call('ZCARD', queueKey)}
   end
 
-  local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
-  if #oldest >= 2 then
-    local oldestScore = tonumber(oldest[2])
-    return {oldestScore + 60000 - now, current}
+  redis.call('ZADD', queueKey, 'NX', now, token)
+  redis.call('PEXPIRE', queueKey, queueTtl)
+  redis.call('PEXPIRE', blockedKey, queueTtl)
+  local depth = redis.call('ZCARD', queueKey)
+
+  -- Refused by the waiter ahead alone: what unblocks this is that waiter's next poll,
+  -- not a window slot, so the oldest-entry expiry below would overstate the wait by a minute.
+  if hasRoom then
+    return {${RETRY_POLL_MS}, current, depth}
   end
 
-  return {1000, current}
+  local queuedOldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+  if #queuedOldest >= 2 then
+    return {tonumber(queuedOldest[2]) + 60000 - now, current, depth}
+  end
+
+  return {1000, current, depth}
+`;
+
+/* KEYS[1] = sorted set key, ARGV[1] = waiter token. */
+const LEAVE_QUEUE_SCRIPT = `
+  redis.call('ZREM', KEYS[1] .. ':queue', ARGV[1])
+  redis.call('ZREM', KEYS[1] .. ':queue:blocked', ARGV[1])
+  return 1
 `;
 
 interface AcquireDecision {
   occupancy: number;
+  queueDepth?: number;
   waitTimeMs: number;
 }
 
@@ -62,24 +141,11 @@ const parseAcquireDecision = (raw: unknown): AcquireDecision => {
   if (!Array.isArray(raw) || raw.length < ACQUIRE_RESULT_LENGTH) {
     throw new Error("Rate limiter acquire script returned an unexpected result shape");
   }
-  return { occupancy: Number(raw[1]), waitTimeMs: Number(raw[0]) };
-};
-
-const inProcessWaitersByKey = new Map<string, number>();
-
-const enterRateLimiterQueue = (key: string): number => {
-  const depth = (inProcessWaitersByKey.get(key) ?? 0) + 1;
-  inProcessWaitersByKey.set(key, depth);
-  return depth;
-};
-
-const leaveRateLimiterQueue = (key: string): void => {
-  const depth = (inProcessWaitersByKey.get(key) ?? 1) - 1;
-  if (depth <= 0) {
-    inProcessWaitersByKey.delete(key);
-    return;
+  const decision: AcquireDecision = { occupancy: Number(raw[1]), waitTimeMs: Number(raw[0]) };
+  if (raw.length > ACQUIRE_RESULT_LENGTH) {
+    decision.queueDepth = Number(raw[QUEUE_DEPTH_INDEX]);
   }
-  inProcessWaitersByKey.set(key, depth);
+  return decision;
 };
 
 const sleep = (delayMs: number): Promise<void> =>
@@ -124,43 +190,58 @@ const createRedisRateLimiter = (
   const acquire = async (count: number, signal?: AbortSignal): Promise<void> => {
     widelog.count("ratelimit.acquire_count", 1);
     const startedAt = performance.now();
-    let queued = false;
+    let waiterToken = "";
+    let joinedQueue = false;
+    let granted = false;
     try {
       while (true) {
         signal?.throwIfAborted();
         const now = Date.now();
         const windowStart = now - MS_PER_MINUTE;
+        const scriptArguments = [
+          key,
+          String(windowStart),
+          String(now),
+          String(count),
+          String(requestsPerMinute),
+        ];
+        if (waiterToken !== "") {
+          scriptArguments.push(waiterToken, String(QUEUE_ENTRY_TTL_MS));
+          /*
+           * Marked before the call, not after: a lost reply still leaves the entry recorded
+           * server-side, and only the departure eval can clear it off the head.
+           */
+          joinedQueue = true;
+        }
 
-        const { occupancy, waitTimeMs } = parseAcquireDecision(await measureRedisCommand(() =>
-          redis.eval(
-            ACQUIRE_SCRIPT,
-            1,
-            key,
-            String(windowStart),
-            String(now),
-            String(count),
-            String(requestsPerMinute),
-          )));
+        const { occupancy, queueDepth, waitTimeMs } = parseAcquireDecision(
+          await measureRedisCommand(() => redis.eval(ACQUIRE_SCRIPT, 1, ...scriptArguments)),
+        );
         widelog.max("ratelimit.window_occupancy_max", occupancy);
+        if (typeof queueDepth === "number") {
+          widelog.max("ratelimit.queue_depth_max", queueDepth);
+        }
 
         if (waitTimeMs <= 0) {
+          granted = true;
           return;
         }
 
         widelog.count("ratelimit.throttled_count", 1);
-        if (!queued) {
-          queued = true;
+        if (waiterToken === "") {
+          waiterToken = crypto.randomUUID();
           /* Only a parked acquire names its key: an unthrottled one waited on nothing. */
           widelog.set("wait.rate_limiter_key", key);
-          widelog.max("ratelimit.queue_depth_max", enterRateLimiterQueue(key));
         }
 
-        const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, MS_PER_MINUTE));
+        const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, QUEUE_POLL_CEILING_MS));
         await waitForRetry(sleepMs, signal);
       }
     } finally {
-      if (queued) {
-        leaveRateLimiterQueue(key);
+      if (joinedQueue && !granted) {
+        await redis
+          .eval(LEAVE_QUEUE_SCRIPT, 1, key, waiterToken)
+          .catch(() => null);
       }
       recordSegment("wait.rate_limiter_ms", performance.now() - startedAt);
     }

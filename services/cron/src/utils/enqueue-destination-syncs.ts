@@ -30,6 +30,7 @@ const enqueueDestinationSyncsForUsers = async (
   candidateUserIds: Iterable<string>,
   trigger: PushSyncTrigger = "cron",
   correlationIdByUserId: Record<string, string> = {},
+  webhookReceivedAtByUserId: Record<string, number> = {},
 ): Promise<number> => {
   const { database, premiumService } = await import("@/context");
   const openQueues = new Set<ReturnType<typeof createPushSyncQueue>>();
@@ -87,6 +88,7 @@ const enqueueDestinationSyncsForUsers = async (
         dependencies,
         trigger,
         correlationIdByUserId,
+        webhookReceivedAtByUserId,
       ),
       ENQUEUE_TIMEOUT_MS,
     );

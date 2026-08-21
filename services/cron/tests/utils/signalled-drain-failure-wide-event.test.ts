@@ -51,7 +51,12 @@ afterEach(() => {
   process.stdout.write = originalWrite;
 });
 
-const scoreRedis = { hmget: () => Promise.resolve([]), zscore: () => Promise.resolve(null) };
+const scoreRedis = {
+  del: (...keys: string[]) => Promise.resolve(keys.length),
+  hmget: () => Promise.resolve([]),
+  set: () => Promise.resolve("OK"),
+  zscore: () => Promise.resolve(null),
+};
 
 describe("a failed signalled drain still emits and still does not throw", () => {
   it("emits the failure event and resolves so the reader loop survives", async () => {

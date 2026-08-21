@@ -20,6 +20,7 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   recordFailures: vi.fn((calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])))),
   releaseAbandoned: vi.fn(() => Promise.resolve()),
+  releaseClaims: vi.fn(() => Promise.resolve()),
   releasePending: vi.fn((members: { calendarId: string; score: number }[]) =>
     Promise.resolve(members.map((member) => member.calendarId))),
   resolveCalendars: vi.fn(() => Promise.resolve([{ calendarId: "cal-1", userId: "user-1" }])),
@@ -118,7 +119,11 @@ describe("runDrainPendingIngest happy path", () => {
       "enqueueDestinationSyncs",
     ]);
     expect(dependencies.ingestCalendars).toHaveBeenCalledWith(["cal-1"], {});
-    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(["user-1"], {});
+    expect(dependencies.enqueueDestinationSyncs).toHaveBeenCalledWith(
+      ["user-1"],
+      {},
+      { "user-1": NOW_MS },
+    );
   });
 
   it("claims the oldest members up to the batch cap", async () => {
