@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { Text } from "@/components/ui/primitives/text";
+import { CalendarFrame } from "./calendar-frame";
 import { addDays, formatHourLabel, HOURS, isSameDay, startOfWeek } from "./calendar-helpers";
 
 /** Width of the left time gutter, in pixels. */
 const GUTTER_WIDTH = 52;
 /** Height of a single hour row, in pixels. */
 const HOUR_HEIGHT = 48;
-/** Height of the sticky weekday/date header row, in pixels. */
+/** Height of the weekday/date header row, in pixels. */
 const HEADER_HEIGHT = 56;
 /** Visible day columns (a week). */
 const VISIBLE_COLUMNS = 7;
@@ -24,17 +26,23 @@ interface WeekGridProps {
   /** Reports the week (its Sunday) scrolled into view, so the pane title and
    * paging stay in sync with manual horizontal scrolling. */
   onVisibleWeekChange: (weekStart: Date) => void;
+  /** The pane's toolbar, rendered in the header card above the day row. */
+  toolbar: ReactNode;
 }
 
 /**
- * The week grid skeleton, modelled on qali's time strip: a pinned left time
- * gutter, a sticky day header, and a single two-axis scroller whose buffered
- * day columns snap one day at a time — so the week scrolls horizontally like
- * qali's. Presentational only: no events; a current-time line marks today.
+ * The week view skeleton, modelled on qali's time strip: a pinned left time
+ * gutter and a single two-axis scroller whose buffered day columns snap one
+ * day at a time — so the week scrolls horizontally like qali's. The day row
+ * lives in the header card above; it has no scroller of its own and simply
+ * mirrors the grid's horizontal offset, so the two always line up.
+ * Presentational only: no events; a current-time line marks today.
  */
-export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
+export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps) {
   const today = useStartOfToday();
   const scrollerRef = useRef<HTMLDivElement>(null);
+  /** The overflow-hidden viewport around the day row, in the header card. */
+  const headerStripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   /** The week (ms) the strip is currently aligned to; guards the anchor effect
@@ -101,6 +109,11 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
   }, [anchor, scrollToWeek]);
 
   const handleScroll = () => {
+    // Mirror the horizontal offset onto the header's day row synchronously —
+    // not inside the rAF below — so it never trails the grid by a frame.
+    const scroller = scrollerRef.current;
+    const headerStrip = headerStripRef.current;
+    if (scroller && headerStrip) headerStrip.scrollLeft = scroller.scrollLeft;
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
@@ -124,42 +137,17 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
     [],
   );
 
-  return (
-    <div
-      ref={scrollerRef}
-      onScroll={handleScroll}
-      className="flex min-h-0 flex-1 items-start overflow-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      style={{ scrollSnapType: "x mandatory", scrollPaddingLeft: GUTTER_WIDTH }}
-    >
-      {/* Pinned time gutter. */}
-      <div
-        className="sticky left-0 z-30 flex shrink-0 flex-col bg-background-elevated"
-        style={{ width: GUTTER_WIDTH }}
-      >
+  const dayRow = (
+    <div className="flex" style={{ height: HEADER_HEIGHT }}>
+      {/* Spacer over the grid's time gutter, keeping the columns aligned. */}
+      <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
+      <div ref={headerStripRef} className="min-w-0 flex-1 overflow-hidden">
         <div
-          className="sticky top-0 z-10 shrink-0 border-b border-border-elevated bg-background-elevated"
-          style={{ height: HEADER_HEIGHT }}
-        />
-        <div className="relative shrink-0" style={{ height: HOUR_HEIGHT * HOURS.length }}>
-          {HOURS.slice(1).map((hour) => (
-            <span
-              key={hour}
-              className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted"
-              style={{ top: hour * HOUR_HEIGHT }}
-            >
-              {formatHourLabel(hour)}
-            </span>
-          ))}
-        </div>
-      </div>
-      {/* Buffered day strip: 7 columns fill the viewport, the rest overflow. */}
-      <div
-        className="flex shrink-0 flex-col"
-        style={{ width: `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})` }}
-      >
-        <div
-          className="sticky top-0 z-20 grid shrink-0 border-b border-border-elevated bg-background-elevated"
-          style={{ gridTemplateColumns: columnsTemplate, height: HEADER_HEIGHT }}
+          className="grid h-full"
+          style={{
+            gridTemplateColumns: columnsTemplate,
+            width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
+          }}
         >
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
@@ -167,7 +155,6 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
               <div
                 key={day.getTime()}
                 className="flex flex-col items-center justify-center gap-1 border-l border-border-elevated"
-                style={{ scrollSnapAlign: "start" }}
               >
                 <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
                   {day.toLocaleDateString("en-US", { weekday: "short" })}
@@ -184,9 +171,41 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
             );
           })}
         </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <CalendarFrame toolbar={toolbar} columnHeader={dayRow}>
+      <div
+        ref={scrollerRef}
+        onScroll={handleScroll}
+        className="flex min-h-0 flex-1 items-start overflow-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ scrollSnapType: "x mandatory", scrollPaddingLeft: GUTTER_WIDTH }}
+      >
+        {/* Pinned time gutter. */}
+        <div
+          className="relative sticky left-0 z-30 shrink-0 bg-background-elevated"
+          style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
+        >
+          {HOURS.slice(1).map((hour) => (
+            <span
+              key={hour}
+              className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted"
+              style={{ top: hour * HOUR_HEIGHT }}
+            >
+              {formatHourLabel(hour)}
+            </span>
+          ))}
+        </div>
+        {/* Buffered day strip: 7 columns fill the viewport, the rest overflow. */}
         <div
           className="relative grid shrink-0"
-          style={{ gridTemplateColumns: columnsTemplate, height: HOUR_HEIGHT * HOURS.length }}
+          style={{
+            gridTemplateColumns: columnsTemplate,
+            width: `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})`,
+            height: HOUR_HEIGHT * HOURS.length,
+          }}
         >
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
@@ -213,6 +232,6 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
           })}
         </div>
       </div>
-    </div>
+    </CalendarFrame>
   );
 }
