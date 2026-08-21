@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { Text } from "@/components/ui/primitives/text";
@@ -19,6 +19,15 @@ const VISIBLE_COLUMNS = 7;
 const BUFFER_WEEKS = 26;
 
 const MS_PER_DAY = 86_400_000;
+
+/** A 1px column rule along a cell's left edge that fades out toward the top,
+ * so the day row's lines dissolve into the toolbar above instead of meeting
+ * a separator at a hard corner. Sits exactly where the grid's `border-l` is. */
+const FADED_COLUMN_RULE: CSSProperties = {
+  backgroundImage: "linear-gradient(to top, var(--color-border-elevated) 35%, transparent)",
+  backgroundSize: "1px 100%",
+  backgroundRepeat: "no-repeat",
+};
 
 interface WeekGridProps {
   /** Any date inside the week to show; drives the horizontal scroll position. */
@@ -79,6 +88,13 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
     return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
   }, []);
 
+  /** Mirrors the scroller's horizontal offset onto the header's day row. */
+  const syncHeaderStrip = useCallback(() => {
+    const scroller = scrollerRef.current;
+    const headerStrip = headerStripRef.current;
+    if (scroller && headerStrip) headerStrip.scrollLeft = scroller.scrollLeft;
+  }, []);
+
   const scrollToWeek = useCallback(
     (weekStart: Date, behavior: ScrollBehavior) => {
       const el = scrollerRef.current;
@@ -87,8 +103,11 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
       const clamped = Math.max(0, Math.min(index, stripDays.length - VISIBLE_COLUMNS));
       alignedWeekMsRef.current = weekStart.getTime();
       el.scrollTo({ left: clamped * columnWidth(), behavior });
+      // An instant jump lands before any scroll event; mirror it right away so
+      // the header never shows a stale week, even for a frame.
+      if (behavior === "auto") syncHeaderStrip();
     },
-    [columnWidth, stripDays],
+    [columnWidth, stripDays, syncHeaderStrip],
   );
 
   // On mount, jump to the anchor week and down to business hours (auto, no
@@ -129,11 +148,9 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
   }, [scrollToWeek]);
 
   const handleScroll = () => {
-    // Mirror the horizontal offset onto the header's day row synchronously —
-    // not inside the rAF below — so it never trails the grid by a frame.
-    const scroller = scrollerRef.current;
-    const headerStrip = headerStripRef.current;
-    if (scroller && headerStrip) headerStrip.scrollLeft = scroller.scrollLeft;
+    // Mirror synchronously — not inside the rAF below — so the header never
+    // trails the grid by a frame.
+    syncHeaderStrip();
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
@@ -174,7 +191,8 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
             return (
               <div
                 key={day.getTime()}
-                className="flex flex-col items-center justify-center gap-1 border-l border-border-elevated"
+                className="flex flex-col items-center justify-center gap-1"
+                style={FADED_COLUMN_RULE}
               >
                 <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
                   {day.toLocaleDateString("en-US", { weekday: "short" })}
