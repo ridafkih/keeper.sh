@@ -128,7 +128,7 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
     <div
       ref={scrollerRef}
       onScroll={handleScroll}
-      className="flex min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-width:thin]"
+      className="flex min-h-0 flex-1 overflow-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{ scrollSnapType: "x mandatory", scrollPaddingLeft: GUTTER_WIDTH }}
     >
       {/* Pinned time gutter. */}
