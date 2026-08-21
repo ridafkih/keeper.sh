@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 interface CalendarFrameProps {
   /** Title, view switcher and paging controls; the header card's top row. */
@@ -7,6 +7,10 @@ interface CalendarFrameProps {
    * inside the header card, so they stay put while the grid scrolls. No
    * separator is drawn between the two; the slot owns its own lines. */
   columnHeader: ReactNode;
+  /** Caps the grid card's content height (px). The card still shrinks to fit
+   * short viewports, but stops growing past this on tall ones — so a grid with
+   * a natural height (24 hours) is not left floating in empty card. */
+  gridMaxHeight?: CSSProperties["maxHeight"];
   /** The grid itself; fills the second card. */
   children: ReactNode;
 }
@@ -17,14 +21,23 @@ interface CalendarFrameProps {
  * carries `overflow-hidden` + `isolate` so a scrolling child is clipped to its
  * rounded corners, and `min-h-0 flex-1` so that child can size itself.
  */
-export function CalendarFrame({ toolbar, columnHeader, children }: CalendarFrameProps) {
+export function CalendarFrame({
+  toolbar,
+  columnHeader,
+  gridMaxHeight,
+  children,
+}: CalendarFrameProps) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-3">
       <header className="flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs">
         <div className="flex items-center justify-between gap-3 px-4 py-3">{toolbar}</div>
         {columnHeader}
       </header>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate">
+      {/* `box-content` so `gridMaxHeight` measures the content, not the border. */}
+      <div
+        className="box-content flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate"
+        style={{ maxHeight: gridMaxHeight }}
+      >
         {children}
       </div>
     </div>

@@ -230,7 +230,11 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   );
 
   return (
-    <CalendarFrame toolbar={toolbar} columnHeader={dayRow}>
+    <CalendarFrame
+      toolbar={toolbar}
+      columnHeader={dayRow}
+      gridMaxHeight={HOUR_HEIGHT * HOURS.length}
+    >
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
