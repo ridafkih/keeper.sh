@@ -1,6 +1,8 @@
+import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { Text } from "@/components/ui/primitives/text";
+import { CalendarFrame } from "./calendar-frame";
 import { isSameDay, isSameMonth, WEEKDAY_LABELS } from "./calendar-helpers";
 
 interface MonthGridProps {
@@ -8,32 +10,38 @@ interface MonthGridProps {
   anchor: Date;
   /** The 42 days of the 6×7 grid, from `getMonthGridDays`. */
   days: Date[];
+  /** The pane's toolbar, rendered in the header card above the weekday row. */
+  toolbar: ReactNode;
 }
 
 /**
- * The month grid skeleton: a weekday header over a 6×7 grid of day cells.
- * Presentational only — no events are rendered yet; each cell reserves space
- * where event pills will later go.
+ * The month view skeleton: a weekday label row in the header card over a 6×7
+ * grid of day cells in the grid card. Presentational only — no events are
+ * rendered yet; each cell reserves space where event pills will later go.
  */
-export function MonthGrid({ anchor, days }: MonthGridProps) {
+export function MonthGrid({ anchor, days, toolbar }: MonthGridProps) {
   const today = useStartOfToday();
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="grid grid-cols-7">
-        {WEEKDAY_LABELS.map((label) => (
-          <Text
-            key={label}
-            as="span"
-            size="xs"
-            tone="muted"
-            className="px-2 py-2 font-medium uppercase tracking-wide"
-          >
-            {label}
-          </Text>
-        ))}
-      </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6 border-t border-border-elevated">
+    <CalendarFrame
+      toolbar={toolbar}
+      columnHeader={
+        <div className="grid grid-cols-7">
+          {WEEKDAY_LABELS.map((label) => (
+            <Text
+              key={label}
+              as="span"
+              size="xs"
+              tone="muted"
+              className="px-2 py-2 font-medium uppercase tracking-wide"
+            >
+              {label}
+            </Text>
+          ))}
+        </div>
+      }
+    >
+      <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-6">
         {days.map((day) => {
           const inMonth = isSameMonth(day, anchor);
           const isToday = isSameDay(day, today);
@@ -61,6 +69,6 @@ export function MonthGrid({ anchor, days }: MonthGridProps) {
           );
         })}
       </div>
-    </div>
+    </CalendarFrame>
   );
 }

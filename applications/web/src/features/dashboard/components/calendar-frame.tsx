@@ -1,0 +1,31 @@
+import type { ReactNode } from "react";
+
+interface CalendarFrameProps {
+  /** Title, view switcher and paging controls; the header card's top row. */
+  toolbar: ReactNode;
+  /** The column labels (weekday / date row) that sit beneath the toolbar,
+   * inside the header card, so they stay put while the grid scrolls. */
+  columnHeader: ReactNode;
+  /** The grid itself; fills the second card. */
+  children: ReactNode;
+}
+
+/**
+ * The calendar pane's chrome: a header card (toolbar over column labels)
+ * stacked on a grid card, matching the sidebar's card rhythm. The grid card
+ * carries `overflow-hidden` + `isolate` so a scrolling child is clipped to its
+ * rounded corners, and `min-h-0 flex-1` so that child can size itself.
+ */
+export function CalendarFrame({ toolbar, columnHeader, children }: CalendarFrameProps) {
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col gap-3">
+      <header className="flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">{toolbar}</div>
+        <div className="border-t border-border-elevated">{columnHeader}</div>
+      </header>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate">
+        {children}
+      </div>
+    </div>
+  );
+}
