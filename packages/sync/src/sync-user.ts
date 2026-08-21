@@ -15,6 +15,7 @@ import {
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
+  isOAuthProvider,
 } from "@keeper.sh/calendar";
 import { MS_PER_DAY, OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
@@ -357,7 +358,7 @@ const MAX_OAUTH_NATIVE_COVERAGE_AGE_MS = 2 * OAUTH_SYNC_TOKEN_REFRESH_MS;
 const MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS = 2 * MS_PER_DAY;
 
 const getMaxNativeCoverageAgeMs = (provider: string): number => {
-  if (provider === "google" || provider === "outlook") {
+  if (isOAuthProvider(provider)) {
     return MAX_OAUTH_NATIVE_COVERAGE_AGE_MS;
   }
   return MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS;

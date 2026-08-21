@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { computeSyncOperations } from "@keeper.sh/calendar";
+import {
+  computeSyncOperations,
+  getCalDAVProviders,
+  getOAuthProviders,
+} from "@keeper.sh/calendar";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 import type {
   BunSQLClient,
@@ -13,6 +17,23 @@ import {
   suppressNativeDuplicates,
 } from "../src/sync-user";
 import type { NativeDuplicateDestination } from "../src/sync-user";
+
+const registryMocks = vi.hoisted(() => ({ newlyRegisteredOAuthProviderId: "keeper-oauth-next" }));
+
+/*
+ * The provider registry is the only place that knows which providers rotate a sync token, so
+ * a provider registered as OAuth after this file was written must arrive already holding the
+ * rotation's week of tolerance — not two days it has no ingest cadence to refresh within.
+ */
+vi.mock("@keeper.sh/calendar", async (importOriginal) => {
+  const original = await importOriginal<Record<string, unknown>>();
+  const isOAuthProvider = original.isOAuthProvider as (id: string) => boolean;
+  return {
+    ...original,
+    isOAuthProvider: (id: string): boolean =>
+      id === registryMocks.newlyRegisteredOAuthProviderId || isOAuthProvider(id),
+  };
+});
 
 const DESTINATION_CALENDAR_ID = "destination-1";
 const SOURCE_CALENDAR_ID = "source-1";
@@ -342,6 +363,53 @@ describe("a destination whose ingest never reached as far back as its sources", 
     expect(filtered.suppressedCount).toBe(1);
   });
 
+  /*
+   * The clamp bounds the window, not the expansion: a master straddling the coverage's start
+   * is walked from a duration before it, so its first slot lands under the very coverage the
+   * clamp verified. The destination detached that instance and moved it out of its ingest
+   * window months ago, so the override row was never fetched and nothing here contradicts
+   * the master — the leak the clamp exists to close, at its lower edge.
+   */
+  const STRADDLING_NATIVE_MASTER: NativeEventStateRow = {
+    endTime: new Date("2026-06-01T02:00:00.000Z"),
+    exceptionDates: null,
+    id: "native-state-2",
+    isAllDay: false,
+    recurrenceId: null,
+    recurrenceRule: JSON.stringify({ frequency: "WEEKLY" }),
+    sourceEventUid: SHARED_UID,
+    startTime: new Date("2026-05-31T22:00:00.000Z"),
+    startTimeZone: null,
+  };
+
+  const STRADDLING_OCCURRENCE = createLocalEvent({
+    endTime: new Date("2026-06-01T02:00:00.000Z"),
+    eventStateId: "source-state-may",
+    id: "source-state-may",
+    startTime: new Date("2026-05-31T22:00:00.000Z"),
+  });
+
+  const COVERED_STRADDLING_OCCURRENCE = createLocalEvent({
+    endTime: new Date("2026-06-08T02:00:00.000Z"),
+    eventStateId: "source-state-june",
+    id: "source-state-june",
+    startTime: new Date("2026-06-07T22:00:00.000Z"),
+  });
+
+  it("keeps the mirror of a slot the expansion reaches below its verified coverage", async () => {
+    const filtered = await suppressNativeDuplicates({
+      database: createNativeDatabase({
+        [DESTINATION_CALENDAR_ID]: [STRADDLING_NATIVE_MASTER],
+      }),
+      destination: INGESTED_FROM_JUNE,
+      events: [STRADDLING_OCCURRENCE, COVERED_STRADDLING_OCCURRENCE],
+      localReadWindow: YEAR_LONG_READ_WINDOW,
+    });
+
+    expect(filtered.events).toEqual([STRADDLING_OCCURRENCE]);
+    expect(filtered.suppressedCount).toBe(1);
+  });
+
   it("suppresses nothing until an ingest has recorded a window at all", async () => {
     const filtered = await filterAgainstStaleMaster({
       ...INGESTED_FROM_JUNE,
@@ -385,6 +453,10 @@ describe("a destination whose ingest never reached as far back as its sources", 
  * where one frozen row goes on claiming every slot its rule expands to.
  */
 describe("a destination whose ingest has stopped recording coverage", () => {
+  const OAUTH_PROVIDER_IDS = getOAuthProviders().map((provider) => provider.id);
+  const CALDAV_PROVIDER_IDS = getCalDAVProviders().map((provider) => provider.id);
+  const EVERY_PROVIDER_ID = [...OAUTH_PROVIDER_IDS, ...CALDAV_PROVIDER_IDS];
+
   const RECORDED_AT = new Date("2026-01-02T00:00:00.000Z");
 
   const wedgedSince = (provider: string): NativeDuplicateDestination => ({
@@ -434,58 +506,91 @@ describe("a destination whose ingest has stopped recording coverage", () => {
     });
   };
 
-  it("suppresses the duplicate while the recorded coverage is still current", async () => {
-    const filtered = await filterAt("google", new Date("2026-01-03T00:00:00.000Z"));
+  it.each(EVERY_PROVIDER_ID)(
+    "suppresses the duplicate for %s while the recorded coverage is still current",
+    async (provider) => {
+      const filtered = await filterAt(provider, new Date("2026-01-03T00:00:00.000Z"));
 
-    expect(filtered.events).toEqual([]);
-    expect(filtered.suppressedCount).toBe(1);
-  });
+      expect(filtered.events).toEqual([]);
+      expect(filtered.suppressedCount).toBe(1);
+    },
+  );
 
-  it("keeps mirroring once the recorded coverage is older than any ingest that refreshes it", async () => {
-    const filtered = await filterAt("google", new Date("2026-07-01T00:00:00.000Z"));
+  it.each(EVERY_PROVIDER_ID)(
+    "keeps mirroring for %s once the recorded coverage is older than any ingest that refreshes it",
+    async (provider) => {
+      const filtered = await filterAt(provider, new Date("2026-07-01T00:00:00.000Z"));
 
-    expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
-    expect(filtered.suppressedCount).toBe(0);
-  });
+      expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
+      expect(filtered.suppressedCount).toBe(0);
+    },
+  );
 
-  it("still suppresses for an OAuth destination that has missed a single sync-token rotation", async () => {
-    const filtered = await filterAt("google", wedgedFor(13));
+  it.each(OAUTH_PROVIDER_IDS)(
+    "still suppresses for a %s destination that has missed a single sync-token rotation",
+    async (provider) => {
+      const filtered = await filterAt(provider, wedgedFor(13));
 
-    expect(filtered.events).toEqual([]);
-    expect(filtered.suppressedCount).toBe(1);
-  });
+      expect(filtered.events).toEqual([]);
+      expect(filtered.suppressedCount).toBe(1);
+    },
+  );
 
-  it("keeps mirroring for an OAuth destination past two sync-token rotations", async () => {
-    const current = await filterAt("google", wedgedFor(14));
-    const stale = await filterAt("google", wedgedFor(14, 1));
+  it.each(OAUTH_PROVIDER_IDS)(
+    "keeps mirroring for a %s destination past two sync-token rotations",
+    async (provider) => {
+      const current = await filterAt(provider, wedgedFor(14));
+      const stale = await filterAt(provider, wedgedFor(14, 1));
 
-    expect(current.suppressedCount).toBe(1);
-    expect(stale.events).toEqual([INVITED_OCCURRENCE]);
-    expect(stale.suppressedCount).toBe(0);
-  });
+      expect(current.suppressedCount).toBe(1);
+      expect(stale.events).toEqual([INVITED_OCCURRENCE]);
+      expect(stale.suppressedCount).toBe(0);
+    },
+  );
 
-  it("still suppresses for a CalDAV destination that has missed a single day-roll", async () => {
-    const filtered = await filterAt("caldav", wedgedFor(2));
+  it.each(CALDAV_PROVIDER_IDS)(
+    "still suppresses for a %s destination that has missed a single day-roll",
+    async (provider) => {
+      const filtered = await filterAt(provider, wedgedFor(2));
 
-    expect(filtered.events).toEqual([]);
-    expect(filtered.suppressedCount).toBe(1);
-  });
+      expect(filtered.events).toEqual([]);
+      expect(filtered.suppressedCount).toBe(1);
+    },
+  );
 
-  it("keeps mirroring for a CalDAV destination past two day-rolls", async () => {
-    const filtered = await filterAt("caldav", wedgedFor(2, 1));
+  it.each(CALDAV_PROVIDER_IDS)(
+    "keeps mirroring for a %s destination past two day-rolls",
+    async (provider) => {
+      const filtered = await filterAt(provider, wedgedFor(2, 1));
 
-    expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
-    expect(filtered.suppressedCount).toBe(0);
-  });
+      expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
+      expect(filtered.suppressedCount).toBe(0);
+    },
+  );
 
   /*
    * The week an OAuth rotation may take is thirteen day-rolls a CalDAV ingest has missed, and
    * its stored masters keep claiming every slot their rules expand to for the whole of it.
    */
-  it("keeps mirroring for a CalDAV destination wedged for an OAuth rotation's worth of days", async () => {
-    const filtered = await filterAt("caldav", wedgedFor(13));
+  it.each(CALDAV_PROVIDER_IDS)(
+    "keeps mirroring for a %s destination wedged for an OAuth rotation's worth of days",
+    async (provider) => {
+      const filtered = await filterAt(provider, wedgedFor(13));
 
-    expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
-    expect(filtered.suppressedCount).toBe(0);
+      expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
+      expect(filtered.suppressedCount).toBe(0);
+    },
+  );
+
+  /*
+   * A hardcoded id list cannot classify a provider registered after it was written, and the
+   * cost of misclassifying one is silent: the destination reads as stale on every steady-state
+   * run, suppresses nothing, and reports the same all-zero count as a healthy one.
+   */
+  it("holds a provider the registry newly calls OAuth to the rotation's tolerance", async () => {
+    const filtered = await filterAt(registryMocks.newlyRegisteredOAuthProviderId, wedgedFor(13));
+
+    expect(filtered.events).toEqual([]);
+    expect(filtered.suppressedCount).toBe(1);
   });
 });

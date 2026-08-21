@@ -199,17 +199,24 @@ const getDuplicateMasterSeriesUids = (events: SyncableEvent[]): Set<string> => {
 
 /*
  * The stretch in which a reference can still be the twin of an indexed slot, opened by one
- * occurrence interval past the first and last slot the rule produces: a reference further out
- * than that names a position the rule reaches at no point in this window — a declined date
- * left behind when COUNT or UNTIL shortened the series, or one anchored before it opens — so
- * every slot it could have vacated is somewhere else entirely. A day floors the interval, the
- * widest a provider re-anchoring the reference into another zone can carry it off its slot.
+ * occurrence interval past the first and last slot the index admits: a reference further out
+ * than that names a position no admitted slot sits at — a declined date left behind when
+ * COUNT or UNTIL shortened the series, one anchored before it opens, or one naming a slot
+ * below the window, which the index leaves unclaimed either way — so every slot it could have
+ * vacated is somewhere else entirely. A day floors the interval, the widest a provider
+ * re-anchoring the reference into another zone can carry it off its slot.
  */
-const getDisplaceableSlotRange = (slots: Set<number>): DisplaceableSlotRange | null => {
-  if (slots.size === 0) {
+const getDisplaceableSlotRange = (
+  slots: Set<number>,
+  window: SyncWindow,
+): DisplaceableSlotRange | null => {
+  const admittedSlots = [...slots].filter(
+    (slot) => slot >= window.timeMin.getTime() && slot < window.timeMax.getTime(),
+  );
+  if (admittedSlots.length === 0) {
     return null;
   }
-  const orderedSlots = [...slots].toSorted((first, second) => first - second);
+  const orderedSlots = admittedSlots.toSorted((first, second) => first - second);
   const [firstSlot = 0] = orderedSlots;
   let lastSlot = firstSlot;
   let widestInterval = MS_PER_DAY;
@@ -230,10 +237,18 @@ const getDisplaceableSlotRange = (slots: Set<number>): DisplaceableSlotRange | n
  * suppressing it hides the one occurrence the mirror was needed for. Expanding the masters
  * alone names the slots such a reference can still land on. One that names none of them costs
  * its series, exactly as a duplicate master does; one outside the stretch those slots occupy
- * displaces nothing that gets indexed, so it withholds nothing. The floor under that stretch
- * is the expansion's own lookback, not the window's start: the index expands from a series
- * duration before timeMin so an occurrence already running there is reached, and a reference
- * landing anywhere in that lookback can still be the mis-anchored twin of an indexed slot.
+ * displaces nothing that gets indexed, so it withholds nothing. That stretch is measured
+ * against the slots the index admits, which begin no earlier than timeMin: a reference an
+ * interval below the first of them names a position the index leaves unclaimed whichever slot
+ * the destination detached there, so withholding on it would cost every in-window occurrence
+ * the series answers for and protect none. Under it sits the expansion's own lookback, held
+ * per series so a longer neighbour's reach never drags a shorter one's reference into
+ * judgement. The ceiling is that allowance in the other direction: every admitted slot sits
+ * below timeMax, so re-anchoring carries one at most a day past it. The masters are expanded
+ * that far as well — an expansion ending at timeMax leaves a reference carried over the edge
+ * unjudged and the slot it vacated indexed, while judging one against slots that stop at
+ * timeMax would cost the series for a date that merely declines the occurrence the window
+ * falls short of.
  */
 const getUnplaceableSlotSeriesUids = (
   events: SyncableEvent[],
@@ -284,6 +299,7 @@ const getUnplaceableSlotSeriesUids = (
     mastersByLookback.set(lookback, lookbackMasters);
   }
 
+  const placeableEnd = window.timeMax.getTime() + MS_PER_DAY;
   const expansionsByUid = new Map<string, PlaceableSeriesExpansion>();
   for (const [lookback, lookbackMasters] of mastersByLookback) {
     const placeableStart = window.timeMin.getTime() - lookback;
@@ -295,7 +311,7 @@ const getUnplaceableSlotSeriesUids = (
     const masterOccurrences = materializeRecurrenceEvents(
       lookbackMasters.map(({ exceptionDates: _exceptionDates, ...master }) => master),
       {
-        end: window.timeMax,
+        end: new Date(placeableEnd),
         start: new Date(placeableStart),
       },
       {
@@ -328,17 +344,17 @@ const getUnplaceableSlotSeriesUids = (
       continue;
     }
     /*
-     * A series the rule produces nothing for over this window has no indexed slot to be
-     * vacated, so its references answer for nothing and cost it nothing.
+     * A series the index admits no slot of over this window has none to be vacated, so its
+     * references answer for nothing and cost it nothing.
      */
-    const displaceable = getDisplaceableSlotRange(expansion.slots);
+    const displaceable = getDisplaceableSlotRange(expansion.slots, window);
     if (!displaceable) {
       continue;
     }
     const isUnplaceable = claimedSlots.some((slot) => slot >= expansion.placeableStart
       && slot >= displaceable.start
       && slot <= displaceable.end
-      && slot < window.timeMax.getTime()
+      && slot < placeableEnd
       && !expansion.slots.has(slot));
     if (isUnplaceable) {
       unplaceableSeriesUids.add(uid);
@@ -347,6 +363,21 @@ const getUnplaceableSlotSeriesUids = (
 
   return unplaceableSeriesUids;
 };
+
+/*
+ * The window's start is as far back as the destination's ingest is known to have read, and
+ * the expansion opens a lookback before it so an occurrence already running there is reached.
+ * A row is its own proof the destination fetched that copy, whichever side of the start it
+ * opens on; a slot the rule produces below the start is only an inference. An instance the
+ * destination detached and moved clear of its ingest window was never written to
+ * event_states, so no claim contradicts the master still naming the slot it vacated —
+ * suppressing that slot would retire the mirror of the source's only copy of it.
+ */
+const isVerifiedNativeOccurrence = (
+  occurrence: MaterializedSyncableEvent,
+  storedRowIds: ReadonlySet<string>,
+  window: SyncWindow,
+): boolean => occurrence.startTime >= window.timeMin || storedRowIds.has(occurrence.id);
 
 const getNativeOccurrenceIndex = async (
   database: BunSQLClient,
@@ -377,7 +408,11 @@ const getNativeOccurrenceIndex = async (
       },
     });
 
+    const storedRowIds = new Set(indexableEvents.map((event) => event.id));
     for (const occurrence of occurrences) {
+      if (!isVerifiedNativeOccurrence(occurrence, storedRowIds, window)) {
+        continue;
+      }
       occurrenceKeys.add(getNativeOccurrenceKey(occurrence));
     }
   }

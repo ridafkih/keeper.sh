@@ -34,6 +34,7 @@ const STORED_WEEKLY_RULE = JSON.stringify(WEEKLY_RULE);
 const DAILY_RULE = { count: 5, frequency: "DAILY" } as const;
 const STORED_DAILY_RULE = JSON.stringify(DAILY_RULE);
 const STORED_ENDLESS_WEEKLY_RULE = JSON.stringify({ frequency: "WEEKLY" });
+const STORED_ENDLESS_DAILY_RULE = JSON.stringify({ frequency: "DAILY" });
 const STORED_SECONDLY_RULE = JSON.stringify({ frequency: "SECONDLY" });
 
 interface NativeEventStateRow {
@@ -205,6 +206,23 @@ describe("a one-off event both calendars were invited to", () => {
     })]);
 
     const result = filterNativeDuplicateOccurrences([createSourceOccurrence()], index);
+
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(1);
+  });
+
+  /*
+   * A stored row is the destination's own proof it fetched that copy, whichever side of the
+   * window's start the copy opens on.
+   */
+  it("suppresses a copy that was already running when the window opened", async () => {
+    const overnight = {
+      endTime: new Date("2026-01-01T02:00:00.000Z"),
+      startTime: new Date("2025-12-31T22:00:00.000Z"),
+    };
+    const index = await buildIndex([createNativeRow(overnight)]);
+
+    const result = filterNativeDuplicateOccurrences([createSourceOccurrence(overnight)], index);
 
     expect(result.events).toEqual([]);
     expect(result.suppressedCount).toBe(1);
@@ -413,6 +431,15 @@ describe("a native series stored in a zone that observes daylight saving", () =>
 });
 
 describe("native data that must never suppress a mirror", () => {
+  /*
+   * A weekly series whose last slot inside the window sits two hours below its end, so a
+   * reference re-anchored forward off that slot lands past the window entirely.
+   */
+  const UPPER_EDGE_SERIES = {
+    endTime: new Date("2026-01-03T23:00:00.000Z"),
+    startTime: new Date("2026-01-03T22:00:00.000Z"),
+  };
+
   it("withholds a series that cannot be expanded within the occurrence budget", async () => {
     const index = await buildIndex([createNativeRow({
       recurrenceRule: STORED_SECONDLY_RULE,
@@ -558,11 +585,12 @@ describe("native data that must never suppress a mirror", () => {
   });
 
   /*
-   * An occurrence that starts before the window and ends inside it is indexed, so the first
-   * slot an overnight series occupies sits below timeMin — where an override the expansion
-   * cannot place still leaves that slot standing.
+   * A reference landing inside the interval below the first slot the index admits is still
+   * within reach of it: nothing separates a provider that rounded this one off the slot the
+   * window opens over from one that re-anchored it off the admitted slot above, and taking
+   * the second guess would leave the index claiming an instant the destination has vacated.
    */
-  it("withholds a series whose unplaceable override names an overnight slot below the window", async () => {
+  it("withholds a series whose unplaceable override sits just below the first admitted slot", async () => {
     const overnight = {
       endTime: new Date("2026-01-01T01:00:00.000Z"),
       startTime: new Date("2025-12-31T23:00:00.000Z"),
@@ -590,11 +618,12 @@ describe("native data that must never suppress a mirror", () => {
   });
 
   /*
-   * The expansion opens a duration before the window so an occurrence already running at
-   * timeMin is reached, and an override mis-anchored into that lookback still names the
-   * slot that expansion indexes.
+   * The index admits no slot below the window's start, so a reference that lands a whole
+   * interval below the first one it does admit can have vacated none of them: whichever slot
+   * the destination detached there is one nothing in the index claims, and withholding the
+   * series would cost every in-window occurrence it answers for.
    */
-  it("withholds a series whose unplaceable override sits in the expansion's lookback", async () => {
+  it("keeps indexing a series whose unplaceable override sits below every slot it admits", async () => {
     const overnight = {
       endTime: new Date("2026-01-01T02:00:00.000Z"),
       startTime: new Date("2025-12-31T22:00:00.000Z"),
@@ -614,11 +643,175 @@ describe("native data that must never suppress a mirror", () => {
 
     const result = filterNativeDuplicateOccurrences(events, index);
 
-    expect(occurrenceStarts(events)).toContain("2025-12-31T22:00:00.000Z");
+    expect(events).toHaveLength(5);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(occurrenceStarts(result.events)).toEqual(["2025-12-31T22:00:00.000Z"]);
+    expect(result.suppressedCount).toBe(4);
+  });
+
+  /*
+   * The same mis-anchoring at the window's upper edge, where it costs the most: the slot the
+   * reference was meant to vacate stays below timeMax and is therefore indexed, so the copy
+   * the destination declined or moved is the very occurrence suppression would hide.
+   */
+  it.each([
+    {
+      name: "declined date re-anchored past the window's end",
+      rows: [createNativeRow({
+        ...UPPER_EDGE_SERIES,
+        exceptionDates: JSON.stringify([{ date: new Date("2026-02-01T03:00:00.000Z") }]),
+        recurrenceRule: STORED_ENDLESS_WEEKLY_RULE,
+      })],
+    },
+    {
+      name: "declined date anchored exactly on the window's end",
+      rows: [createNativeRow({
+        ...UPPER_EDGE_SERIES,
+        exceptionDates: JSON.stringify([{ date: new Date("2026-02-01T00:00:00.000Z") }]),
+        recurrenceRule: STORED_ENDLESS_WEEKLY_RULE,
+      })],
+    },
+    {
+      name: "override re-anchored past the window's end",
+      rows: [
+        createNativeRow({ ...UPPER_EDGE_SERIES, recurrenceRule: STORED_ENDLESS_WEEKLY_RULE }),
+        createNativeRow({
+          endTime: new Date("2026-01-28T11:00:00.000Z"),
+          id: "native-state-2",
+          recurrenceId: new Date("2026-02-01T03:00:00.000Z"),
+          startTime: new Date("2026-01-28T10:00:00.000Z"),
+        }),
+      ],
+    },
+  ])("withholds a series holding a $name", async ({ rows }) => {
+    const index = await buildIndex(rows);
+    const events = materializeSource([
+      createSourceMaster({ ...UPPER_EDGE_SERIES, recurrenceRule: { frequency: "WEEKLY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toContain("2026-01-31T22:00:00.000Z");
     expect(index.withheldSeriesUids.has(SHARED_UID)).toBe(true);
     expect(index.occurrenceKeys.size).toBe(0);
     expect(result.events).toHaveLength(5);
     expect(result.suppressedCount).toBe(0);
+  });
+
+  /*
+   * The occurrence the window stops short of is still one the rule produces, so a date
+   * declining it is placed rather than mis-anchored, and every slot the window does cover
+   * keeps answering for the destination.
+   */
+  it("keeps indexing a series whose declined date lands on the first slot past the window", async () => {
+    const closing = {
+      endTime: new Date("2026-01-30T10:00:00.000Z"),
+      startTime: new Date("2026-01-30T09:00:00.000Z"),
+    };
+    const index = await buildIndex([createNativeRow({
+      ...closing,
+      exceptionDates: JSON.stringify([{ date: new Date("2026-02-01T09:00:00.000Z") }]),
+      recurrenceRule: STORED_ENDLESS_DAILY_RULE,
+    })]);
+    const events = materializeSource([
+      createSourceMaster({ ...closing, recurrenceRule: { frequency: "DAILY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toEqual([
+      "2026-01-30T09:00:00.000Z",
+      "2026-01-31T09:00:00.000Z",
+    ]);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(2);
+  });
+
+  /*
+   * The mirror image of the floor: the slot that date is an hour off is one the window falls
+   * short of, so the index never claimed it, and no slot the index does claim sits within a
+   * day of where the date landed.
+   */
+  it("keeps indexing a series whose declined date sits an hour off the slot past the window", async () => {
+    const closing = {
+      endTime: new Date("2026-01-30T10:00:00.000Z"),
+      startTime: new Date("2026-01-30T09:00:00.000Z"),
+    };
+    const index = await buildIndex([createNativeRow({
+      ...closing,
+      exceptionDates: JSON.stringify([{ date: new Date("2026-02-01T10:00:00.000Z") }]),
+      recurrenceRule: STORED_ENDLESS_DAILY_RULE,
+    })]);
+    const events = materializeSource([
+      createSourceMaster({ ...closing, recurrenceRule: { frequency: "DAILY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(events).toHaveLength(2);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(2);
+  });
+
+  /*
+   * A declined date a whole interval out lands past where the masters are expanded, so the
+   * slot it names is one the expansion cannot show — but the stretch a re-anchored reference
+   * could have reached still covers it, since that stretch opens an interval past the last
+   * slot. Only the expansion's own ceiling separates the two: beyond it a date is taken as
+   * declining an occurrence the window falls short of, never as a reference mis-anchored off
+   * a slot inside it, because no indexed slot sits within a day of where this one landed.
+   */
+  it("keeps indexing a series whose declined date lands an interval past the window", async () => {
+    const index = await buildIndex([createNativeRow({
+      exceptionDates: JSON.stringify([{ date: new Date("2026-02-02T09:00:00.000Z") }]),
+      recurrenceRule: STORED_ENDLESS_WEEKLY_RULE,
+    })]);
+    const events = materializeSource([
+      createSourceMaster({ recurrenceRule: { frequency: "WEEKLY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toEqual([
+      "2026-01-05T09:00:00.000Z",
+      "2026-01-12T09:00:00.000Z",
+      "2026-01-19T09:00:00.000Z",
+      "2026-01-26T09:00:00.000Z",
+    ]);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(index.occurrenceKeys.size).toBe(4);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(4);
+  });
+
+  /*
+   * The window's start is the destination's verified coverage, and the expansion opens a
+   * duration before it. A slot the rule produces in that band is an inference no row backs:
+   * an instance the destination detached and moved clear of its own ingest window was never
+   * written to event_states, so nothing contradicts the master still naming the slot it
+   * vacated — and unlike a mis-anchored reference, an absent row leaves no claim to withhold
+   * the series on. Only slots the window itself covers can answer for the destination.
+   */
+  it("never indexes a slot the expansion reaches below the window", async () => {
+    const overnight = {
+      endTime: new Date("2026-01-01T02:00:00.000Z"),
+      startTime: new Date("2025-12-31T22:00:00.000Z"),
+    };
+    const index = await buildIndex([
+      createNativeRow({ ...overnight, recurrenceRule: STORED_ENDLESS_WEEKLY_RULE }),
+    ]);
+    const events = materializeSource([
+      createSourceMaster({ ...overnight, recurrenceRule: { frequency: "WEEKLY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(events).toHaveLength(5);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(occurrenceStarts(result.events)).toEqual(["2025-12-31T22:00:00.000Z"]);
+    expect(result.suppressedCount).toBe(4);
   });
 
   it("withholds an all-day series whose override is dated at UTC midnight", async () => {
