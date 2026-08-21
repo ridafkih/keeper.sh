@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { type } from "arktype";
 import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
@@ -41,6 +42,30 @@ interface SendEmailParams {
   user: EmailUser;
   url: string;
 }
+
+const USERNAME_BASE_MAX_LENGTH = 32;
+const USERNAME_SUFFIX_LENGTH = 8;
+
+/**
+ * The `username-only` plugin marks `username` as a required, unique column on
+ * the user model. Social providers (Google, Microsoft) don't supply a username,
+ * so new-user creation from a social sign-in fails with `username_is_required`.
+ * This derives a stable, unique-enough username from the provider profile.
+ */
+const generateSocialUsername = (profile: {
+  email?: string | null;
+  name?: string | null;
+}): string => {
+  const emailLocalPart = profile.email?.split("@")[0] ?? "";
+  const base =
+    (emailLocalPart || profile.name || "")
+      .toLowerCase()
+      .replaceAll(/[^a-z0-9._-]+/g, "-")
+      .replaceAll(/^[-._]+|[-._]+$/g, "")
+      .slice(0, USERNAME_BASE_MAX_LENGTH) || "user";
+  const suffix = randomUUID().replaceAll("-", "").slice(0, USERNAME_SUFFIX_LENGTH);
+  return `${base}-${suffix}`;
+};
 
 interface AuthConfig {
   database: BunSQLDatabase;
@@ -226,6 +251,12 @@ const createAuth = (config: AuthConfig) => {
       accessType: "offline",
       clientId: googleClientId,
       clientSecret: googleClientSecret,
+      mapProfileToUser: (profile) => ({
+        username: generateSocialUsername({
+          email: profile.email,
+          name: profile.name,
+        }),
+      }),
       prompt: "consent",
       scope: ["https://www.googleapis.com/auth/calendar.events"],
     };
@@ -235,6 +266,12 @@ const createAuth = (config: AuthConfig) => {
     socialProviders.microsoft = {
       clientId: microsoftClientId,
       clientSecret: microsoftClientSecret,
+      mapProfileToUser: (profile) => ({
+        username: generateSocialUsername({
+          email: profile.email ?? profile.preferred_username,
+          name: profile.name,
+        }),
+      }),
       prompt: "consent",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
