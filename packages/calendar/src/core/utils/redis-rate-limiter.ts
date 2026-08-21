@@ -1,6 +1,8 @@
 import {
+  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
+  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
 } from "@keeper.sh/constants";
 import { widelog } from "widelogger";
 import { measureRedisCommand, recordSegment } from "../telemetry/segments";
@@ -276,10 +278,11 @@ const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 const createCalDAVAccountRateLimiter = (
   redis: RedisScriptClient,
   accountId: string,
+  requestsPerMinute: number = CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
 ): RedisRateLimiter => createRedisRateLimiter(
   redis,
   `ratelimit:caldav-account:${accountId}`,
-  { requestsPerMinute: CALDAV_ACCOUNT_REQUESTS_PER_MINUTE },
+  { requestsPerMinute },
 );
 
 const HOST_REQUESTS_PER_MINUTE = 600;
@@ -325,6 +328,8 @@ const createOutlookAccountSemaphore = (
 export {
   createGoogleUserRateLimiter,
   CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
+  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,

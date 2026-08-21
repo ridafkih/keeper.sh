@@ -13,6 +13,7 @@ import {
   createOutlookAccountSemaphore,
   isCalDAVProvider,
   isHostedCalDAVProvider,
+  getCalDAVAccountRequestsPerMinute,
   ensureValidToken,
   isTimeoutError,
   buildCalendarBackoffState,
@@ -730,7 +731,11 @@ const resolveRateLimiter = (
 
   if (isCalDAVProvider(provider)) {
     if (isHostedCalDAVProvider(provider) && source.accountId) {
-      return createCalDAVAccountRateLimiter(refreshLockRedis, source.accountId);
+      return createCalDAVAccountRateLimiter(
+        refreshLockRedis,
+        source.accountId,
+        getCalDAVAccountRequestsPerMinute(provider),
+      );
     }
     const host = resolveTargetHost(source.serverUrl ?? null);
     if (!host) {
