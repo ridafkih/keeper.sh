@@ -1191,44 +1191,14 @@ const resolveFleetYieldedCalendarIds = async (
 
 const FLEET_PASS_SOURCE_BOUND = 250;
 
-const FLEET_PASS_CURSOR_KEY = "ingest:fleet-pass-cursor";
+const FLEET_PASS_PRO_HEAD_START = "10 minutes";
 
-const parseFleetPassCursor = (stored: string | null): number => {
-  if (stored === null) {
-    return 0;
-  }
-  const parsed = Number.parseInt(stored, 10);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    return 0;
-  }
-  return parsed;
-};
-
-const readFleetPassCursor = async (calendarIds: string[] | undefined): Promise<number> => {
-  if (calendarIds) {
-    return 0;
-  }
-  try {
-    return parseFleetPassCursor(await refreshLockRedis.get(FLEET_PASS_CURSOR_KEY));
-  } catch (error) {
-    widelog.errorFields(error, {
-      retriable: true,
-      slug: "fleet-pass-cursor-read-failed",
-    });
-    return 0;
-  }
-};
-
-const writeFleetPassCursor = async (nextCursor: number): Promise<void> => {
-  try {
-    await refreshLockRedis.set(FLEET_PASS_CURSOR_KEY, String(nextCursor));
-  } catch (error) {
-    widelog.errorFields(error, {
-      retriable: true,
-      slug: "fleet-pass-cursor-write-failed",
-    });
-  }
-};
+const buildFleetPriorityOrder = () => [
+  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '${sql.raw(FLEET_PASS_PRO_HEAD_START)}' else interval '0' end asc`,
+  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
+  desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+  asc(calendarsTable.id),
+];
 
 interface FleetPassWindow<TSource> {
   scanned: number;
@@ -1251,17 +1221,6 @@ const takeFleetPassWindow = <TSource extends { calendarId: string }>(
     }
   }
   return { scanned, taken };
-};
-
-const advanceFleetPassCursor = (
-  cursor: number,
-  windowLength: number,
-  scanned: number,
-): number => {
-  if (scanned >= windowLength) {
-    return 0;
-  }
-  return cursor + scanned;
 };
 
 const resolveYieldedCalendarIds = (
@@ -1308,20 +1267,17 @@ const recordYieldedCount = (
   widelog.set("ingest.yielded_count", yieldedCalendarIds.size);
 };
 
-const resolveSelectedSources = async <TSource extends { calendarId: string }>(
+const resolveSelectedSources = <TSource extends { calendarId: string }>(
   calendarIds: string[] | undefined,
   windowSources: TSource[],
   yieldedCalendarIds: Set<string>,
-  cursor: number,
-): Promise<TSource[]> => {
+): TSource[] => {
   if (calendarIds) {
     return windowSources.filter(({ calendarId }) => !yieldedCalendarIds.has(calendarId));
   }
   const { scanned, taken } = takeFleetPassWindow(windowSources, yieldedCalendarIds);
-  widelog.set("ingest.pass_cursor", cursor);
   widelog.set("ingest.taken_count", taken.length);
   widelog.set("ingest.deferred_count", windowSources.length - scanned);
-  await writeFleetPassCursor(advanceFleetPassCursor(cursor, windowSources.length, scanned));
   return taken;
 };
 
@@ -1356,23 +1312,7 @@ const buildOAuthSourceQuery = (calendarIds: string[] | undefined) =>
         ...buildOAuthSourceIdFilter(calendarIds),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-      asc(calendarsTable.id),
-    );
-
-type OAuthSourceQuery = ReturnType<typeof buildOAuthSourceQuery>;
-
-const readFleetPassWindow = (
-  sourceQuery: OAuthSourceQuery,
-  cursor: number,
-): OAuthSourceQuery | ReturnType<OAuthSourceQuery["offset"]> => {
-  if (cursor === 0) {
-    return sourceQuery;
-  }
-  return sourceQuery.offset(cursor);
-};
+    .orderBy(...buildFleetPriorityOrder());
 
 const ingestOAuthSources = async (
   calendarIds?: string[],
@@ -1382,22 +1322,17 @@ const ingestOAuthSources = async (
     return createEmptyIngestionBatchResult();
   }
   const lane = resolveIngestLane(calendarIds);
-  const fleetPassCursor = await readFleetPassCursor(calendarIds);
 
-  const oauthSources = await readFleetPassWindow(
-    buildOAuthSourceQuery(calendarIds),
-    fleetPassCursor,
-  );
+  const oauthSources = await buildOAuthSourceQuery(calendarIds);
 
   const yieldedCalendarIds = await resolveYieldedCalendarIds(
     calendarIds,
     oauthSources.map(({ calendarId }) => calendarId),
   );
-  const selectedSources = await resolveSelectedSources(
+  const selectedSources = resolveSelectedSources(
     calendarIds,
     oauthSources,
     yieldedCalendarIds,
-    fleetPassCursor,
   );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1666,11 +1601,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-      asc(calendarsTable.id),
-    );
+    .orderBy(...buildFleetPriorityOrder());
 
   const settlements = await allSettledGroupedWithConcurrency(
     caldavSources.map((source) => {
@@ -1871,11 +1802,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
         eq(calendarsTable.disabled, false),
       ),
     )
-    .orderBy(
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-      asc(calendarsTable.id),
-    );
+    .orderBy(...buildFleetPriorityOrder());
 
   const settlements = await allSettledGroupedWithConcurrency(
     icsSources.map((source) => {

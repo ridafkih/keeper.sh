@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { asc, desc, isNull, sql } from "drizzle-orm";
+import { asc, desc, sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
 import type { ingestOAuthSources } from "../../src/jobs/ingest-sources";
@@ -267,7 +267,8 @@ const runPass = async (
 };
 
 const PRIORITY_ORDERING = [
-  desc(isNull(calendarsTable.ingestWindowRecordedAt)),
+  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '10 minutes' else interval '0' end asc`,
+  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
   desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
   asc(calendarsTable.id),
 ];
