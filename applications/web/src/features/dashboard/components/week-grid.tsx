@@ -108,6 +108,26 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
     }
   }, [anchor, scrollToWeek]);
 
+  // Column widths are a fraction of the scroller's width, but the horizontal
+  // offset is kept in pixels — so a viewport resize would silently drift the
+  // strip to a different week (and snap it mid-week). Re-snap to the week the
+  // strip was aligned to whenever the scroller's width changes.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let lastWidth = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const width = el.clientWidth;
+      if (width === 0 || width === lastWidth) return;
+      lastWidth = width;
+      const alignedWeekMs = alignedWeekMsRef.current;
+      if (alignedWeekMs === null) return;
+      scrollToWeek(new Date(alignedWeekMs), "auto");
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [scrollToWeek]);
+
   const handleScroll = () => {
     // Mirror the horizontal offset onto the header's day row synchronously —
     // not inside the rAF below — so it never trails the grid by a frame.
