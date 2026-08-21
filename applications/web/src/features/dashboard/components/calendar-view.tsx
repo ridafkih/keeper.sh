@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { cn } from "@/utils/cn";
@@ -36,6 +37,22 @@ export function CalendarView() {
 
   const title = view === "month" ? formatMonthTitle(anchor) : formatWeekTitle(anchor);
 
+  // Switch views inside a view transition where available, so the header card
+  // morphs between the two column headers (see `CalendarFrame`) rather than
+  // snapping. `flushSync` commits the new view inside the transition's DOM
+  // update callback, as the API requires.
+  const switchView = (mode: CalendarViewMode) => {
+    if (mode === view) return;
+    const reduceMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion || typeof document.startViewTransition !== "function") {
+      setView(mode);
+      return;
+    }
+    document.startViewTransition(() => {
+      flushSync(() => setView(mode));
+    });
+  };
+
   const step = (direction: 1 | -1) => {
     setAnchor((current) =>
       view === "month" ? addMonths(current, direction) : addDays(current, direction * 7),
@@ -53,7 +70,7 @@ export function CalendarView() {
             <button
               key={mode}
               type="button"
-              onClick={() => setView(mode)}
+              onClick={() => switchView(mode)}
               className={cn(
                 "rounded-md px-2.5 py-1 text-sm font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 mode === view
