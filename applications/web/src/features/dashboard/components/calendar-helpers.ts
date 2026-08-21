@@ -10,6 +10,14 @@ export const WEEK_STARTS_ON = 0;
 /** Cells in a fixed 6×7 month grid. */
 const GRID_CELLS = 42;
 
+/** Day columns shown at once in the week view. */
+export const WEEK_VIEW_DAYS = 7;
+
+/** Midnight on `date`'s day. */
+export function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 /** Midnight on the first day of `date`'s month. */
 export function startOfMonth(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -24,6 +32,13 @@ export function addMonths(date: Date, months: number): Date {
 /** `date` shifted by `days`, at midnight. */
 export function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+/** First day of the week view's rolling range when it is centred on `anchor`:
+ * `anchor` sits in the middle column, with the same number of days either
+ * side (3 for a 7-day view). Midnight. */
+export function startOfVisibleWeek(anchor: Date): Date {
+  return addDays(anchor, -Math.floor(WEEK_VIEW_DAYS / 2));
 }
 
 /** Midnight on the first `WEEK_STARTS_ON` weekday on or before `date`. */
@@ -79,15 +94,16 @@ export function formatMonthTitle(anchor: Date): string {
   return anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-/** Toolbar title for a week, e.g. "Aug 16 – 22, 2026", "Aug 31 – Sep 6, 2026"
- * across a month boundary, or "Dec 28, 2025 – Jan 3, 2026" across a year.
+/** Toolbar title for the week view's rolling range centred on `anchor`, e.g.
+ * "Aug 19 – 25, 2026", "Aug 29 – Sep 4, 2026" across a month boundary, or
+ * "Dec 29, 2025 – Jan 4, 2026" across a year.
  *
  * Numeric day/year parts are composed directly rather than via
  * `toLocaleDateString`, because asking Intl for a day+year format with no month
- * ("Aug 16 – 22, 2026") renders an unsupported fallback like "2026 (day: 22)". */
+ * ("Aug 19 – 25, 2026") renders an unsupported fallback like "2026 (day: 25)". */
 export function formatWeekTitle(anchor: Date): string {
-  const start = startOfWeek(anchor);
-  const end = addDays(start, 6);
+  const start = startOfVisibleWeek(anchor);
+  const end = addDays(start, WEEK_VIEW_DAYS - 1);
   const startMonth = start.toLocaleDateString("en-US", { month: "short" });
   const endMonth = end.toLocaleDateString("en-US", { month: "short" });
 
