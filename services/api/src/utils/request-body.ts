@@ -20,6 +20,7 @@ const sourcePatchBodySchema = type({
   "treatFullDayTimedEventsAsAllDay?": "boolean",
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
+  "markEventsAsPrivate?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;

@@ -44,6 +44,7 @@ const GET = withWideEvent(
         syncHistoricRange: calendarsTable.syncHistoricRange,
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         unavailableSince: calendarsTable.unavailableSince,
+        markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
       })
@@ -147,6 +148,9 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
+            if (updated && "markEventsAsPrivate" in updates) {
+              await requestUserSync(transaction, userIdToUpdate);
+            }
             await applyFeedMembership(transaction, updated ?? null);
             return updated ?? null;
           });

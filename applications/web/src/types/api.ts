@@ -55,6 +55,7 @@ export interface CalendarDetail {
   treatFullDayTimedEventsAsAllDay: boolean;
   syncFutureRange: SyncRange;
   syncHistoricRange: SyncRange;
+  markEventsAsPrivate: boolean;
   destinationIds: string[];
   sourceIds: string[];
   unavailableSince: string | null;
