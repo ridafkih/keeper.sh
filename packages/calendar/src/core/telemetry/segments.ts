@@ -18,6 +18,8 @@ type IngestSegmentKey =
   | "wait.provider_retry_ms"
   | "wait.flush_reserve_ms"
   | "wait.db_pool_ms"
+  | "wait.read_gate_ms"
+  | "wait.write_gate_ms"
   | "wait.advisory_lock_ms"
   | "work.provider_http_ms"
   | "work.transform_ms"

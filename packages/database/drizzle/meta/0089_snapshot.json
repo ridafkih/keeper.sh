@@ -1,5 +1,5 @@
 {
-  "id": "9e0bcc67-a500-4543-b206-683cbdf11acc",
+  "id": "acfc6b03-4282-4d00-99b0-8c832e15fbf1",
   "prevId": "8217973e-3538-4a6a-89e4-f35b5cb10896",
   "version": "7",
   "dialect": "postgresql",
@@ -895,12 +895,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "providerMissingSince": {
-          "name": "providerMissingSince",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "externalCalendarId": {
           "name": "externalCalendarId",
           "type": "text",
@@ -936,6 +930,12 @@
         "syncToken": {
           "name": "syncToken",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "storedEventCount": {
+          "name": "storedEventCount",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },

@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, arrayContains, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
@@ -79,6 +79,20 @@ beforeEach(() => {
   capturedOrderings.length = 0;
 });
 
+const FLEET_PRIORITY_ORDERING = [
+  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '10 minutes' else interval '0' end asc`,
+  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
+  desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+  asc(calendarsTable.id),
+];
+
+const renderOrdering = (ordering: unknown[]): string[] => {
+  const dialect = new PgDialect();
+  return ordering.map(
+    (term) => dialect.sqlToQuery(term as Parameters<PgDialect["sqlToQuery"]>[0]).sql,
+  );
+};
+
 describe("ingestOAuthSources selection", () => {
   it("selects every live pull calendar when given no ids", async () => {
     await ingestOAuthSources();
@@ -107,13 +121,12 @@ describe("ingestOAuthSources selection", () => {
     expect(capturedPredicates).toHaveLength(0);
   });
 
-  it("puts never-ingested calendars first, then pro users", async () => {
+  it("puts the least recently ingested calendars first, never-ingested ahead of all", async () => {
     await ingestOAuthSources();
 
-    expect(capturedOrderings).toEqual([[
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    ]]);
+    expect(capturedOrderings.map((ordering) => renderOrdering(ordering as unknown[]))).toEqual([
+      renderOrdering(FLEET_PRIORITY_ORDERING),
+    ]);
   });
 
   /*
@@ -123,26 +136,22 @@ describe("ingestOAuthSources selection", () => {
   it("renders a null-safe pro ordering", async () => {
     await ingestOAuthSources();
 
-    const dialect = new PgDialect();
     const [ordering] = capturedOrderings as [unknown[]];
-    const rendered = dialect.sqlToQuery(ordering[1] as Parameters<PgDialect["sqlToQuery"]>[0]);
+    const proTerms = renderOrdering(ordering).filter((term) => term.includes("= 'pro'"));
 
-    expect(rendered.sql).toContain("coalesce(");
-    expect(rendered.sql).toContain("= 'pro'");
+    expect(proTerms.length).toBeGreaterThan(0);
+    for (const term of proTerms) {
+      expect(term).toContain(`coalesce("user_subscriptions"."plan", 'free') = 'pro'`);
+    }
   });
 
   it("orders every source family the same way", async () => {
     await job?.callback();
 
-    expect(capturedOrderings).toEqual([[
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    ], [
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    ], [
-      desc(isNull(calendarsTable.ingestWindowRecordedAt)),
-      desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-    ]]);
+    expect(capturedOrderings.map((ordering) => renderOrdering(ordering as unknown[]))).toEqual([
+      renderOrdering(FLEET_PRIORITY_ORDERING),
+      renderOrdering(FLEET_PRIORITY_ORDERING),
+      renderOrdering(FLEET_PRIORITY_ORDERING),
+    ]);
   });
 });

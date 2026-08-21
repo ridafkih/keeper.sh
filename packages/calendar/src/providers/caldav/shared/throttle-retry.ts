@@ -1,3 +1,5 @@
+import { widelog } from "widelogger";
+import { measureSegment } from "../../../core/telemetry/segments";
 import { isThrottleStatus, MAX_RETRY_AFTER_MS, parseRetryAfterMs } from "../../../core/utils/retry-after";
 
 const CALDAV_MAX_THROTTLE_RETRIES = 3;
@@ -12,6 +14,23 @@ const CALDAV_THROTTLE_FLOOR_MS = 2000;
 const resolveThrottleDelayMs = (retryAfterMs: number | null, attempt: number): number => {
   const floor = CALDAV_THROTTLE_FLOOR_MS * 2 ** attempt;
   return Math.min(Math.max(floor, retryAfterMs ?? 0), MAX_RETRY_AFTER_MS);
+};
+
+const isRetryAfterHonoured = (retryAfterMs: number | null, delayMs: number): boolean => {
+  if (retryAfterMs === null) {
+    return false;
+  }
+  return Math.min(retryAfterMs, MAX_RETRY_AFTER_MS) === delayMs;
+};
+
+const recordThrottle = (retryAfterMs: number | null, delayMs: number): void => {
+  widelog.count("ratelimit.provider_throttle_count", 1);
+  widelog.count("ratelimit.throttle_wait_ms", delayMs);
+  if (isRetryAfterHonoured(retryAfterMs, delayMs)) {
+    widelog.count("ratelimit.retry_after_honoured_count", 1);
+    return;
+  }
+  widelog.count("ratelimit.throttle_floor_count", 1);
 };
 
 interface ThrottleRetryOptions {
@@ -42,12 +61,14 @@ const fetchHonouringRetryAfter = async <TInput>(
       return response;
     }
 
-    const delayMs = resolveThrottleDelayMs(
-      parseRetryAfterMs(response.headers.get("Retry-After")),
-      attempt,
-    );
+    const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+    const delayMs = resolveThrottleDelayMs(retryAfterMs, attempt);
+    recordThrottle(retryAfterMs, delayMs);
     await response.body?.cancel();
-    await options.sleep(delayMs, options.signal);
+    await measureSegment(
+      "wait.provider_retry_ms",
+      () => options.sleep(delayMs, options.signal),
+    );
     response = await send(cloneAttempt(input));
   }
 

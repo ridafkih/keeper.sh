@@ -35,12 +35,9 @@ const harness = vi.hoisted(() => {
   };
 
   const resolveLimited = (fields: Record<string, unknown>): unknown[] => {
-    if ("failureCount" in fields) {
-      // A non-zero count is what routes the success path through the probe.
-      return [{ failureCount: 1, nextAttemptAt: null }];
-    }
     if ("accessToken" in fields) {
-      return [sourceRow];
+      // A non-zero count is what routes the success path through the probe.
+      return [{ failureCount: 1, nextAttemptAt: null, ...sourceRow }];
     }
     return [];
   };
