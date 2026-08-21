@@ -35,14 +35,22 @@ const MS_PER_DAY = 86_400_000;
  * the horizontal lines read as a secondary, quieter layer under the columns. */
 const HOUR_RULE_COLOR = "color-mix(in oklab, var(--color-border-elevated) 45%, transparent)";
 
-/** A 1px column rule along a cell's left edge that fades out toward the top,
- * so the day row's lines dissolve into the toolbar above instead of meeting
- * a separator at a hard corner. Sits exactly where the grid's `border-l` is. */
-const FADED_COLUMN_RULE: CSSProperties = {
-  backgroundImage: "linear-gradient(to top, var(--color-border-elevated) 35%, transparent)",
-  backgroundSize: "1px 100%",
-  backgroundRepeat: "no-repeat",
+/** The day-column rules: a 1px line at the left edge of every column, tiled
+ * one column apart. They are painted on the *viewport* boxes (the grid's
+ * scroller and the header's strip viewport) rather than on the day cells, so
+ * they are pinned to the visible area and run its full height — through a
+ * vertical overscroll bounce too, instead of stopping at the content's edge.
+ * Horizontal scrolling is followed via `--strip-scroll`, which `handleScroll`
+ * keeps equal to the scroller's `scrollLeft`. Both boxes use the same column
+ * width expression, so header and grid lines coincide to the pixel. */
+const COLUMN_RULES: CSSProperties = {
+  backgroundImage: "linear-gradient(to right, var(--color-border-elevated) 0 1px, transparent 1px)",
+  backgroundRepeat: "repeat-x",
 };
+
+/** Fades the header's column rules out toward the top, so they dissolve into
+ * the toolbar above instead of meeting it at a hard corner. */
+const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
 
 interface WeekGridProps {
   /** The day to centre the visible range on; drives the horizontal scroll
@@ -111,11 +119,16 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
   }, []);
 
-  /** Mirrors the scroller's horizontal offset onto the header's day row. */
+  /** Mirrors the scroller's horizontal offset onto the header's day row, and
+   * into `--strip-scroll` on both boxes so their column rules follow along. */
   const syncHeaderStrip = useCallback(() => {
     const scroller = scrollerRef.current;
     const headerStrip = headerStripRef.current;
-    if (scroller && headerStrip) headerStrip.scrollLeft = scroller.scrollLeft;
+    if (!scroller || !headerStrip) return;
+    headerStrip.scrollLeft = scroller.scrollLeft;
+    const offset = `${scroller.scrollLeft}px`;
+    scroller.style.setProperty("--strip-scroll", offset);
+    headerStrip.style.setProperty("--strip-scroll", offset);
   }, []);
 
   /** Scrolls the strip so `centerDay` (midnight) sits in the middle column. */
@@ -222,9 +235,21 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     <div className="flex" style={{ height: HEADER_HEIGHT }}>
       {/* Spacer over the grid's time gutter, keeping the columns aligned. */}
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-      <div ref={headerStripRef} className="min-w-0 flex-1 overflow-hidden">
+      <div ref={headerStripRef} className="relative min-w-0 flex-1 overflow-hidden">
+        {/* Column rules, pinned to the viewport and faded toward the top. */}
         <div
-          className="grid h-full"
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            ...COLUMN_RULES,
+            backgroundSize: `calc(100% / ${VISIBLE_COLUMNS}) 100%`,
+            backgroundPositionX: "calc(0px - var(--strip-scroll, 0px))",
+            maskImage: HEADER_RULE_FADE,
+            WebkitMaskImage: HEADER_RULE_FADE,
+          }}
+        />
+        <div
+          className="relative grid h-full"
           style={{
             gridTemplateColumns: columnsTemplate,
             width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
@@ -236,7 +261,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
               <div
                 key={day.getTime()}
                 className="flex flex-col items-center justify-center gap-1"
-                style={FADED_COLUMN_RULE}
               >
                 <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
                   {day.toLocaleDateString("en-US", { weekday: "short" })}
@@ -266,8 +290,14 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start overflow-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ scrollSnapType: "x mandatory", scrollPaddingLeft: GUTTER_WIDTH }}
+        className="flex min-h-0 flex-1 items-start overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          ...COLUMN_RULES,
+          backgroundSize: `calc((100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS}) 100%`,
+          backgroundPositionX: `calc(${GUTTER_WIDTH}px - var(--strip-scroll, 0px))`,
+          scrollSnapType: "x mandatory",
+          scrollPaddingLeft: GUTTER_WIDTH,
+        }}
       >
         {/* Pinned time gutter. */}
         <div
@@ -293,17 +323,24 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
             height: HOUR_HEIGHT * HOURS.length,
           }}
         >
+          {/* Hour rules, starting one row down so neither the top nor the
+              bottom edge of the grid carries a line. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0"
+            style={{
+              top: HOUR_HEIGHT,
+              backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
+              backgroundSize: `100% ${HOUR_HEIGHT}px`,
+            }}
+          />
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
             return (
               <div
                 key={day.getTime()}
-                className="relative border-l border-border-elevated"
-                style={{
-                  scrollSnapAlign: "start",
-                  backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
-                  backgroundSize: `100% ${HOUR_HEIGHT}px`,
-                }}
+                className="relative"
+                style={{ scrollSnapAlign: "start" }}
               >
                 {/* Event blocks will render here in a later stage. */}
                 {isToday && nowFraction != null && (
