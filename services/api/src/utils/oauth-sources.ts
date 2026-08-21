@@ -591,13 +591,24 @@ const createOAuthSource = async (
       ...dependencies,
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
+      /*
+       * accountId is unique per (userId, provider). This path has no provider-fetched
+       * account identifier to store there (unlike the import flow's adoptProviderAccountId),
+       * so a row created here would otherwise sit with accountId null/empty until a later
+       * reconnect backfills it - colliding with any other such row for the same user and
+       * provider under the unique index. Seeding the row's own id closes that gap: it is
+       * guaranteed unique and gets superseded the moment a real providerAccountId is adopted.
+       */
       createCalendarAccount: async ({ displayName, email, oauthCredentialId, provider, userId }) => {
+        const accountId = crypto.randomUUID();
         const [insertedAccount] = await tx
           .insert(calendarAccountsTable)
           .values({
+            accountId,
             authType: "oauth",
             displayName: email ?? displayName,
             email: email ?? displayName,
+            id: accountId,
             oauthCredentialId,
             provider,
             userId,
