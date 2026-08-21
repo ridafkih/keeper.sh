@@ -50,8 +50,10 @@ export function CalendarFrame({
         </div>
         <div style={{ viewTransitionName: "calendar-column-header" }}>{columnHeader}</div>
       </header>
+      {/* `mx-px` insets the grid by the header card's border, so its columns
+          share the column header's origin and width and the two line up. */}
       <div
-        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        className="mx-px flex min-h-0 flex-1 flex-col overflow-hidden"
         style={{ maxHeight: gridMaxHeight, viewTransitionName: "calendar-grid" }}
       >
         {children}
