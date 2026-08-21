@@ -52,6 +52,18 @@ const COLUMN_RULES: CSSProperties = {
  * the toolbar above instead of meeting it at a hard corner. */
 const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
 
+/** Depth of the grid's top and bottom edge fades, in pixels. Shallow enough
+ * to stay clear of the first and last hour labels at the scroll extremes. */
+const GRID_EDGE_FADE_SIZE = 24;
+
+/** Fades the grid's scroller out at its top and bottom edges, so rules,
+ * labels and the current-time line dissolve into the page background instead
+ * of stopping at a hard edge. Applied to the scroller box, so it stays pinned
+ * to the visible area while the content scrolls beneath it — through a
+ * vertical overscroll bounce too. Vertical only: a horizontal fade would dim
+ * the time gutter's labels and the outermost day column. */
+const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDGE_FADE_SIZE}px, black calc(100% - ${GRID_EDGE_FADE_SIZE}px), transparent)`;
+
 interface WeekGridProps {
   /** The day to centre the visible range on; drives the horizontal scroll
    * position. Today on entry, so today sits in the middle column. */
@@ -297,11 +309,14 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
           backgroundPositionX: `calc(${GUTTER_WIDTH}px - var(--strip-scroll, 0px))`,
           scrollSnapType: "x mandatory",
           scrollPaddingLeft: GUTTER_WIDTH,
+          maskImage: GRID_EDGE_FADE,
+          WebkitMaskImage: GRID_EDGE_FADE,
         }}
       >
-        {/* Pinned time gutter. */}
+        {/* Pinned time gutter; opaque in the page colour so the columns scroll
+            under it. */}
         <div
-          className="relative sticky left-0 z-30 shrink-0 bg-background-elevated"
+          className="relative sticky left-0 z-30 shrink-0 bg-background"
           style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
         >
           {HOURS.slice(1).map((hour) => (
