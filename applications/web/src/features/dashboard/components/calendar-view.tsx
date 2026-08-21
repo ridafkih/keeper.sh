@@ -40,7 +40,7 @@ export function CalendarView() {
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs">
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate">
       <header className="flex items-center justify-between gap-3 px-4 py-3">
         <Text as="span" size="base" tone="default" className="font-medium">
           {title}
