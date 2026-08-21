@@ -158,7 +158,7 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
         style={{ width: `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})` }}
       >
         <div
-          className="sticky top-0 z-20 grid border-b border-border-elevated bg-background-elevated"
+          className="sticky top-0 z-20 grid shrink-0 border-b border-border-elevated bg-background-elevated"
           style={{ gridTemplateColumns: columnsTemplate, height: HEADER_HEIGHT }}
         >
           {stripDays.map((day) => {
@@ -185,7 +185,7 @@ export function WeekGrid({ anchor, onVisibleWeekChange }: WeekGridProps) {
           })}
         </div>
         <div
-          className="relative grid"
+          className="relative grid shrink-0"
           style={{ gridTemplateColumns: columnsTemplate, height: HOUR_HEIGHT * HOURS.length }}
         >
           {stripDays.map((day) => {
