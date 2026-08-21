@@ -111,6 +111,12 @@ interface PendingFixture {
 const createFakePendingRedis = (fixture: PendingFixture) => {
   const reserved = new Set<string>();
   return {
+    del: (...keys: string[]) => {
+      for (const key of keys) {
+        reserved.delete(key);
+      }
+      return Promise.resolve(keys.length);
+    },
     hmget: (key: string, ...members: string[]) => {
       expect(key).toBe(PENDING_CORRELATION_KEY);
       return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));

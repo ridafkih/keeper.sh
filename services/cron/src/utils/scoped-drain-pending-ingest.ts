@@ -1,9 +1,9 @@
 import { PENDING_CORRELATION_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
-import { reserveClaimedMembers } from "./pending-ingest-claim";
-import type { ClaimReserveRedis } from "./pending-ingest-claim";
+import { releaseClaimsOnFailure, reserveClaimedMembers } from "./pending-ingest-claim";
+import type { ClaimReleaseRedis, ClaimReserveRedis } from "./pending-ingest-claim";
 import type { PendingIngestMember } from "./drain-pending-ingest";
 
-interface ScopedClaimRedis extends ClaimReserveRedis {
+interface ScopedClaimRedis extends ClaimReleaseRedis, ClaimReserveRedis {
   hmget: (key: string, ...members: string[]) => Promise<(string | null)[]>;
   zscore: (key: string, member: string) => Promise<string | null>;
 }
@@ -46,10 +46,11 @@ const createScopedClaimPending = (
     return members;
   }
 
-  return attachCorrelationIds(members, await redis.hmget(
-    PENDING_CORRELATION_KEY,
-    ...members.map((member) => member.calendarId),
-  ));
+  return releaseClaimsOnFailure(redis, members, async () =>
+    attachCorrelationIds(members, await redis.hmget(
+      PENDING_CORRELATION_KEY,
+      ...members.map((member) => member.calendarId),
+    )));
 };
 
 export { attachCorrelationIds, createScopedClaimPending };

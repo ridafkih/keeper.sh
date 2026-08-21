@@ -46,11 +46,30 @@ const releaseClaimedCalendars = async (
   await redis.del(...calendarIds.map((calendarId) => buildClaimKey(calendarId)));
 };
 
+const ignoreReleaseFailure = (): null => null;
+
+const releaseClaimsOnFailure = async <Claimed>(
+  redis: ClaimReleaseRedis,
+  members: PendingIngestMember[],
+  claim: () => Promise<Claimed>,
+): Promise<Claimed> => {
+  try {
+    return await claim();
+  } catch (error) {
+    await releaseClaimedCalendars(
+      redis,
+      members.map((member) => member.calendarId),
+    ).catch(ignoreReleaseFailure);
+    throw error;
+  }
+};
+
 export {
   buildClaimKey,
   CLAIM_RESERVATION_TTL_MS,
   PENDING_CLAIM_PREFIX,
   releaseClaimedCalendars,
+  releaseClaimsOnFailure,
   reserveClaimedMembers,
 };
 export type { ClaimReleaseRedis, ClaimReserveRedis };

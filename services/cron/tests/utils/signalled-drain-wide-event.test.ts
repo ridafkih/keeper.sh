@@ -50,6 +50,7 @@ afterEach(() => {
 });
 
 const scoreRedis = {
+  del: (...keys: string[]) => Promise.resolve(keys.length),
   hmget: () => Promise.resolve([]),
   set: () => Promise.resolve("OK"),
   zscore: () => Promise.resolve(null),

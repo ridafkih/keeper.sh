@@ -13,6 +13,12 @@ interface PendingFixture {
 const createFakeRedis = (fixture: PendingFixture) => {
   const reserved = new Set<string>();
   return {
+    del: vi.fn((...keys: string[]) => {
+      for (const key of keys) {
+        reserved.delete(key);
+      }
+      return Promise.resolve(keys.length);
+    }),
     hmget: vi.fn((key: string, ...members: string[]) => {
       expect(key).toBe(PENDING_CORRELATION_KEY);
       return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));

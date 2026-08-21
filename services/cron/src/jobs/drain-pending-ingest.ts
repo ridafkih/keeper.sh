@@ -17,12 +17,24 @@ import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
 import { IngestBaselineMovedAbortError } from "@/utils/ingest-baseline";
 import {
   releaseClaimedCalendars,
+  releaseClaimsOnFailure,
   reserveClaimedMembers,
 } from "@/utils/pending-ingest-claim";
 
 const DRAIN_LOCK_KEY = "push-drain:tick";
 const DRAIN_LOCK_TTL_SECONDS = 60;
 const SCORE_STRIDE = 2;
+
+const drainWithLockRelease = async (
+  dependencies: DrainPendingIngestDependencies,
+  releaseLock: () => Promise<void>,
+): Promise<void> => {
+  try {
+    await runDrainPendingIngest(dependencies);
+  } finally {
+    await releaseLock();
+  }
+};
 
 const parsePendingMembers = (entries: string[]): PendingIngestMember[] => {
   const members: PendingIngestMember[] = [];
@@ -52,10 +64,11 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
       if (members.length === 0) {
         return members;
       }
-      return attachCorrelationIds(members, await refreshLockRedis.hmget(
-        PENDING_CORRELATION_KEY,
-        ...members.map((member) => member.calendarId),
-      ));
+      return releaseClaimsOnFailure(refreshLockRedis, members, async () =>
+        attachCorrelationIds(members, await refreshLockRedis.hmget(
+          PENDING_CORRELATION_KEY,
+          ...members.map((member) => member.calendarId),
+        )));
     },
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
@@ -154,11 +167,13 @@ const observedDrain = withCronWideEvent({
       return;
     }
 
-    try {
-      await runDrainPendingIngest(dependencies);
-    } finally {
-      await refreshLockStore.release(DRAIN_LOCK_KEY);
-    }
+    const { inFlightDrainRegistry } = await import("@/context");
+    const tick = drainWithLockRelease(
+      dependencies,
+      () => refreshLockStore.release(DRAIN_LOCK_KEY),
+    );
+    inFlightDrainRegistry.register(tick);
+    await tick;
   },
   cron: "*/10 * * * * *",
   name: import.meta.file,
