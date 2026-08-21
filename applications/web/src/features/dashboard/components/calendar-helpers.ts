@@ -79,24 +79,25 @@ export function formatMonthTitle(anchor: Date): string {
   return anchor.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-/** Toolbar title for a week, e.g. "Aug 17 – 23, 2026" or, across a month/year
- * boundary, "Aug 31 – Sep 6, 2026". */
+/** Toolbar title for a week, e.g. "Aug 16 – 22, 2026", "Aug 31 – Sep 6, 2026"
+ * across a month boundary, or "Dec 28, 2025 – Jan 3, 2026" across a year.
+ *
+ * Numeric day/year parts are composed directly rather than via
+ * `toLocaleDateString`, because asking Intl for a day+year format with no month
+ * ("Aug 16 – 22, 2026") renders an unsupported fallback like "2026 (day: 22)". */
 export function formatWeekTitle(anchor: Date): string {
   const start = startOfWeek(anchor);
   const end = addDays(start, 6);
-  const sameMonth = isSameMonth(start, end);
-  const sameYear = start.getFullYear() === end.getFullYear();
-  const startText = start.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: sameYear ? undefined : "numeric",
-  });
-  const endText = end.toLocaleDateString("en-US", {
-    month: sameMonth ? undefined : "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  return `${startText} – ${endText}`;
+  const startMonth = start.toLocaleDateString("en-US", { month: "short" });
+  const endMonth = end.toLocaleDateString("en-US", { month: "short" });
+
+  if (isSameMonth(start, end)) {
+    return `${startMonth} ${start.getDate()} – ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  if (start.getFullYear() === end.getFullYear()) {
+    return `${startMonth} ${start.getDate()} – ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
+  }
+  return `${startMonth} ${start.getDate()}, ${start.getFullYear()} – ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
 }
 
 /** Hours of the day (0–23) for the week-view time gutter and gridlines. */
