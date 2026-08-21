@@ -130,7 +130,7 @@ const listProviderCalendars = async (
   }
 
   if (provider === "outlook") {
-    const calendars = await listOutlookCalendars(accessToken, undefined, ownerEmail);
+    const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
     return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
   }
 

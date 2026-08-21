@@ -592,7 +592,7 @@ const createOAuthSource = async (
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
       /*
-       * accountId is unique per (userId, provider). This path has no provider-fetched
+       * An accountId is unique per (userId, provider). This path has no provider-fetched
        * account identifier to store there (unlike the import flow's adoptProviderAccountId),
        * so a row created here would otherwise sit with accountId null/empty until a later
        * reconnect backfills it - colliding with any other such row for the same user and
@@ -730,7 +730,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
       }
       if (provider === "outlook") {
-        const calendars = await listOutlookCalendars(accessToken, undefined, ownerEmail);
+        const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
       }
       throw new Error(`No calendar listing support for provider: ${provider}`);

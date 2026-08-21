@@ -22,7 +22,7 @@ describe("listUserCalendars abort support", () => {
       return Promise.resolve(Response.json(calendarListBody));
     }) as unknown as typeof fetch;
 
-    await listUserCalendars("token", controller.signal);
+    await listUserCalendars("token", { signal: controller.signal });
 
     expect(seen).toEqual([controller.signal]);
   });
@@ -39,7 +39,7 @@ describe("listUserCalendars abort support", () => {
         );
       })) as unknown as typeof fetch;
 
-    const pending = listUserCalendars("token", controller.signal);
+    const pending = listUserCalendars("token", { signal: controller.signal });
     const timeoutError = new Error("deadline exceeded");
     controller.abort(timeoutError);
 
@@ -73,7 +73,7 @@ describe("listUserCalendars", () => {
       { id: "cal-shared", name: "Colleague calendar", owner: { address: "colleague@example.com" } },
     ]);
 
-    const calendars = await listUserCalendars("test-token", undefined, "me@example.com");
+    const calendars = await listUserCalendars("test-token", { ownerEmail: "me@example.com" });
 
     expect(calendars.map((entry) => entry.id)).toEqual(["cal-own"]);
   });
@@ -83,7 +83,7 @@ describe("listUserCalendars", () => {
       { id: "cal-own", name: "Own calendar", owner: { address: "Me@Example.com" } },
     ]);
 
-    const calendars = await listUserCalendars("test-token", undefined, "me@example.com");
+    const calendars = await listUserCalendars("test-token", { ownerEmail: "me@example.com" });
 
     expect(calendars.map((entry) => entry.id)).toEqual(["cal-own"]);
   });
@@ -93,7 +93,7 @@ describe("listUserCalendars", () => {
       { id: "cal-no-owner", name: "Default calendar" },
     ]);
 
-    const calendars = await listUserCalendars("test-token", undefined, "me@example.com");
+    const calendars = await listUserCalendars("test-token", { ownerEmail: "me@example.com" });
 
     expect(calendars.map((entry) => entry.id)).toEqual(["cal-no-owner"]);
   });

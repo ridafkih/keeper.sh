@@ -145,11 +145,16 @@ const belongsToOwner = (calendar: OutlookCalendarListEntry, ownerEmail: string):
   return address.toLowerCase() === ownerEmail.toLowerCase();
 };
 
+interface ListUserCalendarsOptions {
+  signal?: AbortSignal;
+  ownerEmail?: string | null;
+}
+
 const listUserCalendars = async (
   accessToken: string,
-  signal?: AbortSignal,
-  ownerEmail?: string | null,
+  options?: ListUserCalendarsOptions,
 ): Promise<OutlookCalendarListEntry[]> => {
+  const { signal, ownerEmail } = options ?? {};
   const calendars: OutlookCalendarListEntry[] = [];
   let response = await fetchCalendarPage(accessToken, signal);
   calendars.push(...response.value);
