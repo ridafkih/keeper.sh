@@ -62,10 +62,13 @@ let advisoryWaitMs = 0;
 let commitMs = 0;
 let poolAcquisitionFails = false;
 
+const STORED_INGEST_SEQ = 0;
+
 const baseSource = {
   accessToken: "access-token",
   accountId: "account-1",
   expiresAt: new Date(Date.now() + 3_600_000),
+  ingestSeq: STORED_INGEST_SEQ,
   ingestFutureRange: "P90D",
   ingestHistoricRange: "P30D",
   ingestWindowEnd: null,
@@ -80,6 +83,9 @@ const baseSource = {
 
 const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
+  if (keys.size === 1 && keys.has("ingestSeq")) {
+    return [{ ingestSeq: STORED_INGEST_SEQ }];
+  }
   if (keys.has("encryptedPassword") || keys.has("treatFullDayTimedEventsAsAllDay")) {
     return [];
   }

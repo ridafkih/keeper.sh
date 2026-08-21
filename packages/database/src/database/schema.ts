@@ -131,6 +131,7 @@ const calendarsTable = pgTable(
     ingestNextAttemptAt: timestamp({ withTimezone: true }),
     ingestFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     ingestHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
+    ingestSeq: integer().notNull().default(0),
     ingestWindowEnd: timestamp({ withTimezone: true }),
     ingestWindowRecordedAt: timestamp({ withTimezone: true }),
     ingestWindowStart: timestamp({ withTimezone: true }),

@@ -14,6 +14,7 @@ import {
   releaseUnchangedMembers,
 } from "@/utils/pending-ingest-release";
 import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
+import { IngestBaselineMovedAbortError } from "@/utils/ingest-baseline";
 import {
   releaseClaimedCalendars,
   reserveClaimedMembers,
@@ -72,7 +73,11 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
     },
     ingestCalendars: async (calendarIds, correlationIdByCalendarId) => {
       const result = await ingestOAuthSources(calendarIds, correlationIdByCalendarId);
-      return { affectedUserIds: result.affectedUserIds };
+      const { abortedCalendarIds, affectedUserIds } = result;
+      if (abortedCalendarIds.length > 0 && affectedUserIds.length === 0) {
+        throw new IngestBaselineMovedAbortError(abortedCalendarIds);
+      }
+      return { affectedUserIds };
     },
     now: () => new Date(),
     observe: (fields) => {

@@ -43,6 +43,8 @@ let advisoryWaitMs = 0;
 let commitMs = 0;
 let uninstrumentedHoldMs = 0;
 
+const STORED_INGEST_SEQ = 0;
+
 const baseSource = {
   accessToken: "access-token",
   accountId: "account-1",
@@ -54,6 +56,7 @@ const baseSource = {
   ingestWindowStart: null,
   oauthCredentialId: "credential-1",
   provider: "google",
+  ingestSeq: STORED_INGEST_SEQ,
   refreshToken: "refresh-token",
   syncToken: null,
   userId: "user-1",
@@ -61,6 +64,9 @@ const baseSource = {
 
 const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
+  if (keys.size === 1 && keys.has("ingestSeq")) {
+    return [{ ingestSeq: STORED_INGEST_SEQ }];
+  }
   if (keys.has("encryptedPassword") || keys.has("treatFullDayTimedEventsAsAllDay")) {
     return [];
   }

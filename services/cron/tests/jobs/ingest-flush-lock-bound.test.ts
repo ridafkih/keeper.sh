@@ -31,6 +31,10 @@ const harness = vi.hoisted(() => {
 
   const statementTextSeparator = " ";
 
+  const storedIngestSeq = 0;
+
+  const ingestSeqRows = (): unknown[] => [{ ingestSeq: storedIngestSeq }];
+
   const renderStatementText = (statement: unknown): string => {
     const collected: string[] = [];
     const seen = new Set<object>();
@@ -65,7 +69,7 @@ const harness = vi.hoisted(() => {
       if (!row) {
         return [];
       }
-      return [{ failureCount: 0, nextAttemptAt: null, ...row }];
+      return [{ failureCount: 0, ingestSeq: storedIngestSeq, nextAttemptAt: null, ...row }];
     }
     return [];
   };
@@ -144,6 +148,21 @@ const harness = vi.hoisted(() => {
         }
         return Promise.resolve([]);
       },
+      select: (fields: Record<string, unknown>) => ({
+        from: () => ({
+          where: () => {
+            const resolveRows = (): unknown[] => {
+              if ("ingestSeq" in fields) {
+                return ingestSeqRows();
+              }
+              return [];
+            };
+            return Object.assign(Promise.resolve(resolveRows()), {
+              limit: () => Promise.resolve(resolveRows()),
+            });
+          },
+        }),
+      }),
     });
   };
 

@@ -49,6 +49,10 @@ const harness = vi.hoisted(() => {
   const containsCalendarId = (node: unknown, calendarId: string): boolean =>
     renderStatementText(node).includes(calendarId);
 
+  const storedIngestSeq = 0;
+
+  const ingestSeqRows = (): unknown[] => [{ ingestSeq: storedIngestSeq }];
+
   const resolveLimited = (fields: Record<string, unknown>, predicate: unknown): unknown[] => {
     if ("url" in fields) {
       const row = state.icsRows.find(
@@ -57,7 +61,7 @@ const harness = vi.hoisted(() => {
       if (!row) {
         return [];
       }
-      return [{ failureCount: 0, nextAttemptAt: null, ...row }];
+      return [{ failureCount: 0, ingestSeq: storedIngestSeq, nextAttemptAt: null, ...row }];
     }
     return [];
   };
@@ -95,6 +99,21 @@ const harness = vi.hoisted(() => {
     callback: (transaction: unknown) => Promise<unknown>,
   ): Promise<unknown> => await callback({
     execute: (): Promise<unknown[]> => Promise.resolve([]),
+    select: (fields: Record<string, unknown>) => ({
+      from: () => ({
+        where: () => {
+          const resolveRows = (): unknown[] => {
+            if ("ingestSeq" in fields) {
+              return ingestSeqRows();
+            }
+            return [];
+          };
+          return Object.assign(Promise.resolve(resolveRows()), {
+            limit: () => Promise.resolve(resolveRows()),
+          });
+        },
+      }),
+    }),
   });
 
   const pooledDatabase = {

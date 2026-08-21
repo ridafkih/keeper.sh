@@ -30,6 +30,10 @@ const harness = vi.hoisted(() => {
     orderedEvents: [] as string[],
   };
 
+  const storedIngestSeq = 0;
+
+  const ingestSeqRows = (): unknown[] => [{ ingestSeq: storedIngestSeq }];
+
   /* Grouped as properties so vi.hoisted can own capture-free helpers. */
   const helpers = {
     renderStatementText: (statement: unknown): string => {
@@ -64,6 +68,21 @@ const harness = vi.hoisted(() => {
       callback: (transaction: unknown) => Promise<unknown>,
     ): Promise<unknown> => await callback({
       execute: (): Promise<unknown[]> => Promise.resolve([]),
+      select: (fields: Record<string, unknown>) => ({
+        from: () => ({
+          where: () => {
+            const resolveRows = (): unknown[] => {
+              if ("ingestSeq" in fields) {
+                return ingestSeqRows();
+              }
+              return [];
+            };
+            return Object.assign(Promise.resolve(resolveRows()), {
+              limit: () => Promise.resolve(resolveRows()),
+            });
+          },
+        }),
+      }),
     }),
   };
 
@@ -78,7 +97,7 @@ const harness = vi.hoisted(() => {
       if (!row) {
         return [];
       }
-      return [{ failureCount: 0, nextAttemptAt: null, ...row }];
+      return [{ failureCount: 0, ingestSeq: storedIngestSeq, nextAttemptAt: null, ...row }];
     }
     return [];
   };

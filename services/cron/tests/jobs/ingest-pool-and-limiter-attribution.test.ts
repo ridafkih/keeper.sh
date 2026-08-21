@@ -46,6 +46,8 @@ let gatedReadMs = 0;
 let limiterWaitCount = 0;
 const limiterWaitsServed = new Map<string, number>();
 
+const STORED_INGEST_SEQ = 0;
+
 const baseSource = {
   accessToken: "access-token",
   accountId: "account-1",
@@ -57,6 +59,7 @@ const baseSource = {
   ingestWindowStart: null,
   oauthCredentialId: "credential-1",
   provider: "google",
+  ingestSeq: STORED_INGEST_SEQ,
   refreshToken: "refresh-token",
   syncToken: null,
   userId: "user-1",
@@ -83,6 +86,9 @@ const buildSourceRows = (): unknown[] => {
 
 const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
+  if (keys.size === 1 && keys.has("ingestSeq")) {
+    return [{ ingestSeq: STORED_INGEST_SEQ }];
+  }
   if (keys.has("encryptedPassword") || keys.has("treatFullDayTimedEventsAsAllDay")) {
     return [];
   }

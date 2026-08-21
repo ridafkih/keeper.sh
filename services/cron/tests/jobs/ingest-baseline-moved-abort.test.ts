@@ -7,7 +7,8 @@ const harness = vi.hoisted(() => {
     calendarId: string;
     ingestFutureRange: string;
     ingestHistoricRange: string;
-    ingestWindowRecordedAt: Date;
+    ingestSeq: number;
+    ingestWindowRecordedAt: Date | null;
     storedEventCount: number | null;
     treatFullDayTimedEventsAsAllDay: boolean;
     url: string;
@@ -20,25 +21,23 @@ const harness = vi.hoisted(() => {
 
   const state = {
     calendarUpdates: [] as CapturedCalendarUpdate[],
+    deletedIds: [] as string[],
     existingEventRows: 0,
     icsRows: [] as IcsSourceRow[],
+    insertedRows: [] as unknown[],
     persistenceWork: null as
       | ((persistence: {
           readExistingEvents: () => Promise<unknown[]>;
           flush: (changes: Record<string, unknown>) => Promise<void>;
         }) => Promise<{ eventsAdded: number; eventsRemoved: number }>)
       | null,
+    storedIngestSeq: 0,
   };
-
-  const storedIngestSeq = 0;
-
-  const ingestSeqRows = (): unknown[] => [{ ingestSeq: storedIngestSeq }];
 
   const resolveLimited = (fields: Record<string, unknown>): unknown[] => {
     if ("url" in fields) {
       return state.icsRows.slice(0, 1).map((row) => ({
         failureCount: 0,
-        ingestSeq: storedIngestSeq,
         nextAttemptAt: null,
         ...row,
       }));
@@ -81,27 +80,31 @@ const harness = vi.hoisted(() => {
     }),
   });
 
-
   const createExistingEventRows = (): unknown[] =>
     Array.from({ length: state.existingEventRows }, (_ignored, index) => ({
       id: `event-${index}`,
     }));
 
+  const seqRows = (): Record<string, unknown>[] => [{
+    ingestSeq: state.storedIngestSeq,
+    ingest_seq: state.storedIngestSeq,
+  }];
+
   const flushTransaction = (
     callback: (transaction: unknown) => Promise<unknown>,
   ): Promise<unknown> => callback({
-    execute: () => Promise.resolve([]),
+    execute: () => Promise.resolve(Object.assign([...seqRows()], { rows: seqRows() })),
     select: (fields: Record<string, unknown>) => ({
       from: () => ({
         where: () => {
-          const resolveRows = (): unknown[] => {
+          const resolve = (): unknown[] => {
             if ("ingestSeq" in fields) {
-              return ingestSeqRows();
+              return seqRows();
             }
             return createExistingEventRows();
           };
-          return Object.assign(Promise.resolve(resolveRows()), {
-            limit: () => Promise.resolve(resolveRows()),
+          return Object.assign(Promise.resolve(resolve()), {
+            limit: () => Promise.resolve(resolve()),
           });
         },
       }),
@@ -132,10 +135,13 @@ const harness = vi.hoisted(() => {
     ) => Promise<{ eventsAdded: number; eventsRemoved: number }>;
   }
 
+  const advanceAfterFetch = { value: 0 };
+
   const ingestSource = vi.fn(async (
     options: FakeIngestSourceOptions,
   ): Promise<{ eventsAdded: number; eventsRemoved: number }> => {
     await options.fetchEvents();
+    state.storedIngestSeq += advanceAfterFetch.value;
     const work = state.persistenceWork;
     if (!work) {
       return { eventsAdded: 0, eventsRemoved: 0 };
@@ -144,6 +150,7 @@ const harness = vi.hoisted(() => {
   });
 
   return {
+    advanceAfterFetch,
     calendarsTableRef: harness_calendarsTable,
     flushDatabase,
     ingestSource,
@@ -158,12 +165,25 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
     ...actual,
     buildEventStateInsertRow: (calendarId: string, event: unknown) => ({ calendarId, event }),
     ingestSource: harness.ingestSource,
-    insertEventStatesWithConflictResolution: () => Promise.resolve(),
+    insertEventStatesWithConflictResolution: (
+      _transaction: unknown,
+      rows: unknown[],
+    ): Promise<void> => {
+      harness.state.insertedRows.push(...rows);
+      return Promise.resolve();
+    },
   };
 });
 
 vi.mock("../../src/utils/delete-event-states", () => ({
-  deleteEventStatesInChunks: () => Promise.resolve(),
+  deleteEventStatesInChunks: (
+    _transaction: unknown,
+    _calendarId: string,
+    ids: string[],
+  ): Promise<void> => {
+    harness.state.deletedIds.push(...ids);
+    return Promise.resolve();
+  },
 }));
 
 vi.mock("@keeper.sh/calendar/ics", () => ({
@@ -218,6 +238,7 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   calendarId,
   ingestFutureRange: "6m",
   ingestHistoricRange: "1m",
+  ingestSeq: 7,
   ingestWindowRecordedAt: new Date(),
   storedEventCount: null,
   treatFullDayTimedEventsAsAllDay: false,
@@ -225,8 +246,17 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-const storedEventCountUpdates = () => harness.state.calendarUpdates.filter(
-  (update) => "storedEventCount" in update.values,
+const coverageChange = {
+  futureRange: "6m",
+  historicRange: "1m",
+  window: {
+    timeMax: new Date("2026-12-01T00:00:00.000Z"),
+    timeMin: new Date("2026-01-01T00:00:00.000Z"),
+  },
+};
+
+const updatesWithKey = (key: string) => harness.state.calendarUpdates.filter(
+  (update) => key in update.values,
 );
 
 let job: typeof ingestSourcesJob | null = null;
@@ -238,66 +268,60 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  harness.advanceAfterFetch.value = 0;
   harness.state.calendarUpdates.length = 0;
+  harness.state.deletedIds.length = 0;
   harness.state.existingEventRows = 0;
   harness.state.icsRows.length = 0;
+  harness.state.insertedRows.length = 0;
   harness.state.persistenceWork = null;
+  harness.state.storedIngestSeq = 7;
 });
 
-describe("ingest flush stored-event count maintenance", () => {
-  it("persists max(0, E + I - D) on the calendars row inside the flush transaction", async () => {
-    harness.state.icsRows.push(createIcsRow("calendar-counted", "user-counted"));
-    harness.state.existingEventRows = 5;
+describe("a pass whose baseline moved aborts instead of committing", () => {
+  it("writes nothing when ingestSeq moved between the gated read and the locked transaction", async () => {
+    harness.state.icsRows.push(createIcsRow("calendar-moved", "user-moved"));
+    harness.state.existingEventRows = 2;
+    harness.advanceAfterFetch.value = 1;
     harness.state.persistenceWork = async (persistence) => {
-      const existing = await persistence.readExistingEvents();
-      expect(existing).toHaveLength(5);
+      await persistence.readExistingEvents();
       await persistence.flush({
-        deletes: ["event-0", "event-1"],
-        inserts: [{ id: "new-a" }, { id: "new-b" }, { id: "new-c" }],
+        coverage: coverageChange,
+        deletes: ["event-0"],
+        inserts: [{ id: "fetched-a" }],
+        syncToken: "token-from-stale-fetch",
       });
-      return { eventsAdded: 3, eventsRemoved: 2 };
+      return { eventsAdded: 1, eventsRemoved: 1 };
     };
 
-    await job?.callback();
+    await Promise.resolve(job?.callback()).catch(() => null);
 
-    const updates = storedEventCountUpdates();
-    expect(updates).toHaveLength(1);
-    expect(updates[0]?.values.storedEventCount).toBe(6);
+    expect(harness.state.insertedRows).toHaveLength(0);
+    expect(harness.state.deletedIds).toHaveLength(0);
+    expect(updatesWithKey("syncToken")).toHaveLength(0);
+    expect(updatesWithKey("ingestWindowRecordedAt")).toHaveLength(0);
+    expect(updatesWithKey("storedEventCount")).toHaveLength(0);
   });
 
-  it("clamps the persisted count at zero when deletes outnumber E + I", async () => {
-    harness.state.icsRows.push(createIcsRow("calendar-emptied", "user-emptied"));
+  it("commits and bumps ingestSeq when the baseline is unchanged", async () => {
+    harness.state.icsRows.push(createIcsRow("calendar-stable", "user-stable"));
     harness.state.existingEventRows = 2;
     harness.state.persistenceWork = async (persistence) => {
       await persistence.readExistingEvents();
       await persistence.flush({
-        deletes: ["event-0", "event-1", "stale-a", "stale-b"],
-        inserts: [],
+        coverage: coverageChange,
+        deletes: ["event-0"],
+        inserts: [{ id: "fetched-a" }],
+        syncToken: "token-from-fresh-fetch",
       });
-      return { eventsAdded: 0, eventsRemoved: 4 };
+      return { eventsAdded: 1, eventsRemoved: 1 };
     };
 
     await job?.callback();
 
-    const updates = storedEventCountUpdates();
-    expect(updates).toHaveLength(1);
-    expect(updates[0]?.values.storedEventCount).toBe(0);
-  });
-
-  it("leaves storedEventCount unwritten when the flush never read the existing events", async () => {
-    harness.state.icsRows.push(createIcsRow("calendar-token-only", "user-token-only"));
-    harness.state.persistenceWork = async (persistence) => {
-      await persistence.flush({
-        deletes: [],
-        inserts: [],
-        syncToken: "next-token",
-      });
-      return { eventsAdded: 0, eventsRemoved: 0 };
-    };
-
-    await job?.callback();
-
-    expect(storedEventCountUpdates()).toHaveLength(0);
-    expect(harness.state.calendarUpdates.length).toBeGreaterThan(0);
+    expect(harness.state.insertedRows).toHaveLength(1);
+    expect(harness.state.deletedIds).toEqual(["event-0"]);
+    expect(updatesWithKey("syncToken")[0]?.values.syncToken).toBe("token-from-fresh-fetch");
+    expect(updatesWithKey("ingestSeq")).toHaveLength(1);
   });
 });
