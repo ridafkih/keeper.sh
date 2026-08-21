@@ -100,6 +100,11 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
    * the anchor effect from re-scrolling in response to the strip's own scroll
    * reports. */
   const alignedCenterMsRef = useRef<number | null>(null);
+  /** The scroller's width (px) the strip was last aligned at. Column widths
+   * are a fraction of it, so a scroll report arriving while the width differs
+   * is the strip mid-resize — its offset still belongs to the old width — and
+   * not the user paging; it is ignored and the resize observer re-aligns. */
+  const alignedWidthRef = useRef<number | null>(null);
 
   // The buffered strip is centred on the range active when the grid mounts, so
   // the entry range sits mid-buffer and paging stays inside it.
@@ -152,6 +157,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       const index = Math.round((first.getTime() - stripDays[0].getTime()) / MS_PER_DAY);
       const clamped = Math.max(0, Math.min(index, stripDays.length - VISIBLE_COLUMNS));
       alignedCenterMsRef.current = centerDay.getTime();
+      alignedWidthRef.current = el.clientWidth;
       el.scrollTo({ left: clamped * columnWidth(), behavior });
       // An instant jump lands before any scroll event; mirror it right away so
       // the header never shows a stale range, even for a frame.
@@ -198,17 +204,19 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   // Column widths are a fraction of the scroller's width, but the horizontal
   // offset is kept in pixels — so a viewport resize would silently drift the
   // strip to different days. Re-snap to the day the strip was centred on
-  // whenever the scroller's width changes.
+  // whenever the scroller's width changes. (`handleScroll` ignores the scroll
+  // events a resize produces, so that day is still the one the user chose.)
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
-    let lastWidth = el.clientWidth;
     const observer = new ResizeObserver(() => {
       const width = el.clientWidth;
-      if (width === 0 || width === lastWidth) return;
-      lastWidth = width;
+      if (width === 0 || width === alignedWidthRef.current) return;
       const alignedCenterMs = alignedCenterMsRef.current;
-      if (alignedCenterMs === null) return;
+      if (alignedCenterMs === null) {
+        alignedWidthRef.current = width;
+        return;
+      }
       scrollToCenter(new Date(alignedCenterMs), "auto");
     });
     observer.observe(el);
@@ -224,6 +232,10 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       rafRef.current = null;
       const el = scrollerRef.current;
       if (!el) return;
+      // Mid-resize: the offset belongs to the old width, so reading it against
+      // the new one would land on a different day. The resize observer
+      // re-aligns the strip to the chosen day; don't report this one.
+      if (el.clientWidth !== alignedWidthRef.current) return;
       const index = Math.max(
         0,
         Math.min(Math.round(el.scrollLeft / columnWidth()), stripDays.length - VISIBLE_COLUMNS),
