@@ -1,3 +1,7 @@
+import {
+  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
+} from "@keeper.sh/constants";
 import type { AuthType, ProviderDefinition } from "../../core/types";
 
 const googleCalendarDefinition = {
@@ -148,6 +152,18 @@ const isHostedCalDAVProvider = (id: string): boolean => {
   return (provider.caldav?.serverUrl ?? "").length > 0;
 };
 
+const HOSTED_CALDAV_ACCOUNT_REQUESTS_PER_MINUTE: Record<string, number> = {
+  fastmail: FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  icloud: ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
+};
+
+const getCalDAVAccountRequestsPerMinute = (id: string): number | undefined => {
+  if (!isHostedCalDAVProvider(id)) {
+    return;
+  }
+  return HOSTED_CALDAV_ACCOUNT_REQUESTS_PER_MINUTE[id];
+};
+
 const isOAuthProvider = (id: string): id is OAuthProviderId => {
   const provider = getProvider(id);
   return provider?.authType === "oauth";
@@ -165,6 +181,7 @@ export {
   getProvidersByAuthType,
   getOAuthProviders,
   getCalDAVProviders,
+  getCalDAVAccountRequestsPerMinute,
   isCalDAVProvider,
   isHostedCalDAVProvider,
   isOAuthProvider,

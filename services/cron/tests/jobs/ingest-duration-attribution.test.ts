@@ -62,10 +62,13 @@ let advisoryWaitMs = 0;
 let commitMs = 0;
 let poolAcquisitionFails = false;
 
+const STORED_INGEST_SEQ = 0;
+
 const baseSource = {
   accessToken: "access-token",
   accountId: "account-1",
   expiresAt: new Date(Date.now() + 3_600_000),
+  ingestSeq: STORED_INGEST_SEQ,
   ingestFutureRange: "P90D",
   ingestHistoricRange: "P30D",
   ingestWindowEnd: null,
@@ -78,13 +81,13 @@ const baseSource = {
   userId: "user-1",
 };
 
-const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
+  if (keys.size === 1 && keys.has("ingestSeq")) {
+    return [{ ingestSeq: STORED_INGEST_SEQ }];
+  }
   if (keys.has("encryptedPassword") || keys.has("treatFullDayTimedEventsAsAllDay")) {
     return [];
-  }
-  if (keys.has("failureCount") && keys.has("nextAttemptAt")) {
-    return [{ failureCount: 0, nextAttemptAt: null }];
   }
   if (keys.has("syncFutureRange") && keys.has("syncHistoricRange")) {
     return [];
@@ -109,6 +112,14 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
     }];
   }
   throw new Error(`unexpected select projection: ${[...keys].join(",")}`);
+};
+
+const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+  const rows = resolveSourceRows(projection);
+  if (!("failureCount" in projection)) {
+    return rows;
+  }
+  return rows.map((row) => ({ ...(row as Record<string, unknown>), failureCount: 0, nextAttemptAt: null }));
 };
 
 const createQuery = (resolve: () => unknown): unknown => {
