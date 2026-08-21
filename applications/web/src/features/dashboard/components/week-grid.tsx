@@ -93,9 +93,9 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   const headerStripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
-  /** Tears down the one-shot "re-centre after the router restores scroll"
-   * listener set up on mount, if it is still pending at unmount. */
-  const restorationCleanupRef = useRef<(() => void) | null>(null);
+  /** The scroller's vertical offset as last scrolled, so it can be put back
+   * after the router replays a cached one (see the `onRendered` effect). */
+  const scrollTopRef = useRef(0);
   /** The centre day (ms, midnight) the strip is currently aligned to; guards
    * the anchor effect from re-scrolling in response to the strip's own scroll
    * reports. */
@@ -173,33 +173,39 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     const centerDay = startOfDay(anchor);
     if (!mountedRef.current) {
       mountedRef.current = true;
-      const center = () => {
-        scrollToCenter(centerDay, "auto");
-        const el = scrollerRef.current;
-        if (el) el.scrollTop = Math.max(0, (new Date().getHours() - 1) * HOUR_HEIGHT);
-      };
-      center();
-      // The router's scroll restoration replays this element's offsets from the
-      // last visit right after the route renders — later in this same commit —
-      // which would drag the strip back to wherever it was then. Centre again
-      // once that has run. If it hasn't run by the next frame it won't for
-      // this mount, so stop listening rather than re-centring on a later
-      // navigation.
-      const unsubscribe = router.subscribe("onRendered", () => {
-        unsubscribe();
-        center();
-      });
-      const frame = requestAnimationFrame(unsubscribe);
-      restorationCleanupRef.current = () => {
-        cancelAnimationFrame(frame);
-        unsubscribe();
-      };
+      scrollToCenter(centerDay, "auto");
+      const el = scrollerRef.current;
+      if (el) {
+        el.scrollTop = Math.max(0, (new Date().getHours() - 1) * HOUR_HEIGHT);
+        scrollTopRef.current = el.scrollTop;
+      }
       return;
     }
     if (centerDay.getTime() !== alignedCenterMsRef.current) {
       scrollToCenter(centerDay, "smooth");
     }
-  }, [anchor, router, scrollToCenter]);
+  }, [anchor, scrollToCenter]);
+
+  // The router's scroll restoration replays every scrollable element's cached
+  // offsets once a navigation has rendered — this scroller's included, even
+  // though the pane stays mounted across the dashboard's child routes and its
+  // live position is the truth. The cache is sampled on a throttle, so the
+  // replayed offset can be a stale, mid-scroll one that leaves the strip off
+  // its column (snapping it onto a neighbouring day) and at a different hour.
+  // The router registers its listener when it is created, so this one runs
+  // after it: put the strip back where it was. On the first load that also
+  // re-centres on today after the last visit's offsets are replayed.
+  useEffect(
+    () =>
+      router.subscribe("onRendered", () => {
+        const el = scrollerRef.current;
+        const alignedCenterMs = alignedCenterMsRef.current;
+        if (!el || alignedCenterMs === null) return;
+        el.scrollTop = scrollTopRef.current;
+        scrollToCenter(new Date(alignedCenterMs), "auto");
+      }),
+    [router, scrollToCenter],
+  );
 
   // Column widths are a fraction of the scroller's width, but the horizontal
   // offset is kept in pixels — so a viewport resize would silently drift the
@@ -227,6 +233,8 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     // Mirror synchronously — not inside the rAF below — so the header never
     // trails the grid by a frame.
     syncHeaderStrip();
+    const scroller = scrollerRef.current;
+    if (scroller) scrollTopRef.current = scroller.scrollTop;
     if (rafRef.current !== null) return;
     rafRef.current = requestAnimationFrame(() => {
       rafRef.current = null;
@@ -250,7 +258,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   useEffect(
     () => () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      restorationCleanupRef.current?.();
     },
     [],
   );
