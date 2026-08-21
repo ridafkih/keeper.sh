@@ -1,14 +1,13 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /*
- * The lease TTL already guarantees slot recovery, so a dispose() that rejects in
- * the finally carries no information the run needs and must never turn a
+ * The lease TTL already guarantees slot recovery, so a lease release that rejects once a
+ * request has finished carries no information the run needs and must never turn a
  * successful ingest into a failure feeding the backoff.
  */
 const harness = vi.hoisted(() => {
   const state = {
     backoffWriteCount: 0,
-    disposeCallCount: 0,
     fetchCallCount: 0,
     ingestCallCount: 0,
     releaseCallCount: 0,
@@ -103,13 +102,19 @@ const harness = vi.hoisted(() => {
   }));
 
   const createOutlookSourceFetcher = (
-    params: { rateLimiter?: { acquire: (count: number) => Promise<void> } },
+    params: {
+      rateLimiter?: { acquirePermit?: () => Promise<{ release: () => Promise<void> }> };
+    },
   ) => ({
     fetchEvents: async (): Promise<unknown> => {
       state.fetchCallCount += 1;
-      // Pagination goes through the limiter, so the lease is genuinely held.
-      await params.rateLimiter?.acquire(1);
-      return { events: [] };
+      // Every Graph request takes a permit and hands it back, the way page fetching does.
+      const permit = await params.rateLimiter?.acquirePermit?.();
+      try {
+        return { events: [] };
+      } finally {
+        await permit?.release();
+      }
     },
   });
 
@@ -209,7 +214,7 @@ beforeAll(async () => {
   ingestOAuthSources = module.ingestOAuthSources as IngestOAuthSources;
 });
 
-describe("rate limiter dispose rejection after a successful ingest", () => {
+describe("lease release rejection after a successful ingest", () => {
   it("keeps the successful result and applies no backoff", async () => {
     const result = await ingestOAuthSources();
 
