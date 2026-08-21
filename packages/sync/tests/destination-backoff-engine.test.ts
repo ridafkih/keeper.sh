@@ -552,7 +552,7 @@ describe("two workers racing for the same destination", () => {
     expect(row.failureCount).toBe(3);
   });
 
-  it("does not announce a backoff it decided not to write when the lock was lost mid-run", async () => {
+  it("reports the failure but writes no backoff when the lock was lost mid-run", async () => {
     const { database, row, writes } = createHarness({
       failureCount: 3,
       lastFailureAt: new Date(START.getTime() - 60_000),
@@ -579,9 +579,12 @@ describe("two workers racing for the same destination", () => {
 
     expect(writes).toEqual([]);
     expect(row.failureCount).toBe(3);
-    expect({ errors: result.errors, reportedErrors }).toEqual({
-      errors: [],
-      reportedErrors: [],
+    expect({
+      errors: result.errors,
+      reportedMessages: reportedErrors.map(String),
+    }).toEqual({
+      errors: ["Invalid credentials"],
+      reportedMessages: ["Error: Invalid credentials"],
     });
   });
 });

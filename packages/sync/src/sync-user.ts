@@ -42,6 +42,7 @@ import type Redis from "ioredis";
 import {
   getErrorMessage,
   resolveDestinationAttemptVerdict,
+  resolveThrownDestinationVerdict,
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
@@ -545,6 +546,7 @@ interface CalendarSyncFailure {
   userId: string;
   error: unknown;
   durationMs: number;
+  backoffApplied: boolean;
   syncEvent?: Record<string, unknown>;
 }
 
@@ -690,7 +692,6 @@ const applyDestinationAttemptVerdict = async (
   return true;
 };
 
-// A run that lost the calendar wrote no backoff, so it must not fire onCalendarError either: the worker reads that as a retry.backoff_applied claim.
 const recordDestinationAttemptFailure = async (
   options: {
     callbacks?: SyncCallbacks;
@@ -703,15 +704,13 @@ const recordDestinationAttemptFailure = async (
   },
 ): Promise<string[]> => {
   const { callbacks, database, destination, durationMs, error, handle, syncEvent } = options;
+  const verdict = resolveThrownDestinationVerdict(error);
   const stillOwned = await applyDestinationAttemptVerdict({
     database,
     destination,
     handle,
-    verdict: "failed",
+    verdict,
   });
-  if (!stillOwned) {
-    return [];
-  }
 
   callbacks?.onCalendarError?.({
     provider: destination.provider,
@@ -720,6 +719,7 @@ const recordDestinationAttemptFailure = async (
     userId: destination.userId,
     error,
     durationMs,
+    backoffApplied: stillOwned && verdict === "failed",
     ...(syncEvent && { syncEvent }),
   });
   return [getErrorMessage(error)];

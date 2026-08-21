@@ -279,7 +279,7 @@ describe("a repaired destination that is already in sync", () => {
 });
 
 describe("a healthy destination interrupted by a worker shutdown", () => {
-  it("isolates the destination and escalates when the abort surfaces as a thrown error", async () => {
+  it("isolates the destination without escalating when the abort surfaces as a thrown error", async () => {
     const { database, row } = createHarness({
       failureCount: 2,
       nextAttemptAt: new Date(START.getTime() - 1),
@@ -296,7 +296,7 @@ describe("a healthy destination interrupted by a worker shutdown", () => {
     });
 
     expect(result.errors).toEqual(["The operation was aborted."]);
-    expect(row.failureCount).toBe(3);
+    expect(row.failureCount).toBe(2);
   });
 
   it("does not accumulate a lockout across repeated shutdowns", async () => {
@@ -372,7 +372,7 @@ describe("eligibility of a wrapped provider error", () => {
     const result = await syncDestinationsForUser(USER_ID, config(database));
 
     expect(result.errors).toEqual(["push failed"]);
-    expect(row.failureCount).toBe(1);
+    expect(row.failureCount).toBe(0);
   });
 });
 

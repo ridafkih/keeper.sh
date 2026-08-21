@@ -78,11 +78,19 @@ const resolveDestinationAttemptVerdict = (
   return "succeeded";
 };
 
+const resolveThrownDestinationVerdict = (error: unknown): DestinationAttemptVerdict => {
+  if (isBackoffEligibleError(error)) {
+    return "failed";
+  }
+  return "inconclusive";
+};
+
 export {
   BACKOFF_ERROR_PATTERNS,
   getErrorMessage,
   hasNoSuccessfulOperations,
   isBackoffEligibleError,
   resolveDestinationAttemptVerdict,
+  resolveThrownDestinationVerdict,
 };
 export type { DestinationAttemptVerdict, DestinationOperationCounts };
