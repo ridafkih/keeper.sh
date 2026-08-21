@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { PENDING_CORRELATION_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
+import {
+  PENDING_CORRELATION_KEY,
+  PENDING_INGEST_KEY,
+  PENDING_REWAKE_KEY,
+} from "@keeper.sh/calendar";
 import { runDrainPendingIngest } from "../../src/utils/drain-pending-ingest";
 import type { DrainPendingIngestDependencies } from "../../src/utils/drain-pending-ingest";
 import { createScopedClaimPending } from "../../src/utils/scoped-drain-pending-ingest";
@@ -118,9 +122,18 @@ const createFakePendingRedis = (fixture: PendingFixture) => {
       return Promise.resolve(keys.length);
     },
     hmget: (key: string, ...members: string[]) => {
+      if (key === PENDING_REWAKE_KEY) {
+        return Promise.resolve(members.map((member) => {
+          if (fixture.scores.has(member)) {
+            return "1";
+          }
+          return null;
+        }));
+      }
       expect(key).toBe(PENDING_CORRELATION_KEY);
       return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
     },
+    hsetnx: (): Promise<number> => Promise.resolve(0),
     set: (key: string) => {
       if (reserved.has(key)) {
         return Promise.resolve(null);

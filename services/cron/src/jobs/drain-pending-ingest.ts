@@ -11,9 +11,10 @@ import {
   PENDING_CORRELATION_KEY,
   PENDING_FAILURES_KEY,
   PENDING_INGEST_KEY,
+  PENDING_REWAKE_KEY,
   releaseUnchangedMembers,
 } from "@/utils/pending-ingest-release";
-import { attachCorrelationIds } from "@/utils/scoped-drain-pending-ingest";
+import { claimMetadataWithSeededRewake } from "@/utils/scoped-drain-pending-ingest";
 import { IngestBaselineMovedAbortError } from "@/utils/ingest-baseline";
 import {
   releaseClaimedCalendars,
@@ -64,11 +65,8 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
       if (members.length === 0) {
         return members;
       }
-      return releaseClaimsOnFailure(refreshLockRedis, members, async () =>
-        attachCorrelationIds(members, await refreshLockRedis.hmget(
-          PENDING_CORRELATION_KEY,
-          ...members.map((member) => member.calendarId),
-        )));
+      return releaseClaimsOnFailure(refreshLockRedis, members, () =>
+        claimMetadataWithSeededRewake(refreshLockRedis, members));
     },
     countPending: () => refreshLockRedis.zcard(PENDING_INGEST_KEY),
     enabled: Boolean(environment.WEBHOOK_PUBLIC_URL),
@@ -111,6 +109,7 @@ const createDefaultDependencies = async (): Promise<DrainPendingIngestDependenci
       await refreshLockRedis.zrem(PENDING_INGEST_KEY, ...calendarIds);
       await refreshLockRedis.hdel(PENDING_FAILURES_KEY, ...calendarIds);
       await refreshLockRedis.hdel(PENDING_CORRELATION_KEY, ...calendarIds);
+      await refreshLockRedis.hdel(PENDING_REWAKE_KEY, ...calendarIds);
     },
     releaseClaims: (calendarIds) =>
       releaseClaimedCalendars(refreshLockRedis, calendarIds),

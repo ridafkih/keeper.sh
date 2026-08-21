@@ -19,6 +19,7 @@ const fakeRedis = {
     return Promise.resolve(keys.length);
   },
   hmget: (): Promise<(string | null)[]> => Promise.reject(correlationError),
+  hsetnx: (): Promise<number> => Promise.resolve(0),
   set: (): Promise<string | null> => Promise.resolve("OK"),
   zrange: (): Promise<string[]> =>
     Promise.resolve(["cal-a", "1000", "cal-b", "2000"]),

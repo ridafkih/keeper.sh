@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { PENDING_CORRELATION_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
+import {
+  PENDING_CORRELATION_KEY,
+  PENDING_INGEST_KEY,
+  PENDING_REWAKE_KEY,
+} from "@keeper.sh/calendar";
 import { runDrainPendingIngest } from "../../src/utils/drain-pending-ingest";
 import { createScopedClaimPending } from "../../src/utils/scoped-drain-pending-ingest";
 
 const NOW_MS = new Date("2026-08-18T00:00:00.000Z").getTime();
+const DELIVERED_REWAKE = "1";
 
 interface PendingFixture {
   correlationIds: Map<string, string>;
@@ -20,9 +25,18 @@ const createFakeRedis = (fixture: PendingFixture) => {
       return Promise.resolve(keys.length);
     }),
     hmget: vi.fn((key: string, ...members: string[]) => {
+      if (key === PENDING_REWAKE_KEY) {
+        return Promise.resolve(members.map((member) => {
+          if (fixture.scores.has(member)) {
+            return DELIVERED_REWAKE;
+          }
+          return null;
+        }));
+      }
       expect(key).toBe(PENDING_CORRELATION_KEY);
       return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
     }),
+    hsetnx: vi.fn(() => Promise.resolve(0)),
     set: vi.fn((key: string) => {
       if (reserved.has(key)) {
         return Promise.resolve(null);
@@ -110,7 +124,12 @@ describe("scoped drain claims only the named calendars", () => {
     await runDrainPendingIngest(dependencies);
 
     expect(dependencies.releasePending).toHaveBeenCalledWith([
-      { calendarId: "cal-a", correlationId: "corr-a", score: rewokenScore },
+      {
+        calendarId: "cal-a",
+        correlationId: "corr-a",
+        rewake: DELIVERED_REWAKE,
+        score: rewokenScore,
+      },
     ]);
   });
 

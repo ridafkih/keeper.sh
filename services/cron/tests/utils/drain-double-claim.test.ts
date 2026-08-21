@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PENDING_REWAKE_KEY } from "@keeper.sh/calendar";
 import type {
   DrainPendingIngestDependencies,
   ResolvedPendingCalendar,
 } from "../../src/utils/drain-pending-ingest";
 
-const RELEASE_KEY_COUNT = 3;
-const SCORE_STRIDE = 2;
+const RELEASE_KEY_COUNT = 4;
+const SCORE_STRIDE = 3;
 
 const zsets = new Map<string, Map<string, number>>();
 const hashes = new Map<string, Map<string, string>>();
@@ -57,15 +58,20 @@ const fakeRedis = {
     const scores = readZset(pendingKey);
     const failures = readHash(keys[1] ?? "");
     const correlations = readHash(keys[2] ?? "");
+    const rewakes = readHash(keys[3] ?? "");
     const removed: string[] = [];
     for (let index = 0; index < argv.length; index += SCORE_STRIDE) {
       const member = argv[index] ?? "";
-      const claimedScore = Number(argv[index + 1]);
+      const claimedRewake = argv[index + 1] ?? "";
+      const claimedScore = Number(argv[index + 2] ?? "");
+      const currentRewake = rewakes.get(member) ?? null;
       const currentScore = scores.get(member) ?? Number.POSITIVE_INFINITY;
-      if (currentScore <= claimedScore) {
+      if (scores.has(member) && currentRewake !== null
+        && currentRewake === claimedRewake && currentScore <= claimedScore) {
         scores.delete(member);
         failures.delete(member);
         correlations.delete(member);
+        rewakes.delete(member);
         removed.push(member);
       }
     }
@@ -94,6 +100,14 @@ const fakeRedis = {
     Promise.resolve(fields.map((field) => readHash(key).get(field) ?? null)),
   hset: (key: string, field: string, value: string): Promise<number> => {
     readHash(key).set(field, value);
+    return Promise.resolve(1);
+  },
+  hsetnx: (key: string, field: string, value: string): Promise<number> => {
+    const hash = readHash(key);
+    if (hash.has(field)) {
+      return Promise.resolve(0);
+    }
+    hash.set(field, value);
     return Promise.resolve(1);
   },
   pexpire: (): Promise<number> => Promise.resolve(1),
@@ -219,6 +233,12 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 }));
 
 const { PENDING_INGEST_KEY } = await import("../../src/utils/pending-ingest-release");
+
+const wakePending = (calendarId: string, score: number): void => {
+  readZset(PENDING_INGEST_KEY).set(calendarId, score);
+  const rewakes = readHash(PENDING_REWAKE_KEY);
+  rewakes.set(calendarId, String(Number(rewakes.get(calendarId) ?? 0) + 1));
+};
 const { runDrainPendingIngest } = await import("../../src/utils/drain-pending-ingest");
 const { createDefaultDependencies } = await import("../../src/jobs/drain-pending-ingest");
 const { createScopedClaimPending } = await import("../../src/utils/scoped-drain-pending-ingest");
@@ -262,10 +282,9 @@ beforeEach(() => {
   zsets.clear();
   hashes.clear();
   strings.clear();
-  const pending = readZset(PENDING_INGEST_KEY);
-  pending.set("cal-a", 1000);
-  pending.set("cal-b", 2000);
-  pending.set("cal-c", 3000);
+  wakePending("cal-a", 1000);
+  wakePending("cal-b", 2000);
+  wakePending("cal-c", 3000);
 });
 
 describe("a second drain skips a calendar already being drained", () => {

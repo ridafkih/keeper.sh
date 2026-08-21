@@ -7,6 +7,7 @@ const DRAIN_BATCH_FAILED_SLUG = "push-drain-batch-failed";
 interface PendingIngestMember {
   calendarId: string;
   correlationId?: string;
+  rewake?: string;
   score: number;
 }
 
@@ -106,53 +107,51 @@ const collectCorrelationIds = (
  * arrival order; taking the first claimed would name a different webhook than the receipt
  * stamp travelling beside it.
  */
-const attributeCorrelationIdsToUsers = (
-  members: PendingIngestMember[],
-  userIdByCalendarId: Map<string, string>,
-  affectedUserIds: string[],
-): Record<string, string> => {
-  const wanted = new Set(affectedUserIds);
-  const correlationIdByUserId: Record<string, string> = {};
-  const scoreByUserId = new Map<string, number>();
-  for (const member of members) {
-    const userId = userIdByCalendarId.get(member.calendarId) ?? "";
-    const correlationId = member.correlationId ?? "";
-    if (!wanted.has(userId) || correlationId.length === 0) {
-      continue;
-    }
-    const incumbent = scoreByUserId.get(userId) ?? Number.POSITIVE_INFINITY;
-    if (incumbent <= member.score) {
-      continue;
-    }
-    scoreByUserId.set(userId, member.score);
-    correlationIdByUserId[userId] = correlationId;
+const describesUserBetter = (
+  candidate: PendingIngestMember,
+  incumbent?: PendingIngestMember,
+): boolean => {
+  if (!incumbent) {
+    return true;
   }
-  return correlationIdByUserId;
+  if (candidate.score !== incumbent.score) {
+    return candidate.score < incumbent.score;
+  }
+  return (incumbent.correlationId ?? "").length === 0
+    && (candidate.correlationId ?? "").length > 0;
 };
 
-/*
- * The score is the webhook receipt stamp the API zadded. A user with several woken
- * calendars reports the earliest of them: the metric answers what the worst-served
- * webhook waited, and the freshest score would hide exactly the lag it exists to show.
- * Taken by score rather than by claim order, because a signalled drain claims in signal
- * arrival order rather than score order.
- */
-const attributeWebhookReceiptToUsers = (
+const attributeEarliestMembersToUsers = (
   members: PendingIngestMember[],
   userIdByCalendarId: Map<string, string>,
   affectedUserIds: string[],
-): Record<string, number> => {
+): {
+  correlationIdByUserId: Record<string, string>;
+  webhookReceivedAtByUserId: Record<string, number>;
+} => {
   const wanted = new Set(affectedUserIds);
-  const webhookReceivedAtByUserId: Record<string, number> = {};
+  const earliestByUserId = new Map<string, PendingIngestMember>();
   for (const member of members) {
     const userId = userIdByCalendarId.get(member.calendarId) ?? "";
     if (!wanted.has(userId)) {
       continue;
     }
-    const earliest = webhookReceivedAtByUserId[userId] ?? member.score;
-    webhookReceivedAtByUserId[userId] = Math.min(earliest, member.score);
+    if (!describesUserBetter(member, earliestByUserId.get(userId))) {
+      continue;
+    }
+    earliestByUserId.set(userId, member);
   }
-  return webhookReceivedAtByUserId;
+
+  const correlationIdByUserId: Record<string, string> = {};
+  const webhookReceivedAtByUserId: Record<string, number> = {};
+  for (const [userId, member] of earliestByUserId) {
+    const correlationId = member.correlationId ?? "";
+    if (correlationId.length > 0) {
+      correlationIdByUserId[userId] = correlationId;
+    }
+    webhookReceivedAtByUserId[userId] = member.score;
+  }
+  return { correlationIdByUserId, webhookReceivedAtByUserId };
 };
 
 const abandonExhaustedMembers = async (
@@ -295,10 +294,12 @@ const drainClaimedMembers = async (
          * untagged and a tagged calendar in the same batch would otherwise enqueue untagged
          * first, and BullMQ's dedupe on the deterministic job id drops the tagged retry.
          */
+        const { correlationIdByUserId, webhookReceivedAtByUserId } =
+          attributeEarliestMembersToUsers(eligible, userIdByCalendarId, syncableUserIds);
         await dependencies.enqueueDestinationSyncs(
           syncableUserIds,
-          attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, syncableUserIds),
-          attributeWebhookReceiptToUsers(eligible, userIdByCalendarId, syncableUserIds),
+          correlationIdByUserId,
+          webhookReceivedAtByUserId,
         );
       } catch (error) {
         dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);

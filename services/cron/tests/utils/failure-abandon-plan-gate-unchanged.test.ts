@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PENDING_REWAKE_KEY } from "@keeper.sh/calendar";
 import type {
   DrainPendingIngestDependencies,
   ResolvedPendingCalendar,
 } from "../../src/utils/drain-pending-ingest";
 
-const RELEASE_KEY_COUNT = 3;
-const SCORE_STRIDE = 2;
+const RELEASE_KEY_COUNT = 4;
+const SCORE_STRIDE = 3;
 
 interface StringEntry {
   expiresAt: number;
@@ -76,15 +77,20 @@ const fakeRedis = {
     const scores = readZset(pendingKey);
     const failures = readHash(keys[1] ?? "");
     const correlations = readHash(keys[2] ?? "");
+    const rewakes = readHash(keys[3] ?? "");
     const removed: string[] = [];
     for (let index = 0; index < argv.length; index += SCORE_STRIDE) {
       const member = argv[index] ?? "";
-      const claimedScore = Number(argv[index + 1]);
+      const claimedRewake = argv[index + 1] ?? "";
+      const claimedScore = Number(argv[index + 2] ?? "");
+      const currentRewake = rewakes.get(member) ?? null;
       const currentScore = scores.get(member) ?? Number.POSITIVE_INFINITY;
-      if (currentScore <= claimedScore) {
+      if (scores.has(member) && currentRewake !== null
+        && currentRewake === claimedRewake && currentScore <= claimedScore) {
         scores.delete(member);
         failures.delete(member);
         correlations.delete(member);
+        rewakes.delete(member);
         removed.push(member);
       }
     }
@@ -250,6 +256,12 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 const { PENDING_FAILURES_KEY, PENDING_INGEST_KEY } = await import(
   "../../src/utils/pending-ingest-release"
 );
+
+const wakePending = (calendarId: string, score: number): void => {
+  readZset(PENDING_INGEST_KEY).set(calendarId, score);
+  const rewakes = readHash(PENDING_REWAKE_KEY);
+  rewakes.set(calendarId, String(Number(rewakes.get(calendarId) ?? 0) + 1));
+};
 const { MAX_PENDING_FAILURES, runDrainPendingIngest } = await import(
   "../../src/utils/drain-pending-ingest"
 );
@@ -304,7 +316,7 @@ describe("failure, abandon and the plan gate are unchanged", () => {
     const recordedSlugs: string[] = [];
     const ingestFailed = new Error("source ingest rejected");
 
-    readZset(PENDING_INGEST_KEY).set("cal-pro", clock.nowMs - 1000);
+    wakePending("cal-pro", clock.nowMs - 1000);
 
     for (let pass = 0; pass < MAX_PENDING_FAILURES; pass += 1) {
       const baseDependencies = await createDefaultDependencies();
@@ -342,9 +354,8 @@ describe("failure, abandon and the plan gate are unchanged", () => {
     const attempted: string[] = [];
     const recordedSlugs: string[] = [];
 
-    const pending = readZset(PENDING_INGEST_KEY);
-    pending.set("cal-free", clock.nowMs - 2000);
-    pending.set("cal-pro", clock.nowMs - 1000);
+    wakePending("cal-free", clock.nowMs - 2000);
+    wakePending("cal-pro", clock.nowMs - 1000);
 
     const baseDependencies = await createDefaultDependencies();
     await runDrainPendingIngest({
@@ -365,7 +376,7 @@ describe("failure, abandon and the plan gate are unchanged", () => {
     expect(await fakeRedis.zscore(PENDING_INGEST_KEY, "cal-pro")).toBeNull();
 
     const rewokenScore = clock.nowMs + 1000;
-    await fakeRedis.zadd(PENDING_INGEST_KEY, rewokenScore, "cal-free");
+    wakePending("cal-free", rewokenScore);
     clock.nowMs += 10_000;
 
     const laterAttempted: string[] = [];
@@ -398,7 +409,7 @@ describe("failure, abandon and the plan gate are unchanged", () => {
     const failureCounts: number[] = [];
     const planUnavailable = new Error("plan lookup unavailable");
 
-    readZset(PENDING_INGEST_KEY).set("cal-pro", clock.nowMs - 1000);
+    wakePending("cal-pro", clock.nowMs - 1000);
 
     for (let pass = 0; pass < MAX_PENDING_FAILURES; pass += 1) {
       const baseDependencies = await createDefaultDependencies();
