@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, arrayContains, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
@@ -113,6 +113,7 @@ describe("ingestOAuthSources selection", () => {
     expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     ]]);
   });
 
@@ -137,12 +138,15 @@ describe("ingestOAuthSources selection", () => {
     expect(capturedOrderings).toEqual([[
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     ], [
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     ]]);
   });
 });

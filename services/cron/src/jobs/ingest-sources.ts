@@ -59,7 +59,7 @@ import {
   userSubscriptionsTable,
   userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import {
@@ -1189,6 +1189,81 @@ const resolveFleetYieldedCalendarIds = async (
   }
 };
 
+const FLEET_PASS_SOURCE_BOUND = 250;
+
+const FLEET_PASS_CURSOR_KEY = "ingest:fleet-pass-cursor";
+
+const parseFleetPassCursor = (stored: string | null): number => {
+  if (stored === null) {
+    return 0;
+  }
+  const parsed = Number.parseInt(stored, 10);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+};
+
+const readFleetPassCursor = async (calendarIds: string[] | undefined): Promise<number> => {
+  if (calendarIds) {
+    return 0;
+  }
+  try {
+    return parseFleetPassCursor(await refreshLockRedis.get(FLEET_PASS_CURSOR_KEY));
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "fleet-pass-cursor-read-failed",
+    });
+    return 0;
+  }
+};
+
+const writeFleetPassCursor = async (nextCursor: number): Promise<void> => {
+  try {
+    await refreshLockRedis.set(FLEET_PASS_CURSOR_KEY, String(nextCursor));
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "fleet-pass-cursor-write-failed",
+    });
+  }
+};
+
+interface FleetPassWindow<TSource> {
+  scanned: number;
+  taken: TSource[];
+}
+
+const takeFleetPassWindow = <TSource extends { calendarId: string }>(
+  windowSources: TSource[],
+  yieldedCalendarIds: Set<string>,
+): FleetPassWindow<TSource> => {
+  const taken: TSource[] = [];
+  let scanned = 0;
+  for (const source of windowSources) {
+    if (taken.length >= FLEET_PASS_SOURCE_BOUND) {
+      break;
+    }
+    scanned += 1;
+    if (!yieldedCalendarIds.has(source.calendarId)) {
+      taken.push(source);
+    }
+  }
+  return { scanned, taken };
+};
+
+const advanceFleetPassCursor = (
+  cursor: number,
+  windowLength: number,
+  scanned: number,
+): number => {
+  if (scanned >= windowLength) {
+    return 0;
+  }
+  return cursor + scanned;
+};
+
 const resolveYieldedCalendarIds = (
   calendarIds: string[] | undefined,
   sourceCalendarIds: string[],
@@ -1233,16 +1308,25 @@ const recordYieldedCount = (
   widelog.set("ingest.yielded_count", yieldedCalendarIds.size);
 };
 
-const ingestOAuthSources = async (
-  calendarIds?: string[],
-  correlationIdByCalendarId: Record<string, string> = {},
-): Promise<IngestionBatchResult> => {
-  if (calendarIds && calendarIds.length === 0) {
-    return createEmptyIngestionBatchResult();
+const resolveSelectedSources = async <TSource extends { calendarId: string }>(
+  calendarIds: string[] | undefined,
+  windowSources: TSource[],
+  yieldedCalendarIds: Set<string>,
+  cursor: number,
+): Promise<TSource[]> => {
+  if (calendarIds) {
+    return windowSources.filter(({ calendarId }) => !yieldedCalendarIds.has(calendarId));
   }
-  const lane = resolveIngestLane(calendarIds);
+  const { scanned, taken } = takeFleetPassWindow(windowSources, yieldedCalendarIds);
+  widelog.set("ingest.pass_cursor", cursor);
+  widelog.set("ingest.taken_count", taken.length);
+  widelog.set("ingest.deferred_count", windowSources.length - scanned);
+  await writeFleetPassCursor(advanceFleetPassCursor(cursor, windowSources.length, scanned));
+  return taken;
+};
 
-  const oauthSources = await database
+const buildOAuthSourceQuery = (calendarIds: string[] | undefined) =>
+  database
     .select({
       accountId: calendarAccountsTable.id,
       calendarId: calendarsTable.id,
@@ -1275,14 +1359,45 @@ const ingestOAuthSources = async (
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     );
+
+type OAuthSourceQuery = ReturnType<typeof buildOAuthSourceQuery>;
+
+const readFleetPassWindow = (
+  sourceQuery: OAuthSourceQuery,
+  cursor: number,
+): OAuthSourceQuery | ReturnType<OAuthSourceQuery["offset"]> => {
+  if (cursor === 0) {
+    return sourceQuery;
+  }
+  return sourceQuery.offset(cursor);
+};
+
+const ingestOAuthSources = async (
+  calendarIds?: string[],
+  correlationIdByCalendarId: Record<string, string> = {},
+): Promise<IngestionBatchResult> => {
+  if (calendarIds && calendarIds.length === 0) {
+    return createEmptyIngestionBatchResult();
+  }
+  const lane = resolveIngestLane(calendarIds);
+  const fleetPassCursor = await readFleetPassCursor(calendarIds);
+
+  const oauthSources = await readFleetPassWindow(
+    buildOAuthSourceQuery(calendarIds),
+    fleetPassCursor,
+  );
 
   const yieldedCalendarIds = await resolveYieldedCalendarIds(
     calendarIds,
     oauthSources.map(({ calendarId }) => calendarId),
   );
-  const selectedSources = oauthSources.filter(
-    ({ calendarId }) => !yieldedCalendarIds.has(calendarId),
+  const selectedSources = await resolveSelectedSources(
+    calendarIds,
+    oauthSources,
+    yieldedCalendarIds,
+    fleetPassCursor,
   );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1554,6 +1669,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1758,6 +1874,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
     .orderBy(
       desc(isNull(calendarsTable.ingestWindowRecordedAt)),
       desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
+      asc(calendarsTable.id),
     );
 
   const settlements = await allSettledGroupedWithConcurrency(
@@ -1973,5 +2090,5 @@ export default withCronWideEvent({
   overrunProtection: false,
 }) satisfies CronOptions;
 
-export { ingestOAuthSources, resolveRateLimiter };
+export { FLEET_PASS_SOURCE_BOUND, ingestOAuthSources, resolveRateLimiter };
 export type { IngestionBatchResult };
