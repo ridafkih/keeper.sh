@@ -148,6 +148,9 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
+            if (updated && "markEventsAsPrivate" in updates) {
+              await requestUserSync(transaction, userIdToUpdate);
+            }
             await applyFeedMembership(transaction, updated ?? null);
             return updated ?? null;
           });
