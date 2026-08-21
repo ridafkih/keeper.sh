@@ -4,7 +4,15 @@ import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
-import { addDays, formatHourLabel, HOURS, isSameDay, startOfWeek } from "./calendar-helpers";
+import {
+  addDays,
+  formatHourLabel,
+  HOURS,
+  isSameDay,
+  startOfDay,
+  startOfVisibleWeek,
+  WEEK_VIEW_DAYS,
+} from "./calendar-helpers";
 
 /** Width of the left time gutter, in pixels. */
 const GUTTER_WIDTH = 52;
@@ -13,8 +21,10 @@ const HOUR_HEIGHT = 48;
 /** Height of the weekday/date header row, in pixels. */
 const HEADER_HEIGHT = 56;
 /** Visible day columns (a week). */
-const VISIBLE_COLUMNS = 7;
-/** Weeks buffered on each side of the entry week, giving the strip a long,
+const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
+/** Offset of the centre column from the first visible one. */
+const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
+/** Weeks buffered on each side of the entry range, giving the strip a long,
  * effectively-continuous horizontal scroll range without recentering logic. */
 const BUFFER_WEEKS = 26;
 
@@ -30,11 +40,12 @@ const FADED_COLUMN_RULE: CSSProperties = {
 };
 
 interface WeekGridProps {
-  /** Any date inside the week to show; drives the horizontal scroll position. */
+  /** The day to centre the visible range on; drives the horizontal scroll
+   * position. Today on entry, so today sits in the middle column. */
   anchor: Date;
-  /** Reports the week (its Sunday) scrolled into view, so the pane title and
-   * paging stay in sync with manual horizontal scrolling. */
-  onVisibleWeekChange: (weekStart: Date) => void;
+  /** Reports the day now in the centre column after manual horizontal
+   * scrolling, so the pane title and paging stay in sync with the strip. */
+  onCenterDayChange: (centerDay: Date) => void;
   /** The pane's toolbar, rendered in the header card above the day row. */
   toolbar: ReactNode;
 }
@@ -42,26 +53,29 @@ interface WeekGridProps {
 /**
  * The week view skeleton, modelled on qali's time strip: a pinned left time
  * gutter and a single two-axis scroller whose buffered day columns snap one
- * day at a time — so the week scrolls horizontally like qali's. The day row
- * lives in the header card above; it has no scroller of its own and simply
- * mirrors the grid's horizontal offset, so the two always line up.
+ * day at a time — so the week scrolls horizontally like qali's. The visible
+ * range is a rolling seven days centred on `anchor` rather than a calendar
+ * week, so "Today" puts today in the middle and paging keeps that alignment.
+ * The day row lives in the header card above; it has no scroller of its own
+ * and simply mirrors the grid's horizontal offset, so the two always line up.
  * Presentational only: no events; a current-time line marks today.
  */
-export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps) {
+export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) {
   const today = useStartOfToday();
   const scrollerRef = useRef<HTMLDivElement>(null);
   /** The overflow-hidden viewport around the day row, in the header card. */
   const headerStripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
-  /** The week (ms) the strip is currently aligned to; guards the anchor effect
-   * from re-scrolling in response to the strip's own scroll reports. */
-  const alignedWeekMsRef = useRef<number | null>(null);
+  /** The centre day (ms, midnight) the strip is currently aligned to; guards
+   * the anchor effect from re-scrolling in response to the strip's own scroll
+   * reports. */
+  const alignedCenterMsRef = useRef<number | null>(null);
 
-  // The buffered strip is centered on the week active when the grid mounts, so
-  // the entry week sits mid-range and paging stays inside the buffer.
+  // The buffered strip is centred on the range active when the grid mounts, so
+  // the entry range sits mid-buffer and paging stays inside it.
   const [stripDays] = useState(() => {
-    const start = addDays(startOfWeek(anchor), -BUFFER_WEEKS * 7);
+    const start = addDays(startOfVisibleWeek(anchor), -BUFFER_WEEKS * 7);
     return Array.from({ length: (BUFFER_WEEKS * 2 + 1) * 7 }, (_, index) =>
       addDays(start, index),
     );
@@ -95,42 +109,44 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
     if (scroller && headerStrip) headerStrip.scrollLeft = scroller.scrollLeft;
   }, []);
 
-  const scrollToWeek = useCallback(
-    (weekStart: Date, behavior: ScrollBehavior) => {
+  /** Scrolls the strip so `centerDay` (midnight) sits in the middle column. */
+  const scrollToCenter = useCallback(
+    (centerDay: Date, behavior: ScrollBehavior) => {
       const el = scrollerRef.current;
       if (!el) return;
-      const index = Math.round((weekStart.getTime() - stripDays[0].getTime()) / MS_PER_DAY);
+      const first = startOfVisibleWeek(centerDay);
+      const index = Math.round((first.getTime() - stripDays[0].getTime()) / MS_PER_DAY);
       const clamped = Math.max(0, Math.min(index, stripDays.length - VISIBLE_COLUMNS));
-      alignedWeekMsRef.current = weekStart.getTime();
+      alignedCenterMsRef.current = centerDay.getTime();
       el.scrollTo({ left: clamped * columnWidth(), behavior });
       // An instant jump lands before any scroll event; mirror it right away so
-      // the header never shows a stale week, even for a frame.
+      // the header never shows a stale range, even for a frame.
       if (behavior === "auto") syncHeaderStrip();
     },
     [columnWidth, stripDays, syncHeaderStrip],
   );
 
-  // On mount, jump to the anchor week and down to business hours (auto, no
+  // On mount, centre the anchor day and jump down to business hours (auto, no
   // animation); afterwards, smooth-scroll whenever the anchor moves to a
-  // different week than the strip is aligned to (button paging / Today).
+  // different day than the strip is centred on (button paging / Today).
   useLayoutEffect(() => {
-    const weekStart = startOfWeek(anchor);
+    const centerDay = startOfDay(anchor);
     if (!mountedRef.current) {
       mountedRef.current = true;
-      scrollToWeek(weekStart, "auto");
+      scrollToCenter(centerDay, "auto");
       const el = scrollerRef.current;
       if (el) el.scrollTop = Math.max(0, (new Date().getHours() - 1) * HOUR_HEIGHT);
       return;
     }
-    if (weekStart.getTime() !== alignedWeekMsRef.current) {
-      scrollToWeek(weekStart, "smooth");
+    if (centerDay.getTime() !== alignedCenterMsRef.current) {
+      scrollToCenter(centerDay, "smooth");
     }
-  }, [anchor, scrollToWeek]);
+  }, [anchor, scrollToCenter]);
 
   // Column widths are a fraction of the scroller's width, but the horizontal
   // offset is kept in pixels — so a viewport resize would silently drift the
-  // strip to a different week (and snap it mid-week). Re-snap to the week the
-  // strip was aligned to whenever the scroller's width changes.
+  // strip to different days. Re-snap to the day the strip was centred on
+  // whenever the scroller's width changes.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -139,13 +155,13 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
       const width = el.clientWidth;
       if (width === 0 || width === lastWidth) return;
       lastWidth = width;
-      const alignedWeekMs = alignedWeekMsRef.current;
-      if (alignedWeekMs === null) return;
-      scrollToWeek(new Date(alignedWeekMs), "auto");
+      const alignedCenterMs = alignedCenterMsRef.current;
+      if (alignedCenterMs === null) return;
+      scrollToCenter(new Date(alignedCenterMs), "auto");
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [scrollToWeek]);
+  }, [scrollToCenter]);
 
   const handleScroll = () => {
     // Mirror synchronously — not inside the rAF below — so the header never
@@ -160,10 +176,10 @@ export function WeekGrid({ anchor, onVisibleWeekChange, toolbar }: WeekGridProps
         0,
         Math.min(Math.round(el.scrollLeft / columnWidth()), stripDays.length - VISIBLE_COLUMNS),
       );
-      const weekStart = startOfWeek(stripDays[index]);
-      if (weekStart.getTime() === alignedWeekMsRef.current) return;
-      alignedWeekMsRef.current = weekStart.getTime();
-      onVisibleWeekChange(weekStart);
+      const centerDay = stripDays[index + CENTER_OFFSET];
+      if (centerDay.getTime() === alignedCenterMsRef.current) return;
+      alignedCenterMsRef.current = centerDay.getTime();
+      onCenterDayChange(centerDay);
     });
   };
 
