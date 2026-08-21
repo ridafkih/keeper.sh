@@ -1,4 +1,5 @@
 import { eventStatesTable } from "@keeper.sh/database/schema";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 import { and, eq, gte, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type { MaterializedSyncableEvent, SyncableEvent } from "../types";
@@ -31,6 +32,16 @@ interface NativeEventParseResult {
 interface NativeOccurrenceIndex {
   occurrenceKeys: ReadonlySet<string>;
   withheldSeriesUids: ReadonlySet<string>;
+}
+
+interface PlaceableSeriesExpansion {
+  placeableStart: number;
+  slots: Set<number>;
+}
+
+interface DisplaceableSlotRange {
+  end: number;
+  start: number;
 }
 
 interface NativeDuplicateFilterResult {
@@ -187,6 +198,30 @@ const getDuplicateMasterSeriesUids = (events: SyncableEvent[]): Set<string> => {
 };
 
 /*
+ * The stretch in which a reference can still be the twin of an indexed slot, opened by one
+ * occurrence interval past the first and last slot the rule produces: a reference further out
+ * than that names a position the rule reaches at no point in this window — a declined date
+ * left behind when COUNT or UNTIL shortened the series, or one anchored before it opens — so
+ * every slot it could have vacated is somewhere else entirely. A day floors the interval, the
+ * widest a provider re-anchoring the reference into another zone can carry it off its slot.
+ */
+const getDisplaceableSlotRange = (slots: Set<number>): DisplaceableSlotRange | null => {
+  if (slots.size === 0) {
+    return null;
+  }
+  const orderedSlots = [...slots].toSorted((first, second) => first - second);
+  const [firstSlot = 0] = orderedSlots;
+  let lastSlot = firstSlot;
+  let widestInterval = MS_PER_DAY;
+  for (const slot of orderedSlots) {
+    widestInterval = Math.max(widestInterval, slot - lastSlot);
+    lastSlot = slot;
+  }
+
+  return { end: lastSlot + widestInterval, start: firstSlot - widestInterval };
+};
+
+/*
  * Both RECURRENCE-ID and EXDATE name a slot by an exact-millisecond match against the
  * expansion, so a provider that rounds one or anchors it in another zone leaves the slot it
  * meant to displace standing: the override's original slot survives beside it at its moved
@@ -194,11 +229,11 @@ const getDuplicateMasterSeriesUids = (events: SyncableEvent[]): Set<string> => {
  * instant the destination has vacated — and a declined slot is the worse half, since
  * suppressing it hides the one occurrence the mirror was needed for. Expanding the masters
  * alone names the slots such a reference can still land on. One that names none of them costs
- * its series, exactly as a duplicate master does; one below everything the expansion reaches
- * displaces nothing that gets indexed, so it withholds nothing. That floor is the expansion's
- * own lookback, not the window's start: the index expands from a series duration before
- * timeMin so an occurrence already running there is reached, and a reference landing anywhere
- * in that lookback can still be the mis-anchored twin of an indexed slot.
+ * its series, exactly as a duplicate master does; one outside the stretch those slots occupy
+ * displaces nothing that gets indexed, so it withholds nothing. The floor under that stretch
+ * is the expansion's own lookback, not the window's start: the index expands from a series
+ * duration before timeMin so an occurrence already running there is reached, and a reference
+ * landing anywhere in that lookback can still be the mis-anchored twin of an indexed slot.
  */
 const getUnplaceableSlotSeriesUids = (
   events: SyncableEvent[],
@@ -234,47 +269,77 @@ const getUnplaceableSlotSeriesUids = (
     return unplaceableSeriesUids;
   }
 
-  let lookbackMilliseconds = 0;
-  for (const master of claimedMasters) {
-    lookbackMilliseconds = Math.max(
-      lookbackMilliseconds,
-      getRecurrenceWindowLookbackMilliseconds(master),
-    );
-  }
-  const placeableStart = window.timeMin.getTime() - lookbackMilliseconds;
-
   /*
-   * Expanded without their own exception dates: an EXDATE that does land on a slot must
-   * still leave that slot visible here, or every correctly anchored one would look
-   * unplaceable.
+   * Grouped so every master is expanded from its own floor: a longer series on the same
+   * calendar reaches further back for its own occurrences, but it adds no stretch in which a
+   * shorter one has an indexed slot to be displaced from. Judged against that borrowed floor,
+   * a reference below everything its series indexes would cost a series that is entirely
+   * placeable — one row's damage spreading to a neighbour it never touched.
    */
-  const masterSlotsByUid = new Map<string, Set<number>>();
-  const masterOccurrences = materializeRecurrenceEvents(
-    claimedMasters.map(({ exceptionDates: _exceptionDates, ...master }) => master),
-    {
-      end: window.timeMax,
-      start: new Date(placeableStart),
-    },
-    {
-      onSeriesOverBudget: (error) => {
-        unplaceableSeriesUids.add(error.sourceEventUid);
+  const mastersByLookback = new Map<number, SyncableEvent[]>();
+  for (const master of claimedMasters) {
+    const lookback = getRecurrenceWindowLookbackMilliseconds(master);
+    const lookbackMasters = mastersByLookback.get(lookback) ?? [];
+    lookbackMasters.push(master);
+    mastersByLookback.set(lookback, lookbackMasters);
+  }
+
+  const expansionsByUid = new Map<string, PlaceableSeriesExpansion>();
+  for (const [lookback, lookbackMasters] of mastersByLookback) {
+    const placeableStart = window.timeMin.getTime() - lookback;
+    /*
+     * Expanded without their own exception dates: an EXDATE that does land on a slot must
+     * still leave that slot visible here, or every correctly anchored one would look
+     * unplaceable.
+     */
+    const masterOccurrences = materializeRecurrenceEvents(
+      lookbackMasters.map(({ exceptionDates: _exceptionDates, ...master }) => master),
+      {
+        end: window.timeMax,
+        start: new Date(placeableStart),
       },
-    },
-  );
-  for (const occurrence of masterOccurrences) {
-    const slots = masterSlotsByUid.get(occurrence.sourceEventUid) ?? new Set<number>();
-    slots.add(occurrence.startTime.getTime());
-    masterSlotsByUid.set(occurrence.sourceEventUid, slots);
+      {
+        onSeriesOverBudget: (error) => {
+          unplaceableSeriesUids.add(error.sourceEventUid);
+        },
+      },
+    );
+    for (const master of lookbackMasters) {
+      const expansion = expansionsByUid.get(master.sourceEventUid);
+      if (!expansion) {
+        expansionsByUid.set(master.sourceEventUid, {
+          placeableStart,
+          slots: new Set<number>(),
+        });
+        continue;
+      }
+      expansion.placeableStart = Math.min(expansion.placeableStart, placeableStart);
+    }
+    for (const occurrence of masterOccurrences) {
+      expansionsByUid.get(occurrence.sourceEventUid)?.slots.add(
+        occurrence.startTime.getTime(),
+      );
+    }
   }
 
   for (const [uid, claimedSlots] of claimedSlotsByUid) {
-    const masterSlots = masterSlotsByUid.get(uid);
-    if (!masterSlots) {
+    const expansion = expansionsByUid.get(uid);
+    if (!expansion) {
       continue;
     }
-    const isUnplaceable = claimedSlots.some((slot) => slot >= placeableStart
+    /*
+     * A series the rule produces nothing for over this window has no indexed slot to be
+     * vacated, so its references answer for nothing and cost it nothing.
+     */
+    const displaceable = getDisplaceableSlotRange(expansion.slots);
+    if (!displaceable) {
+      continue;
+    }
+    const isUnplaceable = claimedSlots.some((slot) => slot >= expansion.placeableStart
+      && slot >= displaceable.start
+      && slot <= displaceable.end
       && slot < window.timeMax.getTime()
-      && !masterSlots.has(slot));
+      && !expansion.slots.has(slot));
     if (isUnplaceable) {
       unplaceableSeriesUids.add(uid);
     }

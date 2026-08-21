@@ -697,6 +697,118 @@ describe("native data that must never suppress a mirror", () => {
     expect(result.suppressedCount).toBe(0);
   });
 
+  /*
+   * A withheld series is the whole cost of the row that caused it: the destination holds
+   * hundreds of native series, and one provider-mangled row must not stop the index from
+   * answering for any of the others.
+   */
+  it.each([
+    {
+      name: "stored as two masters",
+      rows: [
+        createNativeRow({ recurrenceRule: STORED_WEEKLY_RULE }),
+        createNativeRow({ id: "native-state-2", recurrenceRule: STORED_WEEKLY_RULE }),
+      ],
+    },
+    {
+      name: "holding an override no expanded slot can place",
+      rows: [
+        createNativeRow({ recurrenceRule: STORED_WEEKLY_RULE }),
+        createNativeRow({
+          endTime: new Date("2026-01-12T15:00:00.000Z"),
+          id: "native-state-2",
+          recurrenceId: new Date("2026-01-12T08:00:00.000Z"),
+          startTime: new Date("2026-01-12T14:00:00.000Z"),
+        }),
+      ],
+    },
+    {
+      name: "holding a row that cannot be parsed",
+      rows: [
+        createNativeRow({ recurrenceRule: STORED_WEEKLY_RULE }),
+        createNativeRow({
+          exceptionDates: "{not json",
+          id: "native-state-2",
+          recurrenceId: new Date("2026-01-12T09:00:00.000Z"),
+          startTime: new Date("2026-01-12T14:00:00.000Z"),
+        }),
+      ],
+    },
+    {
+      name: "that cannot be expanded within the occurrence budget",
+      rows: [createNativeRow({ recurrenceRule: STORED_SECONDLY_RULE })],
+    },
+  ])("keeps suppressing an unrelated series beside one withheld $name", async ({ rows }) => {
+    const unrelated = {
+      endTime: new Date("2026-01-06T10:00:00.000Z"),
+      startTime: new Date("2026-01-06T09:00:00.000Z"),
+    };
+    const unrelatedDeclined = new Date("2026-01-13T09:00:00.000Z");
+    const index = await buildIndex([
+      ...rows,
+      createNativeRow({
+        ...unrelated,
+        exceptionDates: JSON.stringify([{ date: unrelatedDeclined }]),
+        id: "native-state-unrelated",
+        recurrenceRule: STORED_WEEKLY_RULE,
+        sourceEventUid: "unrelated-uid",
+      }),
+    ]);
+    const events = [
+      ...materializeSource([createSourceMaster({ recurrenceRule: WEEKLY_RULE })]),
+      ...materializeSource([createSourceMaster({
+        ...unrelated,
+        eventStateId: "source-state-unrelated",
+        exceptionDates: [unrelatedDeclined],
+        id: "source-state-unrelated",
+        recurrenceRule: WEEKLY_RULE,
+        sourceEventUid: "unrelated-uid",
+      })]),
+    ];
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(index.withheldSeriesUids.has(SHARED_UID)).toBe(true);
+    expect(index.withheldSeriesUids.has("unrelated-uid")).toBe(false);
+    expect(occurrenceStarts(result.events)).toEqual(
+      occurrenceStarts(materializeSource([createSourceMaster({ recurrenceRule: WEEKLY_RULE })])),
+    );
+    expect(result.suppressedCount).toBe(3);
+  });
+
+  /*
+   * The lookback a mis-anchored reference is measured against belongs to its own series. A
+   * longer series sharing the calendar reaches further back for its own sake, but it adds no
+   * stretch in which this one's expansion has a slot to be displaced from.
+   */
+  it("measures an unplaceable reference against its own series' lookback", async () => {
+    const overnight = {
+      endTime: new Date("2026-01-03T02:00:00.000Z"),
+      startTime: new Date("2026-01-02T18:00:00.000Z"),
+    };
+    const index = await buildIndex([
+      createNativeRow({
+        exceptionDates: JSON.stringify([{ date: new Date("2025-12-31T20:00:00.000Z") }]),
+        recurrenceRule: STORED_WEEKLY_RULE,
+      }),
+      createNativeRow({
+        ...overnight,
+        exceptionDates: JSON.stringify([{ date: new Date("2026-01-03T18:00:00.000Z") }]),
+        id: "native-state-2",
+        recurrenceRule: STORED_DAILY_RULE,
+        sourceEventUid: "overnight-uid",
+      }),
+    ]);
+    const events = materializeSource([createSourceMaster({ recurrenceRule: WEEKLY_RULE })]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(events).toHaveLength(4);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(4);
+  });
+
   it("keeps indexing a series whose only declined date sits before the window", async () => {
     const index = await buildIndex([createNativeRow({
       endTime: new Date("2025-11-03T10:00:00.000Z"),
@@ -716,6 +828,56 @@ describe("native data that must never suppress a mirror", () => {
     expect(index.withheldSeriesUids.size).toBe(0);
     expect(result.events).toEqual([]);
     expect(result.suppressedCount).toBe(4);
+  });
+
+  /*
+   * A rule shortened by COUNT or UNTIL leaves the declined dates of the occurrences it no
+   * longer reaches behind it. One naming a position the rule never produces cannot be the
+   * twin of a slot that is indexed, so the series keeps answering for the slots it holds.
+   */
+  it("keeps indexing a series whose declined date sits past the last slot its rule produces", async () => {
+    const shortened = { count: 2, frequency: "WEEKLY" } as const;
+    const index = await buildIndex([createNativeRow({
+      exceptionDates: JSON.stringify([{ date: new Date("2026-01-26T09:00:00.000Z") }]),
+      recurrenceRule: JSON.stringify(shortened),
+    })]);
+    const events = materializeSource([createSourceMaster({ recurrenceRule: shortened })]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toEqual([
+      "2026-01-05T09:00:00.000Z",
+      "2026-01-12T09:00:00.000Z",
+    ]);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(2);
+  });
+
+  it("keeps indexing a series whose declined date predates the slot it opens on", async () => {
+    const opened = {
+      endTime: new Date("2026-01-20T10:00:00.000Z"),
+      startTime: new Date("2026-01-20T09:00:00.000Z"),
+    };
+    const index = await buildIndex([createNativeRow({
+      ...opened,
+      exceptionDates: JSON.stringify([{ date: new Date("2026-01-06T09:00:00.000Z") }]),
+      recurrenceRule: STORED_ENDLESS_WEEKLY_RULE,
+    })]);
+    const events = materializeSource([createSourceMaster({
+      ...opened,
+      recurrenceRule: { frequency: "WEEKLY" },
+    })]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toEqual([
+      "2026-01-20T09:00:00.000Z",
+      "2026-01-27T09:00:00.000Z",
+    ]);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(2);
   });
 
   it("suppresses nothing when the destination has not been ingested yet", async () => {
