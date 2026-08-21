@@ -53,8 +53,11 @@ function DashboardLayout() {
         <SyncProvider />
         <Outlet />
       </div>
-      {/* Calendar pane — desktop only. */}
-      <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1">
+      {/* Calendar pane — desktop only. `isolate` confines the calendar's
+          internal sticky z-indices to its own stacking context, so the header
+          and time gutter sit under the popover blur overlay (z-10) instead of
+          punching through it. */}
+      <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
         <CalendarView />
       </div>
     </div>
