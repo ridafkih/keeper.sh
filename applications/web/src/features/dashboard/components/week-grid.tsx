@@ -323,17 +323,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
             height: HOUR_HEIGHT * HOURS.length,
           }}
         >
-          {/* Hour rules, starting one row down so neither the top nor the
-              bottom edge of the grid carries a line. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 bottom-0"
-            style={{
-              top: HOUR_HEIGHT,
-              backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
-              backgroundSize: `100% ${HOUR_HEIGHT}px`,
-            }}
-          />
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
             return (
@@ -342,6 +331,19 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
                 className="relative"
                 style={{ scrollSnapAlign: "start" }}
               >
+                {/* Hour rules, painted per cell (one strip-wide layer is too
+                    large a box for some engines to paint a background on) and
+                    starting one row down, so neither the top nor the bottom
+                    edge of the grid carries a line. */}
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 bottom-0"
+                  style={{
+                    top: HOUR_HEIGHT,
+                    backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
+                    backgroundSize: `100% ${HOUR_HEIGHT}px`,
+                  }}
+                />
                 {/* Event blocks will render here in a later stage. */}
                 {isToday && nowFraction != null && (
                   <div
