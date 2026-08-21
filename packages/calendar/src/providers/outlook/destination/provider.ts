@@ -423,42 +423,36 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const verified: RemoteEvent[] = [];
 
     for (const deleteId of deleteIds) {
-      try {
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${deleteId}`);
-        url.searchParams.set("$select", "id,iCalUId,start,end,categories");
+      config.signal?.throwIfAborted();
 
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-          method: "GET",
-        });
+      const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${deleteId}`);
+      url.searchParams.set(
+        "$select",
+        "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      );
 
-        if (response.status === HTTP_STATUS.NOT_FOUND) {
-          await response.body?.cancel?.();
-          continue;
-        }
+      const response = await sendRequestWithRetry(url, {
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: `outlook.body-content-type="text"`,
+        },
+        method: "GET",
+      });
 
-        if (!response.ok) {
-          continue;
-        }
-
-        const body = await response.json();
-        const event = outlookEventSchema.assert(body);
-        const startTime = parseEventTime(event.start);
-        const endTime = parseEventTime(event.end);
-
-        if (!event.iCalUId || !startTime || !endTime) {
-          continue;
-        }
-
-        verified.push({
-          deleteId,
-          endTime,
-          isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
-          startTime,
-          uid: event.iCalUId,
-        });
-      } catch {
+      if (response.status === HTTP_STATUS.NOT_FOUND) {
+        await response.body?.cancel?.();
         continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(await readGraphErrorMessage(response));
+      }
+
+      const body = await response.json();
+      const remoteEvent = toOutlookRemoteEvent(outlookEventSchema.assert(body));
+
+      if (remoteEvent) {
+        verified.push(remoteEvent);
       }
     }
 

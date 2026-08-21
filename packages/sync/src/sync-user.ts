@@ -12,6 +12,7 @@ import {
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
+  overlapsTimeWindow,
 } from "@keeper.sh/calendar";
 import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
@@ -444,6 +445,8 @@ const createDestinationAttemptWideEventFields = (
  */
 const TARGETED_DESTINATION_READ_LIMIT = 25;
 
+const DESTINATION_VERIFICATION_LIMIT = 200;
+
 interface TargetedDestinationReadProvider {
   getRemoteEventsByIds?: (ids: string[]) => Promise<RemoteEvent[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
@@ -509,14 +512,19 @@ const withVerifiedUnconfirmedMappings = async (
   provider: TargetedDestinationReadProvider,
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
+  requestedWindow: SyncWindow,
 ): Promise<RemoteEvent[]> => {
   if (!provider.verifyEventsExist) {
     return remoteEvents;
   }
   const remoteUids = new Set(remoteEvents.map((event) => event.uid));
   const unconfirmedDeleteIds = existingMappings
-    .filter((mapping) => !remoteUids.has(mapping.destinationEventUid))
-    .map((mapping) => mapping.deleteIdentifier);
+    .filter((mapping) =>
+      !remoteUids.has(mapping.destinationEventUid)
+      && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
+    .map((mapping) => mapping.deleteIdentifier)
+    .toSorted((first, second) => first.localeCompare(second))
+    .slice(0, DESTINATION_VERIFICATION_LIMIT);
   if (unconfirmedDeleteIds.length === 0) {
     return remoteEvents;
   }
@@ -544,6 +552,7 @@ const readDestinationRemoteEvents = async (
         context.provider,
         context.existingMappings,
         remoteEvents,
+        context.requestedWindow,
       ),
     };
   }
