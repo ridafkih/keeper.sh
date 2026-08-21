@@ -1,6 +1,8 @@
 import {
   syncCalendar,
+  filterNativeDuplicateOccurrences,
   getEventsForCalendarsWithDiagnostics,
+  getNativeOccurrenceIndex,
   getEventMappingsForDestination,
   createDatabaseFlush,
   createGoogleUserRateLimiter,
@@ -9,20 +11,24 @@ import {
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
   getMappedSourceCalendarIds,
+  OAUTH_SYNC_TOKEN_REFRESH_MS,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
+  isOAuthProvider,
 } from "@keeper.sh/calendar";
-import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
+import { MS_PER_DAY, OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type {
+  BunSQLClient,
   EventMapping,
   DestinationEventReadDiagnostics,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
+  NativeDuplicateFilterResult,
   ReconciliationScope,
   RefreshLockStore,
   RemoteEvent,
@@ -166,6 +172,7 @@ interface DestinationReconciliationContext {
   remoteReadDurationMs: number;
   sourceCalendarIdsAtLocalRead: string[];
   sourceCalendarIdsBeforeRemoteRead: string[];
+  suppressedNativeDuplicateCount: number;
   verifiedSourceCalendarCount: number;
 }
 
@@ -324,6 +331,92 @@ const getBoundingSourceAuthorityWindow = (
   return createSyncWindow(timeMin, timeMax);
 };
 
+interface NativeDuplicateDestination extends StoredSourceCoverage {
+  calendarId: string;
+  provider: string;
+}
+
+interface NativeDuplicateSuppressionContext {
+  database: BunSQLClient;
+  destination: NativeDuplicateDestination;
+  events: MaterializedSyncableEvent[];
+  localReadWindow: SyncWindow;
+}
+
+/*
+ * Coverage is recorded when the ingested window changes: for an OAuth calendar only on the
+ * full sync its sync-token rotation forces once per OAUTH_SYNC_TOKEN_REFRESH_MS, for a
+ * CalDAV one whenever the day-anchored window rolls, which is every day its ingest lands.
+ * Twice a provider's own cadence clears its healthy runs and nothing else, and only the
+ * OAuth one is measured in weeks: spending that tolerance on a CalDAV destination would
+ * leave it a fortnight of missed day-rolls to keep suppressing from. Nothing prunes
+ * event_states, so those rows freeze at the last ingest that succeeded and go on claiming
+ * slots the destination's native copy may since have vacated — and CalDAV is where every
+ * stored recurring master lives, one row claiming every slot its rule expands to.
+ */
+const MAX_OAUTH_NATIVE_COVERAGE_AGE_MS = 2 * OAUTH_SYNC_TOKEN_REFRESH_MS;
+const MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS = 2 * MS_PER_DAY;
+
+const getMaxNativeCoverageAgeMs = (provider: string): number => {
+  if (isOAuthProvider(provider)) {
+    return MAX_OAUTH_NATIVE_COVERAGE_AGE_MS;
+  }
+  return MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS;
+};
+
+const isNativeCoverageCurrent = (
+  destination: NativeDuplicateDestination,
+  now: Date,
+): boolean =>
+  destination.ingestWindowRecordedAt !== null
+  && now.getTime() - destination.ingestWindowRecordedAt.getTime()
+    <= getMaxNativeCoverageAgeMs(destination.provider);
+
+/*
+ * The bounding source-authority window is the SOURCES' coverage, and the destination's own
+ * is routinely narrower: a calendar's ingest ranges widen only for the destinations it
+ * feeds, so one that is only ever a destination keeps the base month of history while the
+ * sources feeding it are widened to its year-long sync range. A recurring master row is
+ * never pruned by a narrowing ingest window, so expanding one past the destination's
+ * recorded coverage indexes slots whose detached overrides were never fetched — and an
+ * unsuppressed duplicate is the clutter this removes, while a suppressed non-duplicate is
+ * an event missing from a calendar that will not re-ingest that month to correct it.
+ */
+const resolveNativeSuppressionWindow = (
+  destination: NativeDuplicateDestination,
+  localReadWindow: SyncWindow,
+  now: Date = new Date(),
+): SyncWindow | null => {
+  const destinationCoverage = resolveStoredSourceCoverage(destination);
+  if (!destinationCoverage || !isNativeCoverageCurrent(destination, now)) {
+    return null;
+  }
+  return intersectSyncWindows(localReadWindow, destinationCoverage);
+};
+
+/*
+ * Both calendars are invited to the same meeting, so the destination already holds its own
+ * copy under the organizer's UID. Mirroring the source's copy on top of it is pure clutter;
+ * dropping it here lets reconciliation retire any mirror an earlier run left behind.
+ */
+const suppressNativeDuplicates = async (
+  context: NativeDuplicateSuppressionContext,
+): Promise<NativeDuplicateFilterResult> => {
+  const suppressionWindow = resolveNativeSuppressionWindow(
+    context.destination,
+    context.localReadWindow,
+  );
+  if (!suppressionWindow) {
+    return { events: context.events, suppressedCount: 0 };
+  }
+  const nativeOccurrences = await getNativeOccurrenceIndex(
+    context.database,
+    context.destination.calendarId,
+    suppressionWindow,
+  );
+  return filterNativeDuplicateOccurrences(context.events, nativeOccurrences);
+};
+
 const haveSourceCalendarsChanged = (
   beforeRemoteRead: string[],
   atLocalRead: string[],
@@ -391,6 +484,7 @@ const createDestinationReconciliationWideEventFields = (
   "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids
     .slice(0, OVER_BUDGET_SERIES_UID_SAMPLE_SIZE)
     .join(","),
+  "local_event_states.suppressed_native_duplicate_count": context.suppressedNativeDuplicateCount,
   "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
   "reconciliation.local_read.duration_ms": context.localReadDurationMs,
   "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
@@ -577,7 +671,7 @@ interface SyncCallbacks {
   onCalendarSkipped?: (skip: DestinationSyncSkip) => void;
 }
 
-interface DestinationAttempt {
+interface DestinationAttempt extends StoredSourceCoverage {
   accountId: string;
   calendarId: string;
   failureCount: number;
@@ -598,6 +692,11 @@ const getDestinationAttempt = async (
       accountId: calendarsTable.accountId,
       calendarId: calendarsTable.id,
       failureCount: calendarsTable.failureCount,
+      ingestFutureRange: calendarsTable.ingestFutureRange,
+      ingestHistoricRange: calendarsTable.ingestHistoricRange,
+      ingestWindowEnd: calendarsTable.ingestWindowEnd,
+      ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+      ingestWindowStart: calendarsTable.ingestWindowStart,
       nextAttemptAt: calendarsTable.nextAttemptAt,
       provider: calendarAccountsTable.provider,
       syncFutureRange: calendarsTable.syncFutureRange,
@@ -875,6 +974,7 @@ const syncDestinationsForUser = async (
         };
         let localReadDurationMs = 0;
         let remoteReadDurationMs = 0;
+        let suppressedNativeDuplicateCount = 0;
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
         let sourceCalendarsChangedDuringRemoteRead = false;
         let authoritativeMappingIds: ReadonlySet<string> | null = null;
@@ -951,7 +1051,16 @@ const syncDestinationsForUser = async (
                       localReadWindow,
                     );
                     eventReadDiagnostics = eventRead.diagnostics;
-                    localEvents.push(...eventRead.events);
+                    if (eventRead.events.length > 0) {
+                      const withoutNativeDuplicates = await suppressNativeDuplicates({
+                        database: lockedDatabase,
+                        destination,
+                        events: eventRead.events,
+                        localReadWindow,
+                      });
+                      suppressedNativeDuplicateCount = withoutNativeDuplicates.suppressedCount;
+                      localEvents.push(...withoutNativeDuplicates.events);
+                    }
                   }
                   return {
                     localEvents,
@@ -975,6 +1084,7 @@ const syncDestinationsForUser = async (
           remoteReadDurationMs,
           sourceCalendarIdsAtLocalRead,
           sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
+          suppressedNativeDuplicateCount,
           verifiedSourceCalendarCount: authoritativeSourceWindows.size,
         });
         const isAttemptCurrent = (): Promise<boolean> => {
@@ -1098,6 +1208,7 @@ export {
   readDestinationRemoteEvents,
   resolveSourceAuthority,
   resolveStoredSourceCoverage,
+  suppressNativeDuplicates,
   syncDestinationsForUser,
 };
 export type {
@@ -1105,6 +1216,7 @@ export type {
   CalendarSyncFailure,
   DestinationSkipReason,
   DestinationSyncSkip,
+  NativeDuplicateDestination,
   SyncConfig,
   SyncDestinationsResult,
 };
