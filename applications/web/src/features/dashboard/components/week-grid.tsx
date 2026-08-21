@@ -31,6 +31,10 @@ const BUFFER_WEEKS = 26;
 
 const MS_PER_DAY = 86_400_000;
 
+/** Colour of the hour rules across the grid: the column-rule token, faded so
+ * the horizontal lines read as a secondary, quieter layer under the columns. */
+const HOUR_RULE_COLOR = "color-mix(in oklab, var(--color-border-elevated) 45%, transparent)";
+
 /** A 1px column rule along a cell's left edge that fades out toward the top,
  * so the day row's lines dissolve into the toolbar above instead of meeting
  * a separator at a hard corner. Sits exactly where the grid's `border-l` is. */
@@ -297,8 +301,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
                 className="relative border-l border-border-elevated"
                 style={{
                   scrollSnapAlign: "start",
-                  backgroundImage:
-                    "linear-gradient(to bottom, var(--color-border-elevated) 0 1px, transparent 1px)",
+                  backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
                   backgroundSize: `100% ${HOUR_HEIGHT}px`,
                 }}
               >
