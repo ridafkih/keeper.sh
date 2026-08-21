@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { reconcileAccountCalendars } from "../../src/utils/refresh-account-calendars";
 
+const IMPORTED_AT = new Date("2026-01-01T00:00:00.000Z");
+
 describe("reconcileAccountCalendars", () => {
   it("imports calendars reported by the provider that were never imported before", () => {
     const plan = reconcileAccountCalendars(
@@ -16,7 +18,12 @@ describe("reconcileAccountCalendars", () => {
   it("does not re-import a calendar that is already tracked", () => {
     const plan = reconcileAccountCalendars(
       [{ externalId: "ext-1", name: "Existing Calendar" }],
-      [{ externalCalendarId: "ext-1", id: "cal-1", providerMissingSince: null }],
+      [{
+        createdAt: IMPORTED_AT,
+        externalCalendarId: "ext-1",
+        id: "cal-1",
+        providerMissingSince: null,
+      }],
     );
 
     expect(plan.toInsert).toEqual([]);
@@ -24,8 +31,21 @@ describe("reconcileAccountCalendars", () => {
 
   it("flags a previously-imported calendar the provider no longer reports", () => {
     const plan = reconcileAccountCalendars(
-      [],
-      [{ externalCalendarId: "ext-deleted", id: "cal-1", providerMissingSince: null }],
+      [{ externalId: "ext-kept", name: "Kept Calendar" }],
+      [
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: "ext-kept",
+          id: "cal-kept",
+          providerMissingSince: null,
+        },
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: "ext-deleted",
+          id: "cal-1",
+          providerMissingSince: null,
+        },
+      ],
     );
 
     expect(plan.toMarkMissing).toEqual(["cal-1"]);
@@ -34,8 +54,21 @@ describe("reconcileAccountCalendars", () => {
 
   it("does not re-flag a calendar that is already marked missing", () => {
     const plan = reconcileAccountCalendars(
-      [],
-      [{ externalCalendarId: "ext-deleted", id: "cal-1", providerMissingSince: new Date("2026-01-01") }],
+      [{ externalId: "ext-kept", name: "Kept Calendar" }],
+      [
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: "ext-kept",
+          id: "cal-kept",
+          providerMissingSince: null,
+        },
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: "ext-deleted",
+          id: "cal-1",
+          providerMissingSince: new Date("2026-01-01"),
+        },
+      ],
     );
 
     expect(plan.toMarkMissing).toEqual([]);
@@ -44,7 +77,12 @@ describe("reconcileAccountCalendars", () => {
   it("restores a calendar that was flagged missing but has reappeared at the provider", () => {
     const plan = reconcileAccountCalendars(
       [{ externalId: "ext-1", name: "Back Again" }],
-      [{ externalCalendarId: "ext-1", id: "cal-1", providerMissingSince: new Date("2026-01-01") }],
+      [{
+        createdAt: IMPORTED_AT,
+        externalCalendarId: "ext-1",
+        id: "cal-1",
+        providerMissingSince: new Date("2026-01-01"),
+      }],
     );
 
     expect(plan.toRestore).toEqual(["cal-1"]);
@@ -54,8 +92,21 @@ describe("reconcileAccountCalendars", () => {
 
   it("flags a calendar whose externalCalendarId was never set, since it cannot be matched against the provider list", () => {
     const plan = reconcileAccountCalendars(
-      [],
-      [{ externalCalendarId: null, id: "cal-1", providerMissingSince: null }],
+      [{ externalId: "ext-kept", name: "Kept Calendar" }],
+      [
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: "ext-kept",
+          id: "cal-kept",
+          providerMissingSince: null,
+        },
+        {
+          createdAt: IMPORTED_AT,
+          externalCalendarId: null,
+          id: "cal-1",
+          providerMissingSince: null,
+        },
+      ],
     );
 
     expect(plan.toMarkMissing).toEqual(["cal-1"]);

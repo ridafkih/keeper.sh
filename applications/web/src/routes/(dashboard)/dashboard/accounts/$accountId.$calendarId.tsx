@@ -176,7 +176,7 @@ function CalendarDetailPage() {
       {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
       {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
       <CalendarInfoSection account={account} accountId={accountId} />
-      <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />
+      {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
     </div>
   );
 }

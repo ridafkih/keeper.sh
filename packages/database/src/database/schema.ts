@@ -176,6 +176,32 @@ const calendarsTable = pgTable(
   ],
 );
 
+const calendarRemovalsTable = pgTable(
+  "calendar_removals",
+  {
+    accountId: uuid()
+      .notNull()
+      .references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
+    calendarType: text().notNull(),
+    calendarUrl: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    externalCalendarId: text(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("calendar_removals_account_idx").on(table.accountId),
+    uniqueIndex("calendar_removals_external_idx")
+      .on(table.accountId, table.externalCalendarId)
+      .where(isNotNull(table.externalCalendarId)),
+    uniqueIndex("calendar_removals_url_idx")
+      .on(table.accountId, table.calendarUrl)
+      .where(isNotNull(table.calendarUrl)),
+  ],
+);
+
 const calendarPushChannelsTable = pgTable(
   "calendar_push_channels",
   {
@@ -516,6 +542,7 @@ export {
   caldavCredentialsTable,
   calendarAccountsTable,
   calendarPushChannelsTable,
+  calendarRemovalsTable,
   calendarSnapshotsTable,
   calendarsTable,
   eventMappingsTable,

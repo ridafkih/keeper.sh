@@ -1,9 +1,10 @@
 import {
   calendarAccountsTable,
+  calendarRemovalsTable,
   calendarsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import {
@@ -29,6 +30,12 @@ interface ExistingCalendar {
   id: string;
   externalCalendarId: string | null;
   providerMissingSince: Date | null;
+  createdAt: Date;
+}
+
+interface ReconciliationOptions {
+  enumerationStartedAt?: Date;
+  removedExternalIds?: ReadonlySet<string>;
 }
 
 interface RefreshAccountCalendarsResult {
@@ -59,17 +66,33 @@ interface ReconciliationPlan {
  * listing was tried before and caused false positives, so the user decides via the manual
  * disable toggle once they see the flag.
  */
+const predatesEnumeration = (
+  calendar: ExistingCalendar,
+  enumerationStartedAt: Date | undefined,
+): boolean =>
+  !enumerationStartedAt
+  || calendar.createdAt.getTime() <= enumerationStartedAt.getTime();
+
 const reconcileAccountCalendars = (
   providerCalendars: ExternalCalendar[],
   existingCalendars: ExistingCalendar[],
+  options: ReconciliationOptions = {},
 ): ReconciliationPlan => {
+  if (providerCalendars.length === 0 && existingCalendars.length > 0) {
+    return { toInsert: [], toMarkMissing: [], toRestore: [] };
+  }
+
   const providerExternalIds = new Set(providerCalendars.map((calendar) => calendar.externalId));
   const existingExternalIds = new Set(
     existingCalendars.map((calendar) => calendar.externalCalendarId),
   );
 
+  const removedExternalIds = options.removedExternalIds ?? new Set<string>();
+
   const toInsert = providerCalendars.filter(
-    (calendar) => !existingExternalIds.has(calendar.externalId),
+    (calendar) =>
+      !existingExternalIds.has(calendar.externalId)
+      && !removedExternalIds.has(calendar.externalId),
   );
 
   const toMarkMissing: string[] = [];
@@ -86,12 +109,19 @@ const reconcileAccountCalendars = (
       continue;
     }
 
-    if (!calendar.providerMissingSince) {
+    if (!calendar.providerMissingSince && predatesEnumeration(calendar, options.enumerationStartedAt)) {
       toMarkMissing.push(calendar.id);
     }
   }
 
   return { toInsert, toMarkMissing, toRestore };
+};
+
+const toRemovedExternalId = (externalCalendarId: string | null): string[] => {
+  if (!externalCalendarId) {
+    return [];
+  }
+  return [externalCalendarId];
 };
 
 const isExpired = (expiresAt: Date): boolean => expiresAt < new Date();
@@ -122,7 +152,6 @@ const getValidAccessToken = async (
 const listProviderCalendars = async (
   provider: string,
   accessToken: string,
-  ownerEmail: string | null,
 ): Promise<ExternalCalendar[]> => {
   if (provider === "google") {
     const calendars = await listGoogleCalendars(accessToken);
@@ -130,7 +159,7 @@ const listProviderCalendars = async (
   }
 
   if (provider === "outlook") {
-    const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
+    const calendars = await listOutlookCalendars(accessToken);
     return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
   }
 
@@ -169,10 +198,12 @@ const refreshAccountCalendars = async (
   }
 
   const accessToken = await getValidAccessToken(accountId, account);
-  const providerCalendars = await listProviderCalendars(account.provider, accessToken, account.email);
+  const enumerationStartedAt = new Date();
+  const providerCalendars = await listProviderCalendars(account.provider, accessToken);
 
   const existingCalendars = await database
     .select({
+      createdAt: calendarsTable.createdAt,
       externalCalendarId: calendarsTable.externalCalendarId,
       id: calendarsTable.id,
       providerMissingSince: calendarsTable.providerMissingSince,
@@ -185,9 +216,27 @@ const refreshAccountCalendars = async (
       ),
     );
 
+  const removedRows = await database
+    .select({ externalCalendarId: calendarRemovalsTable.externalCalendarId })
+    .from(calendarRemovalsTable)
+    .where(
+      and(
+        eq(calendarRemovalsTable.accountId, accountId),
+        eq(calendarRemovalsTable.userId, userId),
+        eq(calendarRemovalsTable.calendarType, OAUTH_CALENDAR_TYPE),
+        isNotNull(calendarRemovalsTable.externalCalendarId),
+      ),
+    );
+
   const { toInsert, toMarkMissing, toRestore } = reconcileAccountCalendars(
     providerCalendars,
     existingCalendars,
+    {
+      enumerationStartedAt,
+      removedExternalIds: new Set(
+        removedRows.flatMap((row) => toRemovedExternalId(row.externalCalendarId)),
+      ),
+    },
   );
 
   if (toInsert.length > 0) {

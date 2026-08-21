@@ -2,6 +2,7 @@ import { applySourceSyncDefaults } from "@keeper.sh/data-schemas";
 import {
   calendarAccountsTable,
   caldavCredentialsTable,
+  calendarRemovalsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
@@ -11,7 +12,11 @@ import {
   normalizeCalDAVCalendarKey,
   normalizeCalDAVServerHost,
 } from "../../providers/caldav/shared/calendar-identity";
-import { planCalendarRediscovery, toExistingCalendars } from "./calendar-rediscovery";
+import {
+  planCalendarRediscovery,
+  toExistingCalendars,
+  toRemovedIdentityKeys,
+} from "./calendar-rediscovery";
 import type {
   CalendarRediscoveryPlan,
   DiscoveredCalendar,
@@ -58,6 +63,26 @@ const readExistingCalendars = async (
     ));
 
   return toExistingCalendars(rows, input.calendarType);
+};
+
+const readRemovedKeys = async (
+  transaction: BunSQLTransactionClient,
+  input: CalendarRediscoveryApplyInput,
+): Promise<Set<string>> => {
+  const rows = await transaction
+    .select({
+      calendarUrl: calendarRemovalsTable.calendarUrl,
+      externalCalendarId: calendarRemovalsTable.externalCalendarId,
+      id: calendarRemovalsTable.id,
+    })
+    .from(calendarRemovalsTable)
+    .where(and(
+      eq(calendarRemovalsTable.accountId, input.accountId),
+      eq(calendarRemovalsTable.userId, input.userId),
+      eq(calendarRemovalsTable.calendarType, input.calendarType),
+    ));
+
+  return toRemovedIdentityKeys(rows, input.calendarType);
 };
 
 /*
@@ -162,11 +187,13 @@ const applyCalendarRediscoveryPlan = (
 
     const existing = await readExistingCalendars(transaction, input);
     const blockedKeys = await readCrossAccountCalDAVKeys(transaction, input);
+    const removedKeys = await readRemovedKeys(transaction, input);
     const plan = planCalendarRediscovery({
       blockedKeys,
       discovered: input.discovered,
       enumerationStartedAt: input.now,
       existing,
+      removedKeys,
     });
 
     if (plan.suppressed) {
