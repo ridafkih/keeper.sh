@@ -34,6 +34,10 @@ vi.mock("../src/migration-check", () => ({
 
 vi.mock("../src/context", () => ({
   database: { name: "fake-database" },
+  inFlightDrainRegistry: {
+    register: (): null => null,
+    settle: (): Promise<void> => Promise.resolve(),
+  },
   refreshLockRedis: { hmget: (): Promise<null[]> => Promise.resolve([]) },
   shutdownDatabases: (): Promise<void> => Promise.resolve(),
   shutdownRefreshLockRedis: (): void => {

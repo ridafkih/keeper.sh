@@ -31,6 +31,7 @@ const makeDependencies = () => ({
   recordFailures: vi.fn((calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1])))),
   releaseAbandoned: vi.fn(() => Promise.resolve()),
+  releaseClaims: vi.fn(() => Promise.resolve()),
   releasePending: vi.fn((members: { calendarId: string }[]) =>
     Promise.resolve(members.map((member) => member.calendarId))),
   resolveCalendars: vi.fn(() => Promise.resolve([

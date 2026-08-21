@@ -1,5 +1,5 @@
 {
-  "id": "1a988803-a0e5-42c7-bd2f-aa3f8652da5b",
+  "id": "acfc6b03-4282-4d00-99b0-8c832e15fbf1",
   "prevId": "8217973e-3538-4a6a-89e4-f35b5cb10896",
   "version": "7",
   "dialect": "postgresql",
@@ -818,13 +818,6 @@
           "notNull": true,
           "default": "'{{calendar_name}}'"
         },
-        "markEventsAsPrivate": {
-          "name": "markEventsAsPrivate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "disabled": {
           "name": "disabled",
           "type": "boolean",
@@ -937,6 +930,12 @@
         "syncToken": {
           "name": "syncToken",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "storedEventCount": {
+          "name": "storedEventCount",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },

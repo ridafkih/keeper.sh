@@ -16,10 +16,31 @@ checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
 const jobsFolderPathname = join(import.meta.dirname, "jobs");
 
+const IN_FLIGHT_DRAIN_DEADLINE_MS = 5000;
+
+const settleInFlightDrains = async (settle: () => Promise<void>): Promise<void> => {
+  const settled = settle().then(
+    () => "settled",
+    () => "settle-failed",
+  );
+  let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+  const deadline = new Promise<void>((resolve) => {
+    deadlineTimer = setTimeout(resolve, IN_FLIGHT_DRAIN_DEADLINE_MS);
+  });
+  try {
+    await Promise.race([settled, deadline]);
+  } finally {
+    if (deadlineTimer !== null) {
+      clearTimeout(deadlineTimer);
+    }
+  }
+};
+
 await entry({
   main: async () => {
     const {
       database,
+      inFlightDrainRegistry,
       shutdownDatabases,
       shutdownRefreshLockRedis,
       shutdownSignalReaderRedis,
@@ -43,6 +64,7 @@ await entry({
     return async (): Promise<void> => {
       baker.stopAll();
       await signalReader?.stop();
+      await settleInFlightDrains(() => inFlightDrainRegistry.settle());
       destroy();
       await shutdownDatabases();
       shutdownRefreshLockRedis();

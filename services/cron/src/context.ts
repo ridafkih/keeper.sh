@@ -1,6 +1,7 @@
 import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
 import env from "./env";
 import { createFlushDrainRegistry } from "./utils/flush-drains";
+import { createInFlightDrainRegistry } from "./utils/in-flight-drains";
 import { closeDatabase, createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
@@ -19,6 +20,8 @@ const flushDatabase = await createDatabase(env.DATABASE_URL, {
 });
 
 const flushDrainRegistry = createFlushDrainRegistry();
+
+const inFlightDrainRegistry = createInFlightDrainRegistry();
 
 const FLUSH_DRAIN_DEADLINE_MS = 2000;
 /*
@@ -107,6 +110,7 @@ export {
   database,
   flushDatabase,
   flushDrainRegistry,
+  inFlightDrainRegistry,
   shutdownDatabases,
   premiumService,
   polarClient,
