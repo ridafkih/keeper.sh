@@ -21,8 +21,9 @@ const navButton =
   "flex size-8 items-center justify-center rounded-lg text-foreground-muted hover:bg-background-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
- * The dashboard's calendar pane. Skeleton only: a titled, navigable grid with a
- * week/month view switcher and no events. Owns the visible range (`anchor`, any
+ * The dashboard's calendar pane: a toolbar card (title, week/month switcher,
+ * paging) stacked over a grid card, matching the sidebar's card rhythm.
+ * Skeleton only: no events yet. Owns the visible range (`anchor`, any
  * date inside it) and the active `view`, and lets the user page the range.
  */
 export function CalendarView() {
@@ -40,8 +41,8 @@ export function CalendarView() {
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate">
-      <header className="flex items-center justify-between gap-3 px-4 py-3">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3">
+      <header className="flex shrink-0 items-center justify-between gap-3 rounded-2xl border border-border-elevated bg-background-elevated px-4 py-3 shadow-xs">
         <Text as="span" size="base" tone="default" className="font-medium">
           {title}
         </Text>
@@ -90,11 +91,16 @@ export function CalendarView() {
           </div>
         </div>
       </header>
-      {view === "month" ? (
-        <MonthGrid anchor={anchor} days={monthDays} />
-      ) : (
-        <WeekGrid anchor={anchor} onVisibleWeekChange={setAnchor} />
-      )}
+      {/* The grid card. `overflow-hidden` + `isolate` clip the week scroller to
+          the rounded corners; `min-h-0 flex-1` lets the scroller size itself
+          so its sticky day header holds through the full vertical scroll. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs isolate">
+        {view === "month" ? (
+          <MonthGrid anchor={anchor} days={monthDays} />
+        ) : (
+          <WeekGrid anchor={anchor} onVisibleWeekChange={setAnchor} />
+        )}
+      </div>
     </div>
   );
 }
