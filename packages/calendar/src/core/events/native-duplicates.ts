@@ -4,7 +4,10 @@ import type { BunSQLClient } from "../database-client";
 import type { MaterializedSyncableEvent, SyncableEvent } from "../types";
 import type { SyncWindow } from "../sync/sync-range";
 import { isKeeperEvent } from "./identity";
-import { materializeRecurrenceEvents } from "./recurrence-materializer";
+import {
+  getRecurrenceWindowLookbackMilliseconds,
+  materializeRecurrenceEvents,
+} from "./recurrence-materializer";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import type { MaterializedRecurrenceFields } from "./stored-recurrence";
 
@@ -28,11 +31,6 @@ interface NativeEventParseResult {
 interface NativeOccurrenceIndex {
   occurrenceKeys: ReadonlySet<string>;
   withheldSeriesUids: ReadonlySet<string>;
-}
-
-interface IndexedMasterSlots {
-  earliest: number;
-  slots: Set<number>;
 }
 
 interface NativeDuplicateFilterResult {
@@ -189,75 +187,100 @@ const getDuplicateMasterSeriesUids = (events: SyncableEvent[]): Set<string> => {
 };
 
 /*
- * The expansion attributes an override to its master by an exact-millisecond recurrenceId
- * match, so a provider that rounds RECURRENCE-ID or anchors it in another zone leaves the
- * master's original slot standing beside the override at its moved time — the index would
- * then claim an instant the destination has vacated. Expanding the masters alone names the
- * slots an override can still be attributed to. A recurrenceId that names none of them costs
- * its series, exactly as a duplicate master does; one below the earliest slot the expansion
- * reached displaces nothing that gets indexed, so it withholds nothing. That floor is the
- * expansion's own, not the window's: an occurrence starting before timeMin and ending inside
- * it is indexed, which is where every overnight series on a day-anchored window sits.
+ * Both RECURRENCE-ID and EXDATE name a slot by an exact-millisecond match against the
+ * expansion, so a provider that rounds one or anchors it in another zone leaves the slot it
+ * meant to displace standing: the override's original slot survives beside it at its moved
+ * time, and the declined slot is never excluded at all. Either way the index claims an
+ * instant the destination has vacated — and a declined slot is the worse half, since
+ * suppressing it hides the one occurrence the mirror was needed for. Expanding the masters
+ * alone names the slots such a reference can still land on. One that names none of them costs
+ * its series, exactly as a duplicate master does; one below everything the expansion reaches
+ * displaces nothing that gets indexed, so it withholds nothing. That floor is the expansion's
+ * own lookback, not the window's start: the index expands from a series duration before
+ * timeMin so an occurrence already running there is reached, and a reference landing anywhere
+ * in that lookback can still be the mis-anchored twin of an indexed slot.
  */
-const getUnattributableOverrideSeriesUids = (
+const getUnplaceableSlotSeriesUids = (
   events: SyncableEvent[],
   window: SyncWindow,
 ): Set<string> => {
-  const overrideSlotsByUid = new Map<string, number[]>();
+  const claimedSlotsByUid = new Map<string, number[]>();
   const masters: SyncableEvent[] = [];
+
+  const addClaimedSlot = (uid: string, slot: number): void => {
+    const slots = claimedSlotsByUid.get(uid) ?? [];
+    slots.push(slot);
+    claimedSlotsByUid.set(uid, slots);
+  };
 
   for (const event of events) {
     if (event.recurrenceId) {
-      const slots = overrideSlotsByUid.get(event.sourceEventUid) ?? [];
-      slots.push(event.recurrenceId.getTime());
-      overrideSlotsByUid.set(event.sourceEventUid, slots);
+      addClaimedSlot(event.sourceEventUid, event.recurrenceId.getTime());
       continue;
     }
     if (event.recurrenceRule) {
       masters.push(event);
+      for (const exceptionDate of event.exceptionDates ?? []) {
+        addClaimedSlot(event.sourceEventUid, exceptionDate.getTime());
+      }
     }
   }
 
-  const unattributableSeriesUids = new Set<string>();
-  const overriddenMasters = masters.filter(
-    (master) => overrideSlotsByUid.has(master.sourceEventUid),
+  const unplaceableSeriesUids = new Set<string>();
+  const claimedMasters = masters.filter(
+    (master) => claimedSlotsByUid.has(master.sourceEventUid),
   );
-  if (overriddenMasters.length === 0) {
-    return unattributableSeriesUids;
+  if (claimedMasters.length === 0) {
+    return unplaceableSeriesUids;
   }
 
-  const masterSlotsByUid = new Map<string, IndexedMasterSlots>();
-  const masterOccurrences = materializeRecurrenceEvents(overriddenMasters, {
-    end: window.timeMax,
-    start: window.timeMin,
-  }, {
-    onSeriesOverBudget: (error) => {
-      unattributableSeriesUids.add(error.sourceEventUid);
+  let lookbackMilliseconds = 0;
+  for (const master of claimedMasters) {
+    lookbackMilliseconds = Math.max(
+      lookbackMilliseconds,
+      getRecurrenceWindowLookbackMilliseconds(master),
+    );
+  }
+  const placeableStart = window.timeMin.getTime() - lookbackMilliseconds;
+
+  /*
+   * Expanded without their own exception dates: an EXDATE that does land on a slot must
+   * still leave that slot visible here, or every correctly anchored one would look
+   * unplaceable.
+   */
+  const masterSlotsByUid = new Map<string, Set<number>>();
+  const masterOccurrences = materializeRecurrenceEvents(
+    claimedMasters.map(({ exceptionDates: _exceptionDates, ...master }) => master),
+    {
+      end: window.timeMax,
+      start: new Date(placeableStart),
     },
-  });
+    {
+      onSeriesOverBudget: (error) => {
+        unplaceableSeriesUids.add(error.sourceEventUid);
+      },
+    },
+  );
   for (const occurrence of masterOccurrences) {
-    const slot = occurrence.startTime.getTime();
-    const indexed = masterSlotsByUid.get(occurrence.sourceEventUid)
-      ?? { earliest: slot, slots: new Set<number>() };
-    indexed.earliest = Math.min(indexed.earliest, slot);
-    indexed.slots.add(slot);
-    masterSlotsByUid.set(occurrence.sourceEventUid, indexed);
+    const slots = masterSlotsByUid.get(occurrence.sourceEventUid) ?? new Set<number>();
+    slots.add(occurrence.startTime.getTime());
+    masterSlotsByUid.set(occurrence.sourceEventUid, slots);
   }
 
-  for (const [uid, overrideSlots] of overrideSlotsByUid) {
+  for (const [uid, claimedSlots] of claimedSlotsByUid) {
     const masterSlots = masterSlotsByUid.get(uid);
     if (!masterSlots) {
       continue;
     }
-    const isUnattributable = overrideSlots.some((slot) => slot >= masterSlots.earliest
+    const isUnplaceable = claimedSlots.some((slot) => slot >= placeableStart
       && slot < window.timeMax.getTime()
-      && !masterSlots.slots.has(slot));
-    if (isUnattributable) {
-      unattributableSeriesUids.add(uid);
+      && !masterSlots.has(slot));
+    if (isUnplaceable) {
+      unplaceableSeriesUids.add(uid);
     }
   }
 
-  return unattributableSeriesUids;
+  return unplaceableSeriesUids;
 };
 
 const getNativeOccurrenceIndex = async (
@@ -271,7 +294,7 @@ const getNativeOccurrenceIndex = async (
   for (const uid of unparseableSeriesUids) {
     withheldSeriesUids.add(uid);
   }
-  for (const uid of getUnattributableOverrideSeriesUids(nativeEvents, window)) {
+  for (const uid of getUnplaceableSlotSeriesUids(nativeEvents, window)) {
     withheldSeriesUids.add(uid);
   }
   const indexableEvents = nativeEvents.filter(

@@ -589,6 +589,38 @@ describe("native data that must never suppress a mirror", () => {
     expect(result.suppressedCount).toBe(0);
   });
 
+  /*
+   * The expansion opens a duration before the window so an occurrence already running at
+   * timeMin is reached, and an override mis-anchored into that lookback still names the
+   * slot that expansion indexes.
+   */
+  it("withholds a series whose unplaceable override sits in the expansion's lookback", async () => {
+    const overnight = {
+      endTime: new Date("2026-01-01T02:00:00.000Z"),
+      startTime: new Date("2025-12-31T22:00:00.000Z"),
+    };
+    const index = await buildIndex([
+      createNativeRow({ ...overnight, recurrenceRule: STORED_ENDLESS_WEEKLY_RULE }),
+      createNativeRow({
+        endTime: new Date("2026-01-15T11:00:00.000Z"),
+        id: "native-state-2",
+        recurrenceId: new Date("2025-12-31T21:59:00.000Z"),
+        startTime: new Date("2026-01-15T10:00:00.000Z"),
+      }),
+    ]);
+    const events = materializeSource([
+      createSourceMaster({ ...overnight, recurrenceRule: { frequency: "WEEKLY" } }),
+    ]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(occurrenceStarts(events)).toContain("2025-12-31T22:00:00.000Z");
+    expect(index.withheldSeriesUids.has(SHARED_UID)).toBe(true);
+    expect(index.occurrenceKeys.size).toBe(0);
+    expect(result.events).toHaveLength(5);
+    expect(result.suppressedCount).toBe(0);
+  });
+
   it("withholds an all-day series whose override is dated at UTC midnight", async () => {
     const localMidnight = {
       endTime: new Date("2026-03-06T05:00:00.000Z"),
@@ -620,6 +652,70 @@ describe("native data that must never suppress a mirror", () => {
     expect(index.occurrenceKeys.size).toBe(0);
     expect(result.events).toHaveLength(4);
     expect(result.suppressedCount).toBe(0);
+  });
+
+  it("withholds an all-day series whose declined date is anchored at UTC midnight", async () => {
+    const localMidnight = {
+      endTime: new Date("2026-03-06T05:00:00.000Z"),
+      isAllDay: true,
+      startTime: new Date("2026-03-05T05:00:00.000Z"),
+      startTimeZone: DAYLIGHT_ZONE,
+    };
+    const index = await buildIndex(
+      [createNativeRow({
+        ...localMidnight,
+        exceptionDates: JSON.stringify([{ date: new Date("2026-03-12T00:00:00.000Z") }]),
+        recurrenceRule: STORED_WEEKLY_RULE,
+      })],
+      DAYLIGHT_WINDOW,
+    );
+    const events = materializeSource(
+      [createSourceMaster({ ...localMidnight, recurrenceRule: WEEKLY_RULE })],
+      DAYLIGHT_WINDOW,
+    );
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(index.withheldSeriesUids.has(SHARED_UID)).toBe(true);
+    expect(index.occurrenceKeys.size).toBe(0);
+    expect(result.events).toHaveLength(4);
+    expect(result.suppressedCount).toBe(0);
+  });
+
+  it("withholds a series whose declined date is an hour away from every expanded slot", async () => {
+    const index = await buildIndex([createNativeRow({
+      exceptionDates: JSON.stringify([{ date: new Date("2026-01-19T08:00:00.000Z") }]),
+      recurrenceRule: STORED_WEEKLY_RULE,
+    })]);
+    const events = materializeSource([createSourceMaster({ recurrenceRule: WEEKLY_RULE })]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(index.withheldSeriesUids.has(SHARED_UID)).toBe(true);
+    expect(index.occurrenceKeys.size).toBe(0);
+    expect(result.events).toHaveLength(4);
+    expect(result.suppressedCount).toBe(0);
+  });
+
+  it("keeps indexing a series whose only declined date sits before the window", async () => {
+    const index = await buildIndex([createNativeRow({
+      endTime: new Date("2025-11-03T10:00:00.000Z"),
+      exceptionDates: JSON.stringify([{ date: new Date("2025-11-10T08:30:00.000Z") }]),
+      recurrenceRule: STORED_ENDLESS_WEEKLY_RULE,
+      startTime: new Date("2025-11-03T09:00:00.000Z"),
+    })]);
+    const events = materializeSource([createSourceMaster({
+      endTime: new Date("2025-11-03T10:00:00.000Z"),
+      recurrenceRule: { frequency: "WEEKLY" },
+      startTime: new Date("2025-11-03T09:00:00.000Z"),
+    })]);
+
+    const result = filterNativeDuplicateOccurrences(events, index);
+
+    expect(events).toHaveLength(4);
+    expect(index.withheldSeriesUids.size).toBe(0);
+    expect(result.events).toEqual([]);
+    expect(result.suppressedCount).toBe(4);
   });
 
   it("suppresses nothing when the destination has not been ingested yet", async () => {

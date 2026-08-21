@@ -16,7 +16,7 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
 } from "@keeper.sh/calendar";
-import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
+import { MS_PER_DAY, OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
@@ -332,6 +332,7 @@ const getBoundingSourceAuthorityWindow = (
 
 interface NativeDuplicateDestination extends StoredSourceCoverage {
   calendarId: string;
+  provider: string;
 }
 
 interface NativeDuplicateSuppressionContext {
@@ -343,17 +344,32 @@ interface NativeDuplicateSuppressionContext {
 
 /*
  * Coverage is recorded when the ingested window changes: for an OAuth calendar only on the
- * full sync its sync-token rotation forces once per OAUTH_SYNC_TOKEN_REFRESH_MS, for an ICS
- * or CalDAV one whenever the day-anchored window rolls. Twice the rotation therefore clears
- * every healthy cadence, and what remains past it is an ingest that has stopped landing at
- * all. Nothing prunes event_states, so those rows freeze at the last ingest that succeeded
- * and go on claiming slots the destination's native copy may since have vacated.
+ * full sync its sync-token rotation forces once per OAUTH_SYNC_TOKEN_REFRESH_MS, for a
+ * CalDAV one whenever the day-anchored window rolls, which is every day its ingest lands.
+ * Twice a provider's own cadence clears its healthy runs and nothing else, and only the
+ * OAuth one is measured in weeks: spending that tolerance on a CalDAV destination would
+ * leave it a fortnight of missed day-rolls to keep suppressing from. Nothing prunes
+ * event_states, so those rows freeze at the last ingest that succeeded and go on claiming
+ * slots the destination's native copy may since have vacated — and CalDAV is where every
+ * stored recurring master lives, one row claiming every slot its rule expands to.
  */
-const MAX_NATIVE_COVERAGE_AGE_MS = 2 * OAUTH_SYNC_TOKEN_REFRESH_MS;
+const MAX_OAUTH_NATIVE_COVERAGE_AGE_MS = 2 * OAUTH_SYNC_TOKEN_REFRESH_MS;
+const MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS = 2 * MS_PER_DAY;
 
-const isNativeCoverageCurrent = (recordedAt: Date | null, now: Date): boolean =>
-  recordedAt !== null
-  && now.getTime() - recordedAt.getTime() <= MAX_NATIVE_COVERAGE_AGE_MS;
+const getMaxNativeCoverageAgeMs = (provider: string): number => {
+  if (provider === "google" || provider === "outlook") {
+    return MAX_OAUTH_NATIVE_COVERAGE_AGE_MS;
+  }
+  return MAX_DAY_ANCHORED_NATIVE_COVERAGE_AGE_MS;
+};
+
+const isNativeCoverageCurrent = (
+  destination: NativeDuplicateDestination,
+  now: Date,
+): boolean =>
+  destination.ingestWindowRecordedAt !== null
+  && now.getTime() - destination.ingestWindowRecordedAt.getTime()
+    <= getMaxNativeCoverageAgeMs(destination.provider);
 
 /*
  * The bounding source-authority window is the SOURCES' coverage, and the destination's own
@@ -371,10 +387,7 @@ const resolveNativeSuppressionWindow = (
   now: Date = new Date(),
 ): SyncWindow | null => {
   const destinationCoverage = resolveStoredSourceCoverage(destination);
-  if (
-    !destinationCoverage
-    || !isNativeCoverageCurrent(destination.ingestWindowRecordedAt, now)
-  ) {
+  if (!destinationCoverage || !isNativeCoverageCurrent(destination, now)) {
     return null;
   }
   return intersectSyncWindows(localReadWindow, destinationCoverage);

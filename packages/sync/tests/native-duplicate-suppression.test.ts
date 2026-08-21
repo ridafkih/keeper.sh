@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeSyncOperations } from "@keeper.sh/calendar";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 import type {
   BunSQLClient,
   DestinationEventReadDiagnostics,
@@ -29,6 +30,7 @@ const INGESTED_OVER_WINDOW: NativeDuplicateDestination = {
   ingestWindowEnd: WINDOW.timeMax,
   ingestWindowRecordedAt: new Date("2026-01-01T00:05:00.000Z"),
   ingestWindowStart: WINDOW.timeMin,
+  provider: "google",
 };
 
 const EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics = {
@@ -291,6 +293,7 @@ describe("a destination whose ingest never reached as far back as its sources", 
     ingestWindowEnd: YEAR_LONG_READ_WINDOW.timeMax,
     ingestWindowRecordedAt: new Date("2026-07-01T00:00:00.000Z"),
     ingestWindowStart: new Date("2026-06-01T00:00:00.000Z"),
+    provider: "caldav",
   };
 
   /*
@@ -373,22 +376,29 @@ describe("a destination whose ingest never reached as far back as its sources", 
 
 /*
  * An OAuth calendar records coverage only on the full sync its sync-token rotation forces,
- * and an ICS or CalDAV one whenever the day-anchored window rolls, so a recorded window that
- * has stopped advancing is a destination whose ingest has stopped landing. Nothing prunes
+ * and a CalDAV one whenever the day-anchored window rolls, so a recorded window that has
+ * stopped advancing is a destination whose ingest has stopped landing. Nothing prunes
  * event_states, so its rows outlive the native copies the user has deleted since — and
  * suppressing from them retires the mirror of a meeting that is now on neither calendar.
+ * Each provider is held to its own cadence: the week an OAuth rotation is allowed to take
+ * is a fortnight of missed day-rolls on the only destinations that store recurring masters,
+ * where one frozen row goes on claiming every slot its rule expands to.
  */
 describe("a destination whose ingest has stopped recording coverage", () => {
   const RECORDED_AT = new Date("2026-01-02T00:00:00.000Z");
 
-  const WEDGED_SINCE_JANUARY: NativeDuplicateDestination = {
+  const wedgedSince = (provider: string): NativeDuplicateDestination => ({
     calendarId: DESTINATION_CALENDAR_ID,
     ingestFutureRange: "2_years",
     ingestHistoricRange: "1_month",
     ingestWindowEnd: new Date("2027-01-01T00:00:00.000Z"),
     ingestWindowRecordedAt: RECORDED_AT,
     ingestWindowStart: new Date("2025-12-01T00:00:00.000Z"),
-  };
+    provider,
+  });
+
+  const wedgedFor = (days: number, milliseconds = 0): Date =>
+    new Date(RECORDED_AT.getTime() + days * MS_PER_DAY + milliseconds);
 
   const READ_WINDOW: SyncWindow = {
     timeMax: new Date("2027-01-01T00:00:00.000Z"),
@@ -414,25 +424,66 @@ describe("a destination whose ingest has stopped recording coverage", () => {
     startTime: new Date("2026-01-20T09:00:00.000Z"),
   });
 
-  const filterAt = (now: Date) => {
+  const filterAt = (provider: string, now: Date) => {
     vi.setSystemTime(now);
     return suppressNativeDuplicates({
       database: createNativeDatabase({ [DESTINATION_CALENDAR_ID]: [FROZEN_NATIVE_ROW] }),
-      destination: WEDGED_SINCE_JANUARY,
+      destination: wedgedSince(provider),
       events: [INVITED_OCCURRENCE],
       localReadWindow: READ_WINDOW,
     });
   };
 
   it("suppresses the duplicate while the recorded coverage is still current", async () => {
-    const filtered = await filterAt(new Date("2026-01-03T00:00:00.000Z"));
+    const filtered = await filterAt("google", new Date("2026-01-03T00:00:00.000Z"));
 
     expect(filtered.events).toEqual([]);
     expect(filtered.suppressedCount).toBe(1);
   });
 
   it("keeps mirroring once the recorded coverage is older than any ingest that refreshes it", async () => {
-    const filtered = await filterAt(new Date("2026-07-01T00:00:00.000Z"));
+    const filtered = await filterAt("google", new Date("2026-07-01T00:00:00.000Z"));
+
+    expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
+    expect(filtered.suppressedCount).toBe(0);
+  });
+
+  it("still suppresses for an OAuth destination that has missed a single sync-token rotation", async () => {
+    const filtered = await filterAt("google", wedgedFor(13));
+
+    expect(filtered.events).toEqual([]);
+    expect(filtered.suppressedCount).toBe(1);
+  });
+
+  it("keeps mirroring for an OAuth destination past two sync-token rotations", async () => {
+    const current = await filterAt("google", wedgedFor(14));
+    const stale = await filterAt("google", wedgedFor(14, 1));
+
+    expect(current.suppressedCount).toBe(1);
+    expect(stale.events).toEqual([INVITED_OCCURRENCE]);
+    expect(stale.suppressedCount).toBe(0);
+  });
+
+  it("still suppresses for a CalDAV destination that has missed a single day-roll", async () => {
+    const filtered = await filterAt("caldav", wedgedFor(2));
+
+    expect(filtered.events).toEqual([]);
+    expect(filtered.suppressedCount).toBe(1);
+  });
+
+  it("keeps mirroring for a CalDAV destination past two day-rolls", async () => {
+    const filtered = await filterAt("caldav", wedgedFor(2, 1));
+
+    expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
+    expect(filtered.suppressedCount).toBe(0);
+  });
+
+  /*
+   * The week an OAuth rotation may take is thirteen day-rolls a CalDAV ingest has missed, and
+   * its stored masters keep claiming every slot their rules expand to for the whole of it.
+   */
+  it("keeps mirroring for a CalDAV destination wedged for an OAuth rotation's worth of days", async () => {
+    const filtered = await filterAt("caldav", wedgedFor(13));
 
     expect(filtered.events).toEqual([INVITED_OCCURRENCE]);
     expect(filtered.suppressedCount).toBe(0);
