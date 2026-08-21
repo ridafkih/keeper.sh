@@ -55,14 +55,20 @@ const mapWithConcurrency = async <Item, Result>(
   const results: Result[] = [];
   const queue = items.map((item, index) => ({ index, item }));
   let cursor = 0;
+  let failed = false;
   const runWorker = async (): Promise<void> => {
-    while (cursor < queue.length) {
+    while (!failed && cursor < queue.length) {
       const entry = queue[cursor];
       cursor += 1;
       if (!entry) {
         continue;
       }
-      results[entry.index] = await worker(entry.item);
+      try {
+        results[entry.index] = await worker(entry.item);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
     }
   };
   const workerCount = Math.min(limit, items.length);
@@ -201,16 +207,11 @@ const getRequestUrl = (options: PageFetchOptions): URL => {
   throw new Error("Either deltaLink/nextLink or timeMin/timeMax is required");
 };
 
-const fetchEventsPage = async (
+const requestEventsPage = async (
   options: PageFetchOptions,
+  url: URL,
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
   const { accessToken } = options;
-  const url = getRequestUrl(options);
-
-  if (options.rateLimiter) {
-    await options.rateLimiter.acquire(1, options.signal);
-  }
-
   const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
   const response = await measureProviderRequest(() => fetch(url.toString(), {
@@ -253,6 +254,27 @@ const fetchEventsPage = async (
     data: outlookEventListSchema.assert(responseBody),
     fullSyncRequired: false,
   }));
+};
+
+const fetchEventsPage = async (
+  options: PageFetchOptions,
+): Promise<PageFetchResult | FullSyncRequiredResult> => {
+  const url = getRequestUrl(options);
+
+  const { rateLimiter } = options;
+  if (!rateLimiter) {
+    return await requestEventsPage(options, url);
+  }
+
+  const permit = await rateLimiter.acquirePermit?.(options.signal);
+  if (!permit) {
+    await rateLimiter.acquire(1, options.signal);
+  }
+  try {
+    return await requestEventsPage(options, url);
+  } finally {
+    await permit?.release();
+  }
 };
 
 const fetchSeriesMasterInstances = async (

@@ -1,11 +1,14 @@
+import { INGEST_SOURCE_TIMEOUT_MS, MS_PER_SECOND } from "@keeper.sh/constants";
+
 const LOCK_PREFIX = "sync:lock:";
 const SIGNAL_PREFIX = "sync:signal:";
 const WAITER_PREFIX = "sync:waiters:";
 const LOCK_TTL_SECONDS = 120;
 const LOCK_RENEW_INTERVAL_MS = (LOCK_TTL_SECONDS * 1000) / 3;
-const SIGNAL_TTL_SECONDS = 320;
+const WAITER_GRACE_MS = 60_000;
 const POLL_INTERVAL_MS = 250;
-const POLL_TIMEOUT_MS = 310_000;
+const POLL_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS + WAITER_GRACE_MS;
+const SIGNAL_TTL_SECONDS = Math.ceil((POLL_TIMEOUT_MS + WAITER_GRACE_MS) / MS_PER_SECOND);
 const sleep = (delayMs: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, delayMs);

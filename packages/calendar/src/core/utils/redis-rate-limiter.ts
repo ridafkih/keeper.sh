@@ -1,9 +1,10 @@
 import {
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
+  PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
 } from "@keeper.sh/constants";
 import { widelog } from "widelogger";
-import { measureRedisCommand, recordSegment } from "../telemetry/segments";
+import { measureRedisCommand, measureSegment, recordSegment } from "../telemetry/segments";
 import { createLeasedSemaphore } from "./leased-semaphore";
 import { flagPacingParkAbortReason } from "./pacing-park";
 import type { RedisLeaseClient, SemaphoreLease } from "./leased-semaphore";
@@ -15,8 +16,13 @@ const QUEUE_DEPTH_INDEX = 2;
 /* Beyond SOURCE_TIMEOUT_MS, so a waiter killed by the ingest deadline expires rather than wedging the head. */
 const QUEUE_ENTRY_TTL_MS = 180_000;
 
+interface RateLimiterPermit {
+  release(): Promise<void>;
+}
+
 interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
+  acquirePermit?(signal?: AbortSignal): Promise<RateLimiterPermit>;
 }
 
 interface RedisRateLimiterConfig {
@@ -260,7 +266,8 @@ const createHostRateLimiter = (
 );
 
 const OUTLOOK_ACCOUNT_CONCURRENCY = 3;
-const OUTLOOK_LEASE_TTL_MS = 150_000;
+const OUTLOOK_LEASE_MARGIN_MS = 30_000;
+const OUTLOOK_LEASE_TTL_MS = PROVIDER_INGEST_REQUEST_TIMEOUT_MS + OUTLOOK_LEASE_MARGIN_MS;
 
 interface OutlookAccountSemaphore {
   acquireLease(signal?: AbortSignal): Promise<SemaphoreLease>;
@@ -283,18 +290,122 @@ const createOutlookAccountSemaphore = (
   };
 };
 
+interface AccountGateWaiter {
+  resolve: () => void;
+  settled: boolean;
+}
+
+interface AccountGate {
+  active: number;
+  waiters: AccountGateWaiter[];
+}
+
+const outlookAccountGates = new Map<string, AccountGate>();
+
+const resolveAccountGate = (accountId: string): AccountGate => {
+  const existing = outlookAccountGates.get(accountId);
+  if (existing) {
+    return existing;
+  }
+  const gate: AccountGate = { active: 0, waiters: [] };
+  outlookAccountGates.set(accountId, gate);
+  return gate;
+};
+
+const enterAccountGate = (accountId: string, signal?: AbortSignal): Promise<void> => {
+  const gate = resolveAccountGate(accountId);
+  if (gate.active < OUTLOOK_ACCOUNT_CONCURRENCY) {
+    gate.active += 1;
+    return Promise.resolve();
+  }
+  if (signal?.aborted) {
+    return Promise.reject(signal.reason);
+  }
+  return new Promise<void>((resolve, reject) => {
+    const waiter: AccountGateWaiter = { resolve, settled: false };
+    gate.waiters.push(waiter);
+    signal?.addEventListener("abort", () => {
+      if (waiter.settled) {
+        return;
+      }
+      waiter.settled = true;
+      flagPacingParkAbortReason(signal.reason);
+      reject(signal.reason);
+    }, { once: true });
+  });
+};
+
+const leaveAccountGate = (accountId: string): void => {
+  const gate = resolveAccountGate(accountId);
+  while (gate.waiters.length > 0) {
+    const waiter = gate.waiters.shift();
+    if (waiter && !waiter.settled) {
+      waiter.settled = true;
+      waiter.resolve();
+      return;
+    }
+  }
+  gate.active -= 1;
+  if (gate.active <= 0 && gate.waiters.length === 0) {
+    outlookAccountGates.delete(accountId);
+  }
+};
+
+const createOutlookRequestLimiter = (
+  semaphore: OutlookAccountSemaphore,
+  accountId: string,
+): RedisRateLimiter => {
+  const takePermit = async (signal?: AbortSignal): Promise<RateLimiterPermit> => {
+    await enterAccountGate(accountId, signal);
+    const lease = await semaphore.acquireLease(signal).catch((error: unknown) => {
+      leaveAccountGate(accountId);
+      throw error;
+    });
+    let released = false;
+    const release = async (): Promise<void> => {
+      if (released) {
+        return;
+      }
+      released = true;
+      leaveAccountGate(accountId);
+      await semaphore.release(lease).catch((error: unknown) => {
+        widelog.errorFields(error, { retriable: true, slug: "outlook-lease-release-failed" });
+      });
+    };
+    return { release };
+  };
+
+  const acquirePermit = (signal?: AbortSignal): Promise<RateLimiterPermit> =>
+    measureSegment("wait.rate_limiter_ms", () => takePermit(signal));
+
+  const acquire = async (_count: number, signal?: AbortSignal): Promise<void> => {
+    await acquirePermit(signal);
+  };
+
+  return { acquire, acquirePermit };
+};
+
+const createOutlookAccountRequestLimiter = (
+  redis: RedisLeaseClient,
+  accountId: string,
+): RedisRateLimiter =>
+  createOutlookRequestLimiter(createOutlookAccountSemaphore(redis, accountId), accountId);
+
 export {
   createGoogleUserRateLimiter,
   CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
+  createOutlookAccountRequestLimiter,
   createOutlookAccountSemaphore,
+  createOutlookRequestLimiter,
   createRedisRateLimiter,
 };
 export type {
   GoogleRateLimitLane,
   HostRateLimiterOptions,
   OutlookAccountSemaphore,
+  RateLimiterPermit,
   RedisRateLimiter,
   RedisRateLimiterConfig,
   RedisScriptClient,
