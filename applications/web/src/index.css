@@ -8,14 +8,17 @@
    select on its rendered height. The thresholds assume the week grid's 48px
    hour, Tailwind's 16px text-xs and 20px text-sm lines and the grid card's
    4px vertical padding — the band table in `event-card.tsx` has the fit
-   arithmetic. The container is named deliberately: height queries need a
-   `size` container, and an unnamed query binds to whichever ancestor happens
-   to be one, so a future size container around the card could silently
-   capture these. */
-@custom-variant event-compact (@container event-card (height < 28px));
-@custom-variant event-short (@container event-card (height < 44px));
-@custom-variant event-roomy (@container event-card (60px <= height < 76px));
-@custom-variant event-tall (@container event-card (height >= 76px));
+   arithmetic. Each floor sits 1px under its band's content height: a card's
+   height is a percentage of the day, which can land a hair under the exact
+   pixel and would otherwise drop the card into the band below; the 1px it
+   may clip is padding, never glyphs. The container is named deliberately:
+   height queries need a `size` container, and an unnamed query binds to
+   whichever ancestor happens to be one, so a future size container around
+   the card could silently capture these. */
+@custom-variant event-compact (@container event-card (height < 27px));
+@custom-variant event-short (@container event-card (height < 43px));
+@custom-variant event-roomy (@container event-card (59px <= height < 75px));
+@custom-variant event-tall (@container event-card (height >= 75px));
 
 html {
   @apply w-full min-h-full bg-background overflow-x-hidden;
