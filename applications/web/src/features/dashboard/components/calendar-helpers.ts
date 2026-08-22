@@ -79,6 +79,8 @@ export function formatWeekTitle(anchor: Date): string {
 
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
+export const HOUR_HEIGHT = 48;
+
 export function formatHourLabel(hour: number): string {
   return new Date(2023, 0, 1, hour)
     .toLocaleTimeString("en-US", { hour: "numeric" })

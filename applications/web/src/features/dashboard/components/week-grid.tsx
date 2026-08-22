@@ -3,11 +3,14 @@ import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
+import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
+import { DayColumn } from "./day-column";
 import {
   addDays,
   formatHourLabel,
+  HOUR_HEIGHT,
   HOURS,
   isSameDay,
   startOfDay,
@@ -16,7 +19,6 @@ import {
 } from "./calendar-helpers";
 
 const GUTTER_WIDTH = 52;
-const HOUR_HEIGHT = 48;
 const HEADER_HEIGHT = 56;
 const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
 const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
@@ -24,6 +26,9 @@ const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
 const BUFFER_WEEKS = 26;
 
 const MS_PER_DAY = 86_400_000;
+
+// One stable identity, so the memoised columns don't see a fresh [] each render.
+const NO_EVENTS: CalendarEvent[] = [];
 
 // Painted on the viewport boxes, not the cells, so the rules span overscroll; `--strip-scroll` keeps them following the grid.
 const COLUMN_RULES: CSSProperties = {
@@ -283,21 +288,13 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
             return (
-              <div key={day.getTime()} className="relative snap-start">
-                {/* Hour rules, per cell — one strip-wide background layer is too large for some engines to paint. */}
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_bottom,var(--color-border-hour)_0_1px,transparent_1px)]"
-                  style={{ top: HOUR_HEIGHT, backgroundSize: `100% ${HOUR_HEIGHT}px` }}
-                />
-                {/* Event blocks will render here in a later stage. */}
-                {isToday && nowFraction != null && (
-                  <div
-                    className="pointer-events-none absolute inset-x-0 z-10 h-0.5 -translate-y-1/2 bg-red-500"
-                    style={{ top: `${nowFraction * 100}%` }}
-                  />
-                )}
-              </div>
+              <DayColumn
+                key={day.getTime()}
+                day={day}
+                isToday={isToday}
+                nowFraction={isToday ? nowFraction : null}
+                events={NO_EVENTS}
+              />
             );
           })}
         </div>
