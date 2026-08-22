@@ -1,12 +1,12 @@
 import { useEffect, useRef, memo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { tv } from "tailwind-variants/lite";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
-import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "@/lib/time";
+import { isEventPast, formatDayHeader } from "@/lib/time";
+import { EventCard } from "@/features/dashboard/components/event-card";
 import { useEvents, type CalendarEvent } from "@/hooks/use-events";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/events/")({
@@ -21,10 +21,6 @@ interface DayGroup {
 interface DaySectionProps {
   label: string;
   events: CalendarEvent[];
-}
-
-interface EventCardProps {
-  event: CalendarEvent;
 }
 
 interface LoadMoreSentinelProps {
@@ -127,48 +123,9 @@ const DaySection = memo(function DaySection({ label, events }: DaySectionProps) 
       <DashboardHeading2>{label}</DashboardHeading2>
       <div className="flex flex-col gap-2 pt-1">
         {events.map((event) => (
-          <EventCard key={event.id} event={event} />
+          <EventCard key={event.id} event={event} past={isEventPast(event.endTime)} />
         ))}
       </div>
-    </div>
-  );
-});
-
-const eventCard = tv({
-  base: "relative flex flex-col gap-0.5 overflow-hidden rounded-xl bg-event-background py-2.5 pr-3 pl-4 before:absolute before:inset-y-2 before:left-1.5 before:w-0.5 before:rounded-full before:bg-event-border",
-  variants: {
-    past: {
-      true: "opacity-60 line-through",
-      false: "",
-    },
-  },
-});
-
-const EventCard = memo(function EventCard({ event }: EventCardProps) {
-  const past = isEventPast(event.endTime);
-  const startTime = formatTime(event.startTime);
-  const endTime = formatTime(event.endTime);
-  const timeUntil = formatTimeUntil(event.startTime);
-  const title = event.title ?? event.calendarName;
-
-  return (
-    <div className={eventCard({ past })}>
-      <div className="flex items-center justify-between gap-2">
-        <Text size="sm" tone="eventMuted" className="tabular-nums">
-          {startTime} - {endTime}
-        </Text>
-        <Text size="xs" tone="eventMuted" className="tabular-nums whitespace-nowrap">
-          {timeUntil}
-        </Text>
-      </div>
-      <Text size="sm" tone="event" className="truncate font-semibold">
-        {title}
-      </Text>
-      {event.description && (
-        <Text size="sm" tone="eventMuted" className="line-clamp-2">
-          {event.description}
-        </Text>
-      )}
     </div>
   );
 });
