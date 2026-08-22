@@ -37,13 +37,28 @@ const resolvePeriod = (hours: number): string => {
   return "AM";
 };
 
-export const formatTime = (date: Date): string => {
+/** The 12-hour clock without its period, e.g. "9:30". */
+const formatClock = (date: Date): string => {
   const hours = date.getHours();
   const minutes = date.getMinutes();
-  const period = resolvePeriod(hours);
   const displayHours = hours % 12 || 12;
 
-  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
+  return `${displayHours}:${minutes.toString().padStart(2, "0")}`;
+};
+
+export const formatTime = (date: Date): string =>
+  `${formatClock(date)} ${resolvePeriod(date.getHours())}`;
+
+/**
+ * A compact time range for the calendar grid, e.g. "9:00 – 10:00 AM": the
+ * start's period is dropped when both ends share it and kept when the range
+ * crosses noon ("11:30 AM – 1:00 PM"), so the text fits a week column.
+ */
+export const formatTimeRange = (start: Date, end: Date): string => {
+  const samePeriod = resolvePeriod(start.getHours()) === resolvePeriod(end.getHours());
+  const startLabel = samePeriod ? formatClock(start) : formatTime(start);
+
+  return `${startLabel} – ${formatTime(end)}`;
 };
 
 export const formatDate = (date: string | Date): string =>

@@ -2,6 +2,21 @@
 
 @custom-variant pointer-hover (@media (hover: hover));
 
+/* Calendar event cards are sized by their event's duration, so their content
+   steps down as the card gets shorter. A grid card is a size-query container
+   named `event-card` (see the grid layout in `EventCard`); these variants
+   select on its rendered height. The thresholds assume the week grid's 48px
+   hour, Tailwind's 16px text-xs and 20px text-sm lines and the grid card's
+   4px vertical padding — the band table in `event-card.tsx` has the fit
+   arithmetic. The container is named deliberately: height queries need a
+   `size` container, and an unnamed query binds to whichever ancestor happens
+   to be one, so a future size container around the card could silently
+   capture these. */
+@custom-variant event-compact (@container event-card (height < 28px));
+@custom-variant event-short (@container event-card (height < 44px));
+@custom-variant event-roomy (@container event-card (60px <= height < 76px));
+@custom-variant event-tall (@container event-card (height >= 76px));
+
 html {
   @apply w-full min-h-full bg-background overflow-x-hidden;
   -webkit-font-smoothing: antialiased;
