@@ -19,6 +19,12 @@
 @custom-variant event-short (@container event-card (height < 43px));
 @custom-variant event-roomy (@container event-card (59px <= height < 75px));
 @custom-variant event-tall (@container event-card (height >= 75px));
+/* Narrow cards — overlapping events tiled three across in a week column —
+   can't show a time range's both ends, so the time line goes and the title
+   tightens instead. Declared last on purpose: custom variants emit in
+   declaration order, so `event-narrow:hidden` outranks the roomy/tall
+   description clamps on the same element. */
+@custom-variant event-narrow (@container event-card (width < 72px));
 
 html {
   @apply w-full min-h-full bg-background overflow-x-hidden;

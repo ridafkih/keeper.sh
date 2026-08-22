@@ -39,6 +39,10 @@ interface EventCardProps {
  *   roomy    59–74px  (≤ 90 min)  + one description line            60px
  *   tall     ≥ 75px   (≥ 95 min)  + two description lines           76px
  *
+ * Width has one band of its own: below 72px (`event-narrow` — a two- or
+ * three-way tile in a 136px column) the time line and description go and
+ * the title tightens, since neither end of a time range would fit.
+ *
  * Each band's floor sits 1px under its content height (see the variants for
  * why), so `overflow-hidden` only ever clips a pixel of padding, never
  * glyphs. `min-h-5` floors a 15-minute card at 20px —
@@ -92,20 +96,28 @@ export const EventCard = memo(function EventCard({
         {/* The padding and the compact band's centring sit on this body
             rather than the card: a container's queries never match the
             container itself, only its descendants. */}
-        <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0">
-          <Text size="xs" tone="eventMuted" className="truncate tabular-nums event-short:hidden">
+        <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
+          <Text
+            size="xs"
+            tone="eventMuted"
+            className="truncate tabular-nums event-short:hidden event-narrow:hidden"
+          >
             {formatTimeRange(event.startTime, event.endTime)}
           </Text>
-          {/* No `leading-*` here: `event-compact:text-xs` brings the xs
-              line-height along with the size. */}
-          <Text size="sm" tone="event" className="truncate font-semibold event-compact:text-xs">
+          {/* No `leading-*` here: the `text-xs` steps bring the xs line-height
+              along with the size. */}
+          <Text
+            size="sm"
+            tone="event"
+            className="truncate font-semibold event-compact:text-xs event-narrow:text-xs"
+          >
             {title}
           </Text>
           {event.description && (
             <Text
               size="xs"
               tone="eventMuted"
-              className="hidden event-roomy:line-clamp-1 event-tall:line-clamp-2"
+              className="hidden event-roomy:line-clamp-1 event-tall:line-clamp-2 event-narrow:hidden"
             >
               {event.description}
             </Text>
