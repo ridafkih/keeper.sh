@@ -89,6 +89,10 @@ html {
   --ui-ring: var(--color-blue-500);
   --ui-template: var(--color-purple-600);
   --ui-template-muted: color-mix(in srgb, var(--ui-template), transparent 50%);
+  --ui-event: var(--color-blue-900);
+  --ui-event-muted: color-mix(in srgb, var(--ui-event), transparent 30%);
+  --ui-event-background: var(--color-blue-100);
+  --ui-event-border: var(--color-blue-500);
 }
 
 @font-face {
@@ -135,6 +139,10 @@ html {
   --color-ring: var(--ui-ring);
   --color-template: var(--ui-template);
   --color-template-muted: var(--ui-template-muted);
+  --color-event: var(--ui-event);
+  --color-event-muted: var(--ui-event-muted);
+  --color-event-background: var(--ui-event-background);
+  --color-event-border: var(--ui-event-border);
 
   --font-sans: "Geist Sans", system-ui, sans-serif;
   --font-lora: "Lora", Georgia, serif;
@@ -247,6 +255,14 @@ html {
       var(--ui-template),
       transparent 40%
     );
+    --ui-event: var(--color-blue-100);
+    --ui-event-muted: color-mix(in srgb, var(--ui-event), transparent 30%);
+    --ui-event-background: color-mix(
+      in srgb,
+      var(--color-blue-500),
+      transparent 80%
+    );
+    --ui-event-border: var(--color-blue-400);
   }
 }
 
