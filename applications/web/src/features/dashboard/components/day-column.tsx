@@ -82,6 +82,10 @@ export const DayColumn = memo(function DayColumn({
         className="pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_bottom,var(--color-border-hour)_0_1px,transparent_1px)]"
         style={{ top: HOUR_HEIGHT, backgroundSize: `100% ${HOUR_HEIGHT}px` }}
       />
+      {/* The column's left rule, on the cell so it scrolls with the content:
+          a rule painted on the scroller's viewport and moved from a scroll
+          event trails the cards by a frame. */}
+      <div aria-hidden className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated" />
       {positioned.map((item) => (
         <EventCard
           key={item.event.id}
