@@ -16,11 +16,15 @@ export interface CalendarEvent {
 
 const DAYS_PER_PAGE = 7;
 
+// Keep the key a relative path: an absolute URL via `globalThis.location`
+// throws during SSR, which SWR swallows into a null key, so the server would
+// render the page as loaded while the client's first render is still loading.
 const buildEventsUrl = (from: Date, to: Date): string => {
-  const url = new URL("/api/events", globalThis.location.origin);
-  url.searchParams.set("from", from.toISOString());
-  url.searchParams.set("to", to.toISOString());
-  return url.toString();
+  const params = new URLSearchParams({
+    from: from.toISOString(),
+    to: to.toISOString(),
+  });
+  return `/api/events?${params.toString()}`;
 };
 
 const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {

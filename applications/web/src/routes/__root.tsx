@@ -63,8 +63,10 @@ function ViteScriptTag({ script }: { script: ViteScript }) {
 function RootComponent() {
   const { runtimeConfig, viteAssets } = Route.useRouteContext();
 
+  // The inline client-state script stamps data-* attributes on <html> before
+  // hydration, so the server markup never matches the element exactly.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script
