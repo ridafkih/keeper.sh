@@ -76,6 +76,8 @@ export interface ApiEvent {
   description: string | null;
   startTime: string;
   endTime: string;
+  /** Whole-day event: `startTime`/`endTime` are the UTC-midnight day bounds. */
+  isAllDay: boolean;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;

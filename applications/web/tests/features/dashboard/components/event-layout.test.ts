@@ -20,6 +20,7 @@ const timedEvent = (id: string, startTime: Date, endTime: Date): CalendarEvent =
   description: null,
   startTime,
   endTime,
+  isAllDay: false,
   calendarId: "calendar",
   calendarName: "Calendar",
   calendarProvider: "google",
