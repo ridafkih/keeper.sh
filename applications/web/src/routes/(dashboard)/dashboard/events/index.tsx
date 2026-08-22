@@ -125,7 +125,7 @@ const DaySection = memo(function DaySection({ label, events }: DaySectionProps) 
   return (
     <div className="flex flex-col px-0.5">
       <DashboardHeading2>{label}</DashboardHeading2>
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-2 pt-1">
         {events.map((event) => (
           <EventCard key={event.id} event={event} />
         ))}
