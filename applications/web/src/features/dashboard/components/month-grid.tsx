@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
@@ -50,16 +50,17 @@ const NO_EVENTS: CalendarEvent[] = [];
 
 export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps) {
   const today = useStartOfToday();
-  /** The first cell's pill area. Every cell is the same height, so one
-   * measurement sets the row budget for all of them. */
-  const pillAreaRef = useRef<HTMLDivElement>(null);
   const [pillRows, setPillRows] = useState(0);
 
-  // Measure the row budget once the grid is laid out, and again whenever the
-  // pane resizes. The observer reports once on `observe`, so the first read
-  // happens in its callback rather than as a synchronous set in the effect.
-  useLayoutEffect(() => {
-    const pillArea = pillAreaRef.current;
+  // Measures the row budget from the first cell's pill area (every cell is
+  // the same height, so one measurement serves all), and keeps measuring
+  // through resizes. A callback ref rather than a mount effect: the cells are
+  // keyed by day, so paging the month mounts a new first cell, and an
+  // observer attached once on mount would be left watching the old, detached
+  // node — which reports a zero height, folding every cell to "+N more". The
+  // ref runs again for each new node, and its cleanup disconnects the old
+  // observer. The observer reports once on `observe`, which is the first read.
+  const observePillArea = useCallback((pillArea: HTMLDivElement | null) => {
     if (!pillArea || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
       if (entry) setPillRows(resolvePillRows(entry.contentRect.height));
@@ -114,7 +115,7 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
                   {day.getDate()}
                 </span>
                 <div
-                  ref={index === 0 ? pillAreaRef : undefined}
+                  ref={index === 0 ? observePillArea : undefined}
                   className="flex min-h-0 flex-1 flex-col overflow-hidden"
                   style={{ gap: EVENT_PILL_GAP_PX }}
                 >
