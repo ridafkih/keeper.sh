@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../../../../src/hooks/use-events";
 import {
+  bucketEventsByDay,
   layoutDayEvents,
   MIN_EVENT_SPAN_MS,
   stackIndentPx,
   tileBox,
 } from "../../../../src/features/dashboard/components/event-layout";
-import type { PositionedEvent } from "../../../../src/features/dashboard/components/event-layout";
+import type {
+  DayEvents,
+  PositionedEvent,
+} from "../../../../src/features/dashboard/components/event-layout";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -25,6 +29,11 @@ const timedEvent = (id: string, startTime: Date, endTime: Date): CalendarEvent =
   calendarName: "Calendar",
   calendarProvider: "google",
   calendarUrl: "https://calendar.example",
+});
+
+const allDayEvent = (id: string, startIso: string, endIso: string): CalendarEvent => ({
+  ...timedEvent(id, new Date(startIso), new Date(endIso)),
+  isAllDay: true,
 });
 
 const byId = (layout: PositionedEvent[]): Record<string, PositionedEvent> =>
@@ -240,5 +249,90 @@ describe("tileBox", () => {
 
   it("widens a spanning card across its columns", () => {
     expect(tileBox(0, 2, 2)).toEqual({ left: 0, width: 1 });
+  });
+});
+
+describe("bucketEventsByDay", () => {
+  // A Sunday-to-Sunday window, so day-of-month doubles as the day key.
+  const rangeStart = new Date(2026, 0, 4);
+  const rangeEnd = new Date(2026, 0, 11);
+
+  const daysHolding = (buckets: Map<number, DayEvents>, id: string, kind: keyof DayEvents): number[] =>
+    [...buckets.entries()]
+      .filter(([, bucket]) => bucket[kind].some((event) => event.id === id))
+      .map(([key]) => new Date(key).getDate())
+      .sort((first, second) => first - second);
+
+  it("keys a single-day event under its local midnight", () => {
+    const buckets = bucketEventsByDay([timedEvent("meeting", at(9), at(10))], rangeStart, rangeEnd);
+
+    expect([...buckets.keys()]).toEqual([new Date(2026, 0, 5).getTime()]);
+    expect(buckets.get(day.getTime())?.timed.map((event) => event.id)).toEqual(["meeting"]);
+    expect(buckets.get(day.getTime())?.allDay).toEqual([]);
+  });
+
+  it("spreads a multi-day event over every day it overlaps", () => {
+    const buckets = bucketEventsByDay(
+      [timedEvent("trip", at(22), new Date(2026, 0, 7, 2))],
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(daysHolding(buckets, "trip", "timed")).toEqual([5, 6, 7]);
+  });
+
+  it("keeps an event ending at midnight on the day it ends", () => {
+    const buckets = bucketEventsByDay(
+      [timedEvent("late", at(22), new Date(2026, 0, 6, 0))],
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(daysHolding(buckets, "late", "timed")).toEqual([5]);
+  });
+
+  it("lands a zero-length event on its start day", () => {
+    const buckets = bucketEventsByDay([timedEvent("ping", at(9), at(9))], rangeStart, rangeEnd);
+
+    expect(daysHolding(buckets, "ping", "timed")).toEqual([5]);
+  });
+
+  it("only visits days inside the window", () => {
+    const buckets = bucketEventsByDay(
+      [
+        timedEvent("long", new Date(2026, 0, 3, 22), new Date(2026, 0, 12, 2)),
+        timedEvent("before", new Date(2026, 0, 3, 22), new Date(2026, 0, 4, 0)),
+      ],
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(daysHolding(buckets, "long", "timed")).toEqual([4, 5, 6, 7, 8, 9, 10]);
+    expect(daysHolding(buckets, "before", "timed")).toEqual([]);
+  });
+
+  it("places an all-day event on its calendar days in any zone", () => {
+    const buckets = bucketEventsByDay(
+      [
+        allDayEvent("holiday", "2026-01-05T00:00:00.000Z", "2026-01-06T00:00:00.000Z"),
+        allDayEvent("offsite", "2026-01-07T00:00:00.000Z", "2026-01-10T00:00:00.000Z"),
+      ],
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(daysHolding(buckets, "holiday", "allDay")).toEqual([5]);
+    expect(daysHolding(buckets, "offsite", "allDay")).toEqual([7, 8, 9]);
+    expect(daysHolding(buckets, "holiday", "timed")).toEqual([]);
+  });
+
+  it("clamps an all-day span to the window", () => {
+    const buckets = bucketEventsByDay(
+      [allDayEvent("fortnight", "2026-01-01T00:00:00.000Z", "2026-01-15T00:00:00.000Z")],
+      rangeStart,
+      rangeEnd,
+    );
+
+    expect(daysHolding(buckets, "fortnight", "allDay")).toEqual([4, 5, 6, 7, 8, 9, 10]);
   });
 });

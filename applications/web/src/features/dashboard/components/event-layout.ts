@@ -1,8 +1,9 @@
 import type { CalendarEvent } from "@/hooks/use-events";
-import { addDays } from "./calendar-helpers";
+import { addDays, startOfDay } from "./calendar-helpers";
 
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 24 * 60;
+const MS_PER_DAY = 86_400_000;
 
 /** Shortest span an event is laid out with. A five-minute event still takes
  * a fifteen-minute slot so it registers on the grid; the card's `min-h`
@@ -206,4 +207,80 @@ export function layoutDayEvents(events: CalendarEvent[], day: Date): PositionedE
     columnSpan: item.columnSpan,
     tiled: item.tiled,
   }));
+}
+
+/** A day's events, split by how the calendar shows them: timed events in the
+ * time grid, all-day events in the band above it. */
+export interface DayEvents {
+  timed: CalendarEvent[];
+  allDay: CalendarEvent[];
+}
+
+const getDayEvents = (buckets: Map<number, DayEvents>, dayKey: number): DayEvents => {
+  let bucket = buckets.get(dayKey);
+  if (!bucket) {
+    bucket = { timed: [], allDay: [] };
+    buckets.set(dayKey, bucket);
+  }
+  return bucket;
+};
+
+/**
+ * Groups events by the local calendar days they overlap inside
+ * `[rangeStart, rangeEnd)`, keyed by each day's midnight `getTime()` — the
+ * key the grids use for their day cells, all built with `new Date(y, m, d)`.
+ * Only the window's days are visited, never the strip's full buffer.
+ *
+ * Timed events are walked day by day with `addDays`, not in 86 400 000-ms
+ * steps, so daylight-saving days stay aligned. The end is exclusive: an event
+ * ending at midnight belongs to the day it ends on, not the next, and a
+ * zero-length event still lands on its start day.
+ *
+ * All-day events carry UTC-midnight bounds (a date, not an instant), so their
+ * days are read in UTC and mapped onto local days by index — comparing them
+ * with a local midnight would shift them by the zone offset and spill a
+ * single-day event into a neighbour.
+ */
+export function bucketEventsByDay(
+  events: CalendarEvent[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): Map<number, DayEvents> {
+  const rangeStartMs = rangeStart.getTime();
+  const rangeEndMs = rangeEnd.getTime();
+  const rangeDayCount = Math.round((rangeEndMs - rangeStartMs) / MS_PER_DAY);
+  const utcBase = Date.UTC(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
+  const buckets = new Map<number, DayEvents>();
+
+  for (const event of events) {
+    const startMs = event.startTime.getTime();
+    const endMs = event.endTime.getTime();
+
+    if (event.isAllDay) {
+      const firstIndex = Math.max(Math.round((startMs - utcBase) / MS_PER_DAY), 0);
+      const lastIndex = Math.min(
+        Math.round((endMs - MS_PER_DAY - utcBase) / MS_PER_DAY),
+        rangeDayCount - 1,
+      );
+      for (let index = firstIndex; index <= lastIndex; index++) {
+        getDayEvents(buckets, addDays(rangeStart, index).getTime()).allDay.push(event);
+      }
+      continue;
+    }
+
+    // A zero-length event occupies an instant; give it a millisecond so it
+    // still claims its start day under the exclusive end below.
+    const occupiedEndMs = Math.max(endMs, startMs + 1);
+    if (occupiedEndMs <= rangeStartMs || startMs >= rangeEndMs) continue;
+    const lastMs = Math.min(occupiedEndMs, rangeEndMs);
+    for (
+      let day = startOfDay(new Date(Math.max(startMs, rangeStartMs)));
+      day.getTime() < lastMs;
+      day = addDays(day, 1)
+    ) {
+      getDayEvents(buckets, day.getTime()).timed.push(event);
+    }
+  }
+
+  return buckets;
 }

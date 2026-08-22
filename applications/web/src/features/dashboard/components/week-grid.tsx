@@ -7,6 +7,7 @@ import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
+import type { DayEvents } from "./event-layout";
 import {
   addDays,
   formatHourLabel,
@@ -45,11 +46,13 @@ const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDG
 
 interface WeekGridProps {
   anchor: Date;
+  /** Keyed by local-midnight `getTime()` (see `bucketEventsByDay`); days outside the window are absent. */
+  eventsByDay: Map<number, DayEvents>;
   onCenterDayChange: (centerDay: Date) => void;
   toolbar: ReactNode;
 }
 
-export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) {
+export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: WeekGridProps) {
   const today = useStartOfToday();
   const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -293,7 +296,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
                 day={day}
                 isToday={isToday}
                 nowFraction={isToday ? nowFraction : null}
-                events={NO_EVENTS}
+                events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
               />
             );
           })}

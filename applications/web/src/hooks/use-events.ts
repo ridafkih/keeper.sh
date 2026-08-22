@@ -1,3 +1,4 @@
+import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { fetcher } from "@/lib/fetcher";
 import { useStartOfToday } from "./use-start-of-today";
@@ -20,6 +21,10 @@ export interface CalendarEvent {
 
 const DAYS_PER_PAGE = 7;
 
+/** Relative, so the key is the same string on the server and in the browser.
+ * Bun defines no `globalThis.location`; SWR swallows a *key function* that
+ * throws (which is how `useEvents` survived server rendering with the old
+ * absolute URL), but a plain string key built eagerly would not be caught. */
 const buildEventsUrl = (from: Date, to: Date): string => {
   const params = new URLSearchParams({
     from: from.toISOString(),
@@ -73,6 +78,34 @@ export function useEvents() {
   };
 
   return { events, error, isLoading, isValidating, hasMore, loadMore };
+}
+
+const NO_EVENTS: CalendarEvent[] = [];
+
+/** The API treats `to` as inclusive (see the read window in services/api).
+ * Callers pass a half-open `[start, end)` so day boundaries compose, and the
+ * hook steps the end back by a millisecond. */
+const INCLUSIVE_END_MS = 1;
+
+interface EventsInRange {
+  events: CalendarEvent[];
+  error: Error | undefined;
+  isLoading: boolean;
+}
+
+/**
+ * The events overlapping `[start, end)`, for a view that can look anywhere in
+ * time (the calendar pane) rather than page forward from today. The previous
+ * range's events stay on screen while a new one loads, so a window shift
+ * never blanks the grid.
+ */
+export function useEventsInRange(start: Date, end: Date): EventsInRange {
+  const url = buildEventsUrl(start, new Date(end.getTime() - INCLUSIVE_END_MS));
+  const { data, error, isLoading } = useSWR<CalendarEvent[], Error>(url, fetchEvents, {
+    keepPreviousData: true,
+  });
+
+  return { events: data ?? NO_EVENTS, error, isLoading };
 }
 
 const deduplicateEvents = (events: CalendarEvent[]): CalendarEvent[] => [
