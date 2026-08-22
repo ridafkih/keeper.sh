@@ -54,7 +54,7 @@ interface EventCardProps {
  * by Tailwind's output order, not by the variant chosen.
  */
 const eventCard = tv({
-  base: "overflow-hidden bg-event-background before:absolute before:w-0.5 before:rounded-full before:bg-event-border",
+  base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-event-border",
   variants: {
     layout: {
       list: "relative flex flex-col gap-0.5 rounded-xl py-2.5 pr-3 pl-4 before:inset-y-2 before:left-1.5",
@@ -68,11 +68,14 @@ const eventCard = tv({
       // card out from any card it overlaps so the stack's edges stay legible.
       grid: "absolute @container-[size]/event-card min-h-5 rounded-lg ring-1 ring-background before:inset-y-1 before:left-1",
     },
-    // Past cards dim their content and accent bar, not the card: opacity on
-    // the card itself would let a card beneath show through in a stack.
+    // Past cards recede on a muted (still opaque) fill with their content and
+    // accent bar dimmed — never opacity on the card itself, which would let a
+    // card beneath show through in a stack. The fill lives on both branches
+    // rather than `base`, as two `bg-*` utilities would be left to Tailwind's
+    // output order.
     past: {
-      true: "line-through before:opacity-60 *:opacity-60",
-      false: "",
+      true: "bg-event-background-muted line-through before:opacity-50 *:opacity-50",
+      false: "bg-event-background",
     },
   },
   defaultVariants: {
@@ -160,11 +163,11 @@ interface EventPillProps {
 }
 
 const eventPill = tv({
-  base: "relative flex shrink-0 items-center overflow-hidden rounded-sm bg-event-background pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-event-border",
+  base: "relative flex shrink-0 items-center overflow-hidden rounded-sm pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-event-border",
   variants: {
     past: {
-      true: "line-through before:opacity-60 *:opacity-60",
-      false: "",
+      true: "bg-event-background-muted line-through before:opacity-50 *:opacity-50",
+      false: "bg-event-background",
     },
   },
 });

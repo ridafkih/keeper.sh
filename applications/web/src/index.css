@@ -116,6 +116,13 @@ html {
   --ui-event: var(--color-blue-900);
   --ui-event-muted: color-mix(in srgb, var(--ui-event), transparent 30%);
   --ui-event-background: var(--color-blue-100);
+  /* The fill of a past event: half of the way from the event fill back to
+     the page, so it recedes yet stays opaque for the calendar's stacks. */
+  --ui-event-background-muted: color-mix(
+    in srgb,
+    var(--ui-event-background) 50%,
+    var(--ui-background)
+  );
   --ui-event-border: var(--color-blue-500);
 }
 
@@ -166,6 +173,7 @@ html {
   --color-event: var(--ui-event);
   --color-event-muted: var(--ui-event-muted);
   --color-event-background: var(--ui-event-background);
+  --color-event-background-muted: var(--ui-event-background-muted);
   --color-event-border: var(--ui-event-border);
 
   --font-sans: "Geist Sans", system-ui, sans-serif;
@@ -287,6 +295,11 @@ html {
     --ui-event-background: color-mix(
       in srgb,
       var(--color-blue-500) 20%,
+      var(--ui-background)
+    );
+    --ui-event-background-muted: color-mix(
+      in srgb,
+      var(--ui-event-background) 50%,
       var(--ui-background)
     );
     --ui-event-border: var(--color-blue-400);
