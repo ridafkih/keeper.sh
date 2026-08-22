@@ -281,10 +281,13 @@ html {
     );
     --ui-event: var(--color-blue-100);
     --ui-event-muted: color-mix(in srgb, var(--ui-event), transparent 30%);
+    /* Mixed against the page colour rather than transparent: event cards
+       overlap in the calendar's week grid, and a translucent fill lets the
+       card beneath show through the one on top. */
     --ui-event-background: color-mix(
       in srgb,
-      var(--color-blue-500),
-      transparent 80%
+      var(--color-blue-500) 20%,
+      var(--ui-background)
     );
     --ui-event-border: var(--color-blue-400);
   }

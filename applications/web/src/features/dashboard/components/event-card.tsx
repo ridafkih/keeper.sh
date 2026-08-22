@@ -64,10 +64,14 @@ const eventCard = tv({
       // duration, but it would collapse a content-sized list card to nothing.
       // The card carries no padding of its own: a size container's queries
       // measure its content box, so padding here would shrink every band.
-      grid: "absolute @container-[size]/event-card min-h-5 rounded-lg before:inset-y-1 before:left-1",
+      // The ring is the page colour: invisible against the grid, it cuts a
+      // card out from any card it overlaps so the stack's edges stay legible.
+      grid: "absolute @container-[size]/event-card min-h-5 rounded-lg ring-1 ring-background before:inset-y-1 before:left-1",
     },
+    // Past cards dim their content and accent bar, not the card: opacity on
+    // the card itself would let a card beneath show through in a stack.
     past: {
-      true: "opacity-60 line-through",
+      true: "line-through before:opacity-60 *:opacity-60",
       false: "",
     },
   },
@@ -159,7 +163,7 @@ const eventPill = tv({
   base: "relative flex shrink-0 items-center overflow-hidden rounded-sm bg-event-background pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-event-border",
   variants: {
     past: {
-      true: "opacity-60 line-through",
+      true: "line-through before:opacity-60 *:opacity-60",
       false: "",
     },
   },
