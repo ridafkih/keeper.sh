@@ -40,6 +40,8 @@ interface KeeperEvent {
   eventStateId: string | null;
   startTime: string;
   endTime: string;
+  /** Whole-day event: `startTime`/`endTime` are the UTC-midnight day bounds. */
+  isAllDay: boolean;
   title: string | null;
   description: string | null;
   location: string | null;
