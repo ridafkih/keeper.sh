@@ -3,10 +3,13 @@ import type { CSSProperties, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
+import { isEventPast } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
+import { EventPill } from "./event-card";
+import { EVENT_PILL_GAP_PX, EVENT_PILL_HEIGHT_PX, resolveVisiblePillCount } from "./event-layout";
 import type { DayEvents } from "./event-layout";
 import {
   addDays,
@@ -21,6 +24,8 @@ import {
 
 const GUTTER_WIDTH = 52;
 const HEADER_HEIGHT = 56;
+const ALL_DAY_MAX_ROWS = 2;
+const ALL_DAY_BAND_PADDING_BOTTOM = 4;
 const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
 const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
 /** Weeks buffered on each side of the entry range, so the strip scrolls without recentering logic. */
@@ -199,8 +204,27 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [],
   );
 
+  // The band's rows follow the visible days, so the header only grows when
+  // a day with all-day events is on screen; the height eases between sizes.
+  const visibleStart = startOfVisibleWeek(anchor);
+  let mostAllDay = 0;
+  for (let index = 0; index < VISIBLE_COLUMNS; index++) {
+    const allDayCount = eventsByDay.get(addDays(visibleStart, index).getTime())?.allDay.length ?? 0;
+    mostAllDay = Math.max(mostAllDay, allDayCount);
+  }
+  const bandRows = Math.min(mostAllDay, ALL_DAY_MAX_ROWS);
+  const bandHeight =
+    bandRows === 0
+      ? 0
+      : bandRows * EVENT_PILL_HEIGHT_PX +
+        (bandRows - 1) * EVENT_PILL_GAP_PX +
+        ALL_DAY_BAND_PADDING_BOTTOM;
+
   const dayRow = (
-    <div className="flex" style={{ height: HEADER_HEIGHT }}>
+    <div
+      className="flex transition-[height] duration-200 motion-reduce:transition-none"
+      style={{ height: HEADER_HEIGHT + bandHeight }}
+    >
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
       <div ref={headerStripRef} className="relative min-w-0 flex-1 overflow-hidden">
         <div
@@ -223,22 +247,44 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         >
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
+            const allDay = eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS;
+            const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
             return (
-              <div
-                key={day.getTime()}
-                className="flex flex-col items-center justify-center gap-1"
-              >
-                <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
-                  {day.toLocaleDateString("en-US", { weekday: "short" })}
-                </Text>
-                <span
-                  className={cn(
-                    "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
-                    isToday ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
-                  )}
+              <div key={day.getTime()} className="flex flex-col overflow-hidden">
+                <div
+                  className="flex shrink-0 flex-col items-center justify-center gap-1"
+                  style={{ height: HEADER_HEIGHT }}
                 >
-                  {day.getDate()}
-                </span>
+                  <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
+                    {day.toLocaleDateString("en-US", { weekday: "short" })}
+                  </Text>
+                  <span
+                    className={cn(
+                      "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
+                      isToday ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
+                    )}
+                  >
+                    {day.getDate()}
+                  </span>
+                </div>
+                {allDay.length > 0 && (
+                  <div className="flex flex-col px-0.5" style={{ gap: EVENT_PILL_GAP_PX }}>
+                    {allDay.slice(0, visibleCount).map((event) => (
+                      <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
+                    ))}
+                    {hiddenCount > 0 && (
+                      <Text
+                        as="span"
+                        size="xs"
+                        tone="muted"
+                        className="flex shrink-0 items-center truncate px-1.5"
+                        style={{ height: EVENT_PILL_HEIGHT_PX }}
+                      >
+                        +{hiddenCount} more
+                      </Text>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}

@@ -284,3 +284,20 @@ export function bucketEventsByDay(
 
   return buckets;
 }
+
+/** Height of a one-line event pill (the all-day band and the month grid), and
+ * the gap between stacked pills, in pixels. */
+export const EVENT_PILL_HEIGHT_PX = 18;
+export const EVENT_PILL_GAP_PX = 2;
+
+/** How many of a day's pills to show in `availableRows`: all of them when
+ * they fit, otherwise one row fewer, with the last row given over to a
+ * "+N more" count so the overflow is never silent. */
+export function resolveVisiblePillCount(
+  eventCount: number,
+  availableRows: number,
+): { visibleCount: number; hiddenCount: number } {
+  const visibleCount =
+    eventCount <= availableRows ? eventCount : Math.max(availableRows - 1, 0);
+  return { visibleCount, hiddenCount: eventCount - visibleCount };
+}

@@ -4,6 +4,7 @@ import { tv } from "tailwind-variants/lite";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
+import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
 
@@ -132,6 +133,37 @@ export const EventCard = memo(function EventCard({
           {event.description}
         </Text>
       )}
+    </div>
+  );
+});
+
+interface EventPillProps {
+  event: CalendarEvent;
+  /** Whether the event has ended; see `EventCardProps.past`. */
+  past: boolean;
+}
+
+const eventPill = tv({
+  base: "relative flex shrink-0 items-center overflow-hidden rounded-sm bg-event-background pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-event-border",
+  variants: {
+    past: {
+      true: "opacity-60 line-through",
+      false: "",
+    },
+  },
+});
+
+/**
+ * A one-line event pill — the card's surface and accent bar at pill height —
+ * for the week view's all-day band and the month grid's day cells.
+ */
+export const EventPill = memo(function EventPill({ event, past }: EventPillProps) {
+  return (
+    <div className={eventPill({ past })} style={{ height: EVENT_PILL_HEIGHT_PX }}>
+      {/* `min-w-0` lets the flex item shrink below its text so `truncate` bites. */}
+      <Text as="span" size="xs" tone="event" className="min-w-0 truncate font-medium">
+        {event.title ?? event.calendarName}
+      </Text>
     </div>
   );
 });

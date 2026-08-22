@@ -4,6 +4,7 @@ import {
   bucketEventsByDay,
   layoutDayEvents,
   MIN_EVENT_SPAN_MS,
+  resolveVisiblePillCount,
   stackIndentPx,
   tileBox,
 } from "../../../../src/features/dashboard/components/event-layout";
@@ -334,5 +335,21 @@ describe("bucketEventsByDay", () => {
     );
 
     expect(daysHolding(buckets, "fortnight", "allDay")).toEqual([4, 5, 6, 7, 8, 9, 10]);
+  });
+});
+
+describe("resolveVisiblePillCount", () => {
+  it("shows every pill when they fit", () => {
+    expect(resolveVisiblePillCount(2, 2)).toEqual({ visibleCount: 2, hiddenCount: 0 });
+    expect(resolveVisiblePillCount(0, 2)).toEqual({ visibleCount: 0, hiddenCount: 0 });
+  });
+
+  it("gives the last row to the overflow count when they do not", () => {
+    expect(resolveVisiblePillCount(3, 2)).toEqual({ visibleCount: 1, hiddenCount: 2 });
+    expect(resolveVisiblePillCount(5, 1)).toEqual({ visibleCount: 0, hiddenCount: 5 });
+  });
+
+  it("hides everything when there is no row at all", () => {
+    expect(resolveVisiblePillCount(3, 0)).toEqual({ visibleCount: 0, hiddenCount: 3 });
   });
 });
