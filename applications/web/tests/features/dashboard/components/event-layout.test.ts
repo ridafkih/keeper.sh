@@ -4,6 +4,7 @@ import {
   bucketEventsByDay,
   layoutDayEvents,
   MIN_EVENT_SPAN_MS,
+  resolvePillRows,
   resolveVisiblePillCount,
   stackIndentPx,
   tileBox,
@@ -327,6 +328,23 @@ describe("bucketEventsByDay", () => {
     expect(daysHolding(buckets, "holiday", "timed")).toEqual([]);
   });
 
+  it("returns each day's lists in start order", () => {
+    const buckets = bucketEventsByDay(
+      [
+        timedEvent("noon", at(12), at(13)),
+        timedEvent("morning", at(9), at(10)),
+        allDayEvent("later", "2026-01-05T00:00:00.000Z", "2026-01-07T00:00:00.000Z"),
+        allDayEvent("sooner", "2026-01-04T00:00:00.000Z", "2026-01-06T00:00:00.000Z"),
+      ],
+      rangeStart,
+      rangeEnd,
+    );
+    const monday = buckets.get(day.getTime());
+
+    expect(monday?.timed.map((event) => event.id)).toEqual(["morning", "noon"]);
+    expect(monday?.allDay.map((event) => event.id)).toEqual(["sooner", "later"]);
+  });
+
   it("clamps an all-day span to the window", () => {
     const buckets = bucketEventsByDay(
       [allDayEvent("fortnight", "2026-01-01T00:00:00.000Z", "2026-01-15T00:00:00.000Z")],
@@ -351,5 +369,16 @@ describe("resolveVisiblePillCount", () => {
 
   it("hides everything when there is no row at all", () => {
     expect(resolveVisiblePillCount(3, 0)).toEqual({ visibleCount: 0, hiddenCount: 3 });
+  });
+});
+
+describe("resolvePillRows", () => {
+  it("counts whole rows, each after the first paying for its gap", () => {
+    expect(resolvePillRows(0)).toBe(0);
+    expect(resolvePillRows(17)).toBe(0);
+    expect(resolvePillRows(18)).toBe(1);
+    expect(resolvePillRows(37)).toBe(1);
+    expect(resolvePillRows(38)).toBe(2);
+    expect(resolvePillRows(100)).toBe(5);
   });
 });

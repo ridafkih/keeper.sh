@@ -91,6 +91,12 @@ export function getWeekFetchRange(anchor: Date): { start: Date; end: Date } {
   return { start, end: addDays(start, FETCH_WEEKS * 7) };
 }
 
+/** Half-open `[start, end)` covering exactly the 6×7 grid's days. */
+export function getMonthFetchRange(anchor: Date): { start: Date; end: Date } {
+  const days = getMonthGridDays(anchor);
+  return { start: days[0], end: addDays(days[days.length - 1], 1) };
+}
+
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 export const HOUR_HEIGHT = 48;

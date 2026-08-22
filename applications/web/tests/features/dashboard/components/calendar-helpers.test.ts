@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   addDays,
+  getMonthFetchRange,
+  getMonthGridDays,
   getWeekFetchRange,
   startOfVisibleWeek,
   WEEK_STARTS_ON,
@@ -38,5 +40,17 @@ describe("getWeekFetchRange", () => {
     }
 
     expect(uncovered).toEqual([]);
+  });
+});
+
+describe("getMonthFetchRange", () => {
+  it("spans exactly the month grid's 42 days", () => {
+    const anchor = new Date(2026, 7, 22);
+    const days = getMonthGridDays(anchor);
+    const { start, end } = getMonthFetchRange(anchor);
+
+    expect(start.getTime()).toBe(days[0].getTime());
+    expect(end.getTime()).toBe(addDays(days[41], 1).getTime());
+    expect(Math.round((end.getTime() - start.getTime()) / MS_PER_DAY)).toBe(42);
   });
 });

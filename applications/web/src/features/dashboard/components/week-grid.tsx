@@ -8,7 +8,7 @@ import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
-import { EventPill } from "./event-card";
+import { EventPill, EventPillOverflow } from "./event-card";
 import { EVENT_PILL_GAP_PX, EVENT_PILL_HEIGHT_PX, resolveVisiblePillCount } from "./event-layout";
 import type { DayEvents } from "./event-layout";
 import {
@@ -272,17 +272,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
                     {allDay.slice(0, visibleCount).map((event) => (
                       <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
                     ))}
-                    {hiddenCount > 0 && (
-                      <Text
-                        as="span"
-                        size="xs"
-                        tone="muted"
-                        className="flex shrink-0 items-center truncate px-1.5"
-                        style={{ height: EVENT_PILL_HEIGHT_PX }}
-                      >
-                        +{hiddenCount} more
-                      </Text>
-                    )}
+                    {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
                   </div>
                 )}
               </div>

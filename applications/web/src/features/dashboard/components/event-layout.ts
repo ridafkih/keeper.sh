@@ -240,6 +240,9 @@ const getDayEvents = (buckets: Map<number, DayEvents>, dayKey: number): DayEvent
  * days are read in UTC and mapped onto local days by index — comparing them
  * with a local midnight would shift them by the zone offset and spill a
  * single-day event into a neighbour.
+ *
+ * Each day's lists come back in start order, so a consumer can show them as
+ * they fall without sorting again.
  */
 export function bucketEventsByDay(
   events: CalendarEvent[],
@@ -282,8 +285,15 @@ export function bucketEventsByDay(
     }
   }
 
+  for (const bucket of buckets.values()) {
+    bucket.timed.sort(byStartTime);
+    bucket.allDay.sort(byStartTime);
+  }
   return buckets;
 }
+
+const byStartTime = (first: CalendarEvent, second: CalendarEvent): number =>
+  first.startTime.getTime() - second.startTime.getTime();
 
 /** Height of a one-line event pill (the all-day band and the month grid), and
  * the gap between stacked pills, in pixels. */
@@ -300,4 +310,11 @@ export function resolveVisiblePillCount(
   const visibleCount =
     eventCount <= availableRows ? eventCount : Math.max(availableRows - 1, 0);
   return { visibleCount, hiddenCount: eventCount - visibleCount };
+}
+
+/** How many pill rows fit in `availableHeight` pixels of a month cell, each
+ * row after the first paying for its gap. */
+export function resolvePillRows(availableHeight: number): number {
+  const rowPitch = EVENT_PILL_HEIGHT_PX + EVENT_PILL_GAP_PX;
+  return Math.max(Math.floor((availableHeight + EVENT_PILL_GAP_PX) / rowPitch), 0);
 }

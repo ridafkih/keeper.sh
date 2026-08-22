@@ -167,3 +167,23 @@ export const EventPill = memo(function EventPill({ event, past }: EventPillProps
     </div>
   );
 });
+
+interface EventPillOverflowProps {
+  /** How many of the day's events are folded away. */
+  count: number;
+}
+
+/** The "+N more" row that stands in for the pills a day has no room for. */
+export function EventPillOverflow({ count }: EventPillOverflowProps) {
+  return (
+    <Text
+      as="span"
+      size="xs"
+      tone="muted"
+      className="flex shrink-0 items-center truncate px-1.5"
+      style={{ height: EVENT_PILL_HEIGHT_PX }}
+    >
+      +{count} more
+    </Text>
+  );
+}
