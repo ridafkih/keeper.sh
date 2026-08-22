@@ -72,6 +72,8 @@ export interface CalendarDetail {
 export interface ApiEvent {
   id: string;
   eventStateId: string | null;
+  title: string | null;
+  description: string | null;
   startTime: string;
   endTime: string;
   calendarId: string;
