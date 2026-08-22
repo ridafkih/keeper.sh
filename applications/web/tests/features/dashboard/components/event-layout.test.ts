@@ -8,6 +8,7 @@ import {
   resolveVisiblePillCount,
   stackIndentPx,
   tileBox,
+  timeOfDayFraction,
 } from "../../../../src/features/dashboard/components/event-layout";
 import type {
   DayEvents,
@@ -380,5 +381,17 @@ describe("resolvePillRows", () => {
     expect(resolvePillRows(37)).toBe(1);
     expect(resolvePillRows(38)).toBe(2);
     expect(resolvePillRows(100)).toBe(5);
+  });
+});
+
+describe("timeOfDayFraction", () => {
+  it("reads the wall clock", () => {
+    expect(timeOfDayFraction(at(0))).toBe(0);
+    expect(timeOfDayFraction(at(12))).toBe(0.5);
+    expect(timeOfDayFraction(at(18, 30))).toBeCloseTo(18.5 / 24);
+  });
+
+  it("keeps noon halfway down a daylight-saving day", () => {
+    expect(timeOfDayFraction(new Date(2026, 2, 8, 12))).toBe(0.5);
   });
 });

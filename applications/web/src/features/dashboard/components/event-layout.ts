@@ -71,16 +71,21 @@ export function tileBox(
   return { left: columnIndex / columnCount, width: columnSpan / columnCount };
 }
 
-/** Position of an instant within its day as a fraction of the day's 24 rows,
- * read from the local wall clock rather than elapsed milliseconds: a DST day
- * has 23 or 25 hours, and dividing elapsed time by 86 400 000 would slide
- * every afternoon event a row off its hour. An instant at or past the day's
- * end maps to 1. */
-function wallClockFraction(ms: number, dayEndMs: number): number {
-  if (ms >= dayEndMs) return 1;
-  const date = new Date(ms);
+/** Where an instant falls in its day, as a 0–1 fraction of the day's 24
+ * rows, read from the local wall clock rather than elapsed milliseconds: a
+ * DST day has 23 or 25 hours, and dividing elapsed time by 86 400 000 would
+ * slide every afternoon instant a row off its hour. Shared by the event
+ * cards and the current-time line, so both agree on where an hour sits. */
+export function timeOfDayFraction(date: Date): number {
   const minutes = date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
   return minutes / MINUTES_PER_DAY;
+}
+
+/** `timeOfDayFraction` for a laid-out instant, with one at or past the
+ * day's end mapping to 1. */
+function wallClockFraction(ms: number, dayEndMs: number): number {
+  if (ms >= dayEndMs) return 1;
+  return timeOfDayFraction(new Date(ms));
 }
 
 interface LayoutItem {
