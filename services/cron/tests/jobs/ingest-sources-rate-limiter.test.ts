@@ -1,8 +1,12 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+interface RateLimiterPermit {
+  release(): Promise<void>;
+}
+
 interface FakeLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
-  dispose?(): Promise<void>;
+  acquirePermit?(signal?: AbortSignal): Promise<RateLimiterPermit>;
 }
 
 interface RateLimiterSourceContext {
@@ -156,23 +160,23 @@ describe("resolveRateLimiter", () => {
   });
 
   /*
-   * The lease's 150s TTL outlives a source's own 120s ingest deadline, so a
-   * lease left to expire would strand an account's next calendar in the pass.
+   * The permit is request-scoped, so the lease a request took is handed back when that
+   * request settles rather than being held for the whole run.
    */
-  it("releases the outlook lease on dispose", async () => {
+  it("releases the outlook lease when the request that took it completes", async () => {
     const limiter = resolveRateLimiter("outlook", sourceContext);
 
-    await limiter?.acquire(1);
-    await limiter?.dispose?.();
+    const permit = await limiter?.acquirePermit?.();
+    await permit?.release();
 
     expect(factorySpies.outlookRelease).toHaveBeenCalledTimes(1);
     expect(factorySpies.outlookRelease.mock.calls[0]?.[0]).toEqual({ key: "lease", token: "token" });
   });
 
-  it("dispose without a prior acquire releases nothing", async () => {
+  it("an unreleased permit leaves the lease to its ttl", async () => {
     const limiter = resolveRateLimiter("outlook", sourceContext);
 
-    await limiter?.dispose?.();
+    await limiter?.acquire(1);
 
     expect(factorySpies.outlookRelease).not.toHaveBeenCalled();
   });

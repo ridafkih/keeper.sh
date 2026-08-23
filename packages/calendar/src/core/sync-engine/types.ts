@@ -22,6 +22,7 @@ interface CalendarSyncProvider {
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
+  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
 }
 
 interface PendingInsert {

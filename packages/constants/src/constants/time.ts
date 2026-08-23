@@ -24,7 +24,13 @@ const SYNC_TTL_SECONDS = SECONDS_PER_DAY;
 
 const PROVIDER_PUSH_REQUEST_TIMEOUT_MS = 30_000;
 const PROVIDER_INGEST_REQUEST_TIMEOUT_MS = 90_000;
-const INGEST_SOURCE_TIMEOUT_MS = 120_000;
+/*
+ * A one-off full source resync must expand every recurring series master through its own
+ * /instances request; a calendar with many series can legitimately take a few minutes even with
+ * the concurrent expansion. This ceiling is a safety net for that rare full resync - steady-state
+ * incremental delta syncs finish in seconds.
+ */
+const INGEST_SOURCE_TIMEOUT_MS = 450_000;
 
 const KEEPER_EVENT_SUFFIX = "@keeper.sh";
 const KEEPER_USER_EVENT_SUFFIX = "@user.keeper.sh";

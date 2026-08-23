@@ -324,6 +324,50 @@ describe("fetchCalendarEvents", () => {
     expect(requestedUrls[2]).toBe(instancesNextLink);
   });
 
+  it("expands multiple series masters concurrently and returns every instance", async () => {
+    // A URL-routing mock so the assertions do not depend on the (now concurrent) request order.
+    const requestedUrls: string[] = [];
+    const routingFetch = (input: Request | URL | string): Promise<Response> => {
+      const url = String(input);
+      requestedUrls.push(url);
+      if (url.includes("/events/master-1/instances")) {
+        return Promise.resolve(createJsonResponse({
+          value: [createOutlookEvent({ id: "occ-1a" }), createOutlookEvent({ id: "occ-1b" })],
+        }));
+      }
+      if (url.includes("/events/master-2/instances")) {
+        return Promise.resolve(createJsonResponse({ value: [createOutlookEvent({ id: "occ-2a" })] }));
+      }
+      return Promise.resolve(createJsonResponse({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [
+          createOutlookEvent({ id: "master-1", type: "seriesMaster" }),
+          createOutlookEvent({ id: "master-2", type: "seriesMaster" }),
+          createOutlookEvent({ id: "single-1" }),
+        ],
+      }));
+    };
+    routingFetch.preconnect = originalFetch.preconnect;
+    globalThis.fetch = routingFetch as typeof fetch;
+
+    const result = await fetchCalendarEvents({
+      accessToken: "token",
+      calendarId: "calendar-id",
+      timeMax: new Date("2026-07-31T00:00:00.000Z"),
+      timeMin: new Date("2026-07-01T00:00:00.000Z"),
+    });
+
+    // Both masters replaced by their instances, the standalone event kept, nothing lost.
+    expect(result.events.map((event) => event.id).toSorted()).toEqual([
+      "occ-1a",
+      "occ-1b",
+      "occ-2a",
+      "single-1",
+    ]);
+    expect(requestedUrls.some((url) => url.includes("/events/master-1/instances"))).toBe(true);
+    expect(requestedUrls.some((url) => url.includes("/events/master-2/instances"))).toBe(true);
+  });
+
   it("forces an authoritative full sync when a delta page contains a series master", async () => {
     globalThis.fetch = createFetchQueue([createJsonResponse({
       "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",

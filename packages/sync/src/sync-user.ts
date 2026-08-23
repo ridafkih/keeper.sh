@@ -12,6 +12,7 @@ import {
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
+  overlapsTimeWindow,
 } from "@keeper.sh/calendar";
 import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
@@ -444,9 +445,18 @@ const createDestinationAttemptWideEventFields = (
  */
 const TARGETED_DESTINATION_READ_LIMIT = 25;
 
+const DESTINATION_VERIFICATION_LIMIT = 200;
+
 interface TargetedDestinationReadProvider {
   getRemoteEventsByIds?: (ids: string[]) => Promise<RemoteEvent[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
+  /**
+   * Direct by-id existence check, independent of any time window. The windowed
+   * listRemoteEvents pass below can miss an already-mapped event it should still find (e.g. a
+   * recurring series whose own start/dateTime is its first, possibly long-past, occurrence) -
+   * that must not read as "gone", or the mapping is deleted and re-created every cycle.
+   */
+  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
 }
 
 interface DestinationRemoteReadContext {
@@ -491,6 +501,37 @@ const planTargetedDestinationRead = (
   return { deleteIdentifiers: [...deleteIdentifiers], mappingIds };
 };
 
+/*
+ * The windowed listing above is a best-effort, bounded discovery pass (used to find orphaned
+ * keeper events not covered by any mapping) - it is not the source of truth for whether an
+ * *already-mapped* event still exists. A mapping whose destination uid didn't turn up in that
+ * pass gets one more, authoritative check before it is treated as gone: a direct by-id lookup,
+ * for providers that expose one.
+ */
+const withVerifiedUnconfirmedMappings = async (
+  provider: TargetedDestinationReadProvider,
+  existingMappings: EventMapping[],
+  remoteEvents: RemoteEvent[],
+  requestedWindow: SyncWindow,
+): Promise<RemoteEvent[]> => {
+  if (!provider.verifyEventsExist) {
+    return remoteEvents;
+  }
+  const remoteUids = new Set(remoteEvents.map((event) => event.uid));
+  const unconfirmedDeleteIds = existingMappings
+    .filter((mapping) =>
+      !remoteUids.has(mapping.destinationEventUid)
+      && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
+    .map((mapping) => mapping.deleteIdentifier)
+    .toSorted((first, second) => first.localeCompare(second))
+    .slice(0, DESTINATION_VERIFICATION_LIMIT);
+  if (unconfirmedDeleteIds.length === 0) {
+    return remoteEvents;
+  }
+  const verifiedEvents = await provider.verifyEventsExist(unconfirmedDeleteIds);
+  return [...remoteEvents, ...verifiedEvents];
+};
+
 const readDestinationRemoteEvents = async (
   context: DestinationRemoteReadContext,
 ): Promise<DestinationRemoteRead> => {
@@ -501,12 +542,18 @@ const readDestinationRemoteEvents = async (
    * single page, keeps the windowed listing and its full authority.
    */
   if (!lookUpByIds || plan.deleteIdentifiers.length > TARGETED_DESTINATION_READ_LIMIT) {
+    const remoteEvents = await context.provider.listRemoteEvents({
+      timeMax: context.requestedWindow.timeMax,
+      timeMin: context.requestedWindow.timeMin,
+    });
     return {
       authoritativeMappingIds: null,
-      remoteEvents: await context.provider.listRemoteEvents({
-        timeMax: context.requestedWindow.timeMax,
-        timeMin: context.requestedWindow.timeMin,
-      }),
+      remoteEvents: await withVerifiedUnconfirmedMappings(
+        context.provider,
+        context.existingMappings,
+        remoteEvents,
+        context.requestedWindow,
+      ),
     };
   }
   return {

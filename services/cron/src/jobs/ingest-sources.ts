@@ -11,6 +11,7 @@ import {
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
+  createOutlookRequestLimiter,
   isCalDAVProvider,
   isHostedCalDAVProvider,
   getCalDAVAccountRequestsPerMinute,
@@ -33,9 +34,8 @@ import {
   PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
-import type { SemaphoreLease } from "@keeper.sh/calendar";
 import type { IngestionResult } from "@keeper.sh/calendar";
-import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, OutlookAccountSemaphore, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
+import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -665,57 +665,15 @@ const resolveTargetHost = (target: string | null): string | null => {
 };
 
 /*
- * Per-run concurrency, not per-request pacing: one ingest holds exactly one lease, and
- * pagination reuses it. The TTL outlives the ingest timeout so a crashed holder still frees.
+ * Per-request pacing, not per-run: a permit is taken before each Graph request and given back
+ * when it settles, so the account's capacity bounds requests in flight against the mailbox
+ * across every replica, every calendar and every concurrent series-master expansion. Nothing a
+ * run holds outlives its request, so the lease TTL is request-scale and no run parks a slot.
  */
-/*
- * Released eagerly rather than at the 150s TTL: an account's fourth calendar in a pass
- * would otherwise wait past its own 120s deadline for a slot nobody is going to free.
- */
-interface IngestRateLimiter extends RedisRateLimiter {
-  dispose?: () => Promise<void>;
-}
-
-const releaseOnceAcquired = async (
-  semaphore: OutlookAccountSemaphore,
-  lease: Promise<SemaphoreLease>,
-): Promise<void> => {
-  const acquired = await lease.then(
-    (held: SemaphoreLease) => held,
-    () => null,
-  );
-  if (acquired) {
-    await semaphore.release(acquired);
-  }
-};
-
-const createSemaphoreRateLimiterAdapter = (
-  semaphore: OutlookAccountSemaphore,
-): IngestRateLimiter => {
-  let lease: Promise<SemaphoreLease> | null = null;
-  return {
-    acquire: async (_count: number, signal?: AbortSignal): Promise<void> => {
-      if (!lease) {
-        lease = measureSegment("wait.rate_limiter_ms", () => semaphore.acquireLease(signal));
-      }
-      await lease;
-    },
-    /* A deadline can fire mid-acquire, so the lease is awaited here or its slot waits out the TTL. */
-    dispose: async (): Promise<void> => {
-      if (!lease) {
-        return;
-      }
-      const pending = lease;
-      lease = null;
-      await releaseOnceAcquired(semaphore, pending);
-    },
-  };
-};
-
 const resolveRateLimiter = (
   provider: string,
   source: RateLimiterSourceContext,
-): IngestRateLimiter | undefined => {
+): RedisRateLimiter | undefined => {
   if (provider === "google") {
     return createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest");
   }
@@ -724,8 +682,9 @@ const resolveRateLimiter = (
     if (!source.accountId) {
       return;
     }
-    return createSemaphoreRateLimiterAdapter(
+    return createOutlookRequestLimiter(
       createOutlookAccountSemaphore(leaseLockRedis, source.accountId),
+      source.accountId,
     );
   }
 
@@ -1500,12 +1459,6 @@ const ingestOAuthSources = async (
                   };
                 } finally {
                   reservation.release();
-                  await rateLimiter?.dispose?.().catch((error: unknown) => {
-                    widelog.errorFields(error, {
-                      slug: "rate-limiter-dispose-failed",
-                      retriable: true,
-                    });
-                  });
                 }
               }, shouldApplyOAuthIngestBackoff),
             );
