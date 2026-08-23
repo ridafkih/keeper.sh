@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CalendarAccount, CalendarDetail } from "../../../src/types/api";
+import "../../../src/routes/(dashboard)/dashboard/accounts/$accountId.$calendarId";
 
 const ACCOUNT_ID = "account-1";
 const CALENDAR_ID = "calendar-1";
@@ -80,6 +81,7 @@ const makeCalendar = (capabilities: string[]): CalendarDetail => ({
   id: CALENDAR_ID,
   ingestFailureCount: 0,
   ingestLastFailureAt: null,
+  markEventsAsPrivate: false,
   name: "Team Calendar",
   originalName: "Team Calendar",
   provider: "outlook",
@@ -95,13 +97,11 @@ const makeCalendar = (capabilities: string[]): CalendarDetail => ({
   url: null,
 });
 
-const renderPage = async (capabilities: string[]): Promise<string> => {
+const renderPage = (capabilities: string[]): string => {
   swrData.clear();
   swrData.set(`/api/accounts/${ACCOUNT_ID}`, account);
   swrData.set(`/api/sources/${CALENDAR_ID}`, makeCalendar(capabilities));
   swrData.set("/api/sources", []);
-
-  await import("../../../src/routes/(dashboard)/dashboard/accounts/$accountId.$calendarId");
 
   const Page = captured.component;
   if (!Page) throw new Error("Calendar detail route did not register a component");
@@ -109,14 +109,14 @@ const renderPage = async (capabilities: string[]): Promise<string> => {
 };
 
 describe("calendar detail page delete affordance", () => {
-  it("offers removal for a calendar keeper only pulls from", async () => {
-    const markup = await renderPage(["pull"]);
+  it("offers removal for a calendar keeper only pulls from", () => {
+    const markup = renderPage(["pull"]);
 
     expect(markup).toContain("Delete Calendar");
   });
 
-  it("hides removal for a calendar keeper pushes events to", async () => {
-    const markup = await renderPage(["pull", "push"]);
+  it("hides removal for a calendar keeper pushes events to", () => {
+    const markup = renderPage(["pull", "push"]);
 
     expect(markup.includes("Delete Calendar")).toBe(false);
     expect(markup.includes("Remove Calendar")).toBe(false);

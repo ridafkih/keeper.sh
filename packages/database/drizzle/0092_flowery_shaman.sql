@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN IF NOT EXISTS "markEventsAsPrivate" boolean DEFAULT false NOT NULL;
