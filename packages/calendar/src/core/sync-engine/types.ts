@@ -22,13 +22,6 @@ interface CalendarSyncProvider {
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
-  /**
-   * Direct by-id existence check for destination events that a bulk listRemoteEvents pass
-   * didn't surface. Optional: only providers whose listing endpoint can miss events it should
-   * find (e.g. a bounded window that could disagree with the destination API's own expansion of
-   * a recurring series) need this as a fallback before treating a mapping as genuinely gone.
-   * Returns only the events that were confirmed to still exist.
-   */
   verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
 }
 

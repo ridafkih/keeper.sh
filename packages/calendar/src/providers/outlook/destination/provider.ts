@@ -326,14 +326,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return baseUrl;
   };
 
-  /**
-   * Best-effort discovery of keeper-tagged events not tracked by any mapping, so they can be
-   * cleaned up as orphans. This is intentionally bounded to a time window: a recurring series'
-   * own start/dateTime is its first (possibly long-past) occurrence, so a series that started
-   * before the window can be missed here. That's an acceptable gap for orphan discovery (a
-   * stray duplicate lingers a bit longer) - it must NOT be relied on to confirm whether an
-   * *existing* mapping's event still exists, which is what verifyEventsExist is for.
-   */
   const listRemoteEvents = async (
     options: ListRemoteEventsOptions,
   ): Promise<RemoteEvent[]> => {
@@ -411,13 +403,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
 
-  /**
-   * Authoritative existence check for events we already track a mapping for for: a direct
-   * GET by the destination's own event id, independent of any time window, category
-   * inheritance on recurring instances, or pagination. This is what determines whether an
-   * already-pushed event should be treated as still existing - listRemoteEvents' bounded
-   * window is not reliable enough for that call for a long-running recurring series.
-   */
   const verifyEventsExist = async (deleteIds: string[]): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
     const verified: RemoteEvent[] = [];
