@@ -349,7 +349,7 @@ const processJob = (
           widelog.set("provider.account_id", failure.accountId);
           widelog.set("provider.calendar_id", failure.calendarId);
           widelog.set("duration_ms", failure.durationMs);
-          widelog.set("retry.backoff_applied", true);
+          widelog.set("retry.backoff_applied", failure.backoffApplied);
           widelog.set("outcome", "error");
           applyDatabaseErrorFields(failure.error);
           widelog.errorFields(failure.error, { slug: classifySyncError(failure.error) });

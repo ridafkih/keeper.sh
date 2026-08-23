@@ -136,6 +136,7 @@ const calendarsTable = pgTable(
     ingestWindowEnd: timestamp({ withTimezone: true }),
     ingestWindowRecordedAt: timestamp({ withTimezone: true }),
     ingestWindowStart: timestamp({ withTimezone: true }),
+    providerMissingSince: timestamp({ withTimezone: true }),
     externalCalendarId: text(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     capabilities: text().array().notNull().default(["pull"]),
@@ -173,6 +174,32 @@ const calendarsTable = pgTable(
       "calendars_ingest_coverage_check",
       sql`"ingestHistoricRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND "ingestFutureRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND (("ingestWindowStart" IS NULL AND "ingestWindowEnd" IS NULL AND "ingestWindowRecordedAt" IS NULL) OR ("ingestWindowStart" IS NOT NULL AND "ingestWindowEnd" IS NOT NULL AND "ingestWindowRecordedAt" IS NOT NULL AND "ingestWindowStart" < "ingestWindowEnd"))`,
     ),
+  ],
+);
+
+const calendarRemovalsTable = pgTable(
+  "calendar_removals",
+  {
+    accountId: uuid()
+      .notNull()
+      .references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
+    calendarType: text().notNull(),
+    calendarUrl: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    externalCalendarId: text(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("calendar_removals_account_idx").on(table.accountId),
+    uniqueIndex("calendar_removals_external_idx")
+      .on(table.accountId, table.externalCalendarId)
+      .where(isNotNull(table.externalCalendarId)),
+    uniqueIndex("calendar_removals_url_idx")
+      .on(table.accountId, table.calendarUrl)
+      .where(isNotNull(table.calendarUrl)),
   ],
 );
 
@@ -516,6 +543,7 @@ export {
   caldavCredentialsTable,
   calendarAccountsTable,
   calendarPushChannelsTable,
+  calendarRemovalsTable,
   calendarSnapshotsTable,
   calendarsTable,
   eventMappingsTable,

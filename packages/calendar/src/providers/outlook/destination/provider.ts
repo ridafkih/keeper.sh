@@ -403,6 +403,47 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
 
+  const verifyEventsExist = async (deleteIds: string[]): Promise<RemoteEvent[]> => {
+    await refreshIfNeeded();
+    const verified: RemoteEvent[] = [];
+
+    for (const deleteId of deleteIds) {
+      config.signal?.throwIfAborted();
+
+      const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${deleteId}`);
+      url.searchParams.set(
+        "$select",
+        "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+      );
+
+      const response = await sendRequestWithRetry(url, {
+        headers: {
+          Authorization: `Bearer ${tokenState.accessToken}`,
+          Prefer: `outlook.body-content-type="text"`,
+        },
+        method: "GET",
+      });
+
+      if (response.status === HTTP_STATUS.NOT_FOUND) {
+        await response.body?.cancel?.();
+        continue;
+      }
+
+      if (!response.ok) {
+        throw new Error(await readGraphErrorMessage(response));
+      }
+
+      const body = await response.json();
+      const remoteEvent = toOutlookRemoteEvent(outlookEventSchema.assert(body));
+
+      if (remoteEvent) {
+        verified.push(remoteEvent);
+      }
+    }
+
+    return verified;
+  };
+
   return {
     deleteEvents,
     getRemoteEventsByIds,
@@ -410,6 +451,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     listRemoteEvents,
     normalizeEvent: normalizeOutlookEvent,
     pushEvents,
+    verifyEventsExist,
   };
 };
 

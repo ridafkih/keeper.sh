@@ -15,8 +15,8 @@ const GET = withWideEvent(
     return listOAuthCalendars(request, userId, {
       isCalendarListError: (error): error is CalendarListError =>
         error instanceof CalendarListError,
-      listCalendars: async (accessToken) => {
-        const calendars = await listUserCalendars(accessToken);
+      listCalendars: async (accessToken, ownerEmail) => {
+        const calendars = await listUserCalendars(accessToken, { ownerEmail });
         return calendars.map(({ id, name, isDefaultCalendar }) => ({
           id,
           primary: Boolean(isDefaultCalendar),

@@ -39,6 +39,42 @@ class EventsFetchError extends Error {
 const REQUEST_TIMEOUT_MS = 30_000;
 const DEFAULT_PAGE_SIZE = 50;
 const SERIES_MASTER_TYPE = "seriesMaster";
+/*
+ * Each series master is expanded through its own paginated /instances request. Running them a few
+ * at a time turns a full resync of a calendar with many recurring series from minutes into seconds
+ * without changing the data fetched. The limit is kept well below Microsoft Graph's per-mailbox
+ * concurrency ceiling so the parallelism does not trigger throttling.
+ */
+const SERIES_MASTER_EXPANSION_CONCURRENCY = 3;
+
+const mapWithConcurrency = async <Item, Result>(
+  items: Item[],
+  limit: number,
+  worker: (item: Item) => Promise<Result>,
+): Promise<Result[]> => {
+  const results: Result[] = [];
+  const queue = items.map((item, index) => ({ index, item }));
+  let cursor = 0;
+  let failed = false;
+  const runWorker = async (): Promise<void> => {
+    while (!failed && cursor < queue.length) {
+      const entry = queue[cursor];
+      cursor += 1;
+      if (!entry) {
+        continue;
+      }
+      try {
+        results[entry.index] = await worker(entry.item);
+      } catch (error) {
+        failed = true;
+        throw error;
+      }
+    }
+  };
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+  return results;
+};
 const INSTANCES_SELECT = [
   "id",
   "iCalUId",
@@ -171,16 +207,11 @@ const getRequestUrl = (options: PageFetchOptions): URL => {
   throw new Error("Either deltaLink/nextLink or timeMin/timeMax is required");
 };
 
-const fetchEventsPage = async (
+const requestEventsPage = async (
   options: PageFetchOptions,
+  url: URL,
 ): Promise<PageFetchResult | FullSyncRequiredResult> => {
   const { accessToken } = options;
-  const url = getRequestUrl(options);
-
-  if (options.rateLimiter) {
-    await options.rateLimiter.acquire(1, options.signal);
-  }
-
   const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, options.signal);
 
   const response = await measureProviderRequest(() => fetch(url.toString(), {
@@ -223,6 +254,27 @@ const fetchEventsPage = async (
     data: outlookEventListSchema.assert(responseBody),
     fullSyncRequired: false,
   }));
+};
+
+const fetchEventsPage = async (
+  options: PageFetchOptions,
+): Promise<PageFetchResult | FullSyncRequiredResult> => {
+  const url = getRequestUrl(options);
+
+  const { rateLimiter } = options;
+  if (!rateLimiter) {
+    return await requestEventsPage(options, url);
+  }
+
+  const permit = await rateLimiter.acquirePermit?.(options.signal);
+  if (!permit) {
+    await rateLimiter.acquire(1, options.signal);
+  }
+  try {
+    return await requestEventsPage(options, url);
+  } finally {
+    await permit?.release();
+  }
 };
 
 const fetchSeriesMasterInstances = async (
@@ -279,29 +331,31 @@ const expandSeriesMasters = async (
   signal?: AbortSignal,
   rateLimiter?: RedisRateLimiter,
 ): Promise<ExpandedSeriesMasters> => {
-  const expanded: OutlookCalendarEvent[] = [];
-  let unexpandedSeriesMasterCount = 0;
+  const passthrough: OutlookCalendarEvent[] = [];
+  const masterIds: string[] = [];
   for (const event of events) {
-    if (event.type !== SERIES_MASTER_TYPE || !event.id) {
-      expanded.push(event);
-      continue;
+    if (event.type === SERIES_MASTER_TYPE && event.id) {
+      masterIds.push(event.id);
+    } else {
+      passthrough.push(event);
     }
-    const instances = await fetchSeriesMasterInstances(
+  }
+  const instanceGroups = await mapWithConcurrency(
+    masterIds,
+    SERIES_MASTER_EXPANSION_CONCURRENCY,
+    (masterId) => fetchSeriesMasterInstances(
       accessToken,
       calendarId,
-      event.id,
+      masterId,
       timeMin,
       timeMax,
       signal,
       rateLimiter,
-    );
-    if (instances.length === 0) {
-      unexpandedSeriesMasterCount += 1;
-      continue;
-    }
-    expanded.push(...instances);
-  }
-  return { events: expanded, unexpandedSeriesMasterCount };
+    ),
+  );
+  const unexpandedSeriesMasterCount = instanceGroups.filter((instances) => instances.length === 0).length;
+  const expanded = instanceGroups.flat();
+  return { events: [...passthrough, ...expanded], unexpandedSeriesMasterCount };
 };
 
 const deduplicateOutlookEvents = (events: OutlookCalendarEvent[]): OutlookCalendarEvent[] => {

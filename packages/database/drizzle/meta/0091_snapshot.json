@@ -1,5 +1,5 @@
 {
-  "id": "6952df66-b3b0-4108-b354-7b750af7b7eb",
+  "id": "bbb7679c-0c44-4b93-82e7-9eee75590093",
   "prevId": "05e90f85-eb86-456b-b279-6e0946c5ccee",
   "version": "7",
   "dialect": "postgresql",
@@ -652,6 +652,150 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.calendar_removals": {
+      "name": "calendar_removals",
+      "schema": "",
+      "columns": {
+        "accountId": {
+          "name": "accountId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarType": {
+          "name": "calendarType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarUrl": {
+          "name": "calendarUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "externalCalendarId": {
+          "name": "externalCalendarId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "calendar_removals_account_idx": {
+          "name": "calendar_removals_account_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_removals_external_idx": {
+          "name": "calendar_removals_external_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "externalCalendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_removals\".\"externalCalendarId\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_removals_url_idx": {
+          "name": "calendar_removals_url_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "calendarUrl",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_removals\".\"calendarUrl\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "calendar_removals_accountId_calendar_accounts_id_fk": {
+          "name": "calendar_removals_accountId_calendar_accounts_id_fk",
+          "tableFrom": "calendar_removals",
+          "tableTo": "calendar_accounts",
+          "columnsFrom": [
+            "accountId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calendar_removals_userId_user_id_fk": {
+          "name": "calendar_removals_userId_user_id_fk",
+          "tableFrom": "calendar_removals",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.calendar_snapshots": {
       "name": "calendar_snapshots",
       "schema": "",
@@ -818,13 +962,6 @@
           "notNull": true,
           "default": "'{{calendar_name}}'"
         },
-        "markEventsAsPrivate": {
-          "name": "markEventsAsPrivate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "disabled": {
           "name": "disabled",
           "type": "boolean",
@@ -905,6 +1042,12 @@
         },
         "ingestWindowStart": {
           "name": "ingestWindowStart",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "providerMissingSince": {
+          "name": "providerMissingSince",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false

@@ -8,6 +8,7 @@ import {
   resolveTimeZone,
   wallTimeToInstant,
 } from "../../../ics/utils/timezone-instant";
+import { buildOutlookRecurrence } from "./serialize-recurrence";
 
 const UTC_TIME_ZONE = "UTC";
 
@@ -78,11 +79,13 @@ const serializeOutlookEvent = (event: MaterializedSyncableEvent): OutlookEvent =
   const isAllDay = resolveIsAllDayEvent(event);
   const location = getOutlookLocation(event);
   const eventTimeZone = event.startTimeZone ?? "UTC";
+  const recurrence = buildOutlookRecurrence(event);
 
   return {
     ...(body && { body }),
     ...(location && { location }),
     ...(event.isPrivate && { sensitivity: "private" }),
+    ...(recurrence && { recurrence }),
     categories: [KEEPER_CATEGORY],
     end: buildOutlookDateTime(event.endTime, eventTimeZone, isAllDay),
     isAllDay,

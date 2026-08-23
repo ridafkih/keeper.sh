@@ -48,12 +48,57 @@ function CalendarList({ calendars, accountId }: { calendars: CalendarSource[]; a
       </NavigationMenuItemIcon>
       <NavigationMenuItemLabel>
         {calendar.name}
+        {calendar.providerMissingSince && (
+          <Text as="span" size="sm" tone="danger"> (not found at provider)</Text>
+        )}
       </NavigationMenuItemLabel>
       <NavigationMenuItemTrailing>
         {calendar.unavailableSince && <Text size="sm" tone="muted">Unavailable</Text>}
       </NavigationMenuItemTrailing>
     </NavigationMenuLinkItem>
   ));
+}
+
+function RefreshCalendarsItem({ accountId }: { accountId: string }) {
+  const { mutate: globalMutate } = useSWRConfig();
+  const [isRefreshing, startRefreshTransition] = useTransition();
+  const [result, setResult] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  const handleRefresh = () => {
+    setResult(null);
+    setRefreshError(null);
+
+    startRefreshTransition(async () => {
+      try {
+        const response = await apiFetch(`/api/accounts/${accountId}/refresh`, { method: "POST" });
+        const body: { imported: number; missing: number; restored: number } = await response.json();
+        track(ANALYTICS_EVENTS.calendar_account_refreshed, {
+          imported: body.imported,
+          missing: body.missing,
+          restored: body.restored,
+        });
+        setResult(
+          `${pluralize(body.imported, "new calendar")} imported, `
+          + `${pluralize(body.missing, "calendar")} not found at the provider, `
+          + `${pluralize(body.restored, "calendar")} back.`,
+        );
+        await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
+      } catch (err) {
+        setRefreshError(resolveErrorMessage(err, "Failed to refresh calendars."));
+      }
+    });
+  };
+
+  return (
+    <>
+      <NavigationMenuButtonItem onClick={handleRefresh} disabled={isRefreshing}>
+        <Text size="sm">{isRefreshing ? "Refreshing…" : "Refresh Calendars"}</Text>
+      </NavigationMenuButtonItem>
+      {result && <Text size="sm" tone="muted" className="px-0.5">{result}</Text>}
+      {refreshError && <Text size="sm" tone="danger" className="px-0.5">{refreshError}</Text>}
+    </>
+  );
 }
 
 function AccountDetailPage() {
@@ -121,9 +166,12 @@ function AccountDetailPage() {
           <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
         )}
       </NavigationMenu>
+      <NavigationMenu>
+        <RefreshCalendarsItem accountId={accountId} />
+      </NavigationMenu>
       <DashboardSection
         title="Account Calendars"
-        description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it.</>}
+        description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars no longer found at the provider are noted below.</>}
       />
       <NavigationMenu>
         <CalendarList calendars={calendars} accountId={accountId} />

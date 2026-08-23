@@ -53,12 +53,69 @@ describe("createOutlookSyncProvider", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns a provider with pushEvents, deleteEvents, and listRemoteEvents", () => {
+  it("returns a provider with pushEvents, deleteEvents, listRemoteEvents, getRemoteEventsByIds, and verifyEventsExist", () => {
     const provider = createProvider();
 
     expect(typeof provider.pushEvents).toBe("function");
     expect(typeof provider.deleteEvents).toBe("function");
     expect(typeof provider.listRemoteEvents).toBe("function");
+    expect(typeof provider.getRemoteEventsByIds).toBe("function");
+    expect(typeof provider.verifyEventsExist).toBe("function");
+  });
+
+  it("lists remote events from /events within the requested window", async () => {
+    let requestedUrl: string | null = null;
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      requestedUrl = input.toString();
+      return Promise.resolve(Response.json({ value: [] }));
+    }));
+
+    const provider = createProvider();
+    await provider.listRemoteEvents({
+      timeMax: new Date("2026-07-24T00:00:00.000Z"),
+      timeMin: new Date("2026-07-10T00:00:00.000Z"),
+    });
+
+    expect(requestedUrl).not.toBeNull();
+    const url = new URL(requestedUrl ?? "");
+    expect(url.pathname).toContain("/events");
+    expect(url.pathname).not.toContain("/calendarView");
+    const filter = url.searchParams.get("$filter") ?? "";
+    expect(filter).not.toContain("categories");
+    expect(filter).toContain("end/dateTime ge");
+    expect(filter).toContain("start/dateTime le");
+  });
+
+  it("verifyEventsExist confirms a known event by direct id lookup, independent of any time window", async () => {
+    let requestedUrl: string | null = null;
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      requestedUrl = input.toString();
+      return Promise.resolve(Response.json({
+        categories: [KEEPER_CATEGORY],
+        end: { dateTime: "2026-07-20T19:30:00.000" },
+        iCalUId: "series-uid-1",
+        id: "series-master-id-1",
+        start: { dateTime: "2026-01-19T16:30:00.000" },
+      }));
+    }));
+
+    const provider = createProvider();
+    const verified = await provider.verifyEventsExist(["series-master-id-1"]);
+
+    expect(requestedUrl).not.toBeNull();
+    expect(new URL(requestedUrl ?? "").pathname).toContain("/events/series-master-id-1");
+    expect(verified).toEqual([
+      expect.objectContaining({ deleteId: "series-master-id-1", uid: "series-uid-1" }),
+    ]);
+  });
+
+  it("verifyEventsExist omits ids the destination responds 404 for", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
+
+    const provider = createProvider();
+    const verified = await provider.verifyEventsExist(["deleted-event-id"]);
+
+    expect(verified).toEqual([]);
   });
 
   it("aborts a pending Graph event creation", async () => {

@@ -32,6 +32,8 @@ export interface CalendarSource {
   needsReauthentication: boolean;
   includeInIcalFeed: boolean;
   unavailableSince: string | null;
+  disabled: boolean;
+  providerMissingSince: string | null;
 }
 
 export interface CalendarDetail {
@@ -55,7 +57,11 @@ export interface CalendarDetail {
   treatFullDayTimedEventsAsAllDay: boolean;
   syncFutureRange: SyncRange;
   syncHistoricRange: SyncRange;
+  disabled: boolean;
+  ingestFailureCount: number;
+  ingestLastFailureAt: string | null;
   markEventsAsPrivate: boolean;
+  providerMissingSince: string | null;
   destinationIds: string[];
   sourceIds: string[];
   unavailableSince: string | null;

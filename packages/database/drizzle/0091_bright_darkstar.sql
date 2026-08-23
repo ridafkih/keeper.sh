@@ -1,1 +1,0 @@
-ALTER TABLE "calendars" ADD COLUMN "markEventsAsPrivate" boolean DEFAULT false NOT NULL;

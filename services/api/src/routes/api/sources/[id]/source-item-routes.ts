@@ -36,19 +36,21 @@ interface PatchSourceRouteContext extends SourceRouteContext {
   body: unknown;
 }
 
+type SourceUpdateValue = string | boolean | number | null;
+
 interface PatchSourceDependencies {
   updateSource: (
     userId: string,
     sourceCalendarId: string,
-    updates: Record<string, string | boolean>,
+    updates: Record<string, SourceUpdateValue>,
   ) => Promise<Record<string, unknown> | null>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
 }
 
 const buildSourceUpdates = (
   body: SourcePatchBody,
-): Record<string, string | boolean> => {
-  const updates: Record<string, string | boolean> = {};
+): Record<string, SourceUpdateValue> => {
+  const updates: Record<string, SourceUpdateValue> = {};
 
   if (body.name) {
     updates.name = body.name;
