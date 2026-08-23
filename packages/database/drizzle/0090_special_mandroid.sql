@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN IF NOT EXISTS "ingestSeq" integer DEFAULT 0 NOT NULL;

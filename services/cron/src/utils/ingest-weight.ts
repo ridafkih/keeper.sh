@@ -12,20 +12,26 @@ interface IngestWeightDependencies {
   countStoredEvents: (calendarId: string) => Promise<number>;
 }
 
+const clampWeight = (storedCount: number): number => Math.min(
+  Math.max(storedCount * BYTES_PER_EVENT, WEIGHT_FLOOR),
+  WEIGHT_BUDGET,
+);
+
 const estimateIngestWeight = async (
   dependencies: IngestWeightDependencies,
   calendarId: string,
   hasEverIngested: boolean,
+  cachedStoredEventCount?: number | null,
 ): Promise<number> => {
   if (!hasEverIngested) {
     return NEVER_INGESTED_WEIGHT;
   }
+  if (typeof cachedStoredEventCount === "number") {
+    return clampWeight(cachedStoredEventCount);
+  }
   try {
     const storedCount = await dependencies.countStoredEvents(calendarId);
-    return Math.min(
-      Math.max(storedCount * BYTES_PER_EVENT, WEIGHT_FLOOR),
-      WEIGHT_BUDGET,
-    );
+    return clampWeight(storedCount);
   } catch (error) {
     widelog.errorFields(error, {
       slug: "ingest-weight-estimate-failed",

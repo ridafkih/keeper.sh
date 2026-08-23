@@ -7,6 +7,7 @@ const DRAIN_BATCH_FAILED_SLUG = "push-drain-batch-failed";
 interface PendingIngestMember {
   calendarId: string;
   correlationId?: string;
+  rewake?: string;
   score: number;
 }
 
@@ -33,6 +34,7 @@ interface DrainPendingIngestDependencies {
   recordError: (error: unknown, slug: string) => void;
   recordFailures: (calendarIds: string[]) => Promise<Record<string, number>>;
   releaseAbandoned: (calendarIds: string[]) => Promise<void>;
+  releaseClaims: (calendarIds: string[]) => Promise<void>;
   releasePending: (members: PendingIngestMember[]) => Promise<string[]>;
   resolveCalendars: (calendarIds: string[]) => Promise<ResolvedPendingCalendar[]>;
   resolvePlan: (userId: string) => Promise<Plan>;
@@ -105,53 +107,51 @@ const collectCorrelationIds = (
  * arrival order; taking the first claimed would name a different webhook than the receipt
  * stamp travelling beside it.
  */
-const attributeCorrelationIdsToUsers = (
-  members: PendingIngestMember[],
-  userIdByCalendarId: Map<string, string>,
-  affectedUserIds: string[],
-): Record<string, string> => {
-  const wanted = new Set(affectedUserIds);
-  const correlationIdByUserId: Record<string, string> = {};
-  const scoreByUserId = new Map<string, number>();
-  for (const member of members) {
-    const userId = userIdByCalendarId.get(member.calendarId) ?? "";
-    const correlationId = member.correlationId ?? "";
-    if (!wanted.has(userId) || correlationId.length === 0) {
-      continue;
-    }
-    const incumbent = scoreByUserId.get(userId) ?? Number.POSITIVE_INFINITY;
-    if (incumbent <= member.score) {
-      continue;
-    }
-    scoreByUserId.set(userId, member.score);
-    correlationIdByUserId[userId] = correlationId;
+const describesUserBetter = (
+  candidate: PendingIngestMember,
+  incumbent?: PendingIngestMember,
+): boolean => {
+  if (!incumbent) {
+    return true;
   }
-  return correlationIdByUserId;
+  if (candidate.score !== incumbent.score) {
+    return candidate.score < incumbent.score;
+  }
+  return (incumbent.correlationId ?? "").length === 0
+    && (candidate.correlationId ?? "").length > 0;
 };
 
-/*
- * The score is the webhook receipt stamp the API zadded. A user with several woken
- * calendars reports the earliest of them: the metric answers what the worst-served
- * webhook waited, and the freshest score would hide exactly the lag it exists to show.
- * Taken by score rather than by claim order, because a signalled drain claims in signal
- * arrival order rather than score order.
- */
-const attributeWebhookReceiptToUsers = (
+const attributeEarliestMembersToUsers = (
   members: PendingIngestMember[],
   userIdByCalendarId: Map<string, string>,
   affectedUserIds: string[],
-): Record<string, number> => {
+): {
+  correlationIdByUserId: Record<string, string>;
+  webhookReceivedAtByUserId: Record<string, number>;
+} => {
   const wanted = new Set(affectedUserIds);
-  const webhookReceivedAtByUserId: Record<string, number> = {};
+  const earliestByUserId = new Map<string, PendingIngestMember>();
   for (const member of members) {
     const userId = userIdByCalendarId.get(member.calendarId) ?? "";
     if (!wanted.has(userId)) {
       continue;
     }
-    const earliest = webhookReceivedAtByUserId[userId] ?? member.score;
-    webhookReceivedAtByUserId[userId] = Math.min(earliest, member.score);
+    if (!describesUserBetter(member, earliestByUserId.get(userId))) {
+      continue;
+    }
+    earliestByUserId.set(userId, member);
   }
-  return webhookReceivedAtByUserId;
+
+  const correlationIdByUserId: Record<string, string> = {};
+  const webhookReceivedAtByUserId: Record<string, number> = {};
+  for (const [userId, member] of earliestByUserId) {
+    const correlationId = member.correlationId ?? "";
+    if (correlationId.length > 0) {
+      correlationIdByUserId[userId] = correlationId;
+    }
+    webhookReceivedAtByUserId[userId] = member.score;
+  }
+  return { correlationIdByUserId, webhookReceivedAtByUserId };
 };
 
 const abandonExhaustedMembers = async (
@@ -172,22 +172,10 @@ const abandonExhaustedMembers = async (
   return abandoned.length;
 };
 
-const runDrainPendingIngest = async (
+const drainClaimedMembers = async (
+  claimed: PendingIngestMember[],
   dependencies: DrainPendingIngestDependencies,
 ): Promise<number> => {
-  if (!dependencies.enabled) {
-    return 0;
-  }
-
-  const pendingCount = await dependencies.countPending();
-  dependencies.observe({ "push_drain.pending_count": pendingCount });
-
-  const claimed = await dependencies.claimPending(MAX_DRAIN_BATCH);
-  if (claimed.length === 0) {
-    dependencies.observe({ "push_drain.batch_count": 0 });
-    return 0;
-  }
-
   const nowMs = dependencies.now().getTime();
   const queueAges = resolveQueueAges(claimed, nowMs);
   dependencies.observe({
@@ -253,6 +241,27 @@ const runDrainPendingIngest = async (
     return 0;
   }
 
+  const outstandingByUserId = new Map<string, number>();
+  for (const member of eligible) {
+    const userId = userIdByCalendarId.get(member.calendarId) ?? "";
+    outstandingByUserId.set(userId, (outstandingByUserId.get(userId) ?? 0) + 1);
+  }
+  const awaitingUserIds = new Set<string>();
+
+  const takeSyncableUserIds = (ownerId: string, affectedUserIds: string[]): string[] => {
+    for (const userId of affectedUserIds) {
+      awaitingUserIds.add(userId);
+    }
+    outstandingByUserId.set(ownerId, (outstandingByUserId.get(ownerId) ?? 1) - 1);
+    const syncable = [...awaitingUserIds].filter(
+      (userId) => (outstandingByUserId.get(userId) ?? 0) <= 0,
+    );
+    for (const userId of syncable) {
+      awaitingUserIds.delete(userId);
+    }
+    return syncable;
+  };
+
   /*
    * One calendar per ingest call so a member's destination write leaves as soon as ITS
    * ingest lands: a 29s sibling used to hold a 200ms calendar's sync for the whole batch.
@@ -260,27 +269,44 @@ const runDrainPendingIngest = async (
    * serial flush writer are process-wide, not per call.
    */
   const outcomes = await Promise.all(eligible.map(async (member) => {
+    const ownerId = userIdByCalendarId.get(member.calendarId) ?? "";
+    let affectedUserIds: string[] = [];
+    let failedId = "";
+    let releasedCount = 0;
     try {
-      const { affectedUserIds } = await dependencies.ingestCalendars(
+      ({ affectedUserIds } = await dependencies.ingestCalendars(
         [member.calendarId],
         collectCorrelationIds([member]),
-      );
+      ));
       const released = await dependencies.releasePending([member]);
-      /*
-       * Attribution scans the whole eligible set, not just this member: a user with an
-       * untagged and a tagged calendar in the same batch would otherwise enqueue untagged
-       * first, and BullMQ's dedupe on the deterministic job id drops the tagged retry.
-       */
-      await dependencies.enqueueDestinationSyncs(
-        affectedUserIds,
-        attributeCorrelationIdsToUsers(eligible, userIdByCalendarId, affectedUserIds),
-        attributeWebhookReceiptToUsers(eligible, userIdByCalendarId, affectedUserIds),
-      );
-      return { affectedUserIds, failedId: "", releasedCount: released.length };
+      releasedCount = released.length;
     } catch (error) {
       dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);
-      return { affectedUserIds: [], failedId: member.calendarId, releasedCount: 0 };
+      failedId = member.calendarId;
     }
+
+    // A failed member still settles its owner, or a sibling's sync would wait on it forever.
+    const syncableUserIds = takeSyncableUserIds(ownerId, affectedUserIds);
+    if (syncableUserIds.length > 0) {
+      try {
+        /*
+         * Attribution scans the whole eligible set, not just this member: a user with an
+         * untagged and a tagged calendar in the same batch would otherwise enqueue untagged
+         * first, and BullMQ's dedupe on the deterministic job id drops the tagged retry.
+         */
+        const { correlationIdByUserId, webhookReceivedAtByUserId } =
+          attributeEarliestMembersToUsers(eligible, userIdByCalendarId, syncableUserIds);
+        await dependencies.enqueueDestinationSyncs(
+          syncableUserIds,
+          correlationIdByUserId,
+          webhookReceivedAtByUserId,
+        );
+      } catch (error) {
+        dependencies.recordError(error, DRAIN_BATCH_FAILED_SLUG);
+        failedId = member.calendarId;
+      }
+    }
+    return { affectedUserIds, failedId, releasedCount };
   }));
 
   const affectedUserIds = new Set<string>();
@@ -305,6 +331,30 @@ const runDrainPendingIngest = async (
   });
 
   return ingestedCount;
+};
+
+const runDrainPendingIngest = async (
+  dependencies: DrainPendingIngestDependencies,
+): Promise<number> => {
+  if (!dependencies.enabled) {
+    return 0;
+  }
+
+  const pendingCount = await dependencies.countPending();
+  dependencies.observe({ "push_drain.pending_count": pendingCount });
+
+  const claimed = await dependencies.claimPending(MAX_DRAIN_BATCH);
+  if (claimed.length === 0) {
+    dependencies.observe({ "push_drain.batch_count": 0 });
+    return 0;
+  }
+
+  try {
+    return await drainClaimedMembers(claimed, dependencies);
+  } catch (error) {
+    await dependencies.releaseClaims(claimed.map((member) => member.calendarId));
+    throw error;
+  }
 };
 
 export {

@@ -75,21 +75,30 @@ beforeEach(() => {
 
 const UNBOUNDED_USER_GROUPS = 1000;
 
+/*
+ * The three families fan out concurrently, so which of them reaches its call site first is a
+ * scheduling detail: the budgets are read as a multiset, never by arrival position.
+ */
+const budgets = (key: string): number[] =>
+  capturedOptions.map((options) => Number(options[key])).toSorted((left, right) => left - right);
+
 describe("global source throttle removal", () => {
   it("runs oauth and caldav unbounded and keeps ics at its cpu-bound parse budget", async () => {
     await job?.callback();
 
     expect(capturedOptions).toHaveLength(3);
 
-    const [oauthSite, caldavSite, icsSite] = capturedOptions;
+    const [icsGroup, ...unboundedGroups] = budgets("groupConcurrency");
 
-    expect(oauthSite?.groupConcurrency).toBe(caldavSite?.groupConcurrency);
-    expect(Number(oauthSite?.groupConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
-    expect(Number(icsSite?.groupConcurrency)).toBeLessThan(UNBOUNDED_USER_GROUPS);
+    expect(icsGroup).toBeLessThan(UNBOUNDED_USER_GROUPS);
+    expect(unboundedGroups[0]).toBe(unboundedGroups[1]);
+    expect(Number(unboundedGroups[0])).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
 
-    expect(Number(oauthSite?.taskConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
-    expect(Number(caldavSite?.taskConcurrency)).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
-    expect(Number(icsSite?.taskConcurrency)).toBeLessThan(UNBOUNDED_USER_GROUPS);
+    const [icsTask, ...unboundedTasks] = budgets("taskConcurrency");
+
+    expect(icsTask).toBeLessThan(UNBOUNDED_USER_GROUPS);
+    expect(Number(unboundedTasks[0])).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
+    expect(Number(unboundedTasks[1])).toBeGreaterThanOrEqual(UNBOUNDED_USER_GROUPS);
   });
 
 

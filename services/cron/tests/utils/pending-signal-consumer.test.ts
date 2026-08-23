@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { PENDING_CORRELATION_KEY, PENDING_INGEST_KEY } from "@keeper.sh/calendar";
+import {
+  PENDING_CORRELATION_KEY,
+  PENDING_INGEST_KEY,
+  PENDING_REWAKE_KEY,
+} from "@keeper.sh/calendar";
 import { runDrainPendingIngest } from "../../src/utils/drain-pending-ingest";
 import type { DrainPendingIngestDependencies } from "../../src/utils/drain-pending-ingest";
 import { createScopedClaimPending } from "../../src/utils/scoped-drain-pending-ingest";
@@ -108,20 +112,45 @@ interface PendingFixture {
   scores: Map<string, number>;
 }
 
-const createFakePendingRedis = (fixture: PendingFixture) => ({
-  hmget: (key: string, ...members: string[]) => {
-    expect(key).toBe(PENDING_CORRELATION_KEY);
-    return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
-  },
-  zscore: (key: string, member: string) => {
-    expect(key).toBe(PENDING_INGEST_KEY);
-    const score = fixture.scores.get(member) ?? null;
-    if (score === null) {
-      return Promise.resolve(null);
-    }
-    return Promise.resolve(String(score));
-  },
-});
+const createFakePendingRedis = (fixture: PendingFixture) => {
+  const reserved = new Set<string>();
+  return {
+    del: (...keys: string[]) => {
+      for (const key of keys) {
+        reserved.delete(key);
+      }
+      return Promise.resolve(keys.length);
+    },
+    hmget: (key: string, ...members: string[]) => {
+      if (key === PENDING_REWAKE_KEY) {
+        return Promise.resolve(members.map((member) => {
+          if (fixture.scores.has(member)) {
+            return "1";
+          }
+          return null;
+        }));
+      }
+      expect(key).toBe(PENDING_CORRELATION_KEY);
+      return Promise.resolve(members.map((member) => fixture.correlationIds.get(member) ?? null));
+    },
+    hsetnx: (): Promise<number> => Promise.resolve(0),
+    set: (key: string) => {
+      if (reserved.has(key)) {
+        return Promise.resolve(null);
+      }
+      reserved.add(key);
+      return Promise.resolve("OK");
+    },
+    zscore: (key: string, member: string) => {
+      expect(key).toBe(PENDING_INGEST_KEY);
+      const score = fixture.scores.get(member) ?? null;
+      if (score === null) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(String(score));
+    },
+  };
+};
 
 const makeScopedDependencies = (
   fixture: PendingFixture,
@@ -143,6 +172,7 @@ const makeScopedDependencies = (
   recordFailures: (calendarIds: string[]) =>
     Promise.resolve(Object.fromEntries(calendarIds.map((calendarId) => [calendarId, 1]))),
   releaseAbandoned: () => Promise.resolve(),
+  releaseClaims: () => Promise.resolve(),
   releasePending: (members) => Promise.resolve(members.map((member) => member.calendarId)),
   resolveCalendars: (calendarIds: string[]) =>
     Promise.resolve(calendarIds.map((calendarId) => ({ calendarId, userId: "user-1" }))),

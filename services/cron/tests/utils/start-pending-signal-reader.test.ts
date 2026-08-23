@@ -38,7 +38,13 @@ const blockingRedisDouble = () => {
   };
 };
 
-const scoreRedis = { hmget: () => Promise.resolve([]), zscore: () => Promise.resolve(null) };
+const scoreRedis = {
+  del: (...keys: string[]) => Promise.resolve(keys.length),
+  hmget: () => Promise.resolve([]),
+  hsetnx: () => Promise.resolve(0),
+  set: () => Promise.resolve("OK"),
+  zscore: () => Promise.resolve(null),
+};
 const heartbeatRedis = { setex: () => Promise.resolve("OK") };
 
 describe("starting the signal reader", () => {
