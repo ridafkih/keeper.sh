@@ -664,12 +664,6 @@ const resolveTargetHost = (target: string | null): string | null => {
   }
 };
 
-/*
- * Per-request pacing, not per-run: a permit is taken before each Graph request and given back
- * when it settles, so the account's capacity bounds requests in flight against the mailbox
- * across every replica, every calendar and every concurrent series-master expansion. Nothing a
- * run holds outlives its request, so the lease TTL is request-scale and no run parks a slot.
- */
 const resolveRateLimiter = (
   provider: string,
   source: RateLimiterSourceContext,
