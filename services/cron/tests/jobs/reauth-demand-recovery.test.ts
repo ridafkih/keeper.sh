@@ -105,7 +105,7 @@ const findCalendarId = (calls: { args: unknown[] }[]): string | null => {
   return CALENDAR_IDS.find((calendarId) => found.has(calendarId)) ?? null;
 };
 
-const resolveSelect = (
+const resolveSourceRows = (
   projection: Record<string, unknown>,
   calls: { args: unknown[] }[],
 ): unknown[] => {
@@ -126,13 +126,6 @@ const resolveSelect = (
     }
     return [];
   }
-  if (keys.has("failureCount") && keys.has("nextAttemptAt")) {
-    const calendarId = findCalendarId(calls);
-    if (!calendarId) {
-      throw new Error("backoff select without a calendar id");
-    }
-    return [backoff.get(calendarId) ?? { failureCount: 0, nextAttemptAt: null }];
-  }
   if (keys.has("syncFutureRange") && keys.has("syncHistoricRange")) {
     return [];
   }
@@ -140,6 +133,26 @@ const resolveSelect = (
     return [];
   }
   throw new Error(`unexpected select projection: ${[...keys].join(",")}`);
+};
+
+const resolveBackoffRow = (calls: { args: unknown[] }[]): BackoffRow => {
+  const calendarId = findCalendarId(calls);
+  if (!calendarId) {
+    throw new Error("backoff select without a calendar id");
+  }
+  return backoff.get(calendarId) ?? { failureCount: 0, nextAttemptAt: null };
+};
+
+const resolveSelect = (
+  projection: Record<string, unknown>,
+  calls: { args: unknown[] }[],
+): unknown[] => {
+  const rows = resolveSourceRows(projection, calls);
+  if (!("failureCount" in projection)) {
+    return rows;
+  }
+  const backoffRow = resolveBackoffRow(calls);
+  return rows.map((row) => ({ ...(row as Record<string, unknown>), ...backoffRow }));
 };
 
 const createRecordingQuery = (resolve: (calls: { args: unknown[] }[]) => unknown): unknown => {

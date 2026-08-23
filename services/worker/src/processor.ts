@@ -226,11 +226,13 @@ const processJob = (
      * The webhook stamp is taken on another host, so the delta crosses a clock boundary;
      * skew is left uncorrected but floored, since a negative latency reads as a bug.
      */
+    let reflectMsRecorded = false;
     const recordReflectMs = (): void => {
       const { webhookReceivedAt } = job.data;
-      if (typeof webhookReceivedAt !== "number") {
+      if (typeof webhookReceivedAt !== "number" || reflectMsRecorded) {
         return;
       }
+      reflectMsRecorded = true;
       widelog.set("push_sync.reflect_ms", Math.max(0, Date.now() - webhookReceivedAt));
     };
 

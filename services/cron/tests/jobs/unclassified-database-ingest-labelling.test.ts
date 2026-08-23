@@ -67,7 +67,7 @@ const CALDAV_SOURCE = {
   username: "dav-user",
 };
 
-const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+const resolveSourceRows = (projection: Record<string, unknown>): unknown[] => {
   const keys = new Set(Object.keys(projection));
   if (keys.has("oauthCredentialId")) {
     return [];
@@ -78,9 +78,6 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
   if (keys.has("encryptedPassword")) {
     return [CALDAV_SOURCE];
   }
-  if (keys.has("failureCount") && keys.has("nextAttemptAt")) {
-    return [{ failureCount: 0, nextAttemptAt: null }];
-  }
   if (keys.has("syncFutureRange") && keys.has("syncHistoricRange")) {
     return [];
   }
@@ -88,6 +85,14 @@ const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
     return [];
   }
   throw new Error(`unexpected select projection: ${[...keys].join(",")}`);
+};
+
+const resolveSelect = (projection: Record<string, unknown>): unknown[] => {
+  const rows = resolveSourceRows(projection);
+  if (!("failureCount" in projection)) {
+    return rows;
+  }
+  return rows.map((row) => ({ ...(row as Record<string, unknown>), failureCount: 0, nextAttemptAt: null }));
 };
 
 const createQuery = (resolve: () => unknown): unknown => {

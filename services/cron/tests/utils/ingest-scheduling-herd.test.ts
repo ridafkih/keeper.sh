@@ -1,12 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 
-/*
- * Sources fan out unbounded, so the pool's protection is the query gate rather than the
- * scheduler. This drives the real job against a database double that reports how many
- * queries are in flight at once.
- */
-
 const CRON_DATABASE_POOL_MAX = 25;
 const OAUTH_SOURCE_COUNT = 400;
 
@@ -109,10 +103,12 @@ vi.mock("@keeper.sh/sync", () => ({
 }));
 
 let job: typeof ingestSourcesJob | null = null;
+let passBound = 0;
 
 beforeAll(async () => {
   const module = await import("../../src/jobs/ingest-sources");
   job = module.default;
+  passBound = module.FLEET_PASS_SOURCE_BOUND;
 });
 
 beforeEach(() => {
@@ -122,11 +118,12 @@ beforeEach(() => {
 });
 
 describe("per-pass ingest scheduling", () => {
-  it("keeps pooled queries inside the pool while launching every source at once", async () => {
+  it("keeps pooled queries inside the pool while launching a bounded prefix at once", async () => {
     await job?.callback();
     await settle();
 
-    expect(probe.queries).toBeGreaterThan(OAUTH_SOURCE_COUNT);
+    expect(probe.queries).toBeGreaterThanOrEqual(passBound);
+    expect(probe.queries).toBeLessThan(OAUTH_SOURCE_COUNT);
     expect(probe.peakConcurrent).toBeGreaterThan(0);
     expect(probe.peakConcurrent).toBeLessThan(CRON_DATABASE_POOL_MAX);
   });

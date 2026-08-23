@@ -4,6 +4,7 @@ import {
   buildUnknownChannelKey,
   PENDING_CORRELATION_KEY,
   PENDING_INGEST_KEY,
+  PENDING_REWAKE_KEY,
   signalPendingCalendars,
   resolveAffectedCalendarIds,
   resolvePushRegistrar,
@@ -80,9 +81,12 @@ const createPushWebhookDependencies = async (
         PENDING_CORRELATION_KEY,
         ...calendarIds.flatMap((calendarId) => [calendarId, correlationId]),
       );
+      await Promise.all(calendarIds.map((calendarId) =>
+        redis.hincrby(PENDING_REWAKE_KEY, calendarId, 1)));
       const now = Date.now();
       await redis.zadd(
         PENDING_INGEST_KEY,
+        "LT",
         ...calendarIds.flatMap((calendarId) => [now, calendarId]),
       );
     },

@@ -1,6 +1,8 @@
 import {
+  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
+  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
 } from "@keeper.sh/constants";
 import { widelog } from "widelogger";
 import { measureRedisCommand, recordSegment } from "../telemetry/segments";
@@ -12,8 +14,9 @@ const MS_PER_MINUTE = 60_000;
 const RETRY_POLL_MS = 100;
 const ACQUIRE_RESULT_LENGTH = 2;
 const QUEUE_DEPTH_INDEX = 2;
-/* Beyond SOURCE_TIMEOUT_MS, so a waiter killed by the ingest deadline expires rather than wedging the head. */
 const QUEUE_ENTRY_TTL_MS = 180_000;
+const QUEUE_HEAD_GRACE_MS = 15_000;
+const QUEUE_POLL_CEILING_MS = 5000;
 
 interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
@@ -27,13 +30,28 @@ interface RedisScriptClient {
   eval(script: string, numberOfKeys: number, ...arguments_: string[]): Promise<unknown>;
 }
 
-/**
- * KEYS[1] = sorted set key
- * ARGV = [window start ms, now ms, slots to acquire, max requests per minute]
- * ARGV[5..6] = [waiter token, queue entry ttl ms] — sent only once an acquire has parked.
- * Returns [waitTime, occupancy] and, on a tokened call, the queue depth; waitTime 0 means acquired.
- */
 const ACQUIRE_SCRIPT = `
+  -- The head is dropped for staying silent while it blocks someone, never for its join score:
+  -- eviction by join score would re-queue a still-polling waiter behind every later arrival.
+  local function headAfterReaping(queueKey, blockedKey, token, now)
+    local head = redis.call('ZRANGE', queueKey, 0, 0)[1]
+    if head == nil or head == token then
+      return head
+    end
+    local blockedSince = redis.call('ZSCORE', blockedKey, head)
+    if blockedSince == false then
+      redis.call('ZADD', blockedKey, now, head)
+      redis.call('PEXPIRE', blockedKey, ${QUEUE_ENTRY_TTL_MS})
+      return head
+    end
+    if now - tonumber(blockedSince) >= ${QUEUE_HEAD_GRACE_MS} then
+      redis.call('ZREM', queueKey, head)
+      redis.call('ZREM', blockedKey, head)
+      return redis.call('ZRANGE', queueKey, 0, 0)[1]
+    end
+    return head
+  end
+
   redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
   local current = redis.call('ZCARD', KEYS[1])
   local count = tonumber(ARGV[3])
@@ -43,6 +61,14 @@ const ACQUIRE_SCRIPT = `
 
   if token == nil or token == '' then
     if current + count <= limit then
+      -- The queue binds newcomers too, or a fresh acquire would take the slot a parked
+      -- waiter has been queueing for; the reaping above keeps a gone head from wedging them.
+      local freshQueueKey = KEYS[1] .. ':queue'
+      local aheadOfUs = headAfterReaping(freshQueueKey, freshQueueKey .. ':blocked', '', now)
+      if aheadOfUs ~= nil then
+        return {${RETRY_POLL_MS}, current}
+      end
+
       for i = 1, count do
         redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
       end
@@ -60,11 +86,19 @@ const ACQUIRE_SCRIPT = `
   end
 
   local queueKey = KEYS[1] .. ':queue'
+  local blockedKey = queueKey .. ':blocked'
   local queueTtl = tonumber(ARGV[6])
-  redis.call('ZREMRANGEBYSCORE', queueKey, '-inf', now - queueTtl)
-  local head = redis.call('ZRANGE', queueKey, 0, 0)
+  local head = headAfterReaping(queueKey, blockedKey, token, now)
 
-  if (head[1] == nil or head[1] == token) and current + count <= limit then
+  -- This poll is the head's proof of life, whatever it is about to be told.
+  if head == token then
+    redis.call('ZREM', blockedKey, token)
+  end
+
+  local atHead = head == nil or head == token
+  local hasRoom = current + count <= limit
+
+  if atHead and hasRoom then
     for i = 1, count do
       redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
     end
@@ -75,7 +109,14 @@ const ACQUIRE_SCRIPT = `
 
   redis.call('ZADD', queueKey, 'NX', now, token)
   redis.call('PEXPIRE', queueKey, queueTtl)
+  redis.call('PEXPIRE', blockedKey, queueTtl)
   local depth = redis.call('ZCARD', queueKey)
+
+  -- Refused by the waiter ahead alone: what unblocks this is that waiter's next poll,
+  -- not a window slot, so the oldest-entry expiry below would overstate the wait by a minute.
+  if hasRoom then
+    return {${RETRY_POLL_MS}, current, depth}
+  end
 
   local queuedOldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
   if #queuedOldest >= 2 then
@@ -88,6 +129,7 @@ const ACQUIRE_SCRIPT = `
 /* KEYS[1] = sorted set key, ARGV[1] = waiter token. */
 const LEAVE_QUEUE_SCRIPT = `
   redis.call('ZREM', KEYS[1] .. ':queue', ARGV[1])
+  redis.call('ZREM', KEYS[1] .. ':queue:blocked', ARGV[1])
   return 1
 `;
 
@@ -165,7 +207,6 @@ const createRedisRateLimiter = (
           String(count),
           String(requestsPerMinute),
         ];
-        /* The uncontended attempt carries no token, so it costs one eval and never reads the queue. */
         if (waiterToken !== "") {
           scriptArguments.push(waiterToken, String(QUEUE_ENTRY_TTL_MS));
           /*
@@ -195,7 +236,7 @@ const createRedisRateLimiter = (
           widelog.set("wait.rate_limiter_key", key);
         }
 
-        const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, MS_PER_MINUTE));
+        const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, QUEUE_POLL_CEILING_MS));
         await waitForRetry(sleepMs, signal);
       }
     } finally {
@@ -237,10 +278,11 @@ const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 const createCalDAVAccountRateLimiter = (
   redis: RedisScriptClient,
   accountId: string,
+  requestsPerMinute: number = CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
 ): RedisRateLimiter => createRedisRateLimiter(
   redis,
   `ratelimit:caldav-account:${accountId}`,
-  { requestsPerMinute: CALDAV_ACCOUNT_REQUESTS_PER_MINUTE },
+  { requestsPerMinute },
 );
 
 const HOST_REQUESTS_PER_MINUTE = 600;
@@ -286,6 +328,8 @@ const createOutlookAccountSemaphore = (
 export {
   createGoogleUserRateLimiter,
   CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
+  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,

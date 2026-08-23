@@ -13,6 +13,10 @@ let drainJob: CronOptions = {
 vi.mock("../../src/env", () => ({ default: environment }));
 vi.mock("../../src/context", () => ({
   flushDrainRegistry: { register: (): null => null },
+  inFlightDrainRegistry: {
+    register: (): null => null,
+    settle: (): Promise<void> => Promise.resolve(),
+  },
   database: { select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
   refreshLockRedis: {
