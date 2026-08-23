@@ -16,9 +16,6 @@ export interface CalendarEvent {
 
 const DAYS_PER_PAGE = 7;
 
-// Keep the key a relative path: an absolute URL via `globalThis.location`
-// throws during SSR, which SWR swallows into a null key, so the server would
-// render the page as loaded while the client's first render is still loading.
 const buildEventsUrl = (from: Date, to: Date): string => {
   const params = new URLSearchParams({
     from: from.toISOString(),
