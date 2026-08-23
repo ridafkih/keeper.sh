@@ -127,10 +127,13 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
   throw new Error(`No push notification url is defined for provider ${provider}`);
 };
 
-const deregisterAccountPushChannels = async (accountId: string): Promise<number> => {
+const deregisterPushChannelsWithin = async (
+  scopeId: string,
+  scopeColumn: "accountId" | "calendarId",
+): Promise<number> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
 
-  return await runDeregisterAccountPushChannels(accountId, {
+  return await runDeregisterAccountPushChannels(scopeId, {
     createRegistrarContext: async (channel) => {
       if (webhookConfig === null) {
         throw new Error(
@@ -192,12 +195,12 @@ const deregisterAccountPushChannels = async (accountId: string): Promise<number>
         signal: AbortSignal.timeout(DISCONNECT_TIMEOUT_MS),
       };
     },
-    listLiveChannels: async (ownerAccountId) => {
+    listLiveChannels: async (scope) => {
       const rows = await database
         .select()
         .from(calendarPushChannelsTable)
         .where(and(
-          eq(calendarPushChannelsTable.accountId, ownerAccountId),
+          eq(calendarPushChannelsTable[scopeColumn], scope),
           inArray(calendarPushChannelsTable.state, LIVE_STATES),
         ));
       return rows.map((row) => ({ ...row, state: toPushChannelState(row.state) }));
@@ -213,9 +216,16 @@ const deregisterAccountPushChannels = async (accountId: string): Promise<number>
   });
 };
 
+const deregisterAccountPushChannels = async (accountId: string): Promise<number> =>
+  await deregisterPushChannelsWithin(accountId, "accountId");
+
+const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> =>
+  await deregisterPushChannelsWithin(calendarId, "calendarId");
+
 export {
   DEREGISTRATION_FAILED_SLUG,
   deregisterAccountPushChannels,
+  deregisterCalendarPushChannels,
   runDeregisterAccountPushChannels,
 };
 export type { DeregisterAccountPushChannelsDependencies };

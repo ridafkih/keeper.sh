@@ -50,6 +50,7 @@ const MARKED_AT = new Date("2026-07-01T00:00:00.000Z");
 const PLAN_KEYS = [
   "crossAccountSkippedCount",
   "duplicateCount",
+  "removedSkippedCount",
   "suppressed",
   "toInsert",
   "toMarkUnavailable",
@@ -67,6 +68,7 @@ const createFakeDatabase = (options: {
   calendars: CalendarRow[];
   mappings: MappingRow[];
   crossAccountCalendars?: { calendarUrl: string | null; serverUrl: string }[];
+  removals?: { calendarUrl: string | null; externalCalendarId: string | null; id: string }[];
   insertedRows?: Record<string, unknown>[];
 }) => {
   const operations: string[] = [];
@@ -78,7 +80,10 @@ const createFakeDatabase = (options: {
   let deleteAccessed = false;
   let readCount = 0;
 
-  const resolveRead = (): Record<string, unknown>[] => {
+  const resolveRead = (table: string): Record<string, unknown>[] => {
+    if (table === "calendar_removals") {
+      return (options.removals ?? []).map((row) => toRecord(row));
+    }
     readCount += 1;
     if (readCount === 1) {
       return options.calendars.map((calendar) => toRecord(calendar));
@@ -87,9 +92,11 @@ const createFakeDatabase = (options: {
   };
 
   const createQuery = (): FakeQuery => {
+    let readTable = "";
     const query: FakeQuery = {
       from: (table: unknown) => {
-        operations.push(`read:${tableNameOf(table)}`);
+        readTable = tableNameOf(table);
+        operations.push(`read:${readTable}`);
         return query;
       },
       innerJoin: () => query,
@@ -98,7 +105,7 @@ const createFakeDatabase = (options: {
       orderBy: () => query,
       where: (condition?: unknown) => {
         readConditions.push(condition);
-        return Promise.resolve(resolveRead());
+        return Promise.resolve(resolveRead(readTable));
       },
     };
     return query;

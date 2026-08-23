@@ -178,7 +178,7 @@ const discoverOAuthCalendars = async (
   }
 
   return toDiscoveredOutlookCalendars(
-    await listOutlookCalendars(tokenState.accessToken, signal),
+    await listOutlookCalendars(tokenState.accessToken, { signal }),
   );
 };
 

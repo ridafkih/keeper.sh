@@ -33,6 +33,7 @@ interface CalendarRediscoveryPlan {
   unchangedCount: number;
   duplicateCount: number;
   crossAccountSkippedCount: number;
+  removedSkippedCount: number;
   suppressed: boolean;
 }
 
@@ -40,13 +41,17 @@ interface CalendarRediscoveryInput {
   discovered: DiscoveredCalendar[];
   existing: ExistingCalendar[];
   blockedKeys?: ReadonlySet<string>;
+  removedKeys?: ReadonlySet<string>;
   enumerationStartedAt?: Date;
 }
 
-interface StoredCalendarRow {
+interface CalendarIdentityRow {
   id: string;
   calendarUrl: string | null;
   externalCalendarId: string | null;
+}
+
+interface StoredCalendarRow extends CalendarIdentityRow {
   unavailableSince: Date | null;
   createdAt: Date;
 }
@@ -62,6 +67,7 @@ const GOOGLE_WRITABLE_ROLES = new Set(["owner", "writer"]);
 const EMPTY_PLAN: CalendarRediscoveryPlan = {
   crossAccountSkippedCount: 0,
   duplicateCount: 0,
+  removedSkippedCount: 0,
   suppressed: false,
   toInsert: [],
   toMarkUnavailable: [],
@@ -145,6 +151,7 @@ const planCalendarRediscovery = (
     dedupeDiscoveredByKey(input.discovered);
   const duplicateCount = existingDuplicateCount + discoveredDuplicateCount;
   const blockedKeys = input.blockedKeys ?? new Set<string>();
+  const removedKeys = input.removedKeys ?? new Set<string>();
 
   if (input.discovered.length === 0 && input.existing.length > 0) {
     return { ...EMPTY_PLAN, duplicateCount, suppressed: true };
@@ -158,13 +165,15 @@ const planCalendarRediscovery = (
   const unmatched = unique.filter(
     (calendar) => !byKey.has(calendar.identityKey),
   );
-  const toInsert = unmatched.filter((calendar) => !blockedKeys.has(calendar.identityKey));
+  const retained = unmatched.filter((calendar) => !removedKeys.has(calendar.identityKey));
+  const toInsert = retained.filter((calendar) => !blockedKeys.has(calendar.identityKey));
 
   const survivors = [...byKey.values()];
 
   return {
-    crossAccountSkippedCount: unmatched.length - toInsert.length,
+    crossAccountSkippedCount: retained.length - toInsert.length,
     duplicateCount,
+    removedSkippedCount: unmatched.length - retained.length,
     suppressed: false,
     toInsert,
     toMarkUnavailable: survivors
@@ -217,7 +226,7 @@ const toDiscoveredCalDAVCalendars = (
   }));
 
 const resolveStoredIdentityKey = (
-  row: StoredCalendarRow,
+  row: CalendarIdentityRow,
   calendarType: RediscoveryCalendarType,
 ): string[] => {
   if (calendarType === "oauth") {
@@ -251,6 +260,12 @@ const toExistingCalendars = (
       unavailableSince: row.unavailableSince,
     })));
 
+const toRemovedIdentityKeys = (
+  rows: CalendarIdentityRow[],
+  calendarType: RediscoveryCalendarType,
+): Set<string> =>
+  new Set(rows.flatMap((row) => resolveStoredIdentityKey(row, calendarType)));
+
 const resolveRediscoveryCalendarType = (authType: string): RediscoveryCalendarType => {
   if (authType === "caldav") {
     return "caldav";
@@ -266,8 +281,10 @@ export {
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
   toExistingCalendars,
+  toRemovedIdentityKeys,
 };
 export type {
+  CalendarIdentityRow,
   CalendarRediscoveryPlan,
   CalendarRetarget,
   DiscoveredCalendar,

@@ -9,6 +9,7 @@ import type {
 const PLAN_KEYS = [
   "crossAccountSkippedCount",
   "duplicateCount",
+  "removedSkippedCount",
   "suppressed",
   "toInsert",
   "toMarkUnavailable",
@@ -89,7 +90,7 @@ describe("planCalendarRediscovery", () => {
     expect(Object.keys(plan).toSorted()).toEqual(PLAN_KEYS);
     expect(Object.keys(plan)).not.toContain("inserted");
     expect(JSON.stringify(plan).toLowerCase()).not.toContain("delete");
-    expect(JSON.stringify(plan).toLowerCase()).not.toContain("remove");
+    expect(Object.keys(plan).filter((key) => (/^to(?:Delete|Remove)/u).test(key))).toEqual([]);
 
     const touched = [
       ...plan.toRevive,

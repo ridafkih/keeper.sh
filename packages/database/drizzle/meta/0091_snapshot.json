@@ -1,6 +1,6 @@
 {
-  "id": "e20bc6b8-8ed1-4602-b4d3-0781a81bc21d",
-  "prevId": "0c8edcf1-1868-483f-9beb-b9696867770b",
+  "id": "bbb7679c-0c44-4b93-82e7-9eee75590093",
+  "prevId": "05e90f85-eb86-456b-b279-6e0946c5ccee",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -41,19 +41,19 @@
         },
         "lastUsedAt": {
           "name": "lastUsedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -133,7 +133,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -159,7 +159,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -201,9 +201,21 @@
           "primaryKey": false,
           "notNull": false
         },
+        "calendarsRefreshAttemptedAt": {
+          "name": "calendarsRefreshAttemptedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "calendarsRefreshedAt": {
+          "name": "calendarsRefreshedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -246,9 +258,15 @@
           "primaryKey": false,
           "notNull": true
         },
+        "reauthenticationSource": {
+          "name": "reauthenticationSource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -309,6 +327,12 @@
         "calendar_accounts_provider_account_idx": {
           "name": "calendar_accounts_provider_account_idx",
           "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
             {
               "expression": "provider",
               "isExpression": false,
@@ -375,6 +399,403 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.calendar_push_channels": {
+      "name": "calendar_push_channels",
+      "schema": "",
+      "columns": {
+        "accountId": {
+          "name": "accountId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarId": {
+          "name": "calendarId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failureCount": {
+          "name": "failureCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "lastFailureAt": {
+          "name": "lastFailureAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lastNotificationAt": {
+          "name": "lastNotificationAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "nextAttemptAt": {
+          "name": "nextAttemptAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "providerChannelId": {
+          "name": "providerChannelId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "providerResourceId": {
+          "name": "providerResourceId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "reauthorizeRequestedAt": {
+          "name": "reauthorizeRequestedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "resourcePath": {
+          "name": "resourcePath",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "secretHash": {
+          "name": "secretHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "state": {
+          "name": "state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'registering'"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "verifiedAt": {
+          "name": "verifiedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "calendar_push_channels_account_idx": {
+          "name": "calendar_push_channels_account_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_push_channels_expiry_idx": {
+          "name": "calendar_push_channels_expiry_idx",
+          "columns": [
+            {
+              "expression": "state",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "expiresAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_push_channels_provider_channel_idx": {
+          "name": "calendar_push_channels_provider_channel_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "providerChannelId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_push_channels\".\"providerChannelId\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_push_channels_scope_idx": {
+          "name": "calendar_push_channels_scope_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "calendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_push_channels\".\"calendarId\" is not null and \"calendar_push_channels\".\"state\" in ('registering', 'active', 'degraded')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "calendar_push_channels_accountId_calendar_accounts_id_fk": {
+          "name": "calendar_push_channels_accountId_calendar_accounts_id_fk",
+          "tableFrom": "calendar_push_channels",
+          "tableTo": "calendar_accounts",
+          "columnsFrom": [
+            "accountId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calendar_push_channels_calendarId_calendars_id_fk": {
+          "name": "calendar_push_channels_calendarId_calendars_id_fk",
+          "tableFrom": "calendar_push_channels",
+          "tableTo": "calendars",
+          "columnsFrom": [
+            "calendarId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calendar_push_channels_userId_user_id_fk": {
+          "name": "calendar_push_channels_userId_user_id_fk",
+          "tableFrom": "calendar_push_channels",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.calendar_removals": {
+      "name": "calendar_removals",
+      "schema": "",
+      "columns": {
+        "accountId": {
+          "name": "accountId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarType": {
+          "name": "calendarType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarUrl": {
+          "name": "calendarUrl",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "externalCalendarId": {
+          "name": "externalCalendarId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "calendar_removals_account_idx": {
+          "name": "calendar_removals_account_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_removals_external_idx": {
+          "name": "calendar_removals_external_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "externalCalendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_removals\".\"externalCalendarId\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "calendar_removals_url_idx": {
+          "name": "calendar_removals_url_idx",
+          "columns": [
+            {
+              "expression": "accountId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "calendarUrl",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"calendar_removals\".\"calendarUrl\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "calendar_removals_accountId_calendar_accounts_id_fk": {
+          "name": "calendar_removals_accountId_calendar_accounts_id_fk",
+          "tableFrom": "calendar_removals",
+          "tableTo": "calendar_accounts",
+          "columnsFrom": [
+            "accountId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "calendar_removals_userId_user_id_fk": {
+          "name": "calendar_removals_userId_user_id_fk",
+          "tableFrom": "calendar_removals",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.calendar_snapshots": {
       "name": "calendar_snapshots",
       "schema": "",
@@ -393,7 +814,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -473,7 +894,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -490,21 +911,21 @@
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "excludeEventLocation": {
           "name": "excludeEventLocation",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "excludeEventName": {
           "name": "excludeEventName",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
-          "default": false
+          "default": true
         },
         "excludeFocusTime": {
           "name": "excludeFocusTime",
@@ -539,7 +960,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "''"
+          "default": "'{{calendar_name}}'"
         },
         "disabled": {
           "name": "disabled",
@@ -557,13 +978,13 @@
         },
         "lastFailureAt": {
           "name": "lastFailureAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "nextAttemptAt": {
           "name": "nextAttemptAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -576,13 +997,13 @@
         },
         "ingestLastFailureAt": {
           "name": "ingestLastFailureAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "ingestNextAttemptAt": {
           "name": "ingestNextAttemptAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -600,21 +1021,34 @@
           "notNull": true,
           "default": "'1_month'"
         },
+        "ingestSeq": {
+          "name": "ingestSeq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "ingestWindowEnd": {
           "name": "ingestWindowEnd",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "ingestWindowRecordedAt": {
           "name": "ingestWindowRecordedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "ingestWindowStart": {
           "name": "ingestWindowStart",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "providerMissingSince": {
+          "name": "providerMissingSince",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -656,6 +1090,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "storedEventCount": {
+          "name": "storedEventCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "syncFutureRange": {
           "name": "syncFutureRange",
           "type": "text",
@@ -670,9 +1110,15 @@
           "notNull": true,
           "default": "'1_month'"
         },
+        "unavailableSince": {
+          "name": "unavailableSince",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -783,7 +1229,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "calendars_sync_ranges_check": {
+          "name": "calendars_sync_ranges_check",
+          "value": "\"syncHistoricRange\" IN ('1_week', '1_month', '3_months', '6_months', '12_months', '2_years') AND \"syncFutureRange\" IN ('1_week', '1_month', '3_months', '6_months', '12_months', '2_years')"
+        },
+        "calendars_ingest_coverage_check": {
+          "name": "calendars_ingest_coverage_check",
+          "value": "\"ingestHistoricRange\" IN ('1_week', '1_month', '3_months', '6_months', '12_months', '2_years') AND \"ingestFutureRange\" IN ('1_week', '1_month', '3_months', '6_months', '12_months', '2_years') AND ((\"ingestWindowStart\" IS NULL AND \"ingestWindowEnd\" IS NULL AND \"ingestWindowRecordedAt\" IS NULL) OR (\"ingestWindowStart\" IS NOT NULL AND \"ingestWindowEnd\" IS NOT NULL AND \"ingestWindowRecordedAt\" IS NOT NULL AND \"ingestWindowStart\" < \"ingestWindowEnd\"))"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.event_mappings": {
@@ -798,7 +1253,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -817,7 +1272,7 @@
         },
         "endTime": {
           "name": "endTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -854,7 +1309,7 @@
         },
         "startTime": {
           "name": "startTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         }
@@ -902,6 +1357,21 @@
           "columns": [
             {
               "expression": "eventStateId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "event_mappings_source_calendar_idx": {
+          "name": "event_mappings_source_calendar_idx",
+          "columns": [
+            {
+              "expression": "sourceCalendarId",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -968,14 +1438,19 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "event_mappings_identity_check": {
+          "name": "event_mappings_identity_check",
+          "value": "\"event_mappings\".\"eventStateId\" is not null or \"event_mappings\".\"syncEventId\" is not null"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.event_states": {
@@ -996,7 +1471,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1009,7 +1484,7 @@
         },
         "endTime": {
           "name": "endTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -1040,7 +1515,7 @@
         },
         "recurrenceId": {
           "name": "recurrenceId",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1070,7 +1545,7 @@
         },
         "startTime": {
           "name": "startTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -1245,7 +1720,7 @@
       "columns": {
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1321,6 +1796,124 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.ical_feed_calendars": {
+      "name": "ical_feed_calendars",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "feedId": {
+          "name": "feedId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "calendarId": {
+          "name": "calendarId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ical_feed_calendar_idx": {
+          "name": "ical_feed_calendar_idx",
+          "columns": [
+            {
+              "expression": "feedId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "calendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ical_feed_calendars_feed_idx": {
+          "name": "ical_feed_calendars_feed_idx",
+          "columns": [
+            {
+              "expression": "feedId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ical_feed_calendars_calendar_idx": {
+          "name": "ical_feed_calendars_calendar_idx",
+          "columns": [
+            {
+              "expression": "calendarId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ical_feed_calendars_feedId_ical_feeds_id_fk": {
+          "name": "ical_feed_calendars_feedId_ical_feeds_id_fk",
+          "tableFrom": "ical_feed_calendars",
+          "tableTo": "ical_feeds",
+          "columnsFrom": [
+            "feedId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ical_feed_calendars_calendarId_calendars_id_fk": {
+          "name": "ical_feed_calendars_calendarId_calendars_id_fk",
+          "tableFrom": "ical_feed_calendars",
+          "tableTo": "calendars",
+          "columnsFrom": [
+            "calendarId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.ical_feed_settings": {
       "name": "ical_feed_settings",
       "schema": "",
@@ -1368,7 +1961,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1379,6 +1972,183 @@
         "ical_feed_settings_userId_user_id_fk": {
           "name": "ical_feed_settings_userId_user_id_fk",
           "tableFrom": "ical_feed_settings",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ical_feeds": {
+      "name": "ical_feeds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'My Calendar'"
+        },
+        "token": {
+          "name": "token",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isDefault": {
+          "name": "isDefault",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "legacyAlias": {
+          "name": "legacyAlias",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "includeEventName": {
+          "name": "includeEventName",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "includeEventDescription": {
+          "name": "includeEventDescription",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "includeEventLocation": {
+          "name": "includeEventLocation",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "excludeAllDayEvents": {
+          "name": "excludeAllDayEvents",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "excludeFocusTime": {
+          "name": "excludeFocusTime",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "excludeOutOfOffice": {
+          "name": "excludeOutOfOffice",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "customEventName": {
+          "name": "customEventName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Busy'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "ical_feeds_user_idx": {
+          "name": "ical_feeds_user_idx",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ical_feeds_token_idx": {
+          "name": "ical_feeds_token_idx",
+          "columns": [
+            {
+              "expression": "token",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ical_feeds_default_idx": {
+          "name": "ical_feeds_default_idx",
+          "columns": [
+            {
+              "expression": "userId",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ical_feeds\".\"isDefault\" = true",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "ical_feeds_userId_user_id_fk": {
+          "name": "ical_feeds_userId_user_id_fk",
+          "tableFrom": "ical_feeds",
           "tableTo": "user",
           "columnsFrom": [
             "userId"
@@ -1408,7 +2178,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1421,7 +2191,7 @@
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -1453,7 +2223,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1539,7 +2309,7 @@
       "columns": {
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1670,7 +2440,7 @@
         },
         "lastSyncedAt": {
           "name": "lastSyncedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -1690,7 +2460,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1795,13 +2565,13 @@
         },
         "startTime": {
           "name": "startTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
         "endTime": {
           "name": "endTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -1813,14 +2583,14 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1941,7 +2711,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1988,7 +2758,7 @@
         },
         "requestedAt": {
           "name": "requestedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -2034,7 +2804,7 @@
         },
         "accessTokenExpiresAt": {
           "name": "accessTokenExpiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2046,7 +2816,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -2083,7 +2853,7 @@
         },
         "refreshTokenExpiresAt": {
           "name": "refreshTokenExpiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2095,7 +2865,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -2153,14 +2923,14 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         }
@@ -2221,13 +2991,13 @@
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -2430,21 +3200,21 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2645,14 +3415,14 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -2781,26 +3551,26 @@
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "revoked": {
           "name": "revoked",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "authTime": {
           "name": "authTime",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -2937,7 +3707,7 @@
         },
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -3012,14 +3782,14 @@
       "columns": {
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -3043,7 +3813,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -3097,7 +3867,7 @@
       "columns": {
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -3135,7 +3905,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -3176,14 +3946,14 @@
       "columns": {
         "createdAt": {
           "name": "createdAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "expiresAt": {
           "name": "expiresAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -3201,7 +3971,7 @@
         },
         "updatedAt": {
           "name": "updatedAt",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"

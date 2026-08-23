@@ -35,9 +35,14 @@ interface NormalizedCalendar {
   primary?: boolean;
 }
 
+interface ResolvedAccess {
+  accessToken: string;
+  ownerEmail: string | null;
+}
+
 interface OAuthCalendarListingOptions {
   provider: string;
-  listCalendars: (accessToken: string) => Promise<NormalizedCalendar[]>;
+  listCalendars: (accessToken: string, ownerEmail: string | null) => Promise<NormalizedCalendar[]>;
   refreshDestinationAccessToken: (
     destinationId: string,
     refreshToken: string,
@@ -85,14 +90,15 @@ const resolveAccessToken = async (
   credentialId: string | null,
   destinationId: string | null,
   options: OAuthCalendarAccessOptions,
-): Promise<string> => {
+): Promise<ResolvedAccess> => {
   if (credentialId) {
     const credentials = await getOAuthSourceCredentials(userId, credentialId, options.provider);
-    return getValidSourceAccessToken(
+    const accessToken = await getValidSourceAccessToken(
       credentialId,
       credentials,
       options.refreshSourceAccessToken,
     );
+    return { accessToken, ownerEmail: credentials.email };
   }
 
   if (destinationId) {
@@ -101,11 +107,12 @@ const resolveAccessToken = async (
       destinationId,
       options.provider,
     );
-    return getValidDestinationAccessToken(
+    const accessToken = await getValidDestinationAccessToken(
       destinationId,
       credentials,
       options.refreshDestinationAccessToken,
     );
+    return { accessToken, ownerEmail: credentials.email };
   }
 
   throw new Error("Either credentialId or destinationId is required");
@@ -206,7 +213,7 @@ const listOAuthCalendars = async (
   }
 
   try {
-    const accessToken = await resolveAccessToken(
+    const { accessToken, ownerEmail } = await resolveAccessToken(
       userId,
       credentialId,
       destinationId,
@@ -214,7 +221,7 @@ const listOAuthCalendars = async (
     );
 
     try {
-      const calendars = await options.listCalendars(accessToken);
+      const calendars = await options.listCalendars(accessToken, ownerEmail);
       return Response.json({ calendars });
     } catch (listError) {
       if (options.isCalendarListError(listError) && listError.authRequired) {
