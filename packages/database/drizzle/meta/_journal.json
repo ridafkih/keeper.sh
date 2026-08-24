@@ -645,6 +645,13 @@
       "when": 1787347250440,
       "tag": "0091_hard_screwball",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1787491011577,
+      "tag": "0092_flowery_shaman",
+      "breakpoints": true
     }
   ]
 }

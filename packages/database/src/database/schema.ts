@@ -122,6 +122,7 @@ const calendarsTable = pgTable(
     includeInIcalFeed: boolean().notNull().default(false),
     treatFullDayTimedEventsAsAllDay: boolean().notNull().default(false),
     customEventName: text().notNull().default("{{calendar_name}}"),
+    markEventsAsPrivate: boolean().notNull().default(false),
     disabled: boolean().notNull().default(false),
     failureCount: integer().notNull().default(0),
     lastFailureAt: timestamp({ withTimezone: true }),

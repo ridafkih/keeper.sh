@@ -57,6 +57,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
     summary: event.summary.replaceAll(/\r\n?/g, "\n"),
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
   };
 
