@@ -1,0 +1,23 @@
+{
+  "name": "@keeper.sh/fixtures",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "types": "tsc --noEmit",
+    "lint": "oxlint .",
+    "sync": "bun run src/scripts/sync-fixtures.ts",
+    "verify": "bun run src/scripts/verify-fixtures.ts"
+  },
+  "dependencies": {
+    "arktype": "^2.2.0"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "5.9.3"
+  }
+}

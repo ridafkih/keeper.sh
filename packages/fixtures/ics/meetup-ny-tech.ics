@@ -1,0 +1,49 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Meetup//Meetup Calendar 1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+NAME:NY Tech Meetup
+X-WR-CALNAME:NY Tech Meetup
+BEGIN:VTIMEZONE
+TZID:America/New_York
+TZURL:http://tzurl.org/zoneinfo-outlook/America/New_York
+X-LIC-LOCATION:America/New_York
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:EDT
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:event_313545827@meetup.com
+SEQUENCE:1
+DTSTAMP:20260308T083902Z
+DTSTART;TZID=America/New_York:20260309T180000
+DTEND;TZID=America/New_York:20260309T213000
+SUMMARY:NY Tech Meetup
+DESCRIPTION:NY Tech Meetup\nThe NY Tech Meetup returns on Monday\, March 9
+  with a Space Tech Edition\, bringing together the founders\, engineers\, 
+ researchers\, and investors building what’s next beyond Earth.\n​From 
+ robots to radiation protection\, wireless power technology to deep space i
+ nnovation and more. Come explore how NYC is contributing to the future of 
+ space.\n​\nCome for the innovation. Stay for the connections.\n\nLearn m
+ ore and register [here](https://luma.com/taa36825)
+URL;VALUE=URI:https://www.meetup.com/ny-tech/events/313545827/
+STATUS:CONFIRMED
+CREATED:20260226T212356Z
+LAST-MODIFIED:20260226T212356Z
+CLASS:PUBLIC
+END:VEVENT
+X-ORIGINAL-URL:https://www.meetup.com/ny-tech/events/ical/
+X-WR-CALNAME:NY Tech Meetup
+END:VCALENDAR

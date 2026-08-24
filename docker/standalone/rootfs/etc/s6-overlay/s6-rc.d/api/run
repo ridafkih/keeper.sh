@@ -1,0 +1,7 @@
+#!/bin/bash
+exec 2>&1
+
+export MCP_PUBLIC_URL="${MCP_PUBLIC_URL:-${BETTER_AUTH_URL%/}/mcp}"
+
+cd /app
+exec /root/.bun/bin/bun run services/api/dist/index.js

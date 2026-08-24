@@ -1,0 +1,10 @@
+{
+  "name": "@keeper.sh/typescript-config",
+  "exports": {
+    ".": "./tsconfig.json",
+    "./tsconfig.json": "./tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "name": "@keeper.sh/database",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/database/schema.ts",
+    "./auth-schema": "./src/database/auth-schema.ts"
+  },
+  "scripts": {
+    "push": "drizzle-kit push",
+    "generate": "drizzle-kit generate",
+    "migrate": "bun scripts/migrate.ts",
+    "types": "tsc --noEmit",
+    "test": "bun x --bun vitest run",
+    "test:migrations": "bun x --bun vitest run --config vitest.migrations.config.ts",
+    "lint": "oxlint ."
+  },
+  "dependencies": {
+    "@keeper.sh/data-schemas": "workspace:*",
+    "drizzle-orm": "0.45.2",
+    "pg": "8.16.3",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1"
+  },
+  "devDependencies": {
+    "@keeper.sh/typescript-config": "workspace:*",
+    "@types/bun": "latest",
+    "@types/pg": "8.16.0",
+    "drizzle-kit": "0.31.8",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.4"
+  }
+}

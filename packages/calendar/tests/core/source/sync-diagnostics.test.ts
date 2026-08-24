@@ -1,0 +1,154 @@
+import { describe, expect, it } from "vitest";
+import type { SourceEvent } from "../../../src/core/types";
+import type { ExistingSourceEventState } from "../../../src/core/source/event-diff";
+import {
+  filterSourceEventsToSyncWindow,
+  resolveSourceSyncTokenAction,
+  splitSourceEventsByPersistenceIdentity,
+} from "../../../src/core/source/sync-diagnostics";
+
+const createSourceEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
+  endTime: new Date("2026-03-12T11:00:00.000Z"),
+  startTime: new Date("2026-03-12T10:00:00.000Z"),
+  uid: "event-1",
+  ...overrides,
+});
+
+const createExistingEvent = (
+  overrides: Partial<ExistingSourceEventState>,
+): ExistingSourceEventState => {
+  const event = {
+    endTime: new Date("2026-03-12T11:00:00.000Z"),
+    exceptionDates: null,
+    id: "existing-1",
+    recurrenceId: null,
+    recurrenceRule: null,
+    sourceEventType: "default",
+    sourceEventUid: "event-1",
+    startTime: new Date("2026-03-12T10:00:00.000Z"),
+    startTimeZone: null,
+    ...overrides,
+  };
+  return event;
+};
+
+describe("filterSourceEventsToSyncWindow", () => {
+  it("drops events fully outside the sync window", () => {
+    const events = [
+      createSourceEvent({
+        endTime: new Date("2026-03-01T11:00:00.000Z"),
+        startTime: new Date("2026-03-01T10:00:00.000Z"),
+        uid: "old",
+      }),
+      createSourceEvent({
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "inside",
+      }),
+      createSourceEvent({
+        endTime: new Date("2026-05-01T11:00:00.000Z"),
+        startTime: new Date("2026-05-01T10:00:00.000Z"),
+        uid: "future",
+      }),
+    ];
+
+    const result = filterSourceEventsToSyncWindow(events, {
+      timeMax: new Date("2026-03-31T23:59:59.999Z"),
+      timeMin: new Date("2026-03-10T00:00:00.000Z"),
+    });
+
+    expect(result.filteredCount).toBe(2);
+    expect(result.events).toHaveLength(1);
+    expect(result.events[0]?.uid).toBe("inside");
+  });
+
+  it("keeps a series that exceeds the recurrence budget instead of throwing", () => {
+    /*
+     * Regression: materializing without the over-budget handler threw here,
+     * before ingestion's budget scan could withhold and report the series, which
+     * put the whole calendar into permanent backoff.
+     */
+    const events = [
+      createSourceEvent({
+        endTime: new Date("2026-03-12T10:05:00.000Z"),
+        recurrenceRule: { frequency: "MINUTELY", interval: 1 },
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "over-budget",
+      }),
+      createSourceEvent({ uid: "healthy" }),
+    ];
+
+    const result = filterSourceEventsToSyncWindow(events, {
+      timeMax: new Date("2028-03-31T23:59:59.999Z"),
+      timeMin: new Date("2026-03-10T00:00:00.000Z"),
+    });
+
+    expect(result.events.map(({ uid }) => uid)).toEqual(["over-budget", "healthy"]);
+    expect(result.filteredCount).toBe(0);
+  });
+});
+
+describe("splitSourceEventsByPersistenceIdentity", () => {
+  it("separates true inserts from upserts on existing storage identity", () => {
+    const existingEvents = [
+      createExistingEvent({
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        sourceEventUid: "event-1",
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+      }),
+    ];
+
+    const eventsToAdd = [
+      createSourceEvent({
+        endTime: new Date("2026-03-12T11:00:00.000Z"),
+        startTime: new Date("2026-03-12T10:00:00.000Z"),
+        uid: "event-1",
+      }),
+      createSourceEvent({
+        endTime: new Date("2026-03-13T11:00:00.000Z"),
+        startTime: new Date("2026-03-13T10:00:00.000Z"),
+        uid: "event-2",
+      }),
+    ];
+
+    const result = splitSourceEventsByPersistenceIdentity(existingEvents, eventsToAdd);
+
+    expect(result.eventsToInsert).toHaveLength(1);
+    expect(result.eventsToInsert[0]?.uid).toBe("event-2");
+    expect(result.eventsToUpdate).toHaveLength(1);
+    expect(result.eventsToUpdate[0]?.uid).toBe("event-1");
+  });
+
+  it("classifies a moved provider occurrence as an update by provider identity", () => {
+    const existingEvents = [
+      createExistingEvent({
+        sourceEventId: "provider-event-1",
+      }),
+    ];
+    const movedEvent = createSourceEvent({
+      endTime: new Date("2026-03-14T11:00:00.000Z"),
+      sourceEventId: "provider-event-1",
+      startTime: new Date("2026-03-14T10:00:00.000Z"),
+    });
+
+    const result = splitSourceEventsByPersistenceIdentity(existingEvents, [movedEvent]);
+
+    expect(result.eventsToInsert).toEqual([]);
+    expect(result.eventsToUpdate).toEqual([movedEvent]);
+  });
+});
+
+describe("resolveSourceSyncTokenAction", () => {
+  it("requests token reset when delta sync returns no next token", () => {
+    const tokenPayload: { nextSyncToken?: string } = {};
+    const result = resolveSourceSyncTokenAction(tokenPayload.nextSyncToken, true);
+    expect(result.shouldResetSyncToken).toBe(true);
+    expect(result.nextSyncTokenToPersist).toBeUndefined();
+  });
+
+  it("persists next token when available", () => {
+    const result = resolveSourceSyncTokenAction("next-token", true);
+    expect(result.shouldResetSyncToken).toBe(false);
+    expect(result.nextSyncTokenToPersist).toBe("next-token");
+  });
+});

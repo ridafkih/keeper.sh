@@ -1,0 +1,106 @@
+import { useEffect, useRef } from "react";
+import { useLocation } from "@tanstack/react-router";
+import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+import {
+  ANALYTICS_EVENTS,
+  identify,
+  reportGooglePageView,
+  reportSignupConversion,
+  track,
+  updateGoogleConsent,
+} from "@/lib/analytics";
+import { stripSignupMarker } from "@/lib/signup-marker";
+import { useEffectiveConsent } from "@/hooks/use-effective-consent";
+import { useGdprApplies } from "@/hooks/use-gdpr-applies";
+import { useSession } from "@/hooks/use-session";
+
+function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
+  const { googleAdsId, visitorsNowToken } = runtimeConfig;
+  const gdprApplies = useGdprApplies();
+  const hasConsent = useEffectiveConsent();
+  const location = useLocation();
+  const { user } = useSession();
+  const identifiedUserId = useRef<string | null>(null);
+  const lastReportedPath = useRef<string | null>(null);
+
+  useEffect(() => {
+    track("page_view", { path: location.pathname });
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const previousPath = lastReportedPath.current;
+    lastReportedPath.current = location.pathname;
+
+    if (previousPath === null || previousPath === location.pathname) return;
+    reportGooglePageView(googleAdsId, location.pathname);
+  }, [googleAdsId, location.pathname]);
+
+  useEffect(() => {
+    updateGoogleConsent(hasConsent);
+  }, [hasConsent]);
+
+  useEffect(() => {
+    const cleanedUrl = stripSignupMarker(globalThis.location.href);
+    if (cleanedUrl === null) return;
+
+    globalThis.history.replaceState(null, "", cleanedUrl);
+    track(ANALYTICS_EVENTS.signup_completed, { provider: "oauth" });
+    reportSignupConversion(runtimeConfig);
+  }, [runtimeConfig]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (identifiedUserId.current === user.id) return;
+
+    identifiedUserId.current = user.id;
+    identify({ id: user.id, email: user.email, name: user.name }, { gdprApplies });
+  }, [user, gdprApplies]);
+
+  return (
+    <>
+      {visitorsNowToken && (
+        <script
+          defer
+          src="https://cdn.visitors.now/v.js"
+          data-token={visitorsNowToken}
+          {...(hasConsent && { "data-persist": true })}
+        />
+      )}
+      {googleAdsId && (
+        <>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('consent', 'default', {
+                  'ad_storage': 'denied',
+                  'ad_user_data': 'denied',
+                  'ad_personalization': 'denied',
+                  'analytics_storage': 'denied',
+                  'wait_for_update': 500
+                });
+              `,
+            }}
+          />
+          <script
+            async
+            src={`https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`}
+          />
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${googleAdsId}');
+              `,
+            }}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+export { AnalyticsScripts };

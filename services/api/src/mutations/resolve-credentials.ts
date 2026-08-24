@@ -1,0 +1,233 @@
+import {
+  calendarAccountsTable,
+  caldavCredentialsTable,
+  calendarsTable,
+  eventStatesTable,
+  oauthCredentialsTable,
+  userEventsTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq } from "drizzle-orm";
+import type { KeeperDatabase } from "@/types";
+import type { ProviderCredentials } from "@/types";
+import { parseEventReference } from "@/queries/event-read-model";
+
+const credentialColumns = {
+  calendarId: calendarsTable.id,
+  accountId: calendarAccountsTable.id,
+  externalCalendarId: calendarsTable.externalCalendarId,
+  calendarUrl: calendarsTable.calendarUrl,
+  provider: calendarAccountsTable.provider,
+  email: calendarAccountsTable.email,
+  needsReauthentication: calendarAccountsTable.needsReauthentication,
+  oauthCredentialId: oauthCredentialsTable.id,
+  oauthAccessToken: oauthCredentialsTable.accessToken,
+  oauthRefreshToken: oauthCredentialsTable.refreshToken,
+  oauthExpiresAt: oauthCredentialsTable.expiresAt,
+  caldavAuthMethod: caldavCredentialsTable.authMethod,
+  caldavServerUrl: caldavCredentialsTable.serverUrl,
+  caldavUsername: caldavCredentialsTable.username,
+  caldavEncryptedPassword: caldavCredentialsTable.encryptedPassword,
+};
+
+interface CredentialRow {
+  calendarId: string;
+  accountId: string;
+  externalCalendarId: string | null;
+  calendarUrl: string | null;
+  provider: string;
+  email: string | null;
+  needsReauthentication: boolean;
+  oauthCredentialId: string | null;
+  oauthAccessToken: string | null;
+  oauthRefreshToken: string | null;
+  oauthExpiresAt: Date | null;
+  caldavAuthMethod: string | null;
+  caldavServerUrl: string | null;
+  caldavUsername: string | null;
+  caldavEncryptedPassword: string | null;
+}
+
+const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
+  const credentials: ProviderCredentials = {
+    provider: row.provider,
+    calendarId: row.calendarId,
+    accountId: row.accountId,
+    externalCalendarId: row.externalCalendarId,
+    calendarUrl: row.calendarUrl,
+    email: row.email,
+  };
+
+  if (row.oauthCredentialId && row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
+    credentials.oauth = {
+      credentialId: row.oauthCredentialId,
+      accessToken: row.oauthAccessToken,
+      refreshToken: row.oauthRefreshToken,
+      expiresAt: row.oauthExpiresAt,
+    };
+  }
+
+  if (row.caldavServerUrl && row.caldavUsername && row.caldavEncryptedPassword) {
+    credentials.caldav = {
+      authMethod: row.caldavAuthMethod ?? "basic",
+      serverUrl: row.caldavServerUrl,
+      username: row.caldavUsername,
+      encryptedPassword: row.caldavEncryptedPassword,
+    };
+  }
+
+  return credentials;
+};
+
+const resolveCredentialsByCalendarId = async (
+  database: KeeperDatabase,
+  userId: string,
+  calendarId: string,
+): Promise<ProviderCredentials | null> => {
+  const [result] = await database
+    .select(credentialColumns)
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .leftJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .leftJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
+    .where(
+      and(
+        eq(calendarsTable.id, calendarId),
+        eq(calendarsTable.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!result) {
+    return null;
+  }
+
+  return rowToCredentials(result);
+};
+
+const resolveCredentialsByUserEventId = async (
+  database: KeeperDatabase,
+  userId: string,
+  eventId: string,
+): Promise<{
+  credentials: ProviderCredentials;
+  sourceEventId: null;
+  sourceEventUid: string | null;
+} | null> => {
+  const [event] = await database
+    .select({
+      calendarId: userEventsTable.calendarId,
+      sourceEventUid: userEventsTable.sourceEventUid,
+    })
+    .from(userEventsTable)
+    .where(
+      and(
+        eq(userEventsTable.id, eventId),
+        eq(userEventsTable.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!event) {
+    return null;
+  }
+
+  const credentials = await resolveCredentialsByCalendarId(database, userId, event.calendarId);
+
+  if (!credentials) {
+    return null;
+  }
+
+  return {
+    credentials,
+    sourceEventId: null,
+    sourceEventUid: event.sourceEventUid,
+  };
+};
+
+type EventSource = "user" | "synced";
+
+interface ResolvedEventCredentials {
+  credentials: ProviderCredentials;
+  occurrenceStart: Date | null;
+  sourceEventId: string | null;
+  sourceEventUid: string | null;
+  eventSource: EventSource;
+}
+
+const resolveCredentialsByEventId = async (
+  database: KeeperDatabase,
+  userId: string,
+  eventId: string,
+): Promise<ResolvedEventCredentials | null> => {
+  const reference = parseEventReference(eventId);
+  if (!reference) {
+    return null;
+  }
+
+  let userResult: Awaited<ReturnType<typeof resolveCredentialsByUserEventId>> = null;
+  if (!reference.occurrenceStart) {
+    userResult = await resolveCredentialsByUserEventId(database, userId, reference.resourceId);
+  }
+
+  if (userResult) {
+    return { ...userResult, occurrenceStart: null, eventSource: "user" };
+  }
+
+  const [syncedEvent] = await database
+    .select({
+      calendarId: eventStatesTable.calendarId,
+      sourceEventId: eventStatesTable.sourceEventId,
+      sourceEventUid: eventStatesTable.sourceEventUid,
+      recurrenceId: eventStatesTable.recurrenceId,
+    })
+    .from(eventStatesTable)
+    .innerJoin(calendarsTable, eq(eventStatesTable.calendarId, calendarsTable.id))
+    .where(
+      and(
+        eq(eventStatesTable.id, reference.resourceId),
+        eq(calendarsTable.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!syncedEvent) {
+    return null;
+  }
+
+  const credentials = await resolveCredentialsByCalendarId(database, userId, syncedEvent.calendarId);
+
+  if (!credentials) {
+    return null;
+  }
+
+  return {
+    credentials,
+    occurrenceStart: reference.occurrenceStart ?? syncedEvent.recurrenceId,
+    sourceEventId: syncedEvent.sourceEventId,
+    sourceEventUid: syncedEvent.sourceEventUid,
+    eventSource: "synced",
+  };
+};
+
+const resolveAllSourceCredentials = async (
+  database: KeeperDatabase,
+  userId: string,
+): Promise<ProviderCredentials[]> => {
+  const results = await database
+    .select(credentialColumns)
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .leftJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
+    .leftJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
+    .where(
+      and(
+        eq(calendarsTable.userId, userId),
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+      ),
+    );
+
+  return results.map((row) => rowToCredentials(row));
+};
+
+export { resolveCredentialsByCalendarId, resolveCredentialsByUserEventId, resolveCredentialsByEventId, resolveAllSourceCredentials };
+export type { EventSource, ResolvedEventCredentials };

@@ -1,0 +1,86 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { createKeeperApi } from "@/read-models";
+import { handleGetEventRoute } from "@/handlers/event-routes";
+import { withV1Auth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
+import { eventPatchBodySchema } from "@/utils/request-body";
+import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
+
+const keeperApi = createKeeperApi(database, {
+  oauthTokenRefresher: oauthProviders,
+  refreshLockStore,
+  encryptionKey,
+});
+
+const GET = withWideEvent(
+  withV1Auth(({ params, userId }) => handleGetEventRoute(params.id ?? null, userId, keeperApi)),
+);
+
+const PATCH = withWideEvent(
+  withV1Auth(async ({ request, params, userId }) => {
+    const eventId = params.id;
+    if (!eventId) {
+      return ErrorResponse.badRequest("Event ID is required.").toResponse();
+    }
+
+    const body = await request.json();
+
+    try {
+      const validated = eventPatchBodySchema.assert(body);
+
+      if (validated.rsvpStatus) {
+        const result = await keeperApi.rsvpEvent(userId, eventId, validated.rsvpStatus);
+
+        if (!result.success) {
+          return ErrorResponse.badRequest(result.error ?? "Failed to update RSVP status.").toResponse();
+        }
+
+        return Response.json({ rsvpStatus: validated.rsvpStatus });
+      }
+
+      const result = await keeperApi.updateEvent(userId, eventId, {
+        title: validated.title,
+        description: validated.description,
+        location: validated.location,
+        startTime: validated.startTime,
+        endTime: validated.endTime,
+        isAllDay: validated.isAllDay,
+        availability: validated.availability,
+        startTimeZone: validated.timezone,
+      });
+
+      if (!result.success) {
+        return ErrorResponse.badRequest(result.error ?? "Failed to update event.").toResponse();
+      }
+
+      const updated = await keeperApi.getEvent(userId, eventId);
+      return Response.json(updated);
+    } catch (error) {
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
+      return ErrorResponse.badRequest("Invalid update data.").toResponse();
+    }
+  }),
+);
+
+const DELETE = withWideEvent(
+  withV1Auth(async ({ params, userId }) => {
+    const eventId = params.id;
+    if (!eventId) {
+      return ErrorResponse.badRequest("Event ID is required.").toResponse();
+    }
+    const result = await keeperApi.deleteEvent(userId, eventId);
+
+    if (!result.success) {
+      return ErrorResponse.badRequest(result.error ?? "Failed to delete event.").toResponse();
+    }
+
+    return new Response(null, { status: HTTP_STATUS.NO_CONTENT });
+  }),
+);
+
+export { GET, PATCH, DELETE };

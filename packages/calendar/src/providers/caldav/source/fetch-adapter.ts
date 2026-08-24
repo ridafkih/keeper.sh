@@ -1,0 +1,93 @@
+import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
+import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
+import type { CalendarDiscoveryCache } from "../shared/discovery-cache";
+import type { SafeFetchOptions } from "../../../utils/safe-fetch";
+import { isCalDAVEventInSyncWindow, partitionCalDAVSourceEvents } from "./window";
+import { CalDAVClient } from "../shared/client";
+import { assertAllResourcesRead, parseICalCalendarsToRemoteEvents } from "../shared/ics";
+import { measureSyncSegment } from "../../../core/telemetry/segments";
+
+interface CalDAVSourceFetcherConfig {
+  authMethod?: "basic" | "digest";
+  calendarUrl: string;
+  serverUrl: string;
+  username: string;
+  password: string;
+  safeFetchOptions?: SafeFetchOptions;
+  plan: SourceIngestionPlan;
+  onBeforeRequest?: () => Promise<void> | void;
+  calendarDiscoveryCache?: CalendarDiscoveryCache;
+}
+
+interface CalDAVSourceFetcher {
+  fetchEvents: () => Promise<FetchEventsResult>;
+}
+
+const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSourceFetcher => {
+  const client = new CalDAVClient({
+    authMethod: config.authMethod,
+    calendarDiscoveryCache: config.calendarDiscoveryCache,
+    credentials: { password: config.password, username: config.username },
+    onBeforeRequest: config.onBeforeRequest,
+    serverUrl: config.serverUrl,
+  }, config.safeFetchOptions);
+
+  const fetchEvents = async (): Promise<FetchEventsResult> => {
+    const { futureRange, historicRange, window: syncWindow } = config.plan;
+    const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+
+    const objects = await client.fetchCalendarObjects({
+      calendarUrl,
+      timeRange: {
+        end: syncWindow.timeMax.toISOString(),
+        start: syncWindow.timeMin.toISOString(),
+      },
+    });
+
+    /*
+     * An empty body is an unread resource, not an absent one; it must reach the
+     * parser to be counted as skipped.
+     */
+    const { events, outsideSyncWindowCount, resources, selfAuthoredEventCount } = measureSyncSegment(
+      "work.transform_ms",
+      () => {
+        const parsed = parseICalCalendarsToRemoteEvents(objects.map(({ data }) => data ?? ""));
+        /*
+         * Ingestion diffs stored event_states against this fetch, so a missing
+         * event means "absent" here: a partial read would delete every event in
+         * the unreadable resources and re-add them next pass. Fail instead.
+         */
+        assertAllResourcesRead(parsed);
+        return {
+          resources: parsed,
+          ...partitionCalDAVSourceEvents(parsed.events, syncWindow),
+        };
+      },
+    );
+
+    return {
+      events,
+      discardedEventCounts: {
+        outsideSyncWindow: outsideSyncWindowCount,
+        unrepresentable: resources.unrepresentableEventCount,
+      },
+      selfAuthoredEventCount,
+      syncWindow,
+      coverage: {
+        futureRange,
+        historicRange,
+        window: syncWindow,
+      },
+      skippedResourceCount: resources.skippedResourceCount,
+      skippedResourceReasons: resources.skippedResourceReasons,
+      ...resources.unsupportedEvents.length > 0 && {
+        unsupportedEventUids: resources.unsupportedEvents.map(({ uid }) => uid),
+      },
+    };
+  };
+
+  return { fetchEvents };
+};
+
+export { createCalDAVSourceFetcher, isCalDAVEventInSyncWindow };
+export type { CalDAVSourceFetcherConfig, CalDAVSourceFetcher };

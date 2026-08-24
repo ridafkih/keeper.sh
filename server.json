@@ -1,0 +1,69 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "sh.keeper/keeper",
+  "title": "Keeper.sh",
+  "description": "Read and manage calendars synced from Google, Outlook, iCloud, Fastmail, CalDAV, and iCal feeds.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.keeper.sh/docs/mcp",
+  "repository": {
+    "url": "https://github.com/ridafkih/keeper.sh",
+    "source": "github",
+    "subfolder": "services/mcp"
+  },
+  "icons": [
+    {
+      "src": "https://www.keeper.sh/48x48-on-light.png",
+      "mimeType": "image/png",
+      "sizes": ["48x48"],
+      "theme": "light"
+    },
+    {
+      "src": "https://www.keeper.sh/96x96-on-light.png",
+      "mimeType": "image/png",
+      "sizes": ["96x96"],
+      "theme": "light"
+    },
+    {
+      "src": "https://www.keeper.sh/192x192-on-light.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"],
+      "theme": "light"
+    },
+    {
+      "src": "https://www.keeper.sh/512x512-on-light.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"],
+      "theme": "light"
+    },
+    {
+      "src": "https://www.keeper.sh/48x48-on-dark.png",
+      "mimeType": "image/png",
+      "sizes": ["48x48"],
+      "theme": "dark"
+    },
+    {
+      "src": "https://www.keeper.sh/96x96-on-dark.png",
+      "mimeType": "image/png",
+      "sizes": ["96x96"],
+      "theme": "dark"
+    },
+    {
+      "src": "https://www.keeper.sh/192x192-on-dark.png",
+      "mimeType": "image/png",
+      "sizes": ["192x192"],
+      "theme": "dark"
+    },
+    {
+      "src": "https://www.keeper.sh/512x512-on-dark.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"],
+      "theme": "dark"
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.keeper.sh/mcp"
+    }
+  ]
+}

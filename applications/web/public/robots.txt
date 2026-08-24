@@ -1,0 +1,66 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: GPTBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Claude-User
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Amazonbot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Applebot
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Bytespider
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+User-agent: Cohere-AI
+Allow: /
+Disallow: /dashboard
+Disallow: /auth
+
+Sitemap: https://www.keeper.sh/sitemap.xml

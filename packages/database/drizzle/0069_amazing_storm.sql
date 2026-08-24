@@ -1,0 +1,1 @@
+ALTER TABLE "caldav_credentials" ADD COLUMN "authMethod" text DEFAULT 'basic' NOT NULL;

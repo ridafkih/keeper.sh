@@ -1,0 +1,52 @@
+import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+
+type EventAvailability = "busy" | "free" | "oof" | "workingElsewhere";
+
+interface EventTimeSlot {
+  uid: string;
+  startTime: Date;
+  endTime: Date;
+  availability?: EventAvailability;
+  isAllDay?: boolean;
+  startTimeZone?: string;
+  recurrenceRule?: IcsRecurrenceRule;
+  recurrenceDuration?: IcsDuration;
+  exceptionDates?: IcsExceptionDates;
+  recurrenceId?: Date;
+  title?: string;
+  description?: string;
+  location?: string;
+}
+
+type StoredEventTimeSlot = EventTimeSlot & {
+  id: string;
+};
+
+interface EventDiff {
+  toAdd: EventTimeSlot[];
+  toRemove: StoredEventTimeSlot[];
+}
+
+interface SerializedIcsCalendar {
+  version: string;
+  events?: {
+    uid?: string;
+    start: { date: string };
+    end?: { date: string };
+    duration?: {
+      weeks?: number;
+      days?: number;
+      hours?: number;
+      minutes?: number;
+      seconds?: number;
+    };
+  }[];
+}
+
+export type {
+  EventAvailability,
+  EventTimeSlot,
+  StoredEventTimeSlot,
+  EventDiff,
+  SerializedIcsCalendar,
+};

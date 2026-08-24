@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+@custom-variant pointer-hover (@media (hover: hover));
+
+html {
+  @apply w-full min-h-full bg-background overflow-x-hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply w-full;
+  height: 100dvh;
+  overflow-y: scroll;
+  overflow-x: hidden;
+}
+
+@media (width < 48rem) {
+  body:has(#marketing-header-menu) {
+    overflow-y: hidden;
+  }
+}
+
+#root {
+  @apply w-full;
+}
+
+[data-session-slot] {
+  display: contents;
+}
+
+[data-session-slot="authenticated"] {
+  display: none;
+}
+
+[data-session="authed"] [data-session-slot="authenticated"] {
+  display: contents;
+}
+
+[data-session="authed"] [data-session-slot="unauthenticated"] {
+  display: none;
+}
+
+[data-consent="resolved"] [data-consent-banner] {
+  display: none;
+}
+
+html {
+  color-scheme: light;
+}
+
+:root {
+  --ui-foreground: var(--color-neutral-950);
+  --ui-background: var(--color-neutral-50);
+  --ui-background-inverse: var(--ui-foreground);
+  --ui-foreground-inverse: var(--ui-background);
+  --ui-interactive-border: var(--color-neutral-300);
+  --ui-foreground-muted: var(--color-neutral-500);
+  --ui-foreground-disabled: var(--color-neutral-300);
+  --ui-foreground-hover: color-mix(
+    in srgb,
+    var(--ui-foreground),
+    transparent 20%
+  );
+  --ui-illustration-stripe: color-mix(
+    in srgb,
+    var(--ui-foreground),
+    transparent 92%
+  );
+  --ui-foreground-inverse-muted: color-mix(
+    in srgb,
+    var(--ui-foreground-inverse),
+    transparent 40%
+  );
+  --ui-background-elevated: var(--color-white);
+  --ui-border-elevated: var(--color-neutral-300);
+  --ui-background-inverse-hover: var(--color-neutral-800);
+  --ui-background-hover: color-mix(
+    in srgb,
+    var(--ui-foreground),
+    var(--ui-background) 96.125%
+  );
+  --ui-destructive: var(--color-red-700);
+  --ui-destructive-background: var(--color-red-50);
+  --ui-destructive-border: var(--color-red-200);
+  --ui-destructive-background-hover: var(--color-red-100);
+  --ui-ring: var(--color-blue-500);
+  --ui-template: var(--color-purple-600);
+  --ui-template-muted: color-mix(in srgb, var(--ui-template), transparent 50%);
+}
+
+@font-face {
+  font-family: "Geist Sans";
+  src: url("/assets/fonts/Geist-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/assets/fonts/GeistMono-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Lora";
+  src: url("/assets/fonts/Lora-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --color-foreground: var(--ui-foreground);
+  --color-background: var(--ui-background);
+  --color-background-inverse: var(--ui-background-inverse);
+  --color-foreground-inverse: var(--ui-foreground-inverse);
+  --color-interactive-border: var(--ui-interactive-border);
+  --color-foreground-muted: var(--ui-foreground-muted);
+  --color-foreground-disabled: var(--ui-foreground-disabled);
+  --color-foreground-hover: var(--ui-foreground-hover);
+  --color-illustration-stripe: var(--ui-illustration-stripe);
+  --color-foreground-inverse-muted: var(--ui-foreground-inverse-muted);
+  --color-background-elevated: var(--ui-background-elevated);
+  --color-border-elevated: var(--ui-border-elevated);
+  --color-background-inverse-hover: var(--ui-background-inverse-hover);
+  --color-background-hover: var(--ui-background-hover);
+  --color-destructive: var(--ui-destructive);
+  --color-destructive-background: var(--ui-destructive-background);
+  --color-destructive-border: var(--ui-destructive-border);
+  --color-destructive-background-hover: var(--ui-destructive-background-hover);
+  --color-ring: var(--ui-ring);
+  --color-template: var(--ui-template);
+  --color-template-muted: var(--ui-template-muted);
+
+  --font-sans: "Geist Sans", system-ui, sans-serif;
+  --font-lora: "Lora", Georgia, serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  --breakpoint-xs: 28rem;
+
+  --animate-shimmer: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+@keyframes counter-spin {
+  to {
+    rotate: -360deg;
+  }
+}
+
+@keyframes sync-progress {
+  0% {
+    stroke-dashoffset: 87.96;
+  }
+  50% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: 87.96;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--ui-foreground);
+    -webkit-background-clip: text;
+    caret-color: var(--ui-foreground);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    color-scheme: dark;
+  }
+
+  :root {
+    --ui-foreground: var(--color-neutral-100);
+    --ui-background: var(--color-neutral-950);
+    --ui-background-inverse: var(--ui-foreground);
+    --ui-foreground-inverse: var(--ui-background);
+    --ui-interactive-border: var(--color-neutral-800);
+    --ui-foreground-muted: var(--color-neutral-400);
+    --ui-foreground-disabled: var(--color-neutral-600);
+    --ui-foreground-hover: color-mix(
+      in srgb,
+      var(--ui-foreground),
+      transparent 16%
+    );
+    --ui-illustration-stripe: color-mix(
+      in srgb,
+      var(--ui-foreground),
+      transparent 88%
+    );
+    --ui-foreground-inverse-muted: color-mix(
+      in srgb,
+      var(--ui-foreground-inverse),
+      transparent 40%
+    );
+    --ui-background-elevated: var(--color-neutral-900);
+    --ui-border-elevated: var(--color-neutral-800);
+    --ui-background-inverse-hover: var(--color-neutral-300);
+    --ui-background-hover: color-mix(
+      in srgb,
+      var(--ui-foreground),
+      var(--ui-background) 90%
+    );
+    --ui-destructive: var(--color-red-300);
+    --ui-destructive-background: color-mix(
+      in srgb,
+      var(--color-red-500),
+      transparent 90%
+    );
+    --ui-destructive-border: color-mix(
+      in srgb,
+      var(--color-red-500),
+      transparent 80%
+    );
+    --ui-destructive-background-hover: color-mix(
+      in srgb,
+      var(--color-red-500),
+      transparent 80%
+    );
+    --ui-ring: var(--color-blue-400);
+    --ui-template: var(--color-purple-400);
+    --ui-template-muted: color-mix(
+      in srgb,
+      var(--ui-template),
+      transparent 40%
+    );
+  }
+}

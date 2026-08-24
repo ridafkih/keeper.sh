@@ -1,0 +1,381 @@
+const SITE_URL = "https://www.keeper.sh";
+const SITE_NAME = "Keeper.sh";
+const SITE_ALTERNATE_NAME = "Keeper";
+
+// Search engines only. This must never appear in visible page copy — it reads as a
+// defensive aside about a competitor the reader was not thinking about.
+export const BRAND_DISAMBIGUATION =
+  "Keeper.sh is a calendar syncing tool. It is not affiliated with Keeper Security, the password manager.";
+const DEFAULT_IMAGE_PATH = "/open-graph.png";
+
+export function canonicalUrl(path: string): string {
+  return `${SITE_URL}/${path.replace(/^\/+/, "")}`;
+}
+
+function entityId(path: string, fragment: string): string {
+  const url = canonicalUrl(path);
+  return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
+}
+
+export function jsonLdScript(data: Record<string, unknown>) {
+  return { type: "application/ld+json", children: JSON.stringify(data) };
+}
+
+export interface SeoMetaOptions {
+  title: string;
+  description: string;
+  path: string;
+  type?: string;
+  brandPosition?: "before" | "after";
+  imagePath?: string;
+}
+
+export function seoMeta({
+  title,
+  description,
+  path,
+  type = "website",
+  brandPosition = "after",
+  imagePath = DEFAULT_IMAGE_PATH,
+}: SeoMetaOptions) {
+  const fullTitle = brandPosition === "before"
+    ? `${SITE_NAME} — ${title}`
+    : `${title} · ${SITE_NAME}`;
+  const imageUrl = canonicalUrl(imagePath);
+  return [
+    { title: fullTitle },
+    { content: description, name: "description" },
+    { content: type, property: "og:type" },
+    { content: title, property: "og:title" },
+    { content: description, property: "og:description" },
+    { content: canonicalUrl(path), property: "og:url" },
+    { content: SITE_NAME, property: "og:site_name" },
+    { content: imageUrl, property: "og:image" },
+    { content: "1200", property: "og:image:width" },
+    { content: "630", property: "og:image:height" },
+    { content: "summary_large_image", name: "twitter:card" },
+    { content: title, name: "twitter:title" },
+    { content: description, name: "twitter:description" },
+    { content: imageUrl, name: "twitter:image" },
+  ];
+}
+
+export type SeoMetaTag = ReturnType<typeof seoMeta>[number];
+
+/**
+ * Builds a route `head` from the page's SEO options, so the self-referencing
+ * canonical is derived from `path` rather than restated by every route.
+ */
+export function seoHead({
+  meta = [],
+  links = [],
+  scripts = [],
+  ...seo
+}: SeoMetaOptions & {
+  meta?: SeoMetaTag[];
+  links?: Array<{ rel: string; href: string; type?: string; title?: string }>;
+  scripts?: Array<ReturnType<typeof jsonLdScript>>;
+}) {
+  return {
+    links: [{ rel: "canonical", href: canonicalUrl(seo.path) }, ...links],
+    meta: [...seoMeta(seo), ...meta],
+    scripts,
+  };
+}
+
+export function notFoundHead() {
+  return { meta: [{ title: `Page not found · ${SITE_NAME}` }] };
+}
+const AUTHOR_NAME = "Rida F'kih";
+const PERSON_ID = entityId("/about", "person");
+
+// Consumers resolve @id within one page's graph, not across pages, and the Person
+// node itself is only emitted on /about. Carrying the type and name alongside the
+// id keeps the reference meaningful everywhere else it appears.
+export const authorReference = { "@id": PERSON_ID, "@type": "Person", name: AUTHOR_NAME };
+
+export const organizationSchema = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#organization`,
+      name: SITE_NAME,
+      alternateName: SITE_ALTERNATE_NAME,
+      url: SITE_URL,
+      logo: {
+        "@type": "ImageObject",
+        url: `${SITE_URL}/512x512-on-light.png`,
+        width: 512,
+        height: 512,
+      },
+      disambiguatingDescription: BRAND_DISAMBIGUATION,
+      sameAs: ["https://github.com/ridafkih/keeper.sh"],
+      founder: authorReference,
+    },
+    {
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: SITE_NAME,
+      url: SITE_URL,
+      publisher: { "@id": `${SITE_URL}/#organization` },
+    },
+  ],
+};
+
+export type BreadcrumbTrailItem = { name: string; path: string };
+
+export function breadcrumbTrail(...items: BreadcrumbTrailItem[]): BreadcrumbTrailItem[] {
+  return [{ name: "Home", path: "/" }, ...items];
+}
+
+export function breadcrumbSchema(items: BreadcrumbTrailItem[]) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: canonicalUrl(item.path),
+    })),
+  };
+}
+
+export function webPageSchema(name: string, description: string, path: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": entityId(path, "webpage"),
+    name,
+    description,
+    url: canonicalUrl(path),
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    publisher: { "@id": `${SITE_URL}/#organization` },
+  };
+}
+
+export function faqPageSchema(
+  path: string,
+  questions: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faqpage`,
+    mainEntity: questions.map((entry) => ({
+      "@type": "Question",
+      name: entry.question,
+      acceptedAnswer: { "@type": "Answer", text: entry.answer },
+    })),
+  };
+}
+
+export function softwareApplicationSchema() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "@id": `${SITE_URL}/#software`,
+    name: SITE_NAME,
+    description:
+      "Keeper.sh keeps your personal, work and school calendars in sync, so a booking on one shows you as busy on the others. Your event titles stay private.",
+    url: SITE_URL,
+    image: `${SITE_URL}/open-graph.png`,
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    offers: [
+      {
+        "@type": "Offer",
+        name: "Free",
+        price: "0",
+        priceCurrency: "USD",
+        description:
+          "For keeping two calendar accounts from double-booking each other.",
+      },
+      {
+        "@type": "Offer",
+        name: "Pro",
+        price: "5.00",
+        priceCurrency: "USD",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: "5.00",
+          priceCurrency: "USD",
+          billingDuration: "P1M",
+        },
+        description:
+          "For more than two calendar accounts, or when you need updates within the minute.",
+      },
+    ],
+    provider: { "@id": `${SITE_URL}/#organization` },
+  };
+}
+
+export function offerCatalogSchema(
+  path: string,
+  offers: Array<{ name: string; price: string; description: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "OfferCatalog",
+    "@id": `${canonicalUrl(path)}/#offercatalog`,
+    name: `${SITE_NAME} Plans`,
+    url: canonicalUrl(path),
+    itemListElement: offers.map((offer) => ({
+      "@type": "Offer",
+      name: offer.name,
+      price: offer.price,
+      priceCurrency: "USD",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: offer.price,
+        priceCurrency: "USD",
+        billingDuration: "P1M",
+      },
+      description: offer.description,
+      itemOffered: { "@id": `${SITE_URL}/#software` },
+    })),
+  };
+}
+
+export function faqSchema(
+  path: string,
+  items: Array<{ question: string; answer: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": `${canonicalUrl(path)}/#faq`,
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: items.map((item) => {
+      const question = item.question.trim();
+      const answer = item.answer.trim();
+      if (!question || !answer) {
+        throw new Error(
+          `faqSchema requires a question and answer for every item, received ${JSON.stringify(item)}`,
+        );
+      }
+      return {
+        "@type": "Question",
+        name: question,
+        acceptedAnswer: { "@type": "Answer", text: answer },
+      };
+    }),
+  };
+}
+
+export function collectionPageSchema(
+  path: string,
+  name: string,
+  entries: Array<{ slug: string; metadata: { title: string } }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": entityId(path, "collectionpage"),
+    name,
+    url: canonicalUrl(path),
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: entries.map((entry, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: canonicalUrl(`${path}/${entry.slug}`),
+        name: entry.metadata.title,
+      })),
+    },
+  };
+}
+
+export function changelogCollectionSchema(
+  description: string,
+  entries: Array<{ slug: string; title: string }>,
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "@id": entityId("/changelog", "collectionpage"),
+    name: "What's new in Keeper.sh",
+    description,
+    url: canonicalUrl("/changelog"),
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    mainEntity: {
+      "@type": "ItemList",
+      itemListElement: entries.map((entry, index) => ({
+        "@type": "ListItem",
+        position: index + 1,
+        url: canonicalUrl(`/changelog/${entry.slug}`),
+        name: entry.title,
+      })),
+    },
+  };
+}
+
+export function changelogEntrySchema(entry: {
+  title: string;
+  description: string;
+  slug: string;
+  date: string;
+}) {
+  const path = `/changelog/${entry.slug}`;
+  const url = canonicalUrl(path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "@id": entityId(path, "blogposting"),
+    headline: entry.title,
+    description: entry.description,
+    image: canonicalUrl(DEFAULT_IMAGE_PATH),
+    url,
+    datePublished: entry.date,
+    dateModified: entry.date,
+    author: authorReference,
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+  };
+}
+
+export function personSchema(description: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    "@id": PERSON_ID,
+    name: AUTHOR_NAME,
+    description,
+    url: canonicalUrl("/about"),
+    sameAs: ["https://github.com/ridafkih", "https://rida.dev"],
+    worksFor: { "@id": `${SITE_URL}/#organization` },
+    mainEntityOfPage: { "@id": entityId("/about", "webpage") },
+  };
+}
+
+export function blogPostingSchema(post: {
+  title: string;
+  description: string;
+  path: string;
+  createdAt: string;
+  updatedAt: string;
+  tags: string[];
+  imagePath?: string;
+}) {
+  const url = canonicalUrl(post.path);
+  return {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "@id": entityId(post.path, "blogposting"),
+    headline: post.title,
+    description: post.description,
+    image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),
+    url,
+    datePublished: post.createdAt,
+    dateModified: post.updatedAt,
+    keywords: post.tags,
+    author: authorReference,
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    isPartOf: { "@id": `${SITE_URL}/#website` },
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+  };
+}

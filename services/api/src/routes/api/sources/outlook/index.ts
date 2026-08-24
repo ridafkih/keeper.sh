@@ -1,0 +1,67 @@
+import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { withAuth, withWideEvent } from "@/utils/middleware";
+import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
+import { labelFailureResponse } from "@/utils/error-labelling";
+import {
+  OAuthSourceLimitError,
+  DestinationNotFoundError,
+  DestinationProviderMismatchError,
+  DuplicateSourceError,
+  getUserOAuthSources,
+  createOAuthSource,
+} from "@/utils/oauth-sources";
+
+const OUTLOOK_PROVIDER = "outlook";
+
+const GET = withWideEvent(
+  withAuth(async ({ userId }) => {
+    const sources = await getUserOAuthSources(userId, OUTLOOK_PROVIDER);
+    return Response.json(sources);
+  }),
+);
+
+const POST = withWideEvent(
+  withAuth(async ({ request, userId }) => {
+    widelog.set("provider.name", "outlook");
+    const body = await request.json();
+
+    try {
+      const { externalCalendarId, name, oauthSourceCredentialId } =
+        createOAuthSourceSchema.assert(body);
+      const source = await createOAuthSource({
+        externalCalendarId,
+        name,
+        oauthCredentialId: oauthSourceCredentialId ?? "",
+        provider: OUTLOOK_PROVIDER,
+        userId,
+      });
+      return Response.json(source, { status: HTTP_STATUS.CREATED });
+    } catch (error) {
+      if (error instanceof OAuthSourceLimitError) {
+        widelog.errorFields(error, { slug: "account-limit-reached" });
+        return ErrorResponse.paymentRequired(error.message).toResponse();
+      }
+      if (error instanceof DestinationNotFoundError) {
+        return ErrorResponse.notFound(error.message).toResponse();
+      }
+      if (error instanceof DestinationProviderMismatchError) {
+        return ErrorResponse.badRequest(error.message).toResponse();
+      }
+      if (error instanceof DuplicateSourceError) {
+        widelog.errorFields(error, { slug: "duplicate-source" });
+        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
+      }
+
+      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+      if (databaseResponse) {
+        return databaseResponse;
+      }
+
+      return ErrorResponse.badRequest("Invalid request body").toResponse();
+    }
+  }),
+);
+
+export { GET, POST };

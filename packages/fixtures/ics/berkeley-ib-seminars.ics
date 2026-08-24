@@ -1,0 +1,242 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//University of California Berkeley//IB Events Calendar//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+DTSTART:20260122T203000Z
+DTEND:20260122T213000Z
+DTSTAMP:20260308T083501Z
+UID:313839-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Margaux Pinney: Leveraging Evolutionary-Scale Enzymology to Map and
+  Predict Catalytic Landscapes
+DESCRIPTION:Speaker Institution: University of California\, Berkeley
+URL:https://events.berkeley.edu/ib/event/313839-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260129T203000Z
+DTEND:20260129T213000Z
+DTSTAMP:20260308T083501Z
+UID:313838-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Michael Eisen: From Arkansas to the Atmosphere: Reversing the Impac
+ t of Animal Agriculture on Climate and Biodiversity
+DESCRIPTION:Speaker Institution: University of California\, Berkeley
+URL:https://events.berkeley.edu/ib/event/313838-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260205T203000Z
+DTEND:20260205T213000Z
+DTSTAMP:20260308T083501Z
+UID:313454-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Roxanne Beltran: Unraveling individual and environmental drivers of
+  life history trait variation in long-lived vertebrates
+DESCRIPTION:Speaker Institution: University of California\, Santa Cruz
+URL:https://events.berkeley.edu/ib/event/313454-unraveling-individual-and-e
+ nvironmental-drivers-of
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260212T203000Z
+DTEND:20260212T213000Z
+DTSTAMP:20260308T083501Z
+UID:316364-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Jeff Groh: IB Postdoc Talks: Balanced polymorphism in a floral tran
+ scription factor underlies an ancient rhythm of alternating sexes in avoca
+ do
+DESCRIPTION:Speaker Institution: UCB (Blackman Lab &amp\; Whiteman Lab)
+URL:https://events.berkeley.edu/ib/event/316364-ib-postdoc-talks-title-to-b
+ e-announced
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260212T203000Z
+DTEND:20260212T213000Z
+DTSTAMP:20260308T083501Z
+UID:316365-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Milo Johnson: IB Postdoc Talks: Building a zoo of barcoded mobile g
+ enetic elements
+DESCRIPTION:Speaker Institution: UCB (Koskella Lab)
+URL:https://events.berkeley.edu/ib/event/316365-ib-postdoc-talks-title-to-b
+ e-announced
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260219T203000Z
+DTEND:20260219T213000Z
+DTSTAMP:20260308T083501Z
+UID:312509-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Kirk Lohmueller: Understanding the fitness effects of mutations and
+  implications for small populations
+DESCRIPTION:Speaker Institution: University of California\, Los Angeles
+URL:https://events.berkeley.edu/ib/event/312509-integrative-biology
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260226T203000Z
+DTEND:20260226T213000Z
+DTSTAMP:20260308T083501Z
+UID:312508-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Damien Caillaud: Effects of Population Density on Gorilla Behavior 
+ and Demography
+DESCRIPTION:Speaker Institution: University of California\, Davis
+URL:https://events.berkeley.edu/ib/event/312508-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260305T203000Z
+DTEND:20260305T213000Z
+DTSTAMP:20260308T083501Z
+UID:312507-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Sunghwan Jung: Drinking\, Diving\, and Shaking
+DESCRIPTION:Speaker Institution: Cornell University
+URL:https://events.berkeley.edu/ib/event/312507-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260319T193000Z
+DTEND:20260319T203000Z
+DTSTAMP:20260308T083501Z
+UID:312506-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Xochitl Clare: EcoTrace Project: Mapping Environmental Pollution an
+ damp\; Community Awareness in Placencia\, Belize
+DESCRIPTION:Speaker Institution: University of Washington
+URL:https://events.berkeley.edu/ib/event/312506-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260402T193000Z
+DTEND:20260402T203000Z
+DTSTAMP:20260308T083501Z
+UID:312505-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Erin Mordecai: Global change and the ecology and evolution of infec
+ tious disease
+DESCRIPTION:Speaker Institution: Stanford University
+URL:https://events.berkeley.edu/ib/event/312505-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260409T193000Z
+DTEND:20260409T203000Z
+DTSTAMP:20260308T083501Z
+UID:312504-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Kadeem Gilbert: Pigments and pH: Plant traits temper their interact
+ ions
+DESCRIPTION:Speaker Institution: Michigan State University
+URL:https://events.berkeley.edu/ib/event/312504-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260416T193000Z
+DTEND:20260416T203000Z
+DTSTAMP:20260308T083501Z
+UID:315034-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Andrea Alfaro: Integrative Biology Seminar
+DESCRIPTION:Speaker Institution: University of California\, Davis
+URL:https://events.berkeley.edu/ib/event/315034-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260423T193000Z
+DTEND:20260423T203000Z
+DTSTAMP:20260308T083501Z
+UID:315033-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Leah Krubitzer: Integrative Biology Seminar
+DESCRIPTION:Speaker Institution: University of California\, Davis
+URL:https://events.berkeley.edu/ib/event/315033-integrative-biology-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260430T193000Z
+DTEND:20260430T203000Z
+DTSTAMP:20260308T083501Z
+UID:312503-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Katie Marshall: Julius Thomas Hansen Lecture
+DESCRIPTION:Speaker Institution: The University of British Columbia
+URL:https://events.berkeley.edu/ib/event/312503-julius-thomas-hansen-lectur
+ e
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260507T193000Z
+DTEND:20260507T203000Z
+DTSTAMP:20260308T083501Z
+UID:312502-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Ricardo Mallarino: Joint IB/MCB Seminar
+DESCRIPTION:Speaker Institution: Princeton University
+URL:https://events.berkeley.edu/ib/event/312502-joint-ibmcb-seminar
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260511T223000Z
+DTEND:20260511T233000Z
+DTSTAMP:20260308T083501Z
+UID:317568-ucb-events-calendar@berkeley.edu
+LOCATION:125 Li Ka Shing Center 
+ORGANIZER:
+SUMMARY:Veronarindra Ramananjato: IB Finishing Talk
+DESCRIPTION:Speaker Institution: UCB (Razafindratsima Lab)
+URL:https://events.berkeley.edu/ib/event/317568-ib-finishing-talk
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+BEGIN:VEVENT
+DTSTART:20260518T230000Z
+DTEND:20260519T000000Z
+DTSTAMP:20260308T083501Z
+UID:315909-ucb-events-calendar@berkeley.edu
+LOCATION:2040 VLSB 
+ORGANIZER:
+SUMMARY:Claire Evensen: IB Finishing Talk
+DESCRIPTION:Speaker Institution: UCB (Boots/Koskella Labs)
+URL:https://events.berkeley.edu/ib/event/315909-ib-finishing-talk
+LAST-MODIFIED:20260308T083501Z
+SEQUENCE:0
+END:VEVENT
+END:VCALENDAR

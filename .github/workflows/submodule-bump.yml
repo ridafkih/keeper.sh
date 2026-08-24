@@ -1,0 +1,133 @@
+name: Bump Submodule
+
+concurrency:
+  group: bump-${{ github.event.client_payload.submodule || inputs.submodule }}
+  cancel-in-progress: false
+
+on:
+  repository_dispatch:
+    types: [submodule-updated]
+  workflow_dispatch:
+    inputs:
+      submodule:
+        description: Which submodule to bump
+        required: true
+        type: choice
+        options: [seo, infra, claude]
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve which submodule moved
+        id: target
+        env:
+          NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
+        run: |
+          case "$NAME" in
+            seo)    echo "path=applications/web/seo" >> "$GITHUB_OUTPUT" ;;
+            infra)  echo "path=infra"                 >> "$GITHUB_OUTPUT" ;;
+            claude) echo "path=.claude"               >> "$GITHUB_OUTPUT" ;;
+            *)     echo "Unknown submodule: '$NAME'" >&2; exit 1 ;;
+          esac
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-main
+        with:
+          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: ridafkih
+          repositories: keeper.sh
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-submodules
+        with:
+          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: keeperdotsh
+          repositories: |
+            seo
+            infra
+            .claude
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          token: ${{ steps.app-main.outputs.token }}
+
+      - name: Fetch the submodules
+        env:
+          SUBMODULE_TOKEN: ${{ steps.app-submodules.outputs.token }}
+        run: |
+          git config --global \
+            url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/keeperdotsh/".insteadOf \
+            "https://github.com/keeperdotsh/"
+          git submodule update --init applications/web/seo "${{ steps.target.outputs.path }}"
+
+      - name: Move the pin
+        id: bump
+        run: |
+          git submodule update --remote "${{ steps.target.outputs.path }}"
+          if git diff --quiet -- "${{ steps.target.outputs.path }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is already current; nothing to do."
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
+      - run: bun install --frozen-lockfile
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
+      - run: bunx turbo run build --filter=@keeper.sh/web
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
+
+      - name: Open a pull request
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-main.outputs.token }}
+          APP_SLUG: ${{ steps.app-main.outputs.app-slug }}
+          NAME: ${{ steps.target.outputs.name }}
+          PIN: ${{ steps.bump.outputs.pin }}
+          BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.bump.outputs.pin }}
+        run: |
+          BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          git checkout -B "$BRANCH"
+          git add "${{ steps.target.outputs.path }}"
+          git commit -m "chore($NAME): bump to $PIN"
+          git push -u --force-with-lease origin "$BRANCH"
+
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --title "chore($NAME): bump to $PIN" --body "" --head "$BRANCH"
+          fi
+
+          # One open bump PR per submodule. A newer pin supersedes the rest.
+          gh pr list --state open --json number,headRefName --jq \
+            ".[] | select(.headRefName | startswith(\"chore/bump-${NAME}-\")) | select(.headRefName != \"${BRANCH}\") | .number" \
+          | while read -r n; do
+              [ -n "$n" ] || continue
+              gh pr close "$n" --comment "Superseded by chore($NAME): bump to $PIN."
+            done
+
+      - name: Report a failed bump
+        if: failure()
+        env:
+          GH_TOKEN: ${{ steps.app-main.outputs.token || secrets.GITHUB_TOKEN }}
+          NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Bumping the $NAME submodule failed"
+          if [ -n "$(gh issue list --search "$TITLE in:title" --state open --json number --jq '.[].number')" ]; then
+            echo "An open issue already tracks this."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "The run that failed: $RUN"

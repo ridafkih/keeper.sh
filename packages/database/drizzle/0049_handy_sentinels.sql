@@ -1,0 +1,1 @@
+ALTER TABLE "event_mappings" ADD COLUMN "syncEventHash" text;

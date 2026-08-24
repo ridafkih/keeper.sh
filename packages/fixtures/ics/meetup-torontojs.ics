@@ -1,0 +1,68 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Meetup//Meetup Calendar 1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+NAME:Toronto JavaScript
+X-WR-CALNAME:Toronto JavaScript
+BEGIN:VTIMEZONE
+TZID:America/Toronto
+TZURL:http://tzurl.org/zoneinfo-outlook/America/Toronto
+X-LIC-LOCATION:America/Toronto
+BEGIN:DAYLIGHT
+TZOFFSETFROM:-0500
+TZOFFSETTO:-0400
+TZNAME:EDT
+DTSTART:19700308T020000
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:-0400
+TZOFFSETTO:-0500
+TZNAME:EST
+DTSTART:19701101T020000
+RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+UID:event_313618512@meetup.com
+SEQUENCE:1
+DTSTAMP:20260308T083902Z
+DTSTART;TZID=America/Toronto:20260319T180000
+DTEND;TZID=America/Toronto:20260319T210000
+SUMMARY:TechTalk (In-Person) - March 2026
+DESCRIPTION:Toronto JavaScript\nHere’s the March edition of our Tech Tal
+ k event at Super.com on March 19\, 2026\n\nJoin us for some drinks\, snack
+ s\, and Tech Talks.\n\nMake sure to mark your calendars and come out and j
+ oin us for this event!\n\n**🕑 Agenda & Schedule ✨**\n\n* 18:00 - Door
+ s open\n* 18:20 - Intro and announcements\n* 18:30 - **Understanding envir
+ onment variables in the Javascript ecosystem** by **[Evert Pot](https://ev
+ ertpot.com/)**\n*Abstract*: Environment variables are weird and can behave
+  confusingly. This talk is a pure coding talk that goes into what environm
+ ent variables are\, why they are and what they've become.\nand how we can 
+ protect our pipelines moving forward.\n* 19:00 - **TBD**\n*Abstract*: TBD\
+ n* 19:30 - Networking\n* 21:00 - Doors Close\n\n(**Note**: *All times in t
+ he schedule are an approximation.*)\n\nPlease RSVP to confirm your attenda
+ nce. If you have your friends or teammates joining please ask them to RSVP
+  as well.\n\nThis event is open to all skill levels.\n\nMany thanks to [Su
+ per.com](Super.com) for hosting us!\n\nWe're looking for sponsors for even
+ ts like these. If you or your company would like to support TorontoJS and 
+ get a message out to our community\, please get in touch with organizers@t
+ orontojs.com\n\nThe Code of Conduct is enforced at all TorontoJS events an
+ d spaces - online or in-person.\n\nTorontoJS is a volunteer-led not-for-pr
+ ofit organization.\n\n**Please help us** with tidying up. Otherwise\, the 
+ venue staff and volunteers will have to pick up after you.\n\\-\\-\\-\n\n#
+  **The Venue 🏠**\n\nThe venue is next door to Shoppers Drug Mart\, a no
+ ndescript door that you'll have to look for a little carefully.\n\\-\\-\\-
+ \n*TorontoJS is committed to creating a safe and inclusive environment for
+  all. Our Code of Conduct applies both online and in person at all our eve
+ nts and spaces.*\n\nSee you there! 🎉
+URL;VALUE=URI:https://www.meetup.com/torontojs/events/313618512/
+STATUS:CONFIRMED
+CREATED:20260303T153206Z
+LAST-MODIFIED:20260303T153206Z
+CLASS:PUBLIC
+END:VEVENT
+X-ORIGINAL-URL:https://www.meetup.com/torontojs/events/ical/
+X-WR-CALNAME:Toronto JavaScript
+END:VCALENDAR

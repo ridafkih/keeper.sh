@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_snapshots" ADD COLUMN "public" boolean DEFAULT false NOT NULL;

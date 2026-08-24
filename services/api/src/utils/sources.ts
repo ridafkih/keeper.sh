@@ -1,0 +1,260 @@
+import { calendarAccountsTable, calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
+import {
+  pullRemoteCalendar,
+  createIcsSourceFetcher,
+  interpretFullDayTimedEventsAsAllDay,
+  persistCalendarSnapshot,
+} from "@keeper.sh/calendar/ics";
+import {
+  buildEventStateInsertRow,
+  ingestSource,
+  insertEventStatesWithConflictResolution,
+  selectIngestWideEventFields,
+  withSourceIngestLock,
+} from "@keeper.sh/calendar";
+import type { IngestionPersistenceWork, IngestWideEventFields } from "@keeper.sh/calendar";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { enqueuePushSync } from "./enqueue-push-sync";
+import {
+  SourceLimitError,
+  InvalidSourceUrlError,
+  runSourceCreationPreflight,
+  runCreateSource,
+} from "./source-lifecycle";
+import {
+  buildSourceIngestionPlan,
+  createDestinationRangesReader,
+} from "./source-ingestion-ranges";
+import {
+  createSourceCalendarInsertDependencies,
+  insertSourceCalendars,
+} from "./source-calendar-insert";
+import { safeFetchOptions } from "./safe-fetch-options";
+
+import { spawnBackgroundJob } from "./background-task";
+import { database, premiumService, redis } from "@/context";
+import { widelog } from "@/utils/logging";
+import { createSyncLock } from "@keeper.sh/sync";
+
+const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const SOURCE_INGEST_LOCK_KEY_PREFIX = "source-ingest:";
+const sourceIngestLock = createSyncLock(redis);
+const destinationRangesReader = createDestinationRangesReader(database);
+
+const ICAL_CALENDAR_TYPE = "ical";
+type Source = typeof calendarsTable.$inferSelect;
+
+const createIngestionPersistenceTransaction = (calendarId: string) =>
+  (work: IngestionPersistenceWork) => withSourceIngestLock(
+    database,
+    calendarId,
+    (transaction) => work({
+      readExistingEvents: () => transaction
+        .select({
+          availability: eventStatesTable.availability,
+          description: eventStatesTable.description,
+          endTime: eventStatesTable.endTime,
+          exceptionDates: eventStatesTable.exceptionDates,
+          id: eventStatesTable.id,
+          isAllDay: eventStatesTable.isAllDay,
+          location: eventStatesTable.location,
+          recurrenceId: eventStatesTable.recurrenceId,
+          recurrenceRule: eventStatesTable.recurrenceRule,
+          sourceEventId: eventStatesTable.sourceEventId,
+          sourceEventType: eventStatesTable.sourceEventType,
+          sourceEventUid: eventStatesTable.sourceEventUid,
+          startTime: eventStatesTable.startTime,
+          startTimeZone: eventStatesTable.startTimeZone,
+          title: eventStatesTable.title,
+        })
+        .from(eventStatesTable)
+        .where(eq(eventStatesTable.calendarId, calendarId)),
+      flush: async (changes) => {
+        if (changes.deletes.length > 0) {
+          await transaction
+            .delete(eventStatesTable)
+            .where(
+              and(
+                eq(eventStatesTable.calendarId, calendarId),
+                inArray(eventStatesTable.id, changes.deletes),
+              ),
+            );
+        }
+
+        if (changes.inserts.length > 0) {
+          await insertEventStatesWithConflictResolution(
+            transaction,
+            changes.inserts.map((event) => buildEventStateInsertRow(calendarId, event)),
+          );
+        }
+
+        if (changes.snapshot) {
+          await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+        }
+
+        if (changes.coverage) {
+          await transaction
+            .update(calendarsTable)
+            .set({
+              ingestFutureRange: changes.coverage.futureRange,
+              ingestHistoricRange: changes.coverage.historicRange,
+              ingestWindowEnd: changes.coverage.window.timeMax,
+              ingestWindowRecordedAt: new Date(),
+              ingestWindowStart: changes.coverage.window.timeMin,
+            })
+            .where(eq(calendarsTable.id, calendarId));
+        }
+      },
+    }),
+  );
+
+const recordIngestWideEvent = (event: IngestWideEventFields): void => {
+  for (const [key, value] of Object.entries(selectIngestWideEventFields(event))) {
+    widelog.set(key, value);
+  }
+};
+
+const ingestIcsSource = async (source: Source): Promise<void> => {
+  if (!source.url) {
+    return;
+  }
+
+  const fetcher = createIcsSourceFetcher({
+    calendarId: source.id,
+    url: source.url,
+    database,
+    plan: await buildSourceIngestionPlan(source.id, destinationRangesReader),
+    safeFetchOptions,
+  });
+
+  const lockResult = await sourceIngestLock.acquire(
+    `${SOURCE_INGEST_LOCK_KEY_PREFIX}${source.id}`,
+  );
+  if (!lockResult.acquired) {
+    return;
+  }
+
+  try {
+    await ingestSource({
+      calendarId: source.id,
+      fetchEvents: () =>
+        fetcher.fetchEvents({
+          interpretEvents: (events, context) =>
+            interpretFullDayTimedEventsAsAllDay(events, {
+              calendarTimeZone: context.calendarTimeZone,
+              enabled: source.treatFullDayTimedEventsAsAllDay,
+            }),
+        }),
+      isCurrent: lockResult.handle.isCurrent,
+      onIngestEvent: recordIngestWideEvent,
+      withPersistenceTransaction: createIngestionPersistenceTransaction(source.id),
+    });
+  } finally {
+    await lockResult.handle.release();
+  }
+};
+
+const getUserSources = async (userId: string): Promise<Source[]> => {
+  const sources = await database
+    .select()
+    .from(calendarsTable)
+    .where(
+      and(
+        eq(calendarsTable.userId, userId),
+        eq(calendarsTable.calendarType, ICAL_CALENDAR_TYPE),
+      ),
+    );
+
+  return sources;
+};
+
+const validateSourceUrl = async (url: string): Promise<void> => {
+  await pullRemoteCalendar("json", url, safeFetchOptions);
+};
+
+const countExistingAccounts = async (userId: string): Promise<number> => {
+  const [result] = await database
+    .select({ value: count() })
+    .from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.userId, userId));
+  return result?.value ?? 0;
+};
+
+const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
+  const input = { userId, name, url };
+
+  await runSourceCreationPreflight(input, {
+    canAddAccount: (userIdToCheck, existingAccountCount) =>
+      premiumService.canAddAccount(userIdToCheck, existingAccountCount),
+    countExistingAccounts,
+    validateSourceUrl,
+  });
+
+  return database.transaction((tx) =>
+    runCreateSource(
+      input,
+      {
+        acquireAccountLock: async (userIdToLock) => {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${userIdToLock}))`,
+          );
+        },
+        canAddAccount: (userIdToCheck, existingAccountCount) =>
+          premiumService.canAddAccount(userIdToCheck, existingAccountCount),
+        countExistingAccounts: async (userIdToCount) => {
+          const [result] = await tx
+            .select({ value: count() })
+            .from(calendarAccountsTable)
+            .where(eq(calendarAccountsTable.userId, userIdToCount));
+          return result?.value ?? 0;
+        },
+        createCalendarAccount: async ({ userId: accountUserId, displayName }) => {
+          const [account] = await tx
+            .insert(calendarAccountsTable)
+            .values({
+              authType: "none",
+              displayName,
+              provider: "ics",
+              userId: accountUserId,
+            })
+            .returning({ id: calendarAccountsTable.id });
+          return account?.id;
+        },
+        createSourceCalendar: async ({ accountId, name: sourceName, url: sourceUrl, userId: sourceUserId }) => {
+          const [source] = await insertSourceCalendars(
+            createSourceCalendarInsertDependencies(tx),
+            sourceUserId,
+            [{
+              accountId,
+              calendarType: ICAL_CALENDAR_TYPE,
+              name: sourceName,
+              url: sourceUrl,
+              userId: sourceUserId,
+            }],
+          );
+          return source;
+        },
+        fetchAndSyncSource: async (source) => {
+          await ingestIcsSource(source);
+        },
+        spawnBackgroundJob,
+        enqueuePushSync: async (enqueuedUserId) => {
+          const plan = await premiumService.getUserPlan(enqueuedUserId);
+          if (!plan) {
+            throw new Error("Unable to resolve user plan for sync enqueue");
+          }
+          await enqueuePushSync(enqueuedUserId, plan);
+        },
+      },
+    ),
+  );
+};
+
+export {
+  SourceLimitError,
+  InvalidSourceUrlError,
+  getUserSources,
+  ingestIcsSource,
+  createSource,
+};
+export type { Source };

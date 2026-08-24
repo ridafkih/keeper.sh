@@ -1,0 +1,1 @@
+ALTER TABLE "calendar_snapshots" ADD COLUMN "contentHash" text;

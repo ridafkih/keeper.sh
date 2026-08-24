@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN "customEventName" text DEFAULT '' NOT NULL;

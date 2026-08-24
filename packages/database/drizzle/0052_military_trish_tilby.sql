@@ -1,0 +1,1 @@
+ALTER TABLE "calendars" ADD COLUMN "originalName" text;

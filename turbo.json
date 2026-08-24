@@ -1,0 +1,37 @@
+{
+  "$schema": "https://v2-9-0.turborepo.dev/schema.json",
+  "ui": "stream",
+  "globalPassThroughEnv": ["CI", "ENV", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_HEADERS"],
+  "tasks": {
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "//#dev:root": {
+      "cache": false,
+      "persistent": true
+    },
+    "types": {
+      "dependsOn": ["^types"],
+      "inputs": ["src/**", "scripts/**", "tsconfig.json", "package.json"]
+    },
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
+    "start": {
+      "cache": false
+    },
+    "migrate": {
+      "cache": false
+    },
+    "test": {
+      "cache": false,
+      "passThroughEnv": ["KEEPER_TEST_DATABASE_URL"]
+    },
+    "lint": {
+      "inputs": ["src/**", "tests/**", ".oxlintrc.json", "../../.oxlintrc.json"],
+      "cache": true
+    }
+  }
+}

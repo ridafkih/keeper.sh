@@ -1,0 +1,401 @@
+import type {
+  FetchEventsOptions,
+  FetchEventsResult,
+  GoogleCalendarEvent,
+  GoogleEventsListResponse,
+  EventTimeSlot,
+} from "../types";
+import {
+  GOOGLE_CALENDAR_EVENTS_URL,
+  GOOGLE_CALENDAR_MAX_RESULTS,
+  GONE_STATUS,
+} from "../../shared/api";
+import { isAuthError } from "../../shared/errors";
+import type { GoogleApiError } from "../../types";
+import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
+import { parseEventTime } from "../../shared/date-time";
+import { isKeeperEvent } from "../../../../core/events/identity";
+import { withBackoff } from "../../../../core/utils/backoff";
+import { isRateLimitApiError } from "../../shared/errors";
+import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
+import { measureProviderRequest, measureSegment, measureSyncSegment } from "../../../../core/telemetry/segments";
+
+const EMPTY_API_ERROR: GoogleApiError = {};
+
+const parseApiErrorFromText = (text: string): GoogleApiError => {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (!googleApiErrorSchema.allows(parsed)) {
+      return EMPTY_API_ERROR;
+    }
+    return googleApiErrorSchema.assert(parsed).error ?? EMPTY_API_ERROR;
+  } catch {
+    return EMPTY_API_ERROR;
+  }
+};
+
+class EventsFetchError extends Error {
+  public readonly status: number;
+  public readonly authRequired: boolean;
+  public readonly apiError: GoogleApiError;
+
+  constructor(
+    message: string,
+    status: number,
+    authRequired = false,
+    apiError: GoogleApiError = {},
+  ) {
+    super(message);
+    this.name = "EventsFetchError";
+    this.status = status;
+    this.authRequired = authRequired;
+    this.apiError = apiError;
+  }
+}
+
+const REQUEST_TIMEOUT_MS = 15_000;
+
+const isRequestTimeoutError = (error: unknown): boolean =>
+  error instanceof Error
+  && (error.name === "AbortError" || error.name === "TimeoutError");
+
+interface PageFetchOptions {
+  accessToken: string;
+  baseUrl: string;
+  syncToken?: string;
+  timeMin?: Date;
+  timeMax?: Date;
+  maxResults: number;
+  pageToken?: string;
+  signal?: AbortSignal;
+}
+
+interface PageFetchResult {
+  data: GoogleEventsListResponse;
+  fullSyncRequired: false;
+}
+
+interface FullSyncRequiredResult {
+  fullSyncRequired: true;
+}
+
+const getGoogleRevisionTime = (event: GoogleCalendarEvent): number | null => {
+  const value = event.updated ?? event.created;
+  if (!value) {
+    return null;
+  }
+  const revisionTime = new Date(value).getTime();
+  if (Number.isNaN(revisionTime)) {
+    return null;
+  }
+  return revisionTime;
+};
+
+const shouldReplaceGoogleRevision = (
+  current: GoogleCalendarEvent,
+  candidate: GoogleCalendarEvent,
+): boolean => {
+  const currentTime = getGoogleRevisionTime(current);
+  const candidateTime = getGoogleRevisionTime(candidate);
+  if (currentTime !== null && candidateTime !== null && currentTime !== candidateTime) {
+    return candidateTime > currentTime;
+  }
+  return true;
+};
+
+const fetchEventsPage = async (
+  options: PageFetchOptions,
+): Promise<PageFetchResult | FullSyncRequiredResult> => {
+  const { accessToken, baseUrl, syncToken, timeMin, timeMax, maxResults, pageToken, signal } = options;
+
+  const url = new URL(baseUrl);
+  url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("singleEvents", "true");
+
+  if (syncToken) {
+    url.searchParams.set("syncToken", syncToken);
+  } else {
+    if (timeMin) {
+      url.searchParams.set("timeMin", timeMin.toISOString());
+    }
+    if (timeMax) {
+      url.searchParams.set("timeMax", timeMax.toISOString());
+    }
+  }
+
+  if (pageToken) {
+    url.searchParams.set("pageToken", pageToken);
+  }
+
+  const timeout = buildTimeoutSignal(REQUEST_TIMEOUT_MS, signal);
+  const response = await measureProviderRequest(() => fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    signal: timeout.signal,
+  }).catch((error) => {
+    if (timeout.isTimeout() || isRequestTimeoutError(error) && !signal?.aborted) {
+      throw new EventsFetchError(
+        `Failed to fetch events: timeout after ${REQUEST_TIMEOUT_MS}ms`,
+        408,
+        false,
+      );
+    }
+
+    throw error;
+  }));
+
+  if (response.status === GONE_STATUS) {
+    return { fullSyncRequired: true };
+  }
+
+  if (!response.ok) {
+    const responseText = await response.text();
+    const apiError = parseApiErrorFromText(responseText);
+    const authRequired = isAuthError(response.status, apiError);
+
+    throw new EventsFetchError(
+      `Failed to fetch events: ${response.status}: ${responseText}`,
+      response.status,
+      authRequired,
+      apiError,
+    );
+  }
+
+  /*
+   * The body download is network wait, not work. Charging it to work.transform_ms
+   * would move provider slowness into the half of the decomposition that is
+   * supposed to exonerate the provider.
+   */
+  const responseBody = await measureSegment("work.provider_http_ms", () => response.json());
+  return measureSyncSegment("work.transform_ms", () => ({
+    data: googleEventListSchema.assert(responseBody),
+    fullSyncRequired: false,
+  }));
+};
+
+const fetchCalendarEvents = async (options: FetchEventsOptions): Promise<FetchEventsResult> => {
+  const {
+    accessToken,
+    calendarId,
+    syncToken,
+    timeMin,
+    timeMax,
+    maxResults = GOOGLE_CALENDAR_MAX_RESULTS,
+    rateLimiter,
+    signal,
+  } = options;
+
+  const baseUrl = `${GOOGLE_CALENDAR_EVENTS_URL}/${encodeURIComponent(calendarId)}/events`;
+  const changedEventsById = new Map<string, GoogleCalendarEvent>();
+  const changedEventsWithoutId: GoogleCalendarEvent[] = [];
+  const isDeltaSync = Boolean(syncToken);
+  const collectEvents = (pageEvents: GoogleCalendarEvent[]): void => {
+    for (const event of pageEvents) {
+      if (event.id) {
+        const current = changedEventsById.get(event.id);
+        if (current && !shouldReplaceGoogleRevision(current, event)) {
+          continue;
+        }
+        changedEventsById.set(event.id, event);
+      } else if (event.status !== "cancelled") {
+        changedEventsWithoutId.push(event);
+      }
+    }
+  };
+
+  const fetchPageWithBackoff = (pageOptions: PageFetchOptions): Promise<PageFetchResult | FullSyncRequiredResult> =>
+    withBackoff(
+      () => fetchEventsPage(pageOptions),
+      {
+        signal,
+        shouldRetry: (error) =>
+          error instanceof EventsFetchError && isRateLimitApiError(error.status, error.apiError),
+      },
+    );
+
+  if (rateLimiter) {
+    await rateLimiter.acquire(1, signal);
+  }
+
+  let result = await fetchPageWithBackoff({
+    accessToken,
+    baseUrl,
+    maxResults,
+    syncToken,
+    timeMax,
+    timeMin,
+    signal,
+  });
+
+  if (result.fullSyncRequired) {
+    return { events: [], fullSyncRequired: true };
+  }
+
+  collectEvents(result.data.items ?? []);
+
+  let lastSyncToken = result.data.nextSyncToken;
+
+  while (result.data.nextPageToken) {
+    if (rateLimiter) {
+      await rateLimiter.acquire(1, signal);
+    }
+
+    result = await fetchPageWithBackoff({
+      accessToken,
+      baseUrl,
+      maxResults,
+      pageToken: result.data.nextPageToken,
+      syncToken,
+      timeMax,
+      timeMin,
+      signal,
+    });
+
+    if (result.fullSyncRequired) {
+      return { events: [], fullSyncRequired: true };
+    }
+
+    collectEvents(result.data.items ?? []);
+
+    if (result.data.nextSyncToken) {
+      lastSyncToken = result.data.nextSyncToken;
+    }
+  }
+
+  const latestChangedEvents = [
+    ...changedEventsWithoutId,
+    ...changedEventsById.values(),
+  ];
+  const fetchResult: FetchEventsResult = {
+    events: latestChangedEvents.filter((event) => event.status !== "cancelled"),
+    fullSyncRequired: false,
+    isDeltaSync,
+    nextSyncToken: lastSyncToken,
+  };
+
+  if (isDeltaSync) {
+    fetchResult.changedEventIds = latestChangedEvents.flatMap((event) => {
+      if (!event.id) {
+        return [];
+      }
+      return [event.id];
+    });
+    fetchResult.cancelledEventIds = latestChangedEvents.flatMap((event) => {
+      if (event.status === "cancelled" && event.id) {
+        return [event.id];
+      }
+      return [];
+    });
+  }
+
+  return fetchResult;
+};
+
+const resolveGoogleAvailability = (
+  event: Pick<GoogleCalendarEvent, "eventType" | "transparency">,
+): EventTimeSlot["availability"] => {
+  if (event.eventType === "workingLocation") {
+    return "workingElsewhere";
+  }
+
+  if (event.transparency === "transparent") {
+    return "free";
+  }
+
+  if (event.eventType === "outOfOffice") {
+    return "oof";
+  }
+
+  return "busy";
+};
+
+const resolveGoogleLocation = (
+  event: Pick<GoogleCalendarEvent, "location" | "workingLocationProperties">,
+): string | undefined => {
+  if (event.location?.trim()) {
+    return event.location;
+  }
+
+  const customLocationLabel = event.workingLocationProperties?.customLocation?.label?.trim();
+  if (customLocationLabel) {
+    return customLocationLabel;
+  }
+
+  return event.workingLocationProperties?.officeLocation?.label?.trim();
+};
+
+const isAllDayGoogleEvent = (
+  event: Pick<GoogleCalendarEvent, "start" | "end">,
+): boolean => Boolean(event.start?.date || event.end?.date);
+
+const resolveSourceEventType = (
+  eventType: GoogleCalendarEvent["eventType"],
+): EventTimeSlot["sourceEventType"] => {
+  if (eventType === "focusTime") {
+    return "focusTime";
+  }
+  if (eventType === "outOfOffice") {
+    return "outOfOffice";
+  }
+  if (eventType === "workingLocation") {
+    return "workingLocation";
+  }
+  return "default";
+};
+
+interface ParsedSourceEventDiagnostics {
+  events: EventTimeSlot[];
+  selfAuthoredCount: number;
+  unrepresentableCount: number;
+}
+
+const parseGoogleEventsWithDiagnostics = (
+  events: GoogleCalendarEvent[],
+): ParsedSourceEventDiagnostics => {
+  const result: EventTimeSlot[] = [];
+  let selfAuthoredCount = 0;
+  let unrepresentableCount = 0;
+
+  for (const event of events) {
+    /*
+     * Every member of a Google time object is optional, so `{ timeZone: "UTC" }`
+     * reaches here; guarding on the object alone would let it through.
+     */
+    const startTime = parseEventTime(event.start);
+    const endTime = parseEventTime(event.end);
+    if (!startTime || !endTime || !event.iCalUID) {
+      unrepresentableCount += 1;
+      continue;
+    }
+    if (isKeeperEvent(event.iCalUID)) {
+      selfAuthoredCount += 1;
+      continue;
+    }
+    result.push({
+      availability: resolveGoogleAvailability(event),
+      description: event.description,
+      endTime,
+      isAllDay: isAllDayGoogleEvent(event),
+      location: resolveGoogleLocation(event),
+      sourceEventType: resolveSourceEventType(event.eventType),
+      startTime,
+      startTimeZone: event.start?.timeZone ?? event.end?.timeZone,
+      sourceEventId: event.id,
+      title: event.summary,
+      uid: event.iCalUID,
+    });
+  }
+
+  return { events: result, selfAuthoredCount, unrepresentableCount };
+};
+
+const parseGoogleEvents = (events: GoogleCalendarEvent[]): EventTimeSlot[] =>
+  parseGoogleEventsWithDiagnostics(events).events;
+
+export {
+  fetchCalendarEvents,
+  parseGoogleEvents,
+  parseGoogleEventsWithDiagnostics,
+  EventsFetchError,
+};

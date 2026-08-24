@@ -1,0 +1,491 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { createDAVClient, DAVNamespaceShort } from "tsdav";
+import { chunkArray } from "../../../core/utils/chunk";
+import { createSafeFetch } from "../../../utils/safe-fetch";
+import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
+import { fetchHonouringRetryAfter } from "./throttle-retry";
+import {
+  buildCalendarObjectFilters,
+  CALDAV_MULTIGET_BATCH_SIZE,
+  isCalendarObjectPath,
+} from "./api";
+import { createDigestAwareFetch } from "./digest-fetch";
+import { runInRequestScope } from "./response-status-scope";
+import { findCalendarByStoredUrl } from "./calendar-identity";
+import type { CalDAVAuthMethod } from "./digest-fetch";
+import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
+import type { CalDAVClientConfig, CalendarInfo } from "../types";
+import { measureProviderRequest } from "../../../core/telemetry/segments";
+
+const MISSING_HREF_SAMPLE_SIZE = 5;
+
+interface CalendarObject {
+  url: string;
+  etag?: string;
+  data?: string;
+}
+
+interface CalDAVListingStats {
+  listedCount: number;
+  requestedCount: number;
+  returnedCount: number;
+  unrequestedCount: number;
+}
+
+interface CalDAVIncompleteMultiGetDetails {
+  batchCount: number;
+  calendarUrl: string;
+  hrefsRequested: number;
+  missingHrefs: string[];
+  objectsReturned: number;
+}
+
+class CalDAVIncompleteMultiGetError extends Error {
+  readonly batchCount: number;
+  readonly calendarUrl: string;
+  readonly hrefsRequested: number;
+  readonly missingHrefs: string[];
+  readonly objectsReturned: number;
+
+  constructor(details: CalDAVIncompleteMultiGetDetails) {
+    super(
+      `CalDAV multiget returned ${details.objectsReturned} of ${details.hrefsRequested} requested objects for ${details.calendarUrl}`,
+    );
+    this.name = "CalDAVIncompleteMultiGetError";
+    this.batchCount = details.batchCount;
+    this.calendarUrl = details.calendarUrl;
+    this.hrefsRequested = details.hrefsRequested;
+    this.missingHrefs = details.missingHrefs.slice(0, MISSING_HREF_SAMPLE_SIZE);
+    this.objectsReturned = details.objectsReturned;
+  }
+}
+
+type CalDAVWriteOperation = "create" | "delete" | "update";
+
+class CalDAVHttpError extends Error {
+  readonly operation: CalDAVWriteOperation;
+  readonly status: number;
+
+  constructor(response: Response, operation: CalDAVWriteOperation) {
+    super(`CalDAV ${operation} failed: ${response.status} ${response.statusText}`.trim());
+    this.name = "CalDAVHttpError";
+    this.operation = operation;
+    this.status = response.status;
+  }
+}
+
+class CalDAVAuthenticationError extends Error {
+  readonly status = HTTP_STATUS.UNAUTHORIZED;
+
+  constructor(cause: unknown) {
+    super("Invalid credentials", { cause });
+    this.name = "CalDAVAuthenticationError";
+  }
+}
+
+class CalDAVWithheldCredentialsError extends Error {
+  readonly redirectedTo: string;
+
+  constructor(details: WithheldCredentials, cause: unknown) {
+    super(
+      `CalDAV redirect to ${details.redirectedTo} crossed a security boundary, so the request was sent without credentials and the server refused it`,
+      { cause },
+    );
+    this.name = "CalDAVWithheldCredentialsError";
+    this.redirectedTo = details.redirectedTo;
+  }
+}
+
+class CalDAVCreateConflictError extends CalDAVHttpError {
+  constructor(response: Response) {
+    super(response, "create");
+    this.name = "CalDAVCreateConflictError";
+  }
+}
+
+const releaseResponseBody = async (response: Response): Promise<void> => {
+  await response.body?.cancel();
+};
+
+const assertSuccessfulResponse = async (
+  response: Response,
+  operation: CalDAVWriteOperation,
+): Promise<void> => {
+  await releaseResponseBody(response);
+  if (!response.ok) {
+    throw new CalDAVHttpError(response, operation);
+  }
+};
+
+type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
+
+class CalDAVUnauthorizedResponseError extends Error {
+  readonly status = HTTP_STATUS.UNAUTHORIZED;
+
+  constructor() {
+    super("CalDAV operation completed on an unauthorized response");
+    this.name = "CalDAVUnauthorizedResponseError";
+  }
+}
+
+const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
+  runInRequestScope(async (requests) => {
+    const raiseUnauthorizedVerdict = (cause: unknown): never => {
+      if (requests.hasUnrefutedUnauthorized()) {
+        throw new CalDAVAuthenticationError(cause);
+      }
+
+      const withheld = requests.findUnrefutedWithheldCredentials();
+      if (withheld) {
+        throw new CalDAVWithheldCredentialsError(withheld, cause);
+      }
+
+      throw cause;
+    };
+
+    const result = await operation().catch((error: unknown) => {
+      if (requests.isPropagatedTransportFailure(error)) {
+        throw error;
+      }
+      return raiseUnauthorizedVerdict(error);
+    });
+
+    if (requests.hasUnrefutedUnauthorized() || requests.findUnrefutedWithheldCredentials()) {
+      return raiseUnauthorizedVerdict(new CalDAVUnauthorizedResponseError());
+    }
+
+    return result;
+  });
+
+const getDisplayName = (name: unknown): string => {
+  if (typeof name === "string") {
+    return name;
+  }
+  return "Unnamed Calendar";
+};
+
+const bindUrlToAccount = (url: string, serverUrl: string): string => {
+  const target = new URL(url, serverUrl);
+  const bound = new URL(serverUrl);
+  if (target.origin === bound.origin) {
+    return target.href;
+  }
+
+  bound.pathname = target.pathname;
+  bound.search = target.search;
+  return bound.href;
+};
+
+const bindRequestToAccount = (input: string | Request | URL, serverUrl: string): string | Request => {
+  if (input instanceof Request) {
+    const bound = bindUrlToAccount(input.url, serverUrl);
+    if (bound === input.url) {
+      return input;
+    }
+    return new Request(bound, input);
+  }
+
+  return bindUrlToAccount(input.toString(), serverUrl);
+};
+
+const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
+  new URL(href, calendarUrl).pathname;
+
+const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
+  ...new Set(
+    responses
+      .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
+      .filter((path) => isCalendarObjectPath(path)),
+  ),
+];
+
+class CalDAVClient {
+  private client: DAVClientInstance | null = null;
+  private config: CalDAVClientConfig;
+  private safeFetchOptions?: SafeFetchOptions;
+  private resolvedAuthMethod: (() => CalDAVAuthMethod | null) | null = null;
+
+  constructor(config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions) {
+    this.config = config;
+    this.safeFetchOptions = safeFetchOptions;
+  }
+
+  getResolvedAuthMethod(): CalDAVAuthMethod | null {
+    return this.resolvedAuthMethod?.() ?? null;
+  }
+
+  private async chargeRequest(): Promise<void> {
+    await this.config.onBeforeRequest?.();
+  }
+
+  private async getClient(): Promise<DAVClientInstance> {
+    if (!this.client) {
+      const safeFetch = createSafeFetch(this.safeFetchOptions);
+      const chargedFetch: typeof safeFetch = (input, init) => fetchHonouringRetryAfter(
+        async (attempt) => {
+          await this.chargeRequest();
+          return safeFetch(attempt, init);
+        },
+        input,
+        { signal: init?.signal, sleep: sleepWithSignal },
+      );
+      const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
+        credentials: this.config.credentials,
+        baseFetch: chargedFetch,
+        knownAuthMethod: this.config.authMethod,
+      });
+      this.resolvedAuthMethod = getResolvedMethod;
+      const { serverUrl } = this.config;
+      const accountBoundFetch = (input: string | Request | URL, init?: RequestInit): Promise<Response> =>
+        digestAwareFetch(bindRequestToAccount(input, serverUrl), init);
+      this.client = await createDAVClient({
+        authMethod: "Custom",
+        authFunction: () => Promise.resolve({}),
+        credentials: this.config.credentials,
+        defaultAccountType: "caldav",
+        fetch: accountBoundFetch,
+        serverUrl,
+      });
+    }
+    return this.client;
+  }
+
+  async discoverCalendars(): Promise<CalendarInfo[]> {
+    const cached = await this.config.calendarDiscoveryCache?.read();
+    if (cached) {
+      return cached;
+    }
+
+    const calendars = await mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      return measureProviderRequest(() => client.fetchCalendars());
+    });
+
+    const discovered = calendars
+      .filter(({ components }) => components?.includes("VEVENT"))
+      .map(({ url, displayName, ctag }) => ({
+        ctag,
+        displayName: getDisplayName(displayName),
+        url: bindUrlToAccount(url, this.config.serverUrl),
+      }));
+
+    await this.config.calendarDiscoveryCache?.write(discovered);
+    return discovered;
+  }
+
+  async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
+    const calendars = await this.discoverCalendars();
+
+    return findCalendarByStoredUrl(calendars, calendarUrl)?.displayName ?? null;
+  }
+
+  async resolveCalendarUrl(storedUrl: string): Promise<string> {
+    const calendars = await this.discoverCalendars();
+
+    return findCalendarByStoredUrl(calendars, storedUrl)?.url ?? storedUrl;
+  }
+
+  async createCalendarObject(params: {
+    calendarUrl: string;
+    filename: string;
+    iCalString: string;
+  }): Promise<void> {
+    const client = await this.getClient();
+
+    const response = await client.createCalendarObject({
+      calendar: { url: params.calendarUrl },
+      filename: params.filename,
+      iCalString: params.iCalString,
+    });
+
+    if (response.status === 412) {
+      await releaseResponseBody(response);
+      throw new CalDAVCreateConflictError(response);
+    }
+    await assertSuccessfulResponse(response, "create");
+  }
+
+  async deleteCalendarObject(params: {
+    calendarUrl: string;
+    filename: string;
+    etag?: string;
+  }): Promise<void> {
+    await this.deleteCalendarObjectByUrl({
+      etag: params.etag,
+      objectUrl: CalDAVClient.normalizeUrl(params.calendarUrl, params.filename),
+    });
+  }
+
+  async updateCalendarObjectByUrl(params: {
+    objectUrl: string;
+    iCalString: string;
+  }): Promise<void> {
+    const client = await this.getClient();
+
+    const response = await client.updateCalendarObject({
+      calendarObject: { data: params.iCalString, url: params.objectUrl },
+    });
+
+    await assertSuccessfulResponse(response, "update");
+  }
+
+  async deleteCalendarObjectByUrl(params: {
+    objectUrl: string;
+    etag?: string;
+  }): Promise<void> {
+    const client = await this.getClient();
+
+    const response = await client.deleteCalendarObject({
+      calendarObject: { url: params.objectUrl, etag: params.etag },
+    });
+
+    await assertSuccessfulResponse(response, "delete");
+  }
+
+  fetchCalendarObject(params: {
+    calendarUrl: string;
+    filename: string;
+  }): Promise<CalendarObject | null> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
+      const objects = await client.fetchCalendarObjects({
+        calendar: { url: params.calendarUrl },
+        objectUrls: [objectUrl],
+      });
+
+      return objects[0] ?? null;
+    });
+  }
+
+  /*
+   * A multiget omits hrefs the calendar no longer holds. For a named lookup that omission
+   * is the answer, so — unlike the windowed listing — it is not an incompleteness error.
+   */
+  fetchCalendarObjectsByUrls(params: {
+    calendarUrl: string;
+    objectUrls: string[];
+  }): Promise<CalendarObject[]> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const objects: CalendarObject[] = [];
+
+      for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
+        const batch = await measureProviderRequest(() => client.fetchCalendarObjects({
+          calendar: { url: params.calendarUrl },
+          objectUrls,
+          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+        }));
+        objects.push(
+          ...batch.filter((object): object is CalendarObject => typeof object.data === "string"),
+        );
+      }
+
+      return objects;
+    });
+  }
+
+  fetchCalendarObjects(params: {
+    calendarUrl: string;
+    onListing?: (stats: CalDAVListingStats) => void;
+    pathFilter?: (path: string) => boolean;
+    timeRange?: { start: string; end: string };
+  }): Promise<CalendarObject[]> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+
+      const queryResponses = await measureProviderRequest(() => client.calendarQuery({
+        depth: "1",
+        filters: buildCalendarObjectFilters(params.timeRange),
+        props: { [`${DAVNamespaceShort.DAV}:getetag`]: {} },
+        url: params.calendarUrl,
+      }));
+
+      const listedPaths = toCalendarObjectPaths(queryResponses, params.calendarUrl);
+      const requestedPaths = listedPaths.filter((path) => params.pathFilter?.(path) ?? true);
+      if (requestedPaths.length === 0) {
+        params.onListing?.({
+          listedCount: listedPaths.length,
+          requestedCount: 0,
+          returnedCount: 0,
+          unrequestedCount: 0,
+        });
+        return [];
+      }
+
+      const batches = chunkArray(requestedPaths, CALDAV_MULTIGET_BATCH_SIZE);
+      const batchResults: CalendarObject[][] = [];
+
+      for (const objectUrls of batches) {
+        const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
+          calendar: { url: params.calendarUrl },
+          objectUrls,
+          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+        }));
+        batchResults.push(
+          objects.filter((object): object is CalendarObject => typeof object.data === "string"),
+        );
+      }
+
+      const objectsByPath = new Map(
+        batchResults
+          .flat()
+          .map((object) => [toCalendarObjectPath(object.url, params.calendarUrl), object]),
+      );
+
+      const missingHrefs = requestedPaths.filter((path) => !objectsByPath.has(path));
+      const requestedPathSet = new Set(requestedPaths);
+      params.onListing?.({
+        listedCount: listedPaths.length,
+        requestedCount: batches.reduce((total, batch) => total + batch.length, 0),
+        returnedCount: requestedPaths.length - missingHrefs.length,
+        unrequestedCount: [...objectsByPath.keys()].filter((path) => !requestedPathSet.has(path)).length,
+      });
+
+      if (missingHrefs.length > 0) {
+        throw new CalDAVIncompleteMultiGetError({
+          batchCount: batches.length,
+          calendarUrl: params.calendarUrl,
+          hrefsRequested: requestedPaths.length,
+          missingHrefs,
+          objectsReturned: requestedPaths.length - missingHrefs.length,
+        });
+      }
+
+      return requestedPaths.flatMap((path) => {
+        const object = objectsByPath.get(path);
+        if (!object) {
+          return [];
+        }
+        return [object];
+      });
+    });
+  }
+
+  private static ensureTrailingSlash(url: string): string {
+    if (url.endsWith("/")) {
+      return url;
+    }
+
+    return `${url}/`;
+  }
+
+  private static normalizeUrl(calendarUrl: string, filename: string): string {
+    const base = CalDAVClient.ensureTrailingSlash(calendarUrl);
+    return `${base}${filename}`;
+  }
+}
+
+const createCalDAVClient = (config: CalDAVClientConfig, safeFetchOptions?: SafeFetchOptions): CalDAVClient =>
+  new CalDAVClient(config, safeFetchOptions);
+
+export {
+  CalDAVAuthenticationError,
+  CalDAVClient,
+  CalDAVCreateConflictError,
+  CalDAVHttpError,
+  CalDAVIncompleteMultiGetError,
+  CalDAVWithheldCredentialsError,
+  createCalDAVClient,
+};
+export type { CalDAVListingStats };

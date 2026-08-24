@@ -1,0 +1,191 @@
+import { Resend } from "resend";
+import env from "./env";
+import { createDatabase } from "@keeper.sh/database";
+import { syncStatusTable } from "@keeper.sh/database/schema";
+import Redis from "ioredis";
+import { createAuth } from "@keeper.sh/auth";
+import { createBroadcastService } from "@keeper.sh/broadcast";
+import { createPremiumService } from "@keeper.sh/premium";
+import {
+  createOAuthProviders,
+  buildOAuthConfigs,
+  createSyncAggregateRuntime,
+  resolveWebhookConfig,
+} from "@keeper.sh/calendar";
+import { widelog } from "@/utils/logging";
+import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
+
+const MIN_TRUSTED_ORIGINS_COUNT = 0;
+
+const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
+const redis = new Redis(env.REDIS_URL, {
+  commandTimeout: 10_000,
+  maxRetriesPerRequest: 3,
+});
+
+const createRedisStateStore = (redisClient: Redis): OAuthStateStore => ({
+  async set(key, value, ttlSeconds) {
+    await redisClient.set(key, value);
+    await redisClient.expire(key, ttlSeconds);
+  },
+  async consume(key) {
+    const value = await redisClient.get(key);
+    if (!value) {
+      return null;
+    }
+    const deleted = await redisClient.del(key);
+    if (!deleted) {
+      return null;
+    }
+    return value;
+  },
+});
+
+const oauthStateStore = createRedisStateStore(redis);
+
+const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
+  async tryAcquire(key, ttlSeconds) {
+    const result = await redisClient.set(key, "1", "EX", ttlSeconds, "NX");
+    return result !== null;
+  },
+  async release(key) {
+    await redisClient.del(key);
+  },
+});
+const refreshLockStore = createRedisRefreshLockStore(redis);
+
+const parseTrustedOrigins = (origins?: string): string[] => {
+  if (!origins) {
+    return [];
+  }
+  return origins.split(",").map((origin): string => origin.trim());
+};
+
+const trustedOrigins = parseTrustedOrigins(env.TRUSTED_ORIGINS);
+
+const parseOidcScopes = (scopes?: string): string[] | undefined => {
+  if (!scopes) {
+    return undefined;
+  }
+  return scopes.split(",").map((scope): string => scope.trim()).filter(Boolean);
+};
+
+const { auth, capabilities: authCapabilities } = createAuth({
+  database,
+  secret: env.BETTER_AUTH_SECRET,
+  baseUrl: env.BETTER_AUTH_URL,
+  commercialMode: env.COMMERCIAL_MODE ?? false,
+  polarAccessToken: env.POLAR_ACCESS_TOKEN,
+  polarMode: env.POLAR_MODE,
+  googleClientId: env.GOOGLE_CLIENT_ID,
+  googleClientSecret: env.GOOGLE_CLIENT_SECRET,
+  microsoftClientId: env.MICROSOFT_CLIENT_ID,
+  microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+  oidcIssuerUrl: env.OIDC_ISSUER_URL,
+  oidcClientId: env.OIDC_CLIENT_ID,
+  oidcClientSecret: env.OIDC_CLIENT_SECRET,
+  oidcProviderName: env.OIDC_PROVIDER_NAME,
+  oidcScopes: parseOidcScopes(env.OIDC_SCOPES),
+  disableLocalAuth: env.DISABLE_LOCAL_AUTH ?? false,
+  resendApiKey: env.RESEND_API_KEY,
+  passkeyRpId: env.PASSKEY_RP_ID,
+  passkeyRpName: env.PASSKEY_RP_NAME,
+  passkeyOrigin: env.PASSKEY_ORIGIN,
+  mcpResourceUrl: env.MCP_PUBLIC_URL,
+  mcpApiBaseUrl: env.MCP_API_URL,
+  ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
+});
+
+const broadcastService = createBroadcastService({ redis });
+
+const premiumService = createPremiumService({
+  commercialMode: env.COMMERCIAL_MODE ?? false,
+  database,
+});
+
+const oauthConfigs = buildOAuthConfigs(env);
+const oauthProviders = createOAuthProviders(oauthConfigs, oauthStateStore);
+
+const persistSyncStatus = async (
+  result: DestinationSyncResult,
+  syncedAt: Date,
+): Promise<void> => {
+  await database
+    .insert(syncStatusTable)
+    .values({
+      calendarId: result.calendarId,
+      lastSyncedAt: syncedAt,
+      localEventCount: result.localEventCount,
+      remoteEventCount: result.remoteEventCount,
+    })
+    .onConflictDoUpdate({
+      set: {
+        lastSyncedAt: syncedAt,
+        localEventCount: result.localEventCount,
+        remoteEventCount: result.remoteEventCount,
+      },
+      target: [syncStatusTable.calendarId],
+    });
+};
+
+const reportSyncAggregateError = (scope: string, error: Error): void => {
+  widelog.error(`sync_aggregate.${scope}`, error);
+};
+
+const syncAggregateRuntime = createSyncAggregateRuntime({
+  broadcast: (userId, eventName, payload): void => {
+    broadcastService.emit(userId, eventName, payload);
+  },
+  onError: reportSyncAggregateError,
+  persistSyncStatus,
+  redis,
+});
+
+const getCurrentSyncAggregate = (
+  userId: string,
+  fallback: {
+    progressPercent: number;
+    syncEventsProcessed: number;
+    syncEventsRemaining: number;
+    syncEventsTotal: number;
+    lastSyncedAt: string | null;
+  },
+) => syncAggregateRuntime.getCurrentSyncAggregate(userId, fallback);
+
+const getCachedSyncAggregate = (userId: string) =>
+  syncAggregateRuntime.getCachedSyncAggregate(userId);
+
+const createResendClient = (): Resend | null => {
+  if (!env.RESEND_API_KEY) {
+    return null;
+  }
+
+  return new Resend(env.RESEND_API_KEY);
+};
+
+const resend = createResendClient();
+const feedbackEmail = env.FEEDBACK_EMAIL ?? null;
+
+const baseUrl = env.BETTER_AUTH_URL;
+const encryptionKey = env.ENCRYPTION_KEY;
+const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
+
+export {
+  database,
+  redis,
+  env,
+  webhookConfig,
+  trustedOrigins,
+  auth,
+  authCapabilities,
+  broadcastService,
+  premiumService,
+  oauthProviders,
+  refreshLockStore,
+  resend,
+  feedbackEmail,
+  baseUrl,
+  encryptionKey,
+  getCurrentSyncAggregate,
+  getCachedSyncAggregate,
+};

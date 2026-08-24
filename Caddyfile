@@ -1,0 +1,9 @@
+keeper.localhost {
+	tls internal
+
+	reverse_proxy host.docker.internal:5173
+}
+
+:80 {
+	reverse_proxy host.docker.internal:5173
+}

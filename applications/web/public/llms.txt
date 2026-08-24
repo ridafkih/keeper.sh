@@ -1,0 +1,65 @@
+# Keeper.sh
+
+> Keeper.sh copies your events between Google Calendar, Outlook, Microsoft 365, iCloud, Fastmail and CalDAV calendars, so every one of them shows you as busy at the same times.
+
+Keeper.sh is for people whose commitments are split across accounts that cannot see one another — a work Outlook calendar, a personal Google one, a shared iCloud one. You pick which calendar's events are copied into which, and Keeper.sh writes a matching busy block on the other. Event titles, descriptions and locations stay behind by default, and guest lists are never copied on any plan.
+
+## Key Features
+
+- Works with Google Calendar, Outlook, Microsoft 365, iCloud, Fastmail, any CalDAV server, and calendar links you paste in. Pasted links are read-only
+- A copy carries the calendar's name in place of the event title. Descriptions and locations are left behind too, and Pro lets you turn each one back on per calendar
+- Guest lists are never written to another calendar or to a shared link, on any plan
+- One shareable calendar link covering everything you connect, labelled "Busy" by default, and it opens in any calendar app
+- A REST API under `/api/v1` for calendars, accounts, events, invitations, free-time search and on-demand sync, using `kpr_` API tokens
+- An MCP server with fourteen tools over OAuth 2.1. An AI agent can read your week, book and amend events, RSVP, find open slots, and pause or force a sync
+- Open source under AGPL-3.0, with Docker Compose images you can run yourself
+- On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. iCloud, Fastmail and other CalDAV calendars are read on a timer, because Apple publishes no way to be told an event changed
+- Free covers 2 calendar accounts, 3 connections and 1 shared link, reading every minute and copying every 30. Pro is $5 a month or $45 a year, unlimited, with Google and Outlook changes copied within seconds
+
+## Links
+
+- [Homepage](https://www.keeper.sh)
+- [Features](https://www.keeper.sh/features)
+- [Pricing](https://www.keeper.sh/pricing)
+- [MCP Server & REST API Documentation](https://www.keeper.sh/docs/mcp)
+- [Blog](https://www.keeper.sh/blog)
+- [Compare](https://www.keeper.sh/compare)
+- [Docs](https://www.keeper.sh/docs)
+- [Guides](https://www.keeper.sh/guides)
+- [Recipes](https://www.keeper.sh/recipes)
+- [Privacy Policy](https://www.keeper.sh/privacy)
+- [Terms & Conditions](https://www.keeper.sh/terms)
+- [GitHub Repository](https://github.com/ridafkih/keeper.sh)
+- [Full LLM Context](https://www.keeper.sh/llms-full.txt)
+
+## Setup Guides
+
+- [How to Sync Google Calendar with Outlook](https://www.keeper.sh/blog/sync-google-calendar-with-outlook): two-way sync, and what colleagues see in Outlook.
+- [How to Add Google Calendar to Outlook](https://www.keeper.sh/blog/add-google-calendar-to-outlook): the read-only route, and when it is enough.
+- [How to Add Google Calendar to iPhone](https://www.keeper.sh/blog/how-to-add-google-calendar-to-iphone): work meetings on your iPhone, with no work account.
+- [How to Sync Apple Calendar to Google Calendar](https://www.keeper.sh/blog/how-to-sync-apple-calendar-to-google-calendar): the Apple app password, and who sees titles.
+- [How to Sync iCloud Calendar with Outlook](https://www.keeper.sh/blog/sync-icloud-calendar-with-outlook): block personal time at work.
+- [How to Sync Fastmail Calendar with Google Calendar](https://www.keeper.sh/blog/sync-fastmail-calendar-with-google-calendar): the Fastmail app password, and what travels.
+- [How to Sync Fastmail Calendar with Outlook](https://www.keeper.sh/blog/sync-fastmail-calendar-with-outlook): app password first, then Microsoft 365.
+- [How to Sync Nextcloud Calendar with Google Calendar](https://www.keeper.sh/blog/sync-nextcloud-calendar-with-google-calendar): what the copies look like.
+- [How to Sync Nextcloud Calendar with Outlook](https://www.keeper.sh/blog/sync-nextcloud-calendar-with-outlook): the URL to paste, and tenant consent.
+- [How to Sync Radicale with iCloud Calendar](https://www.keeper.sh/blog/sync-radicale-with-icloud-calendar): the private-network setting that catches people out.
+- [How to Give Claude Access to Your Calendar (MCP)](https://www.keeper.sh/blog/how-to-give-claude-access-to-your-calendar-mcp): the five-minute setup, and what the consent screen asks for.
+
+## Comparisons
+
+- [Best Calendar Sync Tools: 9 Compared on Price, Speed and Privacy](https://www.keeper.sh/compare/best-calendar-sync-tools): nine tools on price and privacy.
+- [Open-Source Calendar Sync Tools Compared](https://www.keeper.sh/blog/open-source-calendar-sync): the projects you can run yourself.
+- [Keeper.sh vs CalendarBridge](https://www.keeper.sh/compare/calendarbridge-alternative): pricing at eight calendars.
+- [Keeper.sh vs Kalender Sync](https://www.keeper.sh/compare/kalender-sync-alternative): EU contracting and update speed.
+- [Keeper.sh vs Morgen](https://www.keeper.sh/compare/morgen-alternative): update speed, data location, native apps.
+- [Keeper.sh vs OneCal](https://www.keeper.sh/compare/onecal-alternative): which calendars each connects.
+- [Keeper.sh vs Reclaim.ai](https://www.keeper.sh/compare/reclaim-ai-alternative): free-plan scope and cost.
+- [Keeper.sh vs SyncDate](https://www.keeper.sh/compare/syncdate-alternative): update speed, price and agent tools.
+- [Keeper.sh vs SyncThemCalendars](https://www.keeper.sh/compare/syncthemcalendars-alternative): two-way setup and pricing by count.
+
+## Background
+
+- [How Calendar Sync Actually Works: Tokens, DST, Deletions](https://www.keeper.sh/blog/how-calendar-sync-actually-works): why changes arrive late, and repeating events.
+- [Stop Getting Double-Booked Across Google, Outlook and iCloud](https://www.keeper.sh/blog/why-i-built-an-open-source-calendar-syncing-tool): why the project exists, and what it costs.
+- [What an AI Agent Can Actually Do With Your Calendar](https://www.keeper.sh/blog/what-an-ai-agent-can-do-with-your-calendar): all fourteen MCP tools, and what is not on the list.

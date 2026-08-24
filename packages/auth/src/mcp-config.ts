@@ -1,0 +1,113 @@
+import {
+  KEEPER_API_DEFAULT_SCOPE,
+  KEEPER_API_DESTINATION_SCOPE,
+  KEEPER_API_EVENT_SCOPE,
+  KEEPER_API_MAPPING_SCOPE,
+  KEEPER_API_READ_SCOPE,
+  KEEPER_API_RESOURCE_SCOPES,
+  KEEPER_API_SCOPES,
+  KEEPER_API_SOURCE_SCOPE,
+  KEEPER_API_SYNC_SCOPE,
+} from "@keeper.sh/constants";
+
+const KEEPER_MCP_OAUTH_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "offline_access",
+  ...KEEPER_API_RESOURCE_SCOPES,
+];
+
+interface ResolveMcpAuthOptionsInput {
+  resourceBaseUrl?: string;
+  webBaseUrl?: string;
+}
+
+const MCP_ACCESS_TOKEN_EXPIRES_IN = 2_592_000;
+const MCP_REFRESH_TOKEN_EXPIRES_IN = 7_776_000;
+
+interface ResolvedMcpAuthOptions {
+  oauthProvider: {
+    accessTokenExpiresIn: number;
+    refreshTokenExpiresIn: number;
+    allowDynamicClientRegistration: true;
+    allowUnauthenticatedClientRegistration: true;
+    clientRegistrationAllowedScopes: string[];
+    clientRegistrationDefaultScopes: string[];
+    consentPage: string;
+    loginPage: string;
+    scopes: string[];
+    silenceWarnings: {
+      oauthAuthServerConfig: boolean;
+    };
+    validAudiences: string[];
+  };
+  protectedResourceMetadata: {
+    resource: string;
+    scopes_supported: string[];
+  };
+}
+
+const resolveAbsoluteUrl = (pathname: string, baseUrl: string): string =>
+  new URL(pathname, baseUrl).toString();
+
+const normalizeUrl = (url: string): string =>
+  url.replace(/\/$/, "");
+
+const resolveValidAudiences = (resourceBaseUrl: string): string[] => {
+  const normalized = normalizeUrl(resourceBaseUrl);
+  const { origin } = new URL(resourceBaseUrl);
+  const audiences = new Set([origin, normalized]);
+  return [...audiences];
+};
+
+const resolveMcpJwksUrl = (baseUrl: string, apiBaseUrl?: string): string =>
+  `${normalizeUrl(apiBaseUrl ?? baseUrl)}/api/auth/jwks`;
+
+const resolveMcpAuthOptions = (
+  input: ResolveMcpAuthOptionsInput,
+): ResolvedMcpAuthOptions | null => {
+  if (!input.webBaseUrl || !input.resourceBaseUrl) {
+    return null;
+  }
+
+  const resourceUrl = normalizeUrl(input.resourceBaseUrl);
+
+  return {
+    oauthProvider: {
+      accessTokenExpiresIn: MCP_ACCESS_TOKEN_EXPIRES_IN,
+      refreshTokenExpiresIn: MCP_REFRESH_TOKEN_EXPIRES_IN,
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+      clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
+      clientRegistrationDefaultScopes: ["offline_access", ...KEEPER_API_RESOURCE_SCOPES],
+      consentPage: resolveAbsoluteUrl("/oauth/consent", input.webBaseUrl),
+      loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),
+      scopes: KEEPER_MCP_OAUTH_SCOPES,
+      silenceWarnings: {
+        oauthAuthServerConfig: true,
+      },
+      validAudiences: resolveValidAudiences(input.resourceBaseUrl),
+    },
+    protectedResourceMetadata: {
+      resource: resourceUrl,
+      scopes_supported: KEEPER_API_RESOURCE_SCOPES,
+    },
+  };
+};
+
+export {
+  KEEPER_API_DEFAULT_SCOPE,
+  KEEPER_API_DESTINATION_SCOPE,
+  KEEPER_API_EVENT_SCOPE,
+  KEEPER_API_MAPPING_SCOPE,
+  KEEPER_API_READ_SCOPE,
+  KEEPER_API_RESOURCE_SCOPES,
+  KEEPER_API_SCOPES,
+  KEEPER_API_SOURCE_SCOPE,
+  KEEPER_API_SYNC_SCOPE,
+  KEEPER_MCP_OAUTH_SCOPES,
+  resolveMcpAuthOptions,
+  resolveMcpJwksUrl,
+};
+export type { ResolvedMcpAuthOptions, ResolveMcpAuthOptionsInput };

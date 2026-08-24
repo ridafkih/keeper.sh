@@ -1,0 +1,14 @@
+node_modules
+.env
+.idea
+.DS_Store
+.turbo/
+dist/
+*.tsbuildinfo
+screenshots/
+applications/mobile/
+.pki/
+.gstack/
+
+# turbo prune --docker output
+out/

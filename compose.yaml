@@ -1,0 +1,45 @@
+name: keeper
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: keeper-postgres
+    environment:
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-postgres}
+    ports:
+      - 5432:5432
+    volumes:
+      - keeper-postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: keeper-redis
+    ports:
+      - 6379:6379
+    volumes:
+      - keeper-redis-data:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: keeper-caddy
+    ports:
+      - "443:443"
+      - "443:443/udp"
+      - "80:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./.pki/root.crt:/data/caddy/pki/authorities/local/root.crt:ro
+      - ./.pki/root.key:/data/caddy/pki/authorities/local/root.key:ro
+      - keeper-caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  keeper-postgres-data:
+  keeper-redis-data:
+  keeper-caddy-config:
