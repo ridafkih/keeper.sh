@@ -306,41 +306,6 @@ html {
   }
 }
 
-/* The week grid's day row lives in the header card, outside the grid's
-   scroller, and has to follow its horizontal scroll to the pixel. Mirroring
-   `scrollLeft` from a scroll event lands a frame or more behind compositor
-   scrolling — the event cards in the grid visibly lead the day labels on
-   every swipe — so where scroll-driven animations exist the row follows a
-   scroll timeline instead: the scroller publishes its inline-axis progress
-   as `--calendar-strip`, scoped up to the frame so the header can see it,
-   and the row translates from rest to `--calendar-strip-travel` (its own
-   width less the viewport's, set inline by `WeekGrid`) in step with it, on
-   the compositor. `WeekGrid` keeps the `scrollLeft` mirror as the fallback
-   for engines without scroll timelines. */
-.calendar-strip-scope {
-  timeline-scope: --calendar-strip;
-}
-
-.calendar-strip-scroller {
-  scroll-timeline: --calendar-strip x;
-}
-
-@supports (animation-timeline: scroll()) {
-  .calendar-strip-row {
-    animation: calendar-strip-follow linear both;
-    animation-timeline: --calendar-strip;
-  }
-}
-
-@keyframes calendar-strip-follow {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(var(--calendar-strip-travel));
-  }
-}
-
 /* Only the calendar's named groups animate in its view transition; keep the root from cross-fading the page. */
 ::view-transition-group(root) {
   animation-duration: 0s;

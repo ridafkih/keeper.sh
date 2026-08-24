@@ -14,11 +14,7 @@ export function CalendarFrame({
   children,
 }: CalendarFrameProps) {
   return (
-    // `calendar-strip-scope` lets the week grid's header row follow the
-    // grid's scroll timeline (see index.css): a named scroll timeline is only
-    // visible to the scroller's descendants unless an ancestor widens its
-    // scope, and this root is the header's and the grid's nearest common one.
-    <div className="calendar-strip-scope flex h-full min-h-0 w-full flex-col gap-1.5">
+    <div className="flex h-full min-h-0 w-full flex-col gap-1.5">
       <header
         className="flex shrink-0 flex-col overflow-hidden rounded-2xl border border-border-elevated bg-background-elevated shadow-xs"
         style={{ viewTransitionName: "calendar-header" }}

@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { scroll } from "motion";
+import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
@@ -40,14 +42,6 @@ const MS_PER_DAY = 86_400_000;
 
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
-
-/** Whether the header's day row can follow the grid's scroll through a CSS
- * scroll timeline (see `.calendar-strip-row` in index.css). The same feature
- * the stylesheet gates on, so the JS mirror below only runs where the CSS
- * does not — both moving the row would scroll it twice. Resolved once: it
- * only varies by engine, and on the server it is false without effect. */
-const HEADER_FOLLOWS_SCROLL_TIMELINE =
-  typeof CSS !== "undefined" && CSS.supports("animation-timeline", "scroll()");
 
 const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
 
@@ -126,7 +120,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const today = useStartOfToday();
   const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const headerStripRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   /** Vertical offset as last scrolled; put back after the router replays a cached one. */
@@ -159,17 +153,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
   }, []);
 
-  /** Fallback for engines without scroll timelines: mirrors the scroller's
-   * horizontal offset onto the header strip from the scroll event, a frame
-   * behind the grid. A no-op where the row follows the timeline in CSS. */
-  const syncHeaderStrip = useCallback(() => {
-    if (HEADER_FOLLOWS_SCROLL_TIMELINE) return;
-    const scroller = scrollerRef.current;
-    const headerStrip = headerStripRef.current;
-    if (!scroller || !headerStrip) return;
-    headerStrip.scrollLeft = scroller.scrollLeft;
-  }, []);
-
   const scrollToCenter = useCallback(
     (centerDay: Date, behavior: ScrollBehavior) => {
       const el = scrollerRef.current;
@@ -180,10 +163,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       alignedCenterMsRef.current = centerDay.getTime();
       alignedWidthRef.current = el.clientWidth;
       el.scrollTo({ left: clamped * columnWidth(), behavior });
-      // An instant jump fires no scroll event; mirror right away so the header never shows a stale range.
-      if (behavior === "auto") syncHeaderStrip();
     },
-    [columnWidth, stripDays, syncHeaderStrip],
+    [columnWidth, stripDays],
   );
 
   // Mount: centre the anchor and jump to business hours; afterwards, smooth-scroll on anchor moves.
@@ -203,6 +184,24 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       scrollToCenter(centerDay, "smooth");
     }
   }, [anchor, scrollToCenter]);
+
+  // The day row follows the grid via Motion's ScrollTimeline — a scrollLeft mirror trails compositor scrolling by a frame.
+  useEffect(() => {
+    const scroller = scrollerRef.current;
+    const row = rowRef.current;
+    if (!scroller || !row) return;
+    const travel = (-100 * (stripDays.length - VISIBLE_COLUMNS)) / stripDays.length;
+    const animation = animate(
+      row,
+      { transform: ["translateX(0%)", `translateX(${travel}%)`] },
+      { ease: "linear" },
+    );
+    const cancel = scroll(animation, { container: scroller, axis: "x" });
+    return () => {
+      cancel();
+      animation.cancel();
+    };
+  }, [stripDays]);
 
   // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
   useEffect(
@@ -236,8 +235,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   }, [scrollToCenter]);
 
   const handleScroll = () => {
-    // Mirror synchronously, not in the rAF, so the header never trails the grid by a frame.
-    syncHeaderStrip();
     const scroller = scrollerRef.current;
     if (scroller) scrollTopRef.current = scroller.scrollTop;
     if (rafRef.current !== null) return;
@@ -287,20 +284,14 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       style={{ height: HEADER_HEIGHT + bandHeight }}
     >
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-      <div ref={headerStripRef} className="relative min-w-0 flex-1 overflow-hidden">
+      <div className="relative min-w-0 flex-1 overflow-hidden">
         <div
-          className="calendar-strip-row relative grid h-full"
-          style={
-            {
-              gridTemplateColumns: columnsTemplate,
-              width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
-              // How far the row travels at full scroll — its own width less
-              // the viewport's, as a share of its width — for the scroll
-              // timeline in index.css. The same ratio as the grid's scroll
-              // range, so the two coincide to the pixel at every offset.
-              "--calendar-strip-travel": `calc(-100% * ${stripDays.length - VISIBLE_COLUMNS} / ${stripDays.length})`,
-            } as CSSProperties
-          }
+          ref={rowRef}
+          className="relative grid h-full"
+          style={{
+            gridTemplateColumns: columnsTemplate,
+            width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
+          }}
         >
           {stripDays.map((day) => (
             <DayHeaderCell
@@ -325,7 +316,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="calendar-strip-scroller flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{
           scrollPaddingLeft: GUTTER_WIDTH,
           maskImage: GRID_EDGE_FADE,
