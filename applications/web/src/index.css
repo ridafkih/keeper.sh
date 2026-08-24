@@ -2,28 +2,19 @@
 
 @custom-variant pointer-hover (@media (hover: hover));
 
-/* Calendar event cards are sized by their event's duration, so their content
-   steps down as the card gets shorter. A grid card is a size-query container
-   named `event-card` (see the grid layout in `EventCard`); these variants
-   select on its rendered height. The thresholds assume the week grid's 48px
-   hour, Tailwind's 16px text-xs and 20px text-sm lines and the grid card's
-   4px vertical padding — the band table in `event-card.tsx` has the fit
-   arithmetic. Each floor sits 1px under its band's content height: a card's
-   height is a percentage of the day, which can land a hair under the exact
-   pixel and would otherwise drop the card into the band below; the 1px it
-   may clip is padding, never glyphs. The container is named deliberately:
-   height queries need a `size` container, and an unnamed query binds to
-   whichever ancestor happens to be one, so a future size container around
-   the card could silently capture these. */
+/* Event cards are sized by their event's duration; these variants select on
+   the card's rendered height (the band table in `event-card.tsx` has the fit
+   arithmetic — each floor sits 1px under its band so percentage-height
+   rounding can't drop a card into the band below). The container is named
+   because an unnamed height query would bind to whichever ancestor happens
+   to be a size container. */
 @custom-variant event-compact (@container event-card (height < 27px));
 @custom-variant event-short (@container event-card (height < 43px));
 @custom-variant event-roomy (@container event-card (59px <= height < 75px));
 @custom-variant event-tall (@container event-card (height >= 75px));
-/* Narrow cards — overlapping events tiled three across in a week column —
-   can't show a time range's both ends, so the time line goes and the title
-   tightens instead. Declared last on purpose: custom variants emit in
-   declaration order, so `event-narrow:hidden` outranks the roomy/tall
-   description clamps on the same element. */
+/* Narrow cards drop the time line and tighten the title. Declared last:
+   custom variants emit in declaration order, so `event-narrow:` utilities
+   outrank the height bands on the same element. */
 @custom-variant event-narrow (@container event-card (width < 72px));
 
 html {

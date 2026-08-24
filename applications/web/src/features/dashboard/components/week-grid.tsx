@@ -72,9 +72,8 @@ const DayHeaderCell = memo(function DayHeaderCell({
 
   return (
     <div className="relative flex flex-col overflow-hidden">
-      {/* The column's left rule, faded toward the top so it dissolves into the
-          toolbar above instead of meeting it at a hard corner. On the cell,
-          so it moves with the row. */}
+      {/* The column's left rule, faded toward the top; on the cell so it
+          moves with the row. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated"
