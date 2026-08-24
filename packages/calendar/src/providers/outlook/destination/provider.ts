@@ -14,6 +14,7 @@ import type {
   RemoteEvent,
 } from "../../../core/types";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
+import type { EventUpdate } from "../../../core/sync-engine/types";
 import { comparePushEchoObservations } from "../../../core/events/push-echo";
 import type { PushEchoObservation } from "../../../core/events/push-echo";
 import { getErrorMessage } from "../../../core/utils/error";
@@ -268,6 +269,54 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return results;
   };
 
+  const updateEvents = async (updates: EventUpdate[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
+    const results: PushResult[] = [];
+
+    for (const update of updates) {
+      try {
+        config.signal?.throwIfAborted();
+        const resource = serializeOutlookEvent(update.event);
+        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${update.deleteId}`);
+
+        const response = await sendRequestWithRetry(url, {
+          body: JSON.stringify(resource),
+          headers: {
+            ...getHeaders(),
+            Prefer: `outlook.body-content-type="text"`,
+          },
+          method: "PATCH",
+        });
+
+        if (!response.ok) {
+          results.push({
+            error: await readGraphErrorMessage(response),
+            errorType: "MicrosoftGraphHttpError",
+            statusCode: response.status,
+            success: false,
+          });
+          continue;
+        }
+
+        const body = await response.json();
+        const updated = outlookEventSchema.assert(body);
+        results.push({
+          deleteId: updated.id ?? update.deleteId,
+          echo: compareOutlookCreateEcho(resource, updated),
+          remoteId: updated.iCalUId ?? updated.id ?? update.deleteId,
+          success: true,
+        });
+      } catch (error) {
+        if (config.signal?.aborted) {
+          throw error;
+        }
+        results.push(createCaughtFailure(error));
+      }
+    }
+
+    return results;
+  };
+
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
     await refreshIfNeeded();
     const results: DeleteResult[] = [];
@@ -451,6 +500,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     listRemoteEvents,
     normalizeEvent: normalizeOutlookEvent,
     pushEvents,
+    updateEvents,
     verifyEventsExist,
   };
 };

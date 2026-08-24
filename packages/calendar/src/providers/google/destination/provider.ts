@@ -23,6 +23,7 @@ import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
+import type { EventUpdate } from "../../../core/sync-engine/types";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
@@ -130,6 +131,22 @@ const compareGoogleImportEcho =(sent: GoogleEvent, body: unknown): PushEchoCompa
     comparable: true,
     divergence: comparePushEchoObservations(sentObservation, echoObservation),
   };
+};
+
+const buildUpdatePatchBody = (resource: GoogleEvent): GoogleEvent => {
+  const body = { ...resource };
+  delete body.iCalUID;
+  return body;
+};
+
+const getEchoedICalUid = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null || !("iCalUID" in body)) {
+    return null;
+  }
+  if (typeof body.iCalUID !== "string" || body.iCalUID.length === 0) {
+    return null;
+  }
+  return body.iCalUID;
 };
 
 const getImportedEventId = (body: unknown): string | null => {
@@ -313,6 +330,111 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         results[entry.index] = createImportResult(
           deleteId,
           entry.uid,
+          response.statusCode,
+          compareGoogleImportEcho(entry.resource, response.body),
+        );
+      } else {
+        results[entry.index] = {
+          error: extractBatchErrorMessage(response.body, response.statusCode),
+          errorType: "GoogleCalendarApiError",
+          statusCode: response.statusCode,
+          success: false,
+        };
+      }
+    }
+
+    return results;
+  };
+
+  const buildUpdateRequest = (
+    update: EventUpdate,
+  ): { uid: string; resource: GoogleEvent; request: BatchSubRequest } | null => {
+    if (!isDirectEventId(update.deleteId)) {
+      const importResource = serializeGoogleEvent(update.event, update.deleteId);
+      if (!importResource) {
+        return null;
+      }
+      return {
+        uid: update.deleteId,
+        resource: importResource,
+        request: {
+          method: "POST",
+          path: `${eventsPath}/import`,
+          headers: { "Content-Type": "application/json" },
+          body: importResource,
+        },
+      };
+    }
+
+    const uid = generateDeterministicEventUid(`${update.event.id}:${config.externalCalendarId}`);
+    const resource = serializeGoogleEvent(update.event, uid);
+    if (!resource) {
+      return null;
+    }
+    return {
+      uid,
+      resource,
+      request: {
+        method: "PATCH",
+        path: `${eventsPath}/${encodeURIComponent(update.deleteId)}`,
+        headers: { "Content-Type": "application/json" },
+        body: buildUpdatePatchBody(resource),
+      },
+    };
+  };
+
+  const updateEvents = async (updates: EventUpdate[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
+
+    const results: PushResult[] = Array.from({ length: updates.length });
+    const pending: {
+      index: number;
+      uid: string;
+      resource: GoogleEvent;
+      batchIndex: number;
+    }[] = [];
+    const requests: BatchSubRequest[] = [];
+
+    for (let index = 0; index < updates.length; index++) {
+      const update = updates[index];
+      if (!update) {
+        results[index] = { success: true };
+        continue;
+      }
+
+      const built = buildUpdateRequest(update);
+      if (!built) {
+        results[index] = { success: true };
+        continue;
+      }
+
+      pending.push({
+        index,
+        uid: built.uid,
+        resource: built.resource,
+        batchIndex: requests.length,
+      });
+      requests.push(built.request);
+    }
+
+    if (requests.length === 0) {
+      return results;
+    }
+
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+
+    for (const entry of pending) {
+      const response = responses[entry.batchIndex];
+      if (!response) {
+        results[entry.index] = {
+          error: "Missing batch response",
+          errorType: "GoogleBatchProtocolError",
+          success: false,
+        };
+      } else if (response.statusCode >= 200 && response.statusCode < 300) {
+        results[entry.index] = createImportResult(
+          getImportedEventId(response.body),
+          getEchoedICalUid(response.body) ?? entry.uid,
           response.statusCode,
           compareGoogleImportEcho(entry.resource, response.body),
         );
@@ -567,6 +689,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     listRemoteEvents,
     normalizeEvent: normalizeGoogleEvent,
     pushEvents,
+    updateEvents,
   };
 };
 

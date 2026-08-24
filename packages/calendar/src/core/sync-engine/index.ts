@@ -289,6 +289,11 @@ const processAddResults = (
   return { changes, added, addFailed, conflictsResolved, errors };
 };
 
+const GONE_STATUS_CODES = new Set([404, 410]);
+
+const isUpdateTargetGone = (pushResult: PushResult | undefined): boolean =>
+  typeof pushResult?.statusCode === "number" && GONE_STATUS_CODES.has(pushResult.statusCode);
+
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
@@ -314,7 +319,9 @@ const processUpdateResults = (
     }
 
     if (!pushResult?.success) {
-      unresolved.push(operation);
+      if (isUpdateTargetGone(pushResult)) {
+        unresolved.push(operation);
+      }
       if (pushResult?.error) {
         errors.push({
           type: "update",
@@ -332,6 +339,7 @@ const processUpdateResults = (
     }
     updates.push({
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId ?? operation.deleteId,
+      ...(pushResult.remoteId && { destinationEventUid: pushResult.remoteId }),
       endTime: operation.event.endTime,
       id: operation.staleMappingId,
       startTime: operation.event.startTime,

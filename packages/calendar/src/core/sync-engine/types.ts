@@ -39,6 +39,7 @@ interface PendingInsert {
 
 interface PendingUpdate {
   deleteIdentifier: string;
+  destinationEventUid?: string;
   endTime: Date;
   id: string;
   startTime: Date;
