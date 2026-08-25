@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createGoogleSyncProvider } from "../../../../src/providers/google/destination/provider";
 import { computeSyncOperations } from "../../../../src/core/sync/operations";
 import { createSyncEventContentHash } from "../../../../src/core/events/content-hash";
-import type { MaterializedSyncableEvent } from "../../../../src/core/types";
+import type { EventAvailability, MaterializedSyncableEvent, RemoteEvent } from "../../../../src/core/types";
 import type { RedisRateLimiter } from "../../../../src/core/utils/redis-rate-limiter";
 
 const batchMocks = vi.hoisted(() => ({
@@ -25,6 +25,21 @@ const createProvider = (options: {
   userId: "user-1",
   rateLimiter: options.rateLimiter,
   signal: options.signal,
+});
+
+interface RecordedRemoteForm {
+  remoteAvailability: EventAvailability | null;
+  remoteContentHash: string | null;
+  remoteEndTime: Date | null;
+  remoteStartTime: Date | null;
+}
+
+/* What a mapping records once it has seen the form Google stored. */
+const recordedRemoteForm = (remoteEvent: RemoteEvent | undefined): RecordedRemoteForm => ({
+  remoteAvailability: remoteEvent?.editableAvailability ?? null,
+  remoteContentHash: remoteEvent?.editableContentHash ?? null,
+  remoteEndTime: remoteEvent?.endTime ?? null,
+  remoteStartTime: remoteEvent?.startTime ?? null,
 });
 
 const batchResponse = (statusCode: number, body: unknown) => ({
@@ -205,6 +220,7 @@ describe("createGoogleSyncProvider", () => {
       endTime: event.endTime,
       eventStateId: event.id,
       id: "mapping-id",
+      ...recordedRemoteForm(remoteEvents[0]),
       sourceCalendarId: "source-cal-1",
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
@@ -261,6 +277,7 @@ describe("createGoogleSyncProvider", () => {
         deleteIdentifier: remoteEvents[0]?.deleteId,
         endTime: event.endTime,
         id: legacyMapping.id,
+        ...recordedRemoteForm(remoteEvents[0]),
         startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,

@@ -6,6 +6,7 @@ import {
 } from "@keeper.sh/data-schemas";
 import type {
   DeleteResult,
+  EventAvailability,
   EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
@@ -13,6 +14,7 @@ import type {
   PushEchoComparison,
   PushResult,
   RemoteEvent,
+  StoredEventForm,
 } from "../../../core/types";
 import type { OutlookEvent } from "@keeper.sh/data-schemas";
 import type { EventUpdate } from "../../../core/sync-engine/types";
@@ -83,9 +85,7 @@ const readGraphErrorMessage = async (response: Response): Promise<string> => {
   }
 };
 
-const parseRemoteAvailability = (
-  showAs: string | undefined,
-): MaterializedSyncableEvent["availability"] => {
+const parseRemoteAvailability = (showAs: string | undefined): EventAvailability => {
   if (showAs === "free" || showAs === "oof" || showAs === "workingElsewhere") {
     return showAs;
   }
@@ -189,6 +189,25 @@ const buildOutlookUpdateBody = (resource: OutlookEvent): OutlookUpdateBody => ({
   location: resource.location ?? null,
   recurrence: resource.recurrence ?? null,
 });
+/*
+ * The form Graph reports it stored. It replaces the read-back the engine would otherwise owe this
+ * write, so it carries the times and availability Graph settled on, not only the content hash.
+ */
+const getStoredForm = (event: OutlookEvent): StoredEventForm | null => {
+  if (event.body && event.body.contentType !== "text") {
+    return null;
+  }
+  const observation = buildOutlookEchoObservation(event);
+  if (!observation) {
+    return null;
+  }
+  return {
+    storedAvailability: parseRemoteAvailability(event.showAs),
+    storedContentHash: hashEditableEventContentSnapshot(observation.content),
+    storedEndTime: observation.endTime,
+    storedStartTime: observation.startTime,
+  };
+};
 
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   const tokenState: TokenState = {
@@ -280,11 +299,13 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
         const body = await response.json();
         const created = outlookEventSchema.assert(body);
+        const storedForm = getStoredForm(created);
         results.push({
           deleteId: created.id,
           echo: compareOutlookCreateEcho(resource, created),
           remoteId: created.iCalUId ?? created.id,
           success: true,
+          ...storedForm,
         });
       } catch (error) {
         if (config.signal?.aborted) {

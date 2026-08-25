@@ -127,6 +127,10 @@ const localEvent: MaterializedSyncableEvent = {
 };
 
 const mapping: EventMapping = {
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: MAPPED_ID,
   destinationEventUid: MIRROR_UID,

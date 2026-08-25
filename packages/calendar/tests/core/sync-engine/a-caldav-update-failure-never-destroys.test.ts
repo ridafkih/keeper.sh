@@ -70,6 +70,10 @@ const uid = generateDeterministicEventUid(movedSeries.id);
 const objectPath = `/calendars/user/shared/${uid}.ics`;
 
 const mapping: EventMapping = {
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   deleteIdentifier: objectPath,
   destinationEventUid: uid,

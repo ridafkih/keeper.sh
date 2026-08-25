@@ -33,6 +33,10 @@ const makeEvent = (summary: string): MaterializedSyncableEvent => ({
 });
 
 const makeMapping = (deleteIdentifier: string, syncEventHash: string): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier,
   destinationEventUid: LIVE_UID,

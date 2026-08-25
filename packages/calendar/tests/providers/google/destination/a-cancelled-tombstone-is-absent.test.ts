@@ -101,6 +101,10 @@ const makeEvent = (): MaterializedSyncableEvent => ({
 });
 
 const makeMapping = (event: MaterializedSyncableEvent): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: MIRROR_EVENT_ID,
   destinationEventUid: MIRROR_UID,

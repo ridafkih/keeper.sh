@@ -1,6 +1,7 @@
 import { eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
+import type { EventAvailability } from "../types";
 
 const DEFAULT_COUNT = 0;
 
@@ -15,9 +16,29 @@ interface EventMapping {
   destinationEventUid: string;
   deleteIdentifier: string;
   syncEventHash: string | null;
+  remoteContentHash: string | null;
+  /* The form the destination held when we last rewrote this event's own text, if we did. */
+  remoteContentHashRepairedFrom?: string | null;
+  /* What the destination was last seen holding, not what we meant to write. */
+  remoteStartTime: Date | null;
+  remoteEndTime: Date | null;
+  remoteAvailability: EventAvailability | null;
   startTime: Date;
   endTime: Date;
 }
+
+const isEventAvailability = (value: string | null): value is EventAvailability =>
+  value === "busy"
+  || value === "free"
+  || value === "oof"
+  || value === "workingElsewhere";
+
+const parseRecordedAvailability = (value: string | null): EventAvailability | null => {
+  if (!isEventAvailability(value)) {
+    return null;
+  }
+  return value;
+};
 
 const requireMappingSyncEventId = (
   mapping: { eventStateId: string | null; id: string; syncEventId: string | null },
@@ -58,6 +79,11 @@ const getEventMappingsForDestination = async (
       eventStateCalendarId: eventStatesTable.calendarId,
       eventStateId: eventMappingsTable.eventStateId,
       id: eventMappingsTable.id,
+      remoteAvailability: eventMappingsTable.remoteAvailability,
+      remoteContentHash: eventMappingsTable.remoteContentHash,
+      remoteContentHashRepairedFrom: eventMappingsTable.remoteContentHashRepairedFrom,
+      remoteEndTime: eventMappingsTable.remoteEndTime,
+      remoteStartTime: eventMappingsTable.remoteStartTime,
       sourceCalendarId: eventMappingsTable.sourceCalendarId,
       syncEventId: eventMappingsTable.syncEventId,
       syncEventHash: eventMappingsTable.syncEventHash,
@@ -73,6 +99,7 @@ const getEventMappingsForDestination = async (
     return {
       ...mapping,
       deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+      remoteAvailability: parseRecordedAvailability(mapping.remoteAvailability),
       sourceCalendarId,
       syncEventId,
     };
@@ -89,6 +116,7 @@ const createEventMapping = async (
     destinationEventUid: string;
     deleteIdentifier?: string;
     syncEventHash?: string;
+    remoteContentHash?: string;
     startTime: Date;
     endTime: Date;
   },
@@ -101,6 +129,7 @@ const createEventMapping = async (
       destinationEventUid: params.destinationEventUid,
       endTime: params.endTime,
       eventStateId: params.eventStateId,
+      remoteContentHash: params.remoteContentHash,
       sourceCalendarId: params.sourceCalendarId,
       syncEventId: params.syncEventId,
       syncEventHash: params.syncEventHash,

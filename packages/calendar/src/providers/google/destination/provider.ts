@@ -4,12 +4,14 @@ import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-vali
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type {
   DeleteResult,
+  EventAvailability,
   EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushEchoComparison,
   PushResult,
   RemoteEvent,
+  StoredEventForm,
 } from "../../../core/types";
 import {
   googleApiErrorSchema,
@@ -68,9 +70,7 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
 };
 
-const parseGoogleAvailability = (
-  resource: GoogleEvent,
-): MaterializedSyncableEvent["availability"] => {
+const parseGoogleAvailability = (resource: GoogleEvent): EventAvailability => {
   if (resource.transparency === "transparent") {
     return "free";
   }
@@ -157,6 +157,28 @@ const getEchoedICalUid = (body: unknown): string | null => {
   return body.iCalUID;
 };
 
+/*
+ * The form Google reports it stored. It replaces the read-back the engine would otherwise owe
+ * this write, so it has to carry the times and the availability Google settled on and not only
+ * the hash of the content.
+ */
+const getStoredForm = (body: unknown): StoredEventForm | null => {
+  if (!googleEventSchema.allows(body)) {
+    return null;
+  }
+  const resource = googleEventSchema.assert(body);
+  const observation = buildGoogleEchoObservation(resource);
+  if (!observation) {
+    return null;
+  }
+  return {
+    storedAvailability: parseGoogleAvailability(resource),
+    storedContentHash: hashEditableEventContentSnapshot(observation.content),
+    storedEndTime: observation.endTime,
+    storedStartTime: observation.startTime,
+  };
+};
+
 const getImportedEventId = (body: unknown): string | null => {
   if (typeof body !== "object" || body === null || !("id" in body)) {
     return null;
@@ -172,9 +194,16 @@ const createImportResult = (
   remoteId: string,
   statusCode: number,
   echo: PushEchoComparison,
+  storedForm: StoredEventForm | null,
 ): PushResult => {
   if (deleteId) {
-    return { deleteId, echo, remoteId, success: true };
+    return {
+      deleteId,
+      echo,
+      remoteId,
+      success: true,
+      ...storedForm,
+    };
   }
   return {
     error: "Google import response is missing the event ID",
@@ -340,6 +369,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           entry.uid,
           response.statusCode,
           compareGoogleImportEcho(entry.resource, response.body),
+          getStoredForm(response.body),
         );
       } else {
         results[entry.index] = {
@@ -445,6 +475,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           getEchoedICalUid(response.body) ?? entry.uid,
           response.statusCode,
           compareGoogleImportEcho(entry.resource, response.body),
+          getStoredForm(response.body),
         );
       } else {
         results[entry.index] = {

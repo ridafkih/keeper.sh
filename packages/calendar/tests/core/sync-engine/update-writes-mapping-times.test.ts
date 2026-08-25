@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { createDatabaseFlush } from "../../../src/core/sync-engine/flush";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
@@ -58,24 +60,46 @@ type MappingColumnValues = Partial<Pick<
   "deleteIdentifier" | "endTime" | "startTime" | "syncEventHash" | "syncEventId"
 >>;
 
+/* Offsets follow buildUpdateRow, whose order flush-binds-every-column-to-its-own-value pins. */
+const UPDATE_COLUMN_COUNT = 13;
+const DELETE_IDENTIFIER_OFFSET = 1;
+const SYNC_EVENT_HASH_OFFSET = 3;
+const SYNC_EVENT_ID_OFFSET = 9;
+const START_TIME_OFFSET = 10;
+const END_TIME_OFFSET = 11;
+
+const decodeUpdateRow = (row: unknown[]): MappingColumnValues => ({
+  deleteIdentifier: String(row[DELETE_IDENTIFIER_OFFSET]),
+  endTime: new Date(String(row[END_TIME_OFFSET])),
+  startTime: new Date(String(row[START_TIME_OFFSET])),
+  syncEventHash: String(row[SYNC_EVENT_HASH_OFFSET]),
+  syncEventId: String(row[SYNC_EVENT_ID_OFFSET]),
+});
+
 const flushUpdatesAgainstRecorder = async (
   changes: PendingChanges,
 ): Promise<MappingColumnValues[]> => {
-  const setValues: MappingColumnValues[] = [];
+  const dialect = new PgDialect();
+  const statementParams: unknown[][] = [];
   const fakeDatabase = {
     transaction: (callback: (transaction: unknown) => Promise<void>) => callback({
       delete: () => ({ where: () => Promise.resolve() }),
+      execute: (query: SQL) => {
+        statementParams.push(dialect.sqlToQuery(query).params);
+        return Promise.resolve();
+      },
       insert: () => ({ values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }),
-      update: () => ({
-        set: (values: MappingColumnValues) => {
-          setValues.push(values);
-          return { where: () => Promise.resolve() };
-        },
-      }),
     }),
   };
 
   await createDatabaseFlush(fakeDatabase as never)(changes);
+
+  const setValues: MappingColumnValues[] = [];
+  for (const params of statementParams) {
+    for (let offset = 0; offset < params.length; offset += UPDATE_COLUMN_COUNT) {
+      setValues.push(decodeUpdateRow(params.slice(offset, offset + UPDATE_COLUMN_COUNT)));
+    }
+  }
 
   return setValues;
 };
@@ -112,6 +136,10 @@ describe("in-place update mapping times", () => {
       endTime: insert.endTime,
       eventStateId: insert.eventStateId,
       id: MAPPING_ID,
+      remoteAvailability: null,
+      remoteContentHash: null,
+      remoteEndTime: null,
+      remoteStartTime: null,
       sourceCalendarId: insert.sourceCalendarId,
       startTime: insert.startTime,
       syncEventHash: insert.syncEventHash,

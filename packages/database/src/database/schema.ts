@@ -390,6 +390,16 @@ const eventMappingsTable = pgTable(
     id: uuid().notNull().primaryKey().defaultRandom(),
     syncEventId: text(),
     syncEventHash: text(),
+    remoteContentHash: text(),
+    // The provider's own stored form of the times and availability, alongside remoteContentHash.
+    // Null until a reconcile has seen what the destination actually kept.
+    remoteStartTime: timestamp({ withTimezone: true }),
+    remoteEndTime: timestamp({ withTimezone: true }),
+    remoteAvailability: text(),
+    // The form the destination was seen holding when we last rewrote this event's own text.
+    // Reading that same form back proves it is our own text as this destination keeps it.
+    // An edit does not survive our overwriting it. Cleared once a read confirms the record.
+    remoteContentHashRepairedFrom: text(),
     // Nullable for rolling compatibility with writers from before this column existed.
     // The migration runner backfills it and installs its validated index/checks.
     sourceCalendarId: uuid(),

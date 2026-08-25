@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { createDatabaseFlush } from "../../../src/core/sync-engine/flush";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
@@ -16,6 +17,8 @@ const TEST_RECONCILIATION_SCOPE = {
     timeMin: new Date("2000-01-01T00:00:00.000Z"),
   },
 };
+
+const COLUMNS_PER_ROW = 13;
 
 const MAPPING_ID = "map-1";
 const DESTINATION_EVENT_ID = "graph-event-id-1";
@@ -70,17 +73,27 @@ type MappingColumnValues = Partial<Pick<
 const flushUpdatesAgainstRecorder = async (
   changes: PendingChanges,
 ): Promise<MappingColumnValues[]> => {
+  /* The flush writes every mapping in one statement now, so the recorder reads its parameters
+     rather than a per-row set. Column order is pinned by flush-binds-every-column-to-its-own-value. */
   const setValues: MappingColumnValues[] = [];
   const fakeDatabase = {
     transaction: (callback: (transaction: unknown) => Promise<void>) => callback({
       delete: () => ({ where: () => Promise.resolve() }),
+      execute: (query: never) => {
+        const { params } = new PgDialect().sqlToQuery(query);
+        for (let index = 0; index + COLUMNS_PER_ROW <= params.length; index += COLUMNS_PER_ROW) {
+          setValues.push({
+            deleteIdentifier: String(params[index + 1]),
+            destinationEventUid: String(params[index + 2]),
+            endTime: new Date(String(params[index + 11])),
+            startTime: new Date(String(params[index + 10])),
+            syncEventHash: String(params[index + 3]),
+            syncEventId: String(params[index + 9]),
+          });
+        }
+        return Promise.resolve();
+      },
       insert: () => ({ values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }),
-      update: () => ({
-        set: (values: MappingColumnValues) => {
-          setValues.push(values);
-          return { where: () => Promise.resolve() };
-        },
-      }),
     }),
   };
 
@@ -105,6 +118,10 @@ describe("an updated event leaves the mapping pointing at it", () => {
       throw new Error("expected the first cycle to insert a mapping");
     }
     const mapping: EventMapping = {
+      remoteAvailability: null,
+      remoteContentHash: null,
+      remoteEndTime: null,
+      remoteStartTime: null,
       calendarId: insert.calendarId,
       deleteIdentifier: insert.deleteIdentifier,
       destinationEventUid: insert.destinationEventUid,

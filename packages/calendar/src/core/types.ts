@@ -78,11 +78,27 @@ type MaterializedSyncableEvent = Omit<
   recurrenceRule?: never;
 };
 
+/*
+ * The form a destination reports it stored for a write. It stands in for the read-back the engine
+ * would otherwise owe that write, so it carries the times and the availability the destination
+ * settled on and not only the hash of the content.
+ */
+interface StoredEventForm {
+  storedAvailability: EventAvailability;
+  storedContentHash: string;
+  storedEndTime: Date;
+  storedStartTime: Date;
+}
+
 interface PushResult {
   success: boolean;
   remoteId?: string;
   deleteId?: string;
   echo?: PushEchoComparison;
+  storedAvailability?: EventAvailability;
+  storedContentHash?: string;
+  storedEndTime?: Date;
+  storedStartTime?: Date;
   error?: string;
   errorType?: string;
   statusCode?: number;
@@ -165,7 +181,24 @@ interface EventPresence {
 }
 
 type SyncOperation =
-  | { type: "add"; event: MaterializedSyncableEvent; staleMappingId?: string }
+  /*
+   * The replaced mapping's recorded baseline — the form, the times and the availability — travels
+   * with the operation so a failed capture never falls back to none. A settled form travels with
+   * it too: the form the destination was seen holding for the copy this operation replaces, when
+   * our own text explains it. So does the form this rewrite is repairing away from, so the next
+   * pass can tell our own rewrite of it apart from an edit.
+   */
+  | {
+    type: "add";
+    event: MaterializedSyncableEvent;
+    staleMappingId?: string;
+    recordedAvailability?: EventAvailability;
+    recordedContentHash?: string;
+    recordedEndTime?: Date;
+    recordedStartTime?: Date;
+    repairedFromContentHash?: string;
+    settledContentHash?: string;
+  }
   | { type: "remove"; uid: string; deleteId: string; startTime: Date; mappingId?: string }
   | {
     type: "replace";
@@ -174,6 +207,12 @@ type SyncOperation =
     uid: string;
     deleteId: string;
     remoteMissing?: boolean;
+    recordedAvailability?: EventAvailability;
+    recordedContentHash?: string;
+    recordedEndTime?: Date;
+    recordedStartTime?: Date;
+    repairedFromContentHash?: string;
+    settledContentHash?: string;
   };
 
 interface ListRemoteEventsOptions {
@@ -250,6 +289,7 @@ export type {
   PushEchoUncomparableReason,
   PushEchoValueLengths,
   PushResult,
+  StoredEventForm,
   DeleteResult,
   SyncResult,
   RemoteEvent,

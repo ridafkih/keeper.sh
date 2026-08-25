@@ -45,6 +45,10 @@ const localEvent: MaterializedSyncableEvent = {
 };
 
 const legacyMapping: EventMapping = {
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: LEGACY_UID,
   destinationEventUid: LEGACY_UID,

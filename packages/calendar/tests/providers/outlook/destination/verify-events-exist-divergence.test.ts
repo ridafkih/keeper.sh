@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOutlookSyncProvider } from "../../../../src/providers/outlook/destination/provider";
 import { identifyStaleMappings } from "../../../../src/core/sync/operations";
-import { createSyncEventContentHash } from "../../../../src/core/events/content-hash";
+import {
+  createEditableEventContentHash,
+  createSyncEventContentHash,
+} from "../../../../src/core/events/content-hash";
 import type { EventMapping } from "../../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 
@@ -41,6 +44,10 @@ const mapping: EventMapping = {
   endTime: END_TIME,
   eventStateId: null,
   id: "mapping-1",
+  remoteAvailability: null,
+  remoteContentHash: createEditableEventContentHash(localEvent),
+  remoteEndTime: null,
+  remoteStartTime: null,
   sourceCalendarId: null,
   startTime: START_TIME,
   syncEventHash: createSyncEventContentHash(localEvent),

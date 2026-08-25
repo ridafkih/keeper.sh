@@ -34,6 +34,10 @@ const makeEvent = (): MaterializedSyncableEvent => ({
 });
 
 const makeMapping = (): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: "/calendar/remote-1@keeper.sh.ics",
   destinationEventUid: "remote-1@keeper.sh",

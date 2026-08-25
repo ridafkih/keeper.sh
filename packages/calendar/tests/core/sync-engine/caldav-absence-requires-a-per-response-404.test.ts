@@ -41,6 +41,10 @@ const mappingFor = (
   uid: string,
   objectPath: string,
 ): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   deleteIdentifier: objectPath,
   destinationEventUid: uid,
@@ -220,7 +224,9 @@ describe("CalDAV absence requires a per-response 404", () => {
 
     const outcome = await runReplacements([firstReplacement], [firstMapping]);
 
-    expect(outcome.multigets).toBe(1);
+    /* Two reads, for two different objects: one proves the old href is gone, and one records the
+       form the destination stored for the replacement. CalDAV echoes nothing, so it owes both. */
+    expect(outcome.multigets).toBe(2);
     expect(outcome.creates).toEqual([FIRST_PATH]);
     expect(outcome.deletes).toEqual([]);
     expect(outcome.inserts).toHaveLength(1);

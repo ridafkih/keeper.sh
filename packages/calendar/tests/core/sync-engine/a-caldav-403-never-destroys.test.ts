@@ -72,6 +72,10 @@ const objectPath = `/calendars/user/shared/${uid}.ics`;
 const objectUrl = `https://caldav.example.com${objectPath}`;
 
 const mapping: EventMapping = {
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   deleteIdentifier: objectPath,
   destinationEventUid: uid,

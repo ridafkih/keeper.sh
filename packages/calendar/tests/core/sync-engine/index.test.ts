@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { executeRemoteOperations, OPERATION_ERROR_SAMPLE_SIZE } from "../../../src/core/sync-engine/index";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
 import type {
@@ -48,6 +49,10 @@ const makeMapping = (id: string, eventStateId: string, destinationEventUid: stri
   id,
   eventStateId,
   syncEventId: eventStateId,
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   sourceCalendarId: "cal-1",
   destinationEventUid,
@@ -734,6 +739,10 @@ describe("syncCalendar", () => {
     };
     const mapping = {
       ...makeMapping("map-1", "recurring-master-id", "legacy-occurrence@keeper.sh"),
+      remoteAvailability: null,
+      remoteContentHash: null,
+      remoteEndTime: null,
+      remoteStartTime: null,
       syncEventHash: "legacy-master-hash",
       syncEventId: "recurring-master-id",
     };
@@ -786,6 +795,10 @@ describe("syncCalendar", () => {
         deleteIdentifier: "google-provider-occurrence-id",
         endTime: occurrence.endTime,
         id: mapping.id,
+        remoteAvailability: "busy",
+        remoteContentHash: createEditableEventContentHash(occurrence),
+        remoteEndTime: occurrence.endTime,
+        remoteStartTime: occurrence.startTime,
         startTime: occurrence.startTime,
         syncEventHash: createSyncEventContentHash(occurrence),
         syncEventId: occurrence.id,
@@ -952,6 +965,10 @@ describe("syncCalendar", () => {
     );
     const mapping = {
       ...makeMapping("map-1", localEvent.id, "remote-1"),
+      remoteAvailability: null,
+      remoteContentHash: createEditableEventContentHash(localEvent),
+      remoteEndTime: null,
+      remoteStartTime: null,
       syncEventHash: createSyncEventContentHash(localEvent),
     };
     const provider = makeProvider({
@@ -1221,12 +1238,10 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
-          update: () => ({
-            set: () => {
-              executedOperations.push("update");
-              return { where: () => Promise.resolve() };
-            },
-          }),
+          execute: () => {
+            executedOperations.push("update");
+            return Promise.resolve();
+          },
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -1240,7 +1255,8 @@ describe("createDatabaseFlush", () => {
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
         sourceCalendarId: "source-cal-1",
         syncEventId: "ev-1",
-        deleteIdentifier: "remote-1", syncEventHash: null,
+        deleteIdentifier: "remote-1", syncEventHash: null, remoteContentHash: null,
+        remoteAvailability: null, remoteEndTime: null, remoteStartTime: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
       deletes: ["map-1", "map-2"],
@@ -1248,6 +1264,9 @@ describe("createDatabaseFlush", () => {
         deleteIdentifier: "google-provider-occurrence-id",
         endTime: new Date("2026-03-15T10:00:00Z"),
         id: "019c0000-0000-7000-8000-000000000001",
+        remoteAvailability: null,
+        remoteEndTime: null,
+        remoteStartTime: null,
         startTime: new Date("2026-03-15T09:00:00Z"),
         syncEventHash: "occurrence-hash",
         syncEventId: "materialized-occurrence-id",
@@ -1257,23 +1276,18 @@ describe("createDatabaseFlush", () => {
     expect(executedOperations).toEqual(["delete", "insert", "update"]);
   });
 
-  it("updates every mapping through the typed update builder", async () => {
+  it("updates every mapping in one batched statement", async () => {
     const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
-    const updateValues: unknown[] = [];
-    let whereCallCount = 0;
+    const dialect = new PgDialect();
+    const updateValues: unknown[][] = [];
+    let executeCallCount = 0;
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => callback({
-        update: () => ({
-          set: (values: unknown) => {
-            updateValues.push(values);
-            return {
-              where: () => {
-                whereCallCount += 1;
-                return Promise.resolve();
-              },
-            };
-          },
-        }),
+        execute: (query: never) => {
+          executeCallCount += 1;
+          updateValues.push(dialect.sqlToQuery(query).params);
+          return Promise.resolve();
+        },
       }),
     };
 
@@ -1286,6 +1300,9 @@ describe("createDatabaseFlush", () => {
           deleteIdentifier: "remote-delete-1",
           endTime: new Date("2026-03-15T10:00:00Z"),
           id: "019c0000-0000-7000-8000-000000000001",
+          remoteAvailability: null,
+          remoteEndTime: null,
+          remoteStartTime: null,
           startTime: new Date("2026-03-15T09:00:00Z"),
           syncEventHash: "hash-1",
           syncEventId: "recurrence-1",
@@ -1294,6 +1311,9 @@ describe("createDatabaseFlush", () => {
           deleteIdentifier: "remote-delete-2",
           endTime: new Date("2026-03-16T10:00:00Z"),
           id: "019c0000-0000-7000-8000-000000000002",
+          remoteAvailability: null,
+          remoteEndTime: null,
+          remoteStartTime: null,
           startTime: new Date("2026-03-16T09:00:00Z"),
           syncEventHash: "hash-2",
           syncEventId: "recurrence-2",
@@ -1301,23 +1321,35 @@ describe("createDatabaseFlush", () => {
       ],
     });
 
-    expect(updateValues).toEqual([
-      {
-        deleteIdentifier: "remote-delete-1",
-        endTime: new Date("2026-03-15T10:00:00Z"),
-        startTime: new Date("2026-03-15T09:00:00Z"),
-        syncEventHash: "hash-1",
-        syncEventId: "recurrence-1",
-      },
-      {
-        deleteIdentifier: "remote-delete-2",
-        endTime: new Date("2026-03-16T10:00:00Z"),
-        startTime: new Date("2026-03-16T09:00:00Z"),
-        syncEventHash: "hash-2",
-        syncEventId: "recurrence-2",
-      },
-    ]);
-    expect(whereCallCount).toBe(2);
+    expect(updateValues).toEqual([[
+      "019c0000-0000-7000-8000-000000000001",
+      "remote-delete-1",
+      null,
+      "hash-1",
+      null,
+      null,
+      null,
+      null,
+      null,
+      "recurrence-1",
+      "2026-03-15T09:00:00.000Z",
+      "2026-03-15T10:00:00.000Z",
+      null,
+      "019c0000-0000-7000-8000-000000000002",
+      "remote-delete-2",
+      null,
+      "hash-2",
+      null,
+      null,
+      null,
+      null,
+      null,
+      "recurrence-2",
+      "2026-03-16T09:00:00.000Z",
+      "2026-03-16T10:00:00.000Z",
+      null,
+    ]]);
+    expect(executeCallCount).toBe(1);
   });
 
   it("skips delete when there are no deletes", async () => {
@@ -1339,7 +1371,8 @@ describe("createDatabaseFlush", () => {
         eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
         sourceCalendarId: "source-cal-1",
         syncEventId: "ev-1",
-        deleteIdentifier: "remote-1", syncEventHash: null,
+        deleteIdentifier: "remote-1", syncEventHash: null, remoteContentHash: null,
+        remoteAvailability: null, remoteEndTime: null, remoteStartTime: null,
         startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
       }],
       deletes: [],
@@ -1423,7 +1456,8 @@ describe("createDatabaseFlush", () => {
       eventStateId: `ev-${idx}`, calendarId: "cal-1", destinationEventUid: `remote-${idx}`,
       sourceCalendarId: "source-cal-1",
       syncEventId: `ev-${idx}`,
-      deleteIdentifier: `remote-${idx}`, syncEventHash: null,
+      deleteIdentifier: `remote-${idx}`, syncEventHash: null, remoteContentHash: null,
+      remoteAvailability: null, remoteEndTime: null, remoteStartTime: null,
       startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
     }));
 
@@ -1460,14 +1494,16 @@ describe("createDatabaseFlush", () => {
           eventStateId: "ev-1", calendarId: "cal-1", destinationEventUid: "remote-1",
           sourceCalendarId: "source-cal-1",
           syncEventId: "ev-1",
-          deleteIdentifier: "remote-1", syncEventHash: null,
+          deleteIdentifier: "remote-1", syncEventHash: null, remoteContentHash: null,
+          remoteAvailability: null, remoteEndTime: null, remoteStartTime: null,
           startTime: new Date("2026-03-15T09:00:00Z"), endTime: new Date("2026-03-15T10:00:00Z"),
         },
         {
           eventStateId: "ev-2", calendarId: "cal-1", destinationEventUid: "remote-2",
           sourceCalendarId: "source-cal-1",
           syncEventId: "ev-2",
-          deleteIdentifier: "remote-2", syncEventHash: null,
+          deleteIdentifier: "remote-2", syncEventHash: null, remoteContentHash: null,
+          remoteAvailability: null, remoteEndTime: null, remoteStartTime: null,
           startTime: new Date("2026-03-16T09:00:00Z"), endTime: new Date("2026-03-16T10:00:00Z"),
         },
       ],

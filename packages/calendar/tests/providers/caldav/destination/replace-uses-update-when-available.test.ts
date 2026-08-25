@@ -12,6 +12,7 @@ const clientMocks = vi.hoisted(() => ({
   deleteCalendarObjectByUrl: vi.fn(),
   fetchCalendarObject: vi.fn(),
   fetchCalendarObjects: vi.fn(),
+  fetchCalendarObjectsByUrls: vi.fn(),
   resolveCalendarUrl: vi.fn(),
 }));
 
@@ -40,6 +41,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
     deleteCalendarObjectByUrl = clientMocks.deleteCalendarObjectByUrl;
     fetchCalendarObject = clientMocks.fetchCalendarObject;
     fetchCalendarObjects = clientMocks.fetchCalendarObjects;
+    fetchCalendarObjectsByUrls = clientMocks.fetchCalendarObjectsByUrls;
     resolveCalendarUrl = clientMocks.resolveCalendarUrl;
   }
 
@@ -70,6 +72,10 @@ const mapping: EventMapping = {
   endTime: event.endTime,
   eventStateId: event.id,
   id: "mapping-1",
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   sourceCalendarId: event.calendarId,
   startTime: event.startTime,
   syncEventHash: "diverged-remote-hash",
@@ -102,6 +108,7 @@ describe("CalDAV replace with an update-capable provider", () => {
     clientMocks.updateCalendarObjectByUrl.mockResolvedValue(null);
     clientMocks.deleteCalendarObject.mockResolvedValue(null);
     clientMocks.deleteCalendarObjectByUrl.mockResolvedValue(null);
+    clientMocks.fetchCalendarObjectsByUrls.mockResolvedValue([]);
 
     await executeRemoteOperations([replacement], [mapping], "dest-calendar-id", createProvider());
 
