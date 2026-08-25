@@ -21,14 +21,6 @@ const VIEWS: CalendarViewMode[] = ["week", "month"];
 const navButton =
   "flex size-8 items-center justify-center rounded-lg text-foreground-muted hover:bg-background-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/**
- * The dashboard's calendar pane. Owns the active `view` and its `anchor` — the
- * day the week view centres on (today on entry), or any day inside the month
- * the month view shows — and lets the user page the range. Renders
- * the toolbar and hands it to the active grid, which places it in the header
- * card above its own column labels (see `CalendarFrame`). Skeleton only: no
- * events yet.
- */
 export function CalendarView() {
   const [view, setView] = useState<CalendarViewMode>("week");
   const [anchor, setAnchor] = useState(() => new Date());
@@ -37,10 +29,6 @@ export function CalendarView() {
 
   const title = view === "month" ? formatMonthTitle(anchor) : formatWeekTitle(anchor);
 
-  // Switch views inside a view transition where available, so the header card
-  // morphs between the two column headers (see `CalendarFrame`) rather than
-  // snapping. `flushSync` commits the new view inside the transition's DOM
-  // update callback, as the API requires.
   const switchView = (mode: CalendarViewMode) => {
     if (mode === view) return;
     const reduceMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches;

@@ -247,9 +247,7 @@ html {
   }
 }
 
-/* The calendar's week/month switch runs inside a view transition (see
-   `CalendarView`). Only the named calendar groups should animate: keep the
-   root snapshot from cross-fading the whole page, and honour reduced motion. */
+/* Only the calendar's named groups animate in its view transition; keep the root from cross-fading the page. */
 ::view-transition-group(root) {
   animation-duration: 0s;
 }

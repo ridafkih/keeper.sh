@@ -8,13 +8,9 @@ import { isSameDay, isSameMonth, WEEKDAY_LABELS } from "./calendar-helpers";
 const COLUMNS = 7;
 const ROWS = 6;
 
-/** Depth of the rule layer's edge fades, in pixels. */
 const EDGE_FADE_SIZE = 24;
 
-/** The cell rules, painted as one layer behind the cells rather than as cell
- * borders: a 1px line at the trailing edge of every column and row tile, so
- * the lines land on the cell boundaries. Keeping them on their own layer lets
- * them be faded at the edges without touching the day numbers. */
+// Cell rules on their own layer behind the cells, so they can fade at the edges without touching the day numbers.
 const CELL_RULES: CSSProperties = {
   backgroundImage: [
     "linear-gradient(to right, transparent calc(100% - 1px), var(--color-border-elevated) calc(100% - 1px))",
@@ -24,10 +20,6 @@ const CELL_RULES: CSSProperties = {
   backgroundRepeat: "repeat-x, repeat-y",
 };
 
-/** Fades the rule layer out toward all four edges, so the rules dissolve into
- * the page background — and the outermost trailing-edge lines, which would
- * otherwise frame the grid, vanish with them. The two gradients intersect so
- * each corner fades on both axes. */
 const EDGE_FADE = [
   `linear-gradient(to bottom, transparent, black ${EDGE_FADE_SIZE}px, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
   `linear-gradient(to right, transparent, black ${EDGE_FADE_SIZE}px, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
@@ -41,20 +33,11 @@ const RULE_LAYER_STYLE: CSSProperties = {
 };
 
 interface MonthGridProps {
-  /** Any date within the month being displayed (dims days outside it). */
   anchor: Date;
-  /** The 42 days of the 6×7 grid, from `getMonthGridDays`. */
   days: Date[];
-  /** The pane's toolbar, rendered in the header card above the weekday row. */
   toolbar: ReactNode;
 }
 
-/**
- * The month view skeleton: a weekday label row in the header card over a bare
- * 6×7 grid of day cells whose rules fade out toward the edges. Presentational
- * only — no events are rendered yet; each cell reserves space where event
- * pills will later go.
- */
 export function MonthGrid({ anchor, days, toolbar }: MonthGridProps) {
   const today = useStartOfToday();
 
@@ -78,7 +61,6 @@ export function MonthGrid({ anchor, days, toolbar }: MonthGridProps) {
       }
     >
       <div className="relative min-h-0 flex-1">
-        {/* Cell rules, behind the cells and faded toward the edges. */}
         <div aria-hidden className="pointer-events-none absolute inset-0" style={RULE_LAYER_STYLE} />
         <div className="relative grid h-full grid-cols-7 grid-rows-6">
           {days.map((day) => {

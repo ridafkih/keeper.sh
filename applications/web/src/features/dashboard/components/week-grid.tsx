@@ -15,99 +15,52 @@ import {
   WEEK_VIEW_DAYS,
 } from "./calendar-helpers";
 
-/** Width of the left time gutter, in pixels. */
 const GUTTER_WIDTH = 52;
-/** Height of a single hour row, in pixels. */
 const HOUR_HEIGHT = 48;
-/** Height of the weekday/date header row, in pixels. */
 const HEADER_HEIGHT = 56;
-/** Visible day columns (a week). */
 const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
-/** Offset of the centre column from the first visible one. */
 const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
-/** Weeks buffered on each side of the entry range, giving the strip a long,
- * effectively-continuous horizontal scroll range without recentering logic. */
+/** Weeks buffered on each side of the entry range, so the strip scrolls without recentering logic. */
 const BUFFER_WEEKS = 26;
 
 const MS_PER_DAY = 86_400_000;
 
-/** Colour of the hour rules across the grid: the column-rule token, faded so
- * the horizontal lines read as a secondary, quieter layer under the columns. */
+// Faded so the hour lines read as a quieter layer under the column rules.
 const HOUR_RULE_COLOR = "color-mix(in oklab, var(--color-border-elevated) 45%, transparent)";
 
-/** The day-column rules: a 1px line at the left edge of every column, tiled
- * one column apart. They are painted on the *viewport* boxes (the grid's
- * scroller and the header's strip viewport) rather than on the day cells, so
- * they are pinned to the visible area and run its full height — through a
- * vertical overscroll bounce too, instead of stopping at the content's edge.
- * Horizontal scrolling is followed via `--strip-scroll`, which `handleScroll`
- * keeps equal to the scroller's `scrollLeft`. Both boxes use the same column
- * width expression, so header and grid lines coincide to the pixel. */
+// Painted on the viewport boxes, not the cells, so the rules span overscroll; `--strip-scroll` keeps them following the grid.
 const COLUMN_RULES: CSSProperties = {
   backgroundImage: "linear-gradient(to right, var(--color-border-elevated) 0 1px, transparent 1px)",
   backgroundRepeat: "repeat-x",
 };
 
-/** Fades the header's column rules out toward the top, so they dissolve into
- * the toolbar above instead of meeting it at a hard corner. */
 const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
 
-/** Depth of the grid's top and bottom edge fades, in pixels. Shallow enough
- * to stay clear of the first and last hour labels at the scroll extremes. */
 const GRID_EDGE_FADE_SIZE = 24;
 
-/** Fades the grid's scroller out at its top and bottom edges, so rules,
- * labels and the current-time line dissolve into the page background instead
- * of stopping at a hard edge. Applied to the scroller box, so it stays pinned
- * to the visible area while the content scrolls beneath it — through a
- * vertical overscroll bounce too. Vertical only: a horizontal fade would dim
- * the time gutter's labels and the outermost day column. */
+// Vertical only: a horizontal fade would dim the gutter labels and the outermost column.
 const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDGE_FADE_SIZE}px, black calc(100% - ${GRID_EDGE_FADE_SIZE}px), transparent)`;
 
 interface WeekGridProps {
-  /** The day to centre the visible range on; drives the horizontal scroll
-   * position. Today on entry, so today sits in the middle column. */
   anchor: Date;
-  /** Reports the day now in the centre column after manual horizontal
-   * scrolling, so the pane title and paging stay in sync with the strip. */
   onCenterDayChange: (centerDay: Date) => void;
-  /** The pane's toolbar, rendered in the header card above the day row. */
   toolbar: ReactNode;
 }
 
-/**
- * The week view skeleton, modelled on qali's time strip: a pinned left time
- * gutter and a single two-axis scroller whose buffered day columns snap one
- * day at a time — so the week scrolls horizontally like qali's. The visible
- * range is a rolling seven days centred on `anchor` rather than a calendar
- * week, so "Today" puts today in the middle and paging keeps that alignment.
- * The day row lives in the header card above; it has no scroller of its own
- * and simply mirrors the grid's horizontal offset, so the two always line up.
- * Presentational only: no events; a current-time line marks today.
- */
 export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) {
   const today = useStartOfToday();
   const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
-  /** The overflow-hidden viewport around the day row, in the header card. */
   const headerStripRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
-  /** The scroller's vertical offset as last scrolled, so it can be put back
-   * after the router replays a cached one (see the `onRendered` effect). */
+  /** Vertical offset as last scrolled; put back after the router replays a cached one. */
   const scrollTopRef = useRef(0);
-  /** The centre day (ms, midnight) the strip is currently aligned to; guards
-   * the anchor effect from re-scrolling in response to the strip's own scroll
-   * reports. */
+  /** Centre day (ms) the strip is aligned to; keeps the anchor effect from reacting to the strip's own reports. */
   const alignedCenterMsRef = useRef<number | null>(null);
-  /** The scroller's width (px) the strip was last aligned at. Column widths
-   * are a fraction of it, so a scroll report arriving while the width differs
-   * is the strip mid-resize — its offset still belongs to the old width — and
-   * not the user paging; it is ignored and the resize observer re-aligns. */
+  /** Width (px) the strip was last aligned at; a scroll report at a different width is a resize, not paging. */
   const alignedWidthRef = useRef<number | null>(null);
 
-  // The buffered strip is centred on the range active when the grid mounts, so
-  // the entry range sits mid-buffer and paging stays inside it.
   const [stripDays] = useState(() => {
     const start = addDays(startOfVisibleWeek(anchor), -BUFFER_WEEKS * 7);
     return Array.from({ length: (BUFFER_WEEKS * 2 + 1) * 7 }, (_, index) =>
@@ -116,8 +69,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   });
   const columnsTemplate = `repeat(${stripDays.length}, minmax(0, 1fr))`;
 
-  // Resolve the current-time line on the client only, so SSR and hydration
-  // agree (the server has no stable "now").
+  // Client-only so SSR and hydration agree.
   const [nowFraction, setNowFraction] = useState<number | null>(null);
   useEffect(() => {
     const update = () => {
@@ -136,8 +88,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
   }, []);
 
-  /** Mirrors the scroller's horizontal offset onto the header's day row, and
-   * into `--strip-scroll` on both boxes so their column rules follow along. */
+  /** Mirrors the scroller's horizontal offset onto the day row and into `--strip-scroll`. */
   const syncHeaderStrip = useCallback(() => {
     const scroller = scrollerRef.current;
     const headerStrip = headerStripRef.current;
@@ -148,7 +99,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     headerStrip.style.setProperty("--strip-scroll", offset);
   }, []);
 
-  /** Scrolls the strip so `centerDay` (midnight) sits in the middle column. */
   const scrollToCenter = useCallback(
     (centerDay: Date, behavior: ScrollBehavior) => {
       const el = scrollerRef.current;
@@ -159,16 +109,13 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       alignedCenterMsRef.current = centerDay.getTime();
       alignedWidthRef.current = el.clientWidth;
       el.scrollTo({ left: clamped * columnWidth(), behavior });
-      // An instant jump lands before any scroll event; mirror it right away so
-      // the header never shows a stale range, even for a frame.
+      // An instant jump fires no scroll event; mirror right away so the header never shows a stale range.
       if (behavior === "auto") syncHeaderStrip();
     },
     [columnWidth, stripDays, syncHeaderStrip],
   );
 
-  // On mount, centre the anchor day and jump down to business hours (auto, no
-  // animation); afterwards, smooth-scroll whenever the anchor moves to a
-  // different day than the strip is centred on (button paging / Today).
+  // Mount: centre the anchor and jump to business hours; afterwards, smooth-scroll on anchor moves.
   useLayoutEffect(() => {
     const centerDay = startOfDay(anchor);
     if (!mountedRef.current) {
@@ -186,15 +133,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     }
   }, [anchor, scrollToCenter]);
 
-  // The router's scroll restoration replays every scrollable element's cached
-  // offsets once a navigation has rendered — this scroller's included, even
-  // though the pane stays mounted across the dashboard's child routes and its
-  // live position is the truth. The cache is sampled on a throttle, so the
-  // replayed offset can be a stale, mid-scroll one that leaves the strip off
-  // its column (snapping it onto a neighbouring day) and at a different hour.
-  // The router registers its listener when it is created, so this one runs
-  // after it: put the strip back where it was. On the first load that also
-  // re-centres on today after the last visit's offsets are replayed.
+  // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
   useEffect(
     () =>
       router.subscribe("onRendered", () => {
@@ -207,11 +146,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
     [router, scrollToCenter],
   );
 
-  // Column widths are a fraction of the scroller's width, but the horizontal
-  // offset is kept in pixels — so a viewport resize would silently drift the
-  // strip to different days. Re-snap to the day the strip was centred on
-  // whenever the scroller's width changes. (`handleScroll` ignores the scroll
-  // events a resize produces, so that day is still the one the user chose.)
+  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day.
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
@@ -230,8 +165,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
   }, [scrollToCenter]);
 
   const handleScroll = () => {
-    // Mirror synchronously — not inside the rAF below — so the header never
-    // trails the grid by a frame.
+    // Mirror synchronously, not in the rAF, so the header never trails the grid by a frame.
     syncHeaderStrip();
     const scroller = scrollerRef.current;
     if (scroller) scrollTopRef.current = scroller.scrollTop;
@@ -240,9 +174,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       rafRef.current = null;
       const el = scrollerRef.current;
       if (!el) return;
-      // Mid-resize: the offset belongs to the old width, so reading it against
-      // the new one would land on a different day. The resize observer
-      // re-aligns the strip to the chosen day; don't report this one.
+      // Mid-resize offsets belong to the old width; the resize observer re-aligns the strip.
       if (el.clientWidth !== alignedWidthRef.current) return;
       const index = Math.max(
         0,
@@ -264,10 +196,8 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
 
   const dayRow = (
     <div className="flex" style={{ height: HEADER_HEIGHT }}>
-      {/* Spacer over the grid's time gutter, keeping the columns aligned. */}
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
       <div ref={headerStripRef} className="relative min-w-0 flex-1 overflow-hidden">
-        {/* Column rules, pinned to the viewport and faded toward the top. */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0"
@@ -332,8 +262,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
           WebkitMaskImage: GRID_EDGE_FADE,
         }}
       >
-        {/* Pinned time gutter; opaque in the page colour so the columns scroll
-            under it. */}
         <div
           className="sticky left-0 z-30 shrink-0 bg-background"
           style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
@@ -348,7 +276,6 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
             </span>
           ))}
         </div>
-        {/* Buffered day strip: 7 columns fill the viewport, the rest overflow. */}
         <div
           className="relative grid shrink-0"
           style={{
@@ -365,10 +292,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
                 className="relative"
                 style={{ scrollSnapAlign: "start" }}
               >
-                {/* Hour rules, painted per cell (one strip-wide layer is too
-                    large a box for some engines to paint a background on) and
-                    starting one row down, so neither the top nor the bottom
-                    edge of the grid carries a line. */}
+                {/* Hour rules, per cell — one strip-wide background layer is too large for some engines to paint. */}
                 <div
                   aria-hidden
                   className="pointer-events-none absolute inset-x-0 bottom-0"

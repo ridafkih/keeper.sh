@@ -35,7 +35,6 @@ function DashboardLayout() {
 
   return (
     <div className="relative flex min-h-dvh justify-center lg:justify-start lg:gap-4 lg:p-4">
-      {/* Sidebar — the existing centered dashboard column. */}
       <div className="relative flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:px-1 lg:pt-6">
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence>
@@ -53,10 +52,7 @@ function DashboardLayout() {
         <SyncProvider />
         <Outlet />
       </div>
-      {/* Calendar pane — desktop only. `isolate` confines the calendar's
-          internal sticky z-indices to its own stacking context, so the header
-          and time gutter sit under the popover blur overlay (z-10) instead of
-          punching through it. */}
+      {/* `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10). */}
       <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
         <CalendarView />
       </div>
