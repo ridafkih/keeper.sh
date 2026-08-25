@@ -1,12 +1,22 @@
 import { memo } from "react";
 import type { CSSProperties, PropsWithChildren } from "react";
 import { tv } from "tailwind-variants/lite";
+import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
+
+const EVENT_COLORS = {
+  blue: cn(
+    "[--event-ink:var(--color-blue-900)] [--event-surface:var(--color-blue-100)] [--event-accent:var(--color-blue-500)]",
+    "dark:[--event-ink:var(--color-blue-100)] dark:[--event-surface:color-mix(in_srgb,var(--color-blue-500)_20%,var(--color-background))] dark:[--event-accent:var(--color-blue-400)]",
+  ),
+};
+
+type EventColor = keyof typeof EVENT_COLORS;
 
 const eventText = tv({
   base: "tracking-tight",
@@ -16,8 +26,8 @@ const eventText = tv({
       xs: "text-xs",
     },
     muted: {
-      true: "text-event-muted",
-      false: "text-event",
+      true: "text-(--event-ink)/70",
+      false: "text-(--event-ink)",
     },
   },
   defaultVariants: {
@@ -53,6 +63,7 @@ interface EventCardProps {
   /** Placement for the `grid` layout: the column sets `top`/`height`/`left`/
    * `width` and the stacking order. */
   style?: CSSProperties;
+  color?: EventColor;
 }
 
 /**
@@ -83,7 +94,7 @@ interface EventCardProps {
  * by Tailwind's output order, not by the variant chosen.
  */
 const eventCard = tv({
-  base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-event-border",
+  base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-(--event-accent)",
   variants: {
     layout: {
       list: "relative flex flex-col gap-0.5 rounded-xl py-2.5 pr-3 pl-4 before:inset-y-2 before:left-1.5",
@@ -103,8 +114,8 @@ const eventCard = tv({
     // rather than `base`, as two `bg-*` utilities would be left to Tailwind's
     // output order.
     past: {
-      true: "bg-event-background-muted line-through before:opacity-50 *:opacity-50",
-      false: "bg-event-background",
+      true: "bg-[color-mix(in_srgb,var(--event-surface)_50%,var(--color-background))] line-through before:opacity-50 *:opacity-50",
+      false: "bg-(--event-surface)",
     },
   },
   defaultVariants: {
@@ -122,9 +133,10 @@ export const EventCard = memo(function EventCard({
   past,
   layout = "list",
   style,
+  color = "blue",
 }: EventCardProps) {
   const title = event.title ?? event.calendarName;
-  const classes = eventCard({ layout, past });
+  const classes = cn(eventCard({ layout, past }), EVENT_COLORS[color]);
 
   if (layout === "grid") {
     return (
@@ -188,14 +200,15 @@ interface EventPillProps {
   event: CalendarEvent;
   /** Whether the event has ended; see `EventCardProps.past`. */
   past: boolean;
+  color?: EventColor;
 }
 
 const eventPill = tv({
-  base: "relative flex shrink-0 items-center overflow-hidden rounded-sm pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-event-border",
+  base: "relative flex shrink-0 items-center overflow-hidden rounded-sm pr-1.5 pl-3 before:absolute before:inset-y-[3px] before:left-1 before:w-0.5 before:rounded-full before:bg-(--event-accent)",
   variants: {
     past: {
-      true: "bg-event-background-muted line-through before:opacity-50 *:opacity-50",
-      false: "bg-event-background",
+      true: "bg-[color-mix(in_srgb,var(--event-surface)_50%,var(--color-background))] line-through before:opacity-50 *:opacity-50",
+      false: "bg-(--event-surface)",
     },
   },
 });
@@ -204,9 +217,9 @@ const eventPill = tv({
  * A one-line event pill — the card's surface and accent bar at pill height —
  * for the week view's all-day band and the month grid's day cells.
  */
-export const EventPill = memo(function EventPill({ event, past }: EventPillProps) {
+export const EventPill = memo(function EventPill({ event, past, color = "blue" }: EventPillProps) {
   return (
-    <div className={eventPill({ past })} style={{ height: EVENT_PILL_HEIGHT_PX }}>
+    <div className={cn(eventPill({ past }), EVENT_COLORS[color])} style={{ height: EVENT_PILL_HEIGHT_PX }}>
       {/* `min-w-0` lets the flex item shrink below its text so `truncate` bites. */}
       <EventText as="span" size="xs" className="min-w-0 truncate font-medium">
         {event.title ?? event.calendarName}
