@@ -335,7 +335,7 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
         {/* Pinned time gutter; opaque in the page colour so the columns scroll
             under it. */}
         <div
-          className="relative sticky left-0 z-30 shrink-0 bg-background"
+          className="sticky left-0 z-30 shrink-0 bg-background"
           style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
         >
           {HOURS.slice(1).map((hour) => (

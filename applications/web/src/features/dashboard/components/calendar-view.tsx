@@ -93,12 +93,12 @@ export function CalendarView() {
           <button
             type="button"
             aria-label="Previous"
-            className={cn(navButton)}
+            className={navButton}
             onClick={() => step(-1)}
           >
             <ChevronLeft size={16} />
           </button>
-          <button type="button" aria-label="Next" className={cn(navButton)} onClick={() => step(1)}>
+          <button type="button" aria-label="Next" className={navButton} onClick={() => step(1)}>
             <ChevronRight size={16} />
           </button>
         </div>
