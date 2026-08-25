@@ -5,6 +5,7 @@ import { createSyncEventContentHash } from "../../../src/core/events/content-has
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
@@ -120,8 +121,8 @@ const createDestination = (
   };
 };
 
-const reportAbsent = (deleteIds: string[]): Promise<EventPresence[]> =>
-  Promise.resolve(deleteIds.map((identifier): EventPresence => ({ identifier, status: "absent" })));
+const reportAbsent = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
+  Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "absent" })));
 
 /* The recipient really deleted the mirror, so nothing is left for the pre-delete to remove: whatever
    the destination answers that delete, only the verification read establishes the absence. */

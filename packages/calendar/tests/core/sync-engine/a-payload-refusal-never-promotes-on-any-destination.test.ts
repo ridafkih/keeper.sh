@@ -57,6 +57,17 @@ const CALENDAR_URL = "https://caldav.example.invalid/calendars/user/shared/";
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const CYCLES = 3;
 
+/* Every status in PAYLOAD_REFUSAL_STATUS_CODES. A real server refuses the create PUT for the
+   same reason it refused the update PUT: both send eventToICalString(event, uid) to the same
+   ${uid}.ics href, so a delete-then-add only destroys the object and leaves nothing behind. */
+const PAYLOAD_REFUSALS = [
+  { status: 400, statusText: "Bad Request" },
+  { status: 413, statusText: "Content Too Large" },
+  { status: 415, statusText: "Unsupported Media Type" },
+  { status: 422, statusText: "Unprocessable Entity" },
+  { status: 431, statusText: "Request Header Fields Too Large" },
+];
+
 const movedMeeting: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
@@ -70,8 +81,8 @@ const movedMeeting: MaterializedSyncableEvent = {
 
 const uid = generateDeterministicEventUid(movedMeeting.id);
 const ownedObjectPath = `/calendars/user/shared/${uid}.ics`;
-/* A server that names objects itself: operations.ts adopts the reported href, so the
-   stored basename never matches <uid>.ics again for this mapping. */
+/* A server that names objects itself: the stored basename never matches <uid>.ics, so the update
+   path can never address it while a create writes the correct fresh href. */
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
 
 const makeMapping = (deleteIdentifier: string): EventMapping => ({
@@ -112,10 +123,6 @@ interface CycleOutcome {
   insertedUids: string[];
 }
 
-/*
- * The engine reports whatever per-mapping state it wants carried to the next cycle as a
- * PendingUpdate on that mapping, so the harness replays the flush without naming the field.
- */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -157,22 +164,6 @@ const runCycles = async (deleteIdentifier: string): Promise<CycleOutcome[]> => {
   return cycleOutcomes;
 };
 
-/* Only an href the update path can never address escapes: the create writes the correct fresh
-   ${uid}.ics and fixes the bad stored href. A refusal of the BYTES has no such escape - update
-   and create send the same eventToICalString(event, uid) to the same href - so it stays here. */
-const durableRejections = [
-  {
-    label: "a stored href the update path can never address",
-    deleteIdentifier: serverNamedObjectPath,
-    reject: () => null,
-  },
-];
-
-const payloadRefusals = [
-  { status: 400, statusText: "Bad Request" },
-  { status: 422, statusText: "Unprocessable Entity" },
-];
-
 beforeEach(() => {
   for (const mock of Object.values(clientMocks)) {
     mock.mockReset();
@@ -183,29 +174,15 @@ beforeEach(() => {
   clientMocks.deleteCalendarObjectByUrl.mockImplementation(() => Promise.resolve());
 });
 
-describe("a durably rejected in-place update escapes instead of stalling forever", () => {
-  for (const rejection of durableRejections) {
-    it(`promotes to a replacement within three cycles after ${rejection.label}`, async () => {
-      rejection.reject();
-
-      const cycleOutcomes = await runCycles(rejection.deleteIdentifier);
-
-      // The first cycle still knows nothing durable, so it must not touch the real event.
-      expect(cycleOutcomes[0]).toEqual({ deletedMappingIds: [], insertedUids: [] });
-
-      expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(1);
-      expect(cycleOutcomes.flatMap((cycle) => cycle.deletedMappingIds)).toEqual(["map-1"]);
-      expect(cycleOutcomes.flatMap((cycle) => cycle.insertedUids)).toEqual([uid]);
-    });
-  }
-
-  for (const { status, statusText } of payloadRefusals) {
-    it(`never deletes after a ${status} the server will repeat forever`, async () => {
+describe("a payload refusal never promotes on any destination", () => {
+  for (const { status, statusText } of PAYLOAD_REFUSALS) {
+    it(`never deletes the live object after a ${status} the create PUT refuses just the same`, async () => {
       clientMocks.updateCalendarObjectByUrl.mockRejectedValue(httpError(status, statusText));
       clientMocks.createCalendarObject.mockRejectedValue(httpError(status, statusText));
 
       const cycleOutcomes = await runCycles(ownedObjectPath);
 
+      expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(CYCLES);
       expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
       expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
       expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
@@ -214,16 +191,12 @@ describe("a durably rejected in-place update escapes instead of stalling forever
     });
   }
 
-  it("never promotes a 503 that is only a brief outage", async () => {
-    clientMocks.updateCalendarObjectByUrl.mockRejectedValue(httpError(503, "Service Unavailable"));
+  it("still promotes a stored href the update path can never address", async () => {
+    const cycleOutcomes = await runCycles(serverNamedObjectPath);
 
-    const cycleOutcomes = await runCycles(ownedObjectPath);
-
-    expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(CYCLES);
-    expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
-    expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
-    expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
-    expect(cycleOutcomes.flatMap((cycle) => cycle.deletedMappingIds)).toEqual([]);
-    expect(cycleOutcomes.flatMap((cycle) => cycle.insertedUids)).toEqual([]);
+    expect(cycleOutcomes[0]).toEqual({ deletedMappingIds: [], insertedUids: [] });
+    expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(1);
+    expect(cycleOutcomes.flatMap((cycle) => cycle.deletedMappingIds)).toEqual(["map-1"]);
+    expect(cycleOutcomes.flatMap((cycle) => cycle.insertedUids)).toEqual([uid]);
   });
 });

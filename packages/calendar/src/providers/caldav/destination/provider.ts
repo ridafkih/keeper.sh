@@ -1,5 +1,6 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { toVerificationDeleteIds } from "../../../core/events/verification-targets";
 import {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
@@ -10,6 +11,7 @@ import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushResult,
@@ -501,7 +503,10 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     };
   };
 
-  const verifyEventsExist = async (deleteIds: string[]): Promise<EventPresence[]> => {
+  const verifyEventsExist = async (
+    targets: (EventVerificationTarget | string)[],
+  ): Promise<EventPresence[]> => {
+    const deleteIds = toVerificationDeleteIds(targets);
     if (deleteIds.length === 0) {
       return [];
     }
@@ -524,10 +529,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   return {
-    /* Our create PUTs to an href derived fresh from the UID, so a refusal tied to the stored
-       object -- a mismatched href, a precondition on what is already there -- does not repeat.
-       A refusal tied to the bytes themselves does, and the failure counter is what bounds it. */
-    createEscapesPayloadRefusal: true,
     pushEvents,
     updateEvents,
     deleteEvents,

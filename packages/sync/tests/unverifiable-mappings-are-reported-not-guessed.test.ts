@@ -3,6 +3,7 @@ import { computeSyncOperations } from "@keeper.sh/calendar";
 import type {
   EventMapping,
   EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   RemoteEvent,
@@ -136,7 +137,8 @@ const createProviderDouble = () => {
       return Promise.resolve([]);
     },
     verifiedIds,
-    verifyEventsExist: (deleteIds: string[]): Promise<EventPresence[]> => {
+    verifyEventsExist: (targets: EventVerificationTarget[]): Promise<EventPresence[]> => {
+      const deleteIds = targets.map((target) => target.deleteId);
       verifiedIds.push(...deleteIds);
       return Promise.resolve(
         deleteIds.map((deleteId) => createPresence(indexOfDeleteIdentifier(deleteId))),

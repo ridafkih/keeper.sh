@@ -4,6 +4,7 @@ import { createSyncEventContentHash } from "../../../src/core/events/content-has
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
@@ -126,7 +127,7 @@ const createOutlookLikeDestination = (options: DestinationOptions) => {
       records.set(update.deleteId, { ...existing, summary: update.event.summary });
       return { deleteId: update.deleteId, remoteId: existing.uid, success: true };
     })),
-    verifyEventsExist: (deleteIds: string[]) => Promise.resolve(deleteIds.map((deleteId): EventPresence => {
+    verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(({ deleteId }): EventPresence => {
       if (records.has(deleteId)) {
         return { identifier: deleteId, status: "present" };
       }

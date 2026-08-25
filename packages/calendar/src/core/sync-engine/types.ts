@@ -1,6 +1,7 @@
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -18,17 +19,14 @@ interface CalendarSyncProvider {
   normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
-  /* Whether this provider's create verb can succeed on bytes its update verb refused. A CalDAV
-     PUT goes to a freshly derived href with its own preconditions; a Graph POST and a Google
-     import carry the same serialization to the same collection and are refused again. */
-  createEscapesPayloadRefusal?: boolean;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
-  // Google, Outlook and CalDAV answer three-valued, so "could not tell" is never read as absence.
-  verifyEventsExist?: (deleteIds: string[]) => Promise<EventPresence[] | RemoteEvent[]>;
+  /* Google, Outlook and CalDAV answer three-valued, so "could not tell" is never read as absence.
+     The target carries the uid as well as the delete id: without it Outlook can never say absent. */
+  verifyEventsExist?: (targets: EventVerificationTarget[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface PendingInsert {

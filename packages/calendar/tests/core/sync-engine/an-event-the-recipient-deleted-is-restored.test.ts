@@ -5,6 +5,7 @@ import { createSyncEventContentHash } from "../../../src/core/events/content-has
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
@@ -83,12 +84,12 @@ const createDestination = (
   const pushedEvents: MaterializedSyncableEvent[] = [];
   let created = 0;
 
-  const trackedVerify = (deleteIds: string[]): Promise<EventPresence[] | RemoteEvent[]> => {
-    verifyTargets.push(...deleteIds);
+  const trackedVerify = (targets: EventVerificationTarget[]): Promise<EventPresence[] | RemoteEvent[]> => {
+    verifyTargets.push(...targets.map((target) => target.deleteId));
     if (!verifyEventsExist) {
       return Promise.resolve([]);
     }
-    return verifyEventsExist(deleteIds);
+    return verifyEventsExist(targets);
   };
 
   const provider: CalendarSyncProvider = {
@@ -145,11 +146,11 @@ const createDestination = (
   };
 };
 
-const reportAbsent = (deleteIds: string[]): Promise<EventPresence[]> =>
-  Promise.resolve(deleteIds.map((identifier): EventPresence => ({ identifier, status: "absent" })));
+const reportAbsent = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
+  Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "absent" })));
 
-const reportUnknown = (deleteIds: string[]): Promise<EventPresence[]> =>
-  Promise.resolve(deleteIds.map((identifier): EventPresence => ({ identifier, status: "unknown" })));
+const reportUnknown = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
+  Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "unknown" })));
 
 /* Outlook answers with the events it actually found and throws when the read itself failed. */
 const reportNoneFound = (): Promise<RemoteEvent[]> => Promise.resolve([]);

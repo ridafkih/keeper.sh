@@ -1,10 +1,12 @@
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { toVerificationDeleteIds } from "../../../core/events/verification-targets";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type {
   DeleteResult,
   EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushEchoComparison,
@@ -762,8 +764,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return presenceOfLegacyLookup(identifier, response);
   };
 
-  const verifyEventsExist = async (identifiers: string[]): Promise<EventPresence[]> => {
+  const verifyEventsExist = async (
+    targets: (EventVerificationTarget | string)[],
+  ): Promise<EventPresence[]> => {
     await refreshIfNeeded();
+
+    const identifiers = toVerificationDeleteIds(targets);
 
     if (identifiers.length === 0) {
       return [];

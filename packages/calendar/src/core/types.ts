@@ -164,6 +164,13 @@ interface EventPresence {
   status: EventPresenceStatus;
 }
 
+/* A mirror is named by a pair: the id a delete would target, and the uid the mapping carries.
+   Graph re-keys an item on a move, so the id alone can never tell a moved mirror from a deleted one. */
+interface EventVerificationTarget {
+  deleteId: string;
+  uid?: string;
+}
+
 type SyncOperation =
   | { type: "add"; event: MaterializedSyncableEvent; staleMappingId?: string }
   | { type: "remove"; uid: string; deleteId: string; startTime: Date; mappingId?: string }
@@ -255,6 +262,7 @@ export type {
   RemoteEvent,
   EventPresence,
   EventPresenceStatus,
+  EventVerificationTarget,
   SyncOperation,
   ListRemoteEventsOptions,
   BroadcastSyncStatus,

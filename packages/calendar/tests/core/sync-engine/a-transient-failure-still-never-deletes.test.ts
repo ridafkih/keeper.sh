@@ -81,7 +81,7 @@ const transientFailures: { behaviour: UpdateBehaviour; label: string }[] = [
     label: "a throttle",
   },
   {
-    behaviour: respondsWith({ success: false, error: "the request timed out", errorType: "TimeoutError" }),
+    behaviour: respondsWith({ success: false, error: "the request timed out", errorType: "RequestTimeoutError" }),
     label: "a timeout",
   },
   {

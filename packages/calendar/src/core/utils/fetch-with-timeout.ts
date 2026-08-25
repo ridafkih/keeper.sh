@@ -8,6 +8,9 @@ class RequestTimeoutError extends Error {
   }
 }
 
+/* What the platform names the reason it aborts a request for AbortSignal.timeout. */
+const TIMEOUT_ABORT_REASON_NAME = "TimeoutError";
+
 interface TimeoutSignal {
   signal: AbortSignal;
   isTimeout: () => boolean;
@@ -71,15 +74,35 @@ const fetchWithTimeout = async (
   }
 };
 
+/* Callers that only ever see the name of a caught error - a provider result crossing into the
+   sync engine - must ask the module that throws, so a rename of the class travels with it
+   instead of leaving a guessed literal behind. */
+const isTimeoutErrorName = (name: string | undefined): boolean => {
+  if (!name) {
+    return false;
+  }
+  if (name === RequestTimeoutError.name) {
+    return true;
+  }
+  return name === TIMEOUT_ABORT_REASON_NAME;
+};
+
 const isTimeoutError = (error: unknown): boolean => {
   if (error instanceof RequestTimeoutError) {
     return true;
   }
-  if (error instanceof DOMException && error.name === "TimeoutError") {
-    return true;
+  if (error instanceof DOMException) {
+    return isTimeoutErrorName(error.name);
   }
-  return error instanceof Error && error.name === "TimeoutError";
+  return error instanceof Error && isTimeoutErrorName(error.name);
 };
 
-export { RequestTimeoutError, buildTimeoutSignal, fetchWithTimeout, isTimeoutError, mergeAbortSignals };
+export {
+  RequestTimeoutError,
+  buildTimeoutSignal,
+  fetchWithTimeout,
+  isTimeoutError,
+  isTimeoutErrorName,
+  mergeAbortSignals,
+};
 export type { TimeoutSignal };

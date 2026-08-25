@@ -28,6 +28,7 @@ import type {
   RefreshLockStore,
   EventPresence,
   EventPresenceStatus,
+  EventVerificationTarget,
   RemoteEvent,
   SyncProgressUpdate,
   SyncWindow,
@@ -491,7 +492,7 @@ interface TargetedDestinationReadProvider {
    * recurring series whose own start/dateTime is its first, possibly long-past, occurrence) -
    * that must not read as "gone", or the mapping is deleted and re-created every cycle.
    */
-  verifyEventsExist?: (deleteIds: string[]) => Promise<EventPresence[] | RemoteEvent[]>;
+  verifyEventsExist?: (targets: EventVerificationTarget[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface DestinationRemoteReadContext {
@@ -679,7 +680,11 @@ const withVerifiedUnconfirmedMappings = async (
     return { remoteEvents };
   }
   const askedDeleteIds = budgetedMappings.map((mapping) => mapping.deleteIdentifier);
-  const verified = await provider.verifyEventsExist(askedDeleteIds);
+  /* Outlook can only tell a re-keyed mirror from a deleted one with the uid the mapping carries. */
+  const verified = await provider.verifyEventsExist(budgetedMappings.map((mapping) => ({
+    deleteId: mapping.deleteIdentifier,
+    uid: mapping.destinationEventUid,
+  })));
   const presenceByDeleteId = readVerifiedPresence(askedDeleteIds, verified);
   const unverifiedMappingIds = collectUnverifiedMappingIds(
     budgetedMappings,

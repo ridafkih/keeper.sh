@@ -333,6 +333,7 @@ export type {
   EventAvailability,
   EventPresence,
   EventPresenceStatus,
+  EventVerificationTarget,
   ProviderConfig,
   OAuthProviderConfig,
   GoogleCalendarConfig,
