@@ -41,12 +41,6 @@ export function startOfVisibleWeek(anchor: Date): Date {
   return addDays(anchor, -Math.floor(WEEK_VIEW_DAYS / 2));
 }
 
-/** Midnight on the first `WEEK_STARTS_ON` weekday on or before `date`. */
-export function startOfWeek(date: Date): Date {
-  const offset = (date.getDay() - WEEK_STARTS_ON + 7) % 7;
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
-}
-
 /** Whether two dates fall in the same calendar month and year. */
 export function isSameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
@@ -82,12 +76,6 @@ export const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, index) => {
   const day = new Date(2023, 0, 1 + WEEK_STARTS_ON + index);
   return day.toLocaleDateString("en-US", { weekday: "short" });
 });
-
-/** The 7 days of the week containing `anchor`, from `WEEK_STARTS_ON`. */
-export function getWeekDays(anchor: Date): Date[] {
-  const weekStart = startOfWeek(anchor);
-  return Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
-}
 
 /** Toolbar title for a month, e.g. "August 2026". */
 export function formatMonthTitle(anchor: Date): string {
