@@ -18,6 +18,10 @@ interface CalendarSyncProvider {
   normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
+  /* Whether this provider's create verb can succeed on bytes its update verb refused. A CalDAV
+     PUT goes to a freshly derived href with its own preconditions; a Graph POST and a Google
+     import carry the same serialization to the same collection and are refused again. */
+  createEscapesPayloadRefusal?: boolean;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
   listRemoteEvents: (options: ListRemoteEventsOptions) => Promise<RemoteEvent[]>;
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;

@@ -524,6 +524,10 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   return {
+    /* Our create PUTs to an href derived fresh from the UID, so a refusal tied to the stored
+       object -- a mismatched href, a precondition on what is already there -- does not repeat.
+       A refusal tied to the bytes themselves does, and the failure counter is what bounds it. */
+    createEscapesPayloadRefusal: true,
     pushEvents,
     updateEvents,
     deleteEvents,

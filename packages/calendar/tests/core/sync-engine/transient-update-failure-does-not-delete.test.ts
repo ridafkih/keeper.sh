@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import type { CalendarSyncProvider } from "../../../src/core/sync-engine/types";
-import type { MaterializedSyncableEvent, PushResult, SyncOperation } from "../../../src/core/types";
+import type {
+  DeleteResult,
+  MaterializedSyncableEvent,
+  PushResult,
+  SyncOperation,
+} from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 
 const makeEvent = (id: string): MaterializedSyncableEvent => ({
@@ -36,14 +41,17 @@ const makeReplacement = (index: number): Extract<SyncOperation, { type: "replace
   deleteId: `/calendar/remote-${index}@keeper.sh.ics`,
 });
 
-const createProvider = (updateResults: PushResult[]) => {
+/* A bare success is what every real provider answers for a delete that found nothing. */
+const FOUND_NOTHING: DeleteResult = { success: true };
+
+const createProvider = (updateResults: PushResult[], deleteResult: DeleteResult = FOUND_NOTHING) => {
   const deleteCalls: string[][] = [];
   const pushCalls: MaterializedSyncableEvent[][] = [];
 
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
       deleteCalls.push(eventIds);
-      return Promise.resolve(eventIds.map(() => ({ success: true })));
+      return Promise.resolve(eventIds.map(() => deleteResult));
     },
     listRemoteEvents: () => Promise.resolve([]),
     pushEvents: (events) => {
@@ -96,12 +104,36 @@ describe("a transient update failure does not delete the event", () => {
     });
   }
 
-  it("still falls back to creating the event when the target is gone", async () => {
+  /*
+   * Overturned. This asserted a push followed a bare delete success, on the reasoning that a 404
+   * from the update proved the target was gone. It does not: a mirror the recipient deleted and
+   * one mapped under a stale identifier answer a delete identically, and on a create-only
+   * destination guessing wrong leaves a second copy of a live event forever. A promotion has no
+   * listing behind it to tell them apart, so it deletes what it can prove it removed and leaves
+   * the rest to the next reconcile, where recreateMissingMirrors has the listing and the
+   * verification read. The delete itself is unchanged -- only the speculative create is gone.
+   */
+  it("deletes but does not recreate when nothing proves the target was removed", async () => {
     const replacements = [makeReplacement(2)];
     const mappings = [makeMapping(2)];
     const { deleteCalls, provider, pushCalls } = createProvider([
       { success: false, error: "not found", errorType: "CalDAVHttpError", statusCode: 404 },
     ]);
+
+    const outcome = await executeRemoteOperations(replacements, mappings, "dest-cal-1", provider);
+
+    expect(deleteCalls).toEqual([["/calendar/remote-2@keeper.sh.ics"]]);
+    expect(pushCalls).toEqual([]);
+    expect(outcome.changes.inserts).toEqual([]);
+  });
+
+  it("recreates once the delete proves it removed the object", async () => {
+    const replacements = [makeReplacement(2)];
+    const mappings = [makeMapping(2)];
+    const { deleteCalls, provider, pushCalls } = createProvider(
+      [{ success: false, error: "not found", errorType: "CalDAVHttpError", statusCode: 404 }],
+      { removedObject: true, success: true },
+    );
 
     const outcome = await executeRemoteOperations(replacements, mappings, "dest-cal-1", provider);
 

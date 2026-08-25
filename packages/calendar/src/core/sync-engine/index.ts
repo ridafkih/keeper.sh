@@ -312,6 +312,12 @@ const TRANSPORT_ERROR_TYPES = new Set(["AbortError", "FetchError", "TimeoutError
    event without putting it back. */
 const REFUSED_WRITE_STATUS_CODES = new Set([401, 403]);
 
+/* The destination refused the PAYLOAD. Whether a create can still succeed is not something the
+   status can say: it depends on what the create verb does with the same bytes. CalDAV PUTs them
+   to a freshly derived href with its own preconditions, so it can; Google and Outlook carry the
+   same serialization to the same collection, so it cannot. Only the provider knows. */
+const PAYLOAD_REFUSAL_STATUS_CODES = new Set([400, 413, 415, 422, 431]);
+
 const isTransportError = (errorType: string | undefined): boolean => {
   if (!errorType) {
     return false;
@@ -332,10 +338,19 @@ const isRetryableStatus = (statusCode: number): boolean => {
  * status and no transport error is ours - an unaddressable target URL, a serializer - and will
  * repeat forever, so it is the one thing that must eventually escape.
  */
-const isDurableUpdateFailure = (pushResult: PushResult | undefined): boolean => {
+const isDurableUpdateFailure = (
+  pushResult: PushResult | undefined,
+  createEscapesPayloadRefusal: boolean,
+): boolean => {
   const { errorType, statusCode } = pushResult ?? {};
   if (typeof statusCode === "number") {
-    return !isRetryableStatus(statusCode) && !REFUSED_WRITE_STATUS_CODES.has(statusCode);
+    if (isRetryableStatus(statusCode) || REFUSED_WRITE_STATUS_CODES.has(statusCode)) {
+      return false;
+    }
+    if (PAYLOAD_REFUSAL_STATUS_CODES.has(statusCode)) {
+      return createEscapesPayloadRefusal;
+    }
+    return true;
   }
   return !isTransportError(errorType);
 };
@@ -381,6 +396,7 @@ const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
   mappingsById: Map<string, EventMapping>,
+  createEscapesPayloadRefusal: boolean,
 ): {
   changes: PendingChanges;
   updated: number;
@@ -410,10 +426,13 @@ const processUpdateResults = (
         continue;
       }
       const failingMapping = mappingsById.get(operation.staleMappingId);
-      if (failingMapping && isDurableUpdateFailure(pushResult)) {
+      if (failingMapping && isDurableUpdateFailure(pushResult, createEscapesPayloadRefusal)) {
         const failures = countUpdateFailure(failingMapping);
         if (failures >= UPDATE_FAILURES_BEFORE_REPLACEMENT) {
           unresolved.push(operation);
+          /* The evidence has been spent on this promotion. Leaving it standing would re-promote
+             the same mapping every cycle for as long as the replacement keeps failing. */
+          updates.push(toFailureCarry(failingMapping, 0));
           continue;
         }
         updates.push(toFailureCarry(failingMapping, failures));
@@ -606,6 +625,7 @@ const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
   mappingsById: Map<string, EventMapping>,
+  createEscapesPayloadRefusal: boolean,
 ): Promise<UpdateRunResult> => {
   const updates: EventUpdate[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
@@ -616,7 +636,12 @@ const executeUpdateRun = async (
     return failedUpdateRun(replacements, outcome.runFailure);
   }
   const { pushResults } = outcome;
-  const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults, mappingsById);
+  const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(
+    replacements,
+    pushResults,
+    mappingsById,
+    createEscapesPayloadRefusal,
+  );
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
@@ -789,14 +814,37 @@ const executeRemoves = async (
   await checkSuperseded(state, isCurrent);
 };
 
+/* A delete reporting success is not evidence that anything left the destination: Outlook maps a
+   404 to success. Only the provider's own observation of a removal licenses a recreate, or a
+   still-live event gets duplicated on a customer calendar. */
+const didRemoveObject = (deleteResult: DeleteResult | undefined): boolean => {
+  if (deleteResult?.success !== true) {
+    return false;
+  }
+  return deleteResult.removedObject === true;
+};
+
 const replaceViaDeleteThenAdd = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
   mappingsByRemoteIdentity: Map<string, EventMapping>,
   state: ChunkedExecutionState,
+  requiresRemovalEvidence: boolean,
   checkpoint?: CheckpointCallback,
 ): Promise<boolean> => {
+  /* A promoted update failure has no reconciliation behind it, so it must earn the recreate with
+     the same evidence recreateMissingMirrors demands rather than a bare delete success. When the
+     delete removed nothing we cannot tell a mirror the recipient deleted from one mapped under a
+     stale identifier, and guessing either way destroys or duplicates a real event -- so we leave
+     it to the next reconcile, which has the listing and the verification to settle it. */
+  const licensesRecreate = (deleteResult: DeleteResult | undefined): boolean => {
+    if (requiresRemovalEvidence) {
+      return didRemoveObject(deleteResult);
+    }
+    return deleteResult?.success === true;
+  };
+
   const removes: Extract<SyncOperation, { type: "remove" }>[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
     startTime: operation.event.startTime,
@@ -819,15 +867,13 @@ const replaceViaDeleteThenAdd = async (
 
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
   for (let index = 0; index < replacements.length; index++) {
-    if (deleteResults[index]?.success) {
-      const replacement = replacements[index];
-      if (replacement) {
-        adds.push({
-          event: replacement.event,
-          staleMappingId: replacement.staleMappingId,
-          type: "add",
-        });
-      }
+    const replacement = replacements[index];
+    if (replacement && licensesRecreate(deleteResults[index])) {
+      adds.push({
+        event: replacement.event,
+        staleMappingId: replacement.staleMappingId,
+        type: "add",
+      });
     }
   }
 
@@ -840,16 +886,6 @@ const replaceViaDeleteThenAdd = async (
   }
 
   return true;
-};
-
-/* A delete reporting success is not evidence that anything left the destination: Outlook maps a
-   404 to success. Only the provider's own observation of a removal licenses a recreate, or a
-   still-live event gets duplicated on a customer calendar. */
-const didRemoveObject = (deleteResult: DeleteResult | undefined): boolean => {
-  if (deleteResult?.success !== true) {
-    return false;
-  }
-  return deleteResult.removedObject === true;
 };
 
 /* Absence has exactly two admissible proofs: a verification read that positively reports the
@@ -1064,7 +1100,12 @@ const executeReplacements = async (
     let unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
 
     if (present.length > 0) {
-      const { runResult, unresolved: unresolvedUpdates } = await executeUpdateRun(present, updateEvents, mappingsById);
+      const { runResult, unresolved: unresolvedUpdates } = await executeUpdateRun(
+        present,
+        updateEvents,
+        mappingsById,
+        Boolean(provider.createEscapesPayloadRefusal),
+      );
       unresolved = unresolvedUpdates;
       mergeRunResult(state, runResult);
       const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
@@ -1093,6 +1134,7 @@ const executeReplacements = async (
         provider,
         mappingsByRemoteIdentity,
         state,
+        true,
         checkpoint,
       );
       if (!recovered) {
@@ -1111,6 +1153,7 @@ const executeReplacements = async (
     provider,
     mappingsByRemoteIdentity,
     state,
+    false,
     checkpoint,
   ))) {
     return;
