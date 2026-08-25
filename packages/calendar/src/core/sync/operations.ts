@@ -22,6 +22,7 @@ interface ReconciliationScope {
 }
 
 interface StaleMappingResult {
+  remoteMissingMappingIds: ReadonlySet<string>;
   staleReasonCounts: StaleReasonCounts;
   staleMappingIds: string[];
   staleMappedEventIds: Set<string>;
@@ -398,6 +399,7 @@ const identifyStaleMappings = (
   const staleMappingIds: string[] = [];
   const staleMappedEventIds = new Set<string>();
   const staleRemoteMappings: EventMapping[] = [];
+  const remoteMissingMappingIds = new Set<string>();
   const staleReasonCounts = createStaleReasonCounts();
 
   for (const mapping of mappings) {
@@ -408,6 +410,7 @@ const identifyStaleMappings = (
       || authoritativeMappingIds.has(mapping.id);
     if (localEventExists && !remoteEvent && remoteReadCoversMapping) {
       staleReasonCounts.remoteMissing += 1;
+      remoteMissingMappingIds.add(mapping.id);
       staleMappingIds.push(mapping.id);
       staleMappedEventIds.add(syncEventId);
       staleRemoteMappings.push(mapping);
@@ -439,6 +442,7 @@ const identifyStaleMappings = (
   }
 
   return {
+    remoteMissingMappingIds,
     staleMappedEventIds,
     staleMappingIds,
     staleReasonCounts,
@@ -502,6 +506,7 @@ const buildReplacementOperations = (
   mappings: EventMapping[],
   localEventsById: Map<string, MaterializedSyncableEvent>,
   remoteEventsByMappingId: ReadonlyMap<string, RemoteEvent>,
+  remoteMissingMappingIds: ReadonlySet<string>,
 ): SyncOperation[] => {
   const operations: SyncOperation[] = [];
   for (const mapping of mappings) {
@@ -512,6 +517,7 @@ const buildReplacementOperations = (
     operations.push({
       deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
       event,
+      ...(remoteMissingMappingIds.has(mapping.id) && { remoteMissing: true }),
       staleMappingId: mapping.id,
       type: "replace",
       uid: mapping.destinationEventUid,
@@ -681,8 +687,13 @@ const computeSyncOperations = (
       getRemoteIdentity(remoteEvent.uid, remoteEvent.deleteId)),
   );
 
-  const { staleMappingIds, staleMappedEventIds, staleReasonCounts, staleRemoteMappings } =
-    identifyStaleMappings(
+  const {
+    remoteMissingMappingIds,
+    staleMappingIds,
+    staleMappedEventIds,
+    staleReasonCounts,
+    staleRemoteMappings,
+  } = identifyStaleMappings(
       standardMappings,
       localEventIds,
       remoteEventsByMappingId,
@@ -747,6 +758,7 @@ const computeSyncOperations = (
     staleRemoteMappings,
     localEventsById,
     remoteEventsByMappingId,
+    remoteMissingMappingIds,
   );
   const reassignmentOperations: SyncOperation[] = remoteReassignments.map(({
     event,

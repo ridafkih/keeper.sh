@@ -13,6 +13,7 @@ import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
+import { getErrorMessage } from "../utils/error";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
 
@@ -294,12 +295,22 @@ const GONE_STATUS_CODES = new Set([404, 410]);
 const isUpdateTargetGone = (pushResult: PushResult | undefined): boolean =>
   typeof pushResult?.statusCode === "number" && GONE_STATUS_CODES.has(pushResult.statusCode);
 
+const describeUpdateFailure = (
+  operation: Extract<SyncOperation, { type: "replace" }>,
+  pushResult: PushResult | undefined,
+): string => {
+  const cause = pushResult?.errorType ?? "unknown error";
+  const status = pushResult?.statusCode ?? "no status";
+  return `update failed for event ${operation.event.id}: ${cause} (${status})`;
+};
+
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
 ): {
   changes: PendingChanges;
   updated: number;
+  updateFailed: number;
   conflictsResolved: number;
   errors: OperationError[];
   unresolved: Extract<SyncOperation, { type: "replace" }>[];
@@ -308,6 +319,7 @@ const processUpdateResults = (
   const errors: OperationError[] = [];
   const unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
   let updated = 0;
+  let updateFailed = 0;
   let conflictsResolved = 0;
 
   for (let index = 0; index < replacements.length; index++) {
@@ -321,15 +333,15 @@ const processUpdateResults = (
     if (!pushResult?.success) {
       if (isUpdateTargetGone(pushResult)) {
         unresolved.push(operation);
+        continue;
       }
-      if (pushResult?.error) {
-        errors.push({
-          type: "update",
-          error: pushResult.error,
-          ...(pushResult.errorType && { errorType: pushResult.errorType }),
-          ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
-        });
-      }
+      updateFailed += 1;
+      errors.push({
+        type: "update",
+        error: pushResult?.error ?? describeUpdateFailure(operation, pushResult),
+        ...(pushResult?.errorType && { errorType: pushResult.errorType }),
+        ...(typeof pushResult?.statusCode === "number" && { statusCode: pushResult.statusCode }),
+      });
       continue;
     }
 
@@ -348,7 +360,7 @@ const processUpdateResults = (
     });
   }
 
-  return { changes: { inserts: [], deletes: [], updates }, updated, conflictsResolved, errors, unresolved };
+  return { changes: { inserts: [], deletes: [], updates }, updated, updateFailed, conflictsResolved, errors, unresolved };
 };
 
 const processDeleteResults = (
@@ -432,6 +444,30 @@ const executeAddRun = async (
   };
 };
 
+const getErrorTypeName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.constructor.name;
+  }
+  return "UnknownError";
+};
+
+const failedUpdateResults = (count: number, error: unknown): PushResult[] => {
+  const message = getErrorMessage(error);
+  const errorType = getErrorTypeName(error);
+  return Array.from({ length: count }, (): PushResult => ({ success: false, error: message, errorType }));
+};
+
+const runUpdateEvents = async (
+  updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
+  updates: EventUpdate[],
+): Promise<PushResult[]> => {
+  try {
+    return await updateEvents(updates);
+  } catch (error) {
+    return failedUpdateResults(updates.length, error);
+  }
+};
+
 const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
@@ -440,14 +476,14 @@ const executeUpdateRun = async (
     deleteId: operation.deleteId,
     event: operation.event,
   }));
-  const pushResults = await updateEvents(updates);
-  const { updated, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults);
+  const pushResults = await runUpdateEvents(updateEvents, updates);
+  const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults);
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
     runResult: {
       changes,
-      result: { added: updated, addFailed: 0, removed: 0, removeFailed: 0 },
+      result: { added: updated, addFailed: updateFailed, removed: 0, removeFailed: 0 },
       conflictsResolved,
       errors,
       pushEcho,
@@ -667,6 +703,23 @@ const replaceViaDeleteThenAdd = async (
   return true;
 };
 
+const recreateMissingMirrors = async (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  state: ChunkedExecutionState,
+  checkpoint?: CheckpointCallback,
+): Promise<boolean> => {
+  const adds: Extract<SyncOperation, { type: "add" }>[] = replacements.map((operation) => ({
+    event: operation.event,
+    staleMappingId: operation.staleMappingId,
+    type: "add",
+  }));
+  const addResult = await executeAddRun(adds, calendarId, provider);
+  mergeRunResult(state, addResult);
+  return checkpointRun(state, addResult.changes, checkpoint);
+};
+
 const executeReplacements = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
@@ -684,18 +737,33 @@ const executeReplacements = async (
 
   const { updateEvents } = provider;
   if (updateEvents) {
-    const { runResult, unresolved } = await executeUpdateRun(replacements, updateEvents);
-    mergeRunResult(state, runResult);
-    const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
-    for (const replacement of replacements) {
-      if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
-        state.protectedRemoteUids.add(replacement.uid);
+    const missing = replacements.filter((operation) => operation.remoteMissing === true);
+    const present = replacements.filter((operation) => operation.remoteMissing !== true);
+    let unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
+
+    if (present.length > 0) {
+      const { runResult, unresolved: unresolvedUpdates } = await executeUpdateRun(present, updateEvents);
+      unresolved = unresolvedUpdates;
+      mergeRunResult(state, runResult);
+      const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
+      for (const replacement of present) {
+        if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
+          state.protectedRemoteUids.add(replacement.uid);
+        }
+      }
+      state.updateFallbacks += unresolved.length;
+      if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
+        return;
       }
     }
-    state.updateFallbacks += unresolved.length;
-    if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
-      return;
+
+    if (missing.length > 0) {
+      const restored = await recreateMissingMirrors(missing, calendarId, provider, state, checkpoint);
+      if (!restored) {
+        return;
+      }
     }
+
     if (unresolved.length > 0) {
       const recovered = await replaceViaDeleteThenAdd(
         unresolved,

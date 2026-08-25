@@ -108,6 +108,7 @@ describe("partial remote reads", () => {
       {
         deleteId: covered.mapping.deleteIdentifier,
         event: covered.event,
+        remoteMissing: true,
         staleMappingId: covered.mapping.id,
         type: "replace",
         uid: covered.mapping.destinationEventUid,

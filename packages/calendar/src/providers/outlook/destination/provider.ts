@@ -162,6 +162,19 @@ const compareOutlookCreateEcho = (
   };
 };
 
+interface OutlookUpdateBody extends Omit<OutlookEvent, "body" | "location" | "recurrence"> {
+  body: OutlookEvent["body"] | null;
+  location: OutlookEvent["location"] | null;
+  recurrence: OutlookEvent["recurrence"] | null;
+}
+
+const buildOutlookUpdateBody = (resource: OutlookEvent): OutlookUpdateBody => ({
+  ...resource,
+  body: resource.body ?? null,
+  location: resource.location ?? null,
+  recurrence: resource.recurrence ?? null,
+});
+
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -280,7 +293,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${update.deleteId}`);
 
         const response = await sendRequestWithRetry(url, {
-          body: JSON.stringify(resource),
+          body: JSON.stringify(buildOutlookUpdateBody(resource)),
           headers: {
             ...getHeaders(),
             Prefer: `outlook.body-content-type="text"`,

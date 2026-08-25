@@ -133,7 +133,7 @@ const compareGoogleImportEcho =(sent: GoogleEvent, body: unknown): PushEchoCompa
   };
 };
 
-const buildUpdatePatchBody = (resource: GoogleEvent): GoogleEvent => {
+const buildUpdateBody = (resource: GoogleEvent): GoogleEvent => {
   const body = { ...resource };
   delete body.iCalUID;
   return body;
@@ -375,10 +375,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       uid,
       resource,
       request: {
-        method: "PATCH",
+        method: "PUT",
         path: `${eventsPath}/${encodeURIComponent(update.deleteId)}`,
         headers: { "Content-Type": "application/json" },
-        body: buildUpdatePatchBody(resource),
+        body: buildUpdateBody(resource),
       },
     };
   };

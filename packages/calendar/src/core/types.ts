@@ -159,6 +159,7 @@ type SyncOperation =
     staleMappingId: string;
     uid: string;
     deleteId: string;
+    remoteMissing?: boolean;
   };
 
 interface ListRemoteEventsOptions {
