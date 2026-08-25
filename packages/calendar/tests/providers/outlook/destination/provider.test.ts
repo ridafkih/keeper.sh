@@ -492,7 +492,7 @@ describe("createOutlookSyncProvider", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
-      { success: true },
+      { removedObject: true, success: true },
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

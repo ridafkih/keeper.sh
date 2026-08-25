@@ -4,6 +4,7 @@ import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-vali
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type {
   DeleteResult,
+  EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushEchoComparison,
@@ -549,7 +550,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
 
       if (deleteResponse.statusCode >= 200 && deleteResponse.statusCode < 300) {
-        results[originalIndex] = { success: true };
+        results[originalIndex] = { removedObject: true, success: true };
       } else if (deleteResponse.statusCode === HTTP_STATUS.NOT_FOUND || deleteResponse.statusCode === GONE_STATUS) {
         // 404 (never existed) and 410 (already deleted) both mean the event is gone — the desired end state.
         results[originalIndex] = { success: true };
@@ -642,6 +643,128 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const buildTargetedReadRequest = (identifier: string): BatchSubRequest => {
+    if (isDirectEventId(identifier)) {
+      return { method: "GET", path: `${eventsPath}/${encodeURIComponent(identifier)}` };
+    }
+    // A legacy mapping holds the iCalUID, which Google only resolves through the list query.
+    return { method: "GET", path: `${eventsPath}?iCalUID=${encodeURIComponent(identifier)}` };
+  };
+
+  const readDirectEvent = (response: BatchSubResponse): RemoteEvent[] => {
+    if (
+      response.statusCode === HTTP_STATUS.NOT_FOUND
+      || response.statusCode === GONE_STATUS
+    ) {
+      return [];
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw new GoogleCalendarApiError(response.statusCode, JSON.stringify(response.body));
+    }
+
+    const remoteEvent = toGoogleRemoteEvent(googleEventSchema.assert(response.body));
+    if (!remoteEvent) {
+      return [];
+    }
+    return [remoteEvent];
+  };
+
+  const readLegacyLookup = (response: BatchSubResponse): RemoteEvent[] => {
+    // Absence here must be proven by an empty item list, never inferred from a status.
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw new GoogleCalendarApiError(response.statusCode, JSON.stringify(response.body));
+    }
+
+    const remoteEvents: RemoteEvent[] = [];
+    for (const event of googleEventListSchema.assert(response.body).items ?? []) {
+      const remoteEvent = toGoogleRemoteEvent(event);
+      if (remoteEvent) {
+        remoteEvents.push(remoteEvent);
+      }
+    }
+    return remoteEvents;
+  };
+
+  const readTargetedResponse = (identifier: string, response: BatchSubResponse): RemoteEvent[] => {
+    if (isDirectEventId(identifier)) {
+      return readDirectEvent(response);
+    }
+    return readLegacyLookup(response);
+  };
+
+  const presenceOfDirectRead = (identifier: string, response: BatchSubResponse): EventPresence => {
+    if (response.statusCode === HTTP_STATUS.NOT_FOUND || response.statusCode === GONE_STATUS) {
+      return { identifier, status: "absent" };
+    }
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return { identifier, status: "unknown" };
+    }
+
+    if (!googleEventSchema.allows(response.body)) {
+      return { identifier, status: "unknown" };
+    }
+
+    const remoteEvent = toGoogleRemoteEvent(googleEventSchema.assert(response.body));
+    if (!remoteEvent) {
+      return { identifier, status: "unknown" };
+    }
+
+    return { event: remoteEvent, identifier, status: "present" };
+  };
+
+  const presenceOfLegacyLookup = (identifier: string, response: BatchSubResponse): EventPresence => {
+    // Absence here is proven by an empty item list, never inferred from a status.
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return { identifier, status: "unknown" };
+    }
+
+    if (!googleEventListSchema.allows(response.body)) {
+      return { identifier, status: "unknown" };
+    }
+
+    const [item] = googleEventListSchema.assert(response.body).items ?? [];
+    if (!item) {
+      return { identifier, status: "absent" };
+    }
+
+    const remoteEvent = toGoogleRemoteEvent(item);
+    if (!remoteEvent) {
+      return { identifier, status: "unknown" };
+    }
+
+    return { event: remoteEvent, identifier, status: "present" };
+  };
+
+  const presenceOfResponse = (
+    identifier: string,
+    response: BatchSubResponse | undefined,
+  ): EventPresence => {
+    if (!response) {
+      return { identifier, status: "unknown" };
+    }
+    if (isDirectEventId(identifier)) {
+      return presenceOfDirectRead(identifier, response);
+    }
+    return presenceOfLegacyLookup(identifier, response);
+  };
+
+  const verifyEventsExist = async (identifiers: string[]): Promise<EventPresence[]> => {
+    await refreshIfNeeded();
+
+    if (identifiers.length === 0) {
+      return [];
+    }
+
+    // One batched request per chunk, so verifying a whole destination costs a handful of requests.
+    const requests: BatchSubRequest[] = identifiers.map((identifier) => buildTargetedReadRequest(identifier));
+
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+
+    return identifiers.map((identifier, index) => presenceOfResponse(identifier, responses[index]));
+  };
+
   const getRemoteEventsByIds = async (eventIds: string[]): Promise<RemoteEvent[]> => {
     await refreshIfNeeded();
 
@@ -649,35 +772,23 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return [];
     }
 
-    const requests: BatchSubRequest[] = eventIds.map((eventId) => ({
-      method: "GET",
-      path: `${eventsPath}/${encodeURIComponent(eventId)}`,
-    }));
+    const requests: BatchSubRequest[] = eventIds.map((eventId) => buildTargetedReadRequest(eventId));
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
     const remoteEvents: RemoteEvent[] = [];
     for (let index = 0; index < eventIds.length; index++) {
+      const identifier = eventIds[index];
+      if (!identifier) {
+        continue;
+      }
+
       const response = responses[index];
       if (!response) {
         throw new Error("Missing batch response for Google event lookup");
       }
 
-      if (
-        response.statusCode === HTTP_STATUS.NOT_FOUND
-        || response.statusCode === GONE_STATUS
-      ) {
-        continue;
-      }
-
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new GoogleCalendarApiError(response.statusCode, JSON.stringify(response.body));
-      }
-
-      const remoteEvent = toGoogleRemoteEvent(googleEventSchema.assert(response.body));
-      if (remoteEvent) {
-        remoteEvents.push(remoteEvent);
-      }
+      remoteEvents.push(...readTargetedResponse(identifier, response));
     }
 
     return remoteEvents;
@@ -690,6 +801,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     normalizeEvent: normalizeGoogleEvent,
     pushEvents,
     updateEvents,
+    verifyEventsExist,
   };
 };
 

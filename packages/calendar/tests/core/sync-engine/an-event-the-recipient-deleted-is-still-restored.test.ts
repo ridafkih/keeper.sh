@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
 import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
-import type { MaterializedSyncableEvent, PushResult, RemoteEvent } from "../../../src/core/types";
+import type {
+  DeleteResult,
+  EventPresence,
+  MaterializedSyncableEvent,
+  PushResult,
+  RemoteEvent,
+} from "../../../src/core/types";
 import type { CalendarSyncProvider, EventUpdate } from "../../../src/core/sync-engine/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 
@@ -54,7 +60,10 @@ interface DestinationRecord {
   uid: string;
 }
 
-const createDestination = (missingDeleteAnswer: () => PushResult) => {
+const createDestination = (
+  missingDeleteAnswer: () => DeleteResult,
+  verifyEventsExist?: CalendarSyncProvider["verifyEventsExist"],
+) => {
   const records = new Map<string, DestinationRecord>();
   const deleteTargets: string[] = [];
   const pushedEvents: MaterializedSyncableEvent[] = [];
@@ -63,12 +72,12 @@ const createDestination = (missingDeleteAnswer: () => PushResult) => {
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
       deleteTargets.push(...eventIds);
-      return Promise.resolve(eventIds.map((eventId) => {
+      return Promise.resolve(eventIds.map((eventId): DeleteResult => {
         if (!records.has(eventId)) {
           return missingDeleteAnswer();
         }
         records.delete(eventId);
-        return { success: true };
+        return { removedObject: true, success: true };
       }));
     },
     listRemoteEvents: () => Promise.resolve([...records.values()].map((record): RemoteEvent => ({
@@ -99,6 +108,7 @@ const createDestination = (missingDeleteAnswer: () => PushResult) => {
       records.set(update.deleteId, { ...existing, summary: update.event.summary });
       return { deleteId: update.deleteId, remoteId: existing.uid, success: true };
     })),
+    ...(verifyEventsExist && { verifyEventsExist }),
   };
 
   return {
@@ -110,16 +120,15 @@ const createDestination = (missingDeleteAnswer: () => PushResult) => {
   };
 };
 
-const restoreAfterRecipientDeletion = async (missingDeleteAnswer: () => PushResult) => {
+const reportAbsent = (deleteIds: string[]): Promise<EventPresence[]> =>
+  Promise.resolve(deleteIds.map((identifier): EventPresence => ({ identifier, status: "absent" })));
+
+/* The recipient really deleted the mirror, so nothing is left for the pre-delete to remove: whatever
+   the destination answers that delete, only the verification read establishes the absence. */
+const restoreAfterRecipientDeletion = async (missingDeleteAnswer: () => DeleteResult) => {
   const event = makeEvent("Team lunch");
   const mapping = makeMapping(createSyncEventContentHash(event));
-  const destination = createDestination(missingDeleteAnswer);
-  destination.records.set(REMOTE_DELETE_ID, {
-    deleteId: REMOTE_DELETE_ID,
-    summary: "Team lunch",
-    uid: REMOTE_UID,
-  });
-  destination.records.delete(REMOTE_DELETE_ID);
+  const destination = createDestination(missingDeleteAnswer, reportAbsent);
 
   const listing = await destination.provider.listRemoteEvents(TEST_RECONCILIATION_SCOPE.authoritativeWindow);
   expect(listing).toEqual([]);
@@ -142,7 +151,7 @@ const restoreAfterRecipientDeletion = async (missingDeleteAnswer: () => PushResu
 };
 
 describe("an event the recipient deleted is still restored", () => {
-  it("recreates the mirror when the destination answers the pre-delete with success", async () => {
+  it("recreates the mirror when a verified absence sits behind a pre-delete answered with success", async () => {
     const { destination, outcome } = await restoreAfterRecipientDeletion(() => ({ success: true }));
 
     expect(destination.pushedEvents.map((pushed) => pushed.id)).toEqual(["ev-1"]);
@@ -158,7 +167,7 @@ describe("an event the recipient deleted is still restored", () => {
     expect(outcome.errors).toEqual([]);
   });
 
-  it("recreates the mirror when the destination answers the pre-delete 404", async () => {
+  it("recreates the mirror when a verified absence sits behind a pre-delete answered 404", async () => {
     const { destination, outcome } = await restoreAfterRecipientDeletion(() => ({
       error: "not found",
       errorType: "not_found",
@@ -173,9 +182,9 @@ describe("an event the recipient deleted is still restored", () => {
     expect(outcome.errors).toEqual([]);
   });
 
-  it("recreates the mirror when the pre-delete reports not found without an http status", async () => {
+  it("recreates the mirror when a verified absence sits behind a pre-delete reporting not found without an http status", async () => {
     const { destination, outcome } = await restoreAfterRecipientDeletion(() => ({
-      error: "DELETE https://caldav.example.com/cal/AAMkAGRemoteOne.ics failed: 404 Not Found",
+      error: "DELETE /calendar/AAMkAGRemoteOne.ics failed: 404 Not Found",
       errorType: "Error",
       success: false,
     }));

@@ -354,6 +354,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         }
 
         await response.body?.cancel?.();
+        // A 404 means nothing was there to remove, so it carries no removal evidence.
+        if (response.ok) {
+          results.push({ removedObject: true, success: true });
+          continue;
+        }
         results.push({ success: true });
       } catch (error) {
         if (config.signal?.aborted) {

@@ -6,6 +6,8 @@ const DEFAULT_COUNT = 0;
 
 interface EventMapping {
   id: string;
+  // Absent on mappings built before the counter existed, which reads as "no failures yet".
+  consecutiveUpdateFailures?: number;
   eventStateId: string | null;
   syncEventId: string;
   calendarId: string;
@@ -49,6 +51,7 @@ const getEventMappingsForDestination = async (
   const mappings = await database
     .select({
       calendarId: eventMappingsTable.calendarId,
+      consecutiveUpdateFailures: eventMappingsTable.consecutiveUpdateFailures,
       deleteIdentifier: eventMappingsTable.deleteIdentifier,
       destinationEventUid: eventMappingsTable.destinationEventUid,
       endTime: eventMappingsTable.endTime,

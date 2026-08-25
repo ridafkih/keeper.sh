@@ -26,6 +26,8 @@ import type {
   MaterializedSyncableEvent,
   ReconciliationScope,
   RefreshLockStore,
+  EventPresence,
+  EventPresenceStatus,
   RemoteEvent,
   SyncProgressUpdate,
   SyncWindow,
@@ -167,6 +169,7 @@ interface DestinationReconciliationContext {
   remoteReadDurationMs: number;
   sourceCalendarIdsAtLocalRead: string[];
   sourceCalendarIdsBeforeRemoteRead: string[];
+  verification?: DestinationVerificationReport | null;
   verifiedSourceCalendarCount: number;
 }
 
@@ -355,6 +358,7 @@ interface DestinationReconciliationScopeContext {
   eventReadDiagnostics: DestinationEventReadDiagnostics;
   requestedWindow: SyncWindow;
   sourceCalendarIdsAtLocalRead: string[];
+  unverifiedMappingIds?: ReadonlySet<string>;
 }
 
 /*
@@ -373,10 +377,40 @@ const createDestinationReconciliationScope = (
   authoritativeWindow: context.authoritativeWindow,
   configuredSourceCalendarIds: new Set(context.sourceCalendarIdsAtLocalRead),
   requestedWindow: context.requestedWindow,
+  ...(context.unverifiedMappingIds && {
+    unverifiedMappingIds: context.unverifiedMappingIds,
+  }),
   withheldSourceEventStateIds: new Set(
     context.eventReadDiagnostics.overBudgetSourceEventStateIds,
   ),
 });
+
+/*
+ * Verification is a bounded budget, so a run routinely ends with mappings whose state was
+ * never established: the budget ran out before them, or the provider answered that it could
+ * not tell. Counted apart from present and absent, a run that deliberately did nothing about
+ * them is visible in production instead of reading like a healthy one.
+ */
+interface DestinationVerificationReport {
+  unverifiedCount: number;
+  unverifiedMappingIds: ReadonlySet<string>;
+  verifiedAbsentCount: number;
+  verifiedPresentCount: number;
+}
+
+/* Counts sum across the destinations a run touches, so each is a run total, not a gauge. */
+const createVerificationWideEventFields = (
+  verification?: DestinationVerificationReport | null,
+): Record<string, number> => {
+  if (!verification) {
+    return {};
+  }
+  return {
+    "reconciliation.verification.unverified_count": verification.unverifiedCount,
+    "reconciliation.verification.verified_absent_count": verification.verifiedAbsentCount,
+    "reconciliation.verification.verified_present_count": verification.verifiedPresentCount,
+  };
+};
 
 const createDestinationReconciliationWideEventFields = (
   context: DestinationReconciliationContext,
@@ -403,6 +437,7 @@ const createDestinationReconciliationWideEventFields = (
     context.sourceCalendarIdsAtLocalRead,
   ),
   "reconciliation.authority.verified": context.authoritativeWindow !== null,
+  ...createVerificationWideEventFields(context.verification),
   "reconciliation.window.requested_time_max": context.requestedWindow.timeMax.toISOString(),
   "reconciliation.window.requested_time_min": context.requestedWindow.timeMin.toISOString(),
   ...(context.authoritativeWindow && {
@@ -456,7 +491,7 @@ interface TargetedDestinationReadProvider {
    * recurring series whose own start/dateTime is its first, possibly long-past, occurrence) -
    * that must not read as "gone", or the mapping is deleted and re-created every cycle.
    */
-  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
+  verifyEventsExist?: (deleteIds: string[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface DestinationRemoteReadContext {
@@ -473,6 +508,7 @@ interface DestinationRemoteRead {
    */
   authoritativeMappingIds: ReadonlySet<string> | null;
   remoteEvents: RemoteEvent[];
+  verification?: DestinationVerificationReport;
 }
 
 interface TargetedDestinationReadPlan {
@@ -502,34 +538,163 @@ const planTargetedDestinationRead = (
 };
 
 /*
+ * The by-id read speaks for exactly the identifiers it asked about, so one it did not return
+ * is absent. It asks only about the mappings the push plan touches, and a mapping outside
+ * that plan is never established either way: unknown, and left exactly as it is.
+ */
+const reportTargetedDestinationRead = (
+  plan: TargetedDestinationReadPlan,
+  existingMappings: EventMapping[],
+  remoteEvents: RemoteEvent[],
+): DestinationVerificationReport => {
+  const askedDeleteIds = new Set(plan.deleteIdentifiers);
+  const presentDeleteIds = new Set(
+    remoteEvents
+      .map((remoteEvent) => remoteEvent.deleteId)
+      .filter((deleteId) => askedDeleteIds.has(deleteId)),
+  );
+  const unverifiedMappingIds = new Set(
+    existingMappings
+      .filter((mapping) => !plan.mappingIds.has(mapping.id))
+      .map((mapping) => mapping.id),
+  );
+  return {
+    unverifiedCount: unverifiedMappingIds.size,
+    unverifiedMappingIds,
+    verifiedAbsentCount: askedDeleteIds.size - presentDeleteIds.size,
+    verifiedPresentCount: presentDeleteIds.size,
+  };
+};
+
+/*
  * The windowed listing above is a best-effort, bounded discovery pass (used to find orphaned
  * keeper events not covered by any mapping) - it is not the source of truth for whether an
  * *already-mapped* event still exists. A mapping whose destination uid didn't turn up in that
  * pass gets one more, authoritative check before it is treated as gone: a direct by-id lookup,
  * for providers that expose one.
  */
+/* A three-valued report confirms only what it calls present: an absence, or a read that could not
+   tell, must never be dressed up as a live remote event. */
+const toConfirmedRemoteEvents = (verified: EventPresence[] | RemoteEvent[]): RemoteEvent[] => {
+  const confirmed: RemoteEvent[] = [];
+  for (const entry of verified) {
+    if (!("status" in entry)) {
+      confirmed.push(entry);
+      continue;
+    }
+    if (entry.status === "present" && entry.event) {
+      confirmed.push(entry.event);
+    }
+  }
+  return confirmed;
+};
+
+/*
+ * Google and CalDAV answer three-valued and always speak for every identifier asked about.
+ * Outlook answers with the events it found and throws when it cannot tell, so an identifier
+ * it left out is a 404: absent. Reading an omission from a three-valued answer as absence
+ * would invent evidence, so it stays unknown.
+ */
+const createDefaultPresence = (
+  verified: EventPresence[] | RemoteEvent[],
+): EventPresenceStatus => {
+  if (verified.some((entry) => "status" in entry)) {
+    return "unknown";
+  }
+  return "absent";
+};
+
+/* A present answer carrying no event body cannot be matched back to its mapping, so it settles nothing. */
+const readReportedPresence = (entry: EventPresence): EventPresenceStatus => {
+  if (entry.status === "present" && !entry.event) {
+    return "unknown";
+  }
+  return entry.status;
+};
+
+const readVerifiedPresence = (
+  askedDeleteIds: string[],
+  verified: EventPresence[] | RemoteEvent[],
+): Map<string, EventPresenceStatus> => {
+  const presence = new Map<string, EventPresenceStatus>(
+    askedDeleteIds.map((deleteId) => [deleteId, createDefaultPresence(verified)]),
+  );
+  for (const entry of verified) {
+    if ("status" in entry) {
+      presence.set(entry.identifier, readReportedPresence(entry));
+      continue;
+    }
+    presence.set(entry.deleteId, "present");
+  }
+  return presence;
+};
+
+interface VerifiedDestinationRead {
+  remoteEvents: RemoteEvent[];
+  verification?: DestinationVerificationReport;
+}
+
+const countVerifiedPresence = (
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+  status: EventPresenceStatus,
+): number => [...presenceByDeleteId.values()].filter((value) => value === status).length;
+
+/*
+ * Everything past the budget is never asked about at all, so it joins the mappings the
+ * provider could not settle: unknown, and left exactly as it is.
+ */
+const collectUnverifiedMappingIds = (
+  budgetedMappings: EventMapping[],
+  beyondBudgetMappings: EventMapping[],
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+): Set<string> => {
+  const unverifiedMappingIds = new Set(beyondBudgetMappings.map((mapping) => mapping.id));
+  for (const mapping of budgetedMappings) {
+    if (presenceByDeleteId.get(mapping.deleteIdentifier) === "unknown") {
+      unverifiedMappingIds.add(mapping.id);
+    }
+  }
+  return unverifiedMappingIds;
+};
+
 const withVerifiedUnconfirmedMappings = async (
   provider: TargetedDestinationReadProvider,
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   requestedWindow: SyncWindow,
-): Promise<RemoteEvent[]> => {
+): Promise<VerifiedDestinationRead> => {
   if (!provider.verifyEventsExist) {
-    return remoteEvents;
+    return { remoteEvents };
   }
   const remoteUids = new Set(remoteEvents.map((event) => event.uid));
-  const unconfirmedDeleteIds = existingMappings
+  const unconfirmedMappings = existingMappings
     .filter((mapping) =>
       !remoteUids.has(mapping.destinationEventUid)
       && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
-    .map((mapping) => mapping.deleteIdentifier)
-    .toSorted((first, second) => first.localeCompare(second))
-    .slice(0, DESTINATION_VERIFICATION_LIMIT);
-  if (unconfirmedDeleteIds.length === 0) {
-    return remoteEvents;
+    .toSorted((first, second) =>
+      first.deleteIdentifier.localeCompare(second.deleteIdentifier));
+  const budgetedMappings = unconfirmedMappings.slice(0, DESTINATION_VERIFICATION_LIMIT);
+  const beyondBudgetMappings = unconfirmedMappings.slice(DESTINATION_VERIFICATION_LIMIT);
+  if (budgetedMappings.length === 0) {
+    return { remoteEvents };
   }
-  const verifiedEvents = await provider.verifyEventsExist(unconfirmedDeleteIds);
-  return [...remoteEvents, ...verifiedEvents];
+  const askedDeleteIds = budgetedMappings.map((mapping) => mapping.deleteIdentifier);
+  const verified = await provider.verifyEventsExist(askedDeleteIds);
+  const presenceByDeleteId = readVerifiedPresence(askedDeleteIds, verified);
+  const unverifiedMappingIds = collectUnverifiedMappingIds(
+    budgetedMappings,
+    beyondBudgetMappings,
+    presenceByDeleteId,
+  );
+  return {
+    remoteEvents: [...remoteEvents, ...toConfirmedRemoteEvents(verified)],
+    verification: {
+      unverifiedCount: unverifiedMappingIds.size,
+      unverifiedMappingIds,
+      verifiedAbsentCount: countVerifiedPresence(presenceByDeleteId, "absent"),
+      verifiedPresentCount: countVerifiedPresence(presenceByDeleteId, "present"),
+    },
+  };
 };
 
 const readDestinationRemoteEvents = async (
@@ -546,19 +711,19 @@ const readDestinationRemoteEvents = async (
       timeMax: context.requestedWindow.timeMax,
       timeMin: context.requestedWindow.timeMin,
     });
-    return {
-      authoritativeMappingIds: null,
-      remoteEvents: await withVerifiedUnconfirmedMappings(
-        context.provider,
-        context.existingMappings,
-        remoteEvents,
-        context.requestedWindow,
-      ),
-    };
+    const verified = await withVerifiedUnconfirmedMappings(
+      context.provider,
+      context.existingMappings,
+      remoteEvents,
+      context.requestedWindow,
+    );
+    return { authoritativeMappingIds: null, ...verified };
   }
+  const remoteEvents = await lookUpByIds(plan.deleteIdentifiers);
   return {
     authoritativeMappingIds: plan.mappingIds,
-    remoteEvents: await lookUpByIds(plan.deleteIdentifiers),
+    remoteEvents,
+    verification: reportTargetedDestinationRead(plan, context.existingMappings, remoteEvents),
   };
 };
 
@@ -924,6 +1089,8 @@ const syncDestinationsForUser = async (
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
         let sourceCalendarsChangedDuringRemoteRead = false;
         let authoritativeMappingIds: ReadonlySet<string> | null = null;
+        let verification: DestinationVerificationReport | null = null;
+        let unverifiedMappingIds: ReadonlySet<string> = new Set<string>();
         const reconciliationState = await readDestinationReconciliationState(
           async (localState) => {
             const startedAt = performance.now();
@@ -935,6 +1102,8 @@ const syncDestinationsForUser = async (
                 requestedWindow,
               });
               ({ authoritativeMappingIds } = read);
+              verification = read.verification ?? null;
+              unverifiedMappingIds = verification?.unverifiedMappingIds ?? new Set<string>();
               return read.remoteEvents;
             } finally {
               remoteReadDurationMs = roundDuration(performance.now() - startedAt);
@@ -1021,6 +1190,7 @@ const syncDestinationsForUser = async (
           remoteReadDurationMs,
           sourceCalendarIdsAtLocalRead,
           sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
+          verification,
           verifiedSourceCalendarCount: authoritativeSourceWindows.size,
         });
         const isAttemptCurrent = (): Promise<boolean> => {
@@ -1068,6 +1238,7 @@ const syncDestinationsForUser = async (
             eventReadDiagnostics,
             requestedWindow,
             sourceCalendarIdsAtLocalRead,
+            unverifiedMappingIds,
           }),
         });
 

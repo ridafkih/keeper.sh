@@ -54,7 +54,9 @@ interface DestinationRecord {
   uid: string;
 }
 
-const createCreateOnlyDestination = (seeded: DestinationRecord[]) => {
+/* The thrown-error branch of a real destination provider: no HTTP response was read, so the
+   failure carries a human-readable message and no structured statusCode. */
+const createTransportThrowingDestination = (seeded: DestinationRecord[], thrown: Error) => {
   const records = new Map<string, DestinationRecord>();
   for (const record of seeded) {
     records.set(record.deleteId, record);
@@ -67,13 +69,11 @@ const createCreateOnlyDestination = (seeded: DestinationRecord[]) => {
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
       deleteTargets.push(...eventIds);
-      return Promise.resolve(eventIds.map((eventId): DeleteResult => {
-        if (!records.has(eventId)) {
-          return { error: "not found", errorType: "not_found", statusCode: 404, success: false };
-        }
-        records.delete(eventId);
-        return { removedObject: true, success: true };
-      }));
+      return Promise.resolve(eventIds.map((): DeleteResult => ({
+        error: thrown.message,
+        errorType: thrown.name,
+        success: false,
+      })));
     },
     listRemoteEvents: () => Promise.resolve([...records.values()].map((record): RemoteEvent => ({
       deleteId: record.deleteId,
@@ -115,13 +115,16 @@ const createCreateOnlyDestination = (seeded: DestinationRecord[]) => {
   };
 };
 
-describe("a false absence never duplicates a mirror", () => {
-  it("leaves exactly one event on a create-only destination whose mirror was still live", async () => {
+describe("an unknown delete failure never recreates", () => {
+  it("creates nothing when the delete fails with no structured statusCode", async () => {
     const event = makeEvent("Team lunch");
     const mapping = makeMapping(createSyncEventContentHash(event));
-    const destination = createCreateOnlyDestination([
-      { deleteId: REMOTE_DELETE_ID, summary: "Team lunch", uid: REMOTE_UID },
-    ]);
+    // A gone-looking number inside prose must not be read as the object's fate.
+    const thrown = new Error("DELETE request failed: 410 bytes read before the socket closed");
+    const destination = createTransportThrowingDestination(
+      [{ deleteId: REMOTE_DELETE_ID, summary: "Team lunch", uid: REMOTE_UID }],
+      thrown,
+    );
 
     const windowedListing: RemoteEvent[] = [];
 
@@ -134,7 +137,6 @@ describe("a false absence never duplicates a mirror", () => {
 
     expect(operations).toHaveLength(1);
     const [replacement] = operations;
-    expect(replacement?.type).toBe("replace");
     expect(replacement?.type === "replace" && replacement.remoteMissing).toBe(true);
 
     const outcome = await executeRemoteOperations(
@@ -144,15 +146,12 @@ describe("a false absence never duplicates a mirror", () => {
       destination.provider,
     );
 
-    const snapshot = destination.snapshot();
-    expect(snapshot).toHaveLength(1);
-
-    const mappedDeleteIds = [
-      ...outcome.changes.inserts.map((insert) => insert.deleteIdentifier),
-      ...(outcome.changes.updates ?? []).map((update) => update.deleteIdentifier),
-    ];
-    expect(mappedDeleteIds).toHaveLength(1);
-    expect(snapshot.map((record) => record.deleteId)).toEqual(mappedDeleteIds);
-    expect(destination.deleteTargets).toContain(REMOTE_DELETE_ID);
+    expect(destination.deleteTargets).toEqual([REMOTE_DELETE_ID]);
+    expect(destination.pushedEvents).toEqual([]);
+    expect(outcome.result.added).toBe(0);
+    expect(outcome.changes.inserts).toEqual([]);
+    expect(destination.snapshot()).toEqual([
+      { deleteId: REMOTE_DELETE_ID, summary: "Team lunch", uid: REMOTE_UID },
+    ]);
   });
 });

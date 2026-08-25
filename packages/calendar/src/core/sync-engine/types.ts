@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -22,7 +23,8 @@ interface CalendarSyncProvider {
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
-  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
+  // Google answers three-valued; Outlook still answers with the events it found and throws when it cannot tell.
+  verifyEventsExist?: (deleteIds: string[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface PendingInsert {
@@ -38,12 +40,13 @@ interface PendingInsert {
 }
 
 interface PendingUpdate {
+  consecutiveUpdateFailures?: number;
   deleteIdentifier: string;
   destinationEventUid?: string;
   endTime: Date;
   id: string;
   startTime: Date;
-  syncEventHash: string;
+  syncEventHash: string | null;
   syncEventId: string;
 }
 

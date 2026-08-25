@@ -375,6 +375,10 @@ const eventMappingsTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    /* Consecutive in-place update failures for this mapping. The sync engine promotes a mapping
+       to delete-then-add once the same update has been refused enough times to be durable, so a
+       mirror cannot stall forever on an object the update path can never write. */
+    consecutiveUpdateFailures: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     deleteIdentifier: text(),
     destinationEventUid: text().notNull(),

@@ -53,60 +53,62 @@ vi.mock("../../../src/providers/caldav/shared/client", () => {
   };
 });
 
+const SERVER_URL = "https://caldav.example.com/";
 const CALENDAR_URL = "https://caldav.example.com/calendars/user/shared/";
 
-const movedSeries: MaterializedSyncableEvent = {
+const oversizedSeries: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
   calendarUrl: null,
-  endTime: new Date("2026-03-15T10:00:00.000Z"),
-  id: "event-state-id-1",
-  sourceEventUid: "source-event-uid-1",
-  startTime: new Date("2026-03-15T09:00:00.000Z"),
-  summary: "Weekly standup, moved",
+  endTime: new Date("2026-05-11T10:00:00.000Z"),
+  id: "event-state-id-403",
+  sourceEventUid: "source-event-uid-403",
+  startTime: new Date("2026-05-11T09:00:00.000Z"),
+  summary: "Quarterly planning, moved",
 };
 
-const uid = generateDeterministicEventUid(movedSeries.id);
+const uid = generateDeterministicEventUid(oversizedSeries.id);
 const objectPath = `/calendars/user/shared/${uid}.ics`;
+const objectUrl = `https://caldav.example.com${objectPath}`;
 
 const mapping: EventMapping = {
   calendarId: "dest-cal-1",
   deleteIdentifier: objectPath,
   destinationEventUid: uid,
-  endTime: movedSeries.endTime,
-  eventStateId: movedSeries.id,
-  id: "map-1",
+  endTime: oversizedSeries.endTime,
+  eventStateId: oversizedSeries.id,
+  id: "map-403",
   sourceCalendarId: "source-calendar-id",
-  startTime: movedSeries.startTime,
+  startTime: oversizedSeries.startTime,
   syncEventHash: "stale-hash",
-  syncEventId: movedSeries.id,
+  syncEventId: oversizedSeries.id,
 };
 
 const replacement: Extract<SyncOperation, { type: "replace" }> = {
   deleteId: objectPath,
-  event: movedSeries,
+  event: oversizedSeries,
   staleMappingId: mapping.id,
   type: "replace",
   uid,
 };
 
-const refusalBody = [
-  "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
-  "<D:error xmlns:D=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">",
-  "<C:valid-calendar-object-resource/>",
-  "</D:error>",
-].join("");
-
-const refusals = [
-  { label: "403 Forbidden with a precondition error", status: 403, statusText: "Forbidden" },
-  { label: "409 Conflict with a precondition error", status: 409, statusText: "Conflict" },
+// RFC 4791 5.3.2 payload preconditions: the server refuses these identical bytes on every request, PUT or recreate alike.
+const payloadPreconditions = [
+  { element: "C:max-resource-size", label: "max-resource-size" },
+  { element: "C:min-date-time", label: "min-date-time" },
+  { element: "C:max-date-time", label: "max-date-time" },
+  { element: "C:max-instances", label: "max-instances" },
+  { element: "C:max-attendees-per-instance", label: "max-attendees-per-instance" },
+  { element: "C:valid-calendar-data", label: "valid-calendar-data" },
 ];
 
-const transientFailures = [
-  { label: "a 503", status: 503, statusText: "Service Unavailable" },
-  { label: "a throttle", status: 429, statusText: "Too Many Requests" },
-  { label: "a timeout", status: 408, statusText: "Request Timeout" },
-];
+const preconditionBody = (element: string): string =>
+  [
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
+    "<D:error xmlns:D=\"DAV:\" xmlns:C=\"urn:ietf:params:xml:ns:caldav\">",
+    `<${element}/>`,
+    "</D:error>",
+  ].join("");
 
 const httpError = (status: number, statusText: string, body: string | null): Error =>
   new CalDAVHttpError(new Response(body, { status, statusText }), "update");
@@ -116,26 +118,45 @@ const createProvider = () =>
     authMethod: "basic",
     calendarUrl: CALENDAR_URL,
     password: "password",
-    serverUrl: "https://caldav.example.com/",
+    serverUrl: SERVER_URL,
     username: "user",
   });
+
+// A synthetic stand-in for the customer's calendar collection, so the assertion is about the remote object surviving rather than which calls were made.
+const remoteObjects = new Map<string, string>();
 
 beforeEach(() => {
   for (const mock of Object.values(clientMocks)) {
     mock.mockReset();
   }
+  remoteObjects.clear();
+  remoteObjects.set(objectUrl, "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n");
+
   clientMocks.resolveCalendarUrl.mockImplementation((url: string) => Promise.resolve(url));
-  clientMocks.createCalendarObject.mockImplementation(() => Promise.resolve());
-  clientMocks.deleteCalendarObject.mockImplementation(() => Promise.resolve());
-  clientMocks.deleteCalendarObjectByUrl.mockImplementation(() => Promise.resolve());
+  clientMocks.deleteCalendarObjectByUrl.mockImplementation(
+    ({ objectUrl: target }: { objectUrl: string }) => {
+      remoteObjects.delete(target);
+      return Promise.resolve();
+    },
+  );
+  clientMocks.deleteCalendarObject.mockImplementation(
+    ({ calendarUrl, filename }: { calendarUrl: string; filename: string }) => {
+      remoteObjects.delete(`${calendarUrl}${filename}`);
+      return Promise.resolve();
+    },
+  );
 });
 
-describe("a CalDAV update refusal resolves rather than stalling", () => {
-  for (const refusal of refusals) {
-    it(`resolves the event on this pass after ${refusal.label}`, async () => {
-      clientMocks.updateCalendarObjectByUrl.mockRejectedValue(
-        httpError(refusal.status, refusal.statusText, refusalBody),
-      );
+describe("a CalDAV 403 never destroys the customer's event", () => {
+  for (const precondition of payloadPreconditions) {
+    it(`leaves the remote object untouched after a 403 ${precondition.label}`, async () => {
+      const refusal = () =>
+        httpError(403, "Forbidden", preconditionBody(precondition.element));
+
+      clientMocks.updateCalendarObjectByUrl.mockRejectedValue(refusal());
+      // The recreate carries the same bytes, so the server refuses it the same way.
+      clientMocks.createCalendarObject.mockRejectedValue(refusal());
+
       const provider = createProvider();
 
       const outcome = await executeRemoteOperations(
@@ -143,48 +164,30 @@ describe("a CalDAV update refusal resolves rather than stalling", () => {
         [mapping],
         "dest-cal-1",
         provider,
-      );
+      ).catch(() => null);
 
       expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(1);
-      expect(clientMocks.deleteCalendarObjectByUrl).toHaveBeenCalledTimes(1);
-      expect(clientMocks.deleteCalendarObjectByUrl.mock.calls[0]?.[0]?.objectUrl)
-        .toBe(`https://caldav.example.com${objectPath}`);
-      expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(1);
-
-      expect(outcome.changes.deletes).toEqual([mapping.id]);
-      expect(outcome.changes.inserts).toHaveLength(1);
-      expect(outcome.changes.updates ?? []).toEqual([]);
-      expect(outcome.result.addFailed).toBe(0);
-    });
-  }
-
-  for (const failure of transientFailures) {
-    it(`leaves the event alone after ${failure.label}`, async () => {
-      clientMocks.updateCalendarObjectByUrl.mockRejectedValue(
-        httpError(failure.status, failure.statusText, null),
-      );
-      const provider = createProvider();
-
-      const outcome = await executeRemoteOperations(
-        [replacement],
-        [mapping],
-        "dest-cal-1",
-        provider,
-      );
-
       expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
       expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
       expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
-      expect(outcome.changes.deletes).toEqual([]);
-      expect(outcome.changes.inserts).toEqual([]);
-      expect(outcome.changes.updates ?? []).toEqual([]);
+
+      expect(remoteObjects.has(objectUrl)).toBe(true);
+
+      expect(outcome?.changes.deletes ?? []).toEqual([]);
+      expect(outcome?.changes.inserts ?? []).toEqual([]);
+      expect(outcome?.changes.updates ?? []).toEqual([]);
     });
   }
 
-  it("leaves the event alone after a thrown network error", async () => {
+  it("leaves the remote object untouched after an ACL-shaped 403 on a read-only calendar", async () => {
     clientMocks.updateCalendarObjectByUrl.mockRejectedValue(
-      Object.assign(new TypeError("fetch failed"), { cause: new Error("socket hang up") }),
+      httpError(403, "Forbidden", preconditionBody("D:need-privileges")),
     );
+    clientMocks.deleteCalendarObjectByUrl.mockRejectedValue(
+      httpError(403, "Forbidden", null),
+    );
+    clientMocks.createCalendarObject.mockRejectedValue(httpError(403, "Forbidden", null));
+
     const provider = createProvider();
 
     const outcome = await executeRemoteOperations(
@@ -195,10 +198,9 @@ describe("a CalDAV update refusal resolves rather than stalling", () => {
     ).catch(() => null);
 
     expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
-    expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
     expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
+    expect(remoteObjects.has(objectUrl)).toBe(true);
     expect(outcome?.changes.deletes ?? []).toEqual([]);
     expect(outcome?.changes.inserts ?? []).toEqual([]);
-    expect(outcome?.changes.updates ?? []).toEqual([]);
   });
 });

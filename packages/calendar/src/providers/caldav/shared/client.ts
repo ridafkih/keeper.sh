@@ -488,4 +488,4 @@ export {
   CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };
-export type { CalDAVListingStats };
+export type { CalDAVListingStats, CalendarObject };

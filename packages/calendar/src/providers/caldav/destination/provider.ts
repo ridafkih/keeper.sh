@@ -9,13 +9,14 @@ import { getErrorMessage } from "../../../core/utils/error";
 import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
+  EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import type { CalDAVListingStats } from "../shared/client";
+import type { CalDAVListingStats, CalendarObject } from "../shared/client";
 import {
   assertAllEventsSupported,
   assertAllResourcesRead,
@@ -29,8 +30,6 @@ import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
-
-const UPDATE_REFUSAL_STATUS_CODES = new Set([403, 409]);
 
 // A CalDAV PUT answers 201/204 with no body, so there is nothing to compare the write against.
 const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as const;
@@ -85,22 +84,6 @@ const createFailureResult = (error: unknown): {
     ...(httpError && { statusCode: httpError.status }),
     success: false,
   };
-};
-
-const isRefusedUpdate = (error: unknown): boolean => {
-  const httpError = findCalDAVHttpError(error);
-  if (!httpError) {
-    return false;
-  }
-  return UPDATE_REFUSAL_STATUS_CODES.has(httpError.status);
-};
-
-const createUpdateFailureResult = (error: unknown): PushResult => {
-  const failure = createFailureResult(error);
-  if (isRefusedUpdate(error)) {
-    return { ...failure, updateRefused: true };
-  }
-  return failure;
 };
 
 const recoverCreateConflict = async (
@@ -187,6 +170,19 @@ const toCalendarBaseUrl = (calendarUrl: string): string => {
     return calendarUrl;
   }
   return `${calendarUrl}/`;
+};
+
+const toUnknownPresence = (deleteId: string): EventPresence => ({
+  identifier: deleteId,
+  status: "unknown",
+});
+
+const toObjectFilename = (objectUrl: string, baseUrl: string): string => {
+  try {
+    return decodeURIComponent(new URL(objectUrl, baseUrl).pathname.split("/").at(-1) ?? "");
+  } catch {
+    return "";
+  }
 };
 
 const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
@@ -344,7 +340,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            return createUpdateFailureResult(error);
+            // A refused PUT is never evidence that delete-then-create would put the event back: RFC 4791 5.3.2 payload preconditions refuse the same bytes again.
+            return createFailureResult(error);
           }
         }, config.safeFetchOptions?.signal),
       ),
@@ -388,7 +385,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           try {
             await deleteEventObject(deleteId);
             removeCounts.succeeded += 1;
-            return { success: true };
+            return { removedObject: true, success: true };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
@@ -477,6 +474,62 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const presenceOfObject = (
+    deleteId: string,
+    object: CalendarObject | undefined,
+  ): EventPresence => {
+    // The server answered without this href, which is the multiget form of a 404: positively gone.
+    if (!object) {
+      return { identifier: deleteId, status: "absent" };
+    }
+    if (!object.data) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    const [parsed] = parseCalendarObjectEvents(object.data);
+    if (!parsed || !isKeeperEvent(parsed.uid)) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    return {
+      event: toCalDAVRemoteEvent(parsed, deleteId),
+      identifier: deleteId,
+      status: "present",
+    };
+  };
+
+  const verifyEventsExist = async (deleteIds: string[]): Promise<EventPresence[]> => {
+    if (deleteIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+      const objects = await client.fetchCalendarObjectsByUrls({
+        calendarUrl,
+        objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
+      });
+
+      const objectsByFilename = new Map<string, CalendarObject>();
+      for (const object of objects) {
+        objectsByFilename.set(toObjectFilename(object.url, calendarUrl), object);
+      }
+
+      return deleteIds.map((deleteId) =>
+        presenceOfObject(
+          deleteId,
+          objectsByFilename.get(toObjectFilename(toObjectUrl(deleteId), calendarBaseUrl)),
+        )
+      );
+    } catch (error) {
+      if (config.safeFetchOptions?.signal?.aborted) {
+        throw error;
+      }
+      // A refused, throttled or failed read tells us nothing about the object, so it is never absence.
+      return deleteIds.map((deleteId) => toUnknownPresence(deleteId));
+    }
+  };
+
   return {
     pushEvents,
     updateEvents,
@@ -485,6 +538,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeCalDAVEvent,
+    verifyEventsExist,
   };
 };
 
