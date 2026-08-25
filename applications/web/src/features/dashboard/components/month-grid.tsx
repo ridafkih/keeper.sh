@@ -52,14 +52,8 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
   const today = useStartOfToday();
   const [pillRows, setPillRows] = useState(0);
 
-  // Measures the row budget from the first cell's pill area (every cell is
-  // the same height, so one measurement serves all), and keeps measuring
-  // through resizes. A callback ref rather than a mount effect: the cells are
-  // keyed by day, so paging the month mounts a new first cell, and an
-  // observer attached once on mount would be left watching the old, detached
-  // node — which reports a zero height, folding every cell to "+N more". The
-  // ref runs again for each new node, and its cleanup disconnects the old
-  // observer. The observer reports once on `observe`, which is the first read.
+  // A callback ref, not a mount effect: paging mounts a new first cell, and an observer
+  // left on the detached node would report zero height and fold every cell to "+N more".
   const observePillArea = useCallback((pillArea: HTMLDivElement | null) => {
     if (!pillArea || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
@@ -95,8 +89,6 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
             const inMonth = isSameMonth(day, anchor);
             const isToday = isSameDay(day, today);
             const dayEvents = eventsByDay.get(day.getTime());
-            // All-day first, then the timed events as they fall (the buckets
-            // keep each list in start order).
             const pills = dayEvents ? [...dayEvents.allDay, ...dayEvents.timed] : NO_EVENTS;
             const { visibleCount, hiddenCount } = resolveVisiblePillCount(pills.length, pillRows);
             return (

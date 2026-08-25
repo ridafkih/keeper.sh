@@ -53,15 +53,10 @@ const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDG
 interface DayHeaderCellProps {
   day: Date;
   isToday: boolean;
-  /** The day's all-day events, identity-stable while unchanged. */
   allDay: CalendarEvent[];
-  /** Rows the band currently shows; a day with more folds the rest away. */
   bandRows: number;
 }
 
-/** One day of the header row: the weekday and date over the day's all-day
- * pills. Memoised so a scroll-driven anchor change only re-renders the cells
- * whose events or band actually changed. */
 const DayHeaderCell = memo(function DayHeaderCell({
   day,
   isToday,
@@ -72,8 +67,6 @@ const DayHeaderCell = memo(function DayHeaderCell({
 
   return (
     <div className="relative flex flex-col overflow-hidden">
-      {/* The column's left rule, faded toward the top; on the cell so it
-          moves with the row. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated"
@@ -261,8 +254,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [],
   );
 
-  // The band's rows follow the visible days, so the header only grows when
-  // a day with all-day events is on screen; the height eases between sizes.
   const visibleStart = startOfVisibleWeek(anchor);
   let mostAllDay = 0;
   for (let index = 0; index < VISIBLE_COLUMNS; index++) {

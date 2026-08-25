@@ -49,25 +49,14 @@ function EventText({ as = "p", size, muted, className, children }: EventTextProp
 
 interface EventCardProps {
   event: CalendarEvent;
-  /** Whether the event has ended (dims and strikes the card); parent-owned since the memoised card can't watch the clock. */
+  /** Parent-owned: the memoised card can't watch the clock. */
   past: boolean;
-  /** `list`: the events page's content-sized card; `grid`: a week-grid card sized by its event's duration. */
   layout?: EventCardLayout;
-  /** Grid placement from the column: `top`/`height`/`left`/`width` and the stacking order. */
   style?: CSSProperties;
   color?: EventColor;
 }
 
-/**
- * Height bands for the grid layout (48px hour); each floor sits 1px under its
- * content height so percentage rounding only ever clips padding, never glyphs:
- *   compact  < 27px   (≤ 30 min)  title (xs), centred, no padding
- *   short    < 43px   (≤ 50 min)  title (sm)
- *   default  43–58px  (≤ 70 min)  time (xs) + title
- *   roomy    59–74px  (≤ 90 min)  + one description line
- *   tall     ≥ 75px   (≥ 95 min)  + two description lines
- *   narrow   < 72px wide          time and description go, title tightens
- */
+// Grid height bands (48px hour): each floor sits 1px under its content height so rounding never clips glyphs.
 const eventCard = tv({
   base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-(--event-accent)",
   variants: {
@@ -88,7 +77,6 @@ const eventCard = tv({
   },
 });
 
-/** A tinted event card, shared by the events page (`list`) and the calendar pane (`grid`). */
 export const EventCard = memo(function EventCard({
   event,
   past,
@@ -155,7 +143,6 @@ export const EventCard = memo(function EventCard({
 
 interface EventPillProps {
   event: CalendarEvent;
-  /** Whether the event has ended; see `EventCardProps.past`. */
   past: boolean;
   color?: EventColor;
 }
@@ -170,7 +157,6 @@ const eventPill = tv({
   },
 });
 
-/** A one-line event pill for the week view's all-day band and the month grid's day cells. */
 export const EventPill = memo(function EventPill({ event, past, color = "blue" }: EventPillProps) {
   return (
     <div className={cn(eventPill({ past }), EVENT_COLORS[color])} style={{ height: EVENT_PILL_HEIGHT_PX }}>
@@ -182,11 +168,9 @@ export const EventPill = memo(function EventPill({ event, past, color = "blue" }
 });
 
 interface EventPillOverflowProps {
-  /** How many of the day's events are folded away. */
   count: number;
 }
 
-/** The "+N more" row that stands in for the pills a day has no room for. */
 export function EventPillOverflow({ count }: EventPillOverflowProps) {
   return (
     <Text

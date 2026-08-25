@@ -87,9 +87,7 @@ describe("layoutDayEvents geometry", () => {
   });
 
   it("positions by the wall clock on a daylight-saving day", () => {
-    // US clocks spring forward on 2026-03-08; noon must still sit halfway
-    // down the day, not 11/23 of the way (passes in any zone, pins the
-    // behaviour where the day is 23 hours long).
+    // US clocks spring forward on 2026-03-08; noon must sit halfway down the day, not 11/23 of the way.
     const dstDay = new Date(2026, 2, 8);
     const [item] = layoutDayEvents(
       [timedEvent("noon", new Date(2026, 2, 8, 12), new Date(2026, 2, 8, 13))],

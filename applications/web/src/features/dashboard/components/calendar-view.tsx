@@ -31,13 +31,9 @@ export function CalendarView() {
 
   const monthDays = useMemo(() => getMonthGridDays(anchor), [anchor]);
 
-  // One fetch for the pane, windowed by the active view.
   const fetchRange = view === "month" ? getMonthFetchRange(anchor) : getWeekFetchRange(anchor);
   const { events } = useEventsInRange(fetchRange.start, fetchRange.end);
-  // Keyed on the window's instants rather than `anchor`: the anchor changes
-  // on every scroll step, the window only when a week boundary is crossed,
-  // and the day buckets — and so each memoised column's `events` identity —
-  // should only change with the data or the window.
+  // Keyed on the window's instants, not `anchor`: the anchor moves on every scroll step, the window doesn't.
   const fetchStartMs = fetchRange.start.getTime();
   const fetchEndMs = fetchRange.end.getTime();
   const eventsByDay = useMemo(
