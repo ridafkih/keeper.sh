@@ -30,6 +30,8 @@ import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 
+const UPDATE_REFUSAL_STATUS_CODES = new Set([403, 409]);
+
 // A CalDAV PUT answers 201/204 with no body, so there is nothing to compare the write against.
 const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as const;
 
@@ -83,6 +85,22 @@ const createFailureResult = (error: unknown): {
     ...(httpError && { statusCode: httpError.status }),
     success: false,
   };
+};
+
+const isRefusedUpdate = (error: unknown): boolean => {
+  const httpError = findCalDAVHttpError(error);
+  if (!httpError) {
+    return false;
+  }
+  return UPDATE_REFUSAL_STATUS_CODES.has(httpError.status);
+};
+
+const createUpdateFailureResult = (error: unknown): PushResult => {
+  const failure = createFailureResult(error);
+  if (isRefusedUpdate(error)) {
+    return { ...failure, updateRefused: true };
+  }
+  return failure;
 };
 
 const recoverCreateConflict = async (
@@ -326,7 +344,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            return createFailureResult(error);
+            return createUpdateFailureResult(error);
           }
         }, config.safeFetchOptions?.signal),
       ),

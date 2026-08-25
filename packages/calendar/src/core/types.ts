@@ -87,6 +87,7 @@ interface PushResult {
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
+  updateRefused?: boolean;
 }
 
 interface PushEchoValueLengths {

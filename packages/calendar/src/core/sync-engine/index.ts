@@ -13,9 +13,9 @@ import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
-import { getErrorMessage } from "../utils/error";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
+import { getErrorMessage } from "../utils/error";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -295,6 +295,12 @@ const GONE_STATUS_CODES = new Set([404, 410]);
 const isUpdateTargetGone = (pushResult: PushResult | undefined): boolean =>
   typeof pushResult?.statusCode === "number" && GONE_STATUS_CODES.has(pushResult.statusCode);
 
+const isUpdateRefused = (pushResult: PushResult | undefined): boolean =>
+  pushResult?.updateRefused === true;
+
+const needsReplacementFallback = (pushResult: PushResult | undefined): boolean =>
+  isUpdateTargetGone(pushResult) || isUpdateRefused(pushResult);
+
 const describeUpdateFailure = (
   operation: Extract<SyncOperation, { type: "replace" }>,
   pushResult: PushResult | undefined,
@@ -331,7 +337,7 @@ const processUpdateResults = (
     }
 
     if (!pushResult?.success) {
-      if (isUpdateTargetGone(pushResult)) {
+      if (needsReplacementFallback(pushResult)) {
         unresolved.push(operation);
         continue;
       }
@@ -451,6 +457,10 @@ const getErrorTypeName = (error: unknown): string => {
   return "UnknownError";
 };
 
+const isRunLevelAbort = (error: unknown): boolean =>
+  error instanceof Error
+  && (error.name === "AbortError" || error.name === "TimeoutError");
+
 const failedUpdateResults = (count: number, error: unknown): PushResult[] => {
   const message = getErrorMessage(error);
   const errorType = getErrorTypeName(error);
@@ -464,6 +474,9 @@ const runUpdateEvents = async (
   try {
     return await updateEvents(updates);
   } catch (error) {
+    if (isRunLevelAbort(error)) {
+      throw error;
+    }
     return failedUpdateResults(updates.length, error);
   }
 };
@@ -703,6 +716,26 @@ const replaceViaDeleteThenAdd = async (
   return true;
 };
 
+const GONE_STATUS_IN_MESSAGE = /failed:\s*(\d{3})\b/i;
+
+const hasGoneStatusInMessage = (message: string | undefined): boolean => {
+  if (!message) {
+    return false;
+  }
+  const match = GONE_STATUS_IN_MESSAGE.exec(message);
+  if (!match?.[1]) {
+    return false;
+  }
+  return GONE_STATUS_CODES.has(Number.parseInt(match[1], 10));
+};
+
+const isDeleteTargetGone = (deleteResult: DeleteResult | undefined): boolean => {
+  if (typeof deleteResult?.statusCode === "number") {
+    return GONE_STATUS_CODES.has(deleteResult.statusCode);
+  }
+  return hasGoneStatusInMessage(deleteResult?.error);
+};
+
 const recreateMissingMirrors = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
@@ -710,11 +743,50 @@ const recreateMissingMirrors = async (
   state: ChunkedExecutionState,
   checkpoint?: CheckpointCallback,
 ): Promise<boolean> => {
-  const adds: Extract<SyncOperation, { type: "add" }>[] = replacements.map((operation) => ({
-    event: operation.event,
-    staleMappingId: operation.staleMappingId,
-    type: "add",
-  }));
+  const deleteResults = await provider.deleteEvents(replacements.map((operation) => operation.deleteId));
+  const adds: Extract<SyncOperation, { type: "add" }>[] = [];
+  const errors: OperationError[] = [];
+  let removed = 0;
+  let removeFailed = 0;
+
+  for (let index = 0; index < replacements.length; index++) {
+    const replacement = replacements[index];
+    if (!replacement) {
+      continue;
+    }
+    const deleteResult = deleteResults[index];
+    if (deleteResult?.success) {
+      removed += 1;
+    } else if (!isDeleteTargetGone(deleteResult)) {
+      removeFailed += 1;
+      if (deleteResult?.error) {
+        errors.push({
+          type: "remove",
+          error: deleteResult.error,
+          ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
+          ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
+        });
+      }
+      continue;
+    }
+    adds.push({
+      event: replacement.event,
+      staleMappingId: replacement.staleMappingId,
+      type: "add",
+    });
+  }
+
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 0, removed, removeFailed },
+    conflictsResolved: 0,
+    errors,
+  }, false);
+
+  if (adds.length === 0) {
+    return true;
+  }
+
   const addResult = await executeAddRun(adds, calendarId, provider);
   mergeRunResult(state, addResult);
   return checkpointRun(state, addResult.changes, checkpoint);
