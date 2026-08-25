@@ -40,6 +40,10 @@ const createEventMapping = (overrides: Partial<EventMapping>): EventMapping => (
   endTime: new Date("2026-03-08T15:00:00.000Z"),
   eventStateId: "event-state-id-1",
   id: "mapping-id-1",
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   sourceCalendarId: "source-calendar-id",
   startTime: new Date("2026-03-08T14:00:00.000Z"),
   syncEventHash: "hash-1",
@@ -54,6 +58,9 @@ const computeAgainstRewrittenRemote = (
   const event = createLocalEvent(localOverrides);
   const mapping = createEventMapping({
     endTime: event.endTime,
+    remoteContentHash: hashEditableEventContentSnapshot(
+      createEditableEventContentSnapshot(event),
+    ),
     startTime: event.startTime,
     syncEventHash: createSyncEventContentHash(event),
   });

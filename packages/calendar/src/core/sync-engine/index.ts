@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EventAvailability,
   EventPresence,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -83,11 +84,12 @@ const createTimedProvider = (
   provider: CalendarSyncProvider,
   timer: ReturnType<typeof createPhaseTimer>,
 ): CalendarSyncProvider => {
-  const { getSyncDiagnostics, getThrottleMetrics, updateEvents } = provider;
+  const { getRemoteEventsByIds, getSyncDiagnostics, getThrottleMetrics, updateEvents } = provider;
   return {
     deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
     listRemoteEvents: (options) => provider.listRemoteEvents(options),
     pushEvents: (events) => timer.measure("provider_push", () => provider.pushEvents(events)),
+    ...(getRemoteEventsByIds && { getRemoteEventsByIds: (eventIds: string[]) => timer.measure("provider_push", () => getRemoteEventsByIds(eventIds)) }),
     ...(updateEvents && { updateEvents: (updates: EventUpdate[]) => timer.measure("provider_push", () => updateEvents(updates)) }),
     ...(getSyncDiagnostics && { getSyncDiagnostics: () => getSyncDiagnostics() }),
     ...(getThrottleMetrics && { getThrottleMetrics: () => getThrottleMetrics() }),
@@ -233,10 +235,234 @@ const appendPushEchoFields = (
   }
 };
 
+/*
+ * A destination that can be read back records its own coercion as the baseline at write time, so
+ * anything a mapping has no baseline for and that contradicts local intent came from somebody
+ * else. One that cannot be read back proves nothing about what it stored, and repairing on that
+ * guess is what puts a whole calendar into permanent churn.
+ */
+const canObserveStoredForm = (provider: CalendarSyncProvider): boolean =>
+  typeof provider.getRemoteEventsByIds === "function";
+
+/*
+ * What the destination was seen holding after a write. An absent field means the capture yielded
+ * nothing for it, which is not the same as observing that the provider stores no such value.
+ */
+interface CapturedRemoteForm {
+  availability?: EventAvailability;
+  contentHash?: string;
+  endTime?: Date;
+  startTime?: Date;
+}
+
+const NOTHING_CAPTURED: CapturedRemoteForm = {};
+
+/*
+ * Google and Outlook compute the form they actually stored and hand it back on the write, so
+ * that echo stands in for the read-back it replaces. It has to carry everything that read-back
+ * would have established — times and availability as well as the content hash — because a write
+ * that records no time baseline leaves the next pass comparing the destination against local
+ * intent, which is what makes an event churn forever.
+ */
+const echoedStoredForm = (pushResult: PushResult): CapturedRemoteForm => {
+  const { storedAvailability, storedContentHash, storedEndTime, storedStartTime } = pushResult;
+  if (typeof storedContentHash !== "string") {
+    return NOTHING_CAPTURED;
+  }
+  return {
+    contentHash: storedContentHash,
+    ...(storedAvailability && { availability: storedAvailability }),
+    ...(storedEndTime && { endTime: storedEndTime }),
+    ...(storedStartTime && { startTime: storedStartTime }),
+  };
+};
+
+const observedRemoteForm = (remoteEvent: RemoteEvent): CapturedRemoteForm => ({
+  endTime: remoteEvent.endTime,
+  startTime: remoteEvent.startTime,
+  ...(typeof remoteEvent.editableAvailability === "string"
+    && { availability: remoteEvent.editableAvailability }),
+  ...(typeof remoteEvent.editableContentHash === "string"
+    && { contentHash: remoteEvent.editableContentHash }),
+});
+
+const resolveCapturedForm = (
+  pushResult: PushResult,
+  formsByRemoteIdentity: ReadonlyMap<string, CapturedRemoteForm>,
+): CapturedRemoteForm | undefined => {
+  for (const identity of [pushResult.deleteId, pushResult.remoteId]) {
+    const captured = identity && formsByRemoteIdentity.get(identity);
+    if (captured) {
+      return captured;
+    }
+  }
+  return globalThis.undefined;
+};
+
+const readRemoteEventsForCapture = async (
+  getRemoteEventsByIds: NonNullable<CalendarSyncProvider["getRemoteEventsByIds"]>,
+  lookupIds: string[],
+): Promise<RemoteEvent[] | null> => {
+  try {
+    return await getRemoteEventsByIds(lookupIds);
+  } catch {
+    return null;
+  }
+};
+
+/*
+ * Only a COMPLETE echo can stand in for the read-back. A partial one would skip the read while
+ * leaving the times and availability unrecorded, and an unrecorded baseline falls back to
+ * comparing against local intent -- which is the churn this whole comparison exists to stop.
+ */
+const echoReplacesTheReadBack = (pushResult: PushResult): boolean =>
+  typeof pushResult.storedContentHash === "string"
+    && Boolean(pushResult.storedAvailability)
+    && Boolean(pushResult.storedStartTime)
+    && Boolean(pushResult.storedEndTime);
+
+const collectCaptureLookupIds = (pushResults: PushResult[]): string[] => {
+  const lookupIds: string[] = [];
+  for (const pushResult of pushResults) {
+    const lookupId = pushResult.deleteId ?? pushResult.remoteId;
+    if (!echoReplacesTheReadBack(pushResult) && pushResult.success && lookupId) {
+      lookupIds.push(lookupId);
+    }
+  }
+  return lookupIds;
+};
+
+const captureRemoteForms = async (
+  pushResults: PushResult[],
+  getRemoteEventsByIds: CalendarSyncProvider["getRemoteEventsByIds"],
+): Promise<CapturedRemoteForm[]> => {
+  const uncaptured = pushResults.map((pushResult) => echoedStoredForm(pushResult));
+  if (!getRemoteEventsByIds) {
+    return uncaptured;
+  }
+
+  const lookupIds = collectCaptureLookupIds(pushResults);
+  if (lookupIds.length === 0) {
+    return uncaptured;
+  }
+
+  const remoteEvents = await readRemoteEventsForCapture(getRemoteEventsByIds, lookupIds);
+  if (remoteEvents === null) {
+    return uncaptured;
+  }
+
+  const formsByRemoteIdentity = new Map<string, CapturedRemoteForm>();
+  for (const remoteEvent of remoteEvents) {
+    const form = observedRemoteForm(remoteEvent);
+    formsByRemoteIdentity.set(remoteEvent.uid, form);
+    formsByRemoteIdentity.set(remoteEvent.deleteId, form);
+  }
+
+  return pushResults.map((pushResult): CapturedRemoteForm => {
+    const captured = resolveCapturedForm(pushResult, formsByRemoteIdentity);
+    if (captured) {
+      return captured;
+    }
+    return echoedStoredForm(pushResult);
+  });
+};
+
+/*
+ * A settled form outranks the capture. It is the form the destination was seen holding for the
+ * copy this write replaces, and the write puts back the same text, so it is where the capture's
+ * form ends up once the destination finishes storing it. Recording the capture instead is what
+ * repairs the same event on every pass forever.
+ */
+const resolveRecordedForm = (
+  operation: { recordedContentHash?: string; settledContentHash?: string },
+  captured: string | undefined,
+): string | undefined => {
+  if (typeof operation.settledContentHash === "string") {
+    return operation.settledContentHash;
+  }
+  if (typeof captured === "string") {
+    return captured;
+  }
+  return operation.recordedContentHash;
+};
+
+/*
+ * A replaced mapping's recorded form is the last thing the provider was seen to hold, so a
+ * capture that came back empty inherits it: recording no baseline would let the next owner
+ * edit be adopted as truth instead of repaired.
+ */
+const resolveInsertedContentHash = (
+  operation: Extract<SyncOperation, { type: "add" }>,
+  captured: string | undefined,
+): string | null => {
+  const recorded = resolveRecordedForm(operation, captured);
+  if (typeof recorded === "string") {
+    return recorded;
+  }
+  return null;
+};
+
+/*
+ * The form this write is repairing away from, so the next pass can recognise our own rewrite of
+ * it. Absent when the write proves nothing about the form that comes back, and the flush clears
+ * whatever the row held: an unproven form must never be adopted.
+ */
+const repairedFromContentHashRecord = (
+  operation: { repairedFromContentHash?: string },
+): { remoteContentHashRepairedFrom?: string } => {
+  const { repairedFromContentHash } = operation;
+  if (typeof repairedFromContentHash !== "string") {
+    return {};
+  }
+  return { remoteContentHashRepairedFrom: repairedFromContentHash };
+};
+
+const capturedContentHashUpdate = (
+  operation: Extract<SyncOperation, { type: "replace" }>,
+  captured: string | undefined,
+): { remoteContentHash?: string } => {
+  const recorded = resolveRecordedForm(operation, captured);
+  if (typeof recorded !== "string") {
+    return {};
+  }
+  return { remoteContentHash: recorded };
+};
+
+/*
+ * A capture that observed nothing proves nothing about the availability the destination holds, so
+ * the baseline the operation carries is written back unchanged. Taking the empty capture instead
+ * nulls a good baseline, and the next pass then compares the destination against local intent,
+ * which churns. The flush coalesces the remaining null so a mapping is never downgraded either.
+ */
+const resolveRecordedAvailability = (
+  operation: { recordedAvailability?: EventAvailability },
+  captured: CapturedRemoteForm,
+): EventAvailability | null => {
+  if (captured.availability) {
+    return captured.availability;
+  }
+  return operation.recordedAvailability ?? null;
+};
+
+/* Both instants or neither: half a baseline says nothing about the span the destination holds. */
+const resolveRecordedTimes = (
+  operation: { recordedEndTime?: Date; recordedStartTime?: Date },
+  captured: CapturedRemoteForm,
+): { remoteEndTime: Date | null; remoteStartTime: Date | null } => {
+  if (captured.startTime && captured.endTime) {
+    return { remoteEndTime: captured.endTime, remoteStartTime: captured.startTime };
+  }
+  if (operation.recordedStartTime && operation.recordedEndTime) {
+    return { remoteEndTime: operation.recordedEndTime, remoteStartTime: operation.recordedStartTime };
+  }
+  return { remoteEndTime: null, remoteStartTime: null };
+};
+
 const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
   pushResults: PushResult[],
   calendarId: string,
+  capturedForms: CapturedRemoteForm[],
 ): { changes: PendingChanges; added: number; addFailed: number; conflictsResolved: number; errors: OperationError[] } => {
   const changes: PendingChanges = { inserts: [], deletes: [] };
   const errors: OperationError[] = [];
@@ -272,6 +498,7 @@ const processAddResults = (
     if (pushResult.conflictResolved) {
       conflictsResolved += 1;
     }
+    const capturedForm = capturedForms[index] ?? NOTHING_CAPTURED;
     changes.inserts.push({
       eventStateId: operation.event.eventStateId ?? operation.event.id,
       sourceCalendarId: operation.event.calendarId,
@@ -280,6 +507,10 @@ const processAddResults = (
       destinationEventUid: pushResult.remoteId,
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId,
       syncEventHash: createSyncEventContentHash(operation.event),
+      remoteContentHash: resolveInsertedContentHash(operation, capturedForm.contentHash),
+      ...repairedFromContentHashRecord(operation),
+      remoteAvailability: resolveRecordedAvailability(operation, capturedForm),
+      ...resolveRecordedTimes(operation, capturedForm),
       startTime: operation.event.startTime,
       endTime: operation.event.endTime,
     });
@@ -395,6 +626,7 @@ const describeUpdateFailure = (
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
+  capturedForms: CapturedRemoteForm[],
   mappingsById: Map<string, EventMapping>,
   createEscapesPayloadRefusal: boolean,
 ): {
@@ -451,12 +683,17 @@ const processUpdateResults = (
     if (pushResult.conflictResolved) {
       conflictsResolved += 1;
     }
+    const capturedForm = capturedForms[index] ?? NOTHING_CAPTURED;
     updates.push({
       ...clearedUpdateFailures(mappingsById.get(operation.staleMappingId)),
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId ?? operation.deleteId,
       ...(pushResult.remoteId && { destinationEventUid: pushResult.remoteId }),
       endTime: operation.event.endTime,
       id: operation.staleMappingId,
+      ...capturedContentHashUpdate(operation, capturedForm.contentHash),
+      ...repairedFromContentHashRecord(operation),
+      remoteAvailability: resolveRecordedAvailability(operation, capturedForm),
+      ...resolveRecordedTimes(operation, capturedForm),
       startTime: operation.event.startTime,
       syncEventHash: createSyncEventContentHash(operation.event),
       syncEventId: operation.event.id,
@@ -535,7 +772,8 @@ const executeAddRun = async (
 ): Promise<RunResult> => {
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
-  const { added, addFailed, conflictsResolved, changes, errors } = processAddResults(adds, pushResults, calendarId);
+  const captures = await captureRemoteForms(pushResults, provider.getRemoteEventsByIds);
+  const { added, addFailed, conflictsResolved, changes, errors } = processAddResults(adds, pushResults, calendarId, captures);
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
@@ -624,6 +862,7 @@ const failedUpdateRun = (
 const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
+  getRemoteEventsByIds: CalendarSyncProvider["getRemoteEventsByIds"],
   mappingsById: Map<string, EventMapping>,
   createEscapesPayloadRefusal: boolean,
 ): Promise<UpdateRunResult> => {
@@ -636,14 +875,17 @@ const executeUpdateRun = async (
     return failedUpdateRun(replacements, outcome.runFailure);
   }
   const { pushResults } = outcome;
+  const captures = await captureRemoteForms(pushResults, getRemoteEventsByIds);
   const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(
     replacements,
     pushResults,
+    captures,
     mappingsById,
     createEscapesPayloadRefusal,
   );
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
+
   return {
     runResult: {
       changes,
@@ -824,6 +1066,35 @@ const didRemoveObject = (deleteResult: DeleteResult | undefined): boolean => {
   return deleteResult.removedObject === true;
 };
 
+/*
+ * Every baseline has to survive the fallback. Without the recorded one the add that follows the
+ * delete records none, and the next owner edit is adopted as truth; without the settled one it
+ * records what the write echoes back, and repairs the same event again on the next pass; without
+ * the form this repair wrote over, the next pass cannot tell our own rewrite of it from an edit.
+ */
+const replacedFormFields = (
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+): {
+  recordedAvailability?: EventAvailability;
+  recordedContentHash?: string;
+  recordedEndTime?: Date;
+  recordedStartTime?: Date;
+  repairedFromContentHash?: string;
+  settledContentHash?: string;
+} => ({
+  ...(replacement.recordedAvailability && { recordedAvailability: replacement.recordedAvailability }),
+  ...(replacement.recordedEndTime && replacement.recordedStartTime && {
+    recordedEndTime: replacement.recordedEndTime,
+    recordedStartTime: replacement.recordedStartTime,
+  }),
+  ...(typeof replacement.recordedContentHash === "string"
+    && { recordedContentHash: replacement.recordedContentHash }),
+  ...(typeof replacement.repairedFromContentHash === "string"
+    && { repairedFromContentHash: replacement.repairedFromContentHash }),
+  ...(typeof replacement.settledContentHash === "string"
+    && { settledContentHash: replacement.settledContentHash }),
+});
+
 const replaceViaDeleteThenAdd = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
@@ -873,6 +1144,7 @@ const replaceViaDeleteThenAdd = async (
         event: replacement.event,
         staleMappingId: replacement.staleMappingId,
         type: "add",
+        ...replacedFormFields(replacement),
       });
     }
   }
@@ -1103,6 +1375,7 @@ const executeReplacements = async (
       const { runResult, unresolved: unresolvedUpdates } = await executeUpdateRun(
         present,
         updateEvents,
+        provider.getRemoteEventsByIds,
         mappingsById,
         Boolean(provider.createEscapesPayloadRefusal),
       );
@@ -1469,7 +1742,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       localEvents,
       state.existingMappings,
       state.remoteEvents,
-      reconciliationScope,
+      { ...reconciliationScope, storedFormIsObservable: canObserveStoredForm(provider) },
     ));
 
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;

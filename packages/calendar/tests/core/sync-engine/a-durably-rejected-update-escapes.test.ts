@@ -75,6 +75,10 @@ const ownedObjectPath = `/calendars/user/shared/${uid}.ics`;
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
 
 const makeMapping = (deleteIdentifier: string): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier,
   destinationEventUid: uid,

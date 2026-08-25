@@ -73,6 +73,10 @@ const createLocalEvent = (index: number): MaterializedSyncableEvent => ({
 });
 
 const createMapping = (index: number): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: createDeleteIdentifier(index),
   destinationEventUid: createDestinationEventUid(index),

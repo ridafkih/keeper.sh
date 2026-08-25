@@ -30,6 +30,10 @@ const createEventMapping = (overrides: Partial<EventMapping>): EventMapping => (
   eventStateId: "event-state-id-1",
   syncEventId: "event-state-id-1",
   id: "mapping-id-1",
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   sourceCalendarId: "source-calendar-id",
   startTime: new Date("2026-03-08T14:00:00.000Z"),
   syncEventHash: "hash-1",
@@ -404,7 +408,17 @@ describe("computeSyncOperations", () => {
     expect(computeSyncOperations([event], [mapping], [remoteEvent], {
       syncWindowStart: new Date("2026-07-10T00:00:00.000Z"),
     })).toEqual({
-      mappingUpdates: [],
+      mappingUpdates: [{
+        deleteIdentifier: mapping.deleteIdentifier,
+        endTime: event.endTime,
+        id: mapping.id,
+        remoteAvailability: null,
+        remoteEndTime: remoteEvent.endTime,
+        remoteStartTime: remoteEvent.startTime,
+        startTime: event.startTime,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
       operations: [],
       staleMappingIds: [],
       staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
@@ -440,7 +454,17 @@ describe("computeSyncOperations", () => {
     }));
 
     expect(computeSyncOperations([first, second], mappings, remotes)).toEqual({
-      mappingUpdates: [],
+      mappingUpdates: [first, second].map((event, index) => ({
+        deleteIdentifier: `delete-${index}`,
+        endTime: event.endTime,
+        id: `mapping-${index}`,
+        remoteAvailability: null,
+        remoteEndTime: event.endTime,
+        remoteStartTime: event.startTime,
+        startTime: event.startTime,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      })),
       operations: [],
       staleMappingIds: [],
       staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
@@ -606,6 +630,7 @@ describe("computeSyncOperations", () => {
     const event = createLocalEvent({ description: "agenda v2", location: "Room 1" });
     const mapping = createEventMapping({
       endTime: event.endTime,
+      remoteContentHash: createEditableEventContentHash(event),
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -639,6 +664,7 @@ describe("computeSyncOperations", () => {
     const event = createLocalEvent({ isAllDay: false, summary: "Busy" });
     const mapping = createEventMapping({
       endTime: event.endTime,
+      remoteContentHash: createEditableEventContentHash(event),
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -674,6 +700,7 @@ describe("computeSyncOperations", () => {
     const event = createLocalEvent({ description: "agenda v2" });
     const mapping = createEventMapping({
       endTime: event.endTime,
+      remoteContentHash: createEditableEventContentHash(event),
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -716,7 +743,17 @@ describe("computeSyncOperations", () => {
     });
 
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
-      mappingUpdates: [],
+      mappingUpdates: [{
+        deleteIdentifier: mapping.deleteIdentifier,
+        endTime: event.endTime,
+        id: mapping.id,
+        remoteAvailability: null,
+        remoteEndTime: remoteEvent.endTime,
+        remoteStartTime: remoteEvent.startTime,
+        startTime: event.startTime,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
       operations: [],
       staleMappingIds: [],
       staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
@@ -729,6 +766,7 @@ describe("computeSyncOperations", () => {
       deleteIdentifier: "remote-delete-id-1",
       destinationEventUid: "remote-uid-1",
       endTime: event.endTime,
+      remoteContentHash: createEditableEventContentHash(event),
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -747,6 +785,8 @@ describe("computeSyncOperations", () => {
     expect(result.operations).toEqual([{
         deleteId: mapping.deleteIdentifier,
         event,
+        recordedContentHash: mapping.remoteContentHash,
+        repairedFromContentHash: editedRemote.editableContentHash,
         staleMappingId: mapping.id,
         type: "replace",
         uid: mapping.destinationEventUid,
@@ -759,6 +799,10 @@ describe("computeSyncOperations", () => {
       deleteIdentifier: "remote-delete-id-1",
       destinationEventUid: "remote-uid-1",
       endTime: event.endTime,
+      remoteContentHash: createEditableEventContentHash({
+        availability: "busy",
+        summary: "Meeting",
+      }),
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -774,7 +818,18 @@ describe("computeSyncOperations", () => {
     });
 
     expect(computeSyncOperations([event], [mapping], [remoteEvent])).toEqual({
-      mappingUpdates: [],
+      mappingUpdates: [{
+        deleteIdentifier: mapping.deleteIdentifier,
+        endTime: event.endTime,
+        id: mapping.id,
+        remoteAvailability: remoteEvent.editableAvailability,
+        remoteContentHash: remoteEvent.editableContentHash,
+        remoteEndTime: remoteEvent.endTime,
+        remoteStartTime: remoteEvent.startTime,
+        startTime: event.startTime,
+        syncEventHash: createSyncEventContentHash(event),
+        syncEventId: event.id,
+      }],
       operations: [],
       staleMappingIds: [],
       staleReasonCounts: EMPTY_STALE_REASON_COUNTS,
@@ -787,6 +842,7 @@ describe("computeSyncOperations", () => {
       deleteIdentifier: "remote-delete-id-1",
       destinationEventUid: "remote-uid-1",
       endTime: event.endTime,
+      remoteAvailability: "busy",
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
     });
@@ -831,6 +887,10 @@ describe("computeSyncOperations", () => {
         deleteIdentifier: remoteEvent.deleteId,
         endTime: event.endTime,
         id: mapping.id,
+        remoteAvailability: remoteEvent.editableAvailability ?? null,
+        remoteContentHash: remoteEvent.editableContentHash,
+        remoteEndTime: remoteEvent.endTime,
+        remoteStartTime: remoteEvent.startTime,
         startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
@@ -883,6 +943,10 @@ describe("computeSyncOperations", () => {
         deleteIdentifier: remoteEvent.deleteId,
         endTime: event.endTime,
         id: mapping.id,
+        remoteAvailability: remoteEvent.editableAvailability ?? null,
+        remoteContentHash: remoteEvent.editableContentHash,
+        remoteEndTime: remoteEvent.endTime,
+        remoteStartTime: remoteEvent.startTime,
         startTime: event.startTime,
         syncEventHash: createSyncEventContentHash(event),
         syncEventId: event.id,
@@ -941,6 +1005,10 @@ describe("computeSyncOperations", () => {
         deleteIdentifier: remoteEvents[0]?.deleteId,
         endTime: first.endTime,
         id: "legacy-mapping-0",
+        remoteAvailability: remoteEvents[0]?.editableAvailability,
+        remoteContentHash: remoteEvents[0]?.editableContentHash,
+        remoteEndTime: remoteEvents[0]?.endTime,
+        remoteStartTime: remoteEvents[0]?.startTime,
         startTime: first.startTime,
         syncEventHash: createSyncEventContentHash(first),
         syncEventId: first.id,
@@ -949,6 +1017,10 @@ describe("computeSyncOperations", () => {
         deleteIdentifier: remoteEvents[2]?.deleteId,
         endTime: third.endTime,
         id: "legacy-mapping-2",
+        remoteAvailability: remoteEvents[2]?.editableAvailability,
+        remoteContentHash: remoteEvents[2]?.editableContentHash,
+        remoteEndTime: remoteEvents[2]?.endTime,
+        remoteStartTime: remoteEvents[2]?.startTime,
         startTime: third.startTime,
         syncEventHash: createSyncEventContentHash(third),
         syncEventId: third.id,
@@ -974,6 +1046,7 @@ describe("computeSyncOperations", () => {
       destinationEventUid: "legacy-occurrence@keeper.sh",
       endTime: event.endTime,
       eventStateId: "recurring-master-id",
+      remoteContentHash: createEditableEventContentHash(event),
       startTime: event.startTime,
       syncEventHash: "legacy-master-hash",
       syncEventId: "recurring-master-id",

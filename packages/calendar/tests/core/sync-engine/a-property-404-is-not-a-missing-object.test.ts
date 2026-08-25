@@ -43,6 +43,10 @@ const mappingFor = (
   uid: string,
   objectPath: string,
 ): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   deleteIdentifier: objectPath,
   destinationEventUid: uid,

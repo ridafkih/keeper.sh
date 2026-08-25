@@ -38,6 +38,12 @@ const mapping: EventMapping = {
   endTime: localEvent.endTime,
   eventStateId: localEvent.id,
   id: "map-1",
+  remoteAvailability: null,
+  remoteContentHash: hashEditableEventContentSnapshot(
+    createEditableEventContentSnapshot(localEvent),
+  ),
+  remoteEndTime: null,
+  remoteStartTime: null,
   sourceCalendarId: "cal-1",
   startTime: localEvent.startTime,
   syncEventHash: createSyncEventContentHash(localEvent),

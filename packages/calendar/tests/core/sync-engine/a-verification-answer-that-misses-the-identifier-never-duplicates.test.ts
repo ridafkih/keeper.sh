@@ -51,6 +51,10 @@ const makeEvent = (): MaterializedSyncableEvent => ({
 });
 
 const makeMapping = (deleteIdentifier: string, destinationEventUid: string, syncEventHash: string): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   id: MAPPING_ID,
   eventStateId: "ev-1",
   syncEventId: "ev-1",

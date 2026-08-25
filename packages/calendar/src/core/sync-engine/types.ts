@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EventAvailability,
   EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
@@ -39,6 +40,12 @@ interface PendingInsert {
   destinationEventUid: string;
   deleteIdentifier: string;
   syncEventHash: string | null;
+  remoteContentHash: string | null;
+  /* Absent is the safe reading of a missing proof: nothing is adopted without one. */
+  remoteContentHashRepairedFrom?: string | null;
+  remoteStartTime: Date | null;
+  remoteEndTime: Date | null;
+  remoteAvailability: EventAvailability | null;
   startTime: Date;
   endTime: Date;
 }
@@ -49,6 +56,21 @@ interface PendingUpdate {
   destinationEventUid?: string;
   endTime: Date;
   id: string;
+  /* Absent means the capture observed nothing; the recorded baseline is then left as it stands. */
+  remoteContentHash?: string;
+  /*
+   * Written as given, absent reading as null: a repair the destination has since confirmed must
+   * be cleared, or a later edit of that same form would be adopted as our own text.
+   */
+  remoteContentHashRepairedFrom?: string | null;
+  /*
+   * Null only when nothing is known: an empty capture writes back the baseline the operation
+   * carries rather than clearing it, and the flush coalesces a remaining null away. Nulling a
+   * recorded baseline sends the next pass back to comparing against local intent, which churns.
+   */
+  remoteStartTime?: Date | null;
+  remoteEndTime?: Date | null;
+  remoteAvailability?: EventAvailability | null;
   startTime: Date;
   syncEventHash: string | null;
   syncEventId: string;

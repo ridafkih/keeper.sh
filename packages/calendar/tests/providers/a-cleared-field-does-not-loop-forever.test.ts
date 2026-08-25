@@ -66,6 +66,10 @@ const beforeClearHash = createSyncEventContentHash({
 });
 
 const makeMapping = (destinationEventUid: string, deleteIdentifier: string): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier,
   destinationEventUid,

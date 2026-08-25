@@ -1,5 +1,8 @@
+import { DomHandler, DomUtils, Parser } from "htmlparser2";
+import { decodeHTML } from "entities";
 import type { EventMapping } from "../events/mappings";
 import type {
+  EventAvailability,
   MaterializedSyncableEvent,
   RemoteEvent,
   SyncOperation,
@@ -12,6 +15,13 @@ import {
 import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
 
+/*
+ * Whether the destination can be asked what it actually stored — by echoing the stored form on
+ * the write, or by an immediate read-back. Only then does a coercing server
+ * record its own rewrite as the baseline at write time, which is what makes a later unexplained
+ * value somebody else's edit. A destination we can never read back cannot tell its own coercion
+ * from a third party's edit, and repairing on that guess puts a whole calendar into churn.
+ */
 interface ReconciliationScope {
   authoritativeMappingIds?: ReadonlySet<string>;
   authoritativeWindow: SyncWindow | null;
@@ -23,6 +33,7 @@ interface ReconciliationScope {
    * budget, or an answer that said so. Their absence from remoteEvents is not evidence.
    */
   unverifiedMappingIds?: ReadonlySet<string>;
+  storedFormIsObservable?: boolean;
   withheldSourceEventStateIds?: ReadonlySet<string>;
 }
 
@@ -84,6 +95,11 @@ interface MappingUpdate {
   deleteIdentifier: string;
   endTime: Date;
   id: string;
+  remoteAvailability: EventAvailability | null;
+  remoteContentHash?: string;
+  remoteContentHashRepairedFrom?: string | null;
+  remoteEndTime: Date | null;
+  remoteStartTime: Date | null;
   startTime: Date;
   syncEventHash: string;
   syncEventId: string;
@@ -293,13 +309,516 @@ const divergedContentLengths = (
   return { [field]: { local: local.length, remote: remote.length } };
 };
 
+const observeRemoteContentHash = (remoteEvent: RemoteEvent): string | null => {
+  if (typeof remoteEvent.editableContentHash !== "string") {
+    return null;
+  }
+  return remoteEvent.editableContentHash;
+};
+
+/* Omitted rather than nulled: an absent baseline must not overwrite one already recorded. */
+const recordedContentHashFields = (mapping: EventMapping): { recordedContentHash?: string } => {
+  if (typeof mapping.remoteContentHash !== "string") {
+    return {};
+  }
+  return { recordedContentHash: mapping.remoteContentHash };
+};
+
+const recordedContentHashUpdate = (recorded: string | null): { remoteContentHash?: string } => {
+  if (recorded === null) {
+    return {};
+  }
+  return { remoteContentHash: recorded };
+};
+
+const getRecordedRemoteContentHash = (mapping: EventMapping): string | null => {
+  if (typeof mapping.remoteContentHash !== "string") {
+    return null;
+  }
+  return mapping.remoteContentHash;
+};
+
+const getRepairedFromContentHash = (mapping: EventMapping): string | null =>
+  mapping.remoteContentHashRepairedFrom ?? null;
+
+/* The same text again, so the destination has no reason to store it in a different form. */
+const isRewritingTheRecordedText = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+): boolean => mapping.syncEventHash === createSyncEventContentHash(localEvent);
+
+/*
+ * A destination may store a write in a form no capture of that write ever sees, so the recorded
+ * baseline is a form no later read returns: the divergence repairs, the repair is captured in the
+ * same unseen form, and the event is rewritten on every pass forever. The way out is proof rather
+ * than trust. A repair rewrites our own text, so a read that comes back holding exactly the form
+ * the repair wrote over has shown that form to be our text as this destination keeps it: an edit
+ * does not survive our overwriting it. Only that reproduced form is adopted; anything else the
+ * read returns is still somebody's edit, and is still repaired.
+ */
+const isReproducedByOurOwnRewrite = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const repairedFrom = getRepairedFromContentHash(mapping);
+  if (repairedFrom === null) {
+    return false;
+  }
+  if (!isRewritingTheRecordedText(mapping, localEvent)) {
+    return false;
+  }
+  return observeRemoteContentHash(remoteEvent) === repairedFrom;
+};
+
+/*
+ * The shapes our own text takes at a destination that keeps it in its own way. It encodes it —
+ * Google escapes the markup inside a description, Graph keeps a body as HTML, an iCalendar server
+ * escapes the separators inside a TEXT value — or it cuts it at a length it always cuts at. Only
+ * real markup is stripped, so an angle bracket we wrote stays text, and an edit that writes markup
+ * of its own decodes to something other than what we wrote.
+ */
+const ICALENDAR_ESCAPES: Record<string, string> = {
+  ",": ",",
+  ";": ";",
+  "N": "\n",
+  "\\": "\\",
+  "n": "\n",
+};
+
+const decodeICalendarText = (value: string): string =>
+  value.replaceAll(/\\([\\,;nN])/g, (escape, character: string) =>
+    ICALENDAR_ESCAPES[character] ?? escape);
+
+/*
+ * A regex cannot strip markup: one pass over `<scr<script>ipt>` leaves `<script>` behind, because
+ * removing the inner tag rejoins the outer one. That is a correctness problem here before it is a
+ * security one -- a mis-decode reads a stranger's edit as our own text and adopts it. A real
+ * tokenizer sees the same bytes the destination's own parser did. Entities are left encoded here
+ * so the decode below stays the single place that resolves them.
+ */
+const readMarkupText = (markup: string): string => {
+  const handler = new DomHandler();
+  new Parser(handler, { decodeEntities: false }).end(markup);
+
+  return DomUtils.textContent(handler.dom);
+};
+
+const decodeDestinationStorageForm = (remote: string): string =>
+  decodeICalendarText(decodeHTML(readMarkupText(remote)));
+
+const isDestinationStorageEncoding = (local: string, remote: string): boolean =>
+  decodeDestinationStorageForm(remote) === local;
+
+/* Emptying a field is not a cut: nothing of ours survives it, so it is an editor's doing. */
+const isDestinationTruncation = (local: string, remote: string): boolean =>
+  remote.length > 0 && remote.length < local.length && local.startsWith(remote);
+
+const isOurTextAsADestinationMayKeepIt = (local: string, remote: string): boolean => {
+  if (local === remote) {
+    return true;
+  }
+  if (isDestinationStorageEncoding(local, remote)) {
+    return true;
+  }
+  return isDestinationTruncation(local, remote);
+};
+
+/*
+ * Whether the form a read returned is one our own text could have taken at this destination at
+ * all. A form that is nobody's storage of our text is somebody's edit, and recording an edit as
+ * the form we repaired away from is what lets a third party win by applying the same edit twice:
+ * the pass after the repair reads their repetition as our own rewrite echoed back, adopts it as
+ * the baseline, and the event is never repaired again.
+ */
+const couldBeOurOwnTextAsStored = (
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const remoteContent = remoteEvent.editableContent;
+  /* A read carrying no fields is weighed against intent nowhere, and is not weighed here either. */
+  if (!remoteContent) {
+    return true;
+  }
+  const localContent = createEditableEventContentSnapshot(localEvent);
+  if (remoteContent.isAllDay !== localContent.isAllDay) {
+    return false;
+  }
+  return isOurTextAsADestinationMayKeepIt(localContent.summary, remoteContent.summary)
+    && isOurTextAsADestinationMayKeepIt(localContent.description, remoteContent.description)
+    && isOurTextAsADestinationMayKeepIt(localContent.location, remoteContent.location);
+};
+
+/*
+ * Only a rewrite of the recorded text proves anything about the form that comes back, and only a
+ * form our own text could have taken here is worth recording as the form it was repaired from.
+ */
+const repairedFromContentHashFields = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): { repairedFromContentHash?: string } => {
+  if (!isRewritingTheRecordedText(mapping, localEvent)) {
+    return {};
+  }
+  if (!couldBeOurOwnTextAsStored(localEvent, remoteEvent)) {
+    return {};
+  }
+  const observed = observeRemoteContentHash(remoteEvent);
+  if (observed === null || observed === getRecordedRemoteContentHash(mapping)) {
+    return {};
+  }
+  return { repairedFromContentHash: observed };
+};
+
+/*
+ * Cleared as soon as a read confirms what the mapping records: an edit that later happens to
+ * match the form we once repaired away from must be repaired too, not mistaken for our own
+ * rewrite. A read that carries no form confirms nothing, so the proof is kept for the next one.
+ */
+const resolveRecordedRepairedFrom = (
+  mapping: EventMapping,
+  remoteEvent: RemoteEvent,
+): string | null => {
+  if (observeRemoteContentHash(remoteEvent) === null) {
+    return getRepairedFromContentHash(mapping);
+  }
+  return null;
+};
+
+/* Written only when there is a proof to keep or a spent one to clear. */
+const repairedFromUpdate = (
+  mapping: EventMapping,
+  recorded: string | null,
+): { remoteContentHashRepairedFrom?: string | null } => {
+  if (recorded === null && getRepairedFromContentHash(mapping) === null) {
+    return {};
+  }
+  return { remoteContentHashRepairedFrom: recorded };
+};
+
+/*
+ * A prefix relationship is no evidence of normalisation: the empty string is a prefix of every
+ * text and shorter than all of them, so a third party who clears a field would be read as the
+ * destination trimming it. A shortening is normalisation only where a documented bound explains
+ * it: Google keeps 8192 characters of a description and that is the only such bound we know. A
+ * field with no known bound gets no allowance at all, and its shortening is somebody's edit.
+ */
+const KNOWN_DESTINATION_LENGTH_LIMITS: Partial<
+  Record<"description" | "location" | "summary", number>
+> = {
+  description: 8192,
+};
+
+const isDestinationLengthLimit = (
+  field: "description" | "location" | "summary",
+  local: string,
+  remote: string,
+): boolean => {
+  const limit = KNOWN_DESTINATION_LENGTH_LIMITS[field];
+  if (limit === globalThis.undefined) {
+    return false;
+  }
+  /* Nothing was over the bound, so the bound cannot be what cut it. */
+  if (local.length <= limit || remote.length > limit) {
+    return false;
+  }
+  /* A bound clips what overruns it; it never empties a field, so an emptied one is a clearance. */
+  if (remote.length === 0) {
+    return false;
+  }
+  return local.startsWith(remote);
+};
+
+const isFieldExplainedByDestination = (
+  field: "description" | "location" | "summary",
+  local: string,
+  remote: string,
+): boolean => {
+  if (local === remote) {
+    return true;
+  }
+  return isDestinationLengthLimit(field, local, remote);
+};
+
+/*
+ * Migration 0093 added remoteContentHash without a backfill, so every pre-existing mapping
+ * arrives with no baseline. Local intent is the only truth available on that first pass, and
+ * a remote the destination's own storage cannot account for must be repaired, not adopted.
+ * Local events reach reconciliation already run through the provider's own normalisation,
+ * so a faithful mirror compares equal here.
+ */
+const hasRemoteContentDivergedFromLocal = (
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const remoteContent = remoteEvent.editableContent;
+  /* Without the observed fields there is nothing to weigh intent against, and repairing on the
+   * hash alone would recreate the event on every pass a destination normalises what we wrote. */
+  if (!remoteContent) {
+    return false;
+  }
+  const localContent = createEditableEventContentSnapshot(localEvent);
+  if (remoteContent.isAllDay !== localContent.isAllDay) {
+    return true;
+  }
+  return !isFieldExplainedByDestination("summary", localContent.summary, remoteContent.summary)
+    || !isFieldExplainedByDestination(
+      "description",
+      localContent.description,
+      remoteContent.description,
+    )
+    || !isFieldExplainedByDestination("location", localContent.location, remoteContent.location);
+};
+
+/*
+ * A reassignment may settle in the database alone only when the destination already holds the
+ * occurrence's current content. Re-anchoring a series reseeds occurrence ids while the instants
+ * stay put, so the pairing survives a rename that the remote copy has never seen; without this
+ * term the old title would stand on the destination forever, unwritten and unreported.
+ */
+const remoteHoldsOccurrenceContent = (
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const observed = observeRemoteContentHash(remoteEvent);
+  if (observed === null) {
+    return false;
+  }
+  if (observed === createEditableEventContentHash(localEvent)) {
+    return true;
+  }
+  /* Without the observed fields a differing hash is the only evidence there is, and it says no. */
+  if (!remoteEvent.editableContent) {
+    return false;
+  }
+  return !hasRemoteContentDivergedFromLocal(localEvent, remoteEvent);
+};
+
+/*
+ * A destination may finish storing a write only after the capture has read it back, so the
+ * recorded baseline is a form no later read returns and the divergence repairs, is captured
+ * unsettled again, and repairs again on every pass forever. A rewrite puts back the same text,
+ * and a form our own text still explains is that text as this destination keeps it, so the
+ * repaired mapping records what the destination was seen holding rather than what the write
+ * echoed back. A form our text cannot explain is somebody's edit and is not recorded at all.
+ */
+const settledContentHashFields = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): { settledContentHash?: string } => {
+  const observed = observeRemoteContentHash(remoteEvent);
+  if (observed === null || observed === getRecordedRemoteContentHash(mapping)) {
+    return {};
+  }
+  /* Without the observed fields nothing can explain the form, and an unexplained one is an edit. */
+  if (!remoteEvent.editableContent) {
+    return {};
+  }
+  if (hasRemoteContentDivergedFromLocal(localEvent, remoteEvent)) {
+    return {};
+  }
+  return { settledContentHash: observed };
+};
+
+const hasRemoteContentDiverged = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const observed = observeRemoteContentHash(remoteEvent);
+  if (observed === null) {
+    return false;
+  }
+  if (isReproducedByOurOwnRewrite(mapping, localEvent, remoteEvent)) {
+    return false;
+  }
+  const recorded = getRecordedRemoteContentHash(mapping);
+  if (recorded === null) {
+    return hasRemoteContentDivergedFromLocal(localEvent, remoteEvent);
+  }
+  return observed !== recorded;
+};
+
+/* Only a remote that still matches what we intend may become the baseline we later compare to. */
+const resolveRecordedRemoteContentHash = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): string | null => {
+  /* The proved form is what the destination holds; the recorded one is what it never returned. */
+  if (isReproducedByOurOwnRewrite(mapping, localEvent, remoteEvent)) {
+    return observeRemoteContentHash(remoteEvent);
+  }
+  const recorded = getRecordedRemoteContentHash(mapping);
+  if (recorded !== null) {
+    return recorded;
+  }
+  if (hasRemoteContentDiverged(mapping, localEvent, remoteEvent)) {
+    return null;
+  }
+  return observeRemoteContentHash(remoteEvent);
+};
+
+/*
+ * A destination that keeps a coarser precision than we sent stores the instant we asked for,
+ * rounded inside its own minute; a third party who moved the event leaves it somewhere else.
+ * The mapping's own times are what we last wrote, so they are what the stored form has to be
+ * explained by. Only a mapping with no recorded form is weighed this way; once one exists the
+ * comparison is against what the destination was seen holding.
+ */
+const NORMALISATION_TOLERANCE_MS = 60_000;
+
+const isExplainedByDestinationRounding = (written: Date, stored: Date): boolean =>
+  Math.abs(stored.getTime() - written.getTime()) < NORMALISATION_TOLERANCE_MS;
+
+const hasRemoteTimeDivergedFromWritten = (
+  mapping: EventMapping,
+  remoteEvent: RemoteEvent,
+): boolean => !isExplainedByDestinationRounding(mapping.startTime, remoteEvent.startTime)
+  || !isExplainedByDestinationRounding(mapping.endTime, remoteEvent.endTime);
+
+interface RecordedRemoteTimes {
+  remoteEndTime: Date | null;
+  remoteStartTime: Date | null;
+}
+
+/* Both instants or neither: half a baseline says nothing about the span the destination holds. */
+const getRecordedRemoteTimes = (mapping: EventMapping): RecordedRemoteTimes => {
+  const { remoteEndTime, remoteStartTime } = mapping;
+  if (!remoteStartTime || !remoteEndTime) {
+    return { remoteEndTime: null, remoteStartTime: null };
+  }
+  return { remoteEndTime, remoteStartTime };
+};
+
+const getRecordedRemoteAvailability = (mapping: EventMapping): EventAvailability | null =>
+  mapping.remoteAvailability ?? null;
+
+/*
+ * The recorded times and availability travel with the operation for the same reason the form does:
+ * a replacement whose capture comes back empty would otherwise record none, and the next pass
+ * would compare the destination against local intent and churn.
+ */
+const recordedRemoteFormFields = (mapping: EventMapping): {
+  recordedAvailability?: EventAvailability;
+  recordedEndTime?: Date;
+  recordedStartTime?: Date;
+} => {
+  const availability = getRecordedRemoteAvailability(mapping);
+  const { remoteEndTime, remoteStartTime } = getRecordedRemoteTimes(mapping);
+  return {
+    ...(availability !== null && { recordedAvailability: availability }),
+    ...(remoteEndTime !== null && remoteStartTime !== null && {
+      recordedEndTime: remoteEndTime,
+      recordedStartTime: remoteStartTime,
+    }),
+  };
+};
+
+const hasRemoteTimeDiverged = (
+  mapping: EventMapping,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const { remoteEndTime, remoteStartTime } = getRecordedRemoteTimes(mapping);
+  if (remoteStartTime === null || remoteEndTime === null) {
+    return hasRemoteTimeDivergedFromWritten(mapping, remoteEvent);
+  }
+  return !isSameSerializedSecond(remoteEvent.startTime, remoteStartTime)
+    || !isSameSerializedSecond(remoteEvent.endTime, remoteEndTime);
+};
+
+/* What an event with no availability of its own asks the destination to store. */
+const DEFAULT_INTENDED_AVAILABILITY: EventAvailability = "busy";
+
+const getIntendedAvailability = (localEvent: MaterializedSyncableEvent): EventAvailability =>
+  localEvent.availability ?? DEFAULT_INTENDED_AVAILABILITY;
+
+/*
+ * A server that rewrites the TRANSP it is handed reports the rewrite on the write itself, so its
+ * coerced value is already the recorded baseline by the time any later pass compares against it.
+ * A mapping with no baseline holds no such evidence — which is every mapping in the fleet on the
+ * deploy that first reads the column — so what it is seen holding is weighed against what we
+ * intend rather than adopted: adopting it makes a third party's flip to free silently permanent.
+ * supportedAvailabilities is a static literal in every destination provider rather than an
+ * observation, so it is no evidence of what a server will accept and is not consulted here.
+ */
+const hasRemoteAvailabilityDivergedFromLocal = (
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): boolean => {
+  const observed = remoteEvent.editableAvailability;
+  if (typeof observed !== "string") {
+    return false;
+  }
+  return observed !== getIntendedAvailability(localEvent);
+};
+
+const hasRemoteAvailabilityDiverged = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
+): boolean => {
+  const observed = remoteEvent.editableAvailability;
+  if (typeof observed !== "string") {
+    return false;
+  }
+  const recorded = getRecordedRemoteAvailability(mapping);
+  if (recorded === null) {
+    return storedFormIsObservable
+      && hasRemoteAvailabilityDivergedFromLocal(localEvent, remoteEvent);
+  }
+  return observed !== recorded;
+};
+
+/* Only a remote whose availability still matches what we intend may become the baseline. */
+const resolveRecordedRemoteAvailability = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
+): EventAvailability | null => {
+  const recorded = getRecordedRemoteAvailability(mapping);
+  if (recorded !== null) {
+    return recorded;
+  }
+  if (storedFormIsObservable && hasRemoteAvailabilityDivergedFromLocal(localEvent, remoteEvent)) {
+    return null;
+  }
+  return remoteEvent.editableAvailability ?? null;
+};
+
+const isSameRecordedInstant = (first: Date | null, second: Date | null): boolean => {
+  if (first === null || second === null) {
+    return first === second;
+  }
+  return first.getTime() === second.getTime();
+};
+
+/* Only a remote whose times the destination's own rounding explains may become the baseline. */
+const resolveRecordedRemoteTimes = (
+  mapping: EventMapping,
+  remoteEvent: RemoteEvent,
+): RecordedRemoteTimes => {
+  const recorded = getRecordedRemoteTimes(mapping);
+  if (recorded.remoteStartTime !== null && recorded.remoteEndTime !== null) {
+    return recorded;
+  }
+  if (hasRemoteTimeDivergedFromWritten(mapping, remoteEvent)) {
+    return { remoteEndTime: null, remoteStartTime: null };
+  }
+  return { remoteEndTime: remoteEvent.endTime, remoteStartTime: remoteEvent.startTime };
+};
+
 const getRemoteStateChanges = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
   remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
 ): RemoteStateChanges => {
-  const remoteContentChanged = typeof remoteEvent.editableContentHash === "string"
-    && remoteEvent.editableContentHash !== createEditableEventContentHash(localEvent);
+  const remoteContentChanged = hasRemoteContentDiverged(mapping, localEvent, remoteEvent);
   let contentFields: RemoteContentFieldChanges | null = null;
   if (remoteContentChanged && remoteEvent.editableContent) {
     const localContent = createEditableEventContentSnapshot(localEvent);
@@ -316,16 +835,13 @@ const getRemoteStateChanges = (
       summary: remoteContent.summary !== localContent.summary,
     };
   }
-  const localAvailability = localEvent.availability ?? "busy";
-  const supportedAvailabilities = remoteEvent.supportedAvailabilities ?? [];
-  let expectedRemoteAvailability: MaterializedSyncableEvent["availability"] = "busy";
-  if (supportedAvailabilities.includes(localAvailability)) {
-    expectedRemoteAvailability = localAvailability;
-  }
-  const remoteAvailabilityChanged = typeof remoteEvent.editableAvailability === "string"
-    && remoteEvent.editableAvailability !== expectedRemoteAvailability;
-  const remoteTimeChanged = !isSameSerializedSecond(remoteEvent.startTime, mapping.startTime)
-    || !isSameSerializedSecond(remoteEvent.endTime, mapping.endTime);
+  const remoteAvailabilityChanged = hasRemoteAvailabilityDiverged(
+    mapping,
+    localEvent,
+    remoteEvent,
+    storedFormIsObservable,
+  );
+  const remoteTimeChanged = hasRemoteTimeDiverged(mapping, remoteEvent);
 
   return {
     availability: remoteAvailabilityChanged,
@@ -339,8 +855,9 @@ const hasRemoteStateChanged = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
   remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
 ): boolean => {
-  const changes = getRemoteStateChanges(mapping, localEvent, remoteEvent);
+  const changes = getRemoteStateChanges(mapping, localEvent, remoteEvent, storedFormIsObservable);
   return changes.availability || changes.content || changes.time;
 };
 
@@ -417,6 +934,7 @@ const identifyStaleMappings = (
   localEventsById: Map<string, MaterializedSyncableEvent>,
   authoritativeMappingIds?: ReadonlySet<string>,
   unverifiedMappingIds?: ReadonlySet<string>,
+  storedFormIsObservable = false,
 ): StaleMappingResult => {
   const staleMappingIds: string[] = [];
   const staleMappedEventIds = new Set<string>();
@@ -453,7 +971,12 @@ const identifyStaleMappings = (
 
     const localEventHash = createSyncEventContentHash(localEvent);
     const localHashChanged = mapping.syncEventHash !== localEventHash;
-    const remoteChanges = getRemoteStateChanges(mapping, localEvent, remoteEvent);
+    const remoteChanges = getRemoteStateChanges(
+      mapping,
+      localEvent,
+      remoteEvent,
+      storedFormIsObservable,
+    );
     const remoteStateChanged = remoteChanges.availability
       || remoteChanges.content
       || remoteChanges.time;
@@ -498,7 +1021,11 @@ const buildAddOperations = (
       operations.push({
         event,
         type: "add",
-        ...(hasStaleMapping && existingMapping && { staleMappingId: existingMapping.id }),
+        ...(hasStaleMapping && existingMapping && {
+          staleMappingId: existingMapping.id,
+          ...recordedContentHashFields(existingMapping),
+          ...recordedRemoteFormFields(existingMapping),
+        }),
       });
     }
   }
@@ -522,6 +1049,16 @@ const buildRemoveOperationsForMappings = (mappings: EventMapping[]): SyncOperati
  * of the delete. Reconciliation has just listed the remote copy, so its provider id is
  * already in hand and the lookup is only needed when no remote copy was matched.
  */
+const resolveRepairedDeleteIdentifier = (
+  mapping: EventMapping,
+  remoteEvent: RemoteEvent,
+): string => {
+  if (mapping.deleteIdentifier === mapping.destinationEventUid) {
+    return remoteEvent.deleteId;
+  }
+  return mapping.deleteIdentifier;
+};
+
 const resolveMappingDeleteId = (
   mapping: EventMapping,
   remoteEventsByMappingId: ReadonlyMap<string, RemoteEvent>,
@@ -539,6 +1076,7 @@ const buildReplacementOperations = (
     if (!event) {
       continue;
     }
+    const remoteEvent = remoteEventsByMappingId.get(mapping.id);
     operations.push({
       deleteId: resolveMappingDeleteId(mapping, remoteEventsByMappingId),
       event,
@@ -546,6 +1084,10 @@ const buildReplacementOperations = (
       staleMappingId: mapping.id,
       type: "replace",
       uid: mapping.destinationEventUid,
+      ...recordedContentHashFields(mapping),
+      ...recordedRemoteFormFields(mapping),
+      ...(remoteEvent && repairedFromContentHashFields(mapping, event, remoteEvent)),
+      ...(remoteEvent && settledContentHashFields(mapping, event, remoteEvent)),
     });
   }
   return operations;
@@ -658,12 +1200,83 @@ const buildRemoveOperations = (
   return operations;
 };
 
+interface RecordedRemoteForm {
+  remoteAvailability: EventAvailability | null;
+  remoteContentHash: string | null;
+  remoteContentHashRepairedFrom: string | null;
+  remoteTimes: RecordedRemoteTimes;
+}
+
+const resolveRecordedRemoteForm = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
+): RecordedRemoteForm => ({
+  remoteAvailability: resolveRecordedRemoteAvailability(
+    mapping,
+    localEvent,
+    remoteEvent,
+    storedFormIsObservable,
+  ),
+  remoteContentHash: resolveRecordedRemoteContentHash(mapping, localEvent, remoteEvent),
+  remoteContentHashRepairedFrom: resolveRecordedRepairedFrom(mapping, remoteEvent),
+  remoteTimes: resolveRecordedRemoteTimes(mapping, remoteEvent),
+});
+
+const hasRecordedRemoteForm = (
+  mapping: EventMapping,
+  recorded: RecordedRemoteForm,
+): boolean => {
+  const mappingRemoteTimes = getRecordedRemoteTimes(mapping);
+  return recorded.remoteContentHash === getRecordedRemoteContentHash(mapping)
+    && recorded.remoteContentHashRepairedFrom === getRepairedFromContentHash(mapping)
+    && recorded.remoteAvailability === getRecordedRemoteAvailability(mapping)
+    && isSameRecordedInstant(recorded.remoteTimes.remoteStartTime, mappingRemoteTimes.remoteStartTime)
+    && isSameRecordedInstant(recorded.remoteTimes.remoteEndTime, mappingRemoteTimes.remoteEndTime);
+};
+
+/* Null when the mapping already records what the destination holds and needs no delete-id repair. */
+const buildRecordingMappingUpdate = (
+  mapping: EventMapping,
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+  storedFormIsObservable: boolean,
+): MappingUpdate | null => {
+  const recorded = resolveRecordedRemoteForm(
+    mapping,
+    localEvent,
+    remoteEvent,
+    storedFormIsObservable,
+  );
+  const needsDeleteIdentifierRepair = mapping.deleteIdentifier === mapping.destinationEventUid
+    && remoteEvent.deleteId !== mapping.deleteIdentifier;
+  if (!needsDeleteIdentifierRepair && hasRecordedRemoteForm(mapping, recorded)) {
+    return null;
+  }
+
+  return {
+    deleteIdentifier: resolveRepairedDeleteIdentifier(mapping, remoteEvent),
+    endTime: localEvent.endTime,
+    id: mapping.id,
+    remoteAvailability: recorded.remoteAvailability,
+    ...recordedContentHashUpdate(recorded.remoteContentHash),
+    ...repairedFromUpdate(mapping, recorded.remoteContentHashRepairedFrom),
+    remoteEndTime: recorded.remoteTimes.remoteEndTime,
+    remoteStartTime: recorded.remoteTimes.remoteStartTime,
+    startTime: localEvent.startTime,
+    syncEventHash: createSyncEventContentHash(localEvent),
+    syncEventId: localEvent.id,
+  };
+};
+
 const computeSyncOperations = (
   localEvents: MaterializedSyncableEvent[],
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   scope: ReconciliationScope,
 ): ComputeSyncOperationsResult => {
+  const storedFormIsObservable = scope.storedFormIsObservable ?? false;
   const authoritativeLocalEvents: MaterializedSyncableEvent[] = [];
   const activeMappings: EventMapping[] = [];
   authoritativeLocalEvents.push(...localEvents.filter((event) =>
@@ -691,7 +1304,8 @@ const computeSyncOperations = (
       remoteEvent
       && remoteStateIsVerifiable
       && mappingMatchesOccurrence
-      && !hasRemoteStateChanged(mapping, event, remoteEvent)
+      && !hasRemoteStateChanged(mapping, event, remoteEvent, storedFormIsObservable)
+      && remoteHoldsOccurrenceContent(event, remoteEvent)
     ) {
       databaseOnlyReassignments.push(reassignment);
     } else {
@@ -725,38 +1339,47 @@ const computeSyncOperations = (
       localEventsById,
       scope.authoritativeMappingIds,
       scope.unverifiedMappingIds,
+      storedFormIsObservable,
     );
   const staleMappingIdSet = new Set(staleMappingIds);
   const mappingUpdatesById = new Map<string, MappingUpdate>();
   for (const mapping of standardMappings) {
     const remoteEvent = remoteEventsByMappingId.get(mapping.id);
     const localEvent = localEventsById.get(getMappingSyncEventId(mapping));
-    if (
-      !staleMappingIdSet.has(mapping.id)
-      && localEvent
-      && remoteEvent
-      && mapping.deleteIdentifier === mapping.destinationEventUid
-      && remoteEvent.deleteId !== mapping.deleteIdentifier
-    ) {
-      mappingUpdatesById.set(mapping.id, {
-        deleteIdentifier: remoteEvent.deleteId,
-        endTime: localEvent.endTime,
-        id: mapping.id,
-        startTime: localEvent.startTime,
-        syncEventHash: createSyncEventContentHash(localEvent),
-        syncEventId: localEvent.id,
-      });
+    if (staleMappingIdSet.has(mapping.id) || !localEvent || !remoteEvent) {
+      continue;
     }
+    const mappingUpdate = buildRecordingMappingUpdate(
+      mapping,
+      localEvent,
+      remoteEvent,
+      storedFormIsObservable,
+    );
+    if (mappingUpdate === null) {
+      continue;
+    }
+    mappingUpdatesById.set(mapping.id, mappingUpdate);
   }
   for (const { event, mapping } of databaseOnlyReassignments) {
     const remoteEvent = remoteEventsByMappingId.get(mapping.id);
     if (!remoteEvent) {
       continue;
     }
+    const recorded = resolveRecordedRemoteForm(
+      mapping,
+      event,
+      remoteEvent,
+      storedFormIsObservable,
+    );
     mappingUpdatesById.set(mapping.id, {
       deleteIdentifier: remoteEvent.deleteId,
       endTime: event.endTime,
       id: mapping.id,
+      remoteAvailability: recorded.remoteAvailability,
+      ...recordedContentHashUpdate(recorded.remoteContentHash),
+      ...repairedFromUpdate(mapping, recorded.remoteContentHashRepairedFrom),
+      remoteEndTime: recorded.remoteTimes.remoteEndTime,
+      remoteStartTime: recorded.remoteTimes.remoteStartTime,
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
       syncEventId: event.id,

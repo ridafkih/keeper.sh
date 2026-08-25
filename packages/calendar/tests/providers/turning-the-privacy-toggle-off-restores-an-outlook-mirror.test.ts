@@ -45,6 +45,10 @@ const whileStillPrivateHash = createSyncEventContentHash({
 });
 
 const makeMapping = (): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: OUTLOOK_EVENT_ID,
   destinationEventUid: OUTLOOK_ICAL_UID,

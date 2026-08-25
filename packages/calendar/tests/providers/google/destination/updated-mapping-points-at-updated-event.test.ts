@@ -48,6 +48,10 @@ const movedEvent: MaterializedSyncableEvent = {
 };
 
 const makeMapping = (): EventMapping => ({
+  remoteAvailability: null,
+  remoteContentHash: null,
+  remoteEndTime: null,
+  remoteStartTime: null,
   calendarId: "dest-cal-1",
   deleteIdentifier: GOOGLE_EVENT_ID,
   destinationEventUid: REMOTE_ICAL_UID,
