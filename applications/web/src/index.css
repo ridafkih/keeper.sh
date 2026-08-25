@@ -2,19 +2,12 @@
 
 @custom-variant pointer-hover (@media (hover: hover));
 
-/* Event cards are sized by their event's duration; these variants select on
-   the card's rendered height (the band table in `event-card.tsx` has the fit
-   arithmetic — each floor sits 1px under its band so percentage-height
-   rounding can't drop a card into the band below). The container is named
-   because an unnamed height query would bind to whichever ancestor happens
-   to be a size container. */
+/* Height bands for grid event cards; the band table in `event-card.tsx` has the fit arithmetic. */
 @custom-variant event-compact (@container event-card (height < 27px));
 @custom-variant event-short (@container event-card (height < 43px));
 @custom-variant event-roomy (@container event-card (59px <= height < 75px));
 @custom-variant event-tall (@container event-card (height >= 75px));
-/* Narrow cards drop the time line and tighten the title. Declared last:
-   custom variants emit in declaration order, so `event-narrow:` utilities
-   outrank the height bands on the same element. */
+/* Declared last so `event-narrow:` utilities outrank the height bands on the same element. */
 @custom-variant event-narrow (@container event-card (width < 72px));
 
 html {

@@ -49,70 +49,35 @@ function EventText({ as = "p", size, muted, className, children }: EventTextProp
 
 interface EventCardProps {
   event: CalendarEvent;
-  /** Whether the event has ended, which dims and strikes the card. Owned by
-   * the parent rather than read from the clock here: the card is memoised, so
-   * a clock read inside it would freeze at first render, while the parent
-   * re-renders on whatever tick it already has (the events list on a data
-   * refresh, the week grid's today column on its minute tick). */
+  /** Whether the event has ended (dims and strikes the card); parent-owned since the memoised card can't watch the clock. */
   past: boolean;
-  /** `list` (the default): the events page's stacked, content-sized card
-   * with the relative time. `grid`: a week-grid card whose height is its
-   * event's duration and whose content steps down with that height — see
-   * the height bands on `eventCard`. */
+  /** `list`: the events page's content-sized card; `grid`: a week-grid card sized by its event's duration. */
   layout?: EventCardLayout;
-  /** Placement for the `grid` layout: the column sets `top`/`height`/`left`/
-   * `width` and the stacking order. */
+  /** Grid placement from the column: `top`/`height`/`left`/`width` and the stacking order. */
   style?: CSSProperties;
   color?: EventColor;
 }
 
 /**
- * Height bands for the grid layout, at the week grid's 48px hour (0.8px a
- * minute), with the card's 4px vertical padding, a 16px text-xs line and a
- * 20px text-sm line. The grid card is a size-query container named
- * `event-card`, and the `event-*` variants in `index.css` select on its
- * rendered height:
- *
- *   compact  < 27px   (≤ 30 min)  title (xs), centred, no padding   16px
- *   short    < 43px   (≤ 50 min)  title (sm)                        28px
- *   default  43–58px  (≤ 70 min)  time (xs) + title                 44px
- *   roomy    59–74px  (≤ 90 min)  + one description line            60px
- *   tall     ≥ 75px   (≥ 95 min)  + two description lines           76px
- *
- * Width has one band of its own: below 72px (`event-narrow` — a two- or
- * three-way tile in a 136px column) the time line and description go and
- * the title tightens, since neither end of a time range would fit.
- *
- * Each band's floor sits 1px under its content height (see the variants for
- * why), so `overflow-hidden` only ever clips a pixel of padding, never
- * glyphs. `min-h-5` floors a 15-minute card at 20px —
- * drawn a little taller than its duration so the title still reads, the
- * trade every calendar makes for sub-hour events.
- *
- * Positioning and spacing live on the layout variants rather than `base`:
- * `cn` is plain clsx, so two `position` or `py-*` utilities would be resolved
- * by Tailwind's output order, not by the variant chosen.
+ * Height bands for the grid layout (48px hour); each floor sits 1px under its
+ * content height so percentage rounding only ever clips padding, never glyphs:
+ *   compact  < 27px   (≤ 30 min)  title (xs), centred, no padding
+ *   short    < 43px   (≤ 50 min)  title (sm)
+ *   default  43–58px  (≤ 70 min)  time (xs) + title
+ *   roomy    59–74px  (≤ 90 min)  + one description line
+ *   tall     ≥ 75px   (≥ 95 min)  + two description lines
+ *   narrow   < 72px wide          time and description go, title tightens
  */
 const eventCard = tv({
   base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-(--event-accent)",
   variants: {
     layout: {
       list: "relative flex flex-col gap-0.5 rounded-xl py-2.5 pr-3 pl-4 before:inset-y-2 before:left-1.5",
-      // `@container-[size]/event-card` makes the card the size container the
-      // `event-*` variants query. Grid only: size containment detaches a
-      // box's height from its content — right for a card whose height is its
-      // duration, but it would collapse a content-sized list card to nothing.
-      // The card carries no padding of its own: a size container's queries
-      // measure its content box, so padding here would shrink every band.
-      // The ring is the page colour: invisible against the grid, it cuts a
-      // card out from any card it overlaps so the stack's edges stay legible.
+      // Size containment is grid-only — it would collapse the content-sized list card.
+      // The page-colour ring cuts a card out of any card it overlaps.
       grid: "absolute @container-[size]/event-card min-h-5 rounded-lg ring-1 ring-background before:inset-y-1 before:left-1",
     },
-    // Past cards recede on a muted (still opaque) fill with their content and
-    // accent bar dimmed — never opacity on the card itself, which would let a
-    // card beneath show through in a stack. The fill lives on both branches
-    // rather than `base`, as two `bg-*` utilities would be left to Tailwind's
-    // output order.
+    // The muted fill stays opaque — card opacity would let a stacked card beneath show through.
     past: {
       true: "bg-[color-mix(in_srgb,var(--event-surface)_50%,var(--color-background))] line-through before:opacity-50 *:opacity-50",
       false: "bg-(--event-surface)",
@@ -123,11 +88,7 @@ const eventCard = tv({
   },
 });
 
-/**
- * A tinted event card: the time range, a bold title (falling back to the
- * calendar name), and the description when the calendar shares it. Shared by
- * the events page (`list`) and the calendar pane (`grid`).
- */
+/** A tinted event card, shared by the events page (`list`) and the calendar pane (`grid`). */
 export const EventCard = memo(function EventCard({
   event,
   past,
@@ -141,9 +102,7 @@ export const EventCard = memo(function EventCard({
   if (layout === "grid") {
     return (
       <div className={classes} style={style}>
-        {/* The padding and the compact band's centring sit on this body
-            rather than the card: a container's queries never match the
-            container itself, only its descendants. */}
+        {/* Padding and centring sit on the body: a container's queries never match the container itself. */}
         <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
           <EventText
             size="xs"
@@ -152,8 +111,6 @@ export const EventCard = memo(function EventCard({
           >
             {formatTimeRange(event.startTime, event.endTime)}
           </EventText>
-          {/* No `leading-*` here: the `text-xs` steps bring the xs line-height
-              along with the size. */}
           <EventText
             size="sm"
             className="truncate font-semibold event-compact:text-xs event-narrow:text-xs"
@@ -213,14 +170,10 @@ const eventPill = tv({
   },
 });
 
-/**
- * A one-line event pill — the card's surface and accent bar at pill height —
- * for the week view's all-day band and the month grid's day cells.
- */
+/** A one-line event pill for the week view's all-day band and the month grid's day cells. */
 export const EventPill = memo(function EventPill({ event, past, color = "blue" }: EventPillProps) {
   return (
     <div className={cn(eventPill({ past }), EVENT_COLORS[color])} style={{ height: EVENT_PILL_HEIGHT_PX }}>
-      {/* `min-w-0` lets the flex item shrink below its text so `truncate` bites. */}
       <EventText as="span" size="xs" className="min-w-0 truncate font-medium">
         {event.title ?? event.calendarName}
       </EventText>
