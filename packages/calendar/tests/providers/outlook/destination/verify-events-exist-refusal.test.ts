@@ -80,8 +80,20 @@ describe("verifyEventsExist refusals never vote to delete", () => {
   /* A dead item id is not proof of absence on Graph, which re-keys an item on a cross-folder move.
      Absence needs the uid resolved too, so an unresolvable 404 answers unknown. */
   it("reports a bare 404 id as unknown, and one the mailbox holds nowhere as missing", async () => {
+    /* The mailbox holds three folders and none of them holds the uid, which is what absence takes:
+       a single folder's empty listing only ever speaks for that folder. */
     vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
-      if (new URL(input.toString()).searchParams.has("$filter")) {
+      const url = new URL(input.toString());
+      if (url.pathname.endsWith("/calendars")) {
+        return Promise.resolve(Response.json({
+          value: [
+            { id: "the-mailbox-default-calendar", isDefaultCalendar: true, name: "Calendar" },
+            { id: "external-cal-1", isDefaultCalendar: false, name: "Keeper" },
+            { id: "external-cal-2", isDefaultCalendar: false, name: "Personal" },
+          ],
+        }));
+      }
+      if (url.searchParams.has("$filter")) {
         return Promise.resolve(Response.json({ value: [] }));
       }
       return Promise.resolve(new Response(null, { status: 404 }));

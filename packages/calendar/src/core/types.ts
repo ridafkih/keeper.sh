@@ -78,8 +78,17 @@ type MaterializedSyncableEvent = Omit<
   recurrenceRule?: never;
 };
 
+/*
+ * Whether the DESTINATION itself said anything about this object. A status number cannot carry
+ * this: a batch sub-response that never arrived is reported as status 0, which reads like a
+ * verdict and is not one. Only "answered" is evidence about the object; "unanswered" means the
+ * request reached no destination that had a say, so nothing at all was learned.
+ */
+type DestinationAnswer = "answered" | "unanswered";
+
 interface PushResult {
   success: boolean;
+  destinationAnswer?: DestinationAnswer;
   remoteId?: string;
   deleteId?: string;
   echo?: PushEchoComparison;
@@ -155,8 +164,10 @@ interface RemoteEvent {
 }
 
 /* Absence must rest on positive evidence, so "unknown" stays distinct from "absent": a transient failure,
-   a rate limit or an exhausted budget must never be read as proof the object is gone. */
-type EventPresenceStatus = "absent" | "present" | "unknown";
+   a rate limit or an exhausted budget must never be read as proof the object is gone. "elsewhere" is
+   evidence of the opposite kind: the object was found, but outside the calendar the sync owns, so it
+   may never license a create and must stay distinguishable from a mirror found in the destination. */
+type EventPresenceStatus = "absent" | "elsewhere" | "present" | "unknown";
 
 interface EventPresence {
   event?: RemoteEvent;
@@ -241,6 +252,7 @@ interface SourceEvent {
 
 export type {
   AuthType,
+  DestinationAnswer,
   EventAvailability,
   SourceEventType,
   CalDAVProviderConfig,

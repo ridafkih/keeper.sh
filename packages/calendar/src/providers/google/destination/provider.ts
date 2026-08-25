@@ -5,6 +5,7 @@ import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-vali
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type {
   DeleteResult,
+  DestinationAnswer,
   EventPresence,
   EventVerificationTarget,
   ListRemoteEventsOptions,
@@ -167,6 +168,21 @@ const getImportedEventId = (body: unknown): string | null => {
     return null;
   }
   return body.id;
+};
+
+/*
+ * Whether Google itself said anything about this object. The batch parser is the only place that
+ * knows: it either read a real status line for this index or it did not. A status of 0 is what a
+ * part that never arrived is filled in with, so it is the absence of an answer, never one.
+ */
+const observedAnswer = (response: BatchSubResponse): DestinationAnswer => {
+  if (response.answer) {
+    return response.answer;
+  }
+  if (response.statusCode > 0) {
+    return "answered";
+  }
+  return "unanswered";
 };
 
 const createImportResult = (
@@ -345,6 +361,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         );
       } else {
         results[entry.index] = {
+          destinationAnswer: observedAnswer(response),
           error: extractBatchErrorMessage(response.body, response.statusCode),
           errorType: "GoogleCalendarApiError",
           statusCode: response.statusCode,
@@ -450,6 +467,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         );
       } else {
         results[entry.index] = {
+          destinationAnswer: observedAnswer(response),
           error: extractBatchErrorMessage(response.body, response.statusCode),
           errorType: "GoogleCalendarApiError",
           statusCode: response.statusCode,

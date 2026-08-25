@@ -11,8 +11,10 @@ const DESTINATION_CALENDAR_ID = "cal-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* Graph rewrites the item id when the recipient drags a mirror into another calendar of the same
-   mailbox. The iCalUId survives the move, so it is the only handle that still names the object. */
+/* Graph rewrites the item id when it moves an item, so the mapped id can 404 while the mirror is
+   still live in the destination. The iCalUId survives, so it is the only handle that names it. */
+const DESTINATION_FOLDER_ID = "external-cal-1";
+const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 const MAPPED_ID = "AAMkAGmirror-as-mapped";
 const MOVED_ID = "AAMkAGmirror-after-the-move";
 const MIRROR_UID = "mirror-uid-1";
@@ -29,6 +31,7 @@ interface VerificationTarget {
 interface MailboxEvent {
   categories: string[];
   end: { dateTime: string; timeZone: string };
+  folderId: string;
   iCalUId: string;
   id: string;
   isAllDay: boolean;
@@ -37,9 +40,14 @@ interface MailboxEvent {
   subject: string;
 }
 
-const makeMailboxEvent = (id: string, iCalUId: string): MailboxEvent => ({
+const makeMailboxEvent = (
+  id: string,
+  iCalUId: string,
+  folderId: string = DESTINATION_FOLDER_ID,
+): MailboxEvent => ({
   categories: [KEEPER_CATEGORY],
   end: { dateTime: "2026-09-01T16:00:00.0000000", timeZone: "UTC" },
+  folderId,
   iCalUId,
   id,
   isAllDay: false,
@@ -53,8 +61,11 @@ interface GraphRequest {
   url: string;
 }
 
+const readPathSegments = (url: URL): string[] =>
+  url.pathname.split("/").filter((segment) => segment.length > 0);
+
 const readDirectEventId = (url: URL): string | null => {
-  const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+  const segments = readPathSegments(url);
   const eventsIndex = segments.lastIndexOf("events");
   if (eventsIndex === -1) {
     return null;
@@ -66,8 +77,23 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* A synthetic mailbox: an item id addresses exactly one event and a listing answers only what its
-   own filter names, so the folder listing never sees the event that moved out of the folder. */
+/* Graph answers a listing about exactly the folder its path names; /me/events names the mailbox
+   default calendar, never the whole mailbox. */
+const readAddressedFolderId = (url: URL): string => {
+  const segments = readPathSegments(url);
+  const calendarsIndex = segments.lastIndexOf("calendars");
+  if (calendarsIndex === -1) {
+    return DEFAULT_FOLDER_ID;
+  }
+  const folderId = segments[calendarsIndex + 1];
+  if (!folderId) {
+    return DEFAULT_FOLDER_ID;
+  }
+  return decodeURIComponent(folderId);
+};
+
+/* A synthetic mailbox with real Graph shape: an item id addresses exactly one event mailbox-wide,
+   but a listing only ever answers about the folder its own URL names. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -77,7 +103,9 @@ const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
     requests.push({ method, url: url.toString() });
 
     if (method !== "GET") {
-      return Promise.resolve(Response.json(makeMailboxEvent("AAMkAGcreated", "created-uid")));
+      return Promise.resolve(Response.json(
+        makeMailboxEvent("AAMkAGcreated", "created-uid", readAddressedFolderId(url)),
+      ));
     }
 
     const directId = readDirectEventId(url);
@@ -90,7 +118,10 @@ const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
     }
 
     const filter = decodeURIComponent(url.searchParams.get("$filter") ?? "");
-    const matched = events.filter((event) => filter.includes(event.iCalUId));
+    const folderId = readAddressedFolderId(url);
+    const matched = events.filter(
+      (event) => event.folderId === folderId && filter.includes(event.iCalUId),
+    );
     return Promise.resolve(Response.json({ value: matched }));
   }));
 
@@ -163,7 +194,7 @@ describe("Outlook resolves a moved mirror by iCalUId before concluding anything"
     vi.unstubAllGlobals();
   });
 
-  it("reports a mirror that Graph re-keyed on a cross-folder move as present", async () => {
+  it("reports a mirror that Graph re-keyed in the destination calendar as present", async () => {
     const requests = installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID)]);
 
     const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
@@ -182,9 +213,9 @@ describe("Outlook resolves a moved mirror by iCalUId before concluding anything"
     expect(report).toEqual([{ identifier: REMOVED_ID, status: "absent" }]);
   });
 
-  /* Outlook's create is a create-only POST, so a create decided against a live-but-moved event is a
-     duplicate on a paying customer's calendar that nothing ever reaps. */
-  it("creates nothing when the engine reconciles a mirror that only moved", async () => {
+  /* Outlook's create is a create-only POST, so a create decided against a live-but-re-keyed event
+     is a duplicate on a paying customer's calendar that nothing ever reaps. */
+  it("creates nothing when the engine reconciles a mirror that was only re-keyed", async () => {
     const requests = installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID)]);
 
     const outcome = await executeRemoteOperations(
@@ -197,5 +228,10 @@ describe("Outlook resolves a moved mirror by iCalUId before concluding anything"
     expect(requests.filter((request) => request.method === "POST")).toEqual([]);
     expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
     expect(outcome.result.added).toBe(0);
+    /* Locating the mirror is only half a repair. A mapping still naming the dead id makes the next
+       cycle call the same live event missing again, so the mirror never receives another edit. */
+    expect(outcome.changes.updates ?? []).toContainEqual(
+      expect.objectContaining({ deleteIdentifier: MOVED_ID, id: mapping.id }),
+    );
   });
 });

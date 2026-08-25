@@ -188,6 +188,40 @@ const readSoleEventForUid = (events: OutlookEvent[], uid: string): OutlookEvent 
   return matched[0] ?? null;
 };
 
+const readCalendarIdsFromPage = (body: unknown): string[] | null => {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const page = body as { value?: unknown };
+  if (!Array.isArray(page.value)) {
+    return null;
+  }
+
+  const identifiers: string[] = [];
+  for (const entry of page.value) {
+    if (typeof entry !== "object" || entry === null) {
+      return null;
+    }
+    const calendar = entry as { id?: unknown };
+    if (typeof calendar.id !== "string") {
+      return null;
+    }
+    identifiers.push(calendar.id);
+  }
+  return identifiers;
+};
+
+const readNextCalendarLink = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const page = body as { "@odata.nextLink"?: unknown };
+  if (typeof page["@odata.nextLink"] !== "string") {
+    return null;
+  }
+  return page["@odata.nextLink"];
+};
+
 const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   const tokenState: TokenState = {
     accessToken: config.accessToken,
@@ -505,42 +539,125 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return { event: remoteEvent, identifier, status: "present" };
   };
 
-  /* Graph re-keys an item when it moves between folders of a mailbox, so the dead item id proves
-     nothing on its own. The iCalUId survives the move and is the only handle that still names it. */
-  const resolvePresenceByUid = async (identifier: string, uid: string): Promise<EventPresence> => {
-    /* /me/events reads the mailbox default calendar, not the folder the sync writes to. For a
-       destination that is not the default, that read would call a live mirror gone and Outlook's
-       create-only POST would leave a permanent duplicate. */
-    const url = new URL(calendarEventsUrl);
+  const buildUidListingUrl = (calendarId: string, uid: string): URL => {
+    const url = new URL(
+      `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(calendarId)}/events`,
+    );
     url.searchParams.set("$filter", `iCalUId eq '${uid.replaceAll("'", "''")}'`);
     url.searchParams.set(
       "$select",
       "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
     );
+    return url;
+  };
 
-    const response = await readVerificationResponse(url);
+  /* What the read saw, not what it returned: a listing that could not be read says nothing about the
+     uid, and that has to stay separate from a listing that positively held nothing under it. */
+  type UidListingObservation =
+    | { kind: "unreadable" }
+    | { kind: "empty" }
+    | { kind: "held"; events: OutlookEvent[] };
+
+  const readUidListing = async (
+    calendarId: string,
+    uid: string,
+  ): Promise<UidListingObservation> => {
+    const response = await readVerificationResponse(buildUidListingUrl(calendarId, uid));
     if (!response.ok) {
       await response.body?.cancel?.();
-      return { identifier, status: "unknown" };
+      return { kind: "unreadable" };
     }
 
     const body = await response.json();
     if (!outlookEventListSchema.allows(body)) {
-      return { identifier, status: "unknown" };
+      return { kind: "unreadable" };
     }
 
     const events = outlookEventListSchema.assert(body).value ?? [];
-    // The destination calendar holds nothing under the uid either, so the mirror is positively gone.
     if (events.length === 0) {
-      return { identifier, status: "absent" };
+      return { kind: "empty" };
     }
+    return { events, kind: "held" };
+  };
 
-    const matched = readSoleEventForUid(events, uid);
-    if (!matched) {
+  const buildCalendarListUrl = (nextLink: string | null): URL => {
+    if (nextLink) {
+      return new URL(nextLink);
+    }
+    const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars`);
+    url.searchParams.set("$select", "id");
+    return url;
+  };
+
+  /* A folder-scoped listing answers only about its own folder, so the mailbox's folders have to be
+     enumerated before absence can mean "nowhere". A listing we could not read leaves that unanswered. */
+  const readMailboxCalendarIds = async (): Promise<string[] | null> => {
+    const identifiers: string[] = [];
+    let nextLink: string | null = null;
+    do {
+      config.signal?.throwIfAborted();
+      const response = await readVerificationResponse(buildCalendarListUrl(nextLink));
+      if (!response.ok) {
+        await response.body?.cancel?.();
+        return null;
+      }
+
+      const body = await response.json();
+      const page = readCalendarIdsFromPage(body);
+      if (!page) {
+        return null;
+      }
+      identifiers.push(...page);
+      nextLink = readNextCalendarLink(body);
+    } while (nextLink);
+
+    return identifiers;
+  };
+
+  /* Graph re-keys an item when it moves between folders of a mailbox, so the dead item id proves
+     nothing on its own. The iCalUId survives the move and is the only handle that still names it.
+
+     No single query can settle this: the destination folder's listing cannot see a mirror dragged
+     out of it, and /me/events reads the mailbox default calendar, which a non-default destination
+     is not. So the uid is carried across the whole mailbox and the verdict follows where it was
+     found — in the destination it is present, in another folder it is still the customer's mirror
+     and a create would duplicate it permanently, and nowhere at all is the only proof of absence. */
+  const resolvePresenceByUid = async (identifier: string, uid: string): Promise<EventPresence> => {
+    const inDestination = await readUidListing(config.externalCalendarId, uid);
+    if (inDestination.kind === "unreadable") {
       return { identifier, status: "unknown" };
     }
 
-    return presenceOfEvent(identifier, matched);
+    if (inDestination.kind === "held") {
+      const matched = readSoleEventForUid(inDestination.events, uid);
+      if (!matched) {
+        return { identifier, status: "unknown" };
+      }
+      return presenceOfEvent(identifier, matched);
+    }
+
+    const calendarIds = await readMailboxCalendarIds();
+    if (!calendarIds) {
+      return { identifier, status: "unknown" };
+    }
+
+    for (const calendarId of calendarIds) {
+      if (calendarId === config.externalCalendarId) {
+        continue;
+      }
+
+      config.signal?.throwIfAborted();
+      const observation = await readUidListing(calendarId, uid);
+      if (observation.kind === "unreadable") {
+        return { identifier, status: "unknown" };
+      }
+      if (observation.kind === "held") {
+        return { identifier, status: "elsewhere" };
+      }
+    }
+
+    // The uid named nothing in any folder of the mailbox, so the mirror is positively gone.
+    return { identifier, status: "absent" };
   };
 
   const verifyTarget = async (target: EventVerificationTarget): Promise<EventPresence> => {

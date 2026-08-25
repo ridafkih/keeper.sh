@@ -8,16 +8,17 @@ import type { EventPresence, MaterializedSyncableEvent } from "../../../../src/c
 import type { EventMapping } from "../../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The paying customer syncs into a calendar they created, not the mailbox default, so a mailbox-wide
-   read answers about a folder the sync never writes to. */
-const DESTINATION_FOLDER_ID = "external-cal-1";
+/* The mailbox holds three folders: the default one the sync never writes to, the destination the
+   sync owns, and the folder the recipient drags a mirror into. */
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
+const DESTINATION_FOLDER_ID = "external-cal-1";
+const OTHER_FOLDER_ID = "external-cal-2";
 
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
 const MAPPED_ID = "AAMkAGmirror-as-mapped";
-const REKEYED_ID = "AAMkAGmirror-after-graph-rekeyed-it";
+const MOVED_ID = "AAMkAGmirror-after-the-move";
 const MIRROR_UID = "mirror-uid-1";
 
 interface MailboxEvent {
@@ -65,8 +66,8 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* /me/events addresses the default calendar collection; only /me/calendars/{id}/events addresses
-   the folder the sync actually writes to. */
+/* Graph answers a listing about exactly the folder its path names, and /me/events names the
+   mailbox default calendar only — never the whole mailbox. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -80,6 +81,11 @@ const readAddressedFolderId = (url: URL): string => {
   return decodeURIComponent(folderId);
 };
 
+const isCalendarCollectionRead = (url: URL): boolean => {
+  const segments = readPathSegments(url);
+  return segments.at(-1) === "calendars";
+};
+
 const readFilteredUid = (url: URL): string | null => {
   const filter = decodeURIComponent(url.searchParams.get("$filter") ?? "");
   const matched = /iCalUId eq '(?<uid>[^']*)'/u.exec(filter);
@@ -90,22 +96,15 @@ const readFilteredUid = (url: URL): string | null => {
   return uid;
 };
 
-const throttledResponse = (): Response =>
-  Response.json(
-    { error: { code: "ApplicationThrottled", message: "ApplicationThrottled from Graph." } },
-    { headers: { "Retry-After": "0" }, status: 429 },
-  );
-
-interface MailboxOptions {
-  throttleFilterReads?: boolean;
-}
+const mailboxCalendars = [
+  { id: DEFAULT_FOLDER_ID, isDefaultCalendar: true, name: "Calendar" },
+  { id: DESTINATION_FOLDER_ID, isDefaultCalendar: false, name: "Keeper" },
+  { id: OTHER_FOLDER_ID, isDefaultCalendar: false, name: "Personal" },
+];
 
 /* A synthetic mailbox with real Graph shape: an item id addresses one event mailbox-wide, but a
-   listing only ever answers about the folder its URL names. */
-const installGraphMailbox = (
-  events: MailboxEvent[],
-  options: MailboxOptions = {},
-): GraphRequest[] => {
+   listing only ever answers about the folder its own URL names. */
+const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
   vi.stubGlobal("fetch", vi.fn((input: string | URL | Request, init?: RequestInit) => {
@@ -119,6 +118,10 @@ const installGraphMailbox = (
       ));
     }
 
+    if (isCalendarCollectionRead(url)) {
+      return Promise.resolve(Response.json({ value: mailboxCalendars }));
+    }
+
     const directId = readDirectEventId(url);
     if (directId) {
       const held = events.find((event) => event.id === directId);
@@ -128,14 +131,10 @@ const installGraphMailbox = (
       return Promise.resolve(Response.json(held));
     }
 
-    if (options.throttleFilterReads) {
-      return Promise.resolve(throttledResponse());
-    }
-
     const folderId = readAddressedFolderId(url);
     const uid = readFilteredUid(url);
     const matched = events.filter(
-      (event) => event.folderId === folderId && event.iCalUId === uid,
+      (event) => event.folderId === folderId && (uid === null || event.iCalUId === uid),
     );
     return Promise.resolve(Response.json({ value: matched }));
   }));
@@ -153,8 +152,8 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The engine names a mirror by the id a delete would target plus the uid the mapping already
-   carries; Outlook needs both to tell a re-keyed mirror from a deleted one. */
+/* The engine names a mirror by the id a delete would target plus the uid the mapping carries;
+   Outlook needs both to tell a moved mirror from a deleted one. */
 interface VerificationTarget {
   deleteId: string;
   uid: string;
@@ -204,7 +203,7 @@ const RECONCILIATION_SCOPE = {
 };
 
 const planMissingMirrorReplacement = () => {
-  // The mirror is missing from the windowed listing, so reconciliation can only plan a replacement.
+  // The moved copy left the synced folder, so the windowed listing can only call the mirror missing.
   const { operations } = computeSyncOperations([localEvent], [mapping], [], RECONCILIATION_SCOPE);
   expect(operations).toHaveLength(1);
   expect(operations[0]?.type).toBe("replace");
@@ -222,15 +221,54 @@ const reconcileMissingMirror = () =>
 const postedRequests = (requests: GraphRequest[]): GraphRequest[] =>
   requests.filter((request) => request.method === "POST");
 
-describe("Outlook can prove a mirror absent, and looks in the destination calendar to do it", () => {
+describe("Outlook calls a mirror absent only when the uid names nothing anywhere in the mailbox", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  /* Absence by omission is what main proved, and what restored the event. A mirror that can never
-     be called absent is silently gone forever while later source edits never reach it. */
-  it("restores a mirror the recipient really deleted", async () => {
+  /* The recipient dragged the mirror into another folder of the same mailbox. Outlook's push is a
+     create-only POST, so a create decided here is a permanent duplicate nothing ever reaps. */
+  it("never reports a mirror moved to another calendar of the mailbox as absent", async () => {
+    installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)]);
+
+    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
+
+    expect(report).toHaveLength(1);
+    expect(report[0]?.status).not.toBe("absent");
+  });
+
+  it("creates nothing when the engine reconciles a mirror that moved to another calendar", async () => {
+    const requests = installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)]);
+
+    const outcome = await reconcileMissingMirror();
+
+    expect(postedRequests(requests)).toEqual([]);
+    expect(outcome.result.added).toBe(0);
+  });
+
+  /* A mirror found outside the destination is not the same observation as one found inside it: the
+     sync still has to move or re-adopt it, so the two must stay distinguishable. */
+  it("distinguishes a mirror found elsewhere in the mailbox from one found in the destination", async () => {
+    installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)]);
+    const moved = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
+    vi.unstubAllGlobals();
+
+    installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, DESTINATION_FOLDER_ID)]);
+    const inPlace = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
+
+    expect(inPlace[0]?.status).toBe("present");
+    expect(moved[0]?.status).not.toBe("absent");
+    expect(moved[0]?.status).not.toBe(inPlace[0]?.status);
+  });
+
+  /* Absence has to stay provable, or a mirror the recipient really deleted is silently gone forever
+     while later source edits never reach it. */
+  it("still reports a mirror deleted from the whole mailbox as absent, and restores it", async () => {
     const requests = installGraphMailbox([]);
+
+    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
+
+    expect(report).toEqual([{ identifier: MAPPED_ID, status: "absent" }]);
 
     const outcome = await reconcileMissingMirror();
 
@@ -238,43 +276,11 @@ describe("Outlook can prove a mirror absent, and looks in the destination calend
     expect(postedRequests(requests)).toHaveLength(1);
   });
 
-  it("reports a mirror the recipient really deleted as absent", async () => {
-    installGraphMailbox([]);
-
-    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
-
-    expect(report).toEqual([{ identifier: MAPPED_ID, status: "absent" }]);
-  });
-
-  /* Graph re-keys an item, so the dead item id proves nothing: the uid still names a live mirror
-     and Outlook's create is a create-only POST that would leave a permanent duplicate. */
-  it("reports a re-keyed mirror still in the destination calendar as present, and recreates nothing", async () => {
-    const requests = installGraphMailbox([
-      makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
-    ]);
-
-    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
-
-    expect(report).toHaveLength(1);
-    expect(report[0]).toMatchObject({ identifier: MAPPED_ID, status: "present" });
-    expect(report[0]?.event?.deleteId).toBe(REKEYED_ID);
-
-    const outcome = await reconcileMissingMirror();
-
-    expect(outcome.result.added).toBe(0);
-    expect(postedRequests(requests)).toEqual([]);
-    /* The read located the mirror at its new id. Throwing that away leaves the mapping pointing at
-       a dead id, and every later source edit is reported as a clean no-op that lands nowhere. */
-    expect(outcome.changes.updates ?? []).toContainEqual(
-      expect.objectContaining({ deleteIdentifier: REKEYED_ID, id: mapping.id }),
-    );
-  });
-
-  /* The destination is not the mailbox default, so a uid read against /me/events sees an empty
-     default calendar and calls a live mirror gone. */
+  /* The destination is not the mailbox default, so a read of /me/events answers about a folder the
+     sync never writes to and would call a live mirror gone. */
   it("never reports a live mirror in a non-default destination calendar as absent", async () => {
     const requests = installGraphMailbox([
-      makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
+      makeMailboxEvent(MOVED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
       makeMailboxEvent("AAMkAGunrelated", "unrelated-uid", DEFAULT_FOLDER_ID),
     ]);
 
@@ -286,27 +292,5 @@ describe("Outlook can prove a mirror absent, and looks in the destination calend
 
     expect(outcome.result.added).toBe(0);
     expect(postedRequests(requests)).toEqual([]);
-  });
-
-  it("answers unknown when the uid read is throttled", async () => {
-    const requests = installGraphMailbox([], { throttleFilterReads: true });
-
-    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
-
-    expect(report).toEqual([{ identifier: MAPPED_ID, status: "unknown" }]);
-    expect(postedRequests(requests)).toEqual([]);
-  });
-
-  /* Two events under one uid name no single object, so nothing here is an observation of the
-     mapped mirror and neither absence nor presence is proven. */
-  it("answers unknown when the uid read matches more than one event", async () => {
-    installGraphMailbox([
-      makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
-      makeMailboxEvent("AAMkAGsecond-copy", MIRROR_UID, DESTINATION_FOLDER_ID),
-    ]);
-
-    const report = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
-
-    expect(report).toEqual([{ identifier: MAPPED_ID, status: "unknown" }]);
   });
 });

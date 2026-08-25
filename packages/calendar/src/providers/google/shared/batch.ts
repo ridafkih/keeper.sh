@@ -1,4 +1,5 @@
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
+import type { DestinationAnswer } from "../../../core/types";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { chunkArray } from "../../../core/utils/chunk";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
@@ -17,7 +18,22 @@ interface BatchSubResponse {
   statusCode: number;
   headers: Record<string, string>;
   body: unknown;
+  /*
+   * Whether Google really returned this sub-response. A part the batch omitted, or one whose
+   * status line we could not read, has no status at all - the 0 below is a placeholder for the
+   * missing number, never a verdict the destination handed down.
+   */
+  answer?: DestinationAnswer;
 }
+
+const NO_STATUS_LINE = 0;
+
+const unansweredSubResponse = (): BatchSubResponse => ({
+  answer: "unanswered",
+  body: null,
+  headers: {},
+  statusCode: NO_STATUS_LINE,
+});
 
 const generateBoundary = (): string =>
   `batch_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -95,23 +111,30 @@ const parsePartHeaders = (headerBlock: string): Record<string, string> => {
   return headers;
 };
 
-const parseStatusCode = (statusLine: string): number => {
+/* Null rather than 0: a part whose first line is not `HTTP/x.y NNN` carries no status the
+   destination sent, and reporting that absence as a number invites it to be read as one. */
+const parseStatusCode = (statusLine: string): number | null => {
   const statusMatch = statusLine.match(/HTTP\/[\d.]+ (\d+)/);
   if (statusMatch && statusMatch[1]) {
     return Number.parseInt(statusMatch[1], 10);
   }
-  return 0;
+  return null;
 };
 
-const parseHttpResponse = (httpBlock: string): { statusCode: number; headers: Record<string, string>; body: unknown } => {
+const parseHttpResponse = (httpBlock: string): BatchSubResponse => {
   const lines = httpBlock.split(/\r?\n/);
   const [statusLine] = lines;
 
   if (!statusLine) {
-    return { statusCode: 0, headers: {}, body: null };
+    return unansweredSubResponse();
   }
 
-  const statusCode = parseStatusCode(statusLine);
+  const parsedStatusCode = parseStatusCode(statusLine);
+  if (parsedStatusCode === null) {
+    return unansweredSubResponse();
+  }
+
+  const statusCode = parsedStatusCode;
   const headers: Record<string, string> = {};
   let bodyStartIndex = 1;
 
@@ -140,7 +163,7 @@ const parseHttpResponse = (httpBlock: string): { statusCode: number; headers: Re
     }
   }
 
-  return { statusCode, headers, body };
+  return { answer: "answered", body, headers, statusCode };
 };
 
 const DEFAULT_SEPARATOR_LENGTH = 2;
@@ -178,11 +201,7 @@ const parseBatchResponseBody = (responseText: string, boundary: string): BatchSu
       index = contentIndex;
     }
 
-    results.set(index, {
-      statusCode: parsed.statusCode,
-      headers: parsed.headers,
-      body: parsed.body,
-    });
+    results.set(index, parsed);
 
     if (index > maxIndex) {
       maxIndex = index;
@@ -195,24 +214,46 @@ const parseBatchResponseBody = (responseText: string, boundary: string): BatchSu
     if (entry) {
       ordered.push(entry);
     } else {
-      ordered.push({ statusCode: 0, headers: {}, body: null });
+      /* An index no part in the envelope claimed: Google never answered about this request. */
+      ordered.push(unansweredSubResponse());
     }
   }
 
   return ordered;
 };
 
+/*
+ * RFC 2045 5.1 lets any Content-Type parameter be spelled as a quoted-string, and RFC 2046 5.1.1
+ * applies that to `boundary`. The quoted form may legally hold characters a bare token cannot -
+ * `;` and spaces among them - so the value is read as a quoted-string first and only then as a
+ * token. Matching the quoted form with a token character class keeps the quotes in the boundary,
+ * and a boundary that never occurs in the body collapses the whole envelope into one part.
+ */
+const BOUNDARY_PARAMETER = /boundary\s*=\s*(?:"([^"]*)"|([^\s;]+))/i;
+
 const extractResponseBoundary = (contentType: string | null): string | null => {
   if (!contentType) {
     return null;
   }
 
-  const match = contentType.match(/boundary=([^\s;]+)/);
-  if (!match || !match[1]) {
+  const match = contentType.match(BOUNDARY_PARAMETER);
+  if (!match) {
     return null;
   }
 
-  return match[1];
+  const [, quoted, token] = match;
+  if (typeof quoted === "string") {
+    if (!quoted) {
+      return null;
+    }
+    return quoted;
+  }
+
+  if (!token) {
+    return null;
+  }
+
+  return token;
 };
 
 class GoogleBatchApiError extends Error {
@@ -305,7 +346,7 @@ const retryRateLimitedSubRequests = async (
 ): Promise<BatchSubResponse[]> => {
   const results: BatchSubResponse[] = Array.from(
     { length: subRequests.length },
-    () => ({ statusCode: 0, headers: {}, body: null }),
+    () => unansweredSubResponse(),
   );
 
   const pending = subRequests.map((request, index) => ({ request, index }));
@@ -343,7 +384,14 @@ const retryRateLimitedSubRequests = async (
   }
 
   for (const entry of pending) {
-    results[entry.index] = { statusCode: HTTP_STATUS.TOO_MANY_REQUESTS, headers: {}, body: null };
+    /* Every attempt came back rate-limited, so the destination did answer - it just never got
+       past its own throttle. */
+    results[entry.index] = {
+      answer: "answered",
+      body: null,
+      headers: {},
+      statusCode: HTTP_STATUS.TOO_MANY_REQUESTS,
+    };
   }
 
   return results;
