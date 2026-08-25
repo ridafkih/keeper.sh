@@ -60,6 +60,7 @@ export interface CalendarDetail {
   disabled: boolean;
   ingestFailureCount: number;
   ingestLastFailureAt: string | null;
+  markEventsAsPrivate: boolean;
   providerMissingSince: string | null;
   destinationIds: string[];
   sourceIds: string[];

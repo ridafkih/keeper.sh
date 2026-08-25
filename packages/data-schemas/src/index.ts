@@ -192,6 +192,7 @@ const outlookEventSchema = type({
   "originalEndTimeZone?": "string",
   "originalStartTimeZone?": "string",
   "recurrence?": outlookRecurrenceSchema.or(type("null")),
+  "sensitivity?": "string",
   "showAs?": "string",
   "start?": { "dateTime?": "string", "timeZone?": "string" },
   "subject?": "string | null",

@@ -64,7 +64,7 @@ function RootComponent() {
   const { runtimeConfig, viteAssets } = Route.useRouteContext();
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script

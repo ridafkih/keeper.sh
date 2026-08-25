@@ -48,6 +48,7 @@ const GET = withWideEvent(
         disabled: calendarsTable.disabled,
         ingestFailureCount: calendarsTable.ingestFailureCount,
         ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
+        markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
         providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
@@ -152,6 +153,9 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
+            if (updated && "markEventsAsPrivate" in updates) {
+              await requestUserSync(transaction, userIdToUpdate);
+            }
             await applyFeedMembership(transaction, updated ?? null);
             return updated ?? null;
           });
