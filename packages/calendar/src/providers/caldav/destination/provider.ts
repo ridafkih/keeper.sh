@@ -9,13 +9,14 @@ import { getErrorMessage } from "../../../core/utils/error";
 import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
+  EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import type { CalDAVListingStats } from "../shared/client";
+import type { CalDAVListingStats, CalDAVObjectAnswer } from "../shared/client";
 import {
   assertAllEventsSupported,
   assertAllResourcesRead,
@@ -171,6 +172,11 @@ const toCalendarBaseUrl = (calendarUrl: string): string => {
   return `${calendarUrl}/`;
 };
 
+const toUnknownPresence = (deleteId: string): EventPresence => ({
+  identifier: deleteId,
+  status: "unknown",
+});
+
 const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
   const resources = parseICalCalendarsToRemoteEvents(
     [data],
@@ -241,6 +247,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     }
   };
 
+  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
+
+  /* CalDAV addresses an object by its href, and that is what a listing reports, so a create hands
+     back the path it wrote to rather than the UID it derived the filename from. */
+  const toObjectPath = (uid: string): string => new URL(`${uid}.ics`, calendarBaseUrl).pathname;
+
   const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
@@ -267,14 +279,19 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               }
               return {
                 conflictResolved: true,
-                deleteId: uid,
+                deleteId: toObjectPath(uid),
                 echo: CALDAV_PUSH_ECHO,
                 remoteId: uid,
                 success: true,
               };
             }
 
-            return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
+            return {
+              deleteId: toObjectPath(uid),
+              echo: CALDAV_PUSH_ECHO,
+              remoteId: uid,
+              success: true,
+            };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
@@ -284,8 +301,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         }, config.safeFetchOptions?.signal),
       ),
     );
-
-  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
 
   const toObjectUrl = (deleteId: string): string => {
     if (deleteId.includes("/")) {
@@ -326,6 +341,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
+            // A refused PUT is never evidence that delete-then-create would put the event back: RFC 4791 5.3.2 payload preconditions refuse the same bytes again.
             return createFailureResult(error);
           }
         }, config.safeFetchOptions?.signal),
@@ -370,7 +386,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           try {
             await deleteEventObject(deleteId);
             removeCounts.succeeded += 1;
-            return { success: true };
+            return { removedObject: true, success: true };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
@@ -459,7 +475,59 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const presenceOfAnswer = (
+    deleteId: string,
+    answer: CalDAVObjectAnswer | undefined,
+  ): EventPresence => {
+    if (!answer || answer.presence === "unknown") {
+      return { identifier: deleteId, status: "unknown" };
+    }
+    if (answer.presence === "absent") {
+      return { identifier: deleteId, status: "absent" };
+    }
+    if (!answer.data) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    const [parsed] = parseCalendarObjectEvents(answer.data);
+    if (!parsed || !isKeeperEvent(parsed.uid)) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    return {
+      event: toCalDAVRemoteEvent(parsed, deleteId),
+      identifier: deleteId,
+      status: "present",
+    };
+  };
+
+  const verifyEventsExist = async (deleteIds: string[]): Promise<EventPresence[]> => {
+    if (deleteIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+      const answers = await client.verifyCalendarObjectsByUrls({
+        calendarUrl,
+        objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
+      });
+
+      return deleteIds.map((deleteId, index) => presenceOfAnswer(deleteId, answers[index]));
+    } catch (error) {
+      if (config.safeFetchOptions?.signal?.aborted) {
+        throw error;
+      }
+      // A refused, throttled or failed read tells us nothing about the object, so it is never absence.
+      return deleteIds.map((deleteId) => toUnknownPresence(deleteId));
+    }
+  };
+
   return {
+    /* Our create PUTs to an href derived fresh from the UID, so a refusal tied to the stored
+       object -- a mismatched href, a precondition on what is already there -- does not repeat.
+       A refusal tied to the bytes themselves does, and the failure counter is what bounds it. */
+    createEscapesPayloadRefusal: true,
     pushEvents,
     updateEvents,
     deleteEvents,
@@ -467,6 +535,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeCalDAVEvent,
+    verifyEventsExist,
   };
 };
 

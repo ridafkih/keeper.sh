@@ -121,6 +121,9 @@ type PushEchoComparison =
 
 interface DeleteResult {
   success: boolean;
+  /* Positive evidence an object actually left the destination. A delete can succeed without
+     removing anything (Outlook maps a 404 to success), and only removal licenses a recreate. */
+  removedObject?: boolean;
   error?: string;
   errorType?: string;
   statusCode?: number;
@@ -151,6 +154,16 @@ interface RemoteEvent {
   supportedAvailabilities?: EventAvailability[];
 }
 
+/* Absence must rest on positive evidence, so "unknown" stays distinct from "absent": a transient failure,
+   a rate limit or an exhausted budget must never be read as proof the object is gone. */
+type EventPresenceStatus = "absent" | "present" | "unknown";
+
+interface EventPresence {
+  event?: RemoteEvent;
+  identifier: string;
+  status: EventPresenceStatus;
+}
+
 type SyncOperation =
   | { type: "add"; event: MaterializedSyncableEvent; staleMappingId?: string }
   | { type: "remove"; uid: string; deleteId: string; startTime: Date; mappingId?: string }
@@ -160,6 +173,7 @@ type SyncOperation =
     staleMappingId: string;
     uid: string;
     deleteId: string;
+    remoteMissing?: boolean;
   };
 
 interface ListRemoteEventsOptions {
@@ -239,6 +253,8 @@ export type {
   DeleteResult,
   SyncResult,
   RemoteEvent,
+  EventPresence,
+  EventPresenceStatus,
   SyncOperation,
   ListRemoteEventsOptions,
   BroadcastSyncStatus,

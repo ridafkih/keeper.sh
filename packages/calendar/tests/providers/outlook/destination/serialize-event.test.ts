@@ -86,7 +86,7 @@ describe("serializeOutlookEvent", () => {
     expect(event.sensitivity).toBe("private");
   });
 
-  it("omits sensitivity when isPrivate is not set", () => {
+  it("states sensitivity as normal when isPrivate is not set, so an update can clear it", () => {
     const event = serializeOutlookEvent({
       calendarId: "calendar-id",
       calendarName: "Calendar",
@@ -99,6 +99,6 @@ describe("serializeOutlookEvent", () => {
       summary: "Doctor appointment",
     });
 
-    expect(event.sensitivity).toBeUndefined();
+    expect(event.sensitivity).toBe("normal");
   });
 });

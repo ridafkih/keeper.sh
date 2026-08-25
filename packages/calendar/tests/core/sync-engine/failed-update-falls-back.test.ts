@@ -38,7 +38,9 @@ const makeReplacement = (index: number): Extract<SyncOperation, { type: "replace
 
 const createUpdateCapableProvider = (
   updateResults: PushResult[],
-  deleteResults: DeleteResult[] = [{ success: true }, { success: true }],
+  /* Every real destination reports removedObject only when an object actually left it: a bare
+     success is what Outlook and CalDAV answer for a 404, which removes nothing. */
+  deleteResults: DeleteResult[] = [{ removedObject: true, success: true }, { removedObject: true, success: true }],
 ) => {
   const deleteCalls: string[][] = [];
   const pushCalls: MaterializedSyncableEvent[][] = [];

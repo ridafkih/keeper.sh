@@ -97,6 +97,7 @@ describe("in-place update mapping changes", () => {
     expect(checkpointed).toHaveLength(1);
     expect(checkpointed[0]?.updates).toEqual([{
       deleteIdentifier: CANONICAL_DELETE_IDENTIFIER,
+      destinationEventUid: mapping.destinationEventUid,
       endTime: event.endTime,
       id: MAPPING_ID,
       startTime: event.startTime,

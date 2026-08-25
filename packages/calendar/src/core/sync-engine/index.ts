@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EventPresence,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
   PushResult,
@@ -15,6 +16,7 @@ import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
+import { getErrorMessage } from "../utils/error";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -289,12 +291,116 @@ const processAddResults = (
   return { changes, added, addFailed, conflictsResolved, errors };
 };
 
+const GONE_STATUS_CODES = new Set([404, 410]);
+
+const isUpdateTargetGone = (pushResult: PushResult | undefined): boolean =>
+  typeof pushResult?.statusCode === "number" && GONE_STATUS_CODES.has(pushResult.statusCode);
+
+const needsReplacementFallback = (pushResult: PushResult | undefined): boolean =>
+  isUpdateTargetGone(pushResult);
+
+/* The destination answered "come back later" - an outage, a throttle, or its copy moving under
+   us - so nothing was learned about the object. */
+const RETRYABLE_UPDATE_STATUS_CODES = new Set([408, 409, 412, 425, 429]);
+
+/* The transport never delivered the request, so the destination never had a say. */
+const TRANSPORT_ERROR_TYPES = new Set(["AbortError", "FetchError", "TimeoutError", "TypeError"]);
+
+/* The destination refused us rather than the object: a delete-then-add carries the same bytes
+   with the same rights into the same refusal - RFC 4791 answers 403 for both a payload
+   precondition and a missing DAV privilege - so escalating could only destroy the customer's
+   event without putting it back. */
+const REFUSED_WRITE_STATUS_CODES = new Set([401, 403]);
+
+/* The destination refused the PAYLOAD. Whether a create can still succeed is not something the
+   status can say: it depends on what the create verb does with the same bytes. CalDAV PUTs them
+   to a freshly derived href with its own preconditions, so it can; Google and Outlook carry the
+   same serialization to the same collection, so it cannot. Only the provider knows. */
+const PAYLOAD_REFUSAL_STATUS_CODES = new Set([400, 413, 415, 422, 431]);
+
+const isTransportError = (errorType: string | undefined): boolean => {
+  if (!errorType) {
+    return false;
+  }
+  return TRANSPORT_ERROR_TYPES.has(errorType);
+};
+
+const isRetryableStatus = (statusCode: number): boolean => {
+  if (RETRYABLE_UPDATE_STATUS_CODES.has(statusCode)) {
+    return true;
+  }
+  return statusCode >= 500;
+};
+
+/*
+ * Which failures may count towards the replacement fallback. Everything above is excluded
+ * because escalating it would risk deleting a live event for nothing; a failure carrying no
+ * status and no transport error is ours - an unaddressable target URL, a serializer - and will
+ * repeat forever, so it is the one thing that must eventually escape.
+ */
+const isDurableUpdateFailure = (
+  pushResult: PushResult | undefined,
+  createEscapesPayloadRefusal: boolean,
+): boolean => {
+  const { errorType, statusCode } = pushResult ?? {};
+  if (typeof statusCode === "number") {
+    if (isRetryableStatus(statusCode) || REFUSED_WRITE_STATUS_CODES.has(statusCode)) {
+      return false;
+    }
+    if (PAYLOAD_REFUSAL_STATUS_CODES.has(statusCode)) {
+      return createEscapesPayloadRefusal;
+    }
+    return true;
+  }
+  return !isTransportError(errorType);
+};
+
+/* Positive evidence is the same durable failure observed on this mapping in this many
+   consecutive cycles, never the status of one request. */
+const UPDATE_FAILURES_BEFORE_REPLACEMENT = 3;
+
+const countUpdateFailure = (mapping: EventMapping | undefined): number =>
+  (mapping?.consecutiveUpdateFailures ?? 0) + 1;
+
+/* A mapping that finally accepted an update starts its evidence over. */
+const clearedUpdateFailures = (mapping: EventMapping | undefined): { consecutiveUpdateFailures?: number } => {
+  if (!mapping?.consecutiveUpdateFailures) {
+    return {};
+  }
+  return { consecutiveUpdateFailures: 0 };
+};
+
+/* Carries the mapping forward unchanged apart from the counter: a failed update learned nothing
+   about the version the destination still holds. */
+const toFailureCarry = (mapping: EventMapping, consecutiveUpdateFailures: number): PendingUpdate => ({
+  consecutiveUpdateFailures,
+  deleteIdentifier: mapping.deleteIdentifier,
+  destinationEventUid: mapping.destinationEventUid,
+  endTime: mapping.endTime,
+  id: mapping.id,
+  startTime: mapping.startTime,
+  syncEventHash: mapping.syncEventHash,
+  syncEventId: mapping.syncEventId,
+});
+
+const describeUpdateFailure = (
+  operation: Extract<SyncOperation, { type: "replace" }>,
+  pushResult: PushResult | undefined,
+): string => {
+  const cause = pushResult?.errorType ?? "unknown error";
+  const status = pushResult?.statusCode ?? "no status";
+  return `update failed for event ${operation.event.id}: ${cause} (${status})`;
+};
+
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
+  mappingsById: Map<string, EventMapping>,
+  createEscapesPayloadRefusal: boolean,
 ): {
   changes: PendingChanges;
   updated: number;
+  updateFailed: number;
   conflictsResolved: number;
   errors: OperationError[];
   unresolved: Extract<SyncOperation, { type: "replace" }>[];
@@ -303,6 +409,7 @@ const processUpdateResults = (
   const errors: OperationError[] = [];
   const unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
   let updated = 0;
+  let updateFailed = 0;
   let conflictsResolved = 0;
 
   for (let index = 0; index < replacements.length; index++) {
@@ -314,15 +421,29 @@ const processUpdateResults = (
     }
 
     if (!pushResult?.success) {
-      unresolved.push(operation);
-      if (pushResult?.error) {
-        errors.push({
-          type: "update",
-          error: pushResult.error,
-          ...(pushResult.errorType && { errorType: pushResult.errorType }),
-          ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
-        });
+      if (needsReplacementFallback(pushResult)) {
+        unresolved.push(operation);
+        continue;
       }
+      const failingMapping = mappingsById.get(operation.staleMappingId);
+      if (failingMapping && isDurableUpdateFailure(pushResult, createEscapesPayloadRefusal)) {
+        const failures = countUpdateFailure(failingMapping);
+        if (failures >= UPDATE_FAILURES_BEFORE_REPLACEMENT) {
+          unresolved.push(operation);
+          /* The evidence has been spent on this promotion. Leaving it standing would re-promote
+             the same mapping every cycle for as long as the replacement keeps failing. */
+          updates.push(toFailureCarry(failingMapping, 0));
+          continue;
+        }
+        updates.push(toFailureCarry(failingMapping, failures));
+      }
+      updateFailed += 1;
+      errors.push({
+        type: "update",
+        error: pushResult?.error ?? describeUpdateFailure(operation, pushResult),
+        ...(pushResult?.errorType && { errorType: pushResult.errorType }),
+        ...(typeof pushResult?.statusCode === "number" && { statusCode: pushResult.statusCode }),
+      });
       continue;
     }
 
@@ -331,7 +452,9 @@ const processUpdateResults = (
       conflictsResolved += 1;
     }
     updates.push({
+      ...clearedUpdateFailures(mappingsById.get(operation.staleMappingId)),
       deleteIdentifier: pushResult.deleteId ?? pushResult.remoteId ?? operation.deleteId,
+      ...(pushResult.remoteId && { destinationEventUid: pushResult.remoteId }),
       endTime: operation.event.endTime,
       id: operation.staleMappingId,
       startTime: operation.event.startTime,
@@ -340,7 +463,7 @@ const processUpdateResults = (
     });
   }
 
-  return { changes: { inserts: [], deletes: [], updates }, updated, conflictsResolved, errors, unresolved };
+  return { changes: { inserts: [], deletes: [], updates }, updated, updateFailed, conflictsResolved, errors, unresolved };
 };
 
 const processDeleteResults = (
@@ -424,22 +547,107 @@ const executeAddRun = async (
   };
 };
 
+const getErrorTypeName = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.constructor.name;
+  }
+  return "UnknownError";
+};
+
+const isRunLevelAbort = (error: unknown): boolean =>
+  error instanceof Error
+  && (error.name === "AbortError" || error.name === "TimeoutError");
+
+/* A provider that throws carries its numeric status on the error rather than on any returned
+   result - Google's whole-batch non-2xx is a throw - so a thrown 429 or 503 must be read off the
+   error or it would classify as the status-less failure it is not. */
+const statusFromThrownError = (error: unknown): number | null => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const { status, statusCode } = error as Error & { status?: unknown; statusCode?: unknown };
+  if (typeof status === "number") {
+    return status;
+  }
+  if (typeof statusCode === "number") {
+    return statusCode;
+  }
+  return null;
+};
+
+/* One failed batch is one failure. The run never reached a single object, so it can say nothing
+   about any individual mapping: fanning it out into a result per mapping would manufacture
+   per-mapping evidence out of an outage, and a status-less throw stays unknown either way. */
+const runLevelUpdateFailure = (error: unknown): OperationError => {
+  const statusCode = statusFromThrownError(error);
+  return {
+    type: "update",
+    error: getErrorMessage(error),
+    errorType: getErrorTypeName(error),
+    ...(statusCode !== null && { statusCode }),
+  };
+};
+
+type UpdateRunOutcome =
+  | { pushResults: PushResult[] }
+  | { runFailure: OperationError };
+
+const runUpdateEvents = async (
+  updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
+  updates: EventUpdate[],
+): Promise<UpdateRunOutcome> => {
+  try {
+    return { pushResults: await updateEvents(updates) };
+  } catch (error) {
+    if (isRunLevelAbort(error)) {
+      throw error;
+    }
+    return { runFailure: runLevelUpdateFailure(error) };
+  }
+};
+
+/* Nothing was learned about any mapping, so every mapping is carried forward untouched: no
+   counter moves, and nothing escalates towards a delete-then-add. */
+const failedUpdateRun = (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  runFailure: OperationError,
+): UpdateRunResult => ({
+  runResult: {
+    changes: { inserts: [], deletes: [], updates: [] },
+    result: { added: 0, addFailed: replacements.length, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: [runFailure],
+  },
+  unresolved: [],
+});
+
 const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
+  mappingsById: Map<string, EventMapping>,
+  createEscapesPayloadRefusal: boolean,
 ): Promise<UpdateRunResult> => {
   const updates: EventUpdate[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
     event: operation.event,
   }));
-  const pushResults = await updateEvents(updates);
-  const { updated, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults);
+  const outcome = await runUpdateEvents(updateEvents, updates);
+  if ("runFailure" in outcome) {
+    return failedUpdateRun(replacements, outcome.runFailure);
+  }
+  const { pushResults } = outcome;
+  const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(
+    replacements,
+    pushResults,
+    mappingsById,
+    createEscapesPayloadRefusal,
+  );
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
     runResult: {
       changes,
-      result: { added: updated, addFailed: 0, removed: 0, removeFailed: 0 },
+      result: { added: updated, addFailed: updateFailed, removed: 0, removeFailed: 0 },
       conflictsResolved,
       errors,
       pushEcho,
@@ -606,14 +814,37 @@ const executeRemoves = async (
   await checkSuperseded(state, isCurrent);
 };
 
+/* A delete reporting success is not evidence that anything left the destination: Outlook maps a
+   404 to success. Only the provider's own observation of a removal licenses a recreate, or a
+   still-live event gets duplicated on a customer calendar. */
+const didRemoveObject = (deleteResult: DeleteResult | undefined): boolean => {
+  if (deleteResult?.success !== true) {
+    return false;
+  }
+  return deleteResult.removedObject === true;
+};
+
 const replaceViaDeleteThenAdd = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
   mappingsByRemoteIdentity: Map<string, EventMapping>,
   state: ChunkedExecutionState,
+  requiresRemovalEvidence: boolean,
   checkpoint?: CheckpointCallback,
 ): Promise<boolean> => {
+  /* A promoted update failure has no reconciliation behind it, so it must earn the recreate with
+     the same evidence recreateMissingMirrors demands rather than a bare delete success. When the
+     delete removed nothing we cannot tell a mirror the recipient deleted from one mapped under a
+     stale identifier, and guessing either way destroys or duplicates a real event -- so we leave
+     it to the next reconcile, which has the listing and the verification to settle it. */
+  const licensesRecreate = (deleteResult: DeleteResult | undefined): boolean => {
+    if (requiresRemovalEvidence) {
+      return didRemoveObject(deleteResult);
+    }
+    return deleteResult?.success === true;
+  };
+
   const removes: Extract<SyncOperation, { type: "remove" }>[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
     startTime: operation.event.startTime,
@@ -636,15 +867,13 @@ const replaceViaDeleteThenAdd = async (
 
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
   for (let index = 0; index < replacements.length; index++) {
-    if (deleteResults[index]?.success) {
-      const replacement = replacements[index];
-      if (replacement) {
-        adds.push({
-          event: replacement.event,
-          staleMappingId: replacement.staleMappingId,
-          type: "add",
-        });
-      }
+    const replacement = replacements[index];
+    if (replacement && licensesRecreate(deleteResults[index])) {
+      adds.push({
+        event: replacement.event,
+        staleMappingId: replacement.staleMappingId,
+        type: "add",
+      });
     }
   }
 
@@ -659,11 +888,201 @@ const replaceViaDeleteThenAdd = async (
   return true;
 };
 
+/* Absence has exactly two admissible proofs: a verification read that positively reports the
+   object gone, or a delete that reports it removed something. Nothing else — no status code, no
+   bare delete success — may stand in for either. */
+const isEventPresence = (entry: EventPresence | RemoteEvent): entry is EventPresence =>
+  "status" in entry;
+
+const absencesFromPresenceReport = (report: EventPresence[]): Set<string> => {
+  const absent = new Set<string>();
+  for (const presence of report) {
+    if (presence.status === "absent") {
+      absent.add(presence.identifier);
+    }
+  }
+  return absent;
+};
+
+/* An object handed back under an identifier we never asked about may be the very object we did ask
+   about wearing a new key: a move or an immutable-id preference renames it. Omission then proves
+   nothing, so the whole answer stays unproven rather than licensing a create. */
+const answersOnlyAboutIdentifiers = (identifiers: string[], found: RemoteEvent[]): boolean => {
+  const asked = new Set(identifiers);
+  for (const event of found) {
+    if (!asked.has(event.deleteId) && !asked.has(event.uid)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/* Outlook answers with the events the read actually found and throws when the read itself failed,
+   so an identifier missing from a returned listing is one the destination positively does not hold. */
+const absencesFromFoundEvents = (identifiers: string[], found: RemoteEvent[]): Set<string> => {
+  if (!answersOnlyAboutIdentifiers(identifiers, found)) {
+    return new Set();
+  }
+
+  const present = new Set<string>();
+  for (const event of found) {
+    present.add(event.deleteId);
+    present.add(event.uid);
+  }
+
+  const absent = new Set<string>();
+  for (const identifier of identifiers) {
+    if (!present.has(identifier)) {
+      absent.add(identifier);
+    }
+  }
+  return absent;
+};
+
+const readVerification = async (
+  verifyEventsExist: NonNullable<CalendarSyncProvider["verifyEventsExist"]>,
+  identifiers: string[],
+): Promise<EventPresence[] | RemoteEvent[] | null> => {
+  try {
+    return await verifyEventsExist(identifiers);
+  } catch {
+    // A read that failed tells us nothing about the object, so it leaves every identifier unproven.
+    return null;
+  }
+};
+
+const verifyAbsentIdentifiers = async (
+  identifiers: string[],
+  verifyEventsExist: NonNullable<CalendarSyncProvider["verifyEventsExist"]>,
+): Promise<Set<string>> => {
+  const report = await readVerification(verifyEventsExist, identifiers);
+  if (!report) {
+    return new Set();
+  }
+  const presences: EventPresence[] = [];
+  const found: RemoteEvent[] = [];
+  for (const entry of report) {
+    if (isEventPresence(entry)) {
+      presences.push(entry);
+      continue;
+    }
+    found.push(entry);
+  }
+
+  /* A three-valued report answers every identifier it was asked about, so whatever it did not call
+     absent stays unproven. A listing of the events actually found proves absence by omission. */
+  if (presences.length > 0) {
+    return absencesFromPresenceReport(presences);
+  }
+  return absencesFromFoundEvents(identifiers, found);
+};
+
+/* The recipient really deleted the mirror, so there is nothing left for a delete to remove and its
+   answer cannot tell that apart from a stale identifier. The verification read can, so on a
+   destination that verifies we recreate on its word alone and never issue a speculative delete. */
+const recreateVerifiedAbsentMirrors = async (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  verifyEventsExist: NonNullable<CalendarSyncProvider["verifyEventsExist"]>,
+  state: ChunkedExecutionState,
+  checkpoint?: CheckpointCallback,
+): Promise<boolean> => {
+  const absent = await verifyAbsentIdentifiers(replacements.map((operation) => operation.deleteId), verifyEventsExist);
+  const adds: Extract<SyncOperation, { type: "add" }>[] = [];
+  for (const replacement of replacements) {
+    if (!absent.has(replacement.deleteId)) {
+      continue;
+    }
+    adds.push({
+      event: replacement.event,
+      staleMappingId: replacement.staleMappingId,
+      type: "add",
+    });
+  }
+
+  if (adds.length === 0) {
+    return true;
+  }
+
+  const addResult = await executeAddRun(adds, calendarId, provider);
+  mergeRunResult(state, addResult);
+  return checkpointRun(state, addResult.changes, checkpoint);
+};
+
+const recreateMissingMirrors = async (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  state: ChunkedExecutionState,
+  checkpoint?: CheckpointCallback,
+): Promise<boolean> => {
+  const { verifyEventsExist } = provider;
+  if (verifyEventsExist) {
+    return recreateVerifiedAbsentMirrors(replacements, calendarId, provider, verifyEventsExist, state, checkpoint);
+  }
+
+  const deleteResults = await provider.deleteEvents(replacements.map((operation) => operation.deleteId));
+  const adds: Extract<SyncOperation, { type: "add" }>[] = [];
+  const errors: OperationError[] = [];
+  let removed = 0;
+  let removeFailed = 0;
+
+  for (let index = 0; index < replacements.length; index++) {
+    const replacement = replacements[index];
+    if (!replacement) {
+      continue;
+    }
+    const deleteResult = deleteResults[index];
+    if (didRemoveObject(deleteResult)) {
+      removed += 1;
+      adds.push({
+        event: replacement.event,
+        staleMappingId: replacement.staleMappingId,
+        type: "add",
+      });
+      continue;
+    }
+
+    /* The delete found nothing at this identifier. The mirror may simply be mapped under a stale
+       identifier while it is still live, so recreating it would duplicate a customer's event. */
+    if (deleteResult?.success === true) {
+      continue;
+    }
+
+    removeFailed += 1;
+    if (deleteResult?.error) {
+      errors.push({
+        type: "remove",
+        error: deleteResult.error,
+        ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
+        ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
+      });
+    }
+  }
+
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 0, removed, removeFailed },
+    conflictsResolved: 0,
+    errors,
+  }, false);
+
+  if (adds.length === 0) {
+    return true;
+  }
+
+  const addResult = await executeAddRun(adds, calendarId, provider);
+  mergeRunResult(state, addResult);
+  return checkpointRun(state, addResult.changes, checkpoint);
+};
+
 const executeReplacements = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
   mappingsByRemoteIdentity: Map<string, EventMapping>,
+  mappingsById: Map<string, EventMapping>,
   state: ChunkedExecutionState,
   totalOperations: number,
   isCurrent?: () => Promise<boolean>,
@@ -676,18 +1095,38 @@ const executeReplacements = async (
 
   const { updateEvents } = provider;
   if (updateEvents) {
-    const { runResult, unresolved } = await executeUpdateRun(replacements, updateEvents);
-    mergeRunResult(state, runResult);
-    const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
-    for (const replacement of replacements) {
-      if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
-        state.protectedRemoteUids.add(replacement.uid);
+    const missing = replacements.filter((operation) => operation.remoteMissing === true);
+    const present = replacements.filter((operation) => operation.remoteMissing !== true);
+    let unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
+
+    if (present.length > 0) {
+      const { runResult, unresolved: unresolvedUpdates } = await executeUpdateRun(
+        present,
+        updateEvents,
+        mappingsById,
+        Boolean(provider.createEscapesPayloadRefusal),
+      );
+      unresolved = unresolvedUpdates;
+      mergeRunResult(state, runResult);
+      const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
+      for (const replacement of present) {
+        if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
+          state.protectedRemoteUids.add(replacement.uid);
+        }
+      }
+      state.updateFallbacks += unresolved.length;
+      if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
+        return;
       }
     }
-    state.updateFallbacks += unresolved.length;
-    if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
-      return;
+
+    if (missing.length > 0) {
+      const restored = await recreateMissingMirrors(missing, calendarId, provider, state, checkpoint);
+      if (!restored) {
+        return;
+      }
     }
+
     if (unresolved.length > 0) {
       const recovered = await replaceViaDeleteThenAdd(
         unresolved,
@@ -695,6 +1134,7 @@ const executeReplacements = async (
         provider,
         mappingsByRemoteIdentity,
         state,
+        true,
         checkpoint,
       );
       if (!recovered) {
@@ -713,6 +1153,7 @@ const executeReplacements = async (
     provider,
     mappingsByRemoteIdentity,
     state,
+    false,
     checkpoint,
   ))) {
     return;
@@ -743,11 +1184,13 @@ const executeRemoteOperations = async (
   checkpoint?: CheckpointCallback,
 ): Promise<ExecuteRemoteResult> => {
   const mappingsByRemoteIdentity = new Map<string, EventMapping>();
+  const mappingsById = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
     mappingsByRemoteIdentity.set(
       `${mapping.destinationEventUid}\u0000${mapping.deleteIdentifier}`,
       mapping,
     );
+    mappingsById.set(mapping.id, mapping);
   }
 
   const operationChunks = chunkOperations(operations, OPERATION_CHUNK_SIZE);
@@ -796,6 +1239,7 @@ const executeRemoteOperations = async (
       calendarId,
       provider,
       mappingsByRemoteIdentity,
+      mappingsById,
       state,
       totalOperations,
       isCurrent,

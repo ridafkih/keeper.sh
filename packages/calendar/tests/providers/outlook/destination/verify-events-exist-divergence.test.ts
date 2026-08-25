@@ -68,8 +68,9 @@ describe("a verified event still shows its divergence", () => {
   it("keeps a destination-side edit visible to staleness detection", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(Response.json(editedRemoteEvent))));
 
-    const [verifiedEvent] = await createProvider().verifyEventsExist([DELETE_ID]);
-    expect(verifiedEvent).toBeDefined();
+    const [presence] = await createProvider().verifyEventsExist([DELETE_ID]);
+    expect(presence).toMatchObject({ identifier: DELETE_ID, status: "present" });
+    const verifiedEvent = presence?.event;
     if (!verifiedEvent) {
       return;
     }

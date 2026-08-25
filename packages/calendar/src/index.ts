@@ -331,6 +331,8 @@ export type {
   SyncResult,
   RemoteEvent,
   EventAvailability,
+  EventPresence,
+  EventPresenceStatus,
   ProviderConfig,
   OAuthProviderConfig,
   GoogleCalendarConfig,

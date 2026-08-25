@@ -528,6 +528,7 @@ describe("computeSyncOperations", () => {
     expect(result.operations).toEqual([{
       deleteId: mapping.deleteIdentifier,
       event,
+      remoteMissing: true,
       staleMappingId: mapping.id,
       type: "replace",
       uid: mapping.destinationEventUid,
