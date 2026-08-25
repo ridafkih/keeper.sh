@@ -14,6 +14,7 @@ const clientMocks = vi.hoisted(() => ({
   fetchCalendarObjectsByUrls: vi.fn(),
   resolveCalendarUrl: vi.fn(),
   updateCalendarObjectByUrl: vi.fn(),
+  verifyCalendarObjectsByUrls: vi.fn(),
 }));
 
 vi.mock("../../../../src/providers/caldav/shared/client", () => {
@@ -43,6 +44,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
     fetchCalendarObjectsByUrls = clientMocks.fetchCalendarObjectsByUrls;
     resolveCalendarUrl = clientMocks.resolveCalendarUrl;
     updateCalendarObjectByUrl = clientMocks.updateCalendarObjectByUrl;
+    verifyCalendarObjectsByUrls = clientMocks.verifyCalendarObjectsByUrls;
   }
 
   return {
@@ -101,11 +103,22 @@ describe("CalDAV destination verifyEventsExist", () => {
     clientMocks.resolveCalendarUrl.mockResolvedValue(CALENDAR_URL);
   });
 
-  it("reads the objects with a single multiget and reports an omitted href as positively absent", async () => {
-    clientMocks.fetchCalendarObjectsByUrls.mockResolvedValueOnce([{
-      data: eventToICalString(presentEvent, PRESENT_UID),
-      url: `${CALENDAR_URL}${PRESENT_UID}.ics`,
-    }]);
+  /*
+   * Overturned this round. This case asserted `{ identifier: DELETED_PATH, status: "absent" }`
+   * for an href the server simply did not answer. Omission is not proof: a truncated multiget,
+   * a withheld calendar-data and a per-href error all look identical to it, and reporting any
+   * of them as absent licenses a create that duplicates a live event. Only a per-response 404
+   * is absence now; the omission case moved to the test below it.
+   */
+  it("reads the objects with a single multiget and reports a 404 answer as absent", async () => {
+    clientMocks.verifyCalendarObjectsByUrls.mockResolvedValueOnce([
+      {
+        data: eventToICalString(presentEvent, PRESENT_UID),
+        path: `${CALENDAR_URL}${PRESENT_UID}.ics`,
+        presence: "present",
+      },
+      { data: null, path: `${CALENDAR_URL}${DELETED_UID}.ics`, presence: "absent" },
+    ]);
 
     const presences = await verificationOf()([PRESENT_PATH, DELETED_PATH]);
 
@@ -117,15 +130,25 @@ describe("CalDAV destination verifyEventsExist", () => {
       },
       { identifier: DELETED_PATH, status: "absent" },
     ]);
-    expect(clientMocks.fetchCalendarObjectsByUrls).toHaveBeenCalledTimes(1);
-    expect(clientMocks.fetchCalendarObjectsByUrls.mock.calls[0]?.[0]?.objectUrls).toEqual([
-      `${CALENDAR_URL}${PRESENT_UID}.ics`,
-      `${CALENDAR_URL}${DELETED_UID}.ics`,
+    expect(clientMocks.verifyCalendarObjectsByUrls).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports an href the multiget never answered as could-not-determine", async () => {
+    clientMocks.verifyCalendarObjectsByUrls.mockResolvedValueOnce([
+      {
+        data: eventToICalString(presentEvent, PRESENT_UID),
+        path: `${CALENDAR_URL}${PRESENT_UID}.ics`,
+        presence: "present",
+      },
     ]);
+
+    const presences = await verificationOf()([PRESENT_PATH, DELETED_PATH]);
+
+    expect(statusesOf(presences)).toEqual(["present", "unknown"]);
   });
 
   it("reports a 403 as could-not-determine, never as absent", async () => {
-    clientMocks.fetchCalendarObjectsByUrls.mockRejectedValueOnce(httpError(403));
+    clientMocks.verifyCalendarObjectsByUrls.mockRejectedValueOnce(httpError(403));
 
     const presences = await verificationOf()([PRESENT_PATH, DELETED_PATH]);
 
@@ -137,7 +160,7 @@ describe("CalDAV destination verifyEventsExist", () => {
   });
 
   it("reports a 503 as could-not-determine, never as absent", async () => {
-    clientMocks.fetchCalendarObjectsByUrls.mockRejectedValueOnce(httpError(503));
+    clientMocks.verifyCalendarObjectsByUrls.mockRejectedValueOnce(httpError(503));
 
     const presences = await verificationOf()([DELETED_PATH]);
 
@@ -145,7 +168,7 @@ describe("CalDAV destination verifyEventsExist", () => {
   });
 
   it("reports a 429 as could-not-determine, never as absent", async () => {
-    clientMocks.fetchCalendarObjectsByUrls.mockRejectedValueOnce(httpError(429));
+    clientMocks.verifyCalendarObjectsByUrls.mockRejectedValueOnce(httpError(429));
 
     const presences = await verificationOf()([DELETED_PATH]);
 
@@ -153,7 +176,7 @@ describe("CalDAV destination verifyEventsExist", () => {
   });
 
   it("reports a thrown error carrying no status as could-not-determine", async () => {
-    clientMocks.fetchCalendarObjectsByUrls.mockRejectedValueOnce(new Error("socket hang up"));
+    clientMocks.verifyCalendarObjectsByUrls.mockRejectedValueOnce(new Error("socket hang up"));
 
     const presences = await verificationOf()([PRESENT_PATH, DELETED_PATH]);
 
@@ -167,13 +190,13 @@ describe("CalDAV destination verifyEventsExist", () => {
     const presences = await verificationOf()([DELETED_PATH]);
 
     expect(presences).toEqual([{ identifier: DELETED_PATH, status: "unknown" }]);
-    expect(clientMocks.fetchCalendarObjectsByUrls).not.toHaveBeenCalled();
+    expect(clientMocks.verifyCalendarObjectsByUrls).not.toHaveBeenCalled();
   });
 
   it("asks the server for nothing when there is nothing to verify", async () => {
     const presences = await verificationOf()([]);
 
     expect(presences).toEqual([]);
-    expect(clientMocks.fetchCalendarObjectsByUrls).not.toHaveBeenCalled();
+    expect(clientMocks.verifyCalendarObjectsByUrls).not.toHaveBeenCalled();
   });
 });

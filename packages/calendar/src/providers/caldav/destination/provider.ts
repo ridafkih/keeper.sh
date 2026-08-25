@@ -16,7 +16,7 @@ import type {
   RemoteEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import type { CalDAVListingStats, CalendarObject } from "../shared/client";
+import type { CalDAVListingStats, CalDAVObjectAnswer } from "../shared/client";
 import {
   assertAllEventsSupported,
   assertAllResourcesRead,
@@ -177,14 +177,6 @@ const toUnknownPresence = (deleteId: string): EventPresence => ({
   status: "unknown",
 });
 
-const toObjectFilename = (objectUrl: string, baseUrl: string): string => {
-  try {
-    return decodeURIComponent(new URL(objectUrl, baseUrl).pathname.split("/").at(-1) ?? "");
-  } catch {
-    return "";
-  }
-};
-
 const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
   const resources = parseICalCalendarsToRemoteEvents(
     [data],
@@ -255,6 +247,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     }
   };
 
+  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
+
+  /* CalDAV addresses an object by its href, and that is what a listing reports, so a create hands
+     back the path it wrote to rather than the UID it derived the filename from. */
+  const toObjectPath = (uid: string): string => new URL(`${uid}.ics`, calendarBaseUrl).pathname;
+
   const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
@@ -281,14 +279,19 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               }
               return {
                 conflictResolved: true,
-                deleteId: uid,
+                deleteId: toObjectPath(uid),
                 echo: CALDAV_PUSH_ECHO,
                 remoteId: uid,
                 success: true,
               };
             }
 
-            return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
+            return {
+              deleteId: toObjectPath(uid),
+              echo: CALDAV_PUSH_ECHO,
+              remoteId: uid,
+              success: true,
+            };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
@@ -298,8 +301,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         }, config.safeFetchOptions?.signal),
       ),
     );
-
-  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
 
   const toObjectUrl = (deleteId: string): string => {
     if (deleteId.includes("/")) {
@@ -474,19 +475,21 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  const presenceOfObject = (
+  const presenceOfAnswer = (
     deleteId: string,
-    object: CalendarObject | undefined,
+    answer: CalDAVObjectAnswer | undefined,
   ): EventPresence => {
-    // The server answered without this href, which is the multiget form of a 404: positively gone.
-    if (!object) {
+    if (!answer || answer.presence === "unknown") {
+      return { identifier: deleteId, status: "unknown" };
+    }
+    if (answer.presence === "absent") {
       return { identifier: deleteId, status: "absent" };
     }
-    if (!object.data) {
+    if (!answer.data) {
       return { identifier: deleteId, status: "unknown" };
     }
 
-    const [parsed] = parseCalendarObjectEvents(object.data);
+    const [parsed] = parseCalendarObjectEvents(answer.data);
     if (!parsed || !isKeeperEvent(parsed.uid)) {
       return { identifier: deleteId, status: "unknown" };
     }
@@ -505,22 +508,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     try {
       const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
-      const objects = await client.fetchCalendarObjectsByUrls({
+      const answers = await client.verifyCalendarObjectsByUrls({
         calendarUrl,
         objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
       });
 
-      const objectsByFilename = new Map<string, CalendarObject>();
-      for (const object of objects) {
-        objectsByFilename.set(toObjectFilename(object.url, calendarUrl), object);
-      }
-
-      return deleteIds.map((deleteId) =>
-        presenceOfObject(
-          deleteId,
-          objectsByFilename.get(toObjectFilename(toObjectUrl(deleteId), calendarBaseUrl)),
-        )
-      );
+      return deleteIds.map((deleteId, index) => presenceOfAnswer(deleteId, answers[index]));
     } catch (error) {
       if (config.safeFetchOptions?.signal?.aborted) {
         throw error;

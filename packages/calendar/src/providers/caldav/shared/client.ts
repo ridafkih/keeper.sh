@@ -1,5 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { createDAVClient, DAVNamespaceShort } from "tsdav";
+import { createDAVClient, DAVNamespace, DAVNamespaceShort, getDAVAttribute } from "tsdav";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
@@ -23,6 +23,16 @@ interface CalendarObject {
   url: string;
   etag?: string;
   data?: string;
+}
+
+type CalDAVObjectPresence = "absent" | "present" | "unknown";
+
+/* What the server actually said about one requested href. Only its own 404 is absence; every other
+   answer, and every href it declined to answer, stays unknown. */
+interface CalDAVObjectAnswer {
+  data: string | null;
+  path: string;
+  presence: CalDAVObjectPresence;
 }
 
 interface CalDAVListingStats {
@@ -198,6 +208,122 @@ const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: stri
       .filter((path) => isCalendarObjectPath(path)),
   ),
 ];
+
+const DAV_STATUS_PATTERN = /^\S+\s(?<code>\d{3})\s/u;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const toStatusCode = (status: unknown): number | null => {
+  if (typeof status !== "string") {
+    return null;
+  }
+  const code = DAV_STATUS_PATTERN.exec(status)?.groups?.code;
+  if (!code) {
+    return null;
+  }
+  return Number.parseInt(code, 10);
+};
+
+/* One child element arrives as an object and a repeat arrives as an array, so both shapes are
+   read the same way. */
+const toElementList = (value: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(value)) {
+    return value.filter((entry) => isRecord(entry));
+  }
+  if (isRecord(value)) {
+    return [value];
+  }
+  return [];
+};
+
+const readPropStatProp = (propstat: Record<string, unknown>): Record<string, unknown> | null => {
+  if (!isRecord(propstat.prop)) {
+    return null;
+  }
+  return propstat.prop;
+};
+
+const readCalendarData = (response: Record<string, unknown>): string | null => {
+  for (const propstat of toElementList(response.propstat)) {
+    const prop = readPropStatProp(propstat);
+    if (prop && typeof prop.calendarData === "string") {
+      return prop.calendarData;
+    }
+  }
+  return null;
+};
+
+/* Inside a propstat the status describes the property, not the resource (RFC 4918 13.9), so a 404
+   filed over calendar-data alongside a propstat the server answered is a withheld body, not a gone
+   object. Absence is a 404 spoken about the href itself: the response-wide status, or propstats
+   that all say 404 and so leave the server claiming nothing about this href. */
+const isHrefNotFound = (response: Record<string, unknown>): boolean => {
+  const responseStatus = toStatusCode(response.status);
+  if (responseStatus !== null) {
+    return responseStatus === HTTP_STATUS.NOT_FOUND;
+  }
+
+  const propstatStatuses = toElementList(response.propstat).map((propstat) =>
+    toStatusCode(propstat.status));
+  if (propstatStatuses.length === 0) {
+    return false;
+  }
+  return propstatStatuses.every((status) => status === HTTP_STATUS.NOT_FOUND);
+};
+
+const toObjectAnswerKey = (href: string, calendarUrl: string): string => {
+  const path = toCalendarObjectPath(href, calendarUrl);
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
+
+const toObjectAnswer = (
+  response: Record<string, unknown>,
+  calendarUrl: string,
+): CalDAVObjectAnswer | null => {
+  const { href } = response;
+  if (typeof href !== "string" || href.length === 0) {
+    return null;
+  }
+
+  const path = toCalendarObjectPath(href, calendarUrl);
+  const data = readCalendarData(response);
+  if (data !== null) {
+    return { data, path, presence: "present" };
+  }
+  if (isHrefNotFound(response)) {
+    return { data: null, path, presence: "absent" };
+  }
+  return { data: null, path, presence: "unknown" };
+};
+
+/* The tsdav calendarMultiGet routes through collectionQuery, which throws as soon as any href
+   answers 4xx — the very answer that proves that href absent. Issuing the REPORT ourselves keeps
+   every href's own status intact. */
+const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
+  "calendar-multiget": {
+    _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
+    [`${DAVNamespaceShort.DAV}:prop`]: {
+      [`${DAVNamespaceShort.DAV}:getetag`]: {},
+      [`${DAVNamespaceShort.CALDAV}:calendar-data`]: {},
+    },
+    [`${DAVNamespaceShort.DAV}:href`]: objectUrls,
+  },
+});
+
+/* The tsdav mapping folds every propstat of an href into one prop bag and keeps only a
+   response-wide status, erasing "gone" versus "refused". The raw multistatus still holds it. */
+const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] => {
+  const raw = responses[0]?.raw;
+  if (!isRecord(raw) || !isRecord(raw.multistatus)) {
+    return [];
+  }
+  return toElementList(raw.multistatus.response);
+};
 
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
@@ -385,6 +511,46 @@ class CalDAVClient {
     });
   }
 
+  /*
+   * Absence must come from the server's own words about that href: a 404 for it. An answer that
+   * refuses, withholds calendar-data, or never arrives at all leaves the object unknown, so a
+   * truncated multiget can never be read as the calendar no longer holding what it did not answer.
+   */
+  verifyCalendarObjectsByUrls(params: {
+    calendarUrl: string;
+    objectUrls: string[];
+  }): Promise<CalDAVObjectAnswer[]> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const answersByKey = new Map<string, CalDAVObjectAnswer>();
+
+      for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
+        const responses = await measureProviderRequest(() => client.davRequest({
+          init: {
+            body: buildMultiGetBody(objectUrls),
+            headers: { depth: "1" },
+            method: "REPORT",
+            namespace: DAVNamespaceShort.CALDAV,
+          },
+          url: params.calendarUrl,
+        }));
+
+        for (const response of toMultiStatusResponses(responses)) {
+          const answer = toObjectAnswer(response, params.calendarUrl);
+          if (answer) {
+            answersByKey.set(toObjectAnswerKey(answer.path, params.calendarUrl), answer);
+          }
+        }
+      }
+
+      return params.objectUrls.map((objectUrl) => {
+        const path = toCalendarObjectPath(objectUrl, params.calendarUrl);
+        const answered = answersByKey.get(toObjectAnswerKey(objectUrl, params.calendarUrl));
+        return answered ?? { data: null, path, presence: "unknown" };
+      });
+    });
+  }
+
   fetchCalendarObjects(params: {
     calendarUrl: string;
     onListing?: (stats: CalDAVListingStats) => void;
@@ -488,4 +654,4 @@ export {
   CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };
-export type { CalDAVListingStats, CalendarObject };
+export type { CalDAVListingStats, CalDAVObjectAnswer, CalendarObject };

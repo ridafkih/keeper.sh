@@ -23,7 +23,7 @@ interface CalendarSyncProvider {
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
-  // Google answers three-valued; Outlook still answers with the events it found and throws when it cannot tell.
+  // Google, Outlook and CalDAV answer three-valued, so "could not tell" is never read as absence.
   verifyEventsExist?: (deleteIds: string[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 

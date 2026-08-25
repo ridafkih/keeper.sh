@@ -6,6 +6,7 @@ import {
 } from "@keeper.sh/data-schemas";
 import type {
   DeleteResult,
+  EventPresence,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -111,6 +112,20 @@ const buildOutlookEchoObservation = (resource: OutlookEvent): PushEchoObservatio
     endTime,
     startTime,
   };
+};
+
+/* The engine names a mirror by the id a delete would target; Graph rewrites that id on a move, so
+   Outlook also needs the uid the mapping carries to tell a moved mirror from a deleted one. */
+interface OutlookVerificationTarget {
+  deleteId: string;
+  uid?: string;
+}
+
+const toVerificationTarget = (target: OutlookVerificationTarget | string): OutlookVerificationTarget => {
+  if (typeof target === "string") {
+    return { deleteId: target };
+  }
+  return target;
 };
 
 const toOutlookRemoteEvent = (event: OutlookEvent): RemoteEvent | null => {
@@ -470,45 +485,110 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const getThrottleMetrics = (): ProviderThrottleMetrics => ({ ...throttleMetrics });
 
-  const verifyEventsExist = async (deleteIds: string[]): Promise<RemoteEvent[]> => {
-    await refreshIfNeeded();
-    const verified: RemoteEvent[] = [];
+  const readVerificationResponse = (url: URL): Promise<Response> =>
+    sendRequestWithRetry(url, {
+      headers: {
+        Authorization: `Bearer ${tokenState.accessToken}`,
+        Prefer: `outlook.body-content-type="text"`,
+      },
+      method: "GET",
+    });
 
-    for (const deleteId of deleteIds) {
+  const presenceOfEvent = (identifier: string, body: unknown): EventPresence => {
+    if (!outlookEventSchema.allows(body)) {
+      return { identifier, status: "unknown" };
+    }
+
+    const remoteEvent = toOutlookRemoteEvent(outlookEventSchema.assert(body));
+    if (!remoteEvent) {
+      return { identifier, status: "unknown" };
+    }
+
+    return { event: remoteEvent, identifier, status: "present" };
+  };
+
+  /* Graph re-keys an item when it moves between folders of a mailbox, so the dead item id proves
+     nothing on its own. The iCalUId survives the move and is the only handle that still names it. */
+  const resolvePresenceByUid = async (identifier: string, uid: string): Promise<EventPresence> => {
+    const url = new URL(`${MICROSOFT_GRAPH_API}/me/events`);
+    url.searchParams.set("$filter", `iCalUId eq '${uid.replaceAll("'", "''")}'`);
+    url.searchParams.set(
+      "$select",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    );
+
+    const response = await readVerificationResponse(url);
+    if (!response.ok) {
+      await response.body?.cancel?.();
+      return { identifier, status: "unknown" };
+    }
+
+    const body = await response.json();
+    if (!outlookEventListSchema.allows(body)) {
+      return { identifier, status: "unknown" };
+    }
+
+    const events = outlookEventListSchema.assert(body).value ?? [];
+    // The whole mailbox holds nothing under the uid either, so the mirror is positively gone.
+    if (events.length === 0) {
+      return { identifier, status: "absent" };
+    }
+
+    const matched = events.find((event) => event.iCalUId === uid);
+    if (!matched) {
+      return { identifier, status: "unknown" };
+    }
+
+    return presenceOfEvent(identifier, matched);
+  };
+
+  const verifyTarget = async (target: OutlookVerificationTarget): Promise<EventPresence> => {
+    const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${target.deleteId}`);
+    url.searchParams.set(
+      "$select",
+      "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
+    );
+
+    const response = await readVerificationResponse(url);
+    if (response.ok) {
+      return presenceOfEvent(target.deleteId, await response.json());
+    }
+
+    await response.body?.cancel?.();
+    // A refusal is not an observation of the object, so it can never stand in for its absence.
+    if (response.status !== HTTP_STATUS.NOT_FOUND) {
+      return { identifier: target.deleteId, status: "unknown" };
+    }
+
+    if (!target.uid) {
+      return { identifier: target.deleteId, status: "unknown" };
+    }
+
+    return await resolvePresenceByUid(target.deleteId, target.uid);
+  };
+
+  const verifyEventsExist = async (
+    targets: (OutlookVerificationTarget | string)[],
+  ): Promise<EventPresence[]> => {
+    await refreshIfNeeded();
+    const report: EventPresence[] = [];
+
+    for (const entry of targets) {
       config.signal?.throwIfAborted();
 
-      const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${deleteId}`);
-      url.searchParams.set(
-        "$select",
-        "id,iCalUId,subject,body,location,start,end,isAllDay,showAs,categories",
-      );
-
-      const response = await sendRequestWithRetry(url, {
-        headers: {
-          Authorization: `Bearer ${tokenState.accessToken}`,
-          Prefer: `outlook.body-content-type="text"`,
-        },
-        method: "GET",
-      });
-
-      if (response.status === HTTP_STATUS.NOT_FOUND) {
-        await response.body?.cancel?.();
-        continue;
-      }
-
-      if (!response.ok) {
-        throw new Error(await readGraphErrorMessage(response));
-      }
-
-      const body = await response.json();
-      const remoteEvent = toOutlookRemoteEvent(outlookEventSchema.assert(body));
-
-      if (remoteEvent) {
-        verified.push(remoteEvent);
+      const target = toVerificationTarget(entry);
+      try {
+        report.push(await verifyTarget(target));
+      } catch (error) {
+        if (config.signal?.aborted) {
+          throw error;
+        }
+        // A read that failed tells us nothing about the object, so it leaves the mirror unproven.
+        report.push({ identifier: target.deleteId, status: "unknown" });
       }
     }
 
-    return verified;
+    return report;
   };
 
   return {

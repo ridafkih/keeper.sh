@@ -98,7 +98,14 @@ const buildGoogleEchoObservation = (resource: GoogleEvent): PushEchoObservation 
   };
 };
 
+/* Google answers a read for a recipient-deleted event with HTTP 200 and a tombstone carrying
+   status "cancelled" rather than a 404, so a cancelled resource is evidence of absence, never a mirror. */
+const isCancelledGoogleEvent = (event: GoogleEvent): boolean => event.status === "cancelled";
+
 const toGoogleRemoteEvent = (event: GoogleEvent): RemoteEvent | null => {
+  if (isCancelledGoogleEvent(event)) {
+    return null;
+  }
   if (!event.iCalUID || !isKeeperEvent(event.iCalUID)) {
     return null;
   }
@@ -706,7 +713,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return { identifier, status: "unknown" };
     }
 
-    const remoteEvent = toGoogleRemoteEvent(googleEventSchema.assert(response.body));
+    const resource = googleEventSchema.assert(response.body);
+    if (isCancelledGoogleEvent(resource)) {
+      return { identifier, status: "absent" };
+    }
+
+    const remoteEvent = toGoogleRemoteEvent(resource);
     if (!remoteEvent) {
       return { identifier, status: "unknown" };
     }
@@ -725,7 +737,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
 
     const [item] = googleEventListSchema.assert(response.body).items ?? [];
-    if (!item) {
+    if (!item || isCancelledGoogleEvent(item)) {
       return { identifier, status: "absent" };
     }
 

@@ -539,25 +539,68 @@ const isRunLevelAbort = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === "AbortError" || error.name === "TimeoutError");
 
-const failedUpdateResults = (count: number, error: unknown): PushResult[] => {
-  const message = getErrorMessage(error);
-  const errorType = getErrorTypeName(error);
-  return Array.from({ length: count }, (): PushResult => ({ success: false, error: message, errorType }));
+/* A provider that throws carries its numeric status on the error rather than on any returned
+   result - Google's whole-batch non-2xx is a throw - so a thrown 429 or 503 must be read off the
+   error or it would classify as the status-less failure it is not. */
+const statusFromThrownError = (error: unknown): number | null => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const { status, statusCode } = error as Error & { status?: unknown; statusCode?: unknown };
+  if (typeof status === "number") {
+    return status;
+  }
+  if (typeof statusCode === "number") {
+    return statusCode;
+  }
+  return null;
 };
+
+/* One failed batch is one failure. The run never reached a single object, so it can say nothing
+   about any individual mapping: fanning it out into a result per mapping would manufacture
+   per-mapping evidence out of an outage, and a status-less throw stays unknown either way. */
+const runLevelUpdateFailure = (error: unknown): OperationError => {
+  const statusCode = statusFromThrownError(error);
+  return {
+    type: "update",
+    error: getErrorMessage(error),
+    errorType: getErrorTypeName(error),
+    ...(statusCode !== null && { statusCode }),
+  };
+};
+
+type UpdateRunOutcome =
+  | { pushResults: PushResult[] }
+  | { runFailure: OperationError };
 
 const runUpdateEvents = async (
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
   updates: EventUpdate[],
-): Promise<PushResult[]> => {
+): Promise<UpdateRunOutcome> => {
   try {
-    return await updateEvents(updates);
+    return { pushResults: await updateEvents(updates) };
   } catch (error) {
     if (isRunLevelAbort(error)) {
       throw error;
     }
-    return failedUpdateResults(updates.length, error);
+    return { runFailure: runLevelUpdateFailure(error) };
   }
 };
+
+/* Nothing was learned about any mapping, so every mapping is carried forward untouched: no
+   counter moves, and nothing escalates towards a delete-then-add. */
+const failedUpdateRun = (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  runFailure: OperationError,
+): UpdateRunResult => ({
+  runResult: {
+    changes: { inserts: [], deletes: [], updates: [] },
+    result: { added: 0, addFailed: replacements.length, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: [runFailure],
+  },
+  unresolved: [],
+});
 
 const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
@@ -568,7 +611,11 @@ const executeUpdateRun = async (
     deleteId: operation.deleteId,
     event: operation.event,
   }));
-  const pushResults = await runUpdateEvents(updateEvents, updates);
+  const outcome = await runUpdateEvents(updateEvents, updates);
+  if ("runFailure" in outcome) {
+    return failedUpdateRun(replacements, outcome.runFailure);
+  }
+  const { pushResults } = outcome;
   const { updated, updateFailed, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults, mappingsById);
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);

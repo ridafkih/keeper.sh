@@ -17,6 +17,8 @@ const graphError = (status: number, code: string, headers?: Record<string, strin
     { headers, status },
   );
 
+/* A refusal is not an observation of the object: it answers unknown, which never licenses a
+   recreate, rather than the absence a create would be decided on. */
 describe("verifyEventsExist refusals never vote to delete", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -29,7 +31,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing when the token expired mid-loop", async () => {
@@ -39,7 +41,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing on a server error", async () => {
@@ -49,7 +51,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing when the request fails at the transport", async () => {
@@ -59,7 +61,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report a batch of ids as missing when the service is unavailable", async () => {
@@ -69,12 +71,29 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["first-id", "second-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([
+        { identifier: "first-id", status: "unknown" },
+        { identifier: "second-id", status: "unknown" },
+      ]);
   });
 
-  it("reports an id as missing only when the destination definitively says not found", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
+  /* A dead item id is not proof of absence on Graph, which re-keys an item on a cross-folder move.
+     Absence needs the uid resolved too, so an unresolvable 404 answers unknown. */
+  it("reports a bare 404 id as unknown, and one the mailbox holds nowhere as missing", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      if (new URL(input.toString()).searchParams.has("$filter")) {
+        return Promise.resolve(Response.json({ value: [] }));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }));
 
-    await expect(createProvider().verifyEventsExist(["deleted-event-id"])).resolves.toEqual([]);
+    const provider = createProvider();
+
+    await expect(provider.verifyEventsExist(["deleted-event-id"])).resolves.toEqual([
+      { identifier: "deleted-event-id", status: "unknown" },
+    ]);
+    await expect(
+      provider.verifyEventsExist([{ deleteId: "deleted-event-id", uid: "deleted-event-uid" }]),
+    ).resolves.toEqual([{ identifier: "deleted-event-id", status: "absent" }]);
   });
 });
