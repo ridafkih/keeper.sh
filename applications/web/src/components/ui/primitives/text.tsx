@@ -17,8 +17,6 @@ const text = tv({
       inverseMuted: "text-foreground-inverse-muted",
       default: "text-foreground",
       danger: "text-red-500",
-      event: "text-event",
-      eventMuted: "text-event-muted",
     },
     align: {
       center: "text-center",
@@ -36,7 +34,7 @@ const text = tv({
 type TextProps = PropsWithChildren<{
   as?: "p" | "span";
   size?: "base" | "sm" | "xs";
-  tone?: "muted" | "disabled" | "inverse" | "inverseMuted" | "default" | "danger" | "highlight" | "event" | "eventMuted";
+  tone?: "muted" | "disabled" | "inverse" | "inverseMuted" | "default" | "danger" | "highlight";
   align?: "center" | "left" | "right";
   className?: string;
   style?: CSSProperties;

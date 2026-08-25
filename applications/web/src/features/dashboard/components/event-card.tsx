@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, PropsWithChildren } from "react";
 import { tv } from "tailwind-variants/lite";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
@@ -7,6 +7,35 @@ import type { CalendarEvent } from "@/hooks/use-events";
 import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
+
+const eventText = tv({
+  base: "tracking-tight",
+  variants: {
+    size: {
+      sm: "text-sm",
+      xs: "text-xs",
+    },
+    muted: {
+      true: "text-event-muted",
+      false: "text-event",
+    },
+  },
+  defaultVariants: {
+    muted: false,
+  },
+});
+
+type EventTextProps = PropsWithChildren<{
+  as?: "p" | "span";
+  size: "sm" | "xs";
+  muted?: boolean;
+  className?: string;
+}>;
+
+function EventText({ as = "p", size, muted, className, children }: EventTextProps) {
+  const Element = as;
+  return <Element className={eventText({ size, muted, className })}>{children}</Element>;
+}
 
 interface EventCardProps {
   event: CalendarEvent;
@@ -104,30 +133,29 @@ export const EventCard = memo(function EventCard({
             rather than the card: a container's queries never match the
             container itself, only its descendants. */}
         <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
-          <Text
+          <EventText
             size="xs"
-            tone="eventMuted"
+            muted
             className="truncate tabular-nums event-short:hidden event-narrow:hidden"
           >
             {formatTimeRange(event.startTime, event.endTime)}
-          </Text>
+          </EventText>
           {/* No `leading-*` here: the `text-xs` steps bring the xs line-height
               along with the size. */}
-          <Text
+          <EventText
             size="sm"
-            tone="event"
             className="truncate font-semibold event-compact:text-xs event-narrow:text-xs"
           >
             {title}
-          </Text>
+          </EventText>
           {event.description && (
-            <Text
+            <EventText
               size="xs"
-              tone="eventMuted"
+              muted
               className="hidden event-roomy:line-clamp-1 event-tall:line-clamp-2 event-narrow:hidden"
             >
               {event.description}
-            </Text>
+            </EventText>
           )}
         </div>
       </div>
@@ -137,20 +165,20 @@ export const EventCard = memo(function EventCard({
   return (
     <div className={classes} style={style}>
       <div className="flex items-center justify-between gap-2">
-        <Text size="sm" tone="eventMuted" className="tabular-nums">
+        <EventText size="sm" muted className="tabular-nums">
           {formatTime(event.startTime)} - {formatTime(event.endTime)}
-        </Text>
-        <Text size="xs" tone="eventMuted" className="tabular-nums whitespace-nowrap">
+        </EventText>
+        <EventText size="xs" muted className="tabular-nums whitespace-nowrap">
           {formatTimeUntil(event.startTime)}
-        </Text>
+        </EventText>
       </div>
-      <Text size="sm" tone="event" className="truncate font-semibold">
+      <EventText size="sm" className="truncate font-semibold">
         {title}
-      </Text>
+      </EventText>
       {event.description && (
-        <Text size="sm" tone="eventMuted" className="line-clamp-2">
+        <EventText size="sm" muted className="line-clamp-2">
           {event.description}
-        </Text>
+        </EventText>
       )}
     </div>
   );
@@ -180,9 +208,9 @@ export const EventPill = memo(function EventPill({ event, past }: EventPillProps
   return (
     <div className={eventPill({ past })} style={{ height: EVENT_PILL_HEIGHT_PX }}>
       {/* `min-w-0` lets the flex item shrink below its text so `truncate` bites. */}
-      <Text as="span" size="xs" tone="event" className="min-w-0 truncate font-medium">
+      <EventText as="span" size="xs" className="min-w-0 truncate font-medium">
         {event.title ?? event.calendarName}
-      </Text>
+      </EventText>
     </div>
   );
 });
