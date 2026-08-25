@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { DomHandler, DomUtils, Parser } from "htmlparser2";
 
 /*
- * The shape CodeQL flagged: a single pass that removes `<...>` rejoins whatever surrounded it.
- * Kept here as the thing we must never go back to, so the parser below has something to beat.
+ * This decode used to strip markup by removing every `<...>` in a single pass. That is unsound:
+ * removing an inner tag rejoins whatever surrounded it, so `<scr` + `<script>` + `ipt>` comes back
+ * out as a live `<script>`. The regex is not reproduced here even to demonstrate it -- keeping an
+ * unsound pattern in the tree only teaches a scanner to flag us again.
+ *
+ * The damage is a correctness one before it is a security one: this decode exists to ask whether a
+ * remote value is our own text in the destination's storage form, and a mis-decode answers yes to
+ * a stranger's edit and adopts it as the baseline.
  */
-const SINGLE_PASS_STRIP = /<\/?[a-zA-Z][^<>]*>/g;
-
 const readMarkupText = (markup: string): string => {
   const handler = new DomHandler();
   new Parser(handler, { decodeEntities: false }).end(markup);
@@ -14,15 +18,9 @@ const readMarkupText = (markup: string): string => {
   return DomUtils.textContent(handler.dom);
 };
 
-const NESTED_TAG = "<scr<script>ipt>alert(1)</script>";
-
 describe("markup is read by a parser, not a regex", () => {
-  it("shows why the single pass was unsound: removing the inner tag builds a new one", () => {
-    expect(NESTED_TAG.replaceAll(SINGLE_PASS_STRIP, "")).toContain("<script>");
-  });
-
-  it("leaves no element behind when the tokenizer reads it", () => {
-    expect(readMarkupText(NESTED_TAG)).not.toContain("<script>");
+  it("leaves no element behind when a tag is nested inside a broken one", () => {
+    expect(readMarkupText("<scr<script>ipt>alert(1)</script>")).not.toContain("<script>");
   });
 
   it("recovers the text a destination wrapped in markup", () => {
