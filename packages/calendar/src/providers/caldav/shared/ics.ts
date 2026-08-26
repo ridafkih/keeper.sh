@@ -82,6 +82,7 @@ interface ParsedCalendarEvent {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
   startTimeZone?: string;
   recurrenceRule?: IcsRecurrenceRule;
   recurrenceDuration?: SyncableEvent["recurrenceDuration"];
@@ -222,6 +223,7 @@ const parseICalCalendarsToRemoteEvents = (
   ];
   const events = parsed.events.map((event) => ({
     availability: event.availability ?? "busy",
+    color: event.color,
     deleteId: event.uid,
     description: event.description,
     endTime: event.endTime,

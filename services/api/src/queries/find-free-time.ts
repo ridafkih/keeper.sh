@@ -78,6 +78,7 @@ const collectBusyIntervals = async (
     .select({
       availability: eventStatesTable.availability,
       calendarId: eventStatesTable.calendarId,
+      color: eventStatesTable.color,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,

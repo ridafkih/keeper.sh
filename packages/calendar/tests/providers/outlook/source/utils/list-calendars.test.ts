@@ -56,6 +56,28 @@ const mockCalendarListResponse = (
 };
 
 describe("listUserCalendars", () => {
+  it("requests and parses hexColor alongside the color enum", async () => {
+    const requestedUrls: string[] = [];
+    const mockFetch = (input: Request | URL | string): Promise<Response> => {
+      if (input instanceof Request) {
+        requestedUrls.push(input.url);
+      } else {
+        requestedUrls.push(input.toString());
+      }
+      return Promise.resolve(Response.json({
+        value: [{ color: "lightBlue", hexColor: "#5ca9e5", id: "cal-1", name: "Work" }],
+      }));
+    };
+    mockFetch.preconnect = originalFetch.preconnect;
+    globalThis.fetch = mockFetch;
+
+    const calendars = await listUserCalendars("test-token");
+
+    expect(requestedUrls[0]).toContain("hexColor");
+    expect(calendars[0]?.color).toBe("lightBlue");
+    expect(calendars[0]?.hexColor).toBe("#5ca9e5");
+  });
+
   it("returns all calendars when no owner email is given", async () => {
     mockCalendarListResponse([
       { id: "cal-own", name: "Own calendar", owner: { address: "me@example.com" } },

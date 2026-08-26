@@ -14,6 +14,7 @@ create table calendar_accounts (
 );
 create table calendars (
   "id" uuid primary key,
+  "color" text,
   "accountId" uuid not null,
   "userId" text not null,
   "name" text not null,
@@ -23,6 +24,7 @@ create table calendars (
 );
 create table event_states (
   "id" uuid primary key,
+  "color" text,
   "calendarId" uuid not null,
   "availability" text,
   "description" text,

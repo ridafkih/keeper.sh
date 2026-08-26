@@ -5,6 +5,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, isNotNull } from "drizzle-orm";
+import { resolveGoogleCalendarColor, resolveOutlookCalendarColor } from "@keeper.sh/calendar";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import {
@@ -24,6 +25,7 @@ class AccountNotFoundError extends Error {
 interface ExternalCalendar {
   externalId: string;
   name: string;
+  color: string | null;
 }
 
 interface ExistingCalendar {
@@ -155,12 +157,20 @@ const listProviderCalendars = async (
 ): Promise<ExternalCalendar[]> => {
   if (provider === "google") {
     const calendars = await listGoogleCalendars(accessToken);
-    return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
+    return calendars.map((calendar) => ({
+      color: resolveGoogleCalendarColor(calendar.backgroundColor),
+      externalId: calendar.id,
+      name: calendar.summary,
+    }));
   }
 
   if (provider === "outlook") {
     const calendars = await listOutlookCalendars(accessToken);
-    return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+    return calendars.map((calendar) => ({
+      color: resolveOutlookCalendarColor(calendar.hexColor, calendar.color),
+      externalId: calendar.id,
+      name: calendar.name,
+    }));
   }
 
   throw new Error(`No calendar listing support for provider: ${provider}`);
@@ -247,6 +257,7 @@ const refreshAccountCalendars = async (
         accountId,
         calendarType: OAUTH_CALENDAR_TYPE,
         capabilities: ["pull", "push"],
+        color: calendar.color,
         externalCalendarId: calendar.externalId,
         name: calendar.name,
         originalName: calendar.name,

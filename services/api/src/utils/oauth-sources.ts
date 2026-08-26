@@ -5,6 +5,7 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { resolveGoogleCalendarColor, resolveOutlookCalendarColor } from "@keeper.sh/calendar";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase } from "@/context";
@@ -716,6 +717,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
         accountId,
         calendarType: OAUTH_CALENDAR_TYPE,
         capabilities: ["pull", "push"],
+        color: calendar.color,
         externalCalendarId: calendar.externalId,
         name: calendar.name,
         originalName: calendar.name,
@@ -727,11 +729,19 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     try {
       if (provider === "google") {
         const calendars = await listGoogleCalendars(accessToken);
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
+        return calendars.map((calendar) => ({
+          color: resolveGoogleCalendarColor(calendar.backgroundColor),
+          externalId: calendar.id,
+          name: calendar.summary,
+        }));
       }
       if (provider === "outlook") {
         const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+        return calendars.map((calendar) => ({
+          color: resolveOutlookCalendarColor(calendar.hexColor, calendar.color),
+          externalId: calendar.id,
+          name: calendar.name,
+        }));
       }
       throw new Error(`No calendar listing support for provider: ${provider}`);
     } catch (error) {
@@ -809,6 +819,7 @@ const importOAuthAccountCalendarsWithDependencies = async (
 interface ExternalCalendar {
   externalId: string;
   name: string;
+  color: string | null;
 }
 
 interface ImportOAuthAccountOptions {
@@ -891,6 +902,7 @@ const insertOAuthCalendarsWithDatabase = async (
       accountId,
       calendarType: OAUTH_CALENDAR_TYPE,
       capabilities: ["pull", "push"],
+      color: calendar.color,
       externalCalendarId: calendar.externalId,
       name: calendar.name,
       originalName: calendar.name,

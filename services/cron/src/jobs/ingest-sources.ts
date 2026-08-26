@@ -487,6 +487,7 @@ const createIngestionPersistenceTransaction = (
         ledger.readCount += 1;
         const events = await measureLedgerRead(ledger, () => transaction.select({
           availability: eventStatesTable.availability,
+          color: eventStatesTable.color,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           exceptionDates: eventStatesTable.exceptionDates,
@@ -590,6 +591,19 @@ const createIngestionPersistenceTransaction = (
           ledger.writeCount += 1;
           await measureLedgerWrite(ledger, () =>
             persistCalendarSnapshot(transaction, calendarId, snapshot));
+          signal.throwIfAborted();
+        }
+
+        if (changes.calendarColor !== globalThis.undefined) {
+          await setRemainingStatementTimeout();
+          ledger.writeCount += 1;
+          await measureLedgerWrite(ledger, () => transaction
+            .update(calendarsTable)
+            .set({ color: changes.calendarColor })
+            .where(and(
+              eq(calendarsTable.id, calendarId),
+              sql`${calendarsTable.color} is distinct from ${changes.calendarColor}`,
+            )));
           signal.throwIfAborted();
         }
 

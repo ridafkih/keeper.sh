@@ -52,6 +52,7 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
       readExistingEvents: () => transaction
         .select({
           availability: eventStatesTable.availability,
+          color: eventStatesTable.color,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           exceptionDates: eventStatesTable.exceptionDates,
@@ -90,6 +91,18 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
 
         if (changes.snapshot) {
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
+        }
+
+        if (changes.calendarColor !== globalThis.undefined) {
+          await transaction
+            .update(calendarsTable)
+            .set({ color: changes.calendarColor })
+            .where(
+              and(
+                eq(calendarsTable.id, calendarId),
+                sql`${calendarsTable.color} is distinct from ${changes.calendarColor}`,
+              ),
+            );
         }
 
         if (changes.coverage) {

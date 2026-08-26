@@ -612,8 +612,29 @@ interface ParsedOutlookEventDiagnostics {
   unrepresentableCount: number;
 }
 
+interface ParseOutlookEventsOptions {
+  categoryColors?: ReadonlyMap<string, string> | null;
+}
+
+const resolveFirstCategoryColor = (
+  categories: string[] | undefined,
+  categoryColors: ReadonlyMap<string, string> | null | undefined,
+): string | undefined => {
+  if (!categories || !categoryColors) {
+    return;
+  }
+  for (const category of categories) {
+    const color = categoryColors.get(category.toLowerCase());
+    if (color) {
+      return color;
+    }
+  }
+  return globalThis.undefined;
+};
+
 const parseOutlookEventsWithDiagnostics = (
   events: OutlookCalendarEvent[],
+  options: ParseOutlookEventsOptions = {},
 ): ParsedOutlookEventDiagnostics => {
   const result: EventTimeSlot[] = [];
   let selfAuthoredCount = 0;
@@ -657,8 +678,10 @@ const parseOutlookEventsWithDiagnostics = (
       continue;
     }
 
+    const color = resolveFirstCategoryColor(event.categories, options.categoryColors);
     result.push({
       ...availability && { availability },
+      ...(color && { color }),
       description: event.body?.content,
       endTime: instant.endTime,
       isAllDay: event.isAllDay ?? false,
