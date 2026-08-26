@@ -19,6 +19,7 @@ const remediationScanRoots = () => [
   "packages/queue/tests",
   "packages/sync/tests",
   "services/api/tests",
+  "services/cron/tests",
 ];
 
 const remediationTestFiles = () => [
@@ -26,6 +27,11 @@ const remediationTestFiles = () => [
   "packages/auth/tests/delete-user-teardown.test.ts",
   "packages/auth/tests/failed-delete-user-does-not-strand-the-account.test.ts",
   "packages/auth/tests/polar-customer-delete.test.ts",
+  "packages/calendar/tests/core/deletion/expired-oauth-grant-residue-is-retired-instead-of-retried-forever.test.ts",
+  "packages/calendar/tests/core/deletion/reaper-refuses-oauth-residue-without-account-email.test.ts",
+  "packages/calendar/tests/core/deletion/reaper-refuses-to-revoke-a-google-account-a-surviving-user-still-holds.test.ts",
+  "packages/calendar/tests/core/deletion/reaper-revokes-oauth-grant-residue.test.ts",
+  "packages/calendar/tests/core/deletion/unresolved-grant-identity-keeps-its-residue.test.ts",
   "packages/calendar/tests/core/sync-engine/aborted-run-is-alertable.test.ts",
   "packages/calendar/tests/core/sync-engine/aborted-run-is-visible-to-the-caller.test.ts",
   "packages/calendar/tests/core/sync-engine/in-flight-sync-aborts-when-user-is-deleted.test.ts",
@@ -35,16 +41,33 @@ const remediationTestFiles = () => [
   "packages/queue/tests/remove-user-sync-jobs.test.ts",
   "packages/sync/tests/aborted-run-does-not-clear-backoff.test.ts",
   "packages/sync/tests/aborted-run-verdict.test.ts",
+  "services/api/tests/utils/deadline-abort-preserves-abandoned-push-channel-residue.test.ts",
   "services/api/tests/utils/delete-user-teardown-budget-fits-auth-deadline.test.ts",
   "services/api/tests/utils/delete-user-teardown-deadline.test.ts",
   "services/api/tests/utils/delete-user-teardown-push-restate.test.ts",
   "services/api/tests/utils/delete-user-teardown-tombstone-abort.test.ts",
   "services/api/tests/utils/delete-user-teardown.test.ts",
+  "services/api/tests/utils/failed-teardown-steps-leave-durable-repairable-residue.test.ts",
+  "services/api/tests/utils/grants-revoked-only-after-the-delete-commits.test.ts",
+  "services/api/tests/utils/oauth-grant-residue-carries-the-provider-account-id.test.ts",
+  "services/api/tests/utils/oauth-grant-residue-records-the-google-account.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels-abandoned-are-loud.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels-abandoned-attribution.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels-concurrency.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels-stop-deadline.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels.test.ts",
+  "services/api/tests/utils/residue-claim-skips-rows-whose-user-row-still-exists.test.ts",
+  "services/api/tests/utils/residue-orphaned-by-a-crashed-delete-is-purged.test.ts",
+  "services/api/tests/utils/revocable-grants-recorded-for-the-reaper.test.ts",
+  "services/api/tests/utils/teardown-rollback-clears-push-channel-residue.test.ts",
+  "services/api/tests/utils/teardown-rollback-fails-loudly-when-its-residue-store-cannot-delete.test.ts",
+  "services/cron/tests/jobs/reaper-cohort-guard-is-case-insensitive-on-account-email.test.ts",
+  "services/cron/tests/jobs/reaper-counts-calendar-account-holders-as-co-holders.test.ts",
+  "services/cron/tests/jobs/reaper-counts-social-sign-in-account-rows-as-co-holders.test.ts",
+  "services/cron/tests/jobs/reaper-counts-unknown-account-identity-as-a-co-holder.test.ts",
+  "services/cron/tests/jobs/reaper-ignores-null-email-credentials-for-a-different-account.test.ts",
+  "services/cron/tests/jobs/reaper-refuses-to-revoke-a-google-account-a-surviving-user-still-holds.test.ts",
+  "services/cron/tests/jobs/unknown-identity-credential-row-defers-instead-of-blocking-every-revocation.test.ts",
 ];
 
 const looksLikeOpaqueIdentifier = (token: string) =>
@@ -70,7 +93,7 @@ const readGuardedFile = async (relativePath: string, options?: GuardOptions) => 
 
 const scanRemediationTests = async (root: string) => {
   const remediationNamePattern =
-    /aborted-run|deleted-user|delete-user|deregister-user-channels|remove-user-sync-jobs|tombstone|user-deleted|user-is-deleted/;
+    /aborted-run|deleted-user|delete-user|deregister-user-channels|grant|reaper|remove-user-sync-jobs|residue|revoke|tombstone|user-deleted|user-is-deleted/;
   const named = remediationTestFiles();
   const found: string[] = [];
   for (const scanRoot of remediationScanRoots()) {

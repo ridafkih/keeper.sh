@@ -105,7 +105,8 @@ const createReaper = (seed: TeardownResidueRecord[]) => {
   const registrar = createRegistrar();
 
   const reap = createTeardownResidueReaper({
-    countSurvivingAccountLinks: () => Promise.resolve(0),
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({ coHolders: 0, identityResolved: true }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),

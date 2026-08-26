@@ -432,10 +432,12 @@ export type {
 } from "./core/deletion/teardown-residue";
 export {
   createTeardownResidueReaper,
+  RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,
   RESIDUE_STALE_SLUG,
 } from "./core/deletion/teardown-residue-reaper";
 export type {
+  SurvivingAccountLinkCensus,
   TeardownResidueReaperDependencies,
   TeardownResidueReaperOutcome,
 } from "./core/deletion/teardown-residue-reaper";

@@ -12,15 +12,26 @@ import type {
 
 const RESIDUE_REPAIR_FAILED_SLUG = "teardown-residue-repair-failed";
 const RESIDUE_STALE_SLUG = "teardown-residue-stale";
+const RESIDUE_IDENTITY_UNRESOLVED_SLUG = "teardown-residue-identity-unresolved";
 const NO_ATTEMPTS = 0;
 const MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION = 5;
 const MAX_RESIDUE_REPAIR_ATTEMPTS = 6;
 const NO_SURVIVING_ACCOUNT_LINKS = 0;
 
-type ResidueRepairOutcome = "repaired" | "revocation_skipped";
+type ResidueRepairOutcome =
+  | "repaired"
+  | "revocation_skipped"
+  | "revocation_unresolved";
+
+interface SurvivingAccountLinkCensus {
+  coHolders: number;
+  identityResolved: boolean;
+}
 
 interface TeardownResidueReaperDependencies {
-  countSurvivingAccountLinks: (record: TeardownResidueRecord) => Promise<number>;
+  countSurvivingAccountLinks: (
+    record: TeardownResidueRecord,
+  ) => Promise<SurvivingAccountLinkCensus>;
   createRegistrarContext: (record: TeardownResidueRecord) => Promise<RegistrarContext>;
   deletePolarCustomer: (externalId: string) => Promise<void>;
   now: () => Date;
@@ -39,6 +50,7 @@ interface TeardownResidueReaperOutcome {
   purgedIds: string[];
   revocationSkippedIds: string[];
   scannedCount: number;
+  unresolvedIds: string[];
 }
 
 const stopTargetFromResidue = (
@@ -122,12 +134,16 @@ const repairOAuthGrant = async (
   }
 
   if (!record.providerAccountId) {
-    return "revocation_skipped";
+    return "revocation_unresolved";
   }
 
-  const survivingAccountLinks = await dependencies.countSurvivingAccountLinks(record);
+  const census = await dependencies.countSurvivingAccountLinks(record);
 
-  if (survivingAccountLinks > NO_SURVIVING_ACCOUNT_LINKS) {
+  if (!census.identityResolved) {
+    return "revocation_unresolved";
+  }
+
+  if (census.coHolders > NO_SURVIVING_ACCOUNT_LINKS) {
     return "revocation_skipped";
   }
 
@@ -214,6 +230,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
   const expiredIds: string[] = [];
   const failedIds: string[] = [];
   const revocationSkippedIds: string[] = [];
+  const unresolvedIds: string[] = [];
 
   for (const record of records) {
     if (awaitsPushChannelReaping(record, records)) {
@@ -238,6 +255,23 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 
     try {
       const repairOutcome = await repairResidue(record, dependencies, now);
+
+      if (repairOutcome === "revocation_unresolved") {
+        if (hasExhaustedItsRepairAttempts(record, now)) {
+          await dependencies.residue.clear(record.id);
+          expiredIds.push(record.id);
+          continue;
+        }
+
+        dependencies.recordError(
+          new Error(
+            `OAuth grant residue ${record.id} for user ${record.userId} cannot be tied to a provider account whose co-holders are all known, so the grant stays unrevoked and the residue waits for the next pass`,
+          ),
+          RESIDUE_IDENTITY_UNRESOLVED_SLUG,
+        );
+        unresolvedIds.push(record.id);
+        continue;
+      }
 
       await dependencies.residue.clear(record.id);
       clearedIds.push(record.id);
@@ -266,6 +300,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     "teardown_residue.purged_count": purgedIds.length,
     "teardown_residue.revocation_skipped_count": revocationSkippedIds.length,
     "teardown_residue.scanned_count": records.length,
+    "teardown_residue.unresolved_count": unresolvedIds.length,
   });
 
   return {
@@ -276,12 +311,18 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     purgedIds,
     revocationSkippedIds,
     scannedCount: records.length,
+    unresolvedIds,
   };
 };
 
 export {
   createTeardownResidueReaper,
+  RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,
   RESIDUE_STALE_SLUG,
 };
-export type { TeardownResidueReaperDependencies, TeardownResidueReaperOutcome };
+export type {
+  SurvivingAccountLinkCensus,
+  TeardownResidueReaperDependencies,
+  TeardownResidueReaperOutcome,
+};

@@ -1,7 +1,11 @@
 import type { CronOptions } from "cronbake";
 import { and, count, eq, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { oauthCredentialsTable } from "@keeper.sh/database/schema";
+import {
+  calendarAccountsTable,
+  oauthCredentialsTable,
+} from "@keeper.sh/database/schema";
 import { account as authAccountTable } from "@keeper.sh/database/auth-schema";
 import {
   createGoogleTokenRefresher,
@@ -14,6 +18,7 @@ import {
 } from "@keeper.sh/calendar";
 import type {
   RegistrarContext,
+  SurvivingAccountLinkCensus,
   TeardownResidueRecord,
   TokenRefresher,
   TokenState,
@@ -24,6 +29,7 @@ import { widelog } from "@/utils/logging";
 
 const RESIDUE_STOP_TIMEOUT_MS = 5000;
 const POLAR_RESOURCE_NOT_FOUND = "ResourceNotFound";
+const NO_UNKNOWABLE_CREDENTIALS = 0;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -182,21 +188,45 @@ const revokeOAuthGrant = async (
   }
 };
 
-const countSurvivingCredentialLinks = async (
+const credentialHoldsTheAccount = (
+  provider: string,
+  accountEmail: string,
+  providerAccountId: string | null,
+): SQL => {
+  if (providerAccountId === null) {
+    return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail})`;
+  }
+
+  return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or (${oauthCredentialsTable.email} is null and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} = ${providerAccountId}))`;
+};
+
+const credentialIdentityIsUnknowable = (
+  provider: string,
+  providerAccountId: string | null,
+): SQL => {
+  if (providerAccountId === null) {
+    return sql`${oauthCredentialsTable.email} is null`;
+  }
+
+  return sql`${oauthCredentialsTable.email} is null and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider})`;
+};
+
+const censusSurvivingCredentialLinks = async (
   database: PgDatabase<PgQueryResultHKT>,
   record: TeardownResidueRecord,
   provider: string,
   accountEmail: string,
-): Promise<number> => {
+  providerAccountId: string | null,
+): Promise<SurvivingAccountLinkCensus> => {
   const [row] = await database
-    .select({ surviving: count() })
+    .select({
+      surviving: sql<number>`count(*) filter (where ${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)})`
+        .mapWith(Number),
+      unknowable: sql<number>`count(*) filter (where ${credentialIdentityIsUnknowable(provider, providerAccountId)})`
+        .mapWith(Number),
+    })
     .from(oauthCredentialsTable)
-    .where(
-      and(
-        eq(oauthCredentialsTable.provider, provider),
-        sql`(lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or ${oauthCredentialsTable.email} is null)`,
-      ),
-    );
+    .where(eq(oauthCredentialsTable.provider, provider));
 
   if (!row) {
     throw new Error(
@@ -204,7 +234,10 @@ const countSurvivingCredentialLinks = async (
     );
   }
 
-  return row.surviving;
+  return {
+    coHolders: row.surviving,
+    identityResolved: row.unknowable === NO_UNKNOWABLE_CREDENTIALS,
+  };
 };
 
 const countSurvivingSocialSignInLinks = async (
@@ -232,10 +265,35 @@ const countSurvivingSocialSignInLinks = async (
   return row.surviving;
 };
 
+const countSurvivingCalendarAccountLinks = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  record: TeardownResidueRecord,
+  provider: string,
+  providerAccountId: string,
+): Promise<number> => {
+  const [row] = await database
+    .select({ surviving: count() })
+    .from(calendarAccountsTable)
+    .where(
+      and(
+        eq(calendarAccountsTable.provider, provider),
+        eq(calendarAccountsTable.accountId, providerAccountId),
+      ),
+    );
+
+  if (!row) {
+    throw new Error(
+      `Counting surviving calendar account links to ${provider} account behind residue ${record.id} returned no row`,
+    );
+  }
+
+  return row.surviving;
+};
+
 const countSurvivingAccountLinks = async (
   database: PgDatabase<PgQueryResultHKT>,
   record: TeardownResidueRecord,
-): Promise<number> => {
+): Promise<SurvivingAccountLinkCensus> => {
   const { provider, accountEmail, providerAccountId } = record;
 
   if (!provider || !accountEmail) {
@@ -244,15 +302,16 @@ const countSurvivingAccountLinks = async (
     );
   }
 
-  const credentialLinks = await countSurvivingCredentialLinks(
+  const credentialCensus = await censusSurvivingCredentialLinks(
     database,
     record,
     provider,
     accountEmail,
+    providerAccountId ?? null,
   );
 
   if (!providerAccountId) {
-    return credentialLinks;
+    return credentialCensus;
   }
 
   const signInLinks = await countSurvivingSocialSignInLinks(
@@ -262,7 +321,17 @@ const countSurvivingAccountLinks = async (
     providerAccountId,
   );
 
-  return credentialLinks + signInLinks;
+  const calendarAccountLinks = await countSurvivingCalendarAccountLinks(
+    database,
+    record,
+    provider,
+    providerAccountId,
+  );
+
+  return {
+    coHolders: credentialCensus.coHolders + signInLinks + calendarAccountLinks,
+    identityResolved: credentialCensus.identityResolved,
+  };
 };
 
 const createDefaultReaper = async () => {

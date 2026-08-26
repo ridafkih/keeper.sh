@@ -93,7 +93,10 @@ const createHarness = (survivingAccountLinks: number) => {
         accountEmail: record.accountEmail,
         provider: record.provider,
       });
-      return Promise.resolve(survivingAccountLinks);
+      return Promise.resolve({
+        coHolders: survivingAccountLinks,
+        identityResolved: true,
+      });
     },
     createRegistrarContext: () =>
       Promise.reject(new Error("push channels are not part of this test")),

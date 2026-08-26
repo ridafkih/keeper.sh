@@ -385,7 +385,8 @@ describe("the teardown residue reaper", () => {
     registrar: SourcePushRegistrar,
     deletedPolarExternalIds: string[],
   ) => ({
-    countSurvivingAccountLinks: () => Promise.resolve(0),
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({ coHolders: 0, identityResolved: true }),
     createRegistrarContext: (record: TeardownResidueRecord) =>
       Promise.resolve({
         accessToken: record.credential?.accessToken ?? "",

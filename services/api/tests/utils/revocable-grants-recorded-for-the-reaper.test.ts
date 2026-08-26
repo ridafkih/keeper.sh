@@ -217,7 +217,8 @@ const makeReaper = async (options: {
   const { createTeardownResidueReaper, revokeGoogleGrant } = await import("@keeper.sh/calendar");
 
   return createTeardownResidueReaper({
-    countSurvivingAccountLinks: () => Promise.resolve(0),
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({ coHolders: 0, identityResolved: true }),
     createRegistrarContext: () =>
       Promise.reject(new Error("push channel repair is not part of this test")),
     deletePolarCustomer: () => Promise.reject(new Error("polar is not part of this test")),

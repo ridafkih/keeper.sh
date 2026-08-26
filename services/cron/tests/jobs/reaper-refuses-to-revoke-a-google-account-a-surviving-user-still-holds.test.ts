@@ -14,9 +14,11 @@ import { countSurvivingAccountLinks } from "../../src/jobs/reap-teardown-residue
 const client = new PGlite();
 const database = drizzle(client);
 
-const RESIDUE_ID = "33333333-3333-3333-3333-333333333333";
-const SHARED_ACCOUNT = "foo@x.com";
-const SHARED_ACCOUNT_ID = "google-sub-foo";
+const RESIDUE_ID = "55555555-5555-5555-5555-555555555555";
+const SHARED_ACCOUNT = "shared@gmail.com";
+const SHARED_ACCOUNT_ID = "google-sub-shared";
+const DELETED_USER_TOKEN = "deleted-user-refresh-token";
+const SURVIVING_USER_TOKEN = "surviving-user-refresh-token";
 
 const DDL = `
 create table "user" (
@@ -69,25 +71,25 @@ const oauthGrantResidue = (): TeardownResidueRecord => ({
   accountEmail: SHARED_ACCOUNT,
   createdAt: new Date("2026-08-26T11:00:00.000Z"),
   credential: {
-    accessToken: "a-access",
+    accessToken: "deleted-user-access-token",
     expiresAt: new Date("2026-08-26T13:00:00.000Z"),
-    refreshToken: "a-refresh",
+    refreshToken: DELETED_USER_TOKEN,
   },
   expiresAt: new Date("2026-09-30T12:00:00.000Z"),
   id: RESIDUE_ID,
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
   providerAccountId: SHARED_ACCOUNT_ID,
-  userId: "user-a",
+  userId: "deleted-user",
 });
 
-const insertSurvivorLinkedOnlyThroughSocialSignIn = async (): Promise<void> => {
+const insertSurvivorHoldingTheSameGoogleAccount = async (): Promise<void> => {
   await client.query(
-    `insert into "user" ("email", "id", "name") values ('b@keeper.sh', 'user-b', 'Survivor B')`,
+    `insert into "user" ("email", "id", "name") values ('survivor@keeper.sh', 'surviving-user', 'Survivor')`,
   );
   await client.query(
-    `insert into "account" ("accountId", "id", "providerId", "refreshToken", "userId")
-     values ('${SHARED_ACCOUNT_ID}', 'account-b', 'google', 'live-refresh-b', 'user-b')`,
+    `insert into oauth_credentials ("accessToken", "email", "expiresAt", "provider", "refreshToken", "userId")
+     values ('surviving-user-access-token', '${SHARED_ACCOUNT}', now() + interval '1 hour', 'google', '${SURVIVING_USER_TOKEN}', 'surviving-user')`,
   );
 };
 
@@ -95,7 +97,6 @@ const createHarness = () => {
   const records = [oauthGrantResidue()];
   const clearedIds: string[] = [];
   const errors: { error: unknown; slug: string }[] = [];
-  const observed: Record<string, unknown>[] = [];
   const revokedTokens: string[] = [];
 
   const store: TeardownResidueStore = {
@@ -117,9 +118,7 @@ const createHarness = () => {
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
     now: () => new Date("2026-08-26T12:00:00.000Z"),
-    observe: (fields: Record<string, unknown>) => {
-      observed.push(fields);
-    },
+    observe: () => {},
     recordError: (error: unknown, slug: string) => {
       errors.push({ error, slug });
     },
@@ -131,10 +130,10 @@ const createHarness = () => {
     },
   } as unknown as Parameters<typeof createTeardownResidueReaper>[0]);
 
-  return { clearedIds, errors, observed, reap, revokedTokens };
+  return { clearedIds, errors, reap, revokedTokens };
 };
 
-describe("a social sign-in account row counts as a co-holder of the grant", () => {
+describe("the reaper refuses to revoke a google account a surviving user still holds", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
@@ -142,30 +141,34 @@ describe("a social sign-in account row counts as a co-holder of the grant", () =
     await client.exec(DDL);
   });
 
-  it("counts a surviving better-auth account row linked to the same google account", async () => {
-    await insertSurvivorLinkedOnlyThroughSocialSignIn();
+  it("counts the surviving credential row as a co-holder of the grant", async () => {
+    await insertSurvivorHoldingTheSameGoogleAccount();
 
-    const surviving = await countSurvivingAccountLinks(database, oauthGrantResidue());
-
-    expect(surviving.coHolders).toBeGreaterThanOrEqual(1);
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 1,
+      identityResolved: true,
+    });
   });
 
-  it("makes the reaper skip revocation when only a sign-in account row survives", async () => {
-    await insertSurvivorLinkedOnlyThroughSocialSignIn();
+  it("revokes nothing and settles the residue while the survivor holds the account", async () => {
+    await insertSurvivorHoldingTheSameGoogleAccount();
 
     const harness = createHarness();
     const outcome = await harness.reap();
 
     expect(harness.revokedTokens).toEqual([]);
+    expect(harness.clearedIds).toContain(RESIDUE_ID);
     expect(outcome.revocationSkippedIds).toContain(RESIDUE_ID);
     expect(outcome.failedIds).toEqual([]);
     expect(harness.errors).toEqual([]);
   });
 
-  it("still counts zero when no user holds the google account any more", async () => {
-    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
-      coHolders: 0,
-      identityResolved: true,
-    });
+  it("revokes only the deleted user's own token once no survivor holds the account", async () => {
+    const harness = createHarness();
+    const outcome = await harness.reap();
+
+    expect(harness.revokedTokens).toEqual([DELETED_USER_TOKEN]);
+    expect(harness.revokedTokens).not.toContain(SURVIVING_USER_TOKEN);
+    expect(outcome.failedIds).toEqual([]);
   });
 });

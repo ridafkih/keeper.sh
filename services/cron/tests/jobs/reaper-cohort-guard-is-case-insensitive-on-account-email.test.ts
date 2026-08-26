@@ -66,18 +66,24 @@ describe("counting co-holders of a google account behind oauth grant residue", (
   it("counts a surviving row whose email matches only case-insensitively", async () => {
     await insertSurvivor("Bob@Gmail.com");
 
-    expect(await countSurvivingAccountLinks(database, residueFor("bob@gmail.com"))).toBe(1);
+    expect(
+      await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
+    ).toEqual({ coHolders: 1, identityResolved: true });
   });
 
   it("counts a surviving row whose email matches exactly", async () => {
     await insertSurvivor("bob@gmail.com");
 
-    expect(await countSurvivingAccountLinks(database, residueFor("bob@gmail.com"))).toBe(1);
+    expect(
+      await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
+    ).toEqual({ coHolders: 1, identityResolved: true });
   });
 
   it("counts no co-holder when the surviving row is a different account", async () => {
     await insertSurvivor("someone-else@gmail.com");
 
-    expect(await countSurvivingAccountLinks(database, residueFor("bob@gmail.com"))).toBe(0);
+    expect(
+      await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
+    ).toEqual({ coHolders: 0, identityResolved: true });
   });
 });
