@@ -120,6 +120,19 @@ const recoverCreateConflict = async (
     return;
   }
 
+  /*
+   * Our object names are derived from the source event, so two customers mirroring the same event
+   * into one shared calendar land on the same href. The object already standing there is only ours
+   * to replace if it says so: anything else is somebody else's event, and deleting it to make room
+   * destroys a copy we were never asked to manage. Failing here costs us a mirror we could not
+   * write; the alternative costs them the event itself.
+   */
+  if (remoteEvent?.uid !== uid) {
+    throw new Error(
+      `CalDAV object ${uid}.ics carries uid ${remoteEvent?.uid ?? "none"}, so it is not this event's mirror`,
+    );
+  }
+
   if (!existing.etag) {
     throw new Error(`CalDAV event ${uid} already exists but has no ETag for a safe recreation`);
   }
