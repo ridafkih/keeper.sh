@@ -21,6 +21,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 
+const DEREGISTRATION_ERROR_PREFIX = "push_channel.disconnect_error";
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const RESTATE_FAILED_SLUG = "push-channel-restate-failed";
 const STOPPED_STATE = "removed";
@@ -28,6 +29,7 @@ const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
 const SERIAL_CONCURRENCY = 1;
 const LIVE_STATES = ["active", "degraded", "registering"];
+const ORPHAN_RISK_STATES = new Set(LIVE_STATES);
 const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 
 interface DeregisterPushChannelsDependencies {
@@ -98,9 +100,30 @@ const resolveAbandonmentReason = (
   return new Error(`Push channel ${channelId} was never dialed at the provider`);
 };
 
+const identifyChannel = (channel: AbandonedPushChannel): string =>
+  `${channel.provider}:${channel.id}:${channel.providerChannelId}`;
+
+const describeReason = (reason: unknown): string => {
+  if (reason instanceof AggregateError) {
+    return [reason.message, ...reason.errors.map((inner) => describeReason(inner))]
+      .join("; ");
+  }
+  if (reason instanceof Error) {
+    const cause = reason.cause ?? null;
+    if (cause === null) {
+      return `${reason.name}: ${reason.message}`;
+    }
+    return `${reason.name}: ${reason.message}; caused by ${describeReason(cause)}`;
+  }
+  if (typeof reason === "string") {
+    return reason;
+  }
+  return `Unknown reason ${String(reason)}`;
+};
+
 const describeAbandonment = (channel: AbandonedPushChannel, reason: unknown): Error =>
   new Error(
-    `Push channel ${channel.id} (${channel.provider} channel ${channel.providerChannelId}) was not confirmed stopped at the provider`,
+    `Push channel ${channel.id} (${channel.provider} channel ${channel.providerChannelId}) was not confirmed stopped at the provider: ${describeReason(reason)}`,
     { cause: reason },
   );
 
@@ -111,13 +134,22 @@ const describeAbandoned = (
   const stopped = new Set(stoppedChannelIds);
 
   return channels
-    .filter((channel) => channel.providerChannelId !== null && !stopped.has(channel.id))
+    .filter((channel) => !stopped.has(channel.id))
     .map((channel) => ({
       id: channel.id,
       provider: channel.provider,
       providerChannelId: String(channel.providerChannelId),
     }));
 };
+
+const carriesProviderIdentifier = (channel: StoredPushChannel): boolean =>
+  channel.providerChannelId !== null;
+
+const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] =>
+  channels
+    .filter((channel) =>
+      !carriesProviderIdentifier(channel) && ORPHAN_RISK_STATES.has(channel.state))
+    .map((channel) => `${channel.provider}:${channel.id}:${channel.state}`);
 
 const restateStoppedChannels = async (
   channelIds: string[],
@@ -152,6 +184,7 @@ const runDeregisterPushChannelsOutcome = async (
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
   concurrency: number = DISCONNECT_CONCURRENCY,
+  recordAbandonments = false,
 ): Promise<DeregisterPushChannelsOutcome> => {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error(
@@ -171,7 +204,9 @@ const runDeregisterPushChannelsOutcome = async (
     return { abandonments: [], deregisteredCount: 0 };
   }
 
-  const queued = [...channels];
+  const dialable = channels.filter((channel) => carriesProviderIdentifier(channel));
+  const possiblyOrphaned = describePossiblyOrphaned(channels);
+  const queued = [...dialable];
   const stoppedChannelIds: string[] = [];
   const failureReasons = new Map<string, unknown>();
 
@@ -192,10 +227,6 @@ const runDeregisterPushChannelsOutcome = async (
           continue;
         }
 
-        if (channel.providerChannelId === null) {
-          continue;
-        }
-
         const outcome = await stopChannel(channel, registrar, dependencies, signal);
         if (outcome.stopped) {
           stoppedChannelIds.push(channel.id);
@@ -208,24 +239,31 @@ const runDeregisterPushChannelsOutcome = async (
 
   await Promise.all(workers);
 
-  const abandoned = describeAbandoned(channels, stoppedChannelIds);
-  const abandonments = abandoned.map((channel) =>
-    describeAbandonment(
-      channel,
-      resolveAbandonmentReason(channel.id, failureReasons, signal),
-    ));
+  const abandoned = describeAbandoned(dialable, stoppedChannelIds).map((channel) => ({
+    channel,
+    reason: resolveAbandonmentReason(channel.id, failureReasons, signal),
+  }));
+  const abandonments = abandoned.map(({ channel, reason }) =>
+    describeAbandonment(channel, reason));
 
-  for (const abandonment of abandonments) {
-    dependencies.recordError(abandonment, DEREGISTRATION_FAILED_SLUG);
+  if (recordAbandonments) {
+    for (const abandonment of abandonments) {
+      dependencies.recordError(abandonment, DEREGISTRATION_FAILED_SLUG);
+    }
   }
 
   const restated = await restateStoppedChannels(stoppedChannelIds, dependencies);
 
   dependencies.observe({
-    "push_channel.disconnect_abandoned": abandoned,
+    "push_channel.disconnect_abandoned": abandoned.map(({ channel }) =>
+      identifyChannel(channel)),
+    "push_channel.disconnect_abandoned_reason": abandoned.map(({ channel, reason }) =>
+      `${identifyChannel(channel)} ${describeReason(reason)}`),
     "push_channel.disconnect_abandoned_count": abandoned.length,
     "push_channel.disconnect_deregistered_count": stoppedChannelIds.length,
     "push_channel.disconnect_live_count": channels.length,
+    "push_channel.disconnect_possibly_orphaned": possiblyOrphaned,
+    "push_channel.disconnect_possibly_orphaned_count": possiblyOrphaned.length,
     "push_channel.disconnect_restated_count": restated,
   });
 
@@ -243,6 +281,7 @@ const runDeregisterPushChannels = async (
     dependencies,
     signal,
     concurrency,
+    true,
   );
 
   return outcome.deregisteredCount;
@@ -401,11 +440,15 @@ const deregisterPushChannelsWithin = async (
       widelog.setFields(fields);
     },
     recordError: (error, slug) => {
-      widelog.errorFields(error, { retriable: false, slug });
+      widelog.errorFields(error, {
+        prefix: DEREGISTRATION_ERROR_PREFIX,
+        retriable: false,
+        slug,
+      });
     },
     resolveRegistrar: resolvePushRegistrar,
     webhookConfigured: webhookConfig !== null,
-  }, signal, concurrency);
+  }, signal, concurrency, true);
 
   if (requireEveryChannelStopped && outcome.abandonments.length > 0) {
     throw describeAbandonedScope(`${scopeColumn} ${scopeId}`, outcome.abandonments);

@@ -128,6 +128,7 @@ describe("push channel stop deadline starts at its own attempt", () => {
     expect(run.observed).toContainEqual(expect.objectContaining({
       "push_channel.disconnect_abandoned": [],
       "push_channel.disconnect_abandoned_count": 0,
+      "push_channel.disconnect_abandoned_reason": [],
       "push_channel.disconnect_deregistered_count": channelCount,
     }));
   });

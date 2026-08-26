@@ -192,7 +192,7 @@ const stopGoogleWatchChannel = async (
       return;
     }
     throw new GoogleWatchChannelError(
-      "Google push deregistration requires both a channel id and a resource id",
+      `Google push deregistration of channel ${String(channel.providerChannelId)} requires a resource id that was never recorded`,
       0,
     );
   }
