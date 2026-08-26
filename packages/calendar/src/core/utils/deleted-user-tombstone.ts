@@ -1,6 +1,8 @@
 const DELETED_USER_TOMBSTONE_TTL_SECONDS = 3600;
 const TOMBSTONE_WRITE_ATTEMPTS = 3;
 const TOMBSTONE_RETRY_DELAY_MS = 25;
+const TOMBSTONE_ERASE_CONFIRMATIONS = 3;
+const TOMBSTONE_ERASE_CONFIRMATION_DELAY_MS = 25;
 
 const deletedUserTombstoneKey = (userId: string): string => `user:${userId}:deleted`;
 
@@ -12,6 +14,10 @@ interface RedisTombstoneClient {
 
 type TombstoneWriter = Pick<RedisTombstoneClient, "exists" | "set">;
 type TombstoneEraser = Pick<RedisTombstoneClient, "del" | "exists">;
+
+interface TombstoneOptions {
+  signal?: AbortSignal;
+}
 
 const delay = (durationMs: number): Promise<void> =>
   new Promise((resolve) => {
@@ -25,6 +31,25 @@ const describeFailure = (error: unknown): string => {
   return String(error);
 };
 
+const throwIfAborted = (
+  signal: AbortSignal | undefined,
+  action: string,
+  userId: string,
+  failures: string[],
+): void => {
+  if (signal?.aborted !== true) {
+    return;
+  }
+
+  const summary = `Aborted the ${action} for user ${userId}: ${describeFailure(signal.reason)}`;
+
+  if (failures.length === 0) {
+    throw new Error(summary);
+  }
+
+  throw new Error(`${summary} — ${failures.join("; ")}`);
+};
+
 const writeTombstoneOnce = async (redis: TombstoneWriter, key: string): Promise<void> => {
   await redis.set(key, String(Date.now()), "EX", DELETED_USER_TOMBSTONE_TTL_SECONDS);
 
@@ -35,11 +60,17 @@ const writeTombstoneOnce = async (redis: TombstoneWriter, key: string): Promise<
   }
 };
 
-const markUserDeleted = async (redis: TombstoneWriter, userId: string): Promise<void> => {
+const markUserDeleted = async (
+  redis: TombstoneWriter,
+  userId: string,
+  options: TombstoneOptions = {},
+): Promise<void> => {
   const key = deletedUserTombstoneKey(userId);
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= TOMBSTONE_WRITE_ATTEMPTS; attempt += 1) {
+    throwIfAborted(options.signal, "deletion tombstone write", userId, failures);
+
     try {
       await writeTombstoneOnce(redis, key);
       return;
@@ -48,6 +79,7 @@ const markUserDeleted = async (redis: TombstoneWriter, userId: string): Promise<
     }
 
     if (attempt < TOMBSTONE_WRITE_ATTEMPTS) {
+      throwIfAborted(options.signal, "deletion tombstone write", userId, failures);
       await delay(TOMBSTONE_RETRY_DELAY_MS * attempt);
     }
   }
@@ -67,13 +99,25 @@ const eraseTombstoneOnce = async (redis: TombstoneEraser, key: string): Promise<
   }
 };
 
+const eraseTombstoneUntilSettled = async (redis: TombstoneEraser, key: string): Promise<void> => {
+  await eraseTombstoneOnce(redis, key);
+
+  for (let confirmation = 1; confirmation <= TOMBSTONE_ERASE_CONFIRMATIONS; confirmation += 1) {
+    await delay(TOMBSTONE_ERASE_CONFIRMATION_DELAY_MS);
+
+    if ((await redis.exists(key)) > 0) {
+      await eraseTombstoneOnce(redis, key);
+    }
+  }
+};
+
 const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise<void> => {
   const key = deletedUserTombstoneKey(userId);
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= TOMBSTONE_WRITE_ATTEMPTS; attempt += 1) {
     try {
-      await eraseTombstoneOnce(redis, key);
+      await eraseTombstoneUntilSettled(redis, key);
       return;
     } catch (error) {
       failures.push(`attempt ${attempt}: ${describeFailure(error)}`);
@@ -173,4 +217,10 @@ export {
   markUserDeleted,
   DELETED_USER_TOMBSTONE_TTL_SECONDS,
 };
-export type { RedisTombstoneClient, TombstoneEraser, TombstoneWriter, UserDeletedFallback };
+export type {
+  RedisTombstoneClient,
+  TombstoneEraser,
+  TombstoneOptions,
+  TombstoneWriter,
+  UserDeletedFallback,
+};

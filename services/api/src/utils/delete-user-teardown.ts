@@ -4,17 +4,35 @@ import { createPushSyncQueue, removeUserSyncJobs } from "@keeper.sh/queue";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 import { deregisterUserPushChannels } from "@/utils/push-notifications/deregister-account-channels";
+import { SYNC_TEARDOWN_TIMEOUT_MS } from "@keeper.sh/auth";
 import type { RedisTombstoneClient } from "@keeper.sh/calendar";
 import type { DeleteUserTeardown } from "@keeper.sh/auth";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
-const TEARDOWN_BUDGET_MS = 7500;
-const TOMBSTONE_TIMEOUT_MS = 1000;
-const SYNC_JOBS_TIMEOUT_MS = 2000;
-const PUSH_CHANNELS_TIMEOUT_MS = 5500;
-const QUEUE_COMMAND_TIMEOUT_MS = 5000;
+const STEP_ABORT_SETTLE_MS = 400;
+const TOMBSTONE_TIMEOUT_MS = 500;
+const SYNC_JOBS_TIMEOUT_MS = 1200;
+const PUSH_CHANNELS_TIMEOUT_MS = 3800;
+const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
-const STEP_ABORT_SETTLE_MS = 1000;
+
+const STEP_TIMEOUTS_MS = [
+  TOMBSTONE_TIMEOUT_MS,
+  SYNC_JOBS_TIMEOUT_MS,
+  PUSH_CHANNELS_TIMEOUT_MS,
+];
+
+const TEARDOWN_BUDGET_MS = STEP_TIMEOUTS_MS.reduce(
+  (total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS,
+  0,
+);
+
+if (TEARDOWN_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
+  throw new Error(
+    `Delete user teardown budget of ${TEARDOWN_BUDGET_MS}ms does not fit inside the ` +
+      `${SYNC_TEARDOWN_TIMEOUT_MS}ms auth deadline supervising it`,
+  );
+}
 
 interface DeleteUserSyncStep {
   name: string;
@@ -36,17 +54,29 @@ interface DeleteUserSyncTeardownDependencies {
   redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
 }
 
+const throwIfAborted = (signal: AbortSignal, stepName: string): void => {
+  if (!signal.aborted) {
+    return;
+  }
+
+  if (signal.reason instanceof Error) {
+    throw signal.reason;
+  }
+
+  throw new Error(`Teardown step ${stepName} was aborted: ${String(signal.reason)}`);
+};
+
 const buildDeleteUserSyncSteps = (
   dependencies: DeleteUserSyncTeardownDependencies,
 ): DeleteUserSyncStep[] => [
   {
     name: "tombstone",
-    run: (userId) => markUserDeleted(dependencies.redis, userId),
+    run: (userId, signal) => markUserDeleted(dependencies.redis, userId, { signal }),
     timeoutMs: TOMBSTONE_TIMEOUT_MS,
   },
   {
     name: "sync_jobs",
-    run: async (userId) => {
+    run: async (userId, signal) => {
       const calendarIds = await dependencies.listCalendarIds(userId);
 
       widelog.setFields({ "delete_user.calendar_count": calendarIds.length });
@@ -54,6 +84,8 @@ const buildDeleteUserSyncSteps = (
       if (calendarIds.length === 0) {
         return;
       }
+
+      throwIfAborted(signal, "sync_jobs");
 
       const outcome = await removeUserSyncJobs(
         dependencies.createQueue(),
@@ -141,20 +173,9 @@ const runWithDeadline = async (
 const createDeleteUserSyncTeardown =
   (dependencies: DeleteUserSyncTeardownDependencies): DeleteUserTeardown =>
   async (userId: string) => {
-    const expiresAt = Date.now() + TEARDOWN_BUDGET_MS;
-
     for (const step of buildDeleteUserSyncSteps(dependencies)) {
-      const remainingMs = expiresAt - Date.now();
-      const deadlineMs = Math.min(step.timeoutMs, remainingMs);
-
       try {
-        if (deadlineMs <= 0) {
-          throw new Error(
-            `Teardown budget of ${TEARDOWN_BUDGET_MS}ms was spent before step ${step.name}`,
-          );
-        }
-
-        await runWithDeadline(step.name, deadlineMs, (signal) => step.run(userId, signal));
+        await runWithDeadline(step.name, step.timeoutMs, (signal) => step.run(userId, signal));
       } catch (error) {
         widelog.errorFields(error, {
           prefix: `delete_user_teardown.${step.name}`,
@@ -214,6 +235,8 @@ export {
   createDeleteUserSyncTeardownRollback,
   deleteUserSyncTeardown,
   deleteUserSyncTeardownRollback,
+  PUSH_CHANNELS_TIMEOUT_MS,
+  STEP_ABORT_SETTLE_MS,
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,
 };

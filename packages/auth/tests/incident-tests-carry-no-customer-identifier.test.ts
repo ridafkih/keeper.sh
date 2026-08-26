@@ -70,9 +70,6 @@ describe("incident remediation tests carry no customer identifier and no comment
     const offenders: string[] = [];
     for (const relativePath of remediationTestFiles) {
       const source = await readGuardedFile(relativePath);
-      if (source === null) {
-        continue;
-      }
       for (const line of findCommentLines(source)) {
         offenders.push(`${relativePath}:${line}`);
       }

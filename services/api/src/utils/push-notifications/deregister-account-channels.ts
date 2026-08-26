@@ -26,6 +26,7 @@ const RESTATE_FAILED_SLUG = "push-channel-restate-failed";
 const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
+const SERIAL_CONCURRENCY = 1;
 const LIVE_STATES = ["active", "degraded", "registering"];
 const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 
@@ -39,16 +40,15 @@ interface DeregisterPushChannelsDependencies {
   webhookConfigured: boolean;
 }
 
+interface DeregisterPushChannelsOutcome {
+  abandonments: Error[];
+  deregisteredCount: number;
+}
+
 interface AbandonedPushChannel {
   id: string;
   provider: string;
   providerChannelId: string;
-}
-
-interface PreparedStop {
-  channel: StoredPushChannel;
-  context: RegistrarContext;
-  registrar: SourcePushRegistrar;
 }
 
 const combineSignals = (signals: AbortSignal[]): AbortSignal[] => {
@@ -58,73 +58,51 @@ const combineSignals = (signals: AbortSignal[]): AbortSignal[] => {
   return [AbortSignal.any(signals)];
 };
 
-const resolveStopSignals = (
-  prepared: PreparedStop,
-  signal: AbortSignal | null,
-): AbortSignal[] => {
-  const candidates = [signal, prepared.context.signal ?? null];
+type ChannelStopOutcome = { reason: unknown; stopped: false } | { stopped: true };
 
-  return candidates.filter((candidate): candidate is AbortSignal => candidate !== null);
-};
-
-const prepareStops = async (
-  channels: StoredPushChannel[],
+const stopChannel = async (
+  channel: StoredPushChannel,
+  registrar: SourcePushRegistrar,
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null,
-): Promise<PreparedStop[]> => {
-  const queued = [...channels];
-  const prepared: PreparedStop[] = [];
-
-  const workers = Array.from(
-    { length: Math.min(DISCONNECT_CONCURRENCY, queued.length) },
-    async () => {
-      for (let channel = queued.shift(); channel; channel = queued.shift()) {
-        if (signal?.aborted) {
-          return;
-        }
-
-        const registrar = dependencies.resolveRegistrar(channel.provider);
-        if (!registrar || channel.providerChannelId === null) {
-          continue;
-        }
-
-        try {
-          const context = await dependencies.createRegistrarContext(channel);
-          prepared.push({ channel, context, registrar });
-        } catch (error) {
-          dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
-        }
-      }
-    },
-  );
-
-  await Promise.all(workers);
-
-  return prepared;
-};
-
-const stopPreparedChannel = async (
-  prepared: PreparedStop,
-  dependencies: DeregisterPushChannelsDependencies,
-  signal: AbortSignal | null,
-): Promise<boolean> => {
-  const [effectiveSignal] = combineSignals(resolveStopSignals(prepared, signal));
-
-  if (effectiveSignal?.aborted) {
-    return false;
-  }
-
+): Promise<ChannelStopOutcome> => {
   try {
-    await prepared.registrar.deregister(prepared.channel, {
-      ...prepared.context,
+    const context = await dependencies.createRegistrarContext(channel);
+    const [effectiveSignal] = combineSignals(
+      [signal, context.signal ?? null].filter(
+        (candidate): candidate is AbortSignal => candidate !== null,
+      ),
+    );
+
+    await registrar.deregister(channel, {
+      ...context,
       ...(effectiveSignal && { signal: effectiveSignal }),
     });
-    return true;
+    return { stopped: true };
   } catch (error) {
-    dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
-    return false;
+    return { reason: error, stopped: false };
   }
 };
+
+const resolveAbandonmentReason = (
+  channelId: string,
+  failureReasons: Map<string, unknown>,
+  signal: AbortSignal | null,
+): unknown => {
+  if (failureReasons.has(channelId)) {
+    return failureReasons.get(channelId);
+  }
+  if (signal?.aborted) {
+    return signal.reason;
+  }
+  return new Error(`Push channel ${channelId} was never dialed at the provider`);
+};
+
+const describeAbandonment = (channel: AbandonedPushChannel, reason: unknown): Error =>
+  new Error(
+    `Push channel ${channel.id} (${channel.provider} channel ${channel.providerChannelId}) was not confirmed stopped at the provider`,
+    { cause: reason },
+  );
 
 const describeAbandoned = (
   channels: StoredPushChannel[],
@@ -169,13 +147,20 @@ const restateStoppedChannels = async (
   }
 };
 
-const runDeregisterPushChannels = async (
+const runDeregisterPushChannelsOutcome = async (
   scopeId: string,
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
-): Promise<number> => {
+  concurrency: number = DISCONNECT_CONCURRENCY,
+): Promise<DeregisterPushChannelsOutcome> => {
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error(
+      `Push channel deregistration concurrency must be a positive integer, received ${concurrency}`,
+    );
+  }
+
   if (!dependencies.webhookConfigured) {
-    return 0;
+    return { abandonments: [], deregisteredCount: 0 };
   }
 
   let channels: StoredPushChannel[] = [];
@@ -183,22 +168,39 @@ const runDeregisterPushChannels = async (
     channels = await dependencies.listLiveChannels(scopeId);
   } catch (error) {
     dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
-    return 0;
+    return { abandonments: [], deregisteredCount: 0 };
   }
 
-  const pending = await prepareStops(channels, dependencies, signal);
+  const queued = [...channels];
   const stoppedChannelIds: string[] = [];
+  const failureReasons = new Map<string, unknown>();
 
   const workers = Array.from(
-    { length: Math.min(DISCONNECT_CONCURRENCY, pending.length) },
+    { length: Math.min(concurrency, queued.length) },
     async () => {
-      for (let prepared = pending.shift(); prepared; prepared = pending.shift()) {
+      for (let channel = queued.shift(); channel; channel = queued.shift()) {
         if (signal?.aborted) {
           return;
         }
 
-        if (await stopPreparedChannel(prepared, dependencies, signal)) {
-          stoppedChannelIds.push(prepared.channel.id);
+        const registrar = dependencies.resolveRegistrar(channel.provider);
+        if (!registrar) {
+          failureReasons.set(
+            channel.id,
+            new Error(`No push registrar is available for provider ${channel.provider}`),
+          );
+          continue;
+        }
+
+        if (channel.providerChannelId === null) {
+          continue;
+        }
+
+        const outcome = await stopChannel(channel, registrar, dependencies, signal);
+        if (outcome.stopped) {
+          stoppedChannelIds.push(channel.id);
+        } else {
+          failureReasons.set(channel.id, outcome.reason);
         }
       }
     },
@@ -206,8 +208,18 @@ const runDeregisterPushChannels = async (
 
   await Promise.all(workers);
 
-  const restated = await restateStoppedChannels(stoppedChannelIds, dependencies);
   const abandoned = describeAbandoned(channels, stoppedChannelIds);
+  const abandonments = abandoned.map((channel) =>
+    describeAbandonment(
+      channel,
+      resolveAbandonmentReason(channel.id, failureReasons, signal),
+    ));
+
+  for (const abandonment of abandonments) {
+    dependencies.recordError(abandonment, DEREGISTRATION_FAILED_SLUG);
+  }
+
+  const restated = await restateStoppedChannels(stoppedChannelIds, dependencies);
 
   dependencies.observe({
     "push_channel.disconnect_abandoned": abandoned,
@@ -217,8 +229,33 @@ const runDeregisterPushChannels = async (
     "push_channel.disconnect_restated_count": restated,
   });
 
-  return stoppedChannelIds.length;
+  return { abandonments, deregisteredCount: stoppedChannelIds.length };
 };
+
+const runDeregisterPushChannels = async (
+  scopeId: string,
+  dependencies: DeregisterPushChannelsDependencies,
+  signal: AbortSignal | null = null,
+  concurrency: number = DISCONNECT_CONCURRENCY,
+): Promise<number> => {
+  const outcome = await runDeregisterPushChannelsOutcome(
+    scopeId,
+    dependencies,
+    signal,
+    concurrency,
+  );
+
+  return outcome.deregisteredCount;
+};
+
+const describeAbandonedScope = (
+  scopeId: string,
+  abandonments: Error[],
+): AggregateError =>
+  new AggregateError(
+    abandonments,
+    `${abandonments.length} push channel(s) for ${scopeId} were left running at their provider`,
+  );
 
 const resolveTokenRefresher = (
   provider: string,
@@ -269,10 +306,12 @@ const deregisterPushChannelsWithin = async (
   scopeColumn: "accountId" | "calendarId" | "userId",
   states: string[],
   signal: AbortSignal | null,
+  requireEveryChannelStopped: boolean,
+  concurrency: number,
 ): Promise<number> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
 
-  return await runDeregisterPushChannels(scopeId, {
+  const outcome = await runDeregisterPushChannelsOutcome(scopeId, {
     createRegistrarContext: async (channel) => {
       if (webhookConfig === null) {
         throw new Error(
@@ -366,23 +405,61 @@ const deregisterPushChannelsWithin = async (
     },
     resolveRegistrar: resolvePushRegistrar,
     webhookConfigured: webhookConfig !== null,
-  }, signal);
+  }, signal, concurrency);
+
+  if (requireEveryChannelStopped && outcome.abandonments.length > 0) {
+    throw describeAbandonedScope(`${scopeColumn} ${scopeId}`, outcome.abandonments);
+  }
+
+  return outcome.deregisteredCount;
 };
 
 const deregisterAccountPushChannels = async (accountId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(accountId, "accountId", LIVE_STATES, null);
+  await deregisterPushChannelsWithin(
+    accountId,
+    "accountId",
+    LIVE_STATES,
+    null,
+    false,
+    SERIAL_CONCURRENCY,
+  );
 
 const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(calendarId, "calendarId", LIVE_STATES, null);
+  await deregisterPushChannelsWithin(
+    calendarId,
+    "calendarId",
+    LIVE_STATES,
+    null,
+    false,
+    SERIAL_CONCURRENCY,
+  );
 
 const deregisterUserPushChannels = async (
   userId: string,
   signal: AbortSignal | null = null,
 ): Promise<number> =>
-  await deregisterPushChannelsWithin(userId, "userId", TEARDOWN_STATES, signal);
+  await deregisterPushChannelsWithin(
+    userId,
+    "userId",
+    TEARDOWN_STATES,
+    signal,
+    true,
+    DISCONNECT_CONCURRENCY,
+  );
 
-const runDeregisterAccountPushChannels = runDeregisterPushChannels;
-const runDeregisterUserPushChannels = runDeregisterPushChannels;
+const runDeregisterAccountPushChannels = async (
+  accountId: string,
+  dependencies: DeregisterPushChannelsDependencies,
+  signal: AbortSignal | null = null,
+): Promise<number> =>
+  await runDeregisterPushChannels(accountId, dependencies, signal, SERIAL_CONCURRENCY);
+
+const runDeregisterUserPushChannels = async (
+  userId: string,
+  dependencies: DeregisterPushChannelsDependencies,
+  signal: AbortSignal | null = null,
+): Promise<number> =>
+  await runDeregisterPushChannels(userId, dependencies, signal, DISCONNECT_CONCURRENCY);
 
 export {
   DEREGISTRATION_FAILED_SLUG,
@@ -392,6 +469,11 @@ export {
   deregisterUserPushChannels,
   runDeregisterAccountPushChannels,
   runDeregisterPushChannels,
+  runDeregisterPushChannelsOutcome,
   runDeregisterUserPushChannels,
 };
-export type { AbandonedPushChannel, DeregisterPushChannelsDependencies };
+export type {
+  AbandonedPushChannel,
+  DeregisterPushChannelsDependencies,
+  DeregisterPushChannelsOutcome,
+};

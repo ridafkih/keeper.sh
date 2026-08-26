@@ -18,6 +18,7 @@ import {
 import {
   createDeleteUserTeardown,
   runDeleteUserTeardown,
+  SYNC_TEARDOWN_TIMEOUT_MS,
 } from "./delete-user-teardown";
 import {
   finishDeleteUserAttempt,
@@ -110,8 +111,6 @@ interface OAuthProviderAuthApi {
   getOAuthServerConfig: (input: { headers: Headers }) => Promise<unknown>;
   getOpenIdConfig: (input: { headers: Headers }) => Promise<unknown>;
 }
-
-const SYNC_TEARDOWN_TIMEOUT_MS = 8000;
 
 const hasOAuthProviderApi = (
   api: object,
@@ -539,6 +538,7 @@ export {
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
 } from "./mcp-config";
+export { SYNC_TEARDOWN_TIMEOUT_MS } from "./delete-user-teardown";
 export type {
   DeleteUserTeardown,
   DeleteUserTeardownStep,

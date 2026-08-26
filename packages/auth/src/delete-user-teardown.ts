@@ -2,6 +2,7 @@ import { widelog } from "widelogger";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const TEARDOWN_BUDGET_MS = 9000;
+const SYNC_TEARDOWN_TIMEOUT_MS = 8000;
 
 interface DeleteUserTeardownStep {
   name: string;
@@ -63,6 +64,7 @@ const runDeleteUserTeardown = createDeleteUserTeardown([]);
 export {
   createDeleteUserTeardown,
   runDeleteUserTeardown,
+  SYNC_TEARDOWN_TIMEOUT_MS,
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,
 };
