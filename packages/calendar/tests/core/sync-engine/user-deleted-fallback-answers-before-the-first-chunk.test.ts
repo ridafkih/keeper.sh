@@ -21,24 +21,8 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-const ADD_COUNT = 120;
-const REMOVE_COUNT = 40;
-const OPERATION_CHUNK_SIZE = 50;
+const REMOVE_COUNT = 500;
 const USER_ID = "user-1";
-
-const makeEvent = (index: number): MaterializedSyncableEvent => {
-  const startTime = new Date(Date.UTC(2026, 2, 15, 9, 0, 0) + index * 3_600_000);
-  return {
-    calendarId: "cal-1",
-    calendarName: "Test Calendar",
-    calendarUrl: null,
-    endTime: new Date(startTime.getTime() + 1_800_000),
-    id: `ev-${index}`,
-    sourceEventUid: `uid-ev-${index}`,
-    startTime,
-    summary: `Event ${index}`,
-  };
-};
 
 const makeDoomedMapping = (index: number): EventMapping => {
   const startTime = new Date(Date.UTC(2027, 5, 1, 9, 0, 0) + index * 3_600_000);
@@ -76,6 +60,7 @@ type DeletionAwareSyncCalendarOptions = SyncCalendarOptions & {
 interface Scenario {
   emitted: Record<string, unknown>[];
   existsCalls: number;
+  probeErrors: unknown[];
   run: () => Promise<Awaited<ReturnType<typeof syncCalendar>>>;
   userRowLookups: number;
   writes: ProviderWrite[];
@@ -87,13 +72,13 @@ interface ScenarioOptions {
 }
 
 const makeScenario = (options: ScenarioOptions): Scenario => {
-  const localEvents = Array.from({ length: ADD_COUNT }, (_value, index) => makeEvent(index));
   const existingMappings = Array.from({ length: REMOVE_COUNT }, (_value, index) =>
     makeDoomedMapping(index));
   const remoteEvents = existingMappings.map((mapping) => makeDoomedRemoteEvent(mapping));
 
   const writes: ProviderWrite[] = [];
   const emitted: Record<string, unknown>[] = [];
+  const probeErrors: unknown[] = [];
   const counters = { exists: 0, userRow: 0 };
 
   const provider = {
@@ -124,6 +109,9 @@ const makeScenario = (options: ScenarioOptions): Scenario => {
       counters.userRow += 1;
       return options.userRowPresent();
     },
+    onProbeError: (error) => {
+      probeErrors.push(error);
+    },
   });
 
   const syncOptions: DeletionAwareSyncCalendarOptions = {
@@ -135,7 +123,7 @@ const makeScenario = (options: ScenarioOptions): Scenario => {
       emitted.push(event);
     },
     provider,
-    readState: () => Promise.resolve({ existingMappings, localEvents, remoteEvents }),
+    readState: () => Promise.resolve({ existingMappings, localEvents: [], remoteEvents }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: USER_ID,
   };
@@ -145,6 +133,7 @@ const makeScenario = (options: ScenarioOptions): Scenario => {
     get existsCalls() {
       return counters.exists;
     },
+    probeErrors,
     run: () => syncCalendar(syncOptions),
     get userRowLookups() {
       return counters.userRow;
@@ -153,11 +142,11 @@ const makeScenario = (options: ScenarioOptions): Scenario => {
   };
 };
 
-const deletedIdsOf = (writes: ProviderWrite[]): string[] =>
-  writes.filter((write) => write.type === "delete").flatMap((write) => write.ids);
+const idsOfType = (writes: ProviderWrite[], type: ProviderWrite["type"]): string[] =>
+  writes.filter((write) => write.type === type).flatMap((write) => write.ids);
 
-describe("a lost tombstone write falls back to the user row", () => {
-  it("halts the run when redis has no tombstone but the user row is confirmed gone", async () => {
+describe("an unreadable tombstone must not let chunk zero through", () => {
+  it("touches nothing when the tombstone write was lost and the user row is already gone", async () => {
     const scenario = makeScenario({
       existsResult: () => Promise.resolve(0),
       userRowPresent: () => Promise.resolve(false),
@@ -165,15 +154,46 @@ describe("a lost tombstone write falls back to the user row", () => {
 
     const result = await scenario.run();
 
-    expect(scenario.userRowLookups).toBeGreaterThan(0);
-    expect(result.aborted).toBe(true);
+    expect(idsOfType(scenario.writes, "delete")).toEqual([]);
+    expect(idsOfType(scenario.writes, "push")).toEqual([]);
+    expect(scenario.writes).toEqual([]);
     expect(result.removed).toBe(0);
-    expect(deletedIdsOf(scenario.writes)).toEqual([]);
-    expect(scenario.writes.filter((write) => write.type === "push")).toHaveLength(0);
-    expect(scenario.emitted.at(0)?.["outcome"]).toBe("aborted");
+    expect(result.aborted).toBe(true);
+    expect(scenario.userRowLookups).toBe(1);
   });
 
-  it("leaves a live customer's run alone when the user row lookup fails", async () => {
+  it("touches nothing when redis is unreachable and the user row is already gone", async () => {
+    const scenario = makeScenario({
+      existsResult: () => Promise.reject(new Error("connect ECONNREFUSED 127.0.0.1:6379")),
+      userRowPresent: () => Promise.resolve(false),
+    });
+
+    const result = await scenario.run();
+
+    expect(idsOfType(scenario.writes, "delete")).toEqual([]);
+    expect(idsOfType(scenario.writes, "push")).toEqual([]);
+    expect(scenario.writes).toEqual([]);
+    expect(result.removed).toBe(0);
+    expect(result.aborted).toBe(true);
+    expect(scenario.existsCalls).toBeGreaterThan(0);
+    expect(scenario.userRowLookups).toBe(1);
+  });
+
+  it("halts on the tombstone alone without ever consulting the user row", async () => {
+    const scenario = makeScenario({
+      existsResult: () => Promise.resolve(1),
+      userRowPresent: () => Promise.resolve(true),
+    });
+
+    const result = await scenario.run();
+
+    expect(scenario.writes).toEqual([]);
+    expect(result.removed).toBe(0);
+    expect(result.aborted).toBe(true);
+    expect(scenario.userRowLookups).toBe(0);
+  });
+
+  it("runs a live customer's removes to completion when the user row probe rejects", async () => {
     const scenario = makeScenario({
       existsResult: () => Promise.resolve(0),
       userRowPresent: () => Promise.reject(new Error("database connection terminated")),
@@ -181,37 +201,40 @@ describe("a lost tombstone write falls back to the user row", () => {
 
     const result = await scenario.run();
 
-    expect(result.aborted).toBeFalsy();
+    expect(idsOfType(scenario.writes, "delete")).toHaveLength(REMOVE_COUNT);
     expect(result.removed).toBe(REMOVE_COUNT);
-    expect(deletedIdsOf(scenario.writes)).toHaveLength(REMOVE_COUNT);
-    expect(scenario.writes.filter((write) => write.type === "push").flatMap((write) => write.ids))
-      .toHaveLength(ADD_COUNT);
-  });
-
-  it("leaves a live customer's run alone when redis fails and the user row is present", async () => {
-    const scenario = makeScenario({
-      existsResult: () => Promise.reject(new Error("OOM command not allowed when used memory > 'maxmemory'.")),
-      userRowPresent: () => Promise.resolve(true),
-    });
-
-    const result = await scenario.run();
-
-    expect(scenario.existsCalls).toBeGreaterThan(0);
     expect(result.aborted).toBeFalsy();
-    expect(result.removed).toBe(REMOVE_COUNT);
-    expect(deletedIdsOf(scenario.writes)).toHaveLength(REMOVE_COUNT);
+    expect(scenario.probeErrors.length).toBeGreaterThan(0);
   });
 });
 
-describe("chunk sizing assumption", () => {
-  it("keeps the first push chunk at the engine's operation chunk size", async () => {
-    const scenario = makeScenario({
-      existsResult: () => Promise.resolve(0),
-      userRowPresent: () => Promise.resolve(true),
-    });
+describe("the user row fallback answers on its first call", () => {
+  it("reports deleted on the first await and caches the answer for later calls", async () => {
+    let probeCalls = 0;
+    const probeErrors: unknown[] = [];
+    const check = createUserDeletedCheck(
+      { exists: () => Promise.resolve(0) },
+      USER_ID,
+      {
+        isUserRowPresent: () => {
+          probeCalls += 1;
+          return Promise.resolve(false);
+        },
+        onProbeError: (error) => {
+          probeErrors.push(error);
+        },
+      },
+    );
 
-    await scenario.run();
+    const first = await check();
 
-    expect(scenario.writes.at(0)?.ids).toHaveLength(OPERATION_CHUNK_SIZE);
+    expect(first).toBe(true);
+    expect(probeCalls).toBe(1);
+
+    const later = [await check(), await check(), await check()];
+
+    expect(later).toEqual([true, true, true]);
+    expect(probeCalls).toBe(1);
+    expect(probeErrors).toEqual([]);
   });
 });

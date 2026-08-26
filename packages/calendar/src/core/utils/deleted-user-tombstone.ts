@@ -139,13 +139,7 @@ const createUserDeletedCheck = (
       return true;
     }
 
-    const probing = userRowProbeInFlight ?? startUserRowProbe(probe);
-
-    if (latestUserRowAnswer === "unobserved") {
-      return false;
-    }
-
-    return await probing;
+    return await (userRowProbeInFlight ?? startUserRowProbe(probe));
   };
 
   const isTombstonePresent = async (): Promise<boolean> => {

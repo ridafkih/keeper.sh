@@ -24,7 +24,7 @@ const TEST_RECONCILIATION_SCOPE = {
 const ADD_COUNT = 120;
 const REMOVE_COUNT = 40;
 const OPERATION_CHUNK_SIZE = 50;
-const HALT_PUSH_CEILING = OPERATION_CHUNK_SIZE * 2;
+const HALT_PUSH_CEILING = OPERATION_CHUNK_SIZE;
 const USER_ID = "user-1";
 
 const makeEvent = (index: number): MaterializedSyncableEvent => {

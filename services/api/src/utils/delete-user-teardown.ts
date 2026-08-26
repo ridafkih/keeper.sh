@@ -5,7 +5,7 @@ import { calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 import { deregisterUserPushChannels } from "@/utils/push-notifications/deregister-account-channels";
 import type { RedisTombstoneClient } from "@keeper.sh/calendar";
-import type { DeleteUserTeardown, DeleteUserTeardownStep } from "@keeper.sh/auth";
+import type { DeleteUserTeardown } from "@keeper.sh/auth";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const TEARDOWN_BUDGET_MS = 7500;
@@ -14,6 +14,15 @@ const SYNC_JOBS_TIMEOUT_MS = 2000;
 const PUSH_CHANNELS_TIMEOUT_MS = 5500;
 const QUEUE_COMMAND_TIMEOUT_MS = 5000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
+const STEP_ABORT_SETTLE_MS = 1000;
+
+interface DeleteUserSyncStep {
+  name: string;
+  run: (userId: string, signal: AbortSignal) => Promise<void>;
+  timeoutMs: number;
+}
+
+type StepSettlement = { error: unknown; status: "rejected" } | { status: "fulfilled" };
 
 interface DeleteUserSyncQueue {
   getJob: (jobId: string) => Promise<{ id?: string } | undefined>;
@@ -22,14 +31,14 @@ interface DeleteUserSyncQueue {
 
 interface DeleteUserSyncTeardownDependencies {
   createQueue: () => DeleteUserSyncQueue;
-  deregisterPushChannels: (userId: string) => Promise<number>;
+  deregisterPushChannels: (userId: string, signal: AbortSignal) => Promise<number>;
   listCalendarIds: (userId: string) => Promise<string[]>;
   redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
 }
 
 const buildDeleteUserSyncSteps = (
   dependencies: DeleteUserSyncTeardownDependencies,
-): DeleteUserTeardownStep[] => [
+): DeleteUserSyncStep[] => [
   {
     name: "tombstone",
     run: (userId) => markUserDeleted(dependencies.redis, userId),
@@ -68,8 +77,8 @@ const buildDeleteUserSyncSteps = (
   },
   {
     name: "push_channels",
-    run: async (userId) => {
-      const deregistered = await dependencies.deregisterPushChannels(userId);
+    run: async (userId, signal) => {
+      const deregistered = await dependencies.deregisterPushChannels(userId, signal);
 
       widelog.setFields({ "delete_user.push_channels_deregistered": deregistered });
     },
@@ -77,26 +86,56 @@ const buildDeleteUserSyncSteps = (
   },
 ];
 
-const runWithDeadline = async (
-  name: string,
-  deadlineMs: number,
-  run: () => Promise<void>,
-): Promise<void> => {
+const settleWithin = async (
+  settlement: Promise<StepSettlement>,
+  ms: number,
+): Promise<StepSettlement | null> => {
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const deadline = new Promise<never>((_resolve, reject) => {
+  const expiry = new Promise<null>((resolve) => {
     timer = setTimeout(() => {
-      reject(new Error(`Teardown step ${name} exceeded its ${deadlineMs}ms deadline`));
-    }, deadlineMs);
+      resolve(null);
+    }, ms);
   });
 
   try {
-    await Promise.race([run(), deadline]);
+    return await Promise.race([settlement, expiry]);
   } finally {
     if (timer !== null) {
       clearTimeout(timer);
     }
   }
+};
+
+const runWithDeadline = async (
+  name: string,
+  deadlineMs: number,
+  run: (signal: AbortSignal) => Promise<void>,
+): Promise<void> => {
+  const controller = new AbortController();
+  const settlement: Promise<StepSettlement> = run(controller.signal).then(
+    () => ({ status: "fulfilled" as const }),
+    (error: unknown) => ({ error, status: "rejected" as const }),
+  );
+
+  const settled = await settleWithin(settlement, deadlineMs);
+
+  if (settled !== null) {
+    if (settled.status === "rejected") {
+      throw settled.error;
+    }
+    return;
+  }
+
+  const deadlineError = new Error(
+    `Teardown step ${name} exceeded its ${deadlineMs}ms deadline`,
+  );
+
+  controller.abort(deadlineError);
+
+  await settleWithin(settlement, STEP_ABORT_SETTLE_MS);
+
+  throw deadlineError;
 };
 
 const createDeleteUserSyncTeardown =
@@ -106,7 +145,7 @@ const createDeleteUserSyncTeardown =
 
     for (const step of buildDeleteUserSyncSteps(dependencies)) {
       const remainingMs = expiresAt - Date.now();
-      const deadlineMs = Math.min(step.timeoutMs ?? remainingMs, remainingMs);
+      const deadlineMs = Math.min(step.timeoutMs, remainingMs);
 
       try {
         if (deadlineMs <= 0) {
@@ -115,7 +154,7 @@ const createDeleteUserSyncTeardown =
           );
         }
 
-        await runWithDeadline(step.name, deadlineMs, () => step.run(userId));
+        await runWithDeadline(step.name, deadlineMs, (signal) => step.run(userId, signal));
       } catch (error) {
         widelog.errorFields(error, {
           prefix: `delete_user_teardown.${step.name}`,
