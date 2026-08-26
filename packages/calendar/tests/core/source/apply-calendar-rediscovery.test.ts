@@ -13,6 +13,7 @@ interface CalendarRow {
   id: string;
   externalCalendarId: string | null;
   calendarUrl: string | null;
+  color?: string | null;
   unavailableSince: Date | null;
   createdAt: Date;
 }
@@ -56,6 +57,7 @@ const PLAN_KEYS = [
   "toMarkUnavailable",
   "toRetargetUrl",
   "toRevive",
+  "toSetColor",
   "unchangedCount",
 ];
 
@@ -193,6 +195,7 @@ const caldavDiscovery = (
   writable = true,
 ): DiscoveredCalendar => ({
   calendarUrl,
+  color: null,
   externalCalendarId: null,
   identityKey: new URL(calendarUrl).pathname.replace(/\/+$/u, ""),
   name,
@@ -205,6 +208,7 @@ const oauthDiscovery = (
   writable = true,
 ): DiscoveredCalendar => ({
   calendarUrl: null,
+  color: null,
   externalCalendarId,
   identityKey: externalCalendarId,
   name,
@@ -217,6 +221,7 @@ const oauthRow = (
   unavailableSince: Date | null = null,
 ): CalendarRow => ({
   calendarUrl: null,
+  color: null,
   createdAt: CREATED_AT,
   externalCalendarId,
   id,
@@ -408,6 +413,7 @@ describe("applyCalendarRediscoveryPlan", () => {
       calendarType: "caldav",
       discovered: [{
         calendarUrl: "https://cloud.example.com/dav/bob/work/",
+        color: null,
         externalCalendarId: null,
         identityKey: "/dav/bob/work",
         name: "Work",
@@ -437,6 +443,7 @@ describe("applyCalendarRediscoveryPlan", () => {
       discovered: [
         {
           calendarUrl: "https://cloud.example.com/dav/bob/work/",
+          color: null,
           externalCalendarId: null,
           identityKey: "/dav/bob/work",
           name: "Work",
@@ -444,6 +451,7 @@ describe("applyCalendarRediscoveryPlan", () => {
         },
         {
           calendarUrl: "https://cloud.example.com/dav/bob/private/",
+          color: null,
           externalCalendarId: null,
           identityKey: "/dav/bob/private",
           name: "Private",
@@ -520,6 +528,36 @@ describe("applyCalendarRediscoveryPlan", () => {
     expect(result.toInsert).toEqual([]);
     expect(result.unchangedCount).toBe(1);
     expect(calendarUpdates(fake.updates)).toEqual([]);
+  });
+
+  it("updates only the color of a matched calendar whose provider color changed", async () => {
+    const fake = createFakeDatabase({
+      calendars: [{ ...oauthRow("calendar-1", "external-1"), color: "#d50000" }],
+      mappings: [],
+    });
+
+    const result = await apply(fake, {
+      calendarType: "oauth",
+      discovered: [{ ...oauthDiscovery("external-1", "Work"), color: "#33b679" }],
+    });
+
+    expect(result.toSetColor).toEqual([{ color: "#33b679", id: "calendar-1" }]);
+    expect(fake.inserts).toEqual([]);
+    const recolorUpdate = calendarUpdates(fake.updates)
+      .find(({ values }) => "color" in values);
+    expect(recolorUpdate?.values).toEqual({ color: "#33b679" });
+  });
+
+  it("seeds inserted calendars with the discovered color", async () => {
+    const fake = createFakeDatabase({ calendars: [], mappings: [] });
+
+    await apply(fake, {
+      calendarType: "oauth",
+      discovered: [{ ...oauthDiscovery("external-1", "Work"), color: "#9fe1e7" }],
+    });
+
+    const [row] = fake.inserts.flatMap(({ rows }) => rows);
+    expect(row?.color).toBe("#9fe1e7");
   });
 
   it("reinstates a reappearing calendar by clearing only its unavailability", async () => {

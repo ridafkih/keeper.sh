@@ -372,6 +372,48 @@ describe("source event diff", () => {
     expect(eventsToAdd[0]?.location).toBe("Room B");
   });
 
+  it("re-adds events when only the color changes", () => {
+    const existingEvents = [
+      createExistingEvent({
+        color: "#33b679",
+        id: "existing-color",
+        sourceEventUid: "color-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        color: "#d50000",
+        uid: "color-uid",
+      }),
+    ];
+
+    const eventsToAdd = buildSourceEventsToAdd(existingEvents, incomingEvents);
+    const idsToRemove = buildSourceEventStateIdsToRemove(existingEvents, incomingEvents);
+
+    expect(eventsToAdd).toHaveLength(1);
+    expect(eventsToAdd[0]?.color).toBe("#d50000");
+    expect(idsToRemove).toEqual([]);
+  });
+
+  it("treats a stored null color and an absent incoming color as identical", () => {
+    const existingEvents = [
+      createExistingEvent({
+        color: null,
+        id: "existing-no-color",
+        sourceEventUid: "no-color-uid",
+      }),
+    ];
+
+    const incomingEvents = [
+      createIncomingEvent({
+        uid: "no-color-uid",
+      }),
+    ];
+
+    expect(buildSourceEventsToAdd(existingEvents, incomingEvents)).toEqual([]);
+  });
+
   it("treats whitespace-only description differences as identical", () => {
     const existingEvents = [
       createExistingEvent({

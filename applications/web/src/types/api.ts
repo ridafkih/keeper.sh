@@ -19,6 +19,7 @@ export interface CalendarAccount {
 export interface CalendarSource {
   id: string;
   name: string;
+  color: string | null;
   calendarType: string;
   capabilities: string[];
   accountId: string;
@@ -40,6 +41,7 @@ export interface CalendarDetail {
   id: string;
   name: string;
   originalName: string | null;
+  color: string | null;
   calendarType: string;
   capabilities: string[];
   provider: string;
@@ -74,6 +76,9 @@ export interface ApiEvent {
   eventStateId: string | null;
   startTime: string;
   endTime: string;
+  /** Resolved provider hex for this event; null means it inherits calendarColor. */
+  color: string | null;
+  calendarColor: string | null;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;

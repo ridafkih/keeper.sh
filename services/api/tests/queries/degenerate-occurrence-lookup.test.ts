@@ -9,12 +9,19 @@ const CALENDAR_ID = "calendar-1";
 const WINDOW_START = new Date("2027-03-08T00:00:00.000Z");
 const WINDOW_END = new Date("2027-04-08T00:00:00.000Z");
 
-const SOURCE: SourceInfo = { name: "Source", provider: "ics", url: null, userId: USER_ID };
+const SOURCE: SourceInfo = {
+  calendarColor: null,
+  name: "Source",
+  provider: "ics",
+  url: null,
+  userId: USER_ID,
+};
 const sourceMap = new Map([[CALENDAR_ID, SOURCE]]);
 
 const buildRow = (overrides: Partial<SyncedEventRow> & { id: string }): SyncedEventRow => ({
   availability: "busy",
   calendarId: CALENDAR_ID,
+  color: null,
   description: null,
   endTime: new Date("2027-03-09T00:00:00.000Z"),
   exceptionDates: null,
@@ -65,6 +72,7 @@ const SERIES: { label: string; row: SyncedEventRow }[] = [
 const buildRepository = (row: SyncedEventRow): EventReadRepository => {
   const owner: SyncedEventOwner = {
     ...row,
+    calendarColor: SOURCE.calendarColor,
     calendarName: SOURCE.name,
     calendarProvider: SOURCE.provider,
     calendarUrl: SOURCE.url,

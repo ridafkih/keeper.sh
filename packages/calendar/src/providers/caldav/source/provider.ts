@@ -115,6 +115,7 @@ const createCalDAVSourceProvider = (
     const storedEvents = await persistenceDatabase
       .select({
         availability: eventStatesTable.availability,
+        color: eventStatesTable.color,
         description: eventStatesTable.description,
         endTime: eventStatesTable.endTime,
         exceptionDates: eventStatesTable.exceptionDates,

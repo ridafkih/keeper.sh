@@ -239,6 +239,7 @@ const rediscoverAccount = async (
   widelog.set("calendar_refresh.discovered", discovered.length);
   widelog.set("calendar_refresh.added", result.inserted.length);
   widelog.set("calendar_refresh.revived", result.toRevive.length);
+  widelog.set("calendar_refresh.recolored", result.toSetColor.length);
   widelog.set("calendar_refresh.unavailable", result.toMarkUnavailable.length);
   widelog.set("calendar_refresh.unchanged", result.unchangedCount);
   widelog.set("calendar_refresh.duplicates", result.duplicateCount);

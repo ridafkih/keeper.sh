@@ -13,6 +13,7 @@ const API_OCCURRENCE_PREFIX = "occurrence";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface SourceInfo {
+  calendarColor: string | null;
   name: string;
   provider: string;
   url: string | null;
@@ -22,6 +23,7 @@ interface SourceInfo {
 interface SyncedEventRow {
   availability: string | null;
   calendarId: string;
+  color: string | null;
   description: string | null;
   endTime: Date;
   exceptionDates: string | null;
@@ -54,6 +56,7 @@ interface EventReference {
 
 interface KeeperEventProjection {
   calendarId: string;
+  color: string | null;
   description: string | null;
   endTime: Date;
   eventStateId: string | null;
@@ -138,6 +141,7 @@ const toSyncableEvent = (
     calendarId: row.calendarId,
     calendarName: source.name,
     calendarUrl: source.url,
+    color: orAbsent(row.color),
     description: orAbsent(row.description),
     endTime: row.endTime,
     eventStateId: row.id,
@@ -166,6 +170,7 @@ const toSyncedProjection = (
 
   return {
     calendarId: occurrence.calendarId,
+    color: occurrence.color ?? null,
     description: occurrence.description ?? null,
     eventStateId,
     id,
@@ -177,6 +182,7 @@ const toSyncedProjection = (
 
 const toUserProjection = (row: UserEventRow): KeeperEventProjection => ({
   calendarId: row.calendarId,
+  color: null,
   description: row.description,
   eventStateId: null,
   id: row.id,
@@ -251,10 +257,12 @@ const toKeeperEvent = (
   event: KeeperEventProjection,
   source: SourceInfo,
 ): KeeperEvent => ({
+  calendarColor: source.calendarColor,
   calendarId: event.calendarId,
   calendarName: source.name,
   calendarProvider: source.provider,
   calendarUrl: source.url,
+  color: event.color,
   description: event.description,
   endTime: event.endTime.toISOString(),
   eventStateId: event.eventStateId,

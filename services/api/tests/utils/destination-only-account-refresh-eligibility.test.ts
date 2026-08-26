@@ -28,6 +28,7 @@ create table calendar_accounts (
 );
 create table calendars (
   "id" uuid primary key,
+  "color" text,
   "accountId" uuid not null,
   "calendarType" text not null,
   "calendarUrl" text,

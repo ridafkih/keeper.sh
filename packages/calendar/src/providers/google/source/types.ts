@@ -29,6 +29,7 @@ interface GoogleCalendarEvent {
   summary?: string;
   description?: string;
   location?: string;
+  colorId?: string;
   start?: GoogleEventDateTime;
   end?: GoogleEventDateTime;
   created?: string;
@@ -81,6 +82,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
 }
 
 export type {

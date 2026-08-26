@@ -49,6 +49,52 @@ describe("parseIcsCalendar", () => {
       .toThrow();
   });
 
+  it("captures calendar and event color properties in nonStandard", () => {
+    const parsedCalendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "X-APPLE-CALENDAR-COLOR:#711A76",
+        "COLOR:turquoise",
+        "BEGIN:VEVENT",
+        "UID:event-1",
+        "DTSTART:20260630T040000Z",
+        "DTEND:20260630T050000Z",
+        "COLOR:tomato",
+        "SUMMARY:Busy",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parsedCalendar.nonStandard?.appleCalendarColor).toBe("#711A76");
+    expect(parsedCalendar.nonStandard?.color).toBe("turquoise");
+    expect(parsedCalendar.events?.[0]?.nonStandard?.color).toBe("tomato");
+  });
+
+  it("does not rewrite properties merely containing the word color", () => {
+    const parsedCalendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VEVENT",
+        "UID:event-1",
+        "DTSTART:20260630T040000Z",
+        "DTEND:20260630T050000Z",
+        "SUMMARY:COLOR: a talk about turquoise",
+        "DESCRIPTION:COLORS everywhere",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parsedCalendar.events?.[0]?.summary).toBe("COLOR: a talk about turquoise");
+    expect(parsedCalendar.events?.[0]?.description).toBe("COLORS everywhere");
+    expect(parsedCalendar.events?.[0]?.nonStandard?.color).toBeUndefined();
+  });
+
   it("parses Google calendar timezone metadata", () => {
     const parsedCalendar = parseIcsCalendar({
       icsString: [

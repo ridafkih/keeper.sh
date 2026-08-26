@@ -596,6 +596,34 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.uid).toBe("external-uid-6");
   });
 
+  it("resolves the first category that maps to a color", () => {
+    const categoryColors = new Map([
+      ["blue category", "#5ca9e5"],
+      ["red category", "#dc626d"],
+    ]);
+
+    const parsed = parseOutlookEventsWithDiagnostics(
+      [createOutlookEvent({ categories: ["Unmapped", "Blue Category", "Red Category"] })],
+      { categoryColors },
+    );
+
+    expect(parsed.events).toHaveLength(1);
+    expect(parsed.events[0]?.color).toBe("#5ca9e5");
+  });
+
+  it("omits the color key without a category map or matching category", () => {
+    const parsedWithoutMap = parseOutlookEventsWithDiagnostics([
+      createOutlookEvent({ categories: ["Blue Category"] }),
+    ]);
+    const parsedWithoutMatch = parseOutlookEventsWithDiagnostics(
+      [createOutlookEvent({ categories: ["Unmapped"] })],
+      { categoryColors: new Map([["blue category", "#5ca9e5"]]) },
+    );
+
+    expect(parsedWithoutMap.events[0]).not.toHaveProperty("color");
+    expect(parsedWithoutMatch.events[0]).not.toHaveProperty("color");
+  });
+
   it("preserves working elsewhere availability", () => {
     const parsedEvents = parseOutlookEvents([
       createOutlookEvent({

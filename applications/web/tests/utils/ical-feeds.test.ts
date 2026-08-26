@@ -12,6 +12,7 @@ import type { CalendarSource } from "../../src/types/api";
 const makeSource = (overrides: Partial<CalendarSource> = {}): CalendarSource => ({
   id: "calendar-1",
   name: "Work",
+  color: null,
   calendarType: "google",
   capabilities: ["pull"],
   accountId: "account-1",

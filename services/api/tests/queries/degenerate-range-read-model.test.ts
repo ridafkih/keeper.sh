@@ -6,12 +6,19 @@ const WINDOW_START = new Date("2027-03-08T00:00:00.000Z");
 const WINDOW_END = new Date("2027-04-08T00:00:00.000Z");
 
 const sourceMap = new Map([
-  ["calendar-1", { name: "Source", provider: "ics", url: null, userId: "user-1" }],
+  ["calendar-1", {
+    calendarColor: null,
+    name: "Source",
+    provider: "ics",
+    url: null,
+    userId: "user-1",
+  }],
 ]);
 
 const buildRow = (overrides: Partial<SyncedEventRow> & { id: string }): SyncedEventRow => ({
   availability: "busy",
   calendarId: "calendar-1",
+  color: null,
   description: null,
   endTime: new Date("2027-03-20T16:00:00.000Z"),
   exceptionDates: null,

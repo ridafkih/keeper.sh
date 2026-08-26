@@ -84,6 +84,7 @@ interface SourceEventIdentityInput {
   recurrenceDuration?: SourceEvent["recurrenceDuration"];
   recurrenceRule?: IcsRecurrenceRule | null;
   startTimeZone?: string | null;
+  color?: string | null;
 }
 
 const buildSourceEventIdentityKey = (
@@ -107,6 +108,7 @@ const buildSourceEventIdentityKey = (
     serializeStructuredIdentityValue(input.recurrenceRule),
     serializeStructuredIdentityValue(input.exceptionDates),
     input.recurrenceId?.toISOString() ?? "",
+    input.color ?? "",
   ]);
 
 const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[] => {
@@ -140,6 +142,7 @@ const buildExistingEventIdentitySet = (
       buildSourceEventIdentityKey(
         {
           availability: existingEvent.availability,
+          color: existingEvent.color,
           description: existingEvent.description,
           endTime: existingEvent.endTime,
           exceptionDates: existingEvent.exceptionDates,
@@ -180,6 +183,7 @@ const buildSourceEventsToAdd = (
         buildSourceEventIdentityKey(
           {
             availability: incomingEvent.availability,
+            color: incomingEvent.color,
             description: incomingEvent.description,
             endTime: incomingEvent.endTime,
             exceptionDates: incomingEvent.exceptionDates,

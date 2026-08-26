@@ -10,7 +10,7 @@ let createAccountCalls: unknown[] = [];
 let createSourceCalls: unknown[] = [];
 let insertCalendarsCalls: unknown[] = [];
 let triggerSyncCalls: { provider: string; userId: string }[] = [];
-let listedCalendars: { externalId: string; name: string }[] = [];
+let listedCalendars: { externalId: string; name: string; color: string | null }[] = [];
 
 beforeEach(() => {
   canAddAccountCalls = [];
@@ -59,7 +59,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
   });
 
   it("reuses an existing OAuth account without checking the account limit", async () => {
-    listedCalendars = [{ externalId: "external-1", name: "Team Calendar" }];
+    listedCalendars = [{ color: null, externalId: "external-1", name: "Team Calendar" }];
 
     const accountId = await importOAuthAccountCalendarsWithDependencies(
       {
@@ -93,7 +93,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
 
     expect(accountId).toBe("account-1");
     expect(canAddAccountCalls).toHaveLength(0);
-    expect(insertCalendarsCalls).toEqual([[{ externalId: "external-1", name: "Team Calendar" }]]);
+    expect(insertCalendarsCalls).toEqual([[{ color: null, externalId: "external-1", name: "Team Calendar" }]]);
     expect(triggerSyncCalls).toEqual([{ provider: "google", userId: "user-1" }]);
   });
 });

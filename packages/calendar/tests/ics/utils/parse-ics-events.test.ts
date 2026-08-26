@@ -29,7 +29,40 @@ const createCalendarIcsString = (): string =>
     "END:VCALENDAR",
   ].join("\r\n");
 
+const buildColoredEvent = (uid: string, colorLine: string): string[] => [
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  "DTSTART:20260311T100000Z",
+  "DTEND:20260311T103000Z",
+  colorLine,
+  "SUMMARY:Colored",
+  "END:VEVENT",
+];
+
 describe("parseIcsEvents", () => {
+  it("resolves RFC 7986 COLOR values to hex", () => {
+    const calendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        ...buildColoredEvent("named-color", "COLOR:Turquoise"),
+        ...buildColoredEvent("hex-color", "COLOR:#D63A47"),
+        ...buildColoredEvent("hex-alpha-color", "COLOR:#D63A47FF"),
+        ...buildColoredEvent("garbage-color", "COLOR:not-a-color"),
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    const parsedEvents = parseIcsEvents(calendar);
+
+    expect(parsedEvents).toHaveLength(4);
+    expect(parsedEvents[0]?.color).toBe("#40e0d0");
+    expect(parsedEvents[1]?.color).toBe("#d63a47");
+    expect(parsedEvents[2]?.color).toBe("#d63a47");
+    expect(parsedEvents[3]).not.toHaveProperty("color");
+  });
+
   it("parses external events and skips keeper-managed events", () => {
     const calendar = parseIcsCalendar({ icsString: createCalendarIcsString() });
     const parsedEvents = parseIcsEvents(calendar);

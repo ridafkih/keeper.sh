@@ -24,6 +24,7 @@ const buildEventStateInsertRow = (
 ): EventStateInsertRow => ({
   availability: event.availability,
   calendarId,
+  color: event.color,
   description: event.description,
   endTime: event.endTime,
   exceptionDates: serializeOptionalJson(event.exceptionDates),
@@ -76,6 +77,7 @@ const excludedColumn = (columnName: string) => sql.raw(`excluded."${columnName}"
 
 const EVENT_STATE_CONFLICT_SET = {
   availability: excludedColumn(eventStatesTable.availability.name),
+  color: excludedColumn(eventStatesTable.color.name),
   description: excludedColumn(eventStatesTable.description.name),
   exceptionDates: excludedColumn(eventStatesTable.exceptionDates.name),
   isAllDay: excludedColumn(eventStatesTable.isAllDay.name),

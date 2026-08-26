@@ -85,6 +85,7 @@ interface CalendarInfo {
   url: string;
   displayName: string;
   ctag?: string;
+  color?: string;
 }
 
 export type {
