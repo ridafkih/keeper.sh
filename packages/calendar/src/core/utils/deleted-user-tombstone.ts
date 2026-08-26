@@ -89,6 +89,8 @@ const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise
   );
 };
 
+type UserRowAnswer = "absent" | "present" | "unobserved";
+
 interface UserDeletedFallback {
   isUserRowPresent: () => Promise<boolean>;
   onProbeError?: (error: unknown) => void;
@@ -100,19 +102,50 @@ const createUserDeletedCheck = (
   fallback?: UserDeletedFallback,
 ): (() => Promise<boolean>) => {
   const key = deletedUserTombstoneKey(userId);
-  let userRowAbsent: Promise<boolean> | null = null;
+  let latestUserRowAnswer: UserRowAnswer = "unobserved";
+  let userRowProbeInFlight: Promise<boolean> | null = null;
 
   const reportProbeError = (error: unknown): void => {
     fallback?.onProbeError?.(error);
   };
 
-  const startUserRowProbe = async (probe: UserDeletedFallback): Promise<boolean> => {
+  const runUserRowProbe = async (probe: UserDeletedFallback): Promise<boolean> => {
     try {
-      return !(await probe.isUserRowPresent());
+      const present = await probe.isUserRowPresent();
+
+      if (present) {
+        latestUserRowAnswer = "present";
+        return false;
+      }
+
+      latestUserRowAnswer = "absent";
+      return true;
     } catch (error) {
       reportProbeError(error);
       return false;
+    } finally {
+      userRowProbeInFlight = null;
     }
+  };
+
+  const startUserRowProbe = (probe: UserDeletedFallback): Promise<boolean> => {
+    const started = runUserRowProbe(probe);
+    userRowProbeInFlight = started;
+    return started;
+  };
+
+  const isUserRowAbsent = async (probe: UserDeletedFallback): Promise<boolean> => {
+    if (latestUserRowAnswer === "absent") {
+      return true;
+    }
+
+    const probing = userRowProbeInFlight ?? startUserRowProbe(probe);
+
+    if (latestUserRowAnswer === "unobserved") {
+      return false;
+    }
+
+    return await probing;
   };
 
   const isTombstonePresent = async (): Promise<boolean> => {
@@ -135,12 +168,7 @@ const createUserDeletedCheck = (
       return false;
     }
 
-    if (userRowAbsent === null) {
-      userRowAbsent = startUserRowProbe(fallback);
-      return false;
-    }
-
-    return await userRowAbsent;
+    return await isUserRowAbsent(fallback);
   };
 };
 

@@ -9,14 +9,6 @@ import type {
 } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 
-/*
- * Incident 2026-08-25: user qhPedMZJCcAFPcqsdHGo5m8K5RLacWFx deleted their account at
- * 06:15:33 UTC. At 06:17:40 a sync:calendar job that was already in flight kept writing
- * to their Google calendar and recorded events_removed: 500, outcome: success. Deletion
- * leaves no signal the sync engine can observe, so a running reconcile drives every
- * remaining chunk to completion against a deleted customer's provider account.
- */
-
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
     timeMax: new Date("2100-01-01T00:00:00.000Z"),

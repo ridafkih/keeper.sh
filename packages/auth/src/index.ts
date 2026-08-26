@@ -20,7 +20,8 @@ import {
   runDeleteUserTeardown,
 } from "./delete-user-teardown";
 import {
-  commitDeleteUserAttempt,
+  finishDeleteUserAttempt,
+  instrumentUserRowDelete,
   startDeleteUserAttempt,
   withDeleteUserCompensation,
 } from "./delete-user-compensation";
@@ -240,13 +241,18 @@ const createAuth = (config: AuthConfig) => {
   };
 
   const afterDelete: AfterDeleteUser = async (user) => {
-    commitDeleteUserAttempt();
+    finishDeleteUserAttempt();
     await destroyExternalState(user.id);
   };
 
   const compensateDeleteUser = async (userId: string): Promise<void> => {
     widelog.setFields({ "delete_user.teardown_compensated": true });
     await rollbackQuiesce(userId);
+  };
+
+  const finishDeleteUser = async (userId: string): Promise<void> => {
+    widelog.setFields({ "delete_user.external_state_destroyed_after_failure": true });
+    await destroyExternalState(userId);
   };
 
   const deleteUser: DeleteUserOptions = {
@@ -481,7 +487,15 @@ const createAuth = (config: AuthConfig) => {
 
   const auth = {
     ...baseAuth,
-    handler: withDeleteUserCompensation(baseAuth.handler, compensateDeleteUser),
+    handler: withDeleteUserCompensation(baseAuth.handler, {
+      compensate: compensateDeleteUser,
+      finish: finishDeleteUser,
+      prepare: async () => {
+        const { internalAdapter } = await baseAuth.$context;
+
+        instrumentUserRowDelete(internalAdapter);
+      },
+    }),
   };
 
   return { auth, capabilities, polarClient: polarClient ?? null };

@@ -1,33 +1,58 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+type DeleteUserAttemptStage = "committed" | "finished" | "started";
+
+interface UnfinishedDeleteUserAttempt {
+  committed: boolean;
+  userId: string;
+}
+
 interface DeleteUserAttempt {
-  commit: () => void;
+  commit: (userId: string) => void;
+  finish: () => void;
   start: (userId: string) => void;
-  uncommittedUserId: () => string | null;
+  unfinished: () => UnfinishedDeleteUserAttempt | null;
+}
+
+interface UserRowDeleter {
+  deleteUser: (userId: string) => Promise<void>;
+}
+
+interface DeleteUserCompensation {
+  compensate: (userId: string) => Promise<void>;
+  finish: (userId: string) => Promise<void>;
+  prepare: () => Promise<void>;
 }
 
 const deleteUserAttempts = new AsyncLocalStorage<DeleteUserAttempt>();
 
 const createDeleteUserAttempt = (): DeleteUserAttempt => {
   let startedUserId: string | null = null;
-  let committed = false;
-
-  const uncommittedUserId = (): string | null => {
-    if (committed) {
-      return null;
-    }
-
-    return startedUserId;
-  };
+  let stage: DeleteUserAttemptStage = "started";
 
   return {
-    commit: () => {
-      committed = true;
+    commit: (userId: string) => {
+      if (startedUserId !== userId) {
+        return;
+      }
+
+      if (stage === "started") {
+        stage = "committed";
+      }
+    },
+    finish: () => {
+      stage = "finished";
     },
     start: (userId: string) => {
       startedUserId = userId;
     },
-    uncommittedUserId,
+    unfinished: () => {
+      if (startedUserId === null || stage === "finished") {
+        return null;
+      }
+
+      return { committed: stage === "committed", userId: startedUserId };
+    },
   };
 };
 
@@ -35,33 +60,80 @@ const startDeleteUserAttempt = (userId: string): void => {
   deleteUserAttempts.getStore()?.start(userId);
 };
 
-const commitDeleteUserAttempt = (): void => {
-  deleteUserAttempts.getStore()?.commit();
+const commitDeleteUserAttempt = (userId: string): void => {
+  deleteUserAttempts.getStore()?.commit(userId);
+};
+
+const finishDeleteUserAttempt = (): void => {
+  deleteUserAttempts.getStore()?.finish();
+};
+
+const instrumentedDeleters = new WeakSet<UserRowDeleter>();
+
+const instrumentUserRowDelete = (adapter: UserRowDeleter): void => {
+  if (instrumentedDeleters.has(adapter)) {
+    return;
+  }
+
+  const deleteUserRow = adapter.deleteUser;
+
+  if (typeof deleteUserRow !== "function") {
+    throw new TypeError("internal adapter does not expose a deleteUser function");
+  }
+
+  adapter.deleteUser = async (userId: string) => {
+    await deleteUserRow.call(adapter, userId);
+    commitDeleteUserAttempt(userId);
+  };
+
+  instrumentedDeleters.add(adapter);
 };
 
 type AuthRequestHandler = (request: Request) => Promise<Response>;
 
+const settleDeleteUserAttempt = async (
+  unfinished: UnfinishedDeleteUserAttempt,
+  compensate: (userId: string) => Promise<void>,
+  finish: (userId: string) => Promise<void>,
+): Promise<void> => {
+  if (unfinished.committed) {
+    await finish(unfinished.userId);
+    return;
+  }
+
+  await compensate(unfinished.userId);
+};
+
 const withDeleteUserCompensation = (
   handler: AuthRequestHandler,
-  compensate: (userId: string) => Promise<void>,
+  { compensate, finish, prepare }: DeleteUserCompensation,
 ): AuthRequestHandler =>
   async (request: Request): Promise<Response> => {
     const attempt = createDeleteUserAttempt();
 
+    await prepare();
+
     try {
       return await deleteUserAttempts.run(attempt, () => handler(request));
     } finally {
-      const uncommittedUserId = attempt.uncommittedUserId();
+      const unfinished = attempt.unfinished();
 
-      if (uncommittedUserId !== null) {
-        await compensate(uncommittedUserId);
+      if (unfinished !== null) {
+        await settleDeleteUserAttempt(unfinished, compensate, finish);
       }
     }
   };
 
 export {
   commitDeleteUserAttempt,
+  finishDeleteUserAttempt,
+  instrumentUserRowDelete,
   startDeleteUserAttempt,
   withDeleteUserCompensation,
 };
-export type { AuthRequestHandler, DeleteUserAttempt };
+export type {
+  AuthRequestHandler,
+  DeleteUserAttempt,
+  DeleteUserCompensation,
+  UserRowDeleter,
+};

@@ -4,16 +4,6 @@ import { createAuth } from "../src/index";
 import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-/*
- * Incident 2026-08-25: user qhPedMZJCcAFPcqsdHGo5m8K5RLacWFx deleted their account at
- * 06:15:33 UTC and worker jobs for that user kept writing to their Google calendar until
- * 06:19:03 UTC. Account deletion cascades database rows but performs no sync teardown:
- * no job drain, no push-channel deregistration, no provider token revocation.
- *
- * These tests pin the missing contract. They are expected to FAIL until deletion becomes
- * a teardown.
- */
-
 const stubDatabase = {} as BunSQLDatabase;
 
 const buildAuth = (overrides: Record<string, unknown> = {}) =>
@@ -76,15 +66,9 @@ const resolveAfterDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
 const TEARDOWN_FAILURE_MESSAGE = "push channel deregistration unavailable";
 
 describe("account deletion teardown", () => {
-  it("runs a beforeDelete teardown while the user's rows still exist", () => {
+  it("runs teardown as beforeDelete, while the cascade-deleted calendar, channel, and credential rows still exist", () => {
     const { auth } = buildAuth();
 
-    /*
-     * Draining queue jobs, deregistering Google/Microsoft push channels, and revoking
-     * provider OAuth tokens all need the user's calendar, channel, and credential rows.
-     * Those rows are cascade-deleted with the user row, so the teardown must be wired
-     * as beforeDelete; afterDelete is too late to ever do this work.
-     */
     expect(auth.options.user?.deleteUser?.beforeDelete).toBeTypeOf("function");
   });
 
@@ -152,13 +136,6 @@ describe("polar customer removal during deletion", () => {
   it("surfaces a Polar failure instead of silently orphaning the billing customer", async () => {
     const deleteExternal = vi.fn(() => Promise.reject(new Error("polar unavailable")));
 
-    /*
-     * The hook chain is user row deleted -> afterDelete -> Polar customer deleted. When
-     * the Polar call fails the customer (and any still-active subscription) is orphaned
-     * with the keeper-side user already gone, and nothing reconciles it later. Swallowing
-     * the error guarantees the orphan is invisible; the failure must propagate so the
-     * caller can retry or alert.
-     */
     await expect(
       deletePolarCustomerByExternalId({ customers: { deleteExternal } }, "user-1"),
     ).rejects.toThrow("polar unavailable");
@@ -198,12 +175,6 @@ describe("polar customer removal during deletion", () => {
       value: { deleteExternal },
     });
 
-    /*
-     * Deleting a Polar customer is irreversible and needs none of the user's rows. Doing
-     * it in beforeDelete destroys the billing customer of a user whose deletion may still
-     * fail, leaving a live account with no billing record. It belongs after the row is
-     * gone, once the deletion has actually committed.
-     */
     await resolveBeforeDelete(auth)({ id: "user-1" });
 
     expect(deleteExternal).not.toHaveBeenCalled();

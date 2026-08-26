@@ -22,6 +22,8 @@ import {
 import { widelog } from "@/utils/logging";
 
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
+const RESTATE_FAILED_SLUG = "push-channel-restate-failed";
+const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
 const LIVE_STATES = ["active", "degraded", "registering"];
@@ -30,6 +32,7 @@ const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 interface DeregisterPushChannelsDependencies {
   createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
   listLiveChannels: (scopeId: string) => Promise<StoredPushChannel[]>;
+  markChannelsStopped?: (channelIds: string[]) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
@@ -54,6 +57,34 @@ const stopChannel = async (
   }
 };
 
+const restateStoppedChannels = async (
+  channelIds: string[],
+  dependencies: DeregisterPushChannelsDependencies,
+): Promise<number> => {
+  if (channelIds.length === 0) {
+    return 0;
+  }
+
+  const { markChannelsStopped } = dependencies;
+  if (!markChannelsStopped) {
+    dependencies.recordError(
+      new Error(
+        `Push channels ${channelIds.join(", ")} were stopped at the provider but no channel writer was supplied to restate their rows`,
+      ),
+      RESTATE_FAILED_SLUG,
+    );
+    return 0;
+  }
+
+  try {
+    await markChannelsStopped(channelIds);
+    return channelIds.length;
+  } catch (error) {
+    dependencies.recordError(error, RESTATE_FAILED_SLUG);
+    return 0;
+  }
+};
+
 const runDeregisterPushChannels = async (
   scopeId: string,
   dependencies: DeregisterPushChannelsDependencies,
@@ -71,26 +102,29 @@ const runDeregisterPushChannels = async (
   }
 
   const pending = [...channels];
-  const results: boolean[] = [];
+  const stoppedChannelIds: string[] = [];
   const workers = Array.from(
     { length: Math.min(DISCONNECT_CONCURRENCY, pending.length) },
     async () => {
       for (let channel = pending.shift(); channel; channel = pending.shift()) {
-        results.push(await stopChannel(channel, dependencies));
+        if (await stopChannel(channel, dependencies)) {
+          stoppedChannelIds.push(channel.id);
+        }
       }
     },
   );
 
   await Promise.all(workers);
 
-  const stopped = results.filter(Boolean).length;
+  const restated = await restateStoppedChannels(stoppedChannelIds, dependencies);
 
   dependencies.observe({
-    "push_channel.disconnect_deregistered_count": stopped,
+    "push_channel.disconnect_deregistered_count": stoppedChannelIds.length,
     "push_channel.disconnect_live_count": channels.length,
+    "push_channel.disconnect_restated_count": restated,
   });
 
-  return stopped;
+  return stoppedChannelIds.length;
 };
 
 const resolveTokenRefresher = (
@@ -216,6 +250,20 @@ const deregisterPushChannelsWithin = async (
         ));
       return rows.map((row) => ({ ...row, state: toPushChannelState(row.state) }));
     },
+    markChannelsStopped: async (channelIds) => {
+      await database
+        .update(calendarPushChannelsTable)
+        .set({
+          expiresAt: null,
+          lastNotificationAt: null,
+          state: STOPPED_STATE,
+          verifiedAt: null,
+        })
+        .where(and(
+          eq(calendarPushChannelsTable[scopeColumn], scopeId),
+          inArray(calendarPushChannelsTable.id, channelIds),
+        ));
+    },
     observe: (fields) => {
       widelog.setFields(fields);
     },
@@ -241,6 +289,7 @@ const runDeregisterUserPushChannels = runDeregisterPushChannels;
 
 export {
   DEREGISTRATION_FAILED_SLUG,
+  RESTATE_FAILED_SLUG,
   deregisterAccountPushChannels,
   deregisterCalendarPushChannels,
   deregisterUserPushChannels,

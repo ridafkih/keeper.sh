@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { widelog, widelogger } from "widelogger";
 import { createAuth } from "../src/index";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -6,6 +7,7 @@ const SECRET = "delete-teardown-secret-long-enough-for-validation";
 const USER_ID = "user-1";
 const TOMBSTONE_KEY = `user:${USER_ID}:deleted`;
 const DELETE_USER_URL = "http://localhost:3000/api/auth/delete-user";
+const POLAR_FAILURE_MESSAGE = "polar customer deletion refused";
 
 const toBase64 = (bytes: Uint8Array): string => {
   let binary = "";
@@ -50,6 +52,12 @@ const createTombstoneStore = (): TombstoneStore => {
   };
 };
 
+type DeletionOutcome =
+  | "polar_delete_fails"
+  | "row_delete_fails"
+  | "session_delete_fails"
+  | "succeeds";
+
 interface DeletionHarness {
   auth: ReturnType<typeof createAuth>["auth"];
   polarDeletions: string[];
@@ -58,7 +66,7 @@ interface DeletionHarness {
   userRowExists: () => boolean;
 }
 
-const buildHarness = (deleteUserOutcome: "fails" | "succeeds"): Promise<DeletionHarness> => {
+const buildHarness = (outcome: DeletionOutcome): Promise<DeletionHarness> => {
   const tombstones = createTombstoneStore();
   const polarDeletions: string[] = [];
   const sequence: string[] = [];
@@ -93,6 +101,11 @@ const buildHarness = (deleteUserOutcome: "fails" | "succeeds"): Promise<Deletion
     value: {
       deleteExternal: vi.fn((payload: { externalId: string }) => {
         sequence.push("polar_delete");
+
+        if (outcome === "polar_delete_fails") {
+          return Promise.reject(new Error(POLAR_FAILURE_MESSAGE));
+        }
+
         polarDeletions.push(payload.externalId);
         return Promise.resolve({});
       }),
@@ -128,11 +141,23 @@ const buildHarness = (deleteUserOutcome: "fails" | "succeeds"): Promise<Deletion
     };
     internalAdapter.findUserById = () => Promise.resolve(user);
     internalAdapter.updateSession = () => Promise.resolve(session);
-    internalAdapter.deleteUserSessions = () => Promise.resolve();
+    internalAdapter.deleteUserSessions = () => {
+      sequence.push("session_delete");
+
+      if (outcome === "session_delete_fails") {
+        return Promise.reject(
+          Object.assign(new Error("connection terminated unexpectedly"), {
+            code: "57P01",
+          }),
+        );
+      }
+
+      return Promise.resolve();
+    };
     internalAdapter.deleteUser = (userId: string) => {
       sequence.push("row_delete");
 
-      if (deleteUserOutcome === "fails") {
+      if (outcome === "row_delete_fails") {
         return Promise.reject(
           Object.assign(new Error("deadlock detected"), { code: "40P01" }),
         );
@@ -168,7 +193,7 @@ const requestAccountDeletion = async (
 
 describe("a failed user-row deletion must not strand a surviving account", () => {
   it("clears the sync-halt tombstone when the row deletion fails", async () => {
-    const harness = await buildHarness("fails");
+    const harness = await buildHarness("row_delete_fails");
 
     const response = await requestAccountDeletion(harness.auth);
 
@@ -179,7 +204,7 @@ describe("a failed user-row deletion must not strand a surviving account", () =>
   });
 
   it("leaves the Polar customer intact when the row deletion fails", async () => {
-    const harness = await buildHarness("fails");
+    const harness = await buildHarness("row_delete_fails");
 
     const response = await requestAccountDeletion(harness.auth);
 
@@ -195,7 +220,12 @@ describe("a failed user-row deletion must not strand a surviving account", () =>
     expect(response.status).toBe(200);
     expect(harness.userRowExists()).toBe(false);
     expect(harness.polarDeletions).toEqual([USER_ID]);
-    expect(harness.sequence).toEqual(["teardown", "row_delete", "polar_delete"]);
+    expect(harness.sequence).toEqual([
+      "teardown",
+      "row_delete",
+      "session_delete",
+      "polar_delete",
+    ]);
   });
 
   it("keeps the tombstone in place after a successful deletion", async () => {
@@ -205,5 +235,74 @@ describe("a failed user-row deletion must not strand a surviving account", () =>
 
     await expect(harness.tombstones.exists(TOMBSTONE_KEY)).resolves.toBe(1);
     expect(harness.sequence).not.toContain("teardown_rollback");
+  });
+});
+
+describe("a user row that is already gone is past the point of no return", () => {
+  it("keeps the sync-halt tombstone when the session delete fails after the row delete", async () => {
+    const harness = await buildHarness("session_delete_fails");
+
+    await requestAccountDeletion(harness.auth);
+
+    expect(harness.userRowExists()).toBe(false);
+    expect(harness.sequence).toContain("session_delete");
+    expect(harness.tombstones.keys()).toEqual([TOMBSTONE_KEY]);
+    await expect(harness.tombstones.exists(TOMBSTONE_KEY)).resolves.toBe(1);
+    expect(harness.sequence).not.toContain("teardown_rollback");
+  });
+
+  it("still destroys the Polar customer when the session delete fails after the row delete", async () => {
+    const harness = await buildHarness("session_delete_fails");
+
+    await requestAccountDeletion(harness.auth);
+
+    expect(harness.userRowExists()).toBe(false);
+    expect(harness.sequence).toContain("polar_delete");
+    expect(harness.polarDeletions).toEqual([USER_ID]);
+  });
+});
+
+const { context } = widelogger({
+  defaultEventName: "wide_event",
+  environment: "production",
+  service: "auth-delete-user-test",
+});
+
+describe("a failed Polar removal must not fail the customer's deletion", () => {
+  const emitted: unknown[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
+
+  beforeEach(() => {
+    emitted.length = 0;
+    process.stdout.write = ((chunk: unknown) => {
+      for (const line of String(chunk).split("\n")) {
+        if (line.trim().length > 0) {
+          emitted.push(JSON.parse(line));
+        }
+      }
+      return true;
+    }) as typeof process.stdout.write;
+  });
+
+  afterEach(() => {
+    process.stdout.write = originalWrite;
+  });
+
+  it("answers the caller without a 500 and reports the failure on the wide event", async () => {
+    const harness = await buildHarness("polar_delete_fails");
+
+    const response = await context(async () => {
+      const result = await requestAccountDeletion(harness.auth);
+
+      widelog.flush();
+
+      return result;
+    });
+
+    expect(response.status).not.toBe(500);
+    expect(harness.userRowExists()).toBe(false);
+    expect(harness.sequence).toContain("polar_delete");
+    expect(emitted).toHaveLength(1);
+    expect(JSON.stringify(emitted[0])).toContain(POLAR_FAILURE_MESSAGE);
   });
 });
