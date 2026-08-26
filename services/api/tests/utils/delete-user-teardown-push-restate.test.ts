@@ -220,6 +220,7 @@ const makeHarness = (): Harness => {
       markChannelStopped: channelStore.markChannelStopped,
       markChannelsStopped: channelStore.markChannelsStopped,
       redis: tombstoneRedis,
+      residue: { deleteForUser: () => Promise.resolve(0) },
     },
     stopRequests: () => [...stopRequests],
     teardownDependencies: {
@@ -230,6 +231,7 @@ const makeHarness = (): Harness => {
       markChannelStopped: channelStore.markChannelStopped,
       markChannelsStopped: channelStore.markChannelsStopped,
       redis: tombstoneRedis,
+      residue: { deleteForUser: () => Promise.resolve(0) },
     },
     tombstoneRedis,
   };

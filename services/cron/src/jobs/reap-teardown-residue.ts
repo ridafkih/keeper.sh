@@ -6,6 +6,7 @@ import {
   createTeardownResidueStore,
   ensureValidToken,
   resolvePushRegistrar,
+  revokeGoogleGrant,
 } from "@keeper.sh/calendar";
 import type {
   RegistrarContext,
@@ -157,6 +158,60 @@ const deletePolarCustomer = async (externalId: string): Promise<void> => {
   }
 };
 
+const revokeOAuthGrant = async (
+  record: TeardownResidueRecord,
+  token: string,
+): Promise<void> => {
+  if (record.provider !== "google") {
+    throw new Error(
+      `OAuth grant residue ${record.id} for user ${record.userId} names provider ${record.provider ?? "none"}, which has no revocation endpoint wired`,
+    );
+  }
+
+  const outcome = await revokeGoogleGrant(token, { fetchImpl: globalThis.fetch });
+
+  if (!outcome.revoked) {
+    throw new Error(
+      `Google refused to revoke the grant behind residue ${record.id} `
+        + `(${outcome.status}): ${outcome.body}`,
+    );
+  }
+};
+
+const countSurvivingAccountLinks = async (
+  record: TeardownResidueRecord,
+): Promise<number> => {
+  const { provider, accountEmail } = record;
+
+  if (!provider || !accountEmail) {
+    throw new Error(
+      `OAuth grant residue ${record.id} for user ${record.userId} names no provider account, so co-holders of the grant cannot be counted`,
+    );
+  }
+
+  const { database } = await import("@/context");
+  const { oauthCredentialsTable } = await import("@keeper.sh/database/schema");
+  const { and, count, eq } = await import("drizzle-orm");
+
+  const [row] = await database
+    .select({ surviving: count() })
+    .from(oauthCredentialsTable)
+    .where(
+      and(
+        eq(oauthCredentialsTable.provider, provider),
+        eq(oauthCredentialsTable.email, accountEmail),
+      ),
+    );
+
+  if (!row) {
+    throw new Error(
+      `Counting surviving links to ${provider} account behind residue ${record.id} returned no row`,
+    );
+  }
+
+  return row.surviving;
+};
+
 const createDefaultReaper = async () => {
   const { database } = await import("@/context");
   const { default: environment } = await import("@/env");
@@ -168,6 +223,7 @@ const createDefaultReaper = async () => {
   }
 
   return createTeardownResidueReaper({
+    countSurvivingAccountLinks,
     createRegistrarContext: createResidueRegistrarContext,
     deletePolarCustomer,
     now: () => new Date(),
@@ -183,6 +239,7 @@ const createDefaultReaper = async () => {
       now: () => new Date(),
     }),
     resolveRegistrar: resolvePushRegistrar,
+    revokeOAuthGrant,
   });
 };
 

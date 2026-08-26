@@ -1,5 +1,6 @@
-import { eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
 import { decryptPassword, encryptPassword } from "@keeper.sh/database";
+import { user } from "@keeper.sh/database/auth-schema";
 import { deletionResidueTable } from "@keeper.sh/database/schema";
 import { RESIDUE_LIFETIME_MS } from "./teardown-residue";
 import type {
@@ -8,7 +9,7 @@ import type {
   TeardownResidueRecord,
   TeardownResidueStore,
 } from "./teardown-residue";
-import type { BunSQLClient } from "../database-client";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
 const RETRY_BASE_SECONDS = 300;
 const RETRY_CAP_SECONDS = 3600;
@@ -17,7 +18,7 @@ const RETRY_BACKOFF_EXPONENT_CAP = 6;
 type DeletionResidueRow = typeof deletionResidueTable.$inferSelect;
 
 interface TeardownResidueStoreConfig {
-  database: BunSQLClient;
+  database: PgDatabase<PgQueryResultHKT>;
   encryptionKey: string | null;
   now: () => Date;
 }
@@ -78,6 +79,7 @@ const toResidueRecord = (
     id: row.id,
     kind: row.kind,
     userId: row.userId,
+    ...(row.accountEmail !== null && { accountEmail: row.accountEmail }),
     ...(credential !== null && { credential }),
     ...(row.externalId !== null && { externalId: row.externalId }),
     ...(row.provider !== null && { provider: row.provider }),
@@ -122,6 +124,14 @@ const createTeardownResidueStore = (
       .delete(deletionResidueTable)
       .where(eq(deletionResidueTable.id, residueId));
   },
+  deleteForUser: async (userId, kind) => {
+    const rows = await config.database
+      .delete(deletionResidueTable)
+      .where(and(eq(deletionResidueTable.userId, userId), eq(deletionResidueTable.kind, kind)))
+      .returning({ id: deletionResidueTable.id });
+
+    return rows.length;
+  },
   list: async () => {
     const claimedAt = config.now();
     const rows = await config.database
@@ -131,9 +141,12 @@ const createTeardownResidueStore = (
         lastAttemptAt: claimedAt,
         nextAttemptAt: nextAttemptExpression(claimedAt),
       })
-      .where(or(
-        isNull(deletionResidueTable.nextAttemptAt),
-        lte(deletionResidueTable.nextAttemptAt, claimedAt),
+      .where(and(
+        or(
+          isNull(deletionResidueTable.nextAttemptAt),
+          lte(deletionResidueTable.nextAttemptAt, claimedAt),
+        ),
+        sql`not exists (select 1 from ${user} where ${user.id} = ${deletionResidueTable.userId})`,
       ))
       .returning();
 
@@ -147,6 +160,7 @@ const createTeardownResidueStore = (
       expiresAt: new Date(recordedAt.getTime() + RESIDUE_LIFETIME_MS),
       kind: draft.kind,
       userId: draft.userId,
+      ...(typeof draft.accountEmail === "string" && { accountEmail: draft.accountEmail }),
       ...encryptCredential(draft.credential, config.encryptionKey),
       ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
       ...(typeof draft.provider === "string" && { provider: draft.provider }),

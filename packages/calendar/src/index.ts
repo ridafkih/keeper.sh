@@ -421,6 +421,7 @@ export {
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
   RESIDUE_LIFETIME_MS,
+  TEARDOWN_RESIDUE_KINDS,
 } from "./core/deletion/teardown-residue";
 export type {
   TeardownResidueCredential,

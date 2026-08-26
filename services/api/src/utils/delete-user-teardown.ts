@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { clearUserDeleted, markUserDeleted, revokeGoogleGrant } from "@keeper.sh/calendar";
+import { clearUserDeleted, markUserDeleted } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
 import { calendarsTable, deletionResidueTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
@@ -8,12 +8,15 @@ import {
   deregisterUserPushChannels,
 } from "@/utils/push-notifications/deregister-account-channels";
 import { RESIDUE_WRITE_FAILED_SLUG, SYNC_TEARDOWN_TIMEOUT_MS } from "@keeper.sh/auth";
-import { OAUTH_GRANT_RESIDUE_KIND, PUSH_CHANNEL_RESIDUE_KIND } from "@keeper.sh/calendar";
+import {
+  OAUTH_GRANT_RESIDUE_KIND,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  TEARDOWN_RESIDUE_KINDS,
+} from "@keeper.sh/calendar";
 import type { AbandonedPushChannelResidue } from "@/utils/push-notifications/deregister-account-channels";
 import type {
   GoogleRevocationFetch,
   RedisTombstoneClient,
-  TeardownResidueRecord,
   TeardownResidueStore,
 } from "@keeper.sh/calendar";
 import type { DeleteUserTeardown } from "@keeper.sh/auth";
@@ -59,6 +62,7 @@ interface DeleteUserSyncQueue {
 interface DeleteUserOAuthCredential {
   accessToken: string;
   accountId: string;
+  email: string | null;
   provider: string;
   refreshToken: string | null;
   userId: string;
@@ -119,22 +123,11 @@ const requireOwnCredentials = (
   return credentials;
 };
 
-const awaitsPushChannelReaping = (
-  residueRecords: TeardownResidueRecord[],
-  credential: DeleteUserOAuthCredential,
-): boolean =>
-  residueRecords.some(
-    (record) =>
-      record.kind === PUSH_CHANNEL_RESIDUE_KIND
-      && record.userId === credential.userId
-      && record.provider === credential.provider,
-  );
-
 const recordOAuthGrantResidue = async (
   residue: TeardownResidueStore,
   userId: string,
   credential: DeleteUserOAuthCredential,
-): Promise<void> => {
+): Promise<boolean> => {
   try {
     await residue.record({
       credential: {
@@ -146,36 +139,12 @@ const recordOAuthGrantResidue = async (
       kind: OAUTH_GRANT_RESIDUE_KIND,
       provider: credential.provider,
       userId,
+      ...(credential.email !== null && { accountEmail: credential.email }),
     });
-  } catch (error) {
-    reportStepFailure(error, "oauth_grants", userId, RESIDUE_WRITE_FAILED_SLUG);
-  }
-};
-
-const revokeOAuthGrant = async (
-  dependencies: DeleteUserSyncTeardownDependencies,
-  userId: string,
-  credential: DeleteUserOAuthCredential,
-  signal: AbortSignal,
-): Promise<boolean> => {
-  try {
-    const outcome = await revokeGoogleGrant(
-      credential.refreshToken ?? credential.accessToken,
-      { fetchImpl: dependencies.fetchImpl, signal },
-    );
-
-    if (!outcome.revoked) {
-      throw new Error(
-        `Google refused to revoke the grant behind credential ${credential.accountId} `
-          + `(${outcome.status}): ${outcome.body}`,
-      );
-    }
 
     return true;
   } catch (error) {
-    reportStepFailure(error, "oauth_grants", userId, TEARDOWN_FAILED_SLUG);
-
-    await recordOAuthGrantResidue(dependencies.residue, userId, credential);
+    reportStepFailure(error, "oauth_grants", userId, RESIDUE_WRITE_FAILED_SLUG);
 
     return false;
   }
@@ -238,36 +207,27 @@ const buildDeleteUserSyncSteps = (
         await dependencies.listOAuthCredentials(userId),
         userId,
       );
-      const residueRecords = await dependencies.residue.list();
       const revocable = credentials.filter(
         (credential) => credential.provider === REVOCABLE_OAUTH_PROVIDER,
       );
       const notRevocable = credentials.filter(
         (credential) => credential.provider !== REVOCABLE_OAUTH_PROVIDER,
       );
-      const deferred = revocable.filter((credential) =>
-        awaitsPushChannelReaping(residueRecords, credential));
-      const pending = revocable.filter((credential) =>
-        !awaitsPushChannelReaping(residueRecords, credential));
 
-      const revocations: boolean[] = [];
+      const recordings: boolean[] = [];
 
-      for (const credential of pending) {
+      for (const credential of revocable) {
         throwIfAborted(signal, "oauth_grants");
 
-        revocations.push(await revokeOAuthGrant(dependencies, userId, credential, signal));
+        recordings.push(await recordOAuthGrantResidue(dependencies.residue, userId, credential));
       }
 
-      const revokedCount = revocations.filter(Boolean).length;
-
       widelog.setFields({
-        "delete_user.oauth_grants_deferred": deferred.length,
-        "delete_user.oauth_grants_failed": revocations.length - revokedCount,
         "delete_user.oauth_grants_not_revocable": notRevocable.map((credential) => ({
           accountId: credential.accountId,
           provider: credential.provider,
         })),
-        "delete_user.oauth_grants_revoked": revokedCount,
+        "delete_user.oauth_grants_recorded": recordings.filter(Boolean).length,
       });
     },
     timeoutMs: OAUTH_GRANTS_TIMEOUT_MS,
@@ -377,13 +337,46 @@ const createDeleteUserSyncTeardown =
     }
   };
 
+interface DeleteUserSyncTeardownRollbackDependencies
+  extends Pick<DeleteUserSyncTeardownDependencies, "redis"> {
+  residue: Pick<TeardownResidueStore, "deleteForUser">;
+}
+
+const discardRecordedResidue = async (
+  dependencies: DeleteUserSyncTeardownRollbackDependencies,
+  userId: string,
+): Promise<void> => {
+  const deleteForUser = dependencies.residue?.deleteForUser as
+    | TeardownResidueStore["deleteForUser"]
+    | undefined;
+
+  if (typeof deleteForUser !== "function") {
+    throw new TypeError(
+      `Rollback for user ${userId} cannot discard its recorded residue: the residue store has no deleteForUser, so the residue was left behind`,
+    );
+  }
+
+  const discardedPerKind = await Promise.all(
+    TEARDOWN_RESIDUE_KINDS.map((kind) => deleteForUser(userId, kind)),
+  );
+
+  widelog.setFields({
+    "delete_user.residue_discarded": discardedPerKind.reduce(
+      (total, discarded) => total + discarded,
+      0,
+    ),
+  });
+};
+
 const createDeleteUserSyncTeardownRollback =
-  (dependencies: Pick<DeleteUserSyncTeardownDependencies, "redis">): DeleteUserTeardown =>
+  (dependencies: DeleteUserSyncTeardownRollbackDependencies): DeleteUserTeardown =>
   async (userId: string) => {
     await runWithDeadline("tombstone_rollback", TOMBSTONE_TIMEOUT_MS, async () => {
       await clearUserDeleted(dependencies.redis, userId);
 
       widelog.setFields({ "delete_user.tombstone_cleared": true });
+
+      await discardRecordedResidue(dependencies, userId);
     });
   };
 
@@ -418,6 +411,7 @@ const createApiDeleteUserSyncTeardown = (
         .select({
           accessToken: oauthCredentialsTable.accessToken,
           accountId: oauthCredentialsTable.id,
+          email: oauthCredentialsTable.email,
           provider: oauthCredentialsTable.provider,
           refreshToken: oauthCredentialsTable.refreshToken,
           userId: oauthCredentialsTable.userId,
@@ -462,6 +456,7 @@ export {
 export type {
   DeleteUserOAuthCredential,
   DeleteUserSyncQueue,
+  DeleteUserSyncTeardownRollbackDependencies,
   DeleteUserSyncTeardownContext,
   DeleteUserSyncTeardownDependencies,
 };

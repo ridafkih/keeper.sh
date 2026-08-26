@@ -104,7 +104,10 @@ const { auth, capabilities: authCapabilities } = createAuth({
     redis,
     residue: teardownResidueStore,
   }),
-  deleteUserTeardownRollback: createDeleteUserSyncTeardownRollback({ redis }),
+  deleteUserTeardownRollback: createDeleteUserSyncTeardownRollback({
+    redis,
+    residue: teardownResidueStore,
+  }),
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 

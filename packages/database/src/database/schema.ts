@@ -248,6 +248,7 @@ const calendarPushChannelsTable = pgTable(
 const deletionResidueTable = pgTable(
   "deletion_residue",
   {
+    accountEmail: text(),
     attempts: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     credentialExpiresAt: timestamp({ withTimezone: true }),

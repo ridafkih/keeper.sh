@@ -1,0 +1,1 @@
+ALTER TABLE "deletion_residue" ADD COLUMN "accountEmail" text;

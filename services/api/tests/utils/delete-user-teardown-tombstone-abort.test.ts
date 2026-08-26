@@ -60,6 +60,7 @@ describe("delete user teardown tombstone abort", () => {
       redis,
       residue: {
         clear: () => Promise.resolve(),
+        deleteForUser: () => Promise.resolve(0),
         list: () => Promise.resolve([]),
         record: () => Promise.resolve(),
       },
@@ -67,7 +68,10 @@ describe("delete user teardown tombstone abort", () => {
 
     await teardown(USER_ID);
 
-    await createDeleteUserSyncTeardownRollback({ redis })(USER_ID);
+    await createDeleteUserSyncTeardownRollback({
+      redis,
+      residue: { deleteForUser: () => Promise.resolve(0) },
+    })(USER_ID);
 
     expect([...redis.store.keys()]).toEqual([]);
 

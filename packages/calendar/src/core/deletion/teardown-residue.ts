@@ -12,6 +12,12 @@ const RESIDUE_LIFETIME_MS =
   Math.max(GOOGLE_WATCH_MAX_LIFETIME_MS, GRAPH_SUBSCRIPTION_MAX_LIFETIME_MS)
   + RESIDUE_REPAIR_MARGIN_MS;
 
+const TEARDOWN_RESIDUE_KINDS = [
+  OAUTH_GRANT_RESIDUE_KIND,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  POLAR_CUSTOMER_RESIDUE_KIND,
+] as const;
+
 interface TeardownResidueCredential {
   accessToken: string;
   expiresAt: Date | null;
@@ -19,6 +25,7 @@ interface TeardownResidueCredential {
 }
 
 interface TeardownResidueDraft {
+  accountEmail?: string;
   credential?: TeardownResidueCredential;
   externalId?: string;
   kind: string;
@@ -37,6 +44,7 @@ interface TeardownResidueRecord extends TeardownResidueDraft {
 
 interface TeardownResidueStore {
   clear: (residueId: string) => Promise<void>;
+  deleteForUser: (userId: string, kind: string) => Promise<number>;
   list: () => Promise<TeardownResidueRecord[]>;
   record: (draft: TeardownResidueDraft) => Promise<void>;
 }
@@ -48,6 +56,7 @@ export {
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
   RESIDUE_LIFETIME_MS,
+  TEARDOWN_RESIDUE_KINDS,
 };
 export type {
   TeardownResidueCredential,
