@@ -383,7 +383,12 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
       if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-        if (fetchResult.nextSyncToken || fetchResult.snapshot || fetchResult.coverage) {
+        if (
+          fetchResult.nextSyncToken
+          || fetchResult.snapshot
+          || fetchResult.coverage
+          || fetchResult.calendarColor !== globalThis.undefined
+        ) {
           const changes: IngestionChanges = { inserts: [], deletes: [] };
           if (fetchResult.nextSyncToken) {
             changes.syncToken = fetchResult.nextSyncToken;

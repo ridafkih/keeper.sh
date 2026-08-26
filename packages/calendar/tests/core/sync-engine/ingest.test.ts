@@ -560,6 +560,23 @@ describe("ingestSource", () => {
     expect(flushedSnapshots).toEqual([snapshot]);
   });
 
+  it("flushes a calendar color change even when the event set is already in sync", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const flushedColors: unknown[] = [];
+
+    await ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ calendarColor: null, events: [] }),
+      readExistingEvents: () => Promise.resolve([]),
+      flush: (changes) => {
+        flushedColors.push(changes.calendarColor);
+        return Promise.resolve();
+      },
+    });
+
+    expect(flushedColors).toEqual([null]);
+  });
+
   it("fetches before opening the persistence transaction", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const order: string[] = [];
