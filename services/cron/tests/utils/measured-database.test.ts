@@ -4,12 +4,22 @@ import type { ConcurrencyGate } from "@keeper.sh/calendar";
 
 const GATE_DELAY_MS = 50;
 const STATEMENT_DELAY_MS = 5;
-const WORK_CEILING_MS = 40;
 
-const delay = (durationMs: number): Promise<null> =>
-  new Promise((resolve) => {
-    setTimeout(() => resolve(null), durationMs);
-  });
+interface TestClock {
+  advance: (durationMs: number) => Promise<null>;
+  now: () => number;
+}
+
+const createClock = (): TestClock => {
+  let elapsedMs = 0;
+  return {
+    advance: async (durationMs: number): Promise<null> => {
+      elapsedMs += durationMs;
+      return await Promise.resolve(null);
+    },
+    now: (): number => elapsedMs,
+  };
+};
 
 interface RecordedSegment {
   name: string;
@@ -74,28 +84,29 @@ const createFreeGate = (inFlightDuringRun: number): ConcurrencyGate => {
   };
 };
 
-const createDelayingGate = (delayMs: number): ConcurrencyGate => ({
+const createDelayingGate = (clock: TestClock, delayMs: number): ConcurrencyGate => ({
   hasFreePermit: () => false,
   inFlight: () => 1,
   run: async <TResult>(operation: () => Promise<TResult>): Promise<TResult> => {
-    await delay(delayMs);
+    await clock.advance(delayMs);
     return await operation();
   },
 });
 
 describe("measureDatabaseRead", () => {
   it("charges only statement execution to work.db_read_ms, never the gate wait", async () => {
-    const gate = createDelayingGate(GATE_DELAY_MS);
+    const clock = createClock();
+    const gate = createDelayingGate(clock, GATE_DELAY_MS);
     const recorder = createSegmentRecorder();
     const { counters } = createCounterRecorder();
 
     const result = await measureDatabaseRead(
       gate,
       async () => {
-        await delay(STATEMENT_DELAY_MS);
+        await clock.advance(STATEMENT_DELAY_MS);
         return "rows";
       },
-      { counters, recordSegment: recorder.record },
+      { counters, now: clock.now, recordSegment: recorder.record },
     );
 
     expect(result).toBe("rows");
@@ -103,37 +114,38 @@ describe("measureDatabaseRead", () => {
       (segment) => segment.name === "work.db_read_ms",
     );
     expect(workSegments).toHaveLength(1);
-    expect(workSegments[0]?.ms).toBeLessThan(WORK_CEILING_MS);
+    expect(workSegments[0]?.ms).toBe(STATEMENT_DELAY_MS);
   });
 
   it("records the gate wait as wait.read_gate_ms", async () => {
-    const gate = createDelayingGate(GATE_DELAY_MS);
+    const clock = createClock();
+    const gate = createDelayingGate(clock, GATE_DELAY_MS);
     const recorder = createSegmentRecorder();
     const { counters } = createCounterRecorder();
 
     await measureDatabaseRead(
       gate,
       async () => {
-        await delay(STATEMENT_DELAY_MS);
+        await clock.advance(STATEMENT_DELAY_MS);
         return "rows";
       },
-      { counters, recordSegment: recorder.record },
+      { counters, now: clock.now, recordSegment: recorder.record },
     );
 
     const waitSegments = recorder.segments.filter(
       (segment) => segment.name === "wait.read_gate_ms",
     );
     expect(waitSegments).toHaveLength(1);
-    expect(waitSegments[0]?.ms).toBeGreaterThanOrEqual(WORK_CEILING_MS);
+    expect(waitSegments[0]?.ms).toBe(GATE_DELAY_MS);
   });
 
   it("keeps the query counters: one read, one query, queued only when contended", async () => {
-    const contendedGate = createDelayingGate(GATE_DELAY_MS);
+    const contendedGate = createDelayingGate(createClock(), GATE_DELAY_MS);
     const contended = createCounterRecorder();
     await measureDatabaseRead(
       contendedGate,
       () => Promise.resolve("rows"),
-      { counters: contended.counters, recordSegment: (): null => null },
+      { counters: contended.counters, now: () => 0, recordSegment: (): null => null },
     );
 
     expect(contended.counts).toContainEqual({ ms: 1, name: "db.read_count" });
@@ -145,7 +157,7 @@ describe("measureDatabaseRead", () => {
     await measureDatabaseRead(
       freeGate,
       () => Promise.resolve("rows"),
-      { counters: free.counters, recordSegment: (): null => null },
+      { counters: free.counters, now: () => 0, recordSegment: (): null => null },
     );
 
     expect(free.counts).toContainEqual({ ms: 1, name: "db.read_count" });
@@ -160,7 +172,7 @@ describe("measureDatabaseRead", () => {
     await measureDatabaseRead(
       gate,
       () => Promise.resolve("rows"),
-      { counters, recordSegment: (): null => null },
+      { counters, now: () => 0, recordSegment: (): null => null },
     );
 
     expect(maxima).toContainEqual({
@@ -178,7 +190,7 @@ describe("measureDatabaseWrite", () => {
     await measureDatabaseWrite(
       gate,
       () => Promise.resolve("written"),
-      { counters, recordSegment: (): null => null },
+      { counters, now: () => 0, recordSegment: (): null => null },
     );
 
     expect(counts).toContainEqual({ ms: 1, name: "db.write_count" });
@@ -187,17 +199,18 @@ describe("measureDatabaseWrite", () => {
   });
 
   it("charges only statement execution to work.db_write_ms and the gate wait to wait.write_gate_ms", async () => {
-    const gate = createDelayingGate(GATE_DELAY_MS);
+    const clock = createClock();
+    const gate = createDelayingGate(clock, GATE_DELAY_MS);
     const recorder = createSegmentRecorder();
     const { counters } = createCounterRecorder();
 
     const result = await measureDatabaseWrite(
       gate,
       async () => {
-        await delay(STATEMENT_DELAY_MS);
+        await clock.advance(STATEMENT_DELAY_MS);
         return "written";
       },
-      { counters, recordSegment: recorder.record },
+      { counters, now: clock.now, recordSegment: recorder.record },
     );
 
     expect(result).toBe("written");
@@ -205,12 +218,12 @@ describe("measureDatabaseWrite", () => {
       (segment) => segment.name === "work.db_write_ms",
     );
     expect(workSegments).toHaveLength(1);
-    expect(workSegments[0]?.ms).toBeLessThan(WORK_CEILING_MS);
+    expect(workSegments[0]?.ms).toBe(STATEMENT_DELAY_MS);
 
     const waitSegments = recorder.segments.filter(
       (segment) => segment.name === "wait.write_gate_ms",
     );
     expect(waitSegments).toHaveLength(1);
-    expect(waitSegments[0]?.ms).toBeGreaterThanOrEqual(WORK_CEILING_MS);
+    expect(waitSegments[0]?.ms).toBe(GATE_DELAY_MS);
   });
 });
