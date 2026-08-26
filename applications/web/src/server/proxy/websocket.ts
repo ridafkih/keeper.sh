@@ -27,6 +27,34 @@ function toWebSocketUrl(requestUrl: URL, origin: string): string {
   throw new Error("API proxy origin must use http or https.");
 }
 
+const NORMAL_CLOSURE = 1000;
+const LOWEST_PROTOCOL_CODE = 1000;
+const HIGHEST_PROTOCOL_CODE = 1014;
+const LOWEST_RESERVED_CODE = 1004;
+const HIGHEST_RESERVED_CODE = 1006;
+const LOWEST_APPLICATION_CODE = 3000;
+const HIGHEST_APPLICATION_CODE = 4999;
+
+export function toForwardableCloseCode(code: number | undefined): number {
+  if (code === undefined) {
+    return NORMAL_CLOSURE;
+  }
+
+  if (code >= LOWEST_RESERVED_CODE && code <= HIGHEST_RESERVED_CODE) {
+    return NORMAL_CLOSURE;
+  }
+
+  if (code >= LOWEST_PROTOCOL_CODE && code <= HIGHEST_PROTOCOL_CODE) {
+    return code;
+  }
+
+  if (code >= LOWEST_APPLICATION_CODE && code <= HIGHEST_APPLICATION_CODE) {
+    return code;
+  }
+
+  return NORMAL_CLOSURE;
+}
+
 function relayUpstreamMessageToClient(clientSocket: SocketConnection, message: unknown): void {
   if (typeof message === "string") {
     clientSocket.send(message);
@@ -104,7 +132,7 @@ export const websocketProxyHandlers = {
       return;
     }
 
-    upstreamSocket.close(code, reason);
+    upstreamSocket.close(toForwardableCloseCode(code), reason);
     clientSocket.data.upstreamSocket = null;
   },
   message(clientSocket: SocketConnection, message: unknown): void {
@@ -126,7 +154,7 @@ export const websocketProxyHandlers = {
 
     upstreamSocket.addEventListener("close", (event) => {
       if (clientSocket.readyState === 1) {
-        clientSocket.close(event.code, event.reason);
+        clientSocket.close(toForwardableCloseCode(event.code), event.reason);
       }
     });
 
