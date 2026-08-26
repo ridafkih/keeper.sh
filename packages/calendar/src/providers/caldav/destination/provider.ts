@@ -1,6 +1,6 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
-import { toVerificationDeleteIds } from "../../../core/events/verification-targets";
+import { toVerificationTarget } from "../../../core/events/verification-targets";
 import {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
@@ -355,8 +355,18 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
    * "@". Comparing decoded basenames keeps the write on the object the mapping
    * already points at instead of a reconstructed href that never matches.
    */
-  const resolveUpdateTargetUrl = (deleteId: string, uid: string): string => {
+  /*
+   * A server that re-keys an object it still holds names it with an href of its own choosing, and
+   * that href says nothing about the UID inside - so the basename test below cannot pass for a
+   * mirror the verification read just located and would refuse the customer's edit forever. A read
+   * that saw this event's own UID on the object at that href has already answered the only question
+   * the basename was standing in for, so the write goes to the object the read proved.
+   */
+  const resolveUpdateTargetUrl = (deleteId: string, uid: string, verifiedUid?: string): string => {
     const objectUrl = toObjectUrl(deleteId);
+    if (verifiedUid === uid) {
+      return objectUrl;
+    }
     const filename = decodeURIComponent(new URL(objectUrl).pathname.split("/").at(-1) ?? "");
     if (filename !== `${uid}.ics`) {
       throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
@@ -366,7 +376,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
     Promise.all(
-      updates.map(({ deleteId, event }) =>
+      updates.map(({ deleteId, event, verifiedUid }) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
           const attempt = unsentAttempt();
           const uid = generateDeterministicEventUid(event.id);
@@ -392,7 +402,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
              * engine reads it as a refusal that never learned anything rather than as evidence
              * that would license destroying the object the href actually names.
              */
-            const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
+            const objectUrl = resolveUpdateTargetUrl(deleteId, uid, verifiedUid);
 
             attempt.sent = true;
             await client.updateCalendarObjectByUrl({
@@ -541,10 +551,63 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  /* Same object, same identifier: a bare-uid mapping and the href it resolves to name one object, and
+     a server free to answer with an absolute href names the same one again. Only a path that is not
+     the one the read asked about is a relocation, and then that path is the only handle anything has
+     on the customer's copy. */
+  const answeredPathOf = (deleteId: string, answer: CalDAVObjectAnswer): string => {
+    const requestedPath = new URL(toObjectUrl(deleteId)).pathname;
+    const answeredPath = new URL(answer.path, calendarBaseUrl).pathname;
+    if (answeredPath === requestedPath) {
+      return deleteId;
+    }
+    return answeredPath;
+  };
+
+  /* An href names a whole object, never one component inside it, and a PUT to it rewrites every
+     component at once. So the object answers about exactly one event: the one its own leading
+     VEVENT identifies. Later components are that event's recurrence overrides -- which carry the
+     same uid, so several of them are ordinary -- or, on a collection that was re-keyed the ordinary
+     way, a sibling event nothing here may claim to have located. The master is preferred over an
+     override so the presence carries the series rather than one instance of it. */
+  const parsedEventForUid = (
+    data: string,
+    uid: string,
+  ): ParsedCalendarEvent | undefined => {
+    const parsedEvents = parseCalendarObjectEvents(data);
+    const [objectEvent] = parsedEvents;
+    if (!objectEvent || objectEvent.uid !== uid) {
+      return globalThis.undefined;
+    }
+    const components = parsedEvents.filter((parsed) => parsed.uid === uid);
+    return components.find((parsed) => !parsed.recurrenceId) ?? objectEvent;
+  };
+
+  /* A caller that asked by bare identifier told us no uid to compare against, so the object the
+     href names is all the question there was; a caller that named a uid gets an answer about that
+     uid or no answer at all. */
+  const readAnsweredEvent = (
+    target: EventVerificationTarget,
+    data: string,
+  ): ParsedCalendarEvent | undefined => {
+    if (!target.uid) {
+      const [first] = parseCalendarObjectEvents(data);
+      return first;
+    }
+    return parsedEventForUid(data, target.uid);
+  };
+
+  /* The read answers about an href, and a server that re-keyed the object answers about the href it
+     actually holds it under. That path is the only handle the update verb has on the customer's
+     copy, so the presence carries what the server answered about rather than what it was asked.
+     What it may never carry is somebody else's identity: an object standing at the href that holds
+     no component for the uid we asked about has told us nothing about our mirror, and calling that
+     "present" hands the engine a located mirror it would then write the wrong event's body into. */
   const presenceOfAnswer = (
-    deleteId: string,
+    target: EventVerificationTarget,
     answer: CalDAVObjectAnswer | undefined,
   ): EventPresence => {
+    const { deleteId } = target;
     if (!answer || answer.presence === "unknown") {
       return { identifier: deleteId, status: "unknown" };
     }
@@ -555,13 +618,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       return { identifier: deleteId, status: "unknown" };
     }
 
-    const [parsed] = parseCalendarObjectEvents(answer.data);
+    const parsed = readAnsweredEvent(target, answer.data);
     if (!parsed || !isKeeperEvent(parsed.uid)) {
       return { identifier: deleteId, status: "unknown" };
     }
 
     return {
-      event: toCalDAVRemoteEvent(parsed, deleteId),
+      event: toCalDAVRemoteEvent(parsed, answeredPathOf(deleteId, answer)),
       identifier: deleteId,
       status: "present",
     };
@@ -570,7 +633,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const verifyEventsExist = async (
     targets: (EventVerificationTarget | string)[],
   ): Promise<EventPresence[]> => {
-    const deleteIds = toVerificationDeleteIds(targets);
+    const verificationTargets = targets.map((target) => toVerificationTarget(target));
+    const deleteIds = verificationTargets.map((target) => target.deleteId);
     if (deleteIds.length === 0) {
       return [];
     }
@@ -580,9 +644,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       const answers = await client.verifyCalendarObjectsByUrls({
         calendarUrl,
         objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
+        /* Positional, so the read can look for a re-keyed object by the uid the mapping carries
+           instead of reporting the href it was asked about gone. */
+        uids: verificationTargets.map((target) => target.uid),
       });
 
-      return deleteIds.map((deleteId, index) => presenceOfAnswer(deleteId, answers[index]));
+      return verificationTargets.map((target, index) => presenceOfAnswer(target, answers[index]));
     } catch (error) {
       if (config.safeFetchOptions?.signal?.aborted) {
         throw error;

@@ -127,12 +127,34 @@ const createOutlookLikeDestination = (options: DestinationOptions) => {
       records.set(update.deleteId, { ...existing, summary: update.event.summary });
       return { deleteId: update.deleteId, remoteId: existing.uid, success: true };
     })),
-    verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(({ deleteId }): EventPresence => {
-      if (records.has(deleteId)) {
-        return { identifier: deleteId, status: "present" };
-      }
-      return { identifier: deleteId, status: "absent" };
-    })),
+    /*
+     * The real provider escalates a dead item id to a uid search before it will say absent, because
+     * a move or a re-key leaves the copy standing under the same uid. Answering absent from the id
+     * alone is kinder than the destination is, and absent is the one verdict that licenses a create
+     * with nothing else asked -- so the kindness comes back as a second copy of a live event.
+     */
+    verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(
+      ({ deleteId, uid }): EventPresence => {
+        if (records.has(deleteId)) {
+          return { identifier: deleteId, status: "present" };
+        }
+        const rekeyed = [...records.values()].find((record) => record.uid === uid);
+        if (rekeyed) {
+          return {
+            event: {
+              deleteId: rekeyed.deleteId,
+              endTime: END_TIME,
+              isKeeperEvent: true,
+              startTime: START_TIME,
+              uid: rekeyed.uid,
+            },
+            identifier: deleteId,
+            status: "present",
+          };
+        }
+        return { identifier: deleteId, status: "absent" };
+      },
+    )),
   };
 
   return {
@@ -226,8 +248,13 @@ describe("the replacement path requires the same evidence its sibling demands", 
 
     await runCycles(destination.provider, event, mapping, 1);
 
-    expect(destination.deleteTargets).toEqual([STALE_DELETE_ID]);
-    // The 404 DELETE reported success, but the live event never left: a POST would duplicate it.
+    /* This expected the speculative DELETE against the stale id, because that was the only way the
+       old path could learn anything. With the double answering as the destination does -- escalating
+       a dead id to a uid search rather than calling it absent -- the read finds the live copy under
+       its real key first, so there is nothing to guess at and no request to spend. What this case
+       exists to pin is unchanged and is the assertion below it: the live event never left, so a
+       create here would be a second copy of it. */
+    expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(destination.snapshot()).toEqual([
       { deleteId: LIVE_DELETE_ID, summary: "Team lunch", uid: LIVE_UID },

@@ -17,6 +17,9 @@ const toMappingUpdateValues = (update: PendingUpdate) => ({
   ...(typeof update.consecutiveUpdateFailures === "number" && {
     consecutiveUpdateFailures: update.consecutiveUpdateFailures,
   }),
+  ...(typeof update.consecutiveUnsettledReads === "number" && {
+    consecutiveUnsettledReads: update.consecutiveUnsettledReads,
+  }),
   deleteIdentifier: update.deleteIdentifier,
   ...(update.destinationEventUid && { destinationEventUid: update.destinationEventUid }),
   endTime: update.endTime,

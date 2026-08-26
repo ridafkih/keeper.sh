@@ -8,6 +8,9 @@ interface EventMapping {
   id: string;
   // Absent on mappings built before the counter existed, which reads as "no failures yet".
   consecutiveUpdateFailures?: number;
+  /* Consecutive verification reads that settled nothing for this mapping. Kept apart from the
+     answered-refusal counter above so neither kind of evidence can top the other up. */
+  consecutiveUnsettledReads?: number;
   eventStateId: string | null;
   syncEventId: string;
   calendarId: string;
@@ -67,6 +70,7 @@ const getEventMappingsForDestination = async (
   const mappings = await database
     .select({
       calendarId: eventMappingsTable.calendarId,
+      consecutiveUnsettledReads: eventMappingsTable.consecutiveUnsettledReads,
       consecutiveUpdateFailures: eventMappingsTable.consecutiveUpdateFailures,
       deleteIdentifier: eventMappingsTable.deleteIdentifier,
       destinationEventUid: eventMappingsTable.destinationEventUid,

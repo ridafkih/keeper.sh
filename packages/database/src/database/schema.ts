@@ -383,6 +383,11 @@ const eventMappingsTable = pgTable(
        to delete-then-add once the same update has been refused enough times to be durable, so a
        mirror cannot stall forever on an object the update path can never write. */
     consecutiveUpdateFailures: integer().notNull().default(0),
+    /* Consecutive verification reads that settled nothing for this mapping. Separate from the
+       counter above because a destination declining to answer is not evidence about the object:
+       sharing one counter let an answered refusal top up what an unknown read was allowed to
+       spend, and a mirror was destroyed on the strength of a read that said nothing. */
+    consecutiveUnsettledReads: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     deleteIdentifier: text(),
     destinationEventUid: text().notNull(),

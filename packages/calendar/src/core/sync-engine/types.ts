@@ -12,6 +12,12 @@ import type {
 interface EventUpdate {
   deleteId: string;
   event: MaterializedSyncableEvent;
+  /* The uid a verification read observed on the object living at deleteId, carried only when a read
+     actually saw it. A destination that re-keys its objects hands back an opaque identifier that
+     says nothing about the uid inside, so a provider which guards its update verb by inspecting the
+     identifier has no other way to tell a relocated mirror from an identifier naming a different
+     event - and refusing the write would leave the customer's edit undelivered forever. */
+  verifiedUid?: string;
 }
 
 interface CalendarSyncProvider {
@@ -49,6 +55,10 @@ interface PendingInsert {
 
 interface PendingUpdate {
   consecutiveUpdateFailures?: number;
+  /* Reads that settled nothing, counted apart from the answered-refusal tally above: one shared
+     counter let either kind of evidence top the other up, and an unknown read is not evidence
+     about the object at all. */
+  consecutiveUnsettledReads?: number;
   deleteIdentifier: string;
   destinationEventUid?: string;
   endTime: Date;

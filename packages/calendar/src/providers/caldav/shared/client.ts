@@ -349,6 +349,68 @@ const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
   },
 });
 
+/* A server that re-keys an object it still holds answers 404 for the href the mapping stored while
+   the object itself is alive in this same collection under a href the server chose. Only a search by
+   UID can find it, and a href says nothing about the UID inside it, so this is the one question that
+   separates relocating the mapping from writing a permanent second copy of the customer's event. */
+const buildUidQueryBody = (uid: string): Record<string, unknown> => ({
+  "calendar-query": {
+    _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
+    [`${DAVNamespaceShort.DAV}:prop`]: {
+      [`${DAVNamespaceShort.DAV}:getetag`]: {},
+      [`${DAVNamespaceShort.CALDAV}:calendar-data`]: {},
+    },
+    [`${DAVNamespaceShort.CALDAV}:filter`]: {
+      [`${DAVNamespaceShort.CALDAV}:comp-filter`]: {
+        _attributes: { name: "VCALENDAR" },
+        [`${DAVNamespaceShort.CALDAV}:comp-filter`]: {
+          _attributes: { name: "VEVENT" },
+          [`${DAVNamespaceShort.CALDAV}:prop-filter`]: {
+            _attributes: { name: "UID" },
+            [`${DAVNamespaceShort.CALDAV}:text-match`]: {
+              _attributes: { collation: "i;octet" },
+              _text: uid,
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+/* Continuation lines are part of the value they continue (RFC 5545 3.1), so the body is unfolded
+   before its UID is read. */
+const readIcsUid = (data: string): string | null => {
+  const unfolded = data.replaceAll(/\r?\n[ \t]/gu, "");
+  for (const line of unfolded.split(/\r?\n/u)) {
+    if (line.startsWith("UID:")) {
+      return line.slice("UID:".length).trim();
+    }
+  }
+  return null;
+};
+
+/* A server free to ignore a filter it does not implement answers with whatever it likes, and acting
+   on that answer would put a stranger's object on the mapping - which the remove path would later
+   DELETE. So the object is accepted only when the bytes it came back with carry the very UID the
+   search asked about. */
+const answerCarryingUid = (
+  answers: CalDAVObjectAnswer[],
+  uid: string,
+  requestedPath: string,
+): CalDAVObjectAnswer | null => {
+  for (const answer of answers) {
+    if (answer.presence !== "present" || answer.data === null) {
+      continue;
+    }
+    if (answer.path === requestedPath || readIcsUid(answer.data) !== uid) {
+      continue;
+    }
+    return answer;
+  }
+  return null;
+};
+
 /* Element names are compared without their namespace prefix, and hyphenated names are folded to
    the camelCase the rest of this file reads them by. */
 const toElementKey = (name: string): string => {
@@ -432,16 +494,58 @@ const parseMultiStatusXml = (xml: string): Record<string, unknown> => {
   return root;
 };
 
-const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] => {
+/* Null means no multistatus body was parsed for this request at all - the server said nothing about
+   anything, which is a different fact from a body that listed no responses. */
+const toParsedMultiStatusResponses = (
+  responses: { raw?: unknown }[],
+): Record<string, unknown>[] | null => {
   const raw = responses[0]?.raw;
   if (typeof raw !== "string" || raw.length === 0) {
-    return [];
+    return null;
   }
   const parsed = parseMultiStatusXml(raw);
   if (!isRecord(parsed.multistatus)) {
-    return [];
+    return null;
   }
   return toElementList(parsed.multistatus.response);
+};
+
+const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] =>
+  toParsedMultiStatusResponses(responses) ?? [];
+
+/* Null means the request never answered the question: the server refused it outright, or what came
+   back held no multistatus body to read. Neither is a statement about what the collection holds. */
+const toAnsweredMultiStatusResponses = (
+  responses: { ok?: unknown; raw?: unknown }[],
+): Record<string, unknown>[] | null => {
+  if (responses[0]?.ok === false) {
+    return null;
+  }
+  return toParsedMultiStatusResponses(responses);
+};
+
+/* A UID search has three outcomes, and collapsing the last two loses the only fact that matters: the
+   search found the object, the search answered and proved the collection does not hold that uid, or
+   the search never answered at all. */
+type CalDAVUidSearchResult =
+  | { answer: CalDAVObjectAnswer; kind: "found" }
+  | { kind: "not-found" }
+  | { kind: "unanswered" };
+
+/* Only a search that answered can leave the href's own 404 standing. When it did not answer, the
+   object is unknown - the engine parks the mapping rather than PUTting a second copy of this uid. */
+const toAnswerFromUidSearch = (
+  search: CalDAVUidSearchResult,
+  answered: CalDAVObjectAnswer,
+  path: string,
+): CalDAVObjectAnswer => {
+  if (search.kind === "found") {
+    return search.answer;
+  }
+  if (search.kind === "unanswered") {
+    return { data: null, path, presence: "unknown" };
+  }
+  return answered;
 };
 
 class CalDAVClient {
@@ -638,6 +742,9 @@ class CalDAVClient {
   verifyCalendarObjectsByUrls(params: {
     calendarUrl: string;
     objectUrls: string[];
+    /* The uid each href is expected to carry, positionally. A caller that knows it lets an href the
+       server answered 404 for be searched for by uid before it is reported gone. */
+    uids?: (string | undefined)[];
   }): Promise<CalDAVObjectAnswer[]> {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
@@ -663,12 +770,74 @@ class CalDAVClient {
         }
       }
 
-      return params.objectUrls.map((objectUrl) => {
+      const answers: CalDAVObjectAnswer[] = [];
+      for (const [index, objectUrl] of params.objectUrls.entries()) {
         const path = toCalendarObjectPath(objectUrl, params.calendarUrl);
         const answered = answersByKey.get(toObjectAnswerKey(objectUrl, params.calendarUrl));
-        return answered ?? { data: null, path, presence: "unknown" };
-      });
+        if (!answered) {
+          answers.push({ data: null, path, presence: "unknown" });
+          continue;
+        }
+        if (answered.presence !== "absent") {
+          answers.push(answered);
+          continue;
+        }
+        const uid = params.uids?.[index];
+        if (!uid) {
+          answers.push(answered);
+          continue;
+        }
+        const search = await this.findObjectByUid(params.calendarUrl, uid, path);
+        answers.push(toAnswerFromUidSearch(search, answered, path));
+      }
+
+      return answers;
     });
+  }
+
+  /* The href is gone, which says nothing about the object: the server may have re-keyed it and still
+     hold it in this collection under a href of its own choosing. Recreating it then writes a second
+     object bearing one uid in one collection, permanently, so the collection is asked by uid first.
+     A server that cannot answer the question - it threw, it refused, or it sent back nothing that
+     parsed as a multistatus - has said nothing about the uid, so it reports "unanswered" and the
+     404 does NOT stand: the simple servers that cannot run this REPORT are the same ones that will
+     not reject the duplicate PUT. Only a search that answered and found nothing proves absence. */
+  private async findObjectByUid(
+    calendarUrl: string,
+    uid: string,
+    requestedPath: string,
+  ): Promise<CalDAVUidSearchResult> {
+    try {
+      const client = await this.getClient();
+      const responses = await measureProviderRequest(() => client.davRequest({
+        init: {
+          body: buildUidQueryBody(uid),
+          headers: { depth: "1" },
+          method: "REPORT",
+          namespace: DAVNamespaceShort.CALDAV,
+        },
+        parseOutgoing: false,
+        url: calendarUrl,
+      }));
+      const parsed = toAnsweredMultiStatusResponses(responses);
+      if (!parsed) {
+        return { kind: "unanswered" };
+      }
+      const found: CalDAVObjectAnswer[] = [];
+      for (const response of parsed) {
+        const answer = toObjectAnswer(response, calendarUrl);
+        if (answer) {
+          found.push(answer);
+        }
+      }
+      const carrying = answerCarryingUid(found, uid, requestedPath);
+      if (!carrying) {
+        return { kind: "not-found" };
+      }
+      return { answer: carrying, kind: "found" };
+    } catch {
+      return { kind: "unanswered" };
+    }
   }
 
   fetchCalendarObjects(params: {

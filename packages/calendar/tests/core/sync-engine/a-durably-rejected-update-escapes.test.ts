@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { executeRemoteOperations } from "../../../src/core/sync-engine/index";
+import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
 import { generateDeterministicEventUid } from "../../../src/core/events/identity";
 import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destination/provider";
+import { eventToICalString } from "../../../src/providers/caldav/shared/ics";
 import { CalDAVHttpError } from "../../../src/providers/caldav/shared/client";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
@@ -15,6 +17,7 @@ const clientMocks = vi.hoisted(() => ({
   fetchCalendarObjectsByUrls: vi.fn(),
   resolveCalendarUrl: vi.fn(),
   updateCalendarObjectByUrl: vi.fn(),
+  verifyCalendarObjectsByUrls: vi.fn(),
 }));
 
 vi.mock("../../../src/providers/caldav/shared/client", () => {
@@ -44,6 +47,7 @@ vi.mock("../../../src/providers/caldav/shared/client", () => {
     fetchCalendarObjectsByUrls = clientMocks.fetchCalendarObjectsByUrls;
     resolveCalendarUrl = clientMocks.resolveCalendarUrl;
     updateCalendarObjectByUrl = clientMocks.updateCalendarObjectByUrl;
+    verifyCalendarObjectsByUrls = clientMocks.verifyCalendarObjectsByUrls;
   }
 
   return {
@@ -57,7 +61,9 @@ const CALENDAR_URL = "https://caldav.example.invalid/calendars/user/shared/";
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const CYCLES = 3;
 
-const movedMeeting: MaterializedSyncableEvent = {
+/* Summaries chosen so neither contains the other: the only way to tell which bytes the customer's
+   object is carrying is that one of the two is in it and the other is not. */
+const storedMeeting: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
   calendarUrl: null,
@@ -65,7 +71,12 @@ const movedMeeting: MaterializedSyncableEvent = {
   id: "event-state-id-1",
   sourceEventUid: "source-event-uid-1",
   startTime: new Date("2026-03-15T09:00:00.000Z"),
-  summary: "Weekly standup, moved",
+  summary: "Standup as first written",
+};
+
+const movedMeeting: MaterializedSyncableEvent = {
+  ...storedMeeting,
+  summary: "Standup pushed to Thursday",
 };
 
 const uid = generateDeterministicEventUid(movedMeeting.id);
@@ -73,6 +84,7 @@ const ownedObjectPath = `/calendars/user/shared/${uid}.ics`;
 /* A server that names objects itself: operations.ts adopts the reported href, so the
    stored basename never matches <uid>.ics again for this mapping. */
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
+const serverNamedObjectUrl = new URL(serverNamedObjectPath, CALENDAR_URL).href;
 
 const makeMapping = (deleteIdentifier: string): EventMapping => ({
   calendarId: DESTINATION_CALENDAR_ID,
@@ -98,6 +110,26 @@ const makeReplacement = (mapping: EventMapping): Extract<SyncOperation, { type: 
 const httpError = (status: number, statusText: string): Error =>
   new CalDAVHttpError(new Response(null, { status, statusText }), "update");
 
+const notFound = (): Error => httpError(404, "Not Found");
+
+/* RFC 4791 5.3.2.1: a PUT that would leave a second object carrying a UID the collection already
+   holds fails the CALDAV:no-uid-conflict precondition, stores nothing, and names the href that
+   already holds it. A create double that accepted those bytes would certify exactly the permanent
+   duplicate a real server refuses. */
+const uidConflict = (heldAt: string): Error =>
+  new CalDAVHttpError(
+    new Response(
+      [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<d:error xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav">',
+        `<c:no-uid-conflict><d:href>${heldAt}</d:href></c:no-uid-conflict>`,
+        "</d:error>",
+      ].join(""),
+      { status: 409, statusText: "Conflict" },
+    ),
+    "create",
+  );
+
 const createProvider = () =>
   createCalDAVSyncProvider({
     authMethod: "basic",
@@ -107,9 +139,31 @@ const createProvider = () =>
     username: "user",
   });
 
+/* The customer's collection, as a real one behaves: a PUT to an href it does not hold is a 404, a
+   create really puts bytes on the calendar, a delete really takes the object away. */
+const remoteObjects = new Map<string, string>();
+
+const uidOf = (iCalString: string): string =>
+  /^UID:(?<uid>.*)$/mu.exec(iCalString)?.groups?.["uid"]?.trim() ?? "";
+
+const holderOfUid = (iCalString: string, exceptUrl: string): string | null => {
+  const held = [...remoteObjects].find(
+    ([objectUrl, data]) => objectUrl !== exceptUrl && uidOf(data) === uidOf(iCalString),
+  );
+  if (!held) {
+    return null;
+  }
+  return held[0];
+};
+
 interface CycleOutcome {
   deletedMappingIds: string[];
   insertedUids: string[];
+}
+
+interface CycleRun {
+  carriedMapping: EventMapping | null;
+  cycleOutcomes: CycleOutcome[];
 }
 
 /*
@@ -130,9 +184,16 @@ const carryMappingForward = (
   return { ...mapping, ...pendingUpdate, id: mapping.id } as EventMapping;
 };
 
-const runCycles = async (deleteIdentifier: string): Promise<CycleOutcome[]> => {
+const runCycles = async (deleteIdentifier: string): Promise<CycleRun> => {
   const cycleOutcomes: CycleOutcome[] = [];
   let mapping: EventMapping | null = makeMapping(deleteIdentifier);
+  let carriedMapping: EventMapping | null = mapping;
+
+  remoteObjects.clear();
+  remoteObjects.set(
+    new URL(deleteIdentifier, CALENDAR_URL).href,
+    eventToICalString(storedMeeting, uid),
+  );
 
   for (let cycle = 0; cycle < CYCLES; cycle++) {
     if (!mapping) {
@@ -152,21 +213,11 @@ const runCycles = async (deleteIdentifier: string): Promise<CycleOutcome[]> => {
       insertedUids: outcome.changes.inserts.map((insert) => insert.destinationEventUid),
     });
     mapping = carryMappingForward(mapping, outcome);
+    carriedMapping = mapping;
   }
 
-  return cycleOutcomes;
+  return { carriedMapping, cycleOutcomes };
 };
-
-/* Only an href the update path can never address escapes: the create writes the correct fresh
-   ${uid}.ics and fixes the bad stored href. A refusal of the BYTES has no such escape - update
-   and create send the same eventToICalString(event, uid) to the same href - so it stays here. */
-const durableRejections = [
-  {
-    label: "a stored href the update path can never address",
-    deleteIdentifier: serverNamedObjectPath,
-    reject: () => null,
-  },
-];
 
 const payloadRefusals = [
   { status: 400, statusText: "Bad Request" },
@@ -177,34 +228,94 @@ beforeEach(() => {
   for (const mock of Object.values(clientMocks)) {
     mock.mockReset();
   }
+  remoteObjects.clear();
   clientMocks.resolveCalendarUrl.mockImplementation((url: string) => Promise.resolve(url));
-  clientMocks.createCalendarObject.mockImplementation(() => Promise.resolve());
-  clientMocks.deleteCalendarObject.mockImplementation(() => Promise.resolve());
-  clientMocks.deleteCalendarObjectByUrl.mockImplementation(() => Promise.resolve());
+  /* Only what the collection holds answers present; a href it does not hold is the server's own
+     404, never a silent success. */
+  clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
+    ({ objectUrls }: { objectUrls: string[] }) => Promise.resolve(objectUrls.map((url) => {
+      const data = remoteObjects.get(url);
+      if (!data) {
+        return { data: null, path: new URL(url).pathname, presence: "absent" as const };
+      }
+      return { data, path: new URL(url).pathname, presence: "present" as const };
+    })),
+  );
+  clientMocks.createCalendarObject.mockImplementation(
+    ({ calendarUrl, filename, iCalString }: {
+      calendarUrl: string;
+      filename: string;
+      iCalString: string;
+    }) => {
+      const objectUrl = new URL(filename, calendarUrl).href;
+      const heldAt = holderOfUid(iCalString, objectUrl);
+      if (heldAt) {
+        return Promise.reject(uidConflict(heldAt));
+      }
+      remoteObjects.set(objectUrl, iCalString);
+      return Promise.resolve();
+    },
+  );
+  clientMocks.deleteCalendarObject.mockImplementation(
+    ({ calendarUrl, filename }: { calendarUrl: string; filename: string }) => {
+      if (!remoteObjects.delete(new URL(filename, calendarUrl).href)) {
+        return Promise.reject(notFound());
+      }
+      return Promise.resolve();
+    },
+  );
+  clientMocks.deleteCalendarObjectByUrl.mockImplementation(({ objectUrl }: { objectUrl: string }) => {
+    if (!remoteObjects.delete(objectUrl)) {
+      return Promise.reject(notFound());
+    }
+    return Promise.resolve();
+  });
+  clientMocks.updateCalendarObjectByUrl.mockImplementation(
+    ({ iCalString, objectUrl }: { iCalString: string; objectUrl: string }) => {
+      if (!remoteObjects.has(objectUrl)) {
+        return Promise.reject(notFound());
+      }
+      remoteObjects.set(objectUrl, iCalString);
+      return Promise.resolve();
+    },
+  );
 });
 
 describe("a durably rejected in-place update escapes instead of stalling forever", () => {
-  for (const rejection of durableRejections) {
-    it(`promotes to a replacement within three cycles after ${rejection.label}`, async () => {
-      rejection.reject();
+  /* The read answered PRESENT at the server-chosen href, carrying this mapping's own uid, so the
+     repair is the write itself retried against that href. A create here would be a second object
+     bearing a live uid - refused by a compliant server, a permanent duplicate on a lenient one -
+     and the delete that follows it would destroy the customer's only copy. */
+  it("rewrites the object at the server-chosen href in place, creating and deleting nothing", async () => {
+    const { carriedMapping, cycleOutcomes } = await runCycles(serverNamedObjectPath);
 
-      const cycleOutcomes = await runCycles(rejection.deleteIdentifier);
+    expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(CYCLES);
+    for (const call of clientMocks.updateCalendarObjectByUrl.mock.calls) {
+      expect(call[0]?.objectUrl).toBe(serverNamedObjectUrl);
+    }
 
-      // The first cycle still knows nothing durable, so it must not touch the real event.
-      expect(cycleOutcomes[0]).toEqual({ deletedMappingIds: [], insertedUids: [] });
+    const stored = remoteObjects.get(serverNamedObjectUrl);
+    expect(stored).toContain(movedMeeting.summary);
+    expect(stored).not.toContain(storedMeeting.summary);
+    expect(uidOf(stored ?? "")).toBe(uid);
+    expect([...remoteObjects.keys()]).toEqual([serverNamedObjectUrl]);
 
-      expect(clientMocks.createCalendarObject).toHaveBeenCalledTimes(1);
-      expect(cycleOutcomes.flatMap((cycle) => cycle.deletedMappingIds)).toEqual(["map-1"]);
-      expect(cycleOutcomes.flatMap((cycle) => cycle.insertedUids)).toEqual([uid]);
-    });
-  }
+    expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
+    expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
+    expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
+    expect(cycleOutcomes.flatMap((cycle) => cycle.deletedMappingIds)).toEqual([]);
+    expect(cycleOutcomes.flatMap((cycle) => cycle.insertedUids)).toEqual([]);
+
+    expect(carriedMapping?.deleteIdentifier).toBe(serverNamedObjectPath);
+    expect(carriedMapping?.syncEventHash).toBe(createSyncEventContentHash(movedMeeting));
+  });
 
   for (const { status, statusText } of payloadRefusals) {
     it(`never deletes after a ${status} the server will repeat forever`, async () => {
       clientMocks.updateCalendarObjectByUrl.mockRejectedValue(httpError(status, statusText));
       clientMocks.createCalendarObject.mockRejectedValue(httpError(status, statusText));
 
-      const cycleOutcomes = await runCycles(ownedObjectPath);
+      const { cycleOutcomes } = await runCycles(ownedObjectPath);
 
       expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();
       expect(clientMocks.deleteCalendarObject).not.toHaveBeenCalled();
@@ -217,7 +328,7 @@ describe("a durably rejected in-place update escapes instead of stalling forever
   it("never promotes a 503 that is only a brief outage", async () => {
     clientMocks.updateCalendarObjectByUrl.mockRejectedValue(httpError(503, "Service Unavailable"));
 
-    const cycleOutcomes = await runCycles(ownedObjectPath);
+    const { cycleOutcomes } = await runCycles(ownedObjectPath);
 
     expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(CYCLES);
     expect(clientMocks.deleteCalendarObjectByUrl).not.toHaveBeenCalled();

@@ -591,6 +591,36 @@ const toUpdateFailureError = (
   ...(typeof pushResult?.statusCode === "number" && { statusCode: pushResult.statusCode }),
 });
 
+/* The provider recorded that the request went out, that the destination itself answered it, and the
+   answer wrote nothing: the mirror stands exactly as it was, and every later cycle re-plans the
+   identical replace and hears the identical refusal. That is one event nobody can act on rather
+   than evidence the destination is broken, so it is graded parked - counted and named as ever, but
+   unable to drive the whole calendar to the six-hour backoff ceiling where every other event on it
+   would then wait for a success a quiet calendar can never reach. Nothing here is a status
+   allowlist or a provider's opinion of its own failure: isDurableUpdateFailure still decides what
+   the answer means, and a gone target is left out because the replacement fallback has an action
+   left to take for it. */
+const isAnsweredRefusalOfTheBytes = (pushResult: PushResult | undefined): boolean => {
+  if (pushResult?.requestSent !== true || pushResult.destinationAnswer !== "answered") {
+    return false;
+  }
+  if (needsReplacementFallback(pushResult)) {
+    return false;
+  }
+  return isDurableUpdateFailure(pushResult);
+};
+
+/* The line a parked refusal leaves behind. The destination's own words say what went wrong but
+   never which of the customer's events stopped moving, and no later path will mention this mapping
+   again - the run report is all an operator gets - so both halves ride the same entry. */
+const toParkedRefusalError = (
+  operation: Extract<SyncOperation, { type: "replace" }>,
+  pushResult: PushResult | undefined,
+): OperationError => ({
+  ...toUpdateFailureError(operation, pushResult),
+  error: `the update for mapping ${operation.staleMappingId} was refused and its mirror stands: ${pushResult?.error ?? describeUpdateFailure(operation, pushResult)}`,
+});
+
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
@@ -601,18 +631,25 @@ const processUpdateResults = (
   created: number;
   updated: number;
   updateFailed: number;
+  /* How many of those failures the destination answered about while writing nothing. */
+  parked: number;
   conflictsResolved: number;
   errors: OperationError[];
   unresolved: Extract<SyncOperation, { type: "replace" }>[];
   refused: Extract<SyncOperation, { type: "replace" }>[];
+  /* The mappings among `refused` whose update verb could not even address the object. Their escape
+     is the only one a rename is open to, so the distinction has to survive the run. */
+  unaddressable: Set<string>;
 } => {
   const updates: PendingUpdate[] = [];
   const errors: OperationError[] = [];
   const unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
   const refused: Extract<SyncOperation, { type: "replace" }>[] = [];
+  const unaddressable = new Set<string>();
   let created = 0;
   let updated = 0;
   let updateFailed = 0;
+  let parked = 0;
   let conflictsResolved = 0;
 
   for (let index = 0; index < replacements.length; index++) {
@@ -629,13 +666,23 @@ const processUpdateResults = (
          (updateRelocatedMirrors did, for both of these branches) turns the failure into a run an
          operator cannot tell from a calendar with nothing to do. */
       updateFailed += 1;
-      errors.push(toUpdateFailureError(operation, pushResult));
+      /* Graded here, beside the counter it pays for, and on the evidence this branch already holds:
+         the destination answered about the bytes and wrote nothing. Whether this cycle also
+         promotes the mapping changes nothing about that - the calendar is not what is at fault
+         either way - so the park rides alongside every branch below. */
+      if (isAnsweredRefusalOfTheBytes(pushResult)) {
+        parked += 1;
+        errors.push(toParkedRefusalError(operation, pushResult));
+      } else {
+        errors.push(toUpdateFailureError(operation, pushResult));
+      }
 
       /* Nothing left the process, so there is no evidence here to accumulate and there never will
          be: the counter stays exactly where it was and the mapping takes the read-first escape now.
          The read destroys nothing, and it is the only thing that can still notice a mirror the
          recipient deleted while this refusal repeats. */
       if (noRequestLeftTheProcess(pushResult)) {
+        unaddressable.add(operation.staleMappingId);
         refused.push(operation);
         continue;
       }
@@ -685,7 +732,7 @@ const processUpdateResults = (
     });
   }
 
-  return { changes: { inserts: [], deletes: [], updates }, created, updated, updateFailed, conflictsResolved, errors, unresolved, refused };
+  return { changes: { inserts: [], deletes: [], updates }, created, updated, updateFailed, parked, conflictsResolved, errors, unresolved, refused, unaddressable };
 };
 
 /* A delete reporting success is not evidence that anything left the destination: Outlook maps a
@@ -777,6 +824,9 @@ interface UpdateRunResult {
      only escape they may take is the verification read: a delete issued to break their stall would
      destroy a mirror the destination just proved it still holds. */
   refused: Extract<SyncOperation, { type: "replace" }>[];
+  /* Stale mapping ids among `refused` whose update verb never sent a byte because it could not
+     address the object at all. */
+  unaddressable: Set<string>;
 }
 
 const executeAddRun = async (
@@ -871,6 +921,7 @@ const failedUpdateRun = (
     errors: [runFailure],
   },
   refused: [],
+  unaddressable: new Set(),
   unresolved: [],
 });
 
@@ -879,17 +930,26 @@ const executeUpdateRun = async (
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
   mappingsById: Map<string, EventMapping>,
   provider: CalendarSyncProvider,
+  /* Only the relocated path fills this: it is the uid a read just observed on the object at the
+     located identifier, and nothing else in the engine has looked. */
+  verifiedUidByMappingId?: Map<string, string>,
 ): Promise<UpdateRunResult> => {
-  const updates: EventUpdate[] = replacements.map((operation) => ({
-    deleteId: operation.deleteId,
-    event: operation.event,
-  }));
+  const updates: EventUpdate[] = replacements.map((operation) => {
+    const verifiedUid = verifiedUidByMappingId?.get(operation.staleMappingId);
+    /* Carried only when a read produced one: an absent key is the ordinary update, and no provider
+       may read a missing uid as an identity anything vouched for. */
+    return {
+      deleteId: operation.deleteId,
+      event: operation.event,
+      ...(verifiedUid && { verifiedUid }),
+    };
+  });
   const outcome = await runUpdateEvents(updateEvents, updates);
   if ("runFailure" in outcome) {
     return failedUpdateRun(replacements, outcome.runFailure);
   }
   const { pushResults } = outcome;
-  const { created, updated, updateFailed, conflictsResolved, changes, errors, unresolved, refused } = processUpdateResults(
+  const { created, updated, updateFailed, parked, conflictsResolved, changes, errors, unresolved, refused, unaddressable } = processUpdateResults(
     replacements,
     pushResults,
     mappingsById,
@@ -900,12 +960,21 @@ const executeUpdateRun = async (
   return {
     runResult: {
       changes,
-      result: { added: created, addFailed: updateFailed, updated, removed: 0, removeFailed: 0 },
+      result: {
+        added: created,
+        addFailed: updateFailed,
+        updated,
+        removed: 0,
+        removeFailed: 0,
+        /* Carried only when there is one, so an ordinary update run reports the shape it always did. */
+        ...(parked > 0 && { parked }),
+      },
       conflictsResolved,
       errors,
       pushEcho,
     },
     refused,
+    unaddressable,
     unresolved,
   };
 };
@@ -1310,6 +1379,11 @@ const isEventPresence = (entry: EventPresence | RemoteEvent): entry is EventPres
 interface MirrorVerdicts {
   absent: Set<string>;
   located: Map<string, RemoteEvent>;
+  /* Identifiers the read positively placed in this destination calendar, whether or not it handed
+     back the object. Without the object nothing can be repaired, so these stay unsettled -- but the
+     destination did say the customer's copy is at the identifier the mapping holds, which is a
+     different thing from a read that said nothing about it at all. */
+  confirmed: Set<string>;
   /* Identifiers the read found outside the calendar this sync owns, carrying the object it saw.
      They are the customer's only copy, so they may never license a create or a delete -- but they
      are an observation of a live item, and dropping them is what froze the mirror forever. */
@@ -1320,23 +1394,68 @@ interface MirrorVerdicts {
      them to itself is byte-identical to a healthy one. */
   unsettled: Set<string>;
   unsettledReason: string;
+  /* Why one particular identifier could not be settled, when that differs from what the read as a
+     whole failed at. A read that answered about the wrong object failed for that mapping alone, and
+     an operator reading "the read returned no verdict" would go looking for a mute destination. */
+  unsettledReasons: Map<string, string>;
 }
 
 const UNSETTLED_BY_REPORT = "the verification read returned no verdict for it";
 
+const UNSETTLED_BY_EMPTY_ANSWER = "the verification read came back saying nothing at all about it";
+
+/* The read answered about the identifier, but the object it handed back is a different Keeper event.
+   That answer proves nothing about our mirror: it is not a location to write to, and it is not an
+   absence either, because some event really is standing at that identifier. */
+const unsettledByIdentityMismatch = (askedUid: string, answeredUid: string): string =>
+  `the verification read answered about ${answeredUid} at an identifier asked about for ${askedUid}`;
+
 const noVerdicts = (): MirrorVerdicts => ({
   absent: new Set(),
+  confirmed: new Set(),
   elsewhere: new Map(),
   located: new Map(),
   unsettled: new Set(),
   unsettledReason: UNSETTLED_BY_REPORT,
+  unsettledReasons: new Map(),
 });
 
-const verdictsFromPresenceReport = (report: EventPresence[]): MirrorVerdicts => {
+/* An identifier answers for the event whose uid the mapping carries, and for no other. A read that
+   hands back an object bearing a different uid has found somebody else's event standing where ours
+   was expected -- an href re-keyed under a sibling, an item id that outlived its event -- and
+   nothing in that answer is about our mirror. Whether the identities match is read off the object
+   the destination actually returned, never off the answer's status. */
+const answersAboutADifferentEvent = (
+  presence: EventPresence,
+  askedUids: Map<string, string>,
+): boolean => {
+  const askedUid = askedUids.get(presence.identifier);
+  if (!askedUid || !presence.event?.uid) {
+    return false;
+  }
+  return presence.event.uid !== askedUid;
+};
+
+const verdictsFromPresenceReport = (
+  report: EventPresence[],
+  askedUids: Map<string, string>,
+): MirrorVerdicts => {
   const verdicts = noVerdicts();
   for (const presence of report) {
     if (presence.status === "absent") {
       verdicts.absent.add(presence.identifier);
+      continue;
+    }
+    /* Not located, and deliberately not confirmed either: confirmation is what licenses the delete
+       the promotion path spends, and the object standing there is another customer event. */
+    if (answersAboutADifferentEvent(presence, askedUids)) {
+      verdicts.unsettledReasons.set(
+        presence.identifier,
+        unsettledByIdentityMismatch(
+          askedUids.get(presence.identifier) ?? "",
+          presence.event?.uid ?? "",
+        ),
+      );
       continue;
     }
     /* "elsewhere" found the mirror outside the calendar this sync owns, so it may never license a
@@ -1345,6 +1464,9 @@ const verdictsFromPresenceReport = (report: EventPresence[]): MirrorVerdicts => 
     if (presence.status === "elsewhere" && presence.event) {
       verdicts.elsewhere.set(presence.identifier, presence.event);
       continue;
+    }
+    if (presence.status === "present") {
+      verdicts.confirmed.add(presence.identifier);
     }
     if (presence.status === "present" && presence.event) {
       verdicts.located.set(presence.identifier, presence.event);
@@ -1391,10 +1513,17 @@ const absencesFromFoundEvents = (identifiers: string[], found: RemoteEvent[]): S
 /* A three-valued report answers about an identifier only when it says something that decides it:
    "unknown" decides nothing, and "present" without the object cannot say whether the mirror is the
    one the mapping names or a re-keyed sibling, so neither settles anything. */
-const settledIdentifiersFromPresenceReport = (report: EventPresence[]): Set<string> => {
+const settledIdentifiersFromPresenceReport = (
+  report: EventPresence[],
+  askedUids: Map<string, string>,
+): Set<string> => {
   const settled = new Set<string>();
   for (const presence of report) {
     if (presence.status === "unknown") {
+      continue;
+    }
+    // An answer about another event decides nothing about ours, however definite it sounded.
+    if (answersAboutADifferentEvent(presence, askedUids)) {
       continue;
     }
     /* A verdict that names a location without handing back the object cannot be acted on at all:
@@ -1445,18 +1574,48 @@ const readVerification = async (
 const verifyMirrors = async (
   targets: EventVerificationTarget[],
   verifyEventsExist: NonNullable<CalendarSyncProvider["verifyEventsExist"]>,
+  /* Identifiers the run's own destination listing already failed to enumerate. They are the only
+     ones an answer that says nothing can leave absent. */
+  corroboratedAbsent: ReadonlySet<string>,
 ): Promise<MirrorVerdicts> => {
   const identifiers = targets.map((target) => target.deleteId);
+  /* The uid each identifier was asked about, so an answer can be checked against the question. */
+  const askedUids = new Map<string, string>();
+  for (const target of targets) {
+    if (target.uid) {
+      askedUids.set(target.deleteId, target.uid);
+    }
+  }
   const read = await readVerification(verifyEventsExist, targets);
   if ("readFailure" in read) {
     return {
       absent: new Set(),
+      confirmed: new Set(),
       elsewhere: new Map(),
       located: new Map(),
       unsettled: new Set(identifiers),
       unsettledReason: read.readFailure,
+      unsettledReasons: new Map(),
     };
   }
+  /* An answer with nothing in it carries no shape: it is a listing that found no object, and it is
+     equally a per-identifier report whose verdict for this target went missing. Absence by omission
+     needs a listing to be omitted from, so it is granted only where the run has an observation of
+     its own to stand on -- the destination listing that planned this cycle did not enumerate the
+     mirror either. A promotion holds no such observation: its whole evidence is one verb's answer
+     about one target, so an empty read leaves it unsettled and everything standing. */
+  if (read.report.length === 0) {
+    return {
+      absent: new Set(identifiers.filter((identifier) => corroboratedAbsent.has(identifier))),
+      confirmed: new Set(),
+      elsewhere: new Map(),
+      located: new Map(),
+      unsettled: new Set(identifiers.filter((identifier) => !corroboratedAbsent.has(identifier))),
+      unsettledReason: UNSETTLED_BY_EMPTY_ANSWER,
+      unsettledReasons: new Map(),
+    };
+  }
+
   const presences: EventPresence[] = [];
   const found: RemoteEvent[] = [];
   for (const entry of read.report) {
@@ -1470,19 +1629,24 @@ const verifyMirrors = async (
   /* A three-valued report answers every identifier it was asked about, so whatever it did not call
      absent stays unproven. A listing of the events actually found proves absence by omission. */
   if (presences.length > 0) {
-    const verdicts = verdictsFromPresenceReport(presences);
+    const verdicts = verdictsFromPresenceReport(presences, askedUids);
     return {
       ...verdicts,
-      unsettled: unsettledIdentifiers(identifiers, settledIdentifiersFromPresenceReport(presences)),
+      unsettled: unsettledIdentifiers(
+        identifiers,
+        settledIdentifiersFromPresenceReport(presences, askedUids),
+      ),
     };
   }
   const absent = absencesFromFoundEvents(identifiers, found);
   return {
     absent,
+    confirmed: new Set(),
     elsewhere: new Map(),
     located: new Map(),
     unsettled: unsettledIdentifiers(identifiers, settledIdentifiersFromFoundEvents(found, absent)),
     unsettledReason: UNSETTLED_BY_REPORT,
+    unsettledReasons: new Map(),
   };
 };
 
@@ -1502,16 +1666,24 @@ interface SurvivingMirror {
   inDestination: boolean;
 }
 
+/* The object the read handed back is this mapping's mirror only if it carries this mapping's uid.
+   Anything else is another customer event standing at the identifier, and treating it as the
+   surviving mirror writes our event's body over theirs and then teaches the mapping their uid. */
+const isOurMirror = (
+  located: RemoteEvent,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+): boolean => Boolean(located.uid) && Boolean(replacement.uid) && located.uid === replacement.uid;
+
 const survivingMirror = (
   verdicts: MirrorVerdicts,
   replacement: Extract<SyncOperation, { type: "replace" }>,
 ): SurvivingMirror | null => {
   const located = verdicts.located.get(replacement.deleteId);
-  if (located) {
+  if (located && isOurMirror(located, replacement)) {
     return { event: located, inDestination: true };
   }
   const outside = verdicts.elsewhere.get(replacement.deleteId);
-  if (outside) {
+  if (outside && isOurMirror(outside, replacement)) {
     return { event: outside, inDestination: false };
   }
   return null;
@@ -1738,7 +1910,16 @@ const updateRelocatedMirrors = async (
     return checkpointRun(state, { inserts: [], deletes: [], updates: unrecorded }, checkpoint);
   }
 
-  const { runResult, refused, unresolved } = await executeUpdateRun(relocated, updateEvents, mappingsById, provider);
+  const verifiedUidByMappingId = new Map(
+    [...locatedByMappingId].map(([mappingId, located]) => [mappingId, located.uid]),
+  );
+  const { runResult, refused, unresolved } = await executeUpdateRun(
+    relocated,
+    updateEvents,
+    mappingsById,
+    provider,
+    verifiedUidByMappingId,
+  );
   /* The identifier the read located is exactly the one that just answered 404, and the hash beside
      it is the pre-edit one, so writing it down would tell the next cycle a mirror that never
      received the edit is settled. */
@@ -1789,6 +1970,15 @@ const updateRelocatedMirrors = async (
   return true;
 };
 
+/* One mirror the read could not settle, and what it nonetheless said. "Present" with no object
+   repairs nothing, so it settles nothing -- but the destination did place the customer's copy at the
+   identifier the mapping already holds, and that is not the same evidence as a read which never
+   answered. The two get different endings, so they are carried apart. */
+interface UnsettledMirror {
+  confirmedAtIdentifier: boolean;
+  replacement: Extract<SyncOperation, { type: "replace" }>;
+}
+
 /* A mirror the read could not settle is a restore that did not happen, and the counters alone say
    exactly what a healthy run says. Counting it and naming its mapping is the only thing that lets
    an operator tell a customer's mirror that is never coming back from a calendar with nothing to do.
@@ -1797,17 +1987,20 @@ const recordUnsettledMirrors = (
   state: ChunkedExecutionState,
   verdicts: MirrorVerdicts,
   replacements: Extract<SyncOperation, { type: "replace" }>[],
-): Extract<SyncOperation, { type: "replace" }>[] => {
-  const unsettled: Extract<SyncOperation, { type: "replace" }>[] = [];
+): UnsettledMirror[] => {
+  const unsettled: UnsettledMirror[] = [];
   for (const replacement of replacements) {
     if (!verdicts.unsettled.has(replacement.deleteId)) {
       continue;
     }
-    unsettled.push(replacement);
+    unsettled.push({
+      confirmedAtIdentifier: verdicts.confirmed.has(replacement.deleteId),
+      replacement,
+    });
     state.verificationUnsettled += 1;
     state.errors.push({
       type: "update",
-      error: `verification could not settle the mirror for mapping ${replacement.staleMappingId}: ${verdicts.unsettledReason}`,
+      error: `verification could not settle the mirror for mapping ${replacement.staleMappingId}: ${verdicts.unsettledReasons.get(replacement.deleteId) ?? verdicts.unsettledReason}`,
     });
   }
   return unsettled;
@@ -1819,6 +2012,36 @@ const isTheSameMirror = (
   located: RemoteEvent,
   replacement: Extract<SyncOperation, { type: "replace" }>,
 ): boolean => located.deleteId === replacement.deleteId && located.uid === replacement.uid;
+
+/* Whether the uid the read handed back can actually address the object our update verb could not
+   name. Three things have to hold, and each one on its own is a reason the customer's copy is left
+   exactly where it is:
+   - the update never reached the destination because it could not address the object at all. A
+     destination that answered refused the BYTES, and a retry sends those same bytes again;
+   - the read handed back this mapping's own uid. It is the only thing the retry can steer by: the
+     write is told to accept the href the read answered about because the uid on it is ours. A read
+     that returned no uid, or a different one, addresses nothing;
+   - the mapping still names the source event this edit is for. A mapping the plan has re-paired to
+     a different event carries the OTHER event's uid, so the uid the read confirmed is not the one
+     the write will send and the retry could not address the object either. */
+const verifiedUidAddressesMirror = (
+  located: RemoteEvent,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+  mappingsById: Map<string, EventMapping>,
+  unaddressableMappingIds: ReadonlySet<string>,
+): boolean => {
+  if (!unaddressableMappingIds.has(replacement.staleMappingId)) {
+    return false;
+  }
+  if (!located.uid || located.uid !== replacement.uid) {
+    return false;
+  }
+  const mapping = mappingsById.get(replacement.staleMappingId);
+  if (!mapping) {
+    return false;
+  }
+  return mapping.syncEventId === replacement.event.id;
+};
 
 /* The recipient really deleted the mirror, so there is nothing left for a delete to remove and its
    answer cannot tell that apart from a stale identifier. The verification read can, so on a
@@ -1832,10 +2055,14 @@ const resolveVerifiedMirrors = async (
   state: ChunkedExecutionState,
   checkpoint?: CheckpointCallback,
   updateAlreadyRefused = false,
+  /* The mappings whose update verb could not address the object at all. Nothing else may be retried
+     in place: a destination that answered about the object refused the bytes, and a retry sends the
+     same bytes to the same object. */
+  unaddressableMappingIds: ReadonlySet<string> = new Set(),
   /* Filled with the replacements the read could not settle. The caller that owns the escape is the
      only place that can decide what a read which never answers is allowed to license, and it needs
      to know which mappings those were. */
-  unsettledSink?: Extract<SyncOperation, { type: "replace" }>[],
+  unsettledSink?: UnsettledMirror[],
 ): Promise<boolean> => {
   /* The replace already carries the uid the mapping holds; dropping it here is what left Outlook
      unable to ever say absent, so a mirror the recipient deleted was never restored. */
@@ -1843,7 +2070,14 @@ const resolveVerifiedMirrors = async (
     deleteId: operation.deleteId,
     uid: operation.uid,
   }));
-  const verdicts = await verifyMirrors(targets, verifyEventsExist);
+  /* The plan calls a replacement remoteMissing when the destination listing this cycle read did not
+     hold the mirror either, which is the second observation an omission needs to mean absence. */
+  const listingMissed = new Set(
+    replacements
+      .filter((operation) => operation.remoteMissing === true)
+      .map((operation) => operation.deleteId),
+  );
+  const verdicts = await verifyMirrors(targets, verifyEventsExist, listingMissed);
   /* Named unconditionally: optional chaining on the sink would skip the call that counts and
      reports them whenever no caller asked for the list. */
   const unsettledReplacements = recordUnsettledMirrors(state, verdicts, replacements);
@@ -1858,11 +2092,21 @@ const resolveVerifiedMirrors = async (
     if (surviving) {
       const located = surviving.event;
       if (updateAlreadyRefused && isTheSameMirror(located, replacement)) {
-        recordUnrepairableRefusal(
-          state,
-          replacement,
-          `its mirror is still present at ${located.deleteId}, so the stale copy stands`,
-        );
+        /* The read proved the object present and ours at a href our update verb cannot name, so the
+           repair is the write itself, retried in place carrying the uid the read verified: one PUT
+           to the very href the read answered about. A create here would put a second object bearing
+           this live uid in the same collection - refused by a compliant server, a permanent
+           duplicate on a lenient one - so no create and no delete may go out on this path. */
+        if (!verifiedUidAddressesMirror(located, replacement, mappingsById, unaddressableMappingIds)) {
+          recordUnrepairableRefusal(
+            state,
+            replacement,
+            `its mirror is still present at ${located.deleteId}, so the stale copy stands`,
+          );
+          continue;
+        }
+        locatedByMappingId.set(replacement.staleMappingId, located);
+        relocated.push(toInPlaceUpdate(replacement, located.deleteId));
         continue;
       }
       const mapping = mappingsById.get(replacement.staleMappingId);
@@ -1913,7 +2157,10 @@ const resolveVerifiedMirrors = async (
   }
 
   const addResult = await executeAddRun(adds, calendarId, provider);
-  return await commitAddRun(state, addResult, checkpoint);
+  if (!(await commitAddRun(state, addResult, checkpoint))) {
+    return false;
+  }
+  return true;
 };
 
 const recreateMissingMirrors = async (
@@ -1923,6 +2170,10 @@ const recreateMissingMirrors = async (
   mappingsById: Map<string, EventMapping>,
   state: ChunkedExecutionState,
   checkpoint?: CheckpointCallback,
+  /* Filled with the replacements the read could not settle, so the caller can park them. A restore
+     that did not happen because the destination said nothing usable reads exactly like a run with
+     nothing to do unless it is graded. */
+  unsettledSink?: UnsettledMirror[],
 ): Promise<boolean> => {
   const { verifyEventsExist } = provider;
   if (verifyEventsExist) {
@@ -1934,6 +2185,9 @@ const recreateMissingMirrors = async (
       mappingsById,
       state,
       checkpoint,
+      false,
+      new Set(),
+      unsettledSink,
     );
   }
 
@@ -1997,44 +2251,88 @@ const recreateMissingMirrors = async (
   return await commitAddRun(state, addResult, checkpoint);
 };
 
-/* The mapping carries one failure counter, and this cycle may already have written to it - a
-   promotion spends it, and spending it is what stops the same mapping being promoted every cycle.
-   So the count advanced here is whatever this run last wrote for the mapping, falling back to what
-   the mapping arrived with: reading the stale arrival value would let an answered refusal that just
-   promoted hand its spent evidence straight back to the escape below. */
+/* Unsettled reads count on their own persisted field. The answered-refusal counter says the
+   destination keeps rejecting this update; this one says the destination will not say anything at
+   all. Sharing one number let each top the other up, so an event was destroyed on the strength of
+   two ordinary refusals plus a single read that answered nothing. This cycle may already have
+   written the tally for the mapping, so the last write wins over the arrival value. */
 const countUnsettledRead = (state: ChunkedExecutionState, mapping: EventMapping): number => {
   const carried = (state.changes.updates ?? [])
     .findLast((update) => update.id === mapping.id);
-  if (typeof carried?.consecutiveUpdateFailures === "number") {
-    return carried.consecutiveUpdateFailures + 1;
+  if (typeof carried?.consecutiveUnsettledReads === "number") {
+    return carried.consecutiveUnsettledReads + 1;
   }
-  return countUpdateFailure(mapping);
+  return (mapping.consecutiveUnsettledReads ?? 0) + 1;
 };
 
-/* What a refusal nothing was ever learned from may accumulate. The refusal itself repeats forever
-   and proves nothing, so the evidence counted here is the verification read failing to settle the
-   mirror: it is the destination declining to say anything about the object, cycle after cycle. The
-   counter rides on the mapping because nothing else survives to the next cycle, and it is spent the
-   moment it promotes so a stalled escape cannot re-promote the same mapping every cycle. */
-const carryUnsettledEvidence = (
+/* A promotion zeroes the answered-refusal counter because the escape it hands the mapping to is
+   expected to settle it. An unsettled read settles nothing, so that evidence was not spent: left
+   at zero the mapping re-earns the same three refusals before it asks again, and the read that
+   might finally answer is only taken every third cycle. Restored only when this run is what
+   zeroed it, so a refusal that never reached the destination cannot manufacture evidence here. */
+const unspentUpdateEvidence = (
+  state: ChunkedExecutionState,
+  mapping: EventMapping,
+): { consecutiveUpdateFailures?: number } => {
+  const carried = (state.changes.updates ?? [])
+    .findLast((update) => update.id === mapping.id);
+  if (carried?.consecutiveUpdateFailures !== 0) {
+    return {};
+  }
+  return { consecutiveUpdateFailures: countUpdateFailure(mapping) };
+};
+
+/* Carries the mapping forward with the unsettled tally advanced and nothing else touched: a read
+   that said nothing learned nothing about the mirror's identity, content or times. */
+const toUnsettledCarry = (
+  state: ChunkedExecutionState,
+  mapping: EventMapping,
+  consecutiveUnsettledReads: number,
+): PendingUpdate => ({
+  ...unspentUpdateEvidence(state, mapping),
+  consecutiveUnsettledReads,
+  deleteIdentifier: mapping.deleteIdentifier,
+  destinationEventUid: mapping.destinationEventUid,
+  endTime: mapping.endTime,
+  id: mapping.id,
+  startTime: mapping.startTime,
+  syncEventHash: mapping.syncEventHash,
+  syncEventId: mapping.syncEventId,
+});
+
+/* One mapping the destination will not talk about. recordUnsettledMirrors has already named it and
+   counted it against the run's unsettled reads, and the update run that sent it here already
+   counted its failure, so all that is added is the grading: parked, and therefore not an
+   actionable failure. Graded failed, one mute mapping pins the whole calendar at the six-hour
+   backoff ceiling where every other event on it then waits. */
+const recordUnsettledPark = (state: ChunkedExecutionState): void => {
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 0, parked: 1 },
+    conflictsResolved: 0,
+    errors: [],
+  }, false);
+};
+
+/* Park every mapping whose read could not settle. Parking is the state while the destination stays
+   mute, not the resting place of the event: the tally advances, the mapping keeps its identifier,
+   and the next cycle asks again -- so the cycle the read finally answers absent the mirror is
+   recreated, and the cycle it answers present-elsewhere it is relocated, through the ordinary
+   branches of resolveVerifiedMirrors. Nothing here promotes to a delete: a read that says nothing
+   is not evidence about the object, and no number of repetitions of nothing becomes evidence. */
+const parkUnsettledMirrors = (
   state: ChunkedExecutionState,
   unsettled: Extract<SyncOperation, { type: "replace" }>[],
   mappingsById: Map<string, EventMapping>,
-): { carries: PendingUpdate[]; promoted: Extract<SyncOperation, { type: "replace" }>[] } => {
-  const promoted: Extract<SyncOperation, { type: "replace" }>[] = [];
+): PendingUpdate[] => {
   const carries: PendingUpdate[] = [];
   for (const replacement of unsettled) {
     const mapping = mappingsById.get(replacement.staleMappingId);
     if (!mapping) {
       continue;
     }
-    const failures = countUnsettledRead(state, mapping);
-    if (failures >= UPDATE_FAILURES_BEFORE_REPLACEMENT) {
-      promoted.push(replacement);
-      carries.push(toFailureCarry(mapping, 0));
-      continue;
-    }
-    carries.push(toFailureCarry(mapping, failures));
+    carries.push(toUnsettledCarry(state, mapping, countUnsettledRead(state, mapping)));
+    recordUnsettledPark(state);
   }
   if (carries.length > 0) {
     mergeRunResult(state, {
@@ -2044,21 +2342,22 @@ const carryUnsettledEvidence = (
       errors: [],
     });
   }
-  return { carries, promoted };
+  return carries;
 };
 
 /* The escape for a refusal the destination answered on the same mapping cycle after cycle. It may
-   only ever end in a recreate of a mirror the read proved absent, or in a named failure: a delete
-   would destroy the customer's only copy to make a stall stop repeating, which is the trade this
-   whole path exists to refuse. A destination that cannot verify has no proof to offer either way,
-   so its mappings are named rather than acted on. */
+   only ever end in a recreate of a mirror the read proved absent, a relocation of one it found
+   elsewhere, or a named park: a delete would destroy the customer's only copy to make a stall stop
+   repeating, which is the trade this whole path exists to refuse. A destination that cannot verify,
+   or one whose read keeps saying nothing, has no proof to offer either way, so its mappings are
+   named and parked rather than acted on -- and asked again on every later cycle. */
 const escapeRefusedUpdates = async (
   refused: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
-  mappingsByRemoteIdentity: Map<string, EventMapping>,
   mappingsById: Map<string, EventMapping>,
   state: ChunkedExecutionState,
+  unaddressableMappingIds: ReadonlySet<string>,
   checkpoint?: CheckpointCallback,
 ): Promise<boolean> => {
   const { verifyEventsExist } = provider;
@@ -2073,7 +2372,7 @@ const escapeRefusedUpdates = async (
     return true;
   }
 
-  const unsettled: Extract<SyncOperation, { type: "replace" }>[] = [];
+  const unsettled: UnsettledMirror[] = [];
   if (!(await resolveVerifiedMirrors(
     refused,
     calendarId,
@@ -2083,6 +2382,7 @@ const escapeRefusedUpdates = async (
     state,
     checkpoint,
     true,
+    unaddressableMappingIds,
     unsettled,
   ))) {
     return false;
@@ -2092,20 +2392,92 @@ const escapeRefusedUpdates = async (
     return true;
   }
 
-  const { carries, promoted } = carryUnsettledEvidence(state, unsettled, mappingsById);
-  if (!(await checkpointRun(state, { inserts: [], deletes: [], updates: carries }, checkpoint))) {
+  const carries = parkUnsettledMirrors(
+    state,
+    unsettled.map((mirror) => mirror.replacement),
+    mappingsById,
+  );
+  return await checkpointRun(state, { inserts: [], deletes: [], updates: carries }, checkpoint);
+};
+
+/* The escape an unaddressable failure earns, on a destination that can answer questions about its
+   own objects. The delete it used to spend went out on an identifier nothing had looked at, so the
+   read runs first - through the same route escapeRefusedUpdates takes, which already settles absent,
+   surviving and relocated mirrors without removing anything. Only what the read could not settle
+   keeps the escape it had, and a destination with no read at all keeps its behaviour untouched. */
+const promoteUnresolvedReplacements = async (
+  unresolved: Extract<SyncOperation, { type: "replace" }>[],
+  calendarId: string,
+  provider: CalendarSyncProvider,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
+  mappingsById: Map<string, EventMapping>,
+  state: ChunkedExecutionState,
+  checkpoint?: CheckpointCallback,
+): Promise<boolean> => {
+  const { verifyEventsExist } = provider;
+  if (!verifyEventsExist) {
+    return await replaceViaDeleteThenAdd(
+      unresolved,
+      calendarId,
+      provider,
+      mappingsByRemoteIdentity,
+      state,
+      true,
+      checkpoint,
+    );
+  }
+
+  /* A read that proved the identifier absent has already answered the only question the delete
+     could have asked, and it answered that there is nothing there: so the replacement is created on
+     the read's word and no delete goes out. Spending one anyway would at best be wasted and at
+     worst reach an object nobody verified. Only what the read could not settle keeps the escape it
+     had; resolveVerifiedMirrors creates what the read proved absent. */
+  const unsettled: UnsettledMirror[] = [];
+  if (!(await resolveVerifiedMirrors(
+    unresolved,
+    calendarId,
+    provider,
+    verifyEventsExist,
+    mappingsById,
+    state,
+    checkpoint,
+    false,
+    new Set(),
+    unsettled,
+  ))) {
     return false;
   }
-  if (promoted.length === 0) {
+
+  if (unsettled.length === 0) {
     return true;
   }
 
-  /* The read has now failed to say anything about these mirrors for as many consecutive cycles as
-     an answered refusal needs to promote, so the destination is offering no proof either way and
-     the mapping would otherwise stay frozen forever. The delete-then-add below still refuses to
-     recreate anything the delete did not observe itself remove. */
+  /* A read that never answered leaves the escape nowhere to go. A delete-then-add on an identifier
+     nothing looked at is the whole hazard this path exists to refuse: the DELETE removes a live copy
+     no read has seen, and the POST behind it is a create with no idempotency key. Parking keeps the
+     mapping and its identifier exactly as they are, and asks the destination again next cycle. */
+  const unanswered = unsettled.filter((mirror) => !mirror.confirmedAtIdentifier);
+  const carries = parkUnsettledMirrors(
+    state,
+    unanswered.map((mirror) => mirror.replacement),
+    mappingsById,
+  );
+  if (!(await checkpointRun(state, { inserts: [], deletes: [], updates: carries }, checkpoint))) {
+    return false;
+  }
+
+  /* The read did answer for these: the customer's copy is in this calendar at the identifier the
+     mapping holds. It handed back no object, so nothing can be repaired in place -- but the delete
+     this escape spends is aimed at an object the destination itself just placed there. */
+  const confirmed = unsettled
+    .filter((mirror) => mirror.confirmedAtIdentifier)
+    .map((mirror) => mirror.replacement);
+  if (confirmed.length === 0) {
+    return true;
+  }
+
   return await replaceViaDeleteThenAdd(
-    promoted,
+    confirmed,
     calendarId,
     provider,
     mappingsByRemoteIdentity,
@@ -2137,11 +2509,13 @@ const executeReplacements = async (
     const present = replacements.filter((operation) => operation.remoteMissing !== true);
     let unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
     let refused: Extract<SyncOperation, { type: "replace" }>[] = [];
+    let unaddressable: ReadonlySet<string> = new Set();
 
     if (present.length > 0) {
       const {
         runResult,
         refused: refusedUpdates,
+        unaddressable: unaddressableMappings,
         unresolved: unresolvedUpdates,
       } = await executeUpdateRun(
         present,
@@ -2151,6 +2525,7 @@ const executeReplacements = async (
       );
       unresolved = unresolvedUpdates;
       refused = refusedUpdates;
+      unaddressable = unaddressableMappings;
       mergeRunResult(state, runResult);
       const unresolvedMappingIds = new Set(
         [...unresolved, ...refused].map((operation) => operation.staleMappingId),
@@ -2171,9 +2546,9 @@ const executeReplacements = async (
         refused,
         calendarId,
         provider,
-        mappingsByRemoteIdentity,
         mappingsById,
         state,
+        unaddressable,
         checkpoint,
       );
       if (!escaped) {
@@ -2182,6 +2557,7 @@ const executeReplacements = async (
     }
 
     if (missing.length > 0) {
+      const unsettled: UnsettledMirror[] = [];
       const restored = await recreateMissingMirrors(
         missing,
         calendarId,
@@ -2189,20 +2565,32 @@ const executeReplacements = async (
         mappingsById,
         state,
         checkpoint,
+        unsettled,
       );
       if (!restored) {
+        return;
+      }
+      /* Parking is the same ending the other verified paths give an unsettled read: the tally
+         advances, the mapping keeps its identifier, and the next cycle asks again -- nothing is
+         created, deleted or written on an answer that proved nothing. */
+      const carries = parkUnsettledMirrors(
+        state,
+        unsettled.map((mirror) => mirror.replacement),
+        mappingsById,
+      );
+      if (!(await checkpointRun(state, { inserts: [], deletes: [], updates: carries }, checkpoint))) {
         return;
       }
     }
 
     if (unresolved.length > 0) {
-      const recovered = await replaceViaDeleteThenAdd(
+      const recovered = await promoteUnresolvedReplacements(
         unresolved,
         calendarId,
         provider,
         mappingsByRemoteIdentity,
+        mappingsById,
         state,
-        true,
         checkpoint,
       );
       if (!recovered) {

@@ -116,6 +116,9 @@ type Responder = (request: RecordedRequest) => Promise<Response>;
 const isMultiGet = (request: RecordedRequest): boolean =>
   request.method === "REPORT" && request.body.includes("calendar-multiget");
 
+const isUidQuery = (request: RecordedRequest): boolean =>
+  request.method === "REPORT" && request.body.includes("calendar-query");
+
 const discoveryServer: Responder = (request) => {
   if (request.path === "/.well-known/caldav") {
     return Promise.resolve(new Response("", { status: 404 }));
@@ -134,6 +137,13 @@ const discoveryServer: Responder = (request) => {
   }
   if (request.method === "PUT") {
     return Promise.resolve(new Response("", { status: 201, statusText: "Created" }));
+  }
+  /* A real server answers a uid calendar-query, and this collection genuinely holds nothing under
+     any other href - so it answers a well-formed empty multistatus. A double that refused the
+     query instead would leave the uid unspoken for, which is not an absence and would suppress the
+     recreate this fixture is about. */
+  if (isUidQuery(request)) {
+    return Promise.resolve(multistatus(""));
   }
   return Promise.reject(new Error(`unhandled request ${request.method} ${request.path}`));
 };

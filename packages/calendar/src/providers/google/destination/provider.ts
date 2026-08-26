@@ -1,5 +1,5 @@
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
-import { toVerificationDeleteIds } from "../../../core/events/verification-targets";
+import { toVerificationTarget } from "../../../core/events/verification-targets";
 import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
@@ -726,8 +726,13 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return readLegacyLookup(response);
   };
 
+  /* The key itself is dead. That is all this status proves: the object behind it may be deleted,
+     or it may be alive under a new id after an import, a move or a restore re-keyed it. */
+  const isDeadKeyRead = (response: BatchSubResponse): boolean =>
+    response.statusCode === HTTP_STATUS.NOT_FOUND || response.statusCode === GONE_STATUS;
+
   const presenceOfDirectRead = (identifier: string, response: BatchSubResponse): EventPresence => {
-    if (response.statusCode === HTTP_STATUS.NOT_FOUND || response.statusCode === GONE_STATUS) {
+    if (isDeadKeyRead(response)) {
       return { identifier, status: "absent" };
     }
 
@@ -797,23 +802,101 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return presenceOfLegacyLookup(identifier, response);
   };
 
+  const buildUidLookupRequest = (uid: string): BatchSubRequest => ({
+    method: "GET",
+    path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
+  });
+
+  /* An id read that came back 404 has only proved that the key is dead, and on Google a key dies
+     for two very different reasons: the event was deleted, or an import, a move between calendars
+     or a restore re-keyed it and the customer's copy is still sitting there under the same
+     iCalUID. Absence is the one verdict that licenses a create with nothing else asked, so it has
+     to be earned against the uid the mapping names -- otherwise a re-key turns into a second
+     permanent copy of an event the customer already has. */
+  const needsUidConfirmation = (
+    target: EventVerificationTarget,
+    response: BatchSubResponse | undefined,
+  ): boolean => {
+    if (!response || !isDeadKeyRead(response)) {
+      /* Any other answer observed the object itself - a cancelled tombstone included, which is the
+         id still resolving to a resource Google marked deleted. Nothing there is stale. */
+      return false;
+    }
+    if (!target.uid) {
+      return false;
+    }
+    // A legacy mapping was already read by its uid, so the lookup would only ask the same question.
+    return isDirectEventId(target.deleteId);
+  };
+
+  const confirmAbsencesByUid = async (
+    targets: EventVerificationTarget[],
+    presences: EventPresence[],
+    responses: (BatchSubResponse | undefined)[],
+  ): Promise<EventPresence[]> => {
+    const pending: { index: number; target: EventVerificationTarget }[] = [];
+    const requests: BatchSubRequest[] = [];
+
+    for (let index = 0; index < targets.length; index++) {
+      const target = targets[index];
+      if (!target || !needsUidConfirmation(target, responses[index])) {
+        continue;
+      }
+      const { uid } = target;
+      if (!uid) {
+        continue;
+      }
+      pending.push({ index, target });
+      requests.push(buildUidLookupRequest(uid));
+    }
+
+    if (requests.length === 0) {
+      return presences;
+    }
+
+    const lookups = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+
+    const confirmed = [...presences];
+    for (let position = 0; position < pending.length; position++) {
+      const entry = pending[position];
+      if (!entry) {
+        continue;
+      }
+      const response = lookups[position];
+      if (!response) {
+        // The lookup never answered, so the id read's absence stays unproven rather than standing.
+        confirmed[entry.index] = { identifier: entry.target.deleteId, status: "unknown" };
+        continue;
+      }
+      /* The lookup is scoped to the destination calendar, so whatever it names is a mirror this
+         sync owns and the verdict is keyed by the identifier the mapping still holds. */
+      confirmed[entry.index] = presenceOfLegacyLookup(entry.target.deleteId, response);
+    }
+
+    return confirmed;
+  };
+
   const verifyEventsExist = async (
     targets: (EventVerificationTarget | string)[],
   ): Promise<EventPresence[]> => {
     await refreshIfNeeded();
 
-    const identifiers = toVerificationDeleteIds(targets);
+    const verificationTargets = targets.map((target) => toVerificationTarget(target));
 
-    if (identifiers.length === 0) {
+    if (verificationTargets.length === 0) {
       return [];
     }
 
     // One batched request per chunk, so verifying a whole destination costs a handful of requests.
-    const requests: BatchSubRequest[] = identifiers.map((identifier) => buildTargetedReadRequest(identifier));
+    const requests: BatchSubRequest[] = verificationTargets.map((target) => buildTargetedReadRequest(target.deleteId));
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
-    return identifiers.map((identifier, index) => presenceOfResponse(identifier, responses[index]));
+    const presences = verificationTargets.map(
+      (target, index) => presenceOfResponse(target.deleteId, responses[index]),
+    );
+
+    return await confirmAbsencesByUid(verificationTargets, presences, responses);
   };
 
   const getRemoteEventsByIds = async (eventIds: string[]): Promise<RemoteEvent[]> => {

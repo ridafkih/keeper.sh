@@ -109,12 +109,35 @@ const createOutlookLikeDestination = (seeded: DestinationRecord[], updateFailure
       }));
     },
     updateEvents: (updates: EventUpdate[]) => Promise.resolve(updates.map((): PushResult => updateFailure)),
-    verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(({ deleteId }): EventPresence => {
-      if (records.has(deleteId)) {
-        return { identifier: deleteId, status: "present" };
-      }
-      return { identifier: deleteId, status: "absent" };
-    })),
+    /*
+     * The real provider escalates a dead item id to a uid search before it will say absent, because
+     * Graph re-keys an event on a move and the copy is still there under the same iCalUId. A double
+     * that answers absent on the id alone is kinder to the engine than Graph is, and the absent
+     * branch creates -- which on a create-only POST is a second copy of a live event for ever.
+     */
+    verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(
+      ({ deleteId, uid }): EventPresence => {
+        const mapped = records.get(deleteId);
+        if (mapped) {
+          return { identifier: deleteId, status: "present" };
+        }
+        const rekeyed = [...records.values()].find((record) => record.uid === uid);
+        if (rekeyed) {
+          return {
+            event: {
+              deleteId: rekeyed.deleteId,
+              endTime: END_TIME,
+              isKeeperEvent: true,
+              startTime: START_TIME,
+              uid: rekeyed.uid,
+            },
+            identifier: deleteId,
+            status: "present",
+          };
+        }
+        return { identifier: deleteId, status: "absent" };
+      },
+    )),
   };
 
   return {
@@ -141,8 +164,9 @@ describe("a delete that removed nothing is not a removal", () => {
       destination.provider,
     );
 
-    // The bare 404-mapped success removed nothing, and nothing was recreated in its place.
-    expect(destination.deleteTargets).toEqual([STALE_DELETE_ID]);
+    /* The read escalates to the uid and finds the re-keyed copy, so no speculative delete is
+       issued at all and nothing is recreated in its place: the live mirror stands untouched. */
+    expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(outcome.result.removed).toBe(0);
 
