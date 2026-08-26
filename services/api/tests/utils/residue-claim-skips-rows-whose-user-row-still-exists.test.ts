@@ -31,6 +31,7 @@ create table deletion_residue (
   "lastAttemptAt" timestamptz,
   "nextAttemptAt" timestamptz,
   "provider" text,
+  "providerAccountId" text,
   "providerChannelId" text,
   "providerResourceId" text,
   "userId" text not null

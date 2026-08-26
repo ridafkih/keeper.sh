@@ -68,6 +68,7 @@ interface TeardownCredential {
   accountId: string;
   email: string;
   provider: string;
+  providerAccountId: string;
   refreshToken: string | null;
   userId: string;
 }
@@ -79,6 +80,7 @@ interface ResidueRow {
   id: string;
   kind: string;
   provider?: string;
+  providerAccountId?: string;
   providerChannelId?: string;
   userId: string;
 }
@@ -89,6 +91,7 @@ const googleCredentials = (count: number): TeardownCredential[] =>
     accountId: `account-${index}`,
     email: `account-${index}@gmail.com`,
     provider: "google",
+    providerAccountId: `provider-account-${index}`,
     refreshToken: `refresh-${index}`,
     userId: DELETED_USER,
   }));
@@ -118,6 +121,7 @@ const createResidueHarness = (seeded: Omit<ResidueRow, "id">[] = []) => {
     reaperStore: {
       clear,
       list: () => Promise.resolve([...rows.values()]),
+      purgeOrphaned: () => Promise.resolve([]),
       record,
     },
     rowsOfKind: (kind: string, userId: string): ResidueRow[] =>

@@ -14,6 +14,7 @@ const RESIDUE_REPAIR_FAILED_SLUG = "teardown-residue-repair-failed";
 const RESIDUE_STALE_SLUG = "teardown-residue-stale";
 const NO_ATTEMPTS = 0;
 const MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION = 5;
+const MAX_RESIDUE_REPAIR_ATTEMPTS = 6;
 const NO_SURVIVING_ACCOUNT_LINKS = 0;
 
 type ResidueRepairOutcome = "repaired" | "revocation_skipped";
@@ -35,6 +36,7 @@ interface TeardownResidueReaperOutcome {
   deferredIds: string[];
   expiredIds: string[];
   failedIds: string[];
+  purgedIds: string[];
   revocationSkippedIds: string[];
   scannedCount: number;
 }
@@ -119,6 +121,10 @@ const repairOAuthGrant = async (
     );
   }
 
+  if (!record.providerAccountId) {
+    return "revocation_skipped";
+  }
+
   const survivingAccountLinks = await dependencies.countSurvivingAccountLinks(record);
 
   if (survivingAccountLinks > NO_SURVIVING_ACCOUNT_LINKS) {
@@ -170,6 +176,13 @@ const repairResidue = (
 const isPastExpiry = (record: TeardownResidueRecord, now: Date): boolean =>
   record.expiresAt instanceof Date && record.expiresAt.getTime() <= now.getTime();
 
+const hasExhaustedItsRepairAttempts = (
+  record: TeardownResidueRecord,
+  now: Date,
+): boolean =>
+  isPastExpiry(record, now)
+  && (record.attempts ?? NO_ATTEMPTS) >= MAX_RESIDUE_REPAIR_ATTEMPTS;
+
 const outlivesItsProviderChannel = (
   record: TeardownResidueRecord,
   now: Date,
@@ -194,6 +207,7 @@ const createTeardownResidueReaper = (
 ) =>
 async (): Promise<TeardownResidueReaperOutcome> => {
   const now = dependencies.now();
+  const purgedIds = await dependencies.residue.purgeOrphaned(now);
   const records = await dependencies.residue.list();
   const clearedIds: string[] = [];
   const deferredIds: string[] = [];
@@ -233,6 +247,13 @@ async (): Promise<TeardownResidueReaperOutcome> => {
       }
     } catch (error) {
       dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
+
+      if (hasExhaustedItsRepairAttempts(record, now)) {
+        await dependencies.residue.clear(record.id);
+        expiredIds.push(record.id);
+        continue;
+      }
+
       failedIds.push(record.id);
     }
   }
@@ -242,6 +263,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     "teardown_residue.deferred_count": deferredIds.length,
     "teardown_residue.expired_count": expiredIds.length,
     "teardown_residue.failed_count": failedIds.length,
+    "teardown_residue.purged_count": purgedIds.length,
     "teardown_residue.revocation_skipped_count": revocationSkippedIds.length,
     "teardown_residue.scanned_count": records.length,
   });
@@ -251,6 +273,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     deferredIds,
     expiredIds,
     failedIds,
+    purgedIds,
     revocationSkippedIds,
     scannedCount: records.length,
   };

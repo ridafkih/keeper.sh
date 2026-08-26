@@ -83,6 +83,7 @@ const toResidueRecord = (
     ...(credential !== null && { credential }),
     ...(row.externalId !== null && { externalId: row.externalId }),
     ...(row.provider !== null && { provider: row.provider }),
+    ...(row.providerAccountId !== null && { providerAccountId: row.providerAccountId }),
     ...(row.providerChannelId !== null && { providerChannelId: row.providerChannelId }),
     ...(row.providerResourceId !== null && {
       providerResourceId: row.providerResourceId,
@@ -106,6 +107,9 @@ const encryptCredential = (
     encryptedRefreshToken: encryptOptional(credential.refreshToken, key),
   };
 };
+
+const userRowExists = () =>
+  sql`exists (select 1 from ${user} where ${user.id} = ${deletionResidueTable.userId})`;
 
 const nextAttemptExpression = (claimedAt: Date) =>
   sql`${claimedAt.toISOString()}::timestamptz + least(
@@ -146,11 +150,19 @@ const createTeardownResidueStore = (
           isNull(deletionResidueTable.nextAttemptAt),
           lte(deletionResidueTable.nextAttemptAt, claimedAt),
         ),
-        sql`not exists (select 1 from ${user} where ${user.id} = ${deletionResidueTable.userId})`,
+        sql`not ${userRowExists()}`,
       ))
       .returning();
 
     return rows.map((row) => toResidueRecord(row, config.encryptionKey));
+  },
+  purgeOrphaned: async (now: Date) => {
+    const rows = await config.database
+      .delete(deletionResidueTable)
+      .where(and(lte(deletionResidueTable.expiresAt, now), userRowExists()))
+      .returning({ id: deletionResidueTable.id });
+
+    return rows.map((row) => row.id);
   },
   record: async (draft: TeardownResidueDraft) => {
     const recordedAt = config.now();
@@ -164,6 +176,9 @@ const createTeardownResidueStore = (
       ...encryptCredential(draft.credential, config.encryptionKey),
       ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
       ...(typeof draft.provider === "string" && { provider: draft.provider }),
+      ...(typeof draft.providerAccountId === "string" && {
+        providerAccountId: draft.providerAccountId,
+      }),
       ...(typeof draft.providerChannelId === "string" && {
         providerChannelId: draft.providerChannelId,
       }),

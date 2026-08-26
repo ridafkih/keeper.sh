@@ -9,6 +9,7 @@ const database = drizzle(client);
 const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 const DELETED_USER = "user-bob";
 const GOOGLE_ACCOUNT_EMAIL = "bob@gmail.com";
+const GOOGLE_SUB = "google-sub-123";
 const NOW = new Date("2026-08-25T06:15:33.956Z");
 const EXPIRES_AT = new Date("2027-01-01T00:00:00.000Z");
 
@@ -65,6 +66,8 @@ create table calendar_accounts (
   "updatedAt" timestamptz not null default now(),
   "userId" text not null references "user"("id") on delete cascade
 );
+create unique index "calendar_accounts_provider_account_idx"
+  on "calendar_accounts" ("userId", "provider", "accountId");
 create table calendars (
   "id" uuid primary key default gen_random_uuid(),
   "name" text not null default 'calendar',
@@ -123,17 +126,24 @@ const seedGoogleCredential = async (): Promise<string> => {
   return credentialId;
 };
 
+const seedCalendarAccount = async (credentialId: string): Promise<void> => {
+  await client.query(
+    `insert into calendar_accounts
+       ("accountId", "authType", "email", "oauthCredentialId", "provider", "userId")
+     values ($1, 'oauth', $2, $3, 'google', $4)`,
+    [GOOGLE_SUB, GOOGLE_ACCOUNT_EMAIL, credentialId, DELETED_USER],
+  );
+};
+
 interface ResidueRow {
   accountEmail: string | null;
   externalId: string | null;
-  kind: string;
-  provider: string | null;
-  userId: string;
+  providerAccountId: string | null;
 }
 
 const readResidue = async (): Promise<ResidueRow[]> => {
   const rows = await client.query<ResidueRow>(
-    `select "accountEmail", "externalId", "kind", "provider", "userId" from deletion_residue`,
+    `select "providerAccountId", "externalId", "accountEmail" from deletion_residue`,
   );
 
   return rows.rows;
@@ -141,41 +151,56 @@ const readResidue = async (): Promise<ResidueRow[]> => {
 
 const { createApiDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
 
-describe("oauth grant residue records the google account it would revoke", () => {
+const runTeardown = async (): Promise<void> => {
+  const teardown = createApiDeleteUserSyncTeardown({
+    database,
+    queue: {
+      getJob: () => Promise.resolve(undefined),
+      remove: () => Promise.resolve(0),
+    },
+    redis: {
+      del: () => Promise.resolve(1),
+      exists: () => Promise.resolve(0),
+      set: () => Promise.resolve("OK"),
+    },
+    residue: createTeardownResidueStore({
+      database,
+      encryptionKey: ENCRYPTION_KEY,
+      now: () => NOW,
+    }),
+  } as never);
+
+  await teardown(DELETED_USER);
+};
+
+describe("oauth grant residue carries the provider account id", () => {
   beforeEach(async () => {
     await resetDatabase();
   });
 
-  it("persists the credential's account email on the residue row", async () => {
+  it("records the google sub from calendar_accounts alongside the credential row uuid", async () => {
     const credentialId = await seedGoogleCredential();
+    await seedCalendarAccount(credentialId);
 
-    const teardown = createApiDeleteUserSyncTeardown({
-      database,
-      queue: {
-        getJob: () => Promise.resolve(undefined),
-        remove: () => Promise.resolve(0),
-      },
-      redis: {
-        del: () => Promise.resolve(1),
-        exists: () => Promise.resolve(0),
-        set: () => Promise.resolve("OK"),
-      },
-      residue: createTeardownResidueStore({
-        database,
-        encryptionKey: ENCRYPTION_KEY,
-        now: () => NOW,
-      }),
-    } as never);
-
-    await teardown(DELETED_USER);
+    await runTeardown();
 
     const rows = await readResidue();
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.kind).toBe("oauth_grant");
-    expect(rows[0]?.provider).toBe("google");
-    expect(rows[0]?.userId).toBe(DELETED_USER);
+    expect(rows[0]?.providerAccountId).toBe(GOOGLE_SUB);
     expect(rows[0]?.externalId).toBe(credentialId);
     expect(rows[0]?.accountEmail).toBe(GOOGLE_ACCOUNT_EMAIL);
+  });
+
+  it("records a null provider account id when the credential has no calendar account", async () => {
+    const credentialId = await seedGoogleCredential();
+
+    await runTeardown();
+
+    const rows = await readResidue();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.providerAccountId).toBeNull();
+    expect(rows[0]?.externalId).toBe(credentialId);
   });
 });

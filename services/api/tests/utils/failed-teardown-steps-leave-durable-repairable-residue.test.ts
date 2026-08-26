@@ -90,6 +90,7 @@ interface ResidueHarness {
   store: {
     clear: (residueId: string) => Promise<void>;
     list: () => Promise<TeardownResidueRecord[]>;
+    purgeOrphaned: () => Promise<string[]>;
     record: (draft: Omit<TeardownResidueRecord, "id">) => Promise<void>;
   };
 }
@@ -112,6 +113,7 @@ const makeResidueHarness = (events: string[]): ResidueHarness => {
         return Promise.resolve();
       },
       list: () => Promise.resolve([...rows.values()]),
+      purgeOrphaned: () => Promise.resolve([]),
       record: (draft) => {
         const id = `residue-${rows.size + 1}`;
         events.push(`residue:${draft.kind}:${draft.userId}`);

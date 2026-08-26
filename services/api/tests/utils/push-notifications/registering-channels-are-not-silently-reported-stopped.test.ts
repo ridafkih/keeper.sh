@@ -358,6 +358,7 @@ describe("a registering push channel is never silently reported stopped", () => 
         clear: () => Promise.resolve(),
         deleteForUser: () => Promise.resolve(0),
         list: () => Promise.resolve([]),
+        purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
       },
     });

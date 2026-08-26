@@ -41,6 +41,7 @@ const oauthGrantRecord = (
   id: "residue-1",
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
+  providerAccountId: "1099876543210",
   userId: "user-1",
   ...overrides,
 });
@@ -68,6 +69,7 @@ const createStore = (records: TeardownResidueRecord[]) => {
     },
     deleteForUser: () => Promise.resolve(0),
     list: () => Promise.resolve(records),
+    purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
   };
 

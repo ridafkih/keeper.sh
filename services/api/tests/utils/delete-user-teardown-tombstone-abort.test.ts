@@ -62,6 +62,7 @@ describe("delete user teardown tombstone abort", () => {
         clear: () => Promise.resolve(),
         deleteForUser: () => Promise.resolve(0),
         list: () => Promise.resolve([]),
+        purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
       },
     });

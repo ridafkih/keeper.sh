@@ -67,6 +67,7 @@ interface TeardownCredential {
   accountId: string;
   email: string | null;
   provider: string;
+  providerAccountId: string;
   refreshToken: string | null;
   userId: string;
 }
@@ -84,6 +85,7 @@ const googleCredentialFor = (userId: string): TeardownCredential => ({
   accountId: `account-${userId}`,
   email: `${userId.toLowerCase()}@gmail.com`,
   provider: "google",
+  providerAccountId: `provider-account-${userId}`,
   refreshToken: `refresh-token-${userId}-google`,
   userId,
 });
@@ -127,6 +129,7 @@ interface ResidueRow {
   id: string;
   kind: string;
   provider?: string;
+  providerAccountId?: string;
   providerChannelId?: string;
   userId: string;
 }
@@ -146,6 +149,7 @@ const makeResidueHarness = (seeded: Omit<ResidueRow, "id">[] = []) => {
     reaperStore: {
       clear,
       list: (): Promise<ResidueRow[]> => Promise.resolve([...rows.values()]),
+      purgeOrphaned: (): Promise<string[]> => Promise.resolve([]),
       record: (draft: Omit<ResidueRow, "id">): Promise<void> => {
         issued.count += 1;
         rows.set(`residue-${issued.count}`, { ...draft, id: `residue-${issued.count}` });
@@ -308,6 +312,7 @@ describe("revocable grants are recorded for the reaper", () => {
             accountId: "account-A-outlook",
             email: "a@outlook.com",
             provider: "microsoft",
+            providerAccountId: "provider-account-A-microsoft",
             refreshToken: "refresh-token-A-microsoft",
             userId: DELETED_USER,
           },

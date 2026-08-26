@@ -261,6 +261,7 @@ const deletionResidueTable = pgTable(
     lastAttemptAt: timestamp({ withTimezone: true }),
     nextAttemptAt: timestamp({ withTimezone: true }),
     provider: text(),
+    providerAccountId: text(),
     providerChannelId: text(),
     providerResourceId: text(),
     userId: text().notNull(),

@@ -1,7 +1,12 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { clearUserDeleted, markUserDeleted } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
-import { calendarsTable, deletionResidueTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  deletionResidueTable,
+  oauthCredentialsTable,
+} from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 import {
   AbandonedPushChannelError,
@@ -64,6 +69,7 @@ interface DeleteUserOAuthCredential {
   accountId: string;
   email: string | null;
   provider: string;
+  providerAccountId?: string | null;
   refreshToken: string | null;
   userId: string;
 }
@@ -140,6 +146,9 @@ const recordOAuthGrantResidue = async (
       provider: credential.provider,
       userId,
       ...(credential.email !== null && { accountEmail: credential.email }),
+      ...(typeof credential.providerAccountId === "string" && {
+        providerAccountId: credential.providerAccountId,
+      }),
     });
 
     return true;
@@ -275,15 +284,17 @@ const runWithDeadline = async (
     return;
   }
 
-  const deadlineError = new Error(
-    `Teardown step ${name} exceeded its ${deadlineMs}ms deadline`,
-  );
+  const deadlineMessage = `Teardown step ${name} exceeded its ${deadlineMs}ms deadline`;
 
-  controller.abort(deadlineError);
+  controller.abort(new Error(deadlineMessage));
 
-  await settleWithin(settlement, STEP_ABORT_SETTLE_MS);
+  const afterAbort = await settleWithin(settlement, STEP_ABORT_SETTLE_MS);
 
-  throw deadlineError;
+  if (afterAbort !== null && afterAbort.status === "rejected") {
+    throw new Error(deadlineMessage, { cause: afterAbort.error });
+  }
+
+  throw new Error(deadlineMessage);
 };
 
 
@@ -294,6 +305,10 @@ const collectAbandonedChannels = (error: unknown): AbandonedPushChannelResidue[]
 
   if (error instanceof AggregateError) {
     return error.errors.flatMap((inner: unknown) => collectAbandonedChannels(inner));
+  }
+
+  if (error instanceof Error && "cause" in error) {
+    return collectAbandonedChannels(error.cause);
   }
 
   return [];
@@ -413,11 +428,20 @@ const createApiDeleteUserSyncTeardown = (
           accountId: oauthCredentialsTable.id,
           email: oauthCredentialsTable.email,
           provider: oauthCredentialsTable.provider,
+          providerAccountId: sql<string | null>`max(${calendarAccountsTable.accountId})`,
           refreshToken: oauthCredentialsTable.refreshToken,
           userId: oauthCredentialsTable.userId,
         })
         .from(oauthCredentialsTable)
-        .where(eq(oauthCredentialsTable.userId, userId)),
+        .leftJoin(
+          calendarAccountsTable,
+          and(
+            eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
+            eq(calendarAccountsTable.provider, oauthCredentialsTable.provider),
+          ),
+        )
+        .where(eq(oauthCredentialsTable.userId, userId))
+        .groupBy(oauthCredentialsTable.id),
     redis: context.redis,
     residue: {
       ...context.residue,

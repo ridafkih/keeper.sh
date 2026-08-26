@@ -30,6 +30,7 @@ interface TeardownResidueDraft {
   externalId?: string;
   kind: string;
   provider?: string;
+  providerAccountId?: string;
   providerChannelId?: string;
   providerResourceId?: string;
   userId: string;
@@ -46,6 +47,7 @@ interface TeardownResidueStore {
   clear: (residueId: string) => Promise<void>;
   deleteForUser: (userId: string, kind: string) => Promise<number>;
   list: () => Promise<TeardownResidueRecord[]>;
+  purgeOrphaned: (now: Date) => Promise<string[]>;
   record: (draft: TeardownResidueDraft) => Promise<void>;
 }
 

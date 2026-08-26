@@ -1,4 +1,8 @@
 import type { CronOptions } from "cronbake";
+import { and, count, eq, sql } from "drizzle-orm";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+import { oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { account as authAccountTable } from "@keeper.sh/database/auth-schema";
 import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
@@ -178,10 +182,61 @@ const revokeOAuthGrant = async (
   }
 };
 
+const countSurvivingCredentialLinks = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  record: TeardownResidueRecord,
+  provider: string,
+  accountEmail: string,
+): Promise<number> => {
+  const [row] = await database
+    .select({ surviving: count() })
+    .from(oauthCredentialsTable)
+    .where(
+      and(
+        eq(oauthCredentialsTable.provider, provider),
+        sql`(lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or ${oauthCredentialsTable.email} is null)`,
+      ),
+    );
+
+  if (!row) {
+    throw new Error(
+      `Counting surviving credential links to ${provider} account behind residue ${record.id} returned no row`,
+    );
+  }
+
+  return row.surviving;
+};
+
+const countSurvivingSocialSignInLinks = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  record: TeardownResidueRecord,
+  provider: string,
+  providerAccountId: string,
+): Promise<number> => {
+  const [row] = await database
+    .select({ surviving: count() })
+    .from(authAccountTable)
+    .where(
+      and(
+        eq(authAccountTable.providerId, provider),
+        eq(authAccountTable.accountId, providerAccountId),
+      ),
+    );
+
+  if (!row) {
+    throw new Error(
+      `Counting surviving sign-in links to ${provider} account behind residue ${record.id} returned no row`,
+    );
+  }
+
+  return row.surviving;
+};
+
 const countSurvivingAccountLinks = async (
+  database: PgDatabase<PgQueryResultHKT>,
   record: TeardownResidueRecord,
 ): Promise<number> => {
-  const { provider, accountEmail } = record;
+  const { provider, accountEmail, providerAccountId } = record;
 
   if (!provider || !accountEmail) {
     throw new Error(
@@ -189,27 +244,25 @@ const countSurvivingAccountLinks = async (
     );
   }
 
-  const { database } = await import("@/context");
-  const { oauthCredentialsTable } = await import("@keeper.sh/database/schema");
-  const { and, count, eq } = await import("drizzle-orm");
+  const credentialLinks = await countSurvivingCredentialLinks(
+    database,
+    record,
+    provider,
+    accountEmail,
+  );
 
-  const [row] = await database
-    .select({ surviving: count() })
-    .from(oauthCredentialsTable)
-    .where(
-      and(
-        eq(oauthCredentialsTable.provider, provider),
-        eq(oauthCredentialsTable.email, accountEmail),
-      ),
-    );
-
-  if (!row) {
-    throw new Error(
-      `Counting surviving links to ${provider} account behind residue ${record.id} returned no row`,
-    );
+  if (!providerAccountId) {
+    return credentialLinks;
   }
 
-  return row.surviving;
+  const signInLinks = await countSurvivingSocialSignInLinks(
+    database,
+    record,
+    provider,
+    providerAccountId,
+  );
+
+  return credentialLinks + signInLinks;
 };
 
 const createDefaultReaper = async () => {
@@ -223,7 +276,7 @@ const createDefaultReaper = async () => {
   }
 
   return createTeardownResidueReaper({
-    countSurvivingAccountLinks,
+    countSurvivingAccountLinks: (record) => countSurvivingAccountLinks(database, record),
     createRegistrarContext: createResidueRegistrarContext,
     deletePolarCustomer,
     now: () => new Date(),
@@ -252,3 +305,5 @@ export default withCronWideEvent({
   name: import.meta.file,
   overrunProtection: true,
 }) satisfies CronOptions;
+
+export { countSurvivingAccountLinks };

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  createTeardownResidueReaper,
-  RESIDUE_REPAIR_FAILED_SLUG,
-} from "../../../src/core/deletion/teardown-residue-reaper";
+import { createTeardownResidueReaper } from "../../../src/core/deletion/teardown-residue-reaper";
 import { OAUTH_GRANT_RESIDUE_KIND } from "../../../src/core/deletion/teardown-residue";
 import type {
   TeardownResidueRecord,
@@ -12,39 +9,41 @@ import type {
 const NOW = new Date("2026-08-26T12:00:00.000Z");
 const FUTURE = new Date("2026-09-30T12:00:00.000Z");
 
-const anonymousGrant: TeardownResidueRecord = {
+const legacyGrant: TeardownResidueRecord = {
+  accountEmail: "shared@gmail.com",
   createdAt: new Date("2026-08-25T06:15:33.956Z"),
   credential: {
-    accessToken: "access-A",
+    accessToken: "legacy-access",
     expiresAt: null,
-    refreshToken: "refresh-A",
+    refreshToken: "legacy-refresh",
   },
   expiresAt: FUTURE,
-  id: "residue-anonymous",
+  id: "residue-legacy",
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
-  userId: "user-anonymous",
+  userId: "user-legacy",
 };
 
-const namedGrant: TeardownResidueRecord = {
-  accountEmail: "named@example.com",
+const identifiedGrant: TeardownResidueRecord = {
+  accountEmail: "identified@gmail.com",
   createdAt: new Date("2026-08-25T06:15:33.956Z"),
   credential: {
-    accessToken: "access-B",
+    accessToken: "identified-access",
     expiresAt: null,
-    refreshToken: "refresh-B",
+    refreshToken: "identified-refresh",
   },
   expiresAt: FUTURE,
-  id: "residue-named",
+  id: "residue-identified",
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
-  providerAccountId: "1099876543211",
-  userId: "user-named",
+  providerAccountId: "1099876543210",
+  userId: "user-identified",
 };
 
 const createHarness = (records: TeardownResidueRecord[]) => {
   const remaining = [...records];
-  const revokedTokens: string[] = [];
+  const revokedRecordIds: string[] = [];
+  const countedRecordIds: string[] = [];
   const errors: { error: unknown; slug: string }[] = [];
 
   const store: TeardownResidueStore = {
@@ -64,7 +63,10 @@ const createHarness = (records: TeardownResidueRecord[]) => {
   };
 
   const reap = createTeardownResidueReaper({
-    countSurvivingAccountLinks: () => Promise.resolve(0),
+    countSurvivingAccountLinks: (record: TeardownResidueRecord) => {
+      countedRecordIds.push(record.id);
+      return Promise.resolve(0);
+    },
     createRegistrarContext: () =>
       Promise.reject(new Error("push channels are not part of this test")),
     deletePolarCustomer: () =>
@@ -76,39 +78,36 @@ const createHarness = (records: TeardownResidueRecord[]) => {
     },
     residue: store,
     resolveRegistrar: () => null,
-    revokeOAuthGrant: (_record: TeardownResidueRecord, token: string) => {
-      revokedTokens.push(token);
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokedRecordIds.push(record.id);
       return Promise.resolve();
     },
   } as unknown as Parameters<typeof createTeardownResidueReaper>[0]);
 
-  return { errors, reap, remaining, revokedTokens };
+  return { countedRecordIds, errors, reap, remaining, revokedRecordIds };
 };
 
-describe("reaper refuses to revoke oauth residue that names no google account", () => {
-  it("never hands a nameless grant to revokeOAuthGrant, keeps the row, and fails it loudly", async () => {
-    const harness = createHarness([anonymousGrant, namedGrant]);
+describe("reaper refuses to revoke oauth residue that carries no provider account id", () => {
+  it("skips revocation for a legacy grant identified only by email and clears the row", async () => {
+    const harness = createHarness([legacyGrant]);
 
     const outcome = await harness.reap();
 
-    expect(harness.revokedTokens).toEqual(["refresh-B"]);
-    expect(outcome.failedIds).toEqual(["residue-anonymous"]);
-    expect(outcome.clearedIds).toEqual(["residue-named"]);
-    expect(harness.remaining.map((record) => record.id)).toEqual([
-      "residue-anonymous",
-    ]);
-    expect(harness.errors.map((entry) => entry.slug)).toEqual([
-      RESIDUE_REPAIR_FAILED_SLUG,
-    ]);
+    expect(harness.revokedRecordIds).toEqual([]);
+    expect(outcome.revocationSkippedIds).toEqual(["residue-legacy"]);
+    expect(outcome.clearedIds).toEqual(["residue-legacy"]);
+    expect(outcome.failedIds).toEqual([]);
+    expect(harness.remaining).toEqual([]);
   });
 
-  it("still revokes the companion grant that does name its account", async () => {
-    const harness = createHarness([anonymousGrant, namedGrant]);
+  it("still revokes a grant that carries a provider account id, checking co-holders first", async () => {
+    const harness = createHarness([identifiedGrant]);
 
     const outcome = await harness.reap();
 
-    expect(harness.revokedTokens).toContain("refresh-B");
-    expect(harness.revokedTokens).not.toContain("refresh-A");
-    expect(outcome.clearedIds).toContain("residue-named");
+    expect(harness.countedRecordIds).toEqual(["residue-identified"]);
+    expect(harness.revokedRecordIds).toEqual(["residue-identified"]);
+    expect(outcome.clearedIds).toEqual(["residue-identified"]);
+    expect(outcome.revocationSkippedIds).toEqual([]);
   });
 });

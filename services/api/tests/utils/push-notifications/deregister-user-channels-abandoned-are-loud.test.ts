@@ -263,6 +263,7 @@ describe("a push channel the provider refused to stop is a loud failure", () => 
         clear: () => Promise.resolve(),
         deleteForUser: () => Promise.resolve(0),
         list: () => Promise.resolve([]),
+        purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
       },
     });

@@ -64,6 +64,7 @@ const oauthGrantRecord = (): TeardownResidueRecord => ({
   id: "residue-oauth-1",
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
+  providerAccountId: "1099876543210",
   userId: "deleted-user",
 });
 
@@ -82,6 +83,7 @@ const createHarness = (survivingAccountLinks: number) => {
     },
     deleteForUser: () => Promise.resolve(0),
     list: () => Promise.resolve(records),
+    purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
   };
 
