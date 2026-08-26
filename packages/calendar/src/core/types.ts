@@ -154,6 +154,9 @@ interface SyncResult {
 interface RemoteEvent {
   uid: string;
   deleteId: string;
+  /* The mirror's own title, carried beside the content snapshot so a presence answer names the
+     object it found without the caller having to unpack the snapshot to identify it. */
+  summary?: string;
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;

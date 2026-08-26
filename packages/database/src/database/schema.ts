@@ -144,6 +144,10 @@ const calendarsTable = pgTable(
     originalName: text(),
     syncToken: text(),
     storedEventCount: integer(),
+    /* Where this destination's bounded verification pass stopped asking last cycle. The next pass
+       resumes after it and wraps, so a population larger than one budget is covered over
+       consecutive cycles instead of the same lexicographic prefix forever. */
+    verificationCursor: text(),
     syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
     unavailableSince: timestamp({ withTimezone: true }),

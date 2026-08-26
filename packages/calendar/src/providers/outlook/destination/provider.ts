@@ -142,6 +142,7 @@ const toOutlookRemoteEvent = (event: OutlookEvent): RemoteEvent | null => {
     endTime,
     isKeeperEvent: event.categories?.includes(KEEPER_CATEGORY) ?? false,
     startTime,
+    summary: event.subject ?? "",
     supportedAvailabilities: ["busy", "free", "oof", "workingElsewhere"],
     uid: event.iCalUId,
   };
@@ -178,6 +179,10 @@ const buildOutlookUpdateBody = (resource: OutlookEvent): OutlookUpdateBody => ({
   recurrence: resource.recurrence ?? null,
 });
 
+/* Bounds a filtered uid walk so a mailbox that keeps handing back nextLinks cannot spin forever;
+   exceeding it yields "unreadable" because the walk never reached the end. */
+const OUTLOOK_UID_LISTING_PAGE_CAP = 100;
+
 /* Two events under one uid name no single object, so neither of them is an observation of the
    mapped mirror and nothing about it is proven. */
 const readSoleEventForUid = (events: OutlookEvent[], uid: string): OutlookEvent | null => {
@@ -209,6 +214,20 @@ const readCalendarIdsFromPage = (body: unknown): string[] | null => {
     identifiers.push(calendar.id);
   }
   return identifiers;
+};
+
+/* Graph names its query parameters with a literal "$" and hands the next page back as a link that
+   carries them that way. Re-serializing the link through URLSearchParams would percent-encode those
+   names, so the follow-up is rebuilt with the names as Graph wrote them and only the values escaped,
+   which keeps a $skiptoken byte-for-byte the token Graph issued. */
+const toGraphFollowUrl = (nextLink: string): URL => {
+  const url = new URL(nextLink);
+  const query: string[] = [];
+  for (const [name, value] of url.searchParams) {
+    query.push(`${name}=${encodeURIComponent(value)}`);
+  }
+  url.search = query.join("&");
+  return url;
 };
 
 const readNextCalendarLink = (body: unknown): string | null => {
@@ -526,7 +545,14 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       method: "GET",
     });
 
-  const presenceOfEvent = (identifier: string, body: unknown): EventPresence => {
+  /* A verdict that names where the item was seen but drops the item itself cannot repair anything:
+     the mapping's own id is dead by the time this is reached, so the id and uid the read is holding
+     at this instant are the only handles left on the customer's copy. They travel with the verdict. */
+  const presenceOfObservedEvent = (
+    identifier: string,
+    body: unknown,
+    status: "elsewhere" | "present",
+  ): EventPresence => {
     if (!outlookEventSchema.allows(body)) {
       return { identifier, status: "unknown" };
     }
@@ -536,10 +562,17 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       return { identifier, status: "unknown" };
     }
 
-    return { event: remoteEvent, identifier, status: "present" };
+    return { event: remoteEvent, identifier, status };
   };
 
-  const buildUidListingUrl = (calendarId: string, uid: string): URL => {
+  const presenceOfEvent = (identifier: string, body: unknown): EventPresence =>
+    presenceOfObservedEvent(identifier, body, "present");
+
+  const buildUidListingUrl = (calendarId: string, uid: string, nextLink: string | null): URL => {
+    if (nextLink) {
+      // Follow the link Graph handed back; re-deriving the filter here can skip past a page.
+      return toGraphFollowUrl(nextLink);
+    }
     const url = new URL(
       `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(calendarId)}/events`,
     );
@@ -558,22 +591,42 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     | { kind: "empty" }
     | { kind: "held"; events: OutlookEvent[] };
 
+  /* Graph does not promise a non-empty page before the last one, and this filter runs over the
+     non-indexed iCalUId, which is exactly the shape that hands back an empty page carrying a
+     $skiptoken. So "nothing here" is only true once the walk has reached the final page; a walk
+     that broke partway saw nothing about the uid and must say so. */
   const readUidListing = async (
     calendarId: string,
     uid: string,
   ): Promise<UidListingObservation> => {
-    const response = await readVerificationResponse(buildUidListingUrl(calendarId, uid));
-    if (!response.ok) {
-      await response.body?.cancel?.();
-      return { kind: "unreadable" };
-    }
+    const events: OutlookEvent[] = [];
+    let nextLink: string | null = null;
+    let pagesRead = 0;
 
-    const body = await response.json();
-    if (!outlookEventListSchema.allows(body)) {
-      return { kind: "unreadable" };
-    }
+    do {
+      config.signal?.throwIfAborted();
+      if (pagesRead >= OUTLOOK_UID_LISTING_PAGE_CAP) {
+        // A walk cut short by the cap is still a partial walk, so it proves no absence.
+        return { kind: "unreadable" };
+      }
 
-    const events = outlookEventListSchema.assert(body).value ?? [];
+      const url = buildUidListingUrl(calendarId, uid, nextLink);
+      const response = await readVerificationResponse(url);
+      if (!response.ok) {
+        await response.body?.cancel?.();
+        return { kind: "unreadable" };
+      }
+
+      const body = await response.json();
+      if (!outlookEventListSchema.allows(body)) {
+        return { kind: "unreadable" };
+      }
+
+      events.push(...(outlookEventListSchema.assert(body).value ?? []));
+      pagesRead += 1;
+      nextLink = readNextCalendarLink(body);
+    } while (nextLink);
+
     if (events.length === 0) {
       return { kind: "empty" };
     }
@@ -614,6 +667,36 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return identifiers;
   };
 
+  /* Every target settled inside one verification call is asking about the same mailbox, so its
+     folder list is read once for the whole batch instead of once per target — that multiplier is
+     what turns an emptied calendar into a throttling event.
+
+     The memo is built per call and dies with it: a folder the recipient creates between two calls
+     holds a real mirror, and deciding a create against a remembered list would duplicate it
+     permanently on a create-only push. An unreadable enumeration is never remembered either — it
+     observed nothing about the mailbox, so it may not stand in for the folder list. */
+  interface MailboxFolderMemo {
+    read: () => Promise<string[] | null>;
+  }
+
+  const createMailboxFolderMemo = (): MailboxFolderMemo => {
+    let pending: Promise<string[] | null> | null = null;
+
+    const read = async (): Promise<string[] | null> => {
+      if (!pending) {
+        pending = readMailboxCalendarIds();
+      }
+
+      const identifiers = await pending;
+      if (!identifiers) {
+        pending = null;
+      }
+      return identifiers;
+    };
+
+    return { read };
+  };
+
   /* Graph re-keys an item when it moves between folders of a mailbox, so the dead item id proves
      nothing on its own. The iCalUId survives the move and is the only handle that still names it.
 
@@ -622,7 +705,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
      is not. So the uid is carried across the whole mailbox and the verdict follows where it was
      found — in the destination it is present, in another folder it is still the customer's mirror
      and a create would duplicate it permanently, and nowhere at all is the only proof of absence. */
-  const resolvePresenceByUid = async (identifier: string, uid: string): Promise<EventPresence> => {
+  const resolvePresenceByUid = async (
+    identifier: string,
+    uid: string,
+    folders: MailboxFolderMemo,
+  ): Promise<EventPresence> => {
     const inDestination = await readUidListing(config.externalCalendarId, uid);
     if (inDestination.kind === "unreadable") {
       return { identifier, status: "unknown" };
@@ -636,7 +723,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       return presenceOfEvent(identifier, matched);
     }
 
-    const calendarIds = await readMailboxCalendarIds();
+    const calendarIds = await folders.read();
     if (!calendarIds) {
       return { identifier, status: "unknown" };
     }
@@ -652,7 +739,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         return { identifier, status: "unknown" };
       }
       if (observation.kind === "held") {
-        return { identifier, status: "elsewhere" };
+        const matched = readSoleEventForUid(observation.events, uid);
+        if (!matched) {
+          return { identifier, status: "unknown" };
+        }
+        return presenceOfObservedEvent(identifier, matched, "elsewhere");
       }
     }
 
@@ -660,7 +751,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return { identifier, status: "absent" };
   };
 
-  const verifyTarget = async (target: EventVerificationTarget): Promise<EventPresence> => {
+  const verifyTarget = async (
+    target: EventVerificationTarget,
+    folders: MailboxFolderMemo,
+  ): Promise<EventPresence> => {
     const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${target.deleteId}`);
     url.searchParams.set(
       "$select",
@@ -682,7 +776,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       return { identifier: target.deleteId, status: "unknown" };
     }
 
-    return await resolvePresenceByUid(target.deleteId, target.uid);
+    return await resolvePresenceByUid(target.deleteId, target.uid, folders);
   };
 
   const verifyEventsExist = async (
@@ -690,13 +784,14 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
   ): Promise<EventPresence[]> => {
     await refreshIfNeeded();
     const report: EventPresence[] = [];
+    const folders = createMailboxFolderMemo();
 
     for (const entry of targets) {
       config.signal?.throwIfAborted();
 
       const target = toVerificationTarget(entry);
       try {
-        report.push(await verifyTarget(target));
+        report.push(await verifyTarget(target, folders));
       } catch (error) {
         if (config.signal?.aborted) {
           throw error;

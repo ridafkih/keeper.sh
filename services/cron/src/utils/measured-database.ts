@@ -9,11 +9,15 @@ interface CounterRecorder {
 
 interface MeasuredDatabaseDependencies {
   counters: CounterRecorder;
+  /* Injectable so a test can state the elapsed time it means rather than racing the scheduler:
+     a wall-clock assertion here measures how loaded the machine is, not what was charged. */
+  now: () => number;
   recordSegment: (name: IngestSegmentKey, ms: number) => void;
 }
 
 const defaultDependencies: MeasuredDatabaseDependencies = {
   counters: widelog,
+  now: () => performance.now(),
   recordSegment,
 };
 
@@ -36,15 +40,15 @@ const runGatedStatement = async <TResult>(
     "database.queries.queued_count",
     countQueuedQuery(gate.hasFreePermit()),
   );
-  const queuedAt = performance.now();
+  const queuedAt = dependencies.now();
   return await gate.run(async () => {
-    dependencies.recordSegment(waitKey, performance.now() - queuedAt);
+    dependencies.recordSegment(waitKey, dependencies.now() - queuedAt);
     dependencies.counters.max("database.pool.in_flight", gate.inFlight());
-    const startedAt = performance.now();
+    const startedAt = dependencies.now();
     try {
       return await statement();
     } finally {
-      dependencies.recordSegment(workKey, performance.now() - startedAt);
+      dependencies.recordSegment(workKey, dependencies.now() - startedAt);
     }
   });
 };

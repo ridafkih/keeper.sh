@@ -393,6 +393,12 @@ const createDestinationReconciliationScope = (
  * them is visible in production instead of reading like a healthy one.
  */
 interface DestinationVerificationReport {
+  /*
+   * Where this pass stopped asking, carried to the next cycle so the budget resumes after it.
+   * Null means the next cycle starts from the top: the pass covered every unconfirmed mapping,
+   * or the caller does not carry a cursor at all. Absent when the caller never asked to rotate.
+   */
+  nextVerificationCursor?: string | null;
   unverifiedCount: number;
   unverifiedMappingIds: ReadonlySet<string>;
   verifiedAbsentCount: number;
@@ -500,6 +506,13 @@ interface DestinationRemoteReadContext {
   localEvents: MaterializedSyncableEvent[];
   provider: TargetedDestinationReadProvider;
   requestedWindow: SyncWindow;
+  /*
+   * The position the previous cycle's verification pass stopped at, as persisted per destination.
+   * Carrying the field - even holding null - is what enrolls a caller in rotation: the resume
+   * position is only reported back to a caller that keeps one, since a caller that discards it
+   * would advance nothing and only ever re-ask about the same prefix.
+   */
+  verificationCursor?: string | null;
 }
 
 interface DestinationRemoteRead {
@@ -560,6 +573,7 @@ const reportTargetedDestinationRead = (
       .map((mapping) => mapping.id),
   );
   return {
+    /* The targeted read asks about the whole push plan, so it never leaves a position to resume. */
     unverifiedCount: unverifiedMappingIds.size,
     unverifiedMappingIds,
     verifiedAbsentCount: askedDeleteIds.size - presentDeleteIds.size,
@@ -605,9 +619,12 @@ const createDefaultPresence = (
   return "absent";
 };
 
-/* A present answer carrying no event body cannot be matched back to its mapping, so it settles nothing. */
+/* An answer that names where the mirror is but carries no event body cannot be matched back to its
+   mapping, so it settles nothing: neither "present" nor "elsewhere" can be acted on without the
+   object, and a verdict nothing can act on has to leave the mapping unverified rather than let the
+   run walk past it as though the destination had been read. */
 const readReportedPresence = (entry: EventPresence): EventPresenceStatus => {
-  if (entry.status === "present" && !entry.event) {
+  if ((entry.status === "present" || entry.status === "elsewhere") && !entry.event) {
     return "unknown";
   }
   return entry.status;
@@ -640,6 +657,16 @@ const countVerifiedPresence = (
   status: EventPresenceStatus,
 ): number => [...presenceByDeleteId.values()].filter((value) => value === status).length;
 
+/* A mirror found in another folder of the same mailbox was found: it is the customer's copy, alive,
+   and the reconciliation repairs it in place rather than recreating it. Counting it anywhere near
+   absent would say a live mirror is gone, and counting it nowhere at all is how it stayed invisible
+   while the mapping froze -- so it is reported with the mirrors the read positively located. */
+const countMirrorsTheReadLocated = (
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+): number =>
+  countVerifiedPresence(presenceByDeleteId, "present")
+  + countVerifiedPresence(presenceByDeleteId, "elsewhere");
+
 /*
  * Everything past the budget is never asked about at all, so it joins the mappings the
  * provider could not settle: unknown, and left exactly as it is.
@@ -658,11 +685,81 @@ const collectUnverifiedMappingIds = (
   return unverifiedMappingIds;
 };
 
+/*
+ * A population larger than one budget used to be sliced from the same lexicographic start every
+ * cycle, so the tail was never asked about even once: a mirror the recipient deleted past that
+ * prefix stayed unverified forever and was never restored. The order stays deterministic, but the
+ * window now opens just after where the previous cycle stopped, so successive cycles walk the
+ * whole set. A cycle is still capped at the budget, and for a given cursor it asks about exactly
+ * the same mappings whatever order the rows arrived in.
+ */
+interface VerificationRotation {
+  cursor: string | null;
+}
+
+/* Only a caller that carries the cursor between runs can advance it, so only that caller rotates. */
+const readVerificationRotation = (
+  context: DestinationRemoteReadContext,
+): VerificationRotation | null => {
+  if (!("verificationCursor" in context)) {
+    return null;
+  }
+  return { cursor: context.verificationCursor ?? null };
+};
+
+const findVerificationRotationStart = (
+  sortedMappings: EventMapping[],
+  verificationCursor: string | null | undefined,
+): number => {
+  if (!verificationCursor) {
+    return 0;
+  }
+  const resumeIndex = sortedMappings.findIndex((mapping) =>
+    mapping.deleteIdentifier.localeCompare(verificationCursor) > 0);
+  /* The cursor sits at or past the end - a mapping since removed, or the last one asked about. */
+  if (resumeIndex === -1) {
+    return 0;
+  }
+  return resumeIndex;
+};
+
+const selectBudgetedMappings = (
+  sortedMappings: EventMapping[],
+  rotationStart: number,
+): EventMapping[] => {
+  if (sortedMappings.length <= DESTINATION_VERIFICATION_LIMIT) {
+    return sortedMappings;
+  }
+  const fromCursor = sortedMappings.slice(
+    rotationStart,
+    rotationStart + DESTINATION_VERIFICATION_LIMIT,
+  );
+  const wrapped = sortedMappings.slice(0, DESTINATION_VERIFICATION_LIMIT - fromCursor.length);
+  return [...fromCursor, ...wrapped];
+};
+
+/* Nothing was left out, so the next cycle starts from the top rather than resuming mid-set. */
+const readNextVerificationCursor = (
+  sortedMappings: EventMapping[],
+  budgetedMappings: EventMapping[],
+  rotation: VerificationRotation | null,
+): { nextVerificationCursor?: string | null } => {
+  if (!rotation) {
+    return {};
+  }
+  const lastAsked = budgetedMappings.at(-1);
+  if (budgetedMappings.length >= sortedMappings.length || !lastAsked) {
+    return { nextVerificationCursor: null };
+  }
+  return { nextVerificationCursor: lastAsked.deleteIdentifier };
+};
+
 const withVerifiedUnconfirmedMappings = async (
   provider: TargetedDestinationReadProvider,
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   requestedWindow: SyncWindow,
+  rotation: VerificationRotation | null,
 ): Promise<VerifiedDestinationRead> => {
   if (!provider.verifyEventsExist) {
     return { remoteEvents };
@@ -674,8 +771,13 @@ const withVerifiedUnconfirmedMappings = async (
       && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
     .toSorted((first, second) =>
       first.deleteIdentifier.localeCompare(second.deleteIdentifier));
-  const budgetedMappings = unconfirmedMappings.slice(0, DESTINATION_VERIFICATION_LIMIT);
-  const beyondBudgetMappings = unconfirmedMappings.slice(DESTINATION_VERIFICATION_LIMIT);
+  const budgetedMappings = selectBudgetedMappings(
+    unconfirmedMappings,
+    findVerificationRotationStart(unconfirmedMappings, rotation?.cursor),
+  );
+  const budgetedMappingIds = new Set(budgetedMappings.map((mapping) => mapping.id));
+  const beyondBudgetMappings = unconfirmedMappings
+    .filter((mapping) => !budgetedMappingIds.has(mapping.id));
   if (budgetedMappings.length === 0) {
     return { remoteEvents };
   }
@@ -694,10 +796,11 @@ const withVerifiedUnconfirmedMappings = async (
   return {
     remoteEvents: [...remoteEvents, ...toConfirmedRemoteEvents(verified)],
     verification: {
+      ...readNextVerificationCursor(unconfirmedMappings, budgetedMappings, rotation),
       unverifiedCount: unverifiedMappingIds.size,
       unverifiedMappingIds,
       verifiedAbsentCount: countVerifiedPresence(presenceByDeleteId, "absent"),
-      verifiedPresentCount: countVerifiedPresence(presenceByDeleteId, "present"),
+      verifiedPresentCount: countMirrorsTheReadLocated(presenceByDeleteId),
     },
   };
 };
@@ -721,6 +824,7 @@ const readDestinationRemoteEvents = async (
       context.existingMappings,
       remoteEvents,
       context.requestedWindow,
+      readVerificationRotation(context),
     );
     return { authoritativeMappingIds: null, ...verified };
   }
@@ -804,6 +908,7 @@ interface DestinationAttempt {
   syncFutureRange: string;
   syncHistoricRange: string;
   userId: string;
+  verificationCursor: string | null;
 }
 
 const getDestinationAttempt = async (
@@ -821,6 +926,7 @@ const getDestinationAttempt = async (
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
       userId: calendarsTable.userId,
+      verificationCursor: calendarsTable.verificationCursor,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -864,6 +970,25 @@ const resetDestinationBackoffIfNeeded = async (
   if (destination.failureCount > 0) {
     await resetDestinationBackoff(database, destination.calendarId);
   }
+};
+
+/*
+ * The pass has already spent its round trips by the time this runs, so the cursor advances even if
+ * the attempt is superseded later: a destination that keeps being cut short would otherwise re-ask
+ * about the same prefix forever, which is the starvation the rotation exists to end.
+ */
+const persistDestinationVerificationCursor = async (
+  database: BunSQLDatabase,
+  destination: DestinationAttempt,
+  nextVerificationCursor: string | null,
+): Promise<void> => {
+  if (nextVerificationCursor === destination.verificationCursor) {
+    return;
+  }
+  await database
+    .update(calendarsTable)
+    .set({ verificationCursor: nextVerificationCursor })
+    .where(eq(calendarsTable.id, destination.calendarId));
 };
 
 const hasSameRetryState = (
@@ -1105,10 +1230,18 @@ const syncDestinationsForUser = async (
                 localEvents: localState.localEvents,
                 provider: providerRef,
                 requestedWindow,
+                verificationCursor: destination.verificationCursor,
               });
               ({ authoritativeMappingIds } = read);
               verification = read.verification ?? null;
               unverifiedMappingIds = verification?.unverifiedMappingIds ?? new Set<string>();
+              if (read.verification) {
+                await persistDestinationVerificationCursor(
+                  database,
+                  destination,
+                  read.verification.nextVerificationCursor ?? null,
+                );
+              }
               return read.remoteEvents;
             } finally {
               remoteReadDurationMs = roundDuration(performance.now() - startedAt);

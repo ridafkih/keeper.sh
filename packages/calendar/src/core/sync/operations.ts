@@ -270,12 +270,15 @@ const matchRemoteEventsToMappings = (
       continue;
     }
 
-    if (mapping.deleteIdentifier !== mapping.destinationEventUid) {
-      continue;
-    }
-    const legacyUidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
-    if (legacyUidMatches.length === 1 && legacyUidMatches[0]) {
-      matches.set(mapping.id, legacyUidMatches[0]);
+    /* The stored id found nothing, so fall back to the uid the destination preserves across an
+       in-place re-key: a modern Outlook mapping holds a Graph item id that Graph can retire while
+       the iCalUId survives, and refusing to recognise the mirror under its new id is what let the
+       run plan a delete against the customer's live event. Only a sole carrier of the uid may
+       stand in for the mapping - two events sharing it name no single mirror, so ambiguity stays
+       unmatched and the mapping is left for the stale path to reason about. */
+    const uidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
+    if (uidMatches.length === 1 && uidMatches[0]) {
+      matches.set(mapping.id, uidMatches[0]);
     }
   }
 
@@ -735,7 +738,6 @@ const computeSyncOperations = (
       !staleMappingIdSet.has(mapping.id)
       && localEvent
       && remoteEvent
-      && mapping.deleteIdentifier === mapping.destinationEventUid
       && remoteEvent.deleteId !== mapping.deleteIdentifier
     ) {
       mappingUpdatesById.set(mapping.id, {

@@ -6,6 +6,24 @@ const GATE_DELAY_MS = 50;
 const STATEMENT_DELAY_MS = 5;
 const WORK_CEILING_MS = 40;
 
+/*
+ * The readings the engine will see, in call order: queued, gate-released, statement-started,
+ * statement-finished. Driving them makes "the gate wait is not charged to work" an exact claim
+ * rather than a wall-clock ceiling that only holds when the machine is idle.
+ */
+const createClock = (readings: number[]): (() => number) => {
+  let index = 0;
+
+  return (): number => {
+    const reading = readings[index] ?? readings.at(-1) ?? 0;
+    index += 1;
+
+    return reading;
+  };
+};
+
+const realClock = (): number => performance.now();
+
 const delay = (durationMs: number): Promise<null> =>
   new Promise((resolve) => {
     setTimeout(() => resolve(null), durationMs);
@@ -95,7 +113,11 @@ describe("measureDatabaseRead", () => {
         await delay(STATEMENT_DELAY_MS);
         return "rows";
       },
-      { counters, recordSegment: recorder.record },
+      {
+        counters,
+        now: createClock([0, GATE_DELAY_MS, GATE_DELAY_MS, GATE_DELAY_MS + STATEMENT_DELAY_MS]),
+        recordSegment: recorder.record,
+      },
     );
 
     expect(result).toBe("rows");
@@ -103,7 +125,7 @@ describe("measureDatabaseRead", () => {
       (segment) => segment.name === "work.db_read_ms",
     );
     expect(workSegments).toHaveLength(1);
-    expect(workSegments[0]?.ms).toBeLessThan(WORK_CEILING_MS);
+    expect(workSegments[0]?.ms).toBe(STATEMENT_DELAY_MS);
   });
 
   it("records the gate wait as wait.read_gate_ms", async () => {
@@ -117,7 +139,7 @@ describe("measureDatabaseRead", () => {
         await delay(STATEMENT_DELAY_MS);
         return "rows";
       },
-      { counters, recordSegment: recorder.record },
+      { counters, now: realClock, recordSegment: recorder.record },
     );
 
     const waitSegments = recorder.segments.filter(
@@ -133,7 +155,7 @@ describe("measureDatabaseRead", () => {
     await measureDatabaseRead(
       contendedGate,
       () => Promise.resolve("rows"),
-      { counters: contended.counters, recordSegment: (): null => null },
+      { counters: contended.counters, now: realClock, recordSegment: (): null => null },
     );
 
     expect(contended.counts).toContainEqual({ ms: 1, name: "db.read_count" });
@@ -145,7 +167,7 @@ describe("measureDatabaseRead", () => {
     await measureDatabaseRead(
       freeGate,
       () => Promise.resolve("rows"),
-      { counters: free.counters, recordSegment: (): null => null },
+      { counters: free.counters, now: realClock, recordSegment: (): null => null },
     );
 
     expect(free.counts).toContainEqual({ ms: 1, name: "db.read_count" });
@@ -160,7 +182,7 @@ describe("measureDatabaseRead", () => {
     await measureDatabaseRead(
       gate,
       () => Promise.resolve("rows"),
-      { counters, recordSegment: (): null => null },
+      { counters, now: realClock, recordSegment: (): null => null },
     );
 
     expect(maxima).toContainEqual({
@@ -178,7 +200,7 @@ describe("measureDatabaseWrite", () => {
     await measureDatabaseWrite(
       gate,
       () => Promise.resolve("written"),
-      { counters, recordSegment: (): null => null },
+      { counters, now: realClock, recordSegment: (): null => null },
     );
 
     expect(counts).toContainEqual({ ms: 1, name: "db.write_count" });
@@ -197,7 +219,7 @@ describe("measureDatabaseWrite", () => {
         await delay(STATEMENT_DELAY_MS);
         return "written";
       },
-      { counters, recordSegment: recorder.record },
+      { counters, now: realClock, recordSegment: recorder.record },
     );
 
     expect(result).toBe("written");
