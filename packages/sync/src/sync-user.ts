@@ -138,6 +138,8 @@ interface SyncConfig {
 }
 
 interface SyncDestinationsResult {
+  aborted: boolean;
+  abortedCount: number;
   added: number;
   addFailed: number;
   removed: number;
@@ -147,6 +149,8 @@ interface SyncDestinationsResult {
 }
 
 const EMPTY_RESULT: SyncDestinationsResult = {
+  aborted: false,
+  abortedCount: 0,
   added: 0,
   addFailed: 0,
   removed: 0,
@@ -820,6 +824,7 @@ const syncDestinationsForUser = async (
   const syncLock = createSyncLock(redis, "background");
   const isUserDeleted = createUserDeletedCheck(redis, userId);
 
+  let abortedCount = 0;
   let added = 0;
   let addFailed = 0;
   let removed = 0;
@@ -1093,10 +1098,18 @@ const syncDestinationsForUser = async (
           database,
           destination,
           handle,
-          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+          verdict: resolveDestinationAttemptVerdict(
+            result,
+            calendarAttempt.superseded,
+            result.aborted,
+          ),
         });
         if (!stillOwned) {
           return;
+        }
+
+        if (result.aborted) {
+          abortedCount += 1;
         }
 
         added += result.added;
@@ -1133,7 +1146,16 @@ const syncDestinationsForUser = async (
     await runDestinationAttempt(destinationCandidate);
   }
 
-  return { added, addFailed, removed, removeFailed, errors, syncEvents };
+  return {
+    aborted: abortedCount > 0,
+    abortedCount,
+    added,
+    addFailed,
+    removed,
+    removeFailed,
+    errors,
+    syncEvents,
+  };
 };
 
 export {

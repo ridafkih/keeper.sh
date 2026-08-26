@@ -878,11 +878,12 @@ interface SyncCalendarOptions {
 }
 
 interface SyncCalendarResult extends SyncResult {
+  aborted: boolean;
   conflictsResolved: number;
   errors: string[];
 }
 
-const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
+const EMPTY_RESULT: SyncCalendarResult = { aborted: false, added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
 const appendDatabaseErrorFields = (
   event: Record<string, unknown>,
@@ -1118,7 +1119,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;
     }
 
-    if (mappingUpdates.length > 0) {
+    if (mappingUpdates.length > 0 && !outcome.aborted) {
       await timer.measure(
         "mapping_flush",
         () => flush({ deletes: [], inserts: [], updates: mappingUpdates }),
@@ -1132,7 +1133,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
     const errorMessages = outcome.errors.map((operationError) => operationError.error);
-    return { ...outcome.result, conflictsResolved: outcome.conflictsResolved, errors: errorMessages };
+    return {
+      ...outcome.result,
+      aborted: outcome.aborted,
+      conflictsResolved: outcome.conflictsResolved,
+      errors: errorMessages,
+    };
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;

@@ -13,6 +13,7 @@ import {
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
 import { widelog } from "@/utils/logging";
+import { deleteUserSyncTeardown } from "@/utils/delete-user-teardown";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
@@ -80,6 +81,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   passkeyOrigin: env.PASSKEY_ORIGIN,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
+  deleteUserTeardown: deleteUserSyncTeardown,
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 

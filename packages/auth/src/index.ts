@@ -98,6 +98,8 @@ interface OAuthProviderAuthApi {
   getOpenIdConfig: (input: { headers: Headers }) => Promise<unknown>;
 }
 
+const POLAR_TEARDOWN_TIMEOUT_MS = 5000;
+
 const hasOAuthProviderApi = (
   api: object,
 ): api is OAuthProviderAuthApi => {
@@ -184,6 +186,7 @@ const createAuth = (config: AuthConfig) => {
       return new Polar({
         accessToken: polarAccessToken,
         server: polarMode,
+        timeoutMs: POLAR_TEARDOWN_TIMEOUT_MS,
       });
     }
     return null;
@@ -205,8 +208,8 @@ const createAuth = (config: AuthConfig) => {
   };
 
   const teardown = createDeleteUserTeardown([
-    ...buildPolarTeardownSteps(),
     { name: "sync", run: deleteUserTeardown },
+    ...buildPolarTeardownSteps(),
   ]);
 
   const beforeDelete: BeforeDeleteUser = async (user) => {
@@ -483,6 +486,10 @@ export {
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
 } from "./mcp-config";
+export type {
+  DeleteUserTeardown,
+  DeleteUserTeardownStep,
+} from "./delete-user-teardown";
 export type {
   AuthConfig,
   AuthResult,

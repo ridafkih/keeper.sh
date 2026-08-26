@@ -24,6 +24,7 @@ import { widelog } from "@/utils/logging";
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const LIVE_STATES = ["active", "degraded", "registering"];
+const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 
 interface DeregisterPushChannelsDependencies {
   createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
@@ -130,6 +131,7 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
 const deregisterPushChannelsWithin = async (
   scopeId: string,
   scopeColumn: "accountId" | "calendarId" | "userId",
+  states: string[],
 ): Promise<number> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
 
@@ -201,7 +203,7 @@ const deregisterPushChannelsWithin = async (
         .from(calendarPushChannelsTable)
         .where(and(
           eq(calendarPushChannelsTable[scopeColumn], scope),
-          inArray(calendarPushChannelsTable.state, LIVE_STATES),
+          inArray(calendarPushChannelsTable.state, states),
         ));
       return rows.map((row) => ({ ...row, state: toPushChannelState(row.state) }));
     },
@@ -217,13 +219,13 @@ const deregisterPushChannelsWithin = async (
 };
 
 const deregisterAccountPushChannels = async (accountId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(accountId, "accountId");
+  await deregisterPushChannelsWithin(accountId, "accountId", LIVE_STATES);
 
 const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(calendarId, "calendarId");
+  await deregisterPushChannelsWithin(calendarId, "calendarId", LIVE_STATES);
 
 const deregisterUserPushChannels = async (userId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(userId, "userId");
+  await deregisterPushChannelsWithin(userId, "userId", TEARDOWN_STATES);
 
 const runDeregisterAccountPushChannels = runDeregisterPushChannels;
 const runDeregisterUserPushChannels = runDeregisterPushChannels;
