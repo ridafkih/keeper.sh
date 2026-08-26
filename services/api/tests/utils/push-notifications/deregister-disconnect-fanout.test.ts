@@ -31,7 +31,8 @@ const makeChannel = (index: number): StoredPushChannel => ({
   verifiedAt: NOW,
 });
 
-const CHANNELS = Array.from({ length: CHANNEL_COUNT }, (_value, index) => makeChannel(index));
+const makeChannels = (count: number): StoredPushChannel[] =>
+  Array.from({ length: count }, (_value, index) => makeChannel(index));
 
 interface OverlapProbe {
   peak: number;
@@ -78,7 +79,7 @@ const makeDependencies = (
     now: NOW,
     requestedExpiresAt: NOW,
   }),
-  listLiveChannels: () => Promise.resolve(CHANNELS),
+  listLiveChannels: () => Promise.resolve(makeChannels(CHANNEL_COUNT)),
   markChannelsStopped: () => Promise.resolve(),
   observe: (fields: Record<string, unknown>) => {
     observedFields.push(fields);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   DeleteResult,
   EventMapping,
@@ -7,67 +7,9 @@ import type {
   RemoteEvent,
 } from "@keeper.sh/calendar";
 
-const resolveSyncProviderMock = vi.fn();
-const isCalendarInvalidatedMock = vi.fn(
-  (_redis: unknown, _calendarId: string) => Promise.resolve(false),
-);
-const handleIsCurrentMock = vi.fn(() => Promise.resolve(true));
-const acquireMock = vi.fn();
-const localEventsMock = vi.fn((): MaterializedSyncableEvent[] => []);
-const flushedChanges: unknown[] = [];
-const mappingsMock = vi.fn((): EventMapping[] => []);
-
 const USER_ID = "user-1";
 const CALENDAR_ID = "destination-1";
 const SOURCE_ID = "source-1";
-
-vi.mock("@keeper.sh/calendar", async (importOriginal) => {
-  const original = await importOriginal<Record<string, unknown>>();
-  return {
-    ...original,
-    createDatabaseFlush: () => (changes: unknown) => {
-      flushedChanges.push(changes);
-      return Promise.resolve();
-    },
-    createGoogleUserRateLimiter: () => null,
-    getEventMappingsForDestination: () => Promise.resolve(mappingsMock()),
-    getEventsForCalendarsWithDiagnostics: () => Promise.resolve({
-      diagnostics: {
-        candidateEventStateCount: 0,
-        excludedBySyncPolicyCount: 0,
-        materializedEventCount: 0,
-        missingSourceEventUidCount: 0,
-        outsideReconciliationWindowCount: 0,
-        overBudgetSourceEventStateIds: [],
-        overBudgetSourceEventUids: [],
-        syncableEventCount: 0,
-      },
-      events: localEventsMock(),
-    }),
-    getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
-    withSourceIngestLocks: (
-      database: unknown,
-      _ids: string[],
-      run: (database: unknown) => Promise<unknown>,
-    ) => run(database),
-  };
-});
-
-vi.mock("../src/resolve-provider", () => ({
-  resolveSyncProvider: (options: unknown) => resolveSyncProviderMock(options),
-}));
-
-vi.mock("../src/sync-lock", () => ({
-  createMappingMutationLockId: (userId: string) => `mapping:${userId}`,
-  createSyncLock: () => ({
-    acquire: (calendarId: string, signal: unknown, lockId: string) =>
-      acquireMock(calendarId, signal, lockId),
-  }),
-  isCalendarInvalidated: (redis: unknown, calendarId: string) =>
-    isCalendarInvalidatedMock(redis, calendarId),
-}));
-
-const { syncDestinationsForUser } = await import("../src/sync-user");
 
 const START = new Date("2026-03-08T00:30:00.000Z");
 
@@ -75,6 +17,18 @@ interface CalendarRow {
   failureCount: number;
   lastFailureAt: Date | null;
   nextAttemptAt: Date | null;
+}
+
+interface HarnessOptions {
+  calendarInvalidated?: boolean;
+  deleteEvents?: (ids: string[]) => Promise<DeleteResult[]>;
+  deletionTombstonePresent?: boolean;
+  handleIsCurrent?: () => Promise<boolean>;
+  listRemoteEvents?: () => Promise<RemoteEvent[]>;
+  localEvents?: () => MaterializedSyncableEvent[];
+  mappings?: () => EventMapping[];
+  pushEvents?: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
+  row?: Partial<CalendarRow>;
 }
 
 const makeEvent = (id: string, startTime: Date): MaterializedSyncableEvent => ({
@@ -88,14 +42,32 @@ const makeEvent = (id: string, startTime: Date): MaterializedSyncableEvent => ({
   summary: `Event ${id}`,
 });
 
-const createHarness = (initial: Partial<CalendarRow> = {}) => {
+const createHarness = (options: HarnessOptions = {}) => {
   const row: CalendarRow = {
     failureCount: 0,
     lastFailureAt: null,
     nextAttemptAt: null,
-    ...initial,
+    ...options.row,
   };
   const writes: Partial<CalendarRow>[] = [];
+  const flushedChanges: unknown[] = [];
+
+  const localEvents = options.localEvents ?? ((): MaterializedSyncableEvent[] => []);
+  const mappings = options.mappings ?? ((): EventMapping[] => []);
+  const handleIsCurrent = options.handleIsCurrent ?? (() => Promise.resolve(true));
+  const calendarInvalidated = options.calendarInvalidated ?? false;
+
+  const provider = {
+    deleteEvents: options.deleteEvents
+      ?? ((ids: string[]) => Promise.resolve(ids.map(() => ({ success: true })))),
+    listRemoteEvents: options.listRemoteEvents ?? (() => Promise.resolve([])),
+    pushEvents: options.pushEvents
+      ?? ((events: MaterializedSyncableEvent[]) =>
+        Promise.resolve(events.map((_event, index) => ({
+          remoteId: `remote-${index}`,
+          success: true,
+        })))),
+  };
 
   const sourceRow = {
     id: SOURCE_ID,
@@ -142,56 +114,87 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
     }),
   };
 
-  return { database, row, writes };
-};
+  const deletionTombstoneCount = Number(options.deletionTombstonePresent ?? false);
 
-const config = (database: unknown, overrides: Record<string, unknown> = {}) => ({
-  destinationCalendarId: CALENDAR_ID,
-  database: database as never,
-  redis: { exists: () => Promise.resolve(0) } as never,
-  oauthConfig: {} as never,
-  plan: "pro" as never,
-  ...overrides,
-});
-
-const setProvider = (overrides: {
-  deleteEvents?: (ids: string[]) => Promise<DeleteResult[]>;
-  listRemoteEvents?: () => Promise<RemoteEvent[]>;
-  pushEvents?: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
-}) => {
-  const provider = {
-    deleteEvents: overrides.deleteEvents
-      ?? ((ids: string[]) => Promise.resolve(ids.map(() => ({ success: true })))),
-    listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
-    pushEvents: overrides.pushEvents
-      ?? ((events: MaterializedSyncableEvent[]) =>
-        Promise.resolve(events.map((_event, index) => ({
-          remoteId: `remote-${index}`,
-          success: true,
-        })))),
+  const config = {
+    destinationCalendarId: CALENDAR_ID,
+    database: database as never,
+    redis: {
+      exists: () => Promise.resolve(deletionTombstoneCount),
+    } as never,
+    oauthConfig: {} as never,
+    plan: "pro" as never,
   };
-  resolveSyncProviderMock.mockImplementation(() => Promise.resolve(provider));
-  return provider;
-};
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.setSystemTime(START);
-  flushedChanges.length = 0;
-  handleIsCurrentMock.mockImplementation(() => Promise.resolve(true));
-  isCalendarInvalidatedMock.mockImplementation(() => Promise.resolve(false));
-  localEventsMock.mockImplementation(() => []);
-  mappingsMock.mockImplementation(() => []);
-  acquireMock.mockImplementation(() => Promise.resolve({
-    acquired: true,
-    handle: { isCurrent: handleIsCurrentMock, release: () => Promise.resolve() },
-  }));
-  setProvider({});
-});
+  const syncDestinations = async (
+    callbacks: { onSyncEvent: (event: Record<string, unknown>) => void },
+  ) => {
+    vi.resetModules();
+
+    vi.doMock("@keeper.sh/calendar", async (importOriginal) => {
+      const original = await importOriginal<Record<string, unknown>>();
+      return {
+        ...original,
+        createDatabaseFlush: () => (changes: unknown) => {
+          flushedChanges.push(changes);
+          return Promise.resolve();
+        },
+        createGoogleUserRateLimiter: () => null,
+        getEventMappingsForDestination: () => Promise.resolve(mappings()),
+        getEventsForCalendarsWithDiagnostics: () => Promise.resolve({
+          diagnostics: {
+            candidateEventStateCount: 0,
+            excludedBySyncPolicyCount: 0,
+            materializedEventCount: 0,
+            missingSourceEventUidCount: 0,
+            outsideReconciliationWindowCount: 0,
+            overBudgetSourceEventStateIds: [],
+            overBudgetSourceEventUids: [],
+            syncableEventCount: 0,
+          },
+          events: localEvents(),
+        }),
+        getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+        withSourceIngestLocks: (
+          database_: unknown,
+          _ids: string[],
+          run: (database_: unknown) => Promise<unknown>,
+        ) => run(database_),
+      };
+    });
+
+    vi.doMock("../src/resolve-provider", () => ({
+      resolveSyncProvider: () => Promise.resolve(provider),
+    }));
+
+    vi.doMock("../src/sync-lock", () => ({
+      createMappingMutationLockId: (userId: string) => `mapping:${userId}`,
+      createSyncLock: () => ({
+        acquire: () => Promise.resolve({
+          acquired: true,
+          handle: { isCurrent: handleIsCurrent, release: () => Promise.resolve() },
+        }),
+      }),
+      isCalendarInvalidated: () => Promise.resolve(calendarInvalidated),
+    }));
+
+    const { syncDestinationsForUser } = await import("../src/sync-user");
+
+    vi.useFakeTimers();
+    vi.setSystemTime(START);
+    try {
+      return await syncDestinationsForUser(USER_ID, config, callbacks);
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  return { flushedChanges, provider, row, syncDestinations, writes };
+};
 
 afterEach(() => {
   vi.useRealTimers();
-  vi.clearAllMocks();
+  vi.resetModules();
 });
 
 describe("a destination run the deletion tombstone aborts", () => {
@@ -201,19 +204,15 @@ describe("a destination run the deletion tombstone aborts", () => {
 
   it("pushes nothing, verdicts as inconclusive, and leaves the accumulated backoff intact", async () => {
     const previousNextAttemptAt = new Date(START.getTime() - 1);
-    const { database, row, writes } = createHarness({
-      failureCount: 4,
-      lastFailureAt: new Date(START.getTime() - 60_000),
-      nextAttemptAt: previousNextAttemptAt,
-    });
-    localEventsMock.mockImplementation(pendingAdds);
     let pushCalls = 0;
     let deleteCalls = 0;
-    setProvider({
+    const { flushedChanges, row, syncDestinations, writes } = createHarness({
       deleteEvents: (ids) => {
         deleteCalls += 1;
         return Promise.resolve(ids.map(() => ({ success: true })));
       },
+      deletionTombstonePresent: true,
+      localEvents: pendingAdds,
       pushEvents: (events) => {
         pushCalls += 1;
         return Promise.resolve(events.map((_event, index) => ({
@@ -221,18 +220,19 @@ describe("a destination run the deletion tombstone aborts", () => {
           success: true,
         })));
       },
+      row: {
+        failureCount: 4,
+        lastFailureAt: new Date(START.getTime() - 60_000),
+        nextAttemptAt: previousNextAttemptAt,
+      },
     });
     const syncEvents: Record<string, unknown>[] = [];
 
-    const result = await syncDestinationsForUser(
-      USER_ID,
-      config(database, { redis: { exists: () => Promise.resolve(1) } }),
-      {
-        onSyncEvent: (event: Record<string, unknown>) => {
-          syncEvents.push(event);
-        },
+    const result = await syncDestinations({
+      onSyncEvent: (event: Record<string, unknown>) => {
+        syncEvents.push(event);
       },
-    );
+    });
 
     expect({ deleteCalls, pushCalls }).toEqual({ deleteCalls: 0, pushCalls: 0 });
     expect(flushedChanges).toEqual([]);
@@ -247,5 +247,5 @@ describe("a destination run the deletion tombstone aborts", () => {
 
     expect(result.aborted).toBe(true);
     expect(result.added).toBe(0);
-  });
+  }, 30_000);
 });

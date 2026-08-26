@@ -1,20 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 import { drizzle } from "drizzle-orm/pg-proxy";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import {
   DEREGISTRATION_FAILED_SLUG,
-  deregisterAccountPushChannels,
-  deregisterCalendarPushChannels,
   deregisterUserPushChannels,
   runDeregisterUserPushChannels,
 } from "../../../src/utils/push-notifications/deregister-account-channels";
-
-const deregistration: Record<string, unknown> = {
-  DEREGISTRATION_FAILED_SLUG,
-  deregisterUserPushChannels,
-  runDeregisterUserPushChannels,
-};
 
 const NOW = new Date("2026-08-25T06:15:33.956Z");
 
@@ -74,11 +66,9 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
 });
 
 const resolveUserRunner = () => {
-  const runner = deregistration.runDeregisterUserPushChannels;
+  expect(runDeregisterUserPushChannels).toBeTypeOf("function");
 
-  expect(runner).toBeTypeOf("function");
-
-  return runner as (
+  return runDeregisterUserPushChannels as unknown as (
     userId: string,
     dependencies: ReturnType<typeof makeDependencies>,
   ) => Promise<number>;
@@ -86,8 +76,7 @@ const resolveUserRunner = () => {
 
 describe("push channel teardown for a deleted user", () => {
   it("exposes a user scoped deregistration entry point for delete teardown", () => {
-    expect(deregistration.deregisterUserPushChannels)
-      .toBeTypeOf("function");
+    expect(deregisterUserPushChannels).toBeTypeOf("function");
   });
 
   it("deregisters every live channel the user owns across providers", async () => {
@@ -144,7 +133,7 @@ describe("push channel teardown for a deleted user", () => {
     ]);
 
     const [, slug] = dependencies.recordError.mock.calls[0] as [unknown, string];
-    expect(slug).toBe(deregistration.DEREGISTRATION_FAILED_SLUG);
+    expect(slug).toBe(DEREGISTRATION_FAILED_SLUG);
     expect(dependencies.observe).toHaveBeenCalledWith(expect.objectContaining({
       "push_channel.disconnect_deregistered_count": 2,
       "push_channel.disconnect_live_count": 3,
@@ -180,32 +169,34 @@ interface SeededChannelRow {
   verifiedAt: string | null;
 }
 
-const ISO_NOW = NOW.toISOString();
+const makeRow = (overrides: Partial<SeededChannelRow>): SeededChannelRow => {
+  const isoNow = NOW.toISOString();
 
-const makeRow = (overrides: Partial<SeededChannelRow>): SeededChannelRow => ({
-  accountId: "account-a",
-  calendarId: "cal-a",
-  createdAt: ISO_NOW,
-  expiresAt: new Date(NOW.getTime() + 600_000).toISOString(),
-  failureCount: 0,
-  id: "row-0",
-  lastFailureAt: null,
-  lastNotificationAt: null,
-  nextAttemptAt: null,
-  provider: "google",
-  providerChannelId: null,
-  providerResourceId: "google-resource",
-  reauthorizeRequestedAt: null,
-  resourcePath: "/calendars/primary/events",
-  secretHash: "b".repeat(64),
-  state: "active",
-  updatedAt: ISO_NOW,
-  userId: "user-a",
-  verifiedAt: ISO_NOW,
-  ...overrides,
-});
+  return {
+    accountId: "account-a",
+    calendarId: "cal-a",
+    createdAt: isoNow,
+    expiresAt: new Date(NOW.getTime() + 600_000).toISOString(),
+    failureCount: 0,
+    id: "row-0",
+    lastFailureAt: null,
+    lastNotificationAt: null,
+    nextAttemptAt: null,
+    provider: "google",
+    providerChannelId: null,
+    providerResourceId: "google-resource",
+    reauthorizeRequestedAt: null,
+    resourcePath: "/calendars/primary/events",
+    secretHash: "b".repeat(64),
+    state: "active",
+    updatedAt: isoNow,
+    userId: "user-a",
+    verifiedAt: isoNow,
+    ...overrides,
+  };
+};
 
-const SEEDED_ROWS: SeededChannelRow[] = [
+const seedChannelRows = (): SeededChannelRow[] => [
   makeRow({ id: "row-active", providerChannelId: "google-active", state: "active" }),
   makeRow({ id: "row-degraded", providerChannelId: "google-degraded", state: "degraded" }),
   makeRow({ id: "row-failed", providerChannelId: "google-failed", state: "failed" }),
@@ -218,14 +209,6 @@ const SEEDED_ROWS: SeededChannelRow[] = [
     state: "failed",
     userId: "user-b",
   }),
-];
-
-const CREDENTIALS_ROW = [
-  "access-token-a",
-  "account-a",
-  new Date(NOW.getTime() + 3_600_000).toISOString(),
-  "oauth-credential-a",
-  "refresh-token-a",
 ];
 
 const selectedNames = (sql: string): string[] =>
@@ -243,7 +226,11 @@ const selectedNames = (sql: string): string[] =>
 const parameterIndexes = (fragment: string): number[] =>
   [...fragment.matchAll(/\$(\d+)/gu)].map(([, index]) => Number(index));
 
-const matchingRows = (sql: string, params: unknown[]): SeededChannelRow[] => {
+const matchingRows = (
+  rows: SeededChannelRow[],
+  sql: string,
+  params: unknown[],
+): SeededChannelRow[] => {
   const scope = /"calendar_push_channels"\."(\w+)" = \$(\d+)/u.exec(sql);
   const states = /"calendar_push_channels"\."state" in \(([^)]*)\)/u.exec(sql);
 
@@ -256,33 +243,40 @@ const matchingRows = (sql: string, params: unknown[]): SeededChannelRow[] => {
   const wantedStates = new Set(parameterIndexes(states[1] as string)
     .map((index) => params[index - 1]));
 
-  return SEEDED_ROWS.filter((row) =>
+  return rows.filter((row) =>
     row[scopeColumn] === scopeValue && wantedStates.has(row.state));
 };
 
-const createProxyDatabase = (queries: ProxyQuery[]) =>
-  drizzle((sql, params, method) => {
+const createProxyDatabase = (queries: ProxyQuery[], rows: SeededChannelRow[]) => {
+  const credentialsRow = [
+    "access-token-a",
+    "account-a",
+    new Date(NOW.getTime() + 3_600_000).toISOString(),
+    "oauth-credential-a",
+    "refresh-token-a",
+  ];
+
+  return drizzle((sql, params, method) => {
     queries.push({ method, params, sql });
 
     if (sql.includes("\"calendar_push_channels\"")) {
       const names = selectedNames(sql);
       return Promise.resolve({
-        rows: matchingRows(sql, params).map((row) =>
+        rows: matchingRows(rows, sql, params).map((row) =>
           names.map((name) => row[name as keyof SeededChannelRow])),
       });
     }
 
     if (sql.includes("\"oauth_credentials\"")) {
-      return Promise.resolve({ rows: [CREDENTIALS_ROW] });
+      return Promise.resolve({ rows: [credentialsRow] });
     }
 
     throw new Error(`Unexpected query: ${sql}`);
   });
-
-const PUSH_CHANNEL_QUERY = "\"calendar_push_channels\"";
+};
 
 const channelQueries = (queries: ProxyQuery[]): ProxyQuery[] =>
-  queries.filter((query) => query.sql.includes(PUSH_CHANNEL_QUERY));
+  queries.filter((query) => query.sql.includes("\"calendar_push_channels\""));
 
 const requestedStates = (query: ProxyQuery): unknown[] => {
   const states = /"calendar_push_channels"\."state" in \(([^)]*)\)/u.exec(query.sql);
@@ -296,42 +290,47 @@ const stoppedChannelIds = (fetchStub: Mock): string[] =>
   fetchStub.mock.calls.map(([, init]) =>
     (JSON.parse(String((init as RequestInit).body)) as { id: string }).id);
 
-const createStopFetchStub = () =>
-  vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
+const installScopingHarness = async () => {
+  const queries: ProxyQuery[] = [];
+  const rows = seedChannelRows();
+  const fetchStub = vi.fn(() => Promise.resolve(new Response(null, { status: 204 })));
 
-const proxyQueries: ProxyQuery[] = [];
-let contextFetch = createStopFetchStub();
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    fetchStub as unknown as typeof globalThis.fetch,
+  );
 
-vi.mock("@/context", () => ({
-  database: createProxyDatabase(proxyQueries),
-  env: {},
-  refreshLockStore: {
-    release: () => Promise.resolve(),
-    tryAcquire: () => Promise.resolve(true),
-  },
-  webhookConfig: {
-    googleCallbackUrl: "https://example.com/api/webhook/google",
-    outlookCallbackUrl: "https://example.com/api/webhook/outlook",
-  },
-}));
+  vi.doMock("@/context", () => ({
+    database: createProxyDatabase(queries, rows),
+    env: {},
+    refreshLockStore: {
+      release: () => Promise.resolve(),
+      tryAcquire: () => Promise.resolve(true),
+    },
+    webhookConfig: {
+      googleCallbackUrl: "https://example.com/api/webhook/google",
+      outlookCallbackUrl: "https://example.com/api/webhook/outlook",
+    },
+  }));
+  vi.resetModules();
+
+  const deregistration = await import("../../../src/utils/push-notifications/deregister-account-channels");
+
+  return { deregistration, fetchStub, queries };
+};
 
 describe("push channel teardown SQL scoping for a deleted user", () => {
-  beforeEach(() => {
-    proxyQueries.length = 0;
-    contextFetch = createStopFetchStub();
-    vi.spyOn(globalThis, "fetch").mockImplementation(
-      contextFetch as unknown as typeof globalThis.fetch,
-    );
-  });
-
   afterEach(() => {
+    vi.doUnmock("@/context");
+    vi.resetModules();
     vi.restoreAllMocks();
   });
 
   it("stops the user's failed channels alongside the live ones without touching another user", async () => {
-    await expect(deregisterUserPushChannels("user-a")).resolves.toBe(3);
+    const { deregistration, fetchStub, queries } = await installScopingHarness();
 
-    const [query] = channelQueries(proxyQueries);
+    await expect(deregistration.deregisterUserPushChannels("user-a")).resolves.toBe(3);
+
+    const [query] = channelQueries(queries);
     expect(query).toBeDefined();
     expect((query as ProxyQuery).sql)
       .toContain("\"calendar_push_channels\".\"userId\" = $1");
@@ -339,14 +338,16 @@ describe("push channel teardown SQL scoping for a deleted user", () => {
     expect(requestedStates(query as ProxyQuery).toSorted())
       .toEqual(["active", "degraded", "failed", "registering"]);
 
-    expect(stoppedChannelIds(contextFetch as unknown as Mock))
+    expect(stoppedChannelIds(fetchStub as unknown as Mock))
       .toEqual(["google-active", "google-degraded", "google-failed"]);
   });
 
   it("keeps the account scoped disconnect path away from failed channels", async () => {
-    await deregisterAccountPushChannels("account-a");
+    const { deregistration, queries } = await installScopingHarness();
 
-    const [query] = channelQueries(proxyQueries);
+    await deregistration.deregisterAccountPushChannels("account-a");
+
+    const [query] = channelQueries(queries);
     expect(query).toBeDefined();
     expect((query as ProxyQuery).sql)
       .toContain("\"calendar_push_channels\".\"accountId\" = $1");
@@ -354,9 +355,11 @@ describe("push channel teardown SQL scoping for a deleted user", () => {
   });
 
   it("keeps the calendar scoped disconnect path away from failed channels", async () => {
-    await deregisterCalendarPushChannels("cal-a");
+    const { deregistration, queries } = await installScopingHarness();
 
-    const [query] = channelQueries(proxyQueries);
+    await deregistration.deregisterCalendarPushChannels("cal-a");
+
+    const [query] = channelQueries(queries);
     expect(query).toBeDefined();
     expect((query as ProxyQuery).sql)
       .toContain("\"calendar_push_channels\".\"calendarId\" = $1");

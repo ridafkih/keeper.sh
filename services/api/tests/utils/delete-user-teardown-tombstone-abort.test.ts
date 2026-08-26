@@ -1,37 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { DeleteUserSyncQueue } from "@/utils/delete-user-teardown";
-
-interface LoggedError {
-  error: unknown;
-  fields: Record<string, unknown>;
-}
-
-const loggedErrors: LoggedError[] = [];
-const loggedFields: Record<string, unknown>[] = [];
-
-vi.mock("@/utils/logging", () => ({
-  context: (run: () => unknown) => run(),
-  destroy: () => Promise.resolve(),
-  widelog: {
-    error: (prefix: string, error: unknown) => {
-      loggedErrors.push({ error, fields: { prefix } });
-    },
-    errorFields: (error: unknown, fields: Record<string, unknown>) => {
-      loggedErrors.push({ error, fields });
-    },
-    set: (key: string, value: unknown) => {
-      loggedFields.push({ [key]: value });
-    },
-    setFields: (fields: Record<string, unknown>) => {
-      loggedFields.push(fields);
-    },
-  },
-}));
-
-const { createUserDeletedCheck, deletedUserTombstoneKey } = await import("@keeper.sh/calendar");
-const { createDeleteUserSyncTeardown, createDeleteUserSyncTeardownRollback } = await import(
-  "@/utils/delete-user-teardown"
-);
 
 const SLOW_FIRST_SET_MS = 2500;
 const RETRY_DRAIN_MS = 1000;
@@ -76,6 +44,11 @@ const createUnusedQueue = (): DeleteUserSyncQueue => ({
 
 describe("delete user teardown tombstone abort", () => {
   it("leaves no tombstone behind when the aborted write retries after the rollback", async () => {
+    const { createUserDeletedCheck, deletedUserTombstoneKey } = await import("@keeper.sh/calendar");
+    const { createDeleteUserSyncTeardown, createDeleteUserSyncTeardownRollback } = await import(
+      "@/utils/delete-user-teardown"
+    );
+
     const redis = createFifoRedis();
 
     const teardown = createDeleteUserSyncTeardown({

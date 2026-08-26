@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import {
   collectGuardedFiles,
   findOpaqueIdentifierOffenders,
@@ -13,11 +13,11 @@ const repositoryRoot = resolve(import.meta.dirname, "../../..");
 const opaqueToken = ["aB3xQ9zK1mN7pR2s", "T5vW8yC4dF6gH0jL"].join("");
 const wallClockTimestamp = ["06:15:33.956", "UTC"].join(" ");
 
-const temporaryRoots: string[] = [];
-
 const makeTemporaryRoot = async () => {
   const root = await mkdtemp(resolve(tmpdir(), "identifier-guard-root-"));
-  temporaryRoots.push(root);
+  onTestFinished(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
   return root;
 };
 
@@ -26,12 +26,6 @@ const writeUnder = async (root: string, relativePath: string, body: string) => {
   await mkdir(resolve(absolute, ".."), { recursive: true });
   await writeFile(absolute, `export const fixtureValue = ${JSON.stringify(body)};\n`);
 };
-
-afterEach(async () => {
-  for (const root of temporaryRoots.splice(0)) {
-    await rm(root, { recursive: true, force: true });
-  }
-});
 
 const probedDirectories = ["packages/auth/tests", "packages/queue/tests"];
 

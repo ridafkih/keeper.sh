@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DELETED_USER_TOMBSTONE_TTL_SECONDS,
   createUserDeletedCheck,
@@ -7,10 +7,6 @@ import {
 } from "@keeper.sh/calendar";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import { runDeregisterPushChannels } from "@/utils/push-notifications/deregister-account-channels";
-
-const state = vi.hoisted(() => ({
-  redisInstances: [] as unknown[],
-}));
 
 process.env.API_PORT ??= "3000";
 process.env.BETTER_AUTH_SECRET ??= "test-secret";
@@ -21,10 +17,6 @@ process.env.REDIS_URL ??= "redis://localhost:6379";
 class FakeIoRedis {
   calls: string[] = [];
   store = new Map<string, string>();
-
-  constructor() {
-    state.redisInstances.push(this);
-  }
 
   set(key: string, value: string, mode?: string, ttlSeconds?: number): Promise<string> {
     this.calls.push(`set:${key}:${mode ?? ""}:${ttlSeconds ?? ""}`);
@@ -93,27 +85,47 @@ interface LoggedError {
   fields: Record<string, unknown>;
 }
 
-const loggedErrors: LoggedError[] = [];
-const loggedFields: Record<string, unknown>[] = [];
+interface WideEventCapture {
+  loggedErrors: LoggedError[];
+  loggedFields: Record<string, unknown>[];
+}
 
-vi.mock("@/utils/logging", () => ({
-  context: (run: () => unknown) => run(),
-  destroy: () => Promise.resolve(),
-  widelog: {
-    error: (prefix: string, error: unknown) => {
-      loggedErrors.push({ error, fields: { prefix } });
+vi.mock("@/utils/logging", () => {
+  const loggedErrors: LoggedError[] = [];
+  const loggedFields: Record<string, unknown>[] = [];
+
+  return {
+    context: (run: () => unknown) => run(),
+    destroy: () => Promise.resolve(),
+    startWideEventCapture: (): WideEventCapture => {
+      loggedErrors.length = 0;
+      loggedFields.length = 0;
+      return { loggedErrors, loggedFields };
     },
-    errorFields: (error: unknown, fields: Record<string, unknown>) => {
-      loggedErrors.push({ error, fields });
+    widelog: {
+      error: (prefix: string, error: unknown) => {
+        loggedErrors.push({ error, fields: { prefix } });
+      },
+      errorFields: (error: unknown, fields: Record<string, unknown>) => {
+        loggedErrors.push({ error, fields });
+      },
+      set: (key: string, value: unknown) => {
+        loggedFields.push({ [key]: value });
+      },
+      setFields: (fields: Record<string, unknown>) => {
+        loggedFields.push(fields);
+      },
     },
-    set: (key: string, value: unknown) => {
-      loggedFields.push({ [key]: value });
-    },
-    setFields: (fields: Record<string, unknown>) => {
-      loggedFields.push(fields);
-    },
-  },
-}));
+  };
+});
+
+const startWideEventCapture = async (): Promise<WideEventCapture> => {
+  const logging = (await import("@/utils/logging")) as unknown as {
+    startWideEventCapture: () => WideEventCapture;
+  };
+
+  return logging.startWideEventCapture();
+};
 
 const NOW = new Date("2026-08-25T06:15:33.956Z");
 const CHANNEL_TTL_MS = 60_000;
@@ -142,7 +154,7 @@ const makeChannel = (overrides: Partial<StoredPushChannel>): StoredPushChannel =
   ...overrides,
 });
 
-const CHANNELS: StoredPushChannel[] = [
+const seedChannels = (): StoredPushChannel[] => [
   makeChannel({}),
   makeChannel({
     accountId: "account-A-2",
@@ -162,10 +174,18 @@ const CHANNELS: StoredPushChannel[] = [
   }),
 ];
 
-const CALENDAR_IDS = new Map<string, string[]>([
-  ["A", ["cal1", "cal2"]],
-  ["B", ["cal9"]],
-]);
+const seedCalendarIds = (channels: StoredPushChannel[]): Map<string, string[]> => {
+  const calendarIds = new Map<string, string[]>();
+
+  for (const channel of channels) {
+    calendarIds.set(channel.userId, [
+      ...(calendarIds.get(channel.userId) ?? []),
+      channel.calendarId,
+    ]);
+  }
+
+  return calendarIds;
+};
 
 const NO_CONTENT = 204;
 
@@ -179,6 +199,8 @@ const readBody = (init?: RequestInit): string => {
 interface Harness {
   dependencies: Record<string, unknown>;
   events: string[];
+  loggedErrors: LoggedError[];
+  loggedFields: Record<string, unknown>[];
   redis: FakeIoRedis;
   remainingJobIds: () => string[];
   removedJobIds: string[];
@@ -190,7 +212,10 @@ interface HarnessOverrides {
   lockedJobIds?: string[];
 }
 
-const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
+const makeHarness = async (overrides: HarnessOverrides = {}): Promise<Harness> => {
+  const { loggedErrors, loggedFields } = await startWideEventCapture();
+  const channels = seedChannels();
+  const calendarIds = seedCalendarIds(channels);
   const events: string[] = [];
   const redis = new FakeIoRedis();
   const removedJobIds: string[] = [];
@@ -229,7 +254,7 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
   const stubFetch = ((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
     const body = readBody(init);
-    for (const channel of CHANNELS) {
+    for (const channel of channels) {
       const channelId = channel.providerChannelId;
       if (channelId !== null && (url.includes(channelId) || body.includes(channelId))) {
         stoppedChannelIds.push(channelId);
@@ -253,7 +278,7 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
       },
       listLiveChannels: (scopeId: string) => {
         events.push(`deregister-list:${scopeId}`);
-        return Promise.resolve(CHANNELS.filter((channel) => channel.userId === scopeId));
+        return Promise.resolve(channels.filter((channel) => channel.userId === scopeId));
       },
       observe: (fields: Record<string, unknown>) => {
         loggedFields.push(fields);
@@ -271,11 +296,13 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
       deregisterPushChannels: overrides.deregisterPushChannels ?? composedDeregister,
       listCalendarIds: (userId: string) => {
         events.push(`list-calendars:${userId}`);
-        return Promise.resolve(CALENDAR_IDS.get(userId) ?? []);
+        return Promise.resolve(calendarIds.get(userId) ?? []);
       },
       redis: trackingRedis,
     },
     events,
+    loggedErrors,
+    loggedFields,
     redis,
     remainingJobIds: () => [...jobIds.keys()],
     removedJobIds,
@@ -285,16 +312,10 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
 
 const importTeardownModule = async () => await import("@/utils/delete-user-teardown");
 
-beforeEach(() => {
-  loggedErrors.length = 0;
-  loggedFields.length = 0;
-  state.redisInstances.length = 0;
-});
-
 describe("delete user sync teardown", () => {
   it("tombstones, drains jobs and deregisters channels for only the deleted user", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
-    const harness = makeHarness();
+    const harness = await makeHarness();
     const tombstoneEvent = `tombstone:${deletedUserTombstoneKey("A")}:${DELETED_USER_TOMBSTONE_TTL_SECONDS}`;
 
     await createDeleteUserSyncTeardown(harness.dependencies as never)("A");
@@ -322,7 +343,7 @@ describe("delete user sync teardown", () => {
 
   it("keeps the tombstone and job drain when deregistration fails, and resolves", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
-    const harness = makeHarness({
+    const harness = await makeHarness({
       deregisterPushChannels: () => Promise.reject(new Error("graph subscription delete failed")),
     });
 
@@ -332,7 +353,7 @@ describe("delete user sync teardown", () => {
 
     await expect(createUserDeletedCheck(harness.redis, "A")()).resolves.toBe(true);
     expect(harness.removedJobIds).toEqual(["sync-A-cal1", "sync-A-cal2"]);
-    expect(loggedErrors.map((entry) => entry.fields.slug)).toContain(
+    expect(harness.loggedErrors.map((entry) => entry.fields.slug)).toContain(
       "delete-user-teardown-failed",
     );
   });
@@ -341,7 +362,7 @@ describe("delete user sync teardown", () => {
 describe("delete user teardown with an in-flight sync run", () => {
   it("records the job it could not remove on the wide event and still completes the deletion", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
-    const harness = makeHarness({ lockedJobIds: ["sync-A-cal2"] });
+    const harness = await makeHarness({ lockedJobIds: ["sync-A-cal2"] });
 
     await expect(
       createDeleteUserSyncTeardown(harness.dependencies as never)("A"),
@@ -351,11 +372,11 @@ describe("delete user teardown with an in-flight sync run", () => {
     expect(harness.removedJobIds).toEqual(["sync-A-cal1"]);
     expect(harness.remainingJobIds()).toContain("sync-A-cal2");
 
-    const merged = Object.assign({}, ...loggedFields) as Record<string, unknown>;
+    const merged = Object.assign({}, ...harness.loggedFields) as Record<string, unknown>;
 
     expect(merged["delete_user.sync_jobs_removed"]).toBe(1);
     expect(merged["delete_user.sync_jobs_unremovable"]).toBe(1);
-    expect(loggedErrors.map((entry) => entry.fields.slug)).not.toContain(
+    expect(harness.loggedErrors.map((entry) => entry.fields.slug)).not.toContain(
       "delete-user-teardown-failed",
     );
     expect(harness.events).toContain("deregister-list:A");
@@ -364,7 +385,7 @@ describe("delete user teardown with an in-flight sync run", () => {
 
 describe("production auth wiring", () => {
   it("writes the tombstone when beforeDelete runs on the api auth instance", async () => {
-    const { auth } = await import("@/context");
+    const { auth, redis } = await import("@/context");
     const beforeDelete = auth.options.user?.deleteUser?.beforeDelete;
 
     expect(beforeDelete).toBeTypeOf("function");
@@ -376,13 +397,11 @@ describe("production auth wiring", () => {
 
     await runBeforeDelete({ id: "A" }, {});
 
-    const [firstRedis] = state.redisInstances;
-
-    if (!(firstRedis instanceof FakeIoRedis)) {
+    if (!(redis instanceof FakeIoRedis)) {
       throw new TypeError("expected the api context to construct a fake redis client");
     }
 
-    await expect(firstRedis.exists(deletedUserTombstoneKey("A"))).resolves.toBe(1);
+    await expect(redis.exists(deletedUserTombstoneKey("A"))).resolves.toBe(1);
   });
 });
 
@@ -434,7 +453,7 @@ const ALWAYS_FAILING = Number.MAX_SAFE_INTEGER;
 describe("tombstone durability", () => {
   it("retries the tombstone write and reads the key back before the step is done", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
-    const harness = makeHarness();
+    const harness = await makeHarness();
     const redis = makeTombstoneRedis(1);
     const key = deletedUserTombstoneKey("A");
 
@@ -460,13 +479,15 @@ describe("tombstone durability", () => {
     expect(redis.store.get(key)).toBeDefined();
 
     expect(
-      loggedErrors.filter((entry) => entry.fields.prefix === "delete_user_teardown.tombstone"),
+      harness.loggedErrors.filter(
+        (entry) => entry.fields.prefix === "delete_user_teardown.tombstone",
+      ),
     ).toEqual([]);
   });
 
   it("still completes deletion and records one tombstone error when redis stays OOM", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
-    const harness = makeHarness();
+    const harness = await makeHarness();
     const redis = makeTombstoneRedis(ALWAYS_FAILING);
 
     await expect(
@@ -479,7 +500,7 @@ describe("tombstone durability", () => {
     expect(harness.removedJobIds).toEqual(["sync-A-cal1", "sync-A-cal2"]);
     expect(harness.stoppedChannelIds.toSorted()).toEqual(["google-A-1", "graph-A-2"]);
 
-    const tombstoneErrors = loggedErrors.filter(
+    const tombstoneErrors = harness.loggedErrors.filter(
       (entry) => entry.fields.prefix === "delete_user_teardown.tombstone",
     );
 

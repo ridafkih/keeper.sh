@@ -193,16 +193,12 @@ const toPushChannelState = (state: string): PushChannelState =>
 const isPullCalendar = (calendar: EligibleSourceCalendar): boolean =>
   !calendar.disabled && calendar.capabilities.includes(PULL_CAPABILITY);
 
-const UNREGISTERED_PUSH_CHANNEL_STATES = new Set<PushChannelState>([
-  "failed",
-  "registering",
-  "removed",
-]);
-
 const neverReachedProvider = (channel: StoredPushChannel): boolean =>
   channel.providerChannelId === null
   && channel.providerResourceId === null
-  && UNREGISTERED_PUSH_CHANNEL_STATES.has(channel.state);
+  && (channel.state === "failed"
+    || channel.state === "registering"
+    || channel.state === "removed");
 
 const resolvePushChannelHealth = (
   channel: StoredPushChannel,

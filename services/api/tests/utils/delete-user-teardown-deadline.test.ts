@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const TEARDOWN_BUDGET_MS = 9000;
 const GUARD_MS = TEARDOWN_BUDGET_MS + 3000;
@@ -7,38 +7,6 @@ interface LoggedError {
   error: unknown;
   fields: Record<string, unknown>;
 }
-
-const loggedErrors: LoggedError[] = [];
-const loggedFields: Record<string, unknown>[] = [];
-
-vi.mock("@/utils/logging", () => ({
-  context: (run: () => unknown) => run(),
-  destroy: () => Promise.resolve(),
-  widelog: {
-    error: (prefix: string, error: unknown) => {
-      loggedErrors.push({ error, fields: { prefix } });
-    },
-    errorFields: (error: unknown, fields: Record<string, unknown>) => {
-      loggedErrors.push({ error, fields });
-    },
-    set: (key: string, value: unknown) => {
-      loggedFields.push({ [key]: value });
-    },
-    setFields: (fields: Record<string, unknown>) => {
-      loggedFields.push(fields);
-    },
-  },
-}));
-
-const queueOptions: unknown[] = [];
-
-vi.mock("@keeper.sh/queue", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  createPushSyncQueue: (options: unknown) => {
-    queueOptions.push(options);
-    return { remove: () => Promise.resolve(0) };
-  },
-}));
 
 vi.mock("@/context", () => ({
   database: {
@@ -57,14 +25,45 @@ vi.mock("@/context", () => ({
   webhookConfig: null,
 }));
 
-const redis = { set: () => Promise.resolve("OK") };
+const loadTeardown = async () => {
+  const loggedErrors: LoggedError[] = [];
+  const loggedFields: Record<string, unknown>[] = [];
 
-const hangingResolvers: ((value: number) => void)[] = [];
+  vi.resetModules();
+  vi.doMock("@/utils/logging", () => ({
+    context: (run: () => unknown) => run(),
+    destroy: () => Promise.resolve(),
+    widelog: {
+      error: (prefix: string, error: unknown) => {
+        loggedErrors.push({ error, fields: { prefix } });
+      },
+      errorFields: (error: unknown, fields: Record<string, unknown>) => {
+        loggedErrors.push({ error, fields });
+      },
+      set: (key: string, value: unknown) => {
+        loggedFields.push({ [key]: value });
+      },
+      setFields: (fields: Record<string, unknown>) => {
+        loggedFields.push(fields);
+      },
+    },
+  }));
 
-const neverSettles = (): Promise<number> =>
-  new Promise<number>((resolve) => {
-    hangingResolvers.push(resolve);
-  });
+  const { createDeleteUserSyncTeardown, TEARDOWN_QUEUE_CONNECTION_OPTIONS } = await import(
+    "@/utils/delete-user-teardown"
+  );
+
+  return {
+    createDeleteUserSyncTeardown,
+    loggedErrors,
+    loggedFields,
+    prefixes: (): string[] => loggedErrors.map((entry) => String(entry.fields.prefix)),
+    slugs: (): unknown[] => loggedErrors.map((entry) => entry.fields.slug),
+    TEARDOWN_QUEUE_CONNECTION_OPTIONS,
+  };
+};
+
+const neverSettles = (): Promise<number> => Promise.race<number>([]);
 
 const raceWithGuard = async (work: Promise<void>): Promise<"guard" | "settled"> => {
   let guardTimer: ReturnType<typeof setTimeout> | null = null;
@@ -87,22 +86,12 @@ const makeDependencies = (remove: (jobId: string) => Promise<number>) => ({
   createQueue: () => ({ remove }),
   deregisterPushChannels: () => Promise.resolve(0),
   listCalendarIds: () => Promise.resolve(["cal1", "cal2"]),
-  redis,
-});
-
-const slugs = (): unknown[] => loggedErrors.map((entry) => entry.fields.slug);
-
-const prefixes = (): string[] => loggedErrors.map((entry) => String(entry.fields.prefix));
-
-beforeEach(() => {
-  loggedErrors.length = 0;
-  loggedFields.length = 0;
-  queueOptions.length = 0;
+  redis: { set: () => Promise.resolve("OK") },
 });
 
 describe("delete user teardown wall clock bound", () => {
   it("returns inside the request budget when a queue removal never settles", async () => {
-    const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
+    const { createDeleteUserSyncTeardown, prefixes, slugs } = await loadTeardown();
     const teardown = createDeleteUserSyncTeardown(makeDependencies(neverSettles) as never);
 
     const startedAt = Date.now();
@@ -116,7 +105,7 @@ describe("delete user teardown wall clock bound", () => {
   });
 
   it("still deregisters push channels after a stalled job drain", async () => {
-    const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
+    const { createDeleteUserSyncTeardown } = await loadTeardown();
     const deregisteredFor: string[] = [];
     const teardown = createDeleteUserSyncTeardown({
       ...makeDependencies(neverSettles),
@@ -133,7 +122,7 @@ describe("delete user teardown wall clock bound", () => {
   });
 
   it("surfaces a rejected queue removal as a wide event error field", async () => {
-    const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
+    const { createDeleteUserSyncTeardown, loggedErrors, prefixes, slugs } = await loadTeardown();
     const teardown = createDeleteUserSyncTeardown(
       makeDependencies((jobId) =>
         new Promise<number>((_resolve, reject) => {
@@ -152,17 +141,11 @@ describe("delete user teardown wall clock bound", () => {
   });
 
   it("builds the teardown queue with bounded redis client options", async () => {
-    const { deleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
+    const { TEARDOWN_QUEUE_CONNECTION_OPTIONS } = await loadTeardown();
 
-    await deleteUserSyncTeardown("A");
-
-    const [options] = queueOptions as { commandTimeout?: unknown; maxRetriesPerRequest?: unknown }[];
-
-    expect(options).toBeDefined();
-    expect(typeof (options as { commandTimeout?: unknown }).commandTimeout).toBe("number");
-    expect((options as { commandTimeout: number }).commandTimeout)
+    expect(typeof TEARDOWN_QUEUE_CONNECTION_OPTIONS.commandTimeout).toBe("number");
+    expect(TEARDOWN_QUEUE_CONNECTION_OPTIONS.commandTimeout)
       .toBeLessThanOrEqual(TEARDOWN_BUDGET_MS);
-    expect((options as { maxRetriesPerRequest?: unknown }).maxRetriesPerRequest)
-      .not.toBeNull();
+    expect(TEARDOWN_QUEUE_CONNECTION_OPTIONS.maxRetriesPerRequest).not.toBeNull();
   });
 });

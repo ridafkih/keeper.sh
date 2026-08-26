@@ -34,18 +34,6 @@ const makeChannel = (id: string, providerChannelId: string): StoredPushChannel =
   verifiedAt: NOW,
 });
 
-const CHANNELS = [makeChannel("chan-1", "g-1"), makeChannel("chan-2", "g-2")];
-
-const STATUS_BY_PROVIDER_CHANNEL_ID: Record<string, number> = {
-  "g-1": UNAUTHORIZED,
-  "g-2": SERVICE_UNAVAILABLE,
-};
-
-const BODY_BY_STATUS: Record<number, string> = {
-  [UNAUTHORIZED]: JSON.stringify({ error: "invalid_grant" }),
-  [SERVICE_UNAVAILABLE]: JSON.stringify({ error: "backendError" }),
-};
-
 const readStopBody = (init?: RequestInit): { id: string } => {
   if (typeof init?.body !== "string") {
     throw new TypeError("Provider stop request carried no JSON body");
@@ -53,41 +41,55 @@ const readStopBody = (init?: RequestInit): { id: string } => {
   return JSON.parse(init.body) as { id: string };
 };
 
-const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
-  const { id } = readStopBody(init);
-  const status = STATUS_BY_PROVIDER_CHANNEL_ID[id];
-  if (status === undefined) {
-    throw new Error(`Provider stop request named an unseeded channel ${id}`);
-  }
-  return Promise.resolve(new Response(BODY_BY_STATUS[status], { status }));
-}) as typeof globalThis.fetch;
-
 const { context } = widelogger({
   defaultEventName: "wide_event",
   environment: "production",
   service: "keeper-api",
 });
 
-const dependencies = {
-  createRegistrarContext: (channel: StoredPushChannel) =>
-    Promise.resolve({
-      accessToken: "stub-token",
-      channelId: channel.providerChannelId,
-      fetchImpl,
-      notificationUrl: "https://keeper.example/api/webhook/google",
-      now: NOW,
-      requestedExpiresAt: NOW,
-    }),
-  listLiveChannels: () => Promise.resolve(CHANNELS),
-  markChannelsStopped: () => Promise.resolve(),
-  observe: (fields: Record<string, unknown>) => {
-    widelog.setFields(fields);
-  },
-  recordError: (error: unknown, slug: string) => {
-    widelog.errorFields(error, { retriable: false, slug });
-  },
-  resolveRegistrar: resolvePushRegistrar,
-  webhookConfigured: true,
+const makeDependencies = () => {
+  const channels = [makeChannel("chan-1", "g-1"), makeChannel("chan-2", "g-2")];
+
+  const statusByProviderChannelId: Record<string, number> = {
+    "g-1": UNAUTHORIZED,
+    "g-2": SERVICE_UNAVAILABLE,
+  };
+
+  const bodyByStatus: Record<number, string> = {
+    [UNAUTHORIZED]: JSON.stringify({ error: "invalid_grant" }),
+    [SERVICE_UNAVAILABLE]: JSON.stringify({ error: "backendError" }),
+  };
+
+  const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) => {
+    const { id } = readStopBody(init);
+    const status = statusByProviderChannelId[id];
+    if (status === undefined) {
+      throw new Error(`Provider stop request named an unseeded channel ${id}`);
+    }
+    return Promise.resolve(new Response(bodyByStatus[status], { status }));
+  }) as typeof globalThis.fetch;
+
+  return {
+    createRegistrarContext: (channel: StoredPushChannel) =>
+      Promise.resolve({
+        accessToken: "stub-token",
+        channelId: channel.providerChannelId,
+        fetchImpl,
+        notificationUrl: "https://keeper.example/api/webhook/google",
+        now: NOW,
+        requestedExpiresAt: NOW,
+      }),
+    listLiveChannels: () => Promise.resolve(channels),
+    markChannelsStopped: () => Promise.resolve(),
+    observe: (fields: Record<string, unknown>) => {
+      widelog.setFields(fields);
+    },
+    recordError: (error: unknown, slug: string) => {
+      widelog.errorFields(error, { retriable: false, slug });
+    },
+    resolveRegistrar: resolvePushRegistrar,
+    webhookConfigured: true,
+  };
 };
 
 const captureEmittedEvent = (emit: () => void): Record<string, unknown> => {
@@ -120,7 +122,7 @@ describe("abandoned push channel reporting", () => {
         slug: "account-lock-failed",
       });
 
-      const result = await runDeregisterPushChannelsOutcome(USER_ID, dependencies);
+      const result = await runDeregisterPushChannelsOutcome(USER_ID, makeDependencies());
       return { emittedEvent: captureEmittedEvent(() => widelog.flush()), result };
     });
 

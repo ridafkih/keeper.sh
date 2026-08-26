@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   FULL_POLL_INTERVAL_MS,
   createUserDeletedCheck,
@@ -15,25 +15,14 @@ interface LoggedError {
   fields: Record<string, unknown>;
 }
 
-const loggedErrors: LoggedError[] = [];
-const loggedFields: Record<string, unknown>[] = [];
-
 vi.mock("@/utils/logging", () => ({
   context: (run: () => unknown) => run(),
   destroy: () => Promise.resolve(),
   widelog: {
-    error: (prefix: string, error: unknown) => {
-      loggedErrors.push({ error, fields: { prefix } });
-    },
-    errorFields: (error: unknown, fields: Record<string, unknown>) => {
-      loggedErrors.push({ error, fields });
-    },
-    set: (key: string, value: unknown) => {
-      loggedFields.push({ [key]: value });
-    },
-    setFields: (fields: Record<string, unknown>) => {
-      loggedFields.push(fields);
-    },
+    error: () => null,
+    errorFields: () => null,
+    set: () => null,
+    setFields: () => null,
   },
 }));
 
@@ -88,13 +77,6 @@ const seedChannels = (): StoredPushChannel[] => [
   }),
 ];
 
-const STOPPED_ROW_PATCH: Partial<StoredPushChannel> = {
-  expiresAt: null,
-  lastNotificationAt: null,
-  state: "removed",
-  verifiedAt: null,
-};
-
 interface ChannelStore {
   listByUser: (userId: string) => Promise<StoredPushChannel[]>;
   markChannelStopped: (
@@ -111,6 +93,12 @@ interface ChannelStore {
 
 const createChannelStore = (): ChannelStore => {
   const rows = new Map(seedChannels().map((channel) => [channel.id, channel] as const));
+  const stoppedRowPatch: Partial<StoredPushChannel> = {
+    expiresAt: null,
+    lastNotificationAt: null,
+    state: "removed",
+    verifiedAt: null,
+  };
 
   const applyStop = (channelId: string, patch?: Partial<StoredPushChannel>): void => {
     const row = rows.get(channelId);
@@ -119,7 +107,7 @@ const createChannelStore = (): ChannelStore => {
     }
     rows.set(channelId, {
       ...row,
-      ...STOPPED_ROW_PATCH,
+      ...stoppedRowPatch,
       ...patch,
       updatedAt: ONE_MINUTE_LATER,
     });
@@ -158,6 +146,8 @@ const readStoppedChannelId = (init?: RequestInit): string => {
 
 interface Harness {
   channelStore: ChannelStore;
+  loggedErrors: () => LoggedError[];
+  loggedFields: () => Record<string, unknown>[];
   rollbackDependencies: Record<string, unknown>;
   stopRequests: () => string[];
   teardownDependencies: Record<string, unknown>;
@@ -171,6 +161,8 @@ interface Harness {
 const makeHarness = (): Harness => {
   const channelStore = createChannelStore();
   const stopRequests: string[] = [];
+  const loggedErrors: LoggedError[] = [];
+  const loggedFields: Record<string, unknown>[] = [];
   const tombstones = new Map<string, string>();
 
   const tombstoneRedis = {
@@ -222,6 +214,8 @@ const makeHarness = (): Harness => {
 
   return {
     channelStore,
+    loggedErrors: () => [...loggedErrors],
+    loggedFields: () => [...loggedFields],
     rollbackDependencies: {
       markChannelStopped: channelStore.markChannelStopped,
       markChannelsStopped: channelStore.markChannelsStopped,
@@ -256,7 +250,7 @@ const makeCalendar = (
   ...overrides,
 });
 
-const CALENDARS: EligibleSourceCalendar[] = [
+const seedCalendars = (): EligibleSourceCalendar[] => [
   makeCalendar({}),
   makeCalendar({ accountId: "account-A-2", calendarId: "cal-A-2" }),
   makeCalendar({
@@ -272,7 +266,7 @@ const planActionsForCalendar = async (
   calendarId: string,
 ) => {
   const actions = await planPushChannelActions({
-    calendars: CALENDARS,
+    calendars: seedCalendars(),
     channels,
     now: ONE_MINUTE_LATER,
     onPlanError: (userId, error) => {
@@ -295,11 +289,6 @@ const runTeardownThenRollback = async (harness: Harness): Promise<void> => {
   await createDeleteUserSyncTeardown(harness.teardownDependencies as never)("A");
   await createDeleteUserSyncTeardownRollback(harness.rollbackDependencies as never)("A");
 };
-
-beforeEach(() => {
-  loggedErrors.length = 0;
-  loggedFields.length = 0;
-});
 
 describe("push channel rows after a delete that was rolled back", () => {
   it("stops each of the target user's channels exactly once and never touches another tenant", async () => {

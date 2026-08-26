@@ -1,34 +1,23 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolvePushRegistrar } from "@keeper.sh/calendar";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import { runDeregisterPushChannels } from "@/utils/push-notifications/deregister-account-channels";
-
-interface LoggedError {
-  error: unknown;
-  fields: Record<string, unknown>;
-}
-
-const loggedErrors: LoggedError[] = [];
-const loggedFields: Record<string, unknown>[] = [];
 
 vi.mock("@/utils/logging", () => ({
   context: (run: () => unknown) => run(),
   destroy: () => Promise.resolve(),
   widelog: {
-    error: (prefix: string, error: unknown) => {
-      loggedErrors.push({ error, fields: { prefix } });
-    },
-    errorFields: (error: unknown, fields: Record<string, unknown>) => {
-      loggedErrors.push({ error, fields });
-    },
-    set: (key: string, value: unknown) => {
-      loggedFields.push({ [key]: value });
-    },
-    setFields: (fields: Record<string, unknown>) => {
-      loggedFields.push(fields);
-    },
+    error: vi.fn(),
+    errorFields: vi.fn(),
+    set: vi.fn(),
+    setFields: vi.fn(),
   },
 }));
+
+interface LoggedError {
+  error: unknown;
+  fields: Record<string, unknown>;
+}
 
 const NOW = new Date("2026-08-25T06:15:33.956Z");
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -67,21 +56,8 @@ const makeChannel = (userId: string, index: number): StoredPushChannel => ({
   verifiedAt: NOW,
 });
 
-const DELETED_CHANNELS = Array.from(
-  { length: DELETED_CHANNEL_COUNT },
-  (_value, index) => makeChannel(DELETED_USER_ID, index + 1),
-);
-
-const SURVIVING_CHANNELS = Array.from(
-  { length: SURVIVING_CHANNEL_COUNT },
-  (_value, index) => makeChannel(SURVIVING_USER_ID, index + 1),
-);
-
-const ALL_CHANNELS = [...DELETED_CHANNELS, ...SURVIVING_CHANNELS];
-
-const channelByProviderChannelId = new Map(
-  ALL_CHANNELS.map((channel) => [String(channel.providerChannelId), channel] as const),
-);
+const makeChannels = (userId: string, count: number): StoredPushChannel[] =>
+  Array.from({ length: count }, (_value, index) => makeChannel(userId, index + 1));
 
 interface ActivityEntry {
   at: number;
@@ -89,16 +65,7 @@ interface ActivityEntry {
   kind: "context" | "dial" | "restate";
 }
 
-const activity: ActivityEntry[] = [];
-
-let startedAt = 0;
-let userRowGone = false;
-
-const since = (): number => Date.now() - startedAt;
-
-const record = (kind: ActivityEntry["kind"], ids: string[]): void => {
-  activity.push({ at: since(), ids, kind });
-};
+type RecordActivity = (kind: ActivityEntry["kind"], ids: string[]) => void;
 
 const readStopBody = (init?: RequestInit): { id: string } => {
   if (typeof init?.body !== "string") {
@@ -123,176 +90,224 @@ const sleepThenNoContent = (signal: AbortSignal | null | undefined): Promise<Res
     );
   });
 
-const stubFetch = ((_input: string | URL | Request, init?: RequestInit) => {
-  const { id } = readStopBody(init);
-  const channel = channelByProviderChannelId.get(id);
+const makeStubFetch = (
+  channelByProviderChannelId: Map<string, StoredPushChannel>,
+  record: RecordActivity,
+): typeof globalThis.fetch =>
+  ((_input: string | URL | Request, init?: RequestInit) => {
+    const { id } = readStopBody(init);
+    const channel = channelByProviderChannelId.get(id);
 
-  if (!channel) {
-    throw new Error(`Provider stop request named an unseeded channel ${id}`);
-  }
+    if (!channel) {
+      throw new Error(`Provider stop request named an unseeded channel ${id}`);
+    }
 
-  record("dial", [channel.id]);
+    record("dial", [channel.id]);
 
-  return sleepThenNoContent(init?.signal);
-}) as typeof globalThis.fetch;
-
-const realFetch = globalThis.fetch;
-
-beforeAll(() => {
-  globalThis.fetch = stubFetch;
-});
-
-afterAll(() => {
-  globalThis.fetch = realFetch;
-});
-
-const createRegistrarContext = (channel: StoredPushChannel) => {
-  record("context", [channel.id]);
-
-  if (userRowGone) {
-    return Promise.reject(
-      new Error(`${MISSING_CREDENTIALS_MESSAGE} ${channel.accountId}`),
-    );
-  }
-
-  return Promise.resolve({
-    accessToken: "stub-token",
-    channelId: channel.providerChannelId,
-    fetchImpl: globalThis.fetch,
-    notificationUrl: "https://keeper.example/api/webhook/google",
-    now: NOW,
-    requestedExpiresAt: NOW,
-    signal: AbortSignal.timeout(DISCONNECT_TIMEOUT_MS),
-  });
-};
-
-const deregisterDependencies = {
-  createRegistrarContext,
-  listLiveChannels: (scopeId: string) =>
-    Promise.resolve(ALL_CHANNELS.filter((channel) => channel.userId === scopeId)),
-  markChannelsStopped: (channelIds: string[]) => {
-    record("restate", [...channelIds]);
-    return Promise.resolve();
-  },
-  observe: (fields: Record<string, unknown>) => {
-    loggedFields.push(fields);
-  },
-  recordError: (error: unknown, slug: string) => {
-    loggedErrors.push({ error, fields: { slug } });
-  },
-  resolveRegistrar: resolvePushRegistrar,
-  webhookConfigured: true,
-};
-
-const deregisterPushChannels = (...args: unknown[]): Promise<number> =>
-  (runDeregisterPushChannels as unknown as (...forwarded: unknown[]) => Promise<number>)(
-    args[0],
-    deregisterDependencies,
-    ...args.slice(1),
-  );
-
-const teardownDependencies = {
-  createQueue: () => ({
-    getJob: () => Promise.resolve({}),
-    remove: () => Promise.resolve(0),
-  }),
-  deregisterPushChannels,
-  listCalendarIds: () => Promise.resolve([]),
-  markChannelsStopped: deregisterDependencies.markChannelsStopped,
-  redis: {
-    del: () => Promise.resolve(1),
-    exists: () => Promise.resolve(0),
-    set: () => Promise.resolve("OK"),
-  },
-};
+    return sleepThenNoContent(init?.signal);
+  }) as typeof globalThis.fetch;
 
 const wait = (ms: number): Promise<void> =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
   });
 
-const entriesOfKind = (kind: ActivityEntry["kind"]): ActivityEntry[] =>
-  activity.filter((entry) => entry.kind === kind);
+const drainWideEventErrors = async (): Promise<LoggedError[]> => {
+  const { widelog } = await import("@/utils/logging");
+  const prefixed = vi.mocked(widelog.error).mock.calls.map(([prefix, error]) => ({
+    error,
+    fields: { prefix },
+  }));
+  const detailed = vi.mocked(widelog.errorFields).mock.calls.map(([error, fields]) => ({
+    error,
+    fields: { ...fields },
+  }));
 
-const idsOfKind = (kind: ActivityEntry["kind"]): string[] =>
-  entriesOfKind(kind).flatMap((entry) => entry.ids);
+  return [...prefixed, ...detailed];
+};
 
-const abandonedText = (): string => {
-  const entries = loggedFields.flatMap((fields) =>
-    Object.entries(fields).filter(([key]) => key.toLowerCase().includes("abandon")));
-  return JSON.stringify(entries);
+const drainWideEventFields = async (): Promise<Record<string, unknown>[]> => {
+  const { widelog } = await import("@/utils/logging");
+  const singles = vi.mocked(widelog.set).mock.calls.map(([key, value]) => ({ [key]: value }));
+  const grouped = vi.mocked(widelog.setFields).mock.calls.map(([fields]) => fields);
+
+  return [...singles, ...grouped];
+};
+
+const clearWideEvent = async (): Promise<void> => {
+  const { widelog } = await import("@/utils/logging");
+
+  for (const method of [widelog.error, widelog.errorFields, widelog.set, widelog.setFields]) {
+    vi.mocked(method).mockClear();
+  }
 };
 
 interface TeardownRun {
+  activity: ActivityEntry[];
+  loggedErrors: LoggedError[];
+  loggedFields: Record<string, unknown>[];
   resolvedAt: number;
   thrown: unknown;
 }
 
-const runTeardown = async (): Promise<TeardownRun> => {
+const runTeardown = async (channels: StoredPushChannel[]): Promise<TeardownRun> => {
   const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
-  const teardown = createDeleteUserSyncTeardown(teardownDependencies as never);
 
-  startedAt = Date.now();
+  await clearWideEvent();
+
+  const activity: ActivityEntry[] = [];
+  const recordedErrors: LoggedError[] = [];
+  const observedFields: Record<string, unknown>[] = [];
+  const credentials = { userRowGone: false };
+  const startedAt = Date.now();
+
+  const since = (): number => Date.now() - startedAt;
+
+  const record: RecordActivity = (kind, ids) => {
+    activity.push({ at: since(), ids, kind });
+  };
+
+  const channelByProviderChannelId = new Map(
+    channels.map((channel) => [String(channel.providerChannelId), channel] as const),
+  );
+
+  const markChannelsStopped = (channelIds: string[]): Promise<void> => {
+    record("restate", [...channelIds]);
+    return Promise.resolve();
+  };
+
+  const deregisterDependencies = {
+    createRegistrarContext: (channel: StoredPushChannel) => {
+      record("context", [channel.id]);
+
+      if (credentials.userRowGone) {
+        return Promise.reject(
+          new Error(`${MISSING_CREDENTIALS_MESSAGE} ${channel.accountId}`),
+        );
+      }
+
+      return Promise.resolve({
+        accessToken: "stub-token",
+        channelId: channel.providerChannelId,
+        fetchImpl: globalThis.fetch,
+        notificationUrl: "https://keeper.example/api/webhook/google",
+        now: NOW,
+        requestedExpiresAt: NOW,
+        signal: AbortSignal.timeout(DISCONNECT_TIMEOUT_MS),
+      });
+    },
+    listLiveChannels: (scopeId: string) =>
+      Promise.resolve(channels.filter((channel) => channel.userId === scopeId)),
+    markChannelsStopped,
+    observe: (fields: Record<string, unknown>) => {
+      observedFields.push(fields);
+    },
+    recordError: (error: unknown, slug: string) => {
+      recordedErrors.push({ error, fields: { slug } });
+    },
+    resolveRegistrar: resolvePushRegistrar,
+    webhookConfigured: true,
+  };
+
+  const deregisterPushChannels = (...args: unknown[]): Promise<number> =>
+    (runDeregisterPushChannels as unknown as (...forwarded: unknown[]) => Promise<number>)(
+      args[0],
+      deregisterDependencies,
+      ...args.slice(1),
+    );
+
+  const teardown = createDeleteUserSyncTeardown({
+    createQueue: () => ({
+      getJob: () => Promise.resolve({}),
+      remove: () => Promise.resolve(0),
+    }),
+    deregisterPushChannels,
+    listCalendarIds: () => Promise.resolve([]),
+    markChannelsStopped,
+    redis: {
+      del: () => Promise.resolve(1),
+      exists: () => Promise.resolve(0),
+      set: () => Promise.resolve("OK"),
+    },
+  } as never);
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = makeStubFetch(channelByProviderChannelId, record);
 
   let thrown: unknown = null;
+  let resolvedAt = 0;
   try {
-    await teardown(DELETED_USER_ID);
-  } catch (error) {
-    thrown = error;
+    try {
+      await teardown(DELETED_USER_ID);
+    } catch (error) {
+      thrown = error;
+    }
+
+    resolvedAt = since();
+    credentials.userRowGone = true;
+
+    await wait(DRAIN_MS);
+  } finally {
+    globalThis.fetch = realFetch;
   }
 
-  const resolvedAt = since();
-  userRowGone = true;
-
-  await wait(DRAIN_MS);
-
-  return { resolvedAt, thrown };
+  return {
+    activity,
+    loggedErrors: [...recordedErrors, ...await drainWideEventErrors()],
+    loggedFields: [...observedFields, ...await drainWideEventFields()],
+    resolvedAt,
+    thrown,
+  };
 };
 
-beforeEach(() => {
-  activity.length = 0;
-  loggedErrors.length = 0;
-  loggedFields.length = 0;
-  userRowGone = false;
-});
+const idsOfKind = (run: TeardownRun, kind: ActivityEntry["kind"]): string[] =>
+  run.activity.filter((entry) => entry.kind === kind).flatMap((entry) => entry.ids);
+
+const abandonedText = (run: TeardownRun): string => {
+  const entries = run.loggedFields.flatMap((fields) =>
+    Object.entries(fields).filter(([key]) => key.toLowerCase().includes("abandon")));
+  return JSON.stringify(entries);
+};
 
 describe("push channel teardown leaves no unnamed orphan", () => {
   it("names every channel it could not stop and issues nothing after it returns", async () => {
-    const { resolvedAt, thrown } = await runTeardown();
+    const deletedChannels = makeChannels(DELETED_USER_ID, DELETED_CHANNEL_COUNT);
+    const survivingChannels = makeChannels(SURVIVING_USER_ID, SURVIVING_CHANNEL_COUNT);
+    const run = await runTeardown([...deletedChannels, ...survivingChannels]);
 
-    expect(thrown).toBeNull();
+    expect(run.thrown).toBeNull();
 
-    const lateEntries = activity.filter((entry) => entry.at > resolvedAt);
+    const lateEntries = run.activity.filter((entry) => entry.at > run.resolvedAt);
 
     expect(lateEntries).toEqual([]);
 
-    const restatedIds = idsOfKind("restate");
-    const namedIds = DELETED_CHANNELS
-      .filter((channel) => abandonedText().includes(channel.id))
+    const restatedIds = idsOfKind(run, "restate");
+    const namedIds = deletedChannels
+      .filter((channel) => abandonedText(run).includes(channel.id))
       .map((channel) => channel.id);
 
     expect([...new Set([...restatedIds, ...namedIds])].toSorted()).toEqual(
-      DELETED_CHANNELS.map((channel) => channel.id).toSorted(),
+      deletedChannels.map((channel) => channel.id).toSorted(),
     );
 
-    for (const channel of DELETED_CHANNELS.filter((row) => namedIds.includes(row.id))) {
-      expect(abandonedText()).toContain(String(channel.providerChannelId));
-      expect(abandonedText()).toContain(channel.provider);
+    for (const channel of deletedChannels.filter((row) => namedIds.includes(row.id))) {
+      expect(abandonedText(run)).toContain(String(channel.providerChannelId));
+      expect(abandonedText(run)).toContain(channel.provider);
     }
 
-    const credentialErrors = loggedErrors.filter((entry) =>
+    const credentialErrors = run.loggedErrors.filter((entry) =>
       String((entry.error as Error).message).includes(MISSING_CREDENTIALS_MESSAGE));
 
     expect(credentialErrors).toEqual([]);
 
-    const survivingIds = new Set(SURVIVING_CHANNELS.map((channel) => channel.id));
+    const survivingIds = new Set(survivingChannels.map((channel) => channel.id));
 
-    expect(idsOfKind("dial").filter((id) => survivingIds.has(id))).toEqual([]);
-    expect(idsOfKind("context").filter((id) => survivingIds.has(id))).toEqual([]);
+    expect(idsOfKind(run, "dial").filter((id) => survivingIds.has(id))).toEqual([]);
+    expect(idsOfKind(run, "context").filter((id) => survivingIds.has(id))).toEqual([]);
     expect(restatedIds.filter((id) => survivingIds.has(id))).toEqual([]);
-    for (const channel of SURVIVING_CHANNELS) {
-      expect(abandonedText()).not.toContain(channel.id);
-      expect(abandonedText()).not.toContain(String(channel.providerChannelId));
+    for (const channel of survivingChannels) {
+      expect(abandonedText(run)).not.toContain(channel.id);
+      expect(abandonedText(run)).not.toContain(String(channel.providerChannelId));
     }
   });
 });

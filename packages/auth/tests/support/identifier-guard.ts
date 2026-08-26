@@ -6,17 +6,7 @@ const defaultRepositoryRoot = resolve(import.meta.dirname, "../../../..");
 const packageTestRoot = "packages/auth";
 const packageTestGlob = "tests/**/*.ts";
 
-const remediationScanRoots = [
-  "packages/calendar/tests",
-  "packages/queue/tests",
-  "packages/sync/tests",
-  "services/api/tests",
-];
-
 const remediationTestGlob = "**/*.test.ts";
-
-const remediationNamePattern =
-  /aborted-run|deleted-user|delete-user|deregister-user-channels|remove-user-sync-jobs|tombstone|user-deleted|user-is-deleted/;
 
 interface GuardOptions {
   root?: string;
@@ -24,7 +14,14 @@ interface GuardOptions {
 
 const rootOf = (options?: GuardOptions) => options?.root ?? defaultRepositoryRoot;
 
-const remediationTestFiles = [
+const remediationScanRoots = () => [
+  "packages/calendar/tests",
+  "packages/queue/tests",
+  "packages/sync/tests",
+  "services/api/tests",
+];
+
+const remediationTestFiles = () => [
   "packages/auth/tests/delete-user-teardown-ordering.test.ts",
   "packages/auth/tests/delete-user-teardown.test.ts",
   "packages/auth/tests/failed-delete-user-does-not-strand-the-account.test.ts",
@@ -50,9 +47,6 @@ const remediationTestFiles = [
   "services/api/tests/utils/push-notifications/deregister-user-channels.test.ts",
 ];
 
-const opaqueIdentifierPattern = /\b[A-Za-z0-9]{32}\b/g;
-const wallClockTimestampPattern = /\b\d{2}:\d{2}:\d{2}(?:\.\d+)? UTC\b/g;
-
 const looksLikeOpaqueIdentifier = (token: string) =>
   /[a-z]/.test(token) && /[A-Z]/.test(token) && /[0-9]/.test(token);
 
@@ -75,8 +69,11 @@ const readGuardedFile = async (relativePath: string, options?: GuardOptions) => 
 };
 
 const scanRemediationTests = async (root: string) => {
+  const remediationNamePattern =
+    /aborted-run|deleted-user|delete-user|deregister-user-channels|remove-user-sync-jobs|tombstone|user-deleted|user-is-deleted/;
+  const named = remediationTestFiles();
   const found: string[] = [];
-  for (const scanRoot of remediationScanRoots) {
+  for (const scanRoot of remediationScanRoots()) {
     const directory = resolve(root, scanRoot);
     if (!(await directoryExists(directory))) {
       continue;
@@ -88,7 +85,7 @@ const scanRemediationTests = async (root: string) => {
       }
     }
   }
-  const unnamed = found.filter((relativePath) => !remediationTestFiles.includes(relativePath));
+  const unnamed = found.filter((relativePath) => !named.includes(relativePath));
   if (unnamed.length > 0) {
     throw new Error(
       `remediation test files are missing from the guarded corpus list: ${unnamed.toSorted().join(", ")}`,
@@ -133,10 +130,10 @@ const findOffenders = async (
 };
 
 const findOpaqueIdentifierOffenders = (relativePaths?: string[], options?: GuardOptions) =>
-  findOffenders(opaqueIdentifierPattern, looksLikeOpaqueIdentifier, relativePaths, options);
+  findOffenders(/\b[A-Za-z0-9]{32}\b/g, looksLikeOpaqueIdentifier, relativePaths, options);
 
 const findWallClockTimestampOffenders = (relativePaths?: string[], options?: GuardOptions) =>
-  findOffenders(wallClockTimestampPattern, () => true, relativePaths, options);
+  findOffenders(/\b\d{2}:\d{2}:\d{2}(?:\.\d+)? UTC\b/g, () => true, relativePaths, options);
 
 export {
   collectGuardedFiles,

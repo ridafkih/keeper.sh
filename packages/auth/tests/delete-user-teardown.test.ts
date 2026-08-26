@@ -1,32 +1,27 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import { createAuth } from "../src/index";
 import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
-const stubDatabase = {} as BunSQLDatabase;
-
 const buildAuth = (overrides: Record<string, unknown> = {}) =>
   createAuth({
     baseUrl: "http://localhost:3000",
-    database: stubDatabase,
+    database: {} as BunSQLDatabase,
     secret: "test-secret",
     ...overrides,
   } as Parameters<typeof createAuth>[0]);
 
-const { context } = widelogger({
-  defaultEventName: "wide_event",
-  environment: "production",
-  service: "auth-test",
-});
+const captureWideEvents = async (run: () => Promise<void>) => {
+  const { context } = widelogger({
+    defaultEventName: "wide_event",
+    environment: "production",
+    service: "auth-test",
+  });
+  const emitted: unknown[] = [];
+  const parsedErrorMessages: string[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
 
-const emitted: unknown[] = [];
-const parsedErrorMessages: string[] = [];
-const originalWrite = process.stdout.write.bind(process.stdout);
-
-beforeEach(() => {
-  emitted.length = 0;
-  parsedErrorMessages.length = 0;
   process.stdout.write = ((chunk: unknown) => {
     for (const line of String(chunk).split("\n")) {
       if (line.trim().length > 0) {
@@ -35,13 +30,24 @@ beforeEach(() => {
     }
     return true;
   }) as typeof process.stdout.write;
-});
 
-afterEach(() => {
-  process.stdout.write = originalWrite;
-});
+  try {
+    await context(async () => {
+      widelog.errors((error) => {
+        parsedErrorMessages.push((error as { message?: string }).message ?? String(error));
+        return "delete-user-teardown-failed";
+      });
 
-const NO_REQUEST = Object.freeze({}) as never;
+      await run();
+
+      widelog.flush();
+    });
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+
+  return { emitted, parsedErrorMessages };
+};
 
 const resolveBeforeDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
   const beforeDelete = auth.options.user?.deleteUser?.beforeDelete;
@@ -50,7 +56,7 @@ const resolveBeforeDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
     throw new TypeError("deleteUser.beforeDelete is not wired");
   }
 
-  return (user: { id: string }) => beforeDelete(user as never, NO_REQUEST);
+  return (user: { id: string }) => beforeDelete(user as never, Object.freeze({}) as never);
 };
 
 const resolveAfterDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
@@ -60,7 +66,7 @@ const resolveAfterDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
     throw new TypeError("deleteUser.afterDelete is not wired");
   }
 
-  return (user: { id: string }) => afterDelete(user as never, NO_REQUEST);
+  return (user: { id: string }) => afterDelete(user as never, Object.freeze({}) as never);
 };
 
 const TEARDOWN_FAILURE_MESSAGE = "push channel deregistration unavailable";
@@ -108,16 +114,9 @@ describe("account deletion teardown", () => {
 
     let deleted = false;
 
-    await context(async () => {
-      widelog.errors((error) => {
-        parsedErrorMessages.push((error as { message?: string }).message ?? String(error));
-        return "delete-user-teardown-failed";
-      });
-
+    const { emitted, parsedErrorMessages } = await captureWideEvents(async () => {
       await beforeDelete({ id: "user-1" });
       deleted = true;
-
-      widelog.flush();
     });
 
     expect(deleted).toBe(true);
@@ -203,15 +202,8 @@ describe("polar customer removal during deletion", () => {
 
     const afterDelete = resolveAfterDelete(auth);
 
-    await context(async () => {
-      widelog.errors((error) => {
-        parsedErrorMessages.push((error as { message?: string }).message ?? String(error));
-        return "delete-user-teardown-failed";
-      });
-
+    const { emitted, parsedErrorMessages } = await captureWideEvents(async () => {
       await afterDelete({ id: "user-1" });
-
-      widelog.flush();
     });
 
     expect(emitted).toHaveLength(1);

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import {
   collectGuardedFiles,
   findOpaqueIdentifierOffenders,
@@ -15,11 +15,11 @@ const wallClockTimestamp = ["06:15:33.956", "UTC"].join(" ");
 const unownedFixturePath = "packages/queue/tests/zz-identifier-guard-scope-fixture.test.ts";
 const ownedFixturePath = "packages/auth/tests/zz-identifier-guard-owned-fixture.test.ts";
 
-const temporaryRoots: string[] = [];
-
 const makeTemporaryRoot = async () => {
   const root = await mkdtemp(resolve(tmpdir(), "identifier-guard-scope-"));
-  temporaryRoots.push(root);
+  onTestFinished(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
   return root;
 };
 
@@ -30,12 +30,6 @@ const writeFixture = async (root: string, relativePath: string, body: string) =>
   await mkdir(resolve(absolute, ".."), { recursive: true });
   await writeFile(absolute, fixtureSource(body));
 };
-
-afterEach(async () => {
-  for (const root of temporaryRoots.splice(0)) {
-    await rm(root, { recursive: true, force: true });
-  }
-});
 
 describe("identifier guard scopes to the files it owns", () => {
   it("does not collect or report a test file in a package the guard does not own", async () => {

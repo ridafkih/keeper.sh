@@ -17,13 +17,13 @@ const isResourceNotFoundError = (error: unknown): boolean => {
   return error.error === "ResourceNotFound";
 };
 
-const NO_FAILURE = Symbol("no-failure");
-const DEADLINE_REACHED = Symbol("deadline-reached");
-
 const deletePolarCustomerByExternalId = async (
   polarClient: PolarCustomerDeletionClient,
   externalId: string,
 ): Promise<void> => {
+  const NO_FAILURE = Symbol("no-failure");
+  const DEADLINE_REACHED = Symbol("deadline-reached");
+
   const failure = polarClient.customers
     .deleteExternal({ externalId })
     .then(

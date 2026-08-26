@@ -1,12 +1,13 @@
 import { eq } from "drizzle-orm";
 import { clearUserDeleted, markUserDeleted } from "@keeper.sh/calendar";
-import { createPushSyncQueue, removeUserSyncJobs } from "@keeper.sh/queue";
+import { removeUserSyncJobs } from "@keeper.sh/queue";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 import { deregisterUserPushChannels } from "@/utils/push-notifications/deregister-account-channels";
 import { SYNC_TEARDOWN_TIMEOUT_MS } from "@keeper.sh/auth";
 import type { RedisTombstoneClient } from "@keeper.sh/calendar";
 import type { DeleteUserTeardown } from "@keeper.sh/auth";
+import type { database as databaseInstance } from "@/context";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const STEP_ABORT_SETTLE_MS = 400;
@@ -16,16 +17,11 @@ const PUSH_CHANNELS_TIMEOUT_MS = 3800;
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
-const STEP_TIMEOUTS_MS = [
+const TEARDOWN_BUDGET_MS = [
   TOMBSTONE_TIMEOUT_MS,
   SYNC_JOBS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
-];
-
-const TEARDOWN_BUDGET_MS = STEP_TIMEOUTS_MS.reduce(
-  (total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS,
-  0,
-);
+].reduce((total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS, 0);
 
 if (TEARDOWN_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
   throw new Error(
@@ -196,48 +192,45 @@ const createDeleteUserSyncTeardownRollback =
     });
   };
 
-let pushSyncQueue: DeleteUserSyncQueue | null = null;
-
-const resolvePushSyncQueue = (redisUrl: string): DeleteUserSyncQueue => {
-  pushSyncQueue ??= createPushSyncQueue({
-    url: redisUrl,
-    commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
-    maxRetriesPerRequest: QUEUE_MAX_RETRIES_PER_REQUEST,
-  });
-  return pushSyncQueue;
+const TEARDOWN_QUEUE_CONNECTION_OPTIONS = {
+  commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+  maxRetriesPerRequest: QUEUE_MAX_RETRIES_PER_REQUEST,
 };
 
-const deleteUserSyncTeardownRollback: DeleteUserTeardown = async (userId) => {
-  const { redis } = await import("@/context");
+interface DeleteUserSyncTeardownContext {
+  database: typeof databaseInstance;
+  queue: DeleteUserSyncQueue;
+  redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
+}
 
-  await createDeleteUserSyncTeardownRollback({ redis })(userId);
-};
-
-const deleteUserSyncTeardown: DeleteUserTeardown = async (userId) => {
-  const { database, env, redis } = await import("@/context");
-
-  await createDeleteUserSyncTeardown({
-    createQueue: () => resolvePushSyncQueue(env.REDIS_URL),
+const createApiDeleteUserSyncTeardown = (
+  context: DeleteUserSyncTeardownContext,
+): DeleteUserTeardown =>
+  createDeleteUserSyncTeardown({
+    createQueue: () => context.queue,
     deregisterPushChannels: deregisterUserPushChannels,
-    listCalendarIds: async (scopeUserId) => {
-      const rows = await database
+    listCalendarIds: async (userId) => {
+      const rows = await context.database
         .select({ id: calendarsTable.id })
         .from(calendarsTable)
-        .where(eq(calendarsTable.userId, scopeUserId));
+        .where(eq(calendarsTable.userId, userId));
       return rows.map((row) => row.id);
     },
-    redis,
-  })(userId);
-};
+    redis: context.redis,
+  });
 
 export {
+  createApiDeleteUserSyncTeardown,
   createDeleteUserSyncTeardown,
   createDeleteUserSyncTeardownRollback,
-  deleteUserSyncTeardown,
-  deleteUserSyncTeardownRollback,
   PUSH_CHANNELS_TIMEOUT_MS,
   STEP_ABORT_SETTLE_MS,
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,
+  TEARDOWN_QUEUE_CONNECTION_OPTIONS,
 };
-export type { DeleteUserSyncQueue, DeleteUserSyncTeardownDependencies };
+export type {
+  DeleteUserSyncQueue,
+  DeleteUserSyncTeardownContext,
+  DeleteUserSyncTeardownDependencies,
+};

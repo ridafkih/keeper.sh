@@ -24,8 +24,6 @@ interface DeleteUserCompensation {
   prepare: () => Promise<void>;
 }
 
-const deleteUserAttempts = new AsyncLocalStorage<DeleteUserAttempt>();
-
 const createDeleteUserAttempt = (): DeleteUserAttempt => {
   let startedUserId: string | null = null;
   let stage: DeleteUserAttemptStage = "started";
@@ -56,39 +54,6 @@ const createDeleteUserAttempt = (): DeleteUserAttempt => {
   };
 };
 
-const startDeleteUserAttempt = (userId: string): void => {
-  deleteUserAttempts.getStore()?.start(userId);
-};
-
-const commitDeleteUserAttempt = (userId: string): void => {
-  deleteUserAttempts.getStore()?.commit(userId);
-};
-
-const finishDeleteUserAttempt = (): void => {
-  deleteUserAttempts.getStore()?.finish();
-};
-
-const instrumentedDeleters = new WeakSet<UserRowDeleter>();
-
-const instrumentUserRowDelete = (adapter: UserRowDeleter): void => {
-  if (instrumentedDeleters.has(adapter)) {
-    return;
-  }
-
-  const deleteUserRow = adapter.deleteUser;
-
-  if (typeof deleteUserRow !== "function") {
-    throw new TypeError("internal adapter does not expose a deleteUser function");
-  }
-
-  adapter.deleteUser = async (userId: string) => {
-    await deleteUserRow.call(adapter, userId);
-    commitDeleteUserAttempt(userId);
-  };
-
-  instrumentedDeleters.add(adapter);
-};
-
 type AuthRequestHandler = (request: Request) => Promise<Response>;
 
 const settleDeleteUserAttempt = async (
@@ -104,36 +69,76 @@ const settleDeleteUserAttempt = async (
   await compensate(unfinished.userId);
 };
 
-const withDeleteUserCompensation = (
-  handler: AuthRequestHandler,
-  { compensate, finish, prepare }: DeleteUserCompensation,
-): AuthRequestHandler =>
-  async (request: Request): Promise<Response> => {
-    const attempt = createDeleteUserAttempt();
+interface DeleteUserCompensationScope {
+  finishDeleteUserAttempt: () => void;
+  instrumentUserRowDelete: (adapter: UserRowDeleter) => void;
+  startDeleteUserAttempt: (userId: string) => void;
+  withDeleteUserCompensation: (
+    handler: AuthRequestHandler,
+    compensation: DeleteUserCompensation,
+  ) => AuthRequestHandler;
+}
 
-    await prepare();
+const createDeleteUserCompensationScope = (): DeleteUserCompensationScope => {
+  const attempts = new AsyncLocalStorage<DeleteUserAttempt>();
+  const instrumentedDeleters = new WeakSet<UserRowDeleter>();
 
-    try {
-      return await deleteUserAttempts.run(attempt, () => handler(request));
-    } finally {
-      const unfinished = attempt.unfinished();
-
-      if (unfinished !== null) {
-        await settleDeleteUserAttempt(unfinished, compensate, finish);
-      }
-    }
+  const commitDeleteUserAttempt = (userId: string): void => {
+    attempts.getStore()?.commit(userId);
   };
 
-export {
-  commitDeleteUserAttempt,
-  finishDeleteUserAttempt,
-  instrumentUserRowDelete,
-  startDeleteUserAttempt,
-  withDeleteUserCompensation,
+  return {
+    finishDeleteUserAttempt: () => {
+      attempts.getStore()?.finish();
+    },
+    instrumentUserRowDelete: (adapter: UserRowDeleter) => {
+      if (instrumentedDeleters.has(adapter)) {
+        return;
+      }
+
+      const deleteUserRow = adapter.deleteUser;
+
+      if (typeof deleteUserRow !== "function") {
+        throw new TypeError("internal adapter does not expose a deleteUser function");
+      }
+
+      adapter.deleteUser = async (userId: string) => {
+        await deleteUserRow.call(adapter, userId);
+        commitDeleteUserAttempt(userId);
+      };
+
+      instrumentedDeleters.add(adapter);
+    },
+    startDeleteUserAttempt: (userId: string) => {
+      attempts.getStore()?.start(userId);
+    },
+    withDeleteUserCompensation: (
+      handler: AuthRequestHandler,
+      { compensate, finish, prepare }: DeleteUserCompensation,
+    ): AuthRequestHandler =>
+      async (request: Request): Promise<Response> => {
+        const attempt = createDeleteUserAttempt();
+
+        await prepare();
+
+        try {
+          return await attempts.run(attempt, () => handler(request));
+        } finally {
+          const unfinished = attempt.unfinished();
+
+          if (unfinished !== null) {
+            await settleDeleteUserAttempt(unfinished, compensate, finish);
+          }
+        }
+      },
+  };
 };
+
+export { createDeleteUserCompensationScope };
 export type {
   AuthRequestHandler,
   DeleteUserAttempt,
   DeleteUserCompensation,
+  DeleteUserCompensationScope,
   UserRowDeleter,
 };

@@ -29,8 +29,6 @@ const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
 const SERIAL_CONCURRENCY = 1;
 const LIVE_STATES = ["active", "degraded", "registering"];
-const ORPHAN_RISK_STATES = new Set(LIVE_STATES);
-const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 
 interface DeregisterPushChannelsDependencies {
   createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
@@ -145,11 +143,14 @@ const describeAbandoned = (
 const carriesProviderIdentifier = (channel: StoredPushChannel): boolean =>
   channel.providerChannelId !== null;
 
-const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] =>
-  channels
+const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] => {
+  const orphanRiskStates = new Set(LIVE_STATES);
+
+  return channels
     .filter((channel) =>
-      !carriesProviderIdentifier(channel) && ORPHAN_RISK_STATES.has(channel.state))
+      !carriesProviderIdentifier(channel) && orphanRiskStates.has(channel.state))
     .map((channel) => `${channel.provider}:${channel.id}:${channel.state}`);
+};
 
 const restateStoppedChannels = async (
   channelIds: string[],
@@ -484,7 +485,7 @@ const deregisterUserPushChannels = async (
   await deregisterPushChannelsWithin(
     userId,
     "userId",
-    TEARDOWN_STATES,
+    [...LIVE_STATES, "failed"],
     signal,
     true,
     DISCONNECT_CONCURRENCY,

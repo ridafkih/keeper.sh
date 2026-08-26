@@ -59,11 +59,8 @@ const createDeleteUserTeardown =
     }
   };
 
-const runDeleteUserTeardown = createDeleteUserTeardown([]);
-
 export {
   createDeleteUserTeardown,
-  runDeleteUserTeardown,
   SYNC_TEARDOWN_TIMEOUT_MS,
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,

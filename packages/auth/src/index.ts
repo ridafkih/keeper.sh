@@ -17,15 +17,9 @@ import {
 } from "./polar-customer-delete";
 import {
   createDeleteUserTeardown,
-  runDeleteUserTeardown,
   SYNC_TEARDOWN_TIMEOUT_MS,
 } from "./delete-user-teardown";
-import {
-  finishDeleteUserAttempt,
-  instrumentUserRowDelete,
-  startDeleteUserAttempt,
-  withDeleteUserCompensation,
-} from "./delete-user-compensation";
+import { createDeleteUserCompensationScope } from "./delete-user-compensation";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
@@ -166,8 +160,8 @@ const createAuth = (config: AuthConfig) => {
     trustedOrigins,
     mcpResourceUrl,
     mcpApiBaseUrl,
-    deleteUserTeardown = runDeleteUserTeardown,
-    deleteUserTeardownRollback = runDeleteUserTeardown,
+    deleteUserTeardown = createDeleteUserTeardown([]),
+    deleteUserTeardownRollback = createDeleteUserTeardown([]),
   } = config;
 
   const buildResendClient = (): Resend | null => {
@@ -176,6 +170,13 @@ const createAuth = (config: AuthConfig) => {
     }
     return null;
   };
+
+  const {
+    finishDeleteUserAttempt,
+    instrumentUserRowDelete,
+    startDeleteUserAttempt,
+    withDeleteUserCompensation,
+  } = createDeleteUserCompensationScope();
 
   const resend = buildResendClient();
   const capabilities = resolveAuthCapabilities({

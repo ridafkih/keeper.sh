@@ -68,7 +68,7 @@ describe("incident remediation tests carry no customer identifier and no comment
 
   it("keeps every test file this remediation added free of block and line comments", async () => {
     const offenders: string[] = [];
-    for (const relativePath of remediationTestFiles) {
+    for (const relativePath of remediationTestFiles()) {
       const source = await readGuardedFile(relativePath);
       for (const line of findCommentLines(source)) {
         offenders.push(`${relativePath}:${line}`);

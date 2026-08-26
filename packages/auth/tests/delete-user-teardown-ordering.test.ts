@@ -1,16 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import { createAuth } from "../src/index";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-
-const stubDatabase = {} as BunSQLDatabase;
 
 const POLAR_TEARDOWN_BOUND_MS = 10_000;
 
 const buildAuth = (overrides: Record<string, unknown> = {}) =>
   createAuth({
     baseUrl: "http://localhost:3000",
-    database: stubDatabase,
+    database: {} as BunSQLDatabase,
     polarAccessToken: "polar-test-token",
     polarMode: "sandbox",
     secret: "test-secret",
@@ -23,11 +21,10 @@ const { context } = widelogger({
   service: "auth-test",
 });
 
-const emitted: Record<string, unknown>[] = [];
-const originalWrite = process.stdout.write.bind(process.stdout);
+const captureWideEvents = async (run: () => Promise<void>) => {
+  const emitted: Record<string, unknown>[] = [];
+  const originalWrite = process.stdout.write.bind(process.stdout);
 
-beforeEach(() => {
-  emitted.length = 0;
   process.stdout.write = ((chunk: unknown) => {
     for (const line of String(chunk).split("\n")) {
       if (line.trim().length > 0) {
@@ -36,11 +33,15 @@ beforeEach(() => {
     }
     return true;
   }) as typeof process.stdout.write;
-});
 
-afterEach(() => {
-  process.stdout.write = originalWrite;
-});
+  try {
+    await run();
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+
+  return emitted;
+};
 
 const NO_REQUEST = Object.freeze({}) as never;
 
@@ -198,18 +199,20 @@ describe("boundedness of the Polar teardown call", () => {
     const afterDelete = resolveAfterDelete(auth);
 
     try {
-      await context(async () => {
-        const outcome = await Promise.race([
-          afterDelete({ id: "user-1" }).then(() => "settled" as const),
-          delay(POLAR_TEARDOWN_BOUND_MS).then(() => "still-hanging" as const),
-        ]);
+      const emitted = await captureWideEvents(async () => {
+        await context(async () => {
+          const outcome = await Promise.race([
+            afterDelete({ id: "user-1" }).then(() => "settled" as const),
+            delay(POLAR_TEARDOWN_BOUND_MS).then(() => "still-hanging" as const),
+          ]);
 
-        expect(acceptedConnections).toBeGreaterThan(0);
-        expect(receivedChunks).toBeGreaterThan(0);
-        expect(socketErrors).toBe(0);
-        expect(outcome).toBe("settled");
+          expect(acceptedConnections).toBeGreaterThan(0);
+          expect(receivedChunks).toBeGreaterThan(0);
+          expect(socketErrors).toBe(0);
+          expect(outcome).toBe("settled");
 
-        widelog.flush();
+          widelog.flush();
+        });
       });
 
       expect(emitted).toHaveLength(1);
