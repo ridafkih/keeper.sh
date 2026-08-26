@@ -168,10 +168,40 @@ const parseHttpResponse = (httpBlock: string): BatchSubResponse => {
 
 const DEFAULT_SEPARATOR_LENGTH = 2;
 
-const parseBatchResponseBody = (responseText: string, boundary: string): BatchSubResponse[] => {
+/*
+ * `expectedCount` is the number of sub-requests that went out in this envelope's own request.
+ * The returned array is exactly that long, in sub-request order, because every caller downstream
+ * (executeBatchChunked's concatenation, retryRateLimitedSubRequests' zip against `pending`, and
+ * the provider's entry.batchIndex lookups) reads a response by its position alone. Deriving the
+ * length from the largest Content-ID the envelope happened to claim instead let a short or
+ * renumbered envelope shift every later answer onto another event's mapping. Omitting the count
+ * leaves the length to the envelope's own largest Content-ID, for callers that parse a stored
+ * body with no outgoing request in hand.
+ */
+const UNBOUNDED_SUB_REQUEST_COUNT = Number.POSITIVE_INFINITY;
+
+const orderedLength = (expectedCount: number, maxIndex: number): number => {
+  if (Number.isFinite(expectedCount)) {
+    return expectedCount;
+  }
+  return maxIndex + 1;
+};
+
+const parseBatchResponseBody = (
+  responseText: string,
+  boundary: string,
+  expectedCount: number = UNBOUNDED_SUB_REQUEST_COUNT,
+): BatchSubResponse[] => {
   const parts = responseText.split(`--${boundary}`);
   const results = new Map<number, BatchSubResponse>();
   let maxIndex = -1;
+
+  const isOutsideRange = (index: number): boolean => {
+    if (index < 0) {
+      return true;
+    }
+    return index >= expectedCount;
+  };
 
   for (const part of parts) {
     const trimmed = part.trim();
@@ -201,6 +231,13 @@ const parseBatchResponseBody = (responseText: string, boundary: string): BatchSu
       index = contentIndex;
     }
 
+    if (isOutsideRange(index)) {
+      /* A part claiming a Content-ID this request never sent answers no sub-request of ours.
+         Dropping it keeps it from displacing a sibling; the slot it would have taken stays
+         unanswered, which is the truth about what the destination told us. */
+      continue;
+    }
+
     results.set(index, parsed);
 
     if (index > maxIndex) {
@@ -208,8 +245,9 @@ const parseBatchResponseBody = (responseText: string, boundary: string): BatchSu
     }
   }
 
+  const length = orderedLength(expectedCount, maxIndex);
   const ordered: BatchSubResponse[] = [];
-  for (let index = 0; index <= maxIndex; index++) {
+  for (let index = 0; index < length; index++) {
     const entry = results.get(index);
     if (entry) {
       ordered.push(entry);
@@ -313,7 +351,7 @@ const executeBatch = (
         throw new Error(`Batch response missing boundary in Content-Type`);
       }
 
-      return parseBatchResponseBody(responseText, responseBoundary);
+      return parseBatchResponseBody(responseText, responseBoundary, subRequests.length);
     },
     {
       signal: options?.signal,

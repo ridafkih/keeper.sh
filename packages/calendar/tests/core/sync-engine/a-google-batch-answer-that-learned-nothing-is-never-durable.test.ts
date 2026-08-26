@@ -51,10 +51,11 @@ const makeReplacement = (mapping: EventMapping): Extract<SyncOperation, { type: 
 });
 
 /*
- * The two answers the real Google destination emits when the batch carried no word about a
- * mapping, copied from provider.ts verbatim: the status-less protocol hole (a sub-response the
- * batch never returned) and the status-carrying one (parseHttpResponse and the synthetic fill
- * in batch.ts both report 0 when no HTTP status line was ever read for that index).
+ * The two answers the destination layer emits when the batch carried no word about a mapping,
+ * copied from provider.ts verbatim: the status-less protocol hole (the defensive branch for a
+ * responses array shorter than the requests that produced it) and the status-carrying one
+ * (parseHttpResponse and the synthetic fill in batch.ts both report 0 when no HTTP status line
+ * was ever read for that index). The engine must find neither of them durable.
  */
 const missingBatchResponse = (): PushResult => ({
   error: "Missing batch response",
@@ -252,13 +253,17 @@ describe("a google batch answer that learned nothing is never durable evidence",
   }
 });
 
-describe("both learned-nothing shapes come from one real google batch response", () => {
-  it("reports the status-less protocol hole for the index the batch omitted", async () => {
+describe("a real google batch response never lets one index answer for another", () => {
+  /* An envelope that answers fewer parts than the request sent leaves that index explicitly
+     unanswered rather than shortening the array, so the update it belonged to keeps its own
+     slot instead of inheriting the neighbour that happened to be answered. */
+  it("reports an unanswered zero status for the index the batch omitted", async () => {
     const results = await updateTwoEventsThroughRealGoogle("response-item-0", GOOGLE_EVENT_ID);
 
     expect(results[0]).toMatchObject({ success: true });
-    expect(results[1]).toEqual(missingBatchResponse());
-    expect(results[1]).not.toHaveProperty("statusCode");
+    expect(results[1]).toMatchObject(zeroStatusResponse());
+    expect(results[1]).toMatchObject({ destinationAnswer: "unanswered" });
+    expect(results[1]).not.toHaveProperty("deleteId");
   });
 
   it("reports a zero status for the index the renumbered parts skipped", async () => {
