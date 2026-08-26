@@ -165,6 +165,10 @@ interface SyncResult {
   updated: number;
   removed: number;
   removeFailed: number;
+  /* Failures nobody can act on: the destination will refuse this one event on every future cycle
+     too. They are still reported, but they must not grade the whole calendar failed, or one such
+     event backs every other event on it off to the six-hour ceiling for ever. */
+  parked?: number;
 }
 
 interface RemoteEvent {

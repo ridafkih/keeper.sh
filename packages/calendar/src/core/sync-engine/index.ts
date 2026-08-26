@@ -926,6 +926,11 @@ const executeRemoveRun = async (
   };
 };
 
+const parkedTotal = (
+  state: ChunkedExecutionState,
+  runResult: RunResult,
+): number => (state.result.parked ?? 0) + (runResult.result.parked ?? 0);
+
 const mergeRunResult = (
   state: ChunkedExecutionState,
   runResult: RunResult,
@@ -944,6 +949,9 @@ const mergeRunResult = (
     updated: state.result.updated + runResult.result.updated,
     removed: state.result.removed + runResult.result.removed,
     removeFailed: state.result.removeFailed + runResult.result.removeFailed,
+    /* Carried only when there is one, so a run with nothing parked reports the shape it always
+       reported and no caller has to learn a new key to read an ordinary result. */
+    ...(parkedTotal(state, runResult) > 0 && { parked: parkedTotal(state, runResult) }),
   };
   state.conflictsResolved += runResult.conflictsResolved;
   state.errors.push(...runResult.errors);
@@ -1094,7 +1102,16 @@ const recordUnremovableMirrors = (
 ): void => {
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: unremovable.length },
+    /* The mirror is not here to remove and no later cycle changes that, so it is reported without
+       grading the destination broken. */
+    result: {
+      added: 0,
+      addFailed: 0,
+      updated: 0,
+      removed: 0,
+      removeFailed: unremovable.length,
+      parked: unremovable.length,
+    },
     conflictsResolved: 0,
     errors: unremovable.map((operation) => ({
       type: "remove" as const,
@@ -1150,7 +1167,9 @@ const recordUnbuildableRecreate = (
   });
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    /* One event nobody can act on, and every later cycle will say the same: reported, but never
+       evidence that the destination itself is broken. */
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0, parked: 1 },
     conflictsResolved: 0,
     errors: [],
   }, false);
@@ -1546,7 +1565,9 @@ const recordMirrorOutsideDestination = (
   });
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    /* One event nobody can act on, and every later cycle will say the same: reported, but never
+       evidence that the destination itself is broken. */
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0, parked: 1 },
     conflictsResolved: 0,
     errors: [],
   }, false);
@@ -1654,7 +1675,9 @@ const recordUnrepairableRefusal = (
   });
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    /* One event nobody can act on, and every later cycle will say the same: reported, but never
+       evidence that the destination itself is broken. */
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0, parked: 1 },
     conflictsResolved: 0,
     errors: [],
   }, false);
@@ -1774,17 +1797,20 @@ const recordUnsettledMirrors = (
   state: ChunkedExecutionState,
   verdicts: MirrorVerdicts,
   replacements: Extract<SyncOperation, { type: "replace" }>[],
-): void => {
+): Extract<SyncOperation, { type: "replace" }>[] => {
+  const unsettled: Extract<SyncOperation, { type: "replace" }>[] = [];
   for (const replacement of replacements) {
     if (!verdicts.unsettled.has(replacement.deleteId)) {
       continue;
     }
+    unsettled.push(replacement);
     state.verificationUnsettled += 1;
     state.errors.push({
       type: "update",
       error: `verification could not settle the mirror for mapping ${replacement.staleMappingId}: ${verdicts.unsettledReason}`,
     });
   }
+  return unsettled;
 };
 
 /* The read handed back the object under the same key and uid the refused update already used, so
@@ -1806,6 +1832,10 @@ const resolveVerifiedMirrors = async (
   state: ChunkedExecutionState,
   checkpoint?: CheckpointCallback,
   updateAlreadyRefused = false,
+  /* Filled with the replacements the read could not settle. The caller that owns the escape is the
+     only place that can decide what a read which never answers is allowed to license, and it needs
+     to know which mappings those were. */
+  unsettledSink?: Extract<SyncOperation, { type: "replace" }>[],
 ): Promise<boolean> => {
   /* The replace already carries the uid the mapping holds; dropping it here is what left Outlook
      unable to ever say absent, so a mirror the recipient deleted was never restored. */
@@ -1814,7 +1844,10 @@ const resolveVerifiedMirrors = async (
     uid: operation.uid,
   }));
   const verdicts = await verifyMirrors(targets, verifyEventsExist);
-  recordUnsettledMirrors(state, verdicts, replacements);
+  /* Named unconditionally: optional chaining on the sink would skip the call that counts and
+     reports them whenever no caller asked for the list. */
+  const unsettledReplacements = recordUnsettledMirrors(state, verdicts, replacements);
+  unsettledSink?.push(...unsettledReplacements);
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
   const relocated: Extract<SyncOperation, { type: "replace" }>[] = [];
   const repairs: PendingUpdate[] = [];
@@ -1964,6 +1997,56 @@ const recreateMissingMirrors = async (
   return await commitAddRun(state, addResult, checkpoint);
 };
 
+/* The mapping carries one failure counter, and this cycle may already have written to it - a
+   promotion spends it, and spending it is what stops the same mapping being promoted every cycle.
+   So the count advanced here is whatever this run last wrote for the mapping, falling back to what
+   the mapping arrived with: reading the stale arrival value would let an answered refusal that just
+   promoted hand its spent evidence straight back to the escape below. */
+const countUnsettledRead = (state: ChunkedExecutionState, mapping: EventMapping): number => {
+  const carried = (state.changes.updates ?? [])
+    .findLast((update) => update.id === mapping.id);
+  if (typeof carried?.consecutiveUpdateFailures === "number") {
+    return carried.consecutiveUpdateFailures + 1;
+  }
+  return countUpdateFailure(mapping);
+};
+
+/* What a refusal nothing was ever learned from may accumulate. The refusal itself repeats forever
+   and proves nothing, so the evidence counted here is the verification read failing to settle the
+   mirror: it is the destination declining to say anything about the object, cycle after cycle. The
+   counter rides on the mapping because nothing else survives to the next cycle, and it is spent the
+   moment it promotes so a stalled escape cannot re-promote the same mapping every cycle. */
+const carryUnsettledEvidence = (
+  state: ChunkedExecutionState,
+  unsettled: Extract<SyncOperation, { type: "replace" }>[],
+  mappingsById: Map<string, EventMapping>,
+): { carries: PendingUpdate[]; promoted: Extract<SyncOperation, { type: "replace" }>[] } => {
+  const promoted: Extract<SyncOperation, { type: "replace" }>[] = [];
+  const carries: PendingUpdate[] = [];
+  for (const replacement of unsettled) {
+    const mapping = mappingsById.get(replacement.staleMappingId);
+    if (!mapping) {
+      continue;
+    }
+    const failures = countUnsettledRead(state, mapping);
+    if (failures >= UPDATE_FAILURES_BEFORE_REPLACEMENT) {
+      promoted.push(replacement);
+      carries.push(toFailureCarry(mapping, 0));
+      continue;
+    }
+    carries.push(toFailureCarry(mapping, failures));
+  }
+  if (carries.length > 0) {
+    mergeRunResult(state, {
+      changes: { inserts: [], deletes: [], updates: carries },
+      result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 0 },
+      conflictsResolved: 0,
+      errors: [],
+    });
+  }
+  return { carries, promoted };
+};
+
 /* The escape for a refusal the destination answered on the same mapping cycle after cycle. It may
    only ever end in a recreate of a mirror the read proved absent, or in a named failure: a delete
    would destroy the customer's only copy to make a stall stop repeating, which is the trade this
@@ -1973,6 +2056,7 @@ const escapeRefusedUpdates = async (
   refused: Extract<SyncOperation, { type: "replace" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
+  mappingsByRemoteIdentity: Map<string, EventMapping>,
   mappingsById: Map<string, EventMapping>,
   state: ChunkedExecutionState,
   checkpoint?: CheckpointCallback,
@@ -1989,7 +2073,8 @@ const escapeRefusedUpdates = async (
     return true;
   }
 
-  return await resolveVerifiedMirrors(
+  const unsettled: Extract<SyncOperation, { type: "replace" }>[] = [];
+  if (!(await resolveVerifiedMirrors(
     refused,
     calendarId,
     provider,
@@ -1998,6 +2083,35 @@ const escapeRefusedUpdates = async (
     state,
     checkpoint,
     true,
+    unsettled,
+  ))) {
+    return false;
+  }
+
+  if (unsettled.length === 0) {
+    return true;
+  }
+
+  const { carries, promoted } = carryUnsettledEvidence(state, unsettled, mappingsById);
+  if (!(await checkpointRun(state, { inserts: [], deletes: [], updates: carries }, checkpoint))) {
+    return false;
+  }
+  if (promoted.length === 0) {
+    return true;
+  }
+
+  /* The read has now failed to say anything about these mirrors for as many consecutive cycles as
+     an answered refusal needs to promote, so the destination is offering no proof either way and
+     the mapping would otherwise stay frozen forever. The delete-then-add below still refuses to
+     recreate anything the delete did not observe itself remove. */
+  return await replaceViaDeleteThenAdd(
+    promoted,
+    calendarId,
+    provider,
+    mappingsByRemoteIdentity,
+    state,
+    true,
+    checkpoint,
   );
 };
 
@@ -2057,6 +2171,7 @@ const executeReplacements = async (
         refused,
         calendarId,
         provider,
+        mappingsByRemoteIdentity,
         mappingsById,
         state,
         checkpoint,
@@ -2223,7 +2338,16 @@ const recordMirrorsOutsideDestination = (
 
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: unplanned.length, updated: 0, removed: 0, removeFailed: 0 },
+    /* Parked, not failed: the copy is outside this calendar and every future cycle will say so
+       again, so it is reported without grading the destination broken. */
+    result: {
+      added: 0,
+      addFailed: unplanned.length,
+      updated: 0,
+      removed: 0,
+      removeFailed: 0,
+      parked: unplanned.length,
+    },
     conflictsResolved: 0,
     errors: unplanned.map((mapping) => ({
       type: "update" as const,

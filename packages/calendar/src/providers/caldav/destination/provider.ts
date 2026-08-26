@@ -387,9 +387,10 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
           try {
             /*
-             * A stored href this event can never address is the opposite case: the recreate writes
-             * one derived from the UID, correct by construction, so this has to stay promotable
-             * rather than being read as having learned nothing.
+             * A stored href this event can never address is refused here, before a single byte
+             * leaves: the server said nothing about its copy, so the attempt stays unsent and the
+             * engine reads it as a refusal that never learned anything rather than as evidence
+             * that would license destroying the object the href actually names.
              */
             const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
 
@@ -405,7 +406,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               throw error;
             }
             // A refused PUT is never evidence that delete-then-create would put the event back: RFC 4791 5.3.2 payload preconditions refuse the same bytes again.
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),

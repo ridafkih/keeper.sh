@@ -52,6 +52,7 @@ interface DestinationOperationCounts {
   conflictsResolved: number;
   removed: number;
   removeFailed: number;
+  parked?: number;
 }
 
 /* Stated as positive evidence of success rather than as an absence of it, so a counter that never
@@ -62,13 +63,20 @@ const hasSuccessfulOperation = (result: DestinationOperationCounts): boolean =>
   || result.removed > 0
   || result.conflictsResolved > 0;
 
+/* A parked failure says nothing about the destination: it is the same one event being refused
+   again, and it will be refused on every future cycle too. Counting it as evidence lets a single
+   unactionable event escalate the whole calendar to the six-hour ceiling, where every other event
+   on it then waits, and backoff clears only on a success a quiet calendar can never reach. */
+const hasActionableFailure = (result: DestinationOperationCounts): boolean =>
+  result.addFailed + result.removeFailed - (result.parked ?? 0) > 0;
+
 const hasNoSuccessfulOperations = (result: DestinationOperationCounts): boolean =>
   !hasSuccessfulOperation(result)
-  && result.addFailed + result.removeFailed > 0;
+  && hasActionableFailure(result);
 
 const hasAttemptedOperations = (result: DestinationOperationCounts): boolean =>
   hasSuccessfulOperation(result)
-  || result.addFailed + result.removeFailed > 0;
+  || hasActionableFailure(result);
 
 type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
 
