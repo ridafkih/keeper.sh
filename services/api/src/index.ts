@@ -17,6 +17,8 @@ const HTTP_NOT_FOUND = 404;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
 
+const SERVER_IDLE_TIMEOUT_SECONDS = 30;
+
 const router = new Bun.FileSystemRouter({
   dir: join(import.meta.dirname, "routes"),
   style: "nextjs",
@@ -27,6 +29,7 @@ await entry({
     const server = Bun.serve<BroadcastData>({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
+      idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
       port: env.API_PORT,
       websocket: websocketHandler,
       fetch: withCors(async (request) => {

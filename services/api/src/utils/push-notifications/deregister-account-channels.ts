@@ -23,6 +23,7 @@ import { widelog } from "@/utils/logging";
 
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const DISCONNECT_TIMEOUT_MS = 5000;
+const DISCONNECT_CONCURRENCY = 8;
 const LIVE_STATES = ["active", "degraded", "registering"];
 const TEARDOWN_STATES = [...LIVE_STATES, "failed"];
 
@@ -69,12 +70,20 @@ const runDeregisterPushChannels = async (
     return 0;
   }
 
-  let stopped = 0;
-  for (const channel of channels) {
-    if (await stopChannel(channel, dependencies)) {
-      stopped += 1;
-    }
-  }
+  const pending = [...channels];
+  const results: boolean[] = [];
+  const workers = Array.from(
+    { length: Math.min(DISCONNECT_CONCURRENCY, pending.length) },
+    async () => {
+      for (let channel = pending.shift(); channel; channel = pending.shift()) {
+        results.push(await stopChannel(channel, dependencies));
+      }
+    },
+  );
+
+  await Promise.all(workers);
+
+  const stopped = results.filter(Boolean).length;
 
   dependencies.observe({
     "push_channel.disconnect_deregistered_count": stopped,

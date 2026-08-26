@@ -152,7 +152,7 @@ export {
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
-export { DELETED_USER_TOMBSTONE_TTL_SECONDS, createUserDeletedCheck, deletedUserTombstoneKey, markUserDeleted, type RedisTombstoneClient } from "./core/utils/deleted-user-tombstone";
+export { DELETED_USER_TOMBSTONE_TTL_SECONDS, clearUserDeleted, createUserDeletedCheck, deletedUserTombstoneKey, markUserDeleted, type RedisTombstoneClient, type TombstoneEraser, type TombstoneWriter, type UserDeletedFallback } from "./core/utils/deleted-user-tombstone";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";

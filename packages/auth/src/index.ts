@@ -9,12 +9,21 @@ import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { checkout, polar, portal } from "@polar-sh/better-auth";
 import { Polar } from "@polar-sh/sdk";
 import { Resend } from "resend";
+import { widelog } from "widelogger";
 import { usernameOnly } from "./plugins/username-only";
-import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
+import {
+  deletePolarCustomerByExternalId,
+  POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+} from "./polar-customer-delete";
 import {
   createDeleteUserTeardown,
   runDeleteUserTeardown,
 } from "./delete-user-teardown";
+import {
+  commitDeleteUserAttempt,
+  startDeleteUserAttempt,
+  withDeleteUserCompensation,
+} from "./delete-user-compensation";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
@@ -46,6 +55,8 @@ type DeleteUserOptions = NonNullable<
 
 type BeforeDeleteUser = NonNullable<DeleteUserOptions["beforeDelete"]>;
 
+type AfterDeleteUser = NonNullable<DeleteUserOptions["afterDelete"]>;
+
 interface EmailUser {
   email: string;
   name: string;
@@ -75,6 +86,7 @@ interface AuthConfig {
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
   deleteUserTeardown?: DeleteUserTeardown;
+  deleteUserTeardownRollback?: DeleteUserTeardown;
 }
 
 interface KeeperMcpAuthSession {
@@ -98,7 +110,7 @@ interface OAuthProviderAuthApi {
   getOpenIdConfig: (input: { headers: Headers }) => Promise<unknown>;
 }
 
-const POLAR_TEARDOWN_TIMEOUT_MS = 5000;
+const SYNC_TEARDOWN_TIMEOUT_MS = 8000;
 
 const hasOAuthProviderApi = (
   api: object,
@@ -155,6 +167,7 @@ const createAuth = (config: AuthConfig) => {
     mcpResourceUrl,
     mcpApiBaseUrl,
     deleteUserTeardown = runDeleteUserTeardown,
+    deleteUserTeardownRollback = runDeleteUserTeardown,
   } = config;
 
   const buildResendClient = (): Resend | null => {
@@ -186,7 +199,6 @@ const createAuth = (config: AuthConfig) => {
       return new Polar({
         accessToken: polarAccessToken,
         server: polarMode,
-        timeoutMs: POLAR_TEARDOWN_TIMEOUT_MS,
       });
     }
     return null;
@@ -203,20 +215,42 @@ const createAuth = (config: AuthConfig) => {
       {
         name: "polar_customer",
         run: (userId) => deletePolarCustomerByExternalId(polarClient, userId),
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
       },
     ];
   };
 
-  const teardown = createDeleteUserTeardown([
-    { name: "sync", run: deleteUserTeardown },
-    ...buildPolarTeardownSteps(),
+  const quiesce = createDeleteUserTeardown([
+    { name: "sync", run: deleteUserTeardown, timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS },
+  ]);
+
+  const destroyExternalState = createDeleteUserTeardown(buildPolarTeardownSteps());
+
+  const rollbackQuiesce = createDeleteUserTeardown([
+    {
+      name: "sync_rollback",
+      run: deleteUserTeardownRollback,
+      timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS,
+    },
   ]);
 
   const beforeDelete: BeforeDeleteUser = async (user) => {
-    await teardown(user.id);
+    startDeleteUserAttempt(user.id);
+    await quiesce(user.id);
+  };
+
+  const afterDelete: AfterDeleteUser = async (user) => {
+    commitDeleteUserAttempt();
+    await destroyExternalState(user.id);
+  };
+
+  const compensateDeleteUser = async (userId: string): Promise<void> => {
+    widelog.setFields({ "delete_user.teardown_compensated": true });
+    await rollbackQuiesce(userId);
   };
 
   const deleteUser: DeleteUserOptions = {
+    afterDelete,
     beforeDelete,
     enabled: true,
   };
@@ -286,7 +320,7 @@ const createAuth = (config: AuthConfig) => {
     };
   }
 
-  const auth = betterAuth({
+  const baseAuth = betterAuth({
     account: {
       accountLinking: {
         allowDifferentEmails: true,
@@ -395,13 +429,13 @@ const createAuth = (config: AuthConfig) => {
     const resourceActions = resourceClient.getActions();
     const jwksUrl = resolveMcpJwksUrl(baseUrl, mcpApiBaseUrl);
 
-    if (!hasOAuthProviderApi(auth.api)) {
+    if (!hasOAuthProviderApi(baseAuth.api)) {
       throw new Error("OAuth provider plugin did not register expected API methods");
     }
 
-    const oauthApi = auth.api;
+    const oauthApi = baseAuth.api;
 
-    Object.assign(auth.api, {
+    Object.assign(baseAuth.api, {
       getMCPProtectedResource: () =>
         resourceActions.getProtectedResourceMetadata(
           mcpOptions.protectedResourceMetadata,
@@ -444,6 +478,11 @@ const createAuth = (config: AuthConfig) => {
       },
     } satisfies KeeperMcpAuthApi);
   }
+
+  const auth = {
+    ...baseAuth,
+    handler: withDeleteUserCompensation(baseAuth.handler, compensateDeleteUser),
+  };
 
   return { auth, capabilities, polarClient: polarClient ?? null };
 };

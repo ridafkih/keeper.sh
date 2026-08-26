@@ -36,6 +36,7 @@ import {
   calendarsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
 import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
@@ -789,6 +790,13 @@ const countMappedSources = async (
   return mappings.length;
 };
 
+const buildDeletionProbeFields = (failures: string[]): Record<string, unknown> => {
+  if (failures.length === 0) {
+    return {};
+  }
+  return { "user_deleted_check.probe_errors": [...failures] };
+};
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
@@ -822,7 +830,20 @@ const syncDestinationsForUser = async (
   }
 
   const syncLock = createSyncLock(redis, "background");
-  const isUserDeleted = createUserDeletedCheck(redis, userId);
+  const deletionProbeFailures: string[] = [];
+  const isUserDeleted = createUserDeletedCheck(redis, userId, {
+    isUserRowPresent: async () => {
+      const rows = await database
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+        .limit(1);
+      return rows.length > 0;
+    },
+    onProbeError: (error) => {
+      deletionProbeFailures.push(getErrorMessage(error));
+    },
+  });
 
   let abortedCount = 0;
   let added = 0;
@@ -1058,6 +1079,7 @@ const syncDestinationsForUser = async (
                 readPoolWindow,
                 sourceAuthorityDurationMs,
               }),
+              ...buildDeletionProbeFields(deletionProbeFailures),
               "provider.name": destination.provider,
               "provider.account_id": destination.accountId,
               "provider.calendar_id": destination.calendarId,

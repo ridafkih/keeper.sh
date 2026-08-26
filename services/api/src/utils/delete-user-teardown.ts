@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { markUserDeleted } from "@keeper.sh/calendar";
+import { clearUserDeleted, markUserDeleted } from "@keeper.sh/calendar";
 import { createPushSyncQueue, removeUserSyncJobs } from "@keeper.sh/queue";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
@@ -8,8 +8,15 @@ import type { RedisTombstoneClient } from "@keeper.sh/calendar";
 import type { DeleteUserTeardown, DeleteUserTeardownStep } from "@keeper.sh/auth";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
+const TEARDOWN_BUDGET_MS = 7500;
+const TOMBSTONE_TIMEOUT_MS = 1000;
+const SYNC_JOBS_TIMEOUT_MS = 2000;
+const PUSH_CHANNELS_TIMEOUT_MS = 5500;
+const QUEUE_COMMAND_TIMEOUT_MS = 5000;
+const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
 interface DeleteUserSyncQueue {
+  getJob: (jobId: string) => Promise<{ id?: string } | undefined>;
   remove: (jobId: string) => Promise<number>;
 }
 
@@ -17,7 +24,7 @@ interface DeleteUserSyncTeardownDependencies {
   createQueue: () => DeleteUserSyncQueue;
   deregisterPushChannels: (userId: string) => Promise<number>;
   listCalendarIds: (userId: string) => Promise<string[]>;
-  redis: Pick<RedisTombstoneClient, "set">;
+  redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
 }
 
 const buildDeleteUserSyncSteps = (
@@ -26,6 +33,7 @@ const buildDeleteUserSyncSteps = (
   {
     name: "tombstone",
     run: (userId) => markUserDeleted(dependencies.redis, userId),
+    timeoutMs: TOMBSTONE_TIMEOUT_MS,
   },
   {
     name: "sync_jobs",
@@ -46,6 +54,7 @@ const buildDeleteUserSyncSteps = (
 
       widelog.setFields({
         "delete_user.sync_jobs_removed": outcome.removedJobIds.length,
+        "delete_user.sync_jobs_unremovable": outcome.unremovableJobIds.length,
       });
 
       if (outcome.failures.length > 0) {
@@ -55,6 +64,7 @@ const buildDeleteUserSyncSteps = (
         throw new Error(`Failed to remove queued sync jobs for user ${userId} — ${details}`);
       }
     },
+    timeoutMs: SYNC_JOBS_TIMEOUT_MS,
   },
   {
     name: "push_channels",
@@ -63,15 +73,49 @@ const buildDeleteUserSyncSteps = (
 
       widelog.setFields({ "delete_user.push_channels_deregistered": deregistered });
     },
+    timeoutMs: PUSH_CHANNELS_TIMEOUT_MS,
   },
 ];
+
+const runWithDeadline = async (
+  name: string,
+  deadlineMs: number,
+  run: () => Promise<void>,
+): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`Teardown step ${name} exceeded its ${deadlineMs}ms deadline`));
+    }, deadlineMs);
+  });
+
+  try {
+    await Promise.race([run(), deadline]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  }
+};
 
 const createDeleteUserSyncTeardown =
   (dependencies: DeleteUserSyncTeardownDependencies): DeleteUserTeardown =>
   async (userId: string) => {
+    const expiresAt = Date.now() + TEARDOWN_BUDGET_MS;
+
     for (const step of buildDeleteUserSyncSteps(dependencies)) {
+      const remainingMs = expiresAt - Date.now();
+      const deadlineMs = Math.min(step.timeoutMs ?? remainingMs, remainingMs);
+
       try {
-        await step.run(userId);
+        if (deadlineMs <= 0) {
+          throw new Error(
+            `Teardown budget of ${TEARDOWN_BUDGET_MS}ms was spent before step ${step.name}`,
+          );
+        }
+
+        await runWithDeadline(step.name, deadlineMs, () => step.run(userId));
       } catch (error) {
         widelog.errorFields(error, {
           prefix: `delete_user_teardown.${step.name}`,
@@ -82,11 +126,31 @@ const createDeleteUserSyncTeardown =
     }
   };
 
+const createDeleteUserSyncTeardownRollback =
+  (dependencies: Pick<DeleteUserSyncTeardownDependencies, "redis">): DeleteUserTeardown =>
+  async (userId: string) => {
+    await runWithDeadline("tombstone_rollback", TOMBSTONE_TIMEOUT_MS, async () => {
+      await clearUserDeleted(dependencies.redis, userId);
+
+      widelog.setFields({ "delete_user.tombstone_cleared": true });
+    });
+  };
+
 let pushSyncQueue: DeleteUserSyncQueue | null = null;
 
 const resolvePushSyncQueue = (redisUrl: string): DeleteUserSyncQueue => {
-  pushSyncQueue ??= createPushSyncQueue({ url: redisUrl, maxRetriesPerRequest: null });
+  pushSyncQueue ??= createPushSyncQueue({
+    url: redisUrl,
+    commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
+    maxRetriesPerRequest: QUEUE_MAX_RETRIES_PER_REQUEST,
+  });
   return pushSyncQueue;
+};
+
+const deleteUserSyncTeardownRollback: DeleteUserTeardown = async (userId) => {
+  const { redis } = await import("@/context");
+
+  await createDeleteUserSyncTeardownRollback({ redis })(userId);
 };
 
 const deleteUserSyncTeardown: DeleteUserTeardown = async (userId) => {
@@ -106,5 +170,12 @@ const deleteUserSyncTeardown: DeleteUserTeardown = async (userId) => {
   })(userId);
 };
 
-export { createDeleteUserSyncTeardown, deleteUserSyncTeardown, TEARDOWN_FAILED_SLUG };
+export {
+  createDeleteUserSyncTeardown,
+  createDeleteUserSyncTeardownRollback,
+  deleteUserSyncTeardown,
+  deleteUserSyncTeardownRollback,
+  TEARDOWN_BUDGET_MS,
+  TEARDOWN_FAILED_SLUG,
+};
 export type { DeleteUserSyncQueue, DeleteUserSyncTeardownDependencies };

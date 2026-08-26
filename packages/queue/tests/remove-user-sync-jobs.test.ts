@@ -90,3 +90,77 @@ describe("removeUserSyncJobs", () => {
     expect([...store.remaining]).toEqual(["sync-user-1-cal-a"]);
   });
 });
+
+interface BullQueueSemanticsStore {
+  queue: {
+    getJob: (jobId: string) => Promise<{ id: string } | undefined>;
+    remove: (jobId: string) => Promise<number>;
+  };
+  removeAttempts: string[];
+  remaining: Set<string>;
+}
+
+const createBullSemanticsQueueStore = (
+  idleJobIds: string[],
+  lockedJobIds: string[],
+): BullQueueSemanticsStore => {
+  const remaining = new Set([...idleJobIds, ...lockedJobIds]);
+  const locked = new Set(lockedJobIds);
+  const removeAttempts: string[] = [];
+
+  return {
+    remaining,
+    removeAttempts,
+    queue: {
+      getJob: (jobId: string) => {
+        if (!remaining.has(jobId)) {
+          return Promise.resolve();
+        }
+
+        return Promise.resolve({ id: jobId });
+      },
+      remove: (jobId: string) => {
+        removeAttempts.push(jobId);
+
+        if (locked.has(jobId)) {
+          return Promise.resolve(0);
+        }
+
+        remaining.delete(jobId);
+        return Promise.resolve(1);
+      },
+    },
+  };
+};
+
+describe("removeUserSyncJobs against BullMQ removeJob-2.lua semantics", () => {
+  it("reports an active job that could not be removed separately from one that was never queued", async () => {
+    const store = createBullSemanticsQueueStore(["sync-user-1-cal-a"], ["sync-user-1-cal-b"]);
+
+    const outcome = await removeUserSyncJobs(store.queue as never, "user-1", [
+      "cal-a",
+      "cal-b",
+      "cal-c",
+    ]);
+
+    expect(store.removeAttempts.toSorted()).toEqual([
+      "sync-user-1-cal-a",
+      "sync-user-1-cal-b",
+      "sync-user-1-cal-c",
+    ]);
+    expect(outcome.removedJobIds).toEqual(["sync-user-1-cal-a"]);
+    expect(outcome.unremovableJobIds).toEqual(["sync-user-1-cal-b"]);
+    expect(outcome.failures).toEqual([]);
+    expect([...store.remaining]).toEqual(["sync-user-1-cal-b"]);
+  });
+
+  it("does not count a job id that was never queued as a removal", async () => {
+    const store = createBullSemanticsQueueStore([], []);
+
+    const outcome = await removeUserSyncJobs(store.queue as never, "user-1", ["cal-a"]);
+
+    expect(outcome.removedJobIds).toEqual([]);
+    expect(outcome.unremovableJobIds).toEqual([]);
+    expect(outcome.failures).toEqual([]);
+  });
+});

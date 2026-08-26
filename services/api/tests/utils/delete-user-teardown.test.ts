@@ -187,6 +187,7 @@ interface Harness {
 
 interface HarnessOverrides {
   deregisterPushChannels?: (userId: string) => Promise<unknown>;
+  lockedJobIds?: string[];
 }
 
 const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
@@ -194,7 +195,11 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
   const redis = new FakeIoRedis();
   const removedJobIds: string[] = [];
   const stoppedChannelIds: string[] = [];
-  const jobIds = new Set(["sync-A-cal1", "sync-A-cal2", "sync-B-cal9", "sync-B-cal10"]);
+  const jobIds = new Map(
+    ["sync-A-cal1", "sync-A-cal2", "sync-B-cal9", "sync-B-cal10"].map(
+      (jobId) => [jobId, { id: jobId }] as const,
+    ),
+  );
 
   const trackingRedis = {
     exists: (key: string) => redis.exists(key),
@@ -204,9 +209,15 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
     },
   };
 
+  const lockedJobIds = new Set(overrides.lockedJobIds);
+
   const queue = {
+    getJob: (jobId: string) => Promise.resolve(jobIds.get(jobId)),
     remove: (jobId: string) => {
       events.push(`job-remove:${jobId}`);
+      if (lockedJobIds.has(jobId)) {
+        return Promise.resolve(0);
+      }
       if (!jobIds.delete(jobId)) {
         return Promise.resolve(0);
       }
@@ -266,7 +277,7 @@ const makeHarness = (overrides: HarnessOverrides = {}): Harness => {
     },
     events,
     redis,
-    remainingJobIds: () => [...jobIds],
+    remainingJobIds: () => [...jobIds.keys()],
     removedJobIds,
     stoppedChannelIds,
   };
@@ -327,6 +338,30 @@ describe("delete user sync teardown", () => {
   });
 });
 
+describe("delete user teardown with an in-flight sync run", () => {
+  it("records the job it could not remove on the wide event and still completes the deletion", async () => {
+    const { createDeleteUserSyncTeardown } = await importTeardownModule();
+    const harness = makeHarness({ lockedJobIds: ["sync-A-cal2"] });
+
+    await expect(
+      createDeleteUserSyncTeardown(harness.dependencies as never)("A"),
+    ).resolves.toBeUndefined();
+
+    await expect(createUserDeletedCheck(harness.redis, "A")()).resolves.toBe(true);
+    expect(harness.removedJobIds).toEqual(["sync-A-cal1"]);
+    expect(harness.remainingJobIds()).toContain("sync-A-cal2");
+
+    const merged = Object.assign({}, ...loggedFields) as Record<string, unknown>;
+
+    expect(merged["delete_user.sync_jobs_removed"]).toBe(1);
+    expect(merged["delete_user.sync_jobs_unremovable"]).toBe(1);
+    expect(loggedErrors.map((entry) => entry.fields.slug)).not.toContain(
+      "delete-user-teardown-failed",
+    );
+    expect(harness.events).toContain("deregister-list:A");
+  });
+});
+
 describe("production auth wiring", () => {
   it("writes the tombstone when beforeDelete runs on the api auth instance", async () => {
     const { auth } = await import("@/context");
@@ -348,5 +383,107 @@ describe("production auth wiring", () => {
     }
 
     await expect(firstRedis.exists(deletedUserTombstoneKey("A"))).resolves.toBe(1);
+  });
+});
+
+interface TombstoneRedisCall {
+  args: unknown[];
+  op: "set" | "exists" | "get";
+}
+
+interface TombstoneRedisFake {
+  calls: TombstoneRedisCall[];
+  exists: (key: string) => Promise<number>;
+  get: (key: string) => Promise<string | null>;
+  set: (key: string, value: string, mode: "EX", ttlSeconds: number) => Promise<string>;
+  store: Map<string, string>;
+}
+
+const OOM_MESSAGE = "OOM command not allowed when used memory > 'maxmemory'.";
+
+const makeTombstoneRedis = (failures: number): TombstoneRedisFake => {
+  const calls: TombstoneRedisCall[] = [];
+  const store = new Map<string, string>();
+  let attempts = 0;
+
+  return {
+    calls,
+    exists: (key: string) => {
+      calls.push({ args: [key], op: "exists" });
+      return Promise.resolve(Number(store.has(key)));
+    },
+    get: (key: string) => {
+      calls.push({ args: [key], op: "get" });
+      return Promise.resolve(store.get(key) ?? null);
+    },
+    set: (key: string, value: string, mode: "EX", ttlSeconds: number) => {
+      calls.push({ args: [key, value, mode, ttlSeconds], op: "set" });
+      attempts += 1;
+      if (attempts <= failures) {
+        return Promise.reject(new Error(OOM_MESSAGE));
+      }
+      store.set(key, value);
+      return Promise.resolve("OK");
+    },
+    store,
+  };
+};
+
+const ALWAYS_FAILING = Number.MAX_SAFE_INTEGER;
+
+describe("tombstone durability", () => {
+  it("retries the tombstone write and reads the key back before the step is done", async () => {
+    const { createDeleteUserSyncTeardown } = await importTeardownModule();
+    const harness = makeHarness();
+    const redis = makeTombstoneRedis(1);
+    const key = deletedUserTombstoneKey("A");
+
+    await createDeleteUserSyncTeardown({
+      ...harness.dependencies,
+      redis,
+    } as never)("A");
+
+    const setCalls = redis.calls.filter((call) => call.op === "set");
+
+    expect(setCalls.length).toBeGreaterThanOrEqual(2);
+    expect(setCalls.every((call) => call.args[0] === key)).toBe(true);
+    expect(setCalls.every((call) => call.args[3] === DELETED_USER_TOMBSTONE_TTL_SECONDS)).toBe(
+      true,
+    );
+
+    const lastSetIndex = redis.calls.findLastIndex((call) => call.op === "set");
+    const readBack = redis.calls
+      .slice(lastSetIndex + 1)
+      .find((call) => call.op !== "set" && call.args[0] === key);
+
+    expect(readBack).toBeDefined();
+    expect(redis.store.get(key)).toBeDefined();
+
+    expect(
+      loggedErrors.filter((entry) => entry.fields.prefix === "delete_user_teardown.tombstone"),
+    ).toEqual([]);
+  });
+
+  it("still completes deletion and records one tombstone error when redis stays OOM", async () => {
+    const { createDeleteUserSyncTeardown } = await importTeardownModule();
+    const harness = makeHarness();
+    const redis = makeTombstoneRedis(ALWAYS_FAILING);
+
+    await expect(
+      createDeleteUserSyncTeardown({ ...harness.dependencies, redis } as never)("A"),
+    ).resolves.toBeUndefined();
+
+    const setCalls = redis.calls.filter((call) => call.op === "set");
+
+    expect(setCalls.length).toBeGreaterThanOrEqual(2);
+    expect(harness.removedJobIds).toEqual(["sync-A-cal1", "sync-A-cal2"]);
+    expect(harness.stoppedChannelIds.toSorted()).toEqual(["google-A-1", "graph-A-2"]);
+
+    const tombstoneErrors = loggedErrors.filter(
+      (entry) => entry.fields.prefix === "delete_user_teardown.tombstone",
+    );
+
+    expect(tombstoneErrors).toHaveLength(1);
+    expect(tombstoneErrors.map((entry) => String(entry.error)).join(" ")).toContain("OOM");
   });
 });

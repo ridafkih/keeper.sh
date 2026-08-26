@@ -63,6 +63,16 @@ const resolveBeforeDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
   return (user: { id: string }) => beforeDelete(user as never, NO_REQUEST);
 };
 
+const resolveAfterDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
+  const afterDelete = auth.options.user?.deleteUser?.afterDelete;
+
+  if (typeof afterDelete !== "function") {
+    throw new TypeError("deleteUser.afterDelete is not wired");
+  }
+
+  return (user: { id: string }) => afterDelete(user as never, NO_REQUEST);
+};
+
 const TEARDOWN_FAILURE_MESSAGE = "push channel deregistration unavailable";
 
 describe("account deletion teardown", () => {
@@ -171,7 +181,7 @@ describe("polar customer removal during deletion", () => {
     expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
   });
 
-  it("removes the Polar customer during beforeDelete teardown, not after the row is gone", async () => {
+  it("removes the Polar customer only once the user row is actually gone", async () => {
     const { auth, polarClient } = buildAuth({
       polarAccessToken: "polar-test-token",
       polarMode: "sandbox",
@@ -188,10 +198,19 @@ describe("polar customer removal during deletion", () => {
       value: { deleteExternal },
     });
 
+    /*
+     * Deleting a Polar customer is irreversible and needs none of the user's rows. Doing
+     * it in beforeDelete destroys the billing customer of a user whose deletion may still
+     * fail, leaving a live account with no billing record. It belongs after the row is
+     * gone, once the deletion has actually committed.
+     */
     await resolveBeforeDelete(auth)({ id: "user-1" });
 
+    expect(deleteExternal).not.toHaveBeenCalled();
+
+    await resolveAfterDelete(auth)({ id: "user-1" });
+
     expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
-    expect(auth.options.user?.deleteUser?.afterDelete).toBeUndefined();
   });
 
   it("surfaces a Polar teardown failure on the active wide event", async () => {
@@ -211,7 +230,7 @@ describe("polar customer removal during deletion", () => {
       },
     });
 
-    const beforeDelete = resolveBeforeDelete(auth);
+    const afterDelete = resolveAfterDelete(auth);
 
     await context(async () => {
       widelog.errors((error) => {
@@ -219,7 +238,7 @@ describe("polar customer removal during deletion", () => {
         return "delete-user-teardown-failed";
       });
 
-      await beforeDelete({ id: "user-1" });
+      await afterDelete({ id: "user-1" });
 
       widelog.flush();
     });

@@ -54,6 +54,16 @@ const resolveBeforeDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
   return (user: { id: string }) => beforeDelete(user as never, NO_REQUEST);
 };
 
+const resolveAfterDelete = (auth: ReturnType<typeof createAuth>["auth"]) => {
+  const afterDelete = auth.options.user?.deleteUser?.afterDelete;
+
+  if (typeof afterDelete !== "function") {
+    throw new TypeError("deleteUser.afterDelete is not wired");
+  }
+
+  return (user: { id: string }) => afterDelete(user as never, NO_REQUEST);
+};
+
 const delay = (ms: number) =>
   new Promise<void>((resolve) => {
     setTimeout(resolve, ms);
@@ -122,7 +132,7 @@ const pointPolarAt = (
 };
 
 describe("teardown ordering around the billing call", () => {
-  it("stops sync before the Polar customer removal is allowed to finish", async () => {
+  it("stops sync before the row goes and bills out only after it is gone", async () => {
     const deleteUserTeardown = vi.fn(() => Promise.resolve());
     const { auth, polarClient } = buildAuth({ deleteUserTeardown });
 
@@ -132,22 +142,26 @@ describe("teardown ordering around the billing call", () => {
 
     const { promise: polarHang, release: releasePolar } = createHang();
 
+    const deleteExternal = vi.fn(() => polarHang);
+
     Object.defineProperty(polarClient, "customers", {
       configurable: true,
-      value: {
-        deleteExternal: vi.fn(() => polarHang),
-      },
+      value: { deleteExternal },
     });
 
-    const pendingDelete = resolveBeforeDelete(auth)({ id: "user-1" });
+    await resolveBeforeDelete(auth)({ id: "user-1" });
 
-    const syncRan = await waitUntil(() => deleteUserTeardown.mock.calls.length > 0, 1000);
+    expect(deleteUserTeardown).toHaveBeenCalledWith("user-1");
+    expect(deleteExternal).not.toHaveBeenCalled();
+
+    const pendingDelete = resolveAfterDelete(auth)({ id: "user-1" });
+
+    const polarRan = await waitUntil(() => deleteExternal.mock.calls.length > 0, 1000);
 
     releasePolar();
     await pendingDelete;
 
-    expect(syncRan).toBe(true);
-    expect(deleteUserTeardown).toHaveBeenCalledWith("user-1");
+    expect(polarRan).toBe(true);
   });
 });
 
@@ -181,12 +195,12 @@ describe("boundedness of the Polar teardown call", () => {
 
     pointPolarAt(polarClient, `http://127.0.0.1:${blackHole.port}`);
 
-    const beforeDelete = resolveBeforeDelete(auth);
+    const afterDelete = resolveAfterDelete(auth);
 
     try {
       await context(async () => {
         const outcome = await Promise.race([
-          beforeDelete({ id: "user-1" }).then(() => "settled" as const),
+          afterDelete({ id: "user-1" }).then(() => "settled" as const),
           delay(POLAR_TEARDOWN_BOUND_MS).then(() => "still-hanging" as const),
         ]);
 

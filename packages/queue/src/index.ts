@@ -57,31 +57,52 @@ interface SyncJobRemovalFailure {
 
 interface SyncJobRemovalResult {
   removedJobId?: string;
+  unremovableJobId?: string;
   failure?: SyncJobRemovalFailure;
 }
 
 interface RemoveUserSyncJobsOutcome {
   removedJobIds: string[];
+  unremovableJobIds: string[];
   failures: SyncJobRemovalFailure[];
 }
 
+interface SyncJobQueue {
+  getJob?: (jobId: string) => Promise<unknown>;
+  remove: (jobId: string) => Promise<number>;
+}
+
+const classifyRemoval = (
+  jobId: string,
+  wasQueued: boolean,
+  removedCount: number,
+): SyncJobRemovalResult => {
+  if (!wasQueued) {
+    return {};
+  }
+
+  if (removedCount > 0) {
+    return { removedJobId: jobId };
+  }
+
+  return { unremovableJobId: jobId };
+};
+
 const removeUserSyncJobs = async (
-  queue: Pick<Queue<PushSyncJobPayload, PushSyncJobResult>, "remove">,
+  queue: SyncJobQueue,
   userId: string,
   calendarIds: string[],
 ): Promise<RemoveUserSyncJobsOutcome> => {
+  const lookUpQueuedJob = queue.getJob?.bind(queue) ?? null;
+
   const results = await Promise.all(
     calendarIds.map(async (calendarId): Promise<SyncJobRemovalResult> => {
       const jobId = syncJobId(userId, calendarId);
 
       try {
-        const removedCount = await queue.remove(jobId);
+        const wasQueued = lookUpQueuedJob === null || Boolean(await lookUpQueuedJob(jobId));
 
-        if (removedCount > 0) {
-          return { removedJobId: jobId };
-        }
-
-        return {};
+        return classifyRemoval(jobId, wasQueued, await queue.remove(jobId));
       } catch (error) {
         return { failure: { jobId, message: removalFailureMessage(error) } };
       }
@@ -90,6 +111,7 @@ const removeUserSyncJobs = async (
 
   return {
     removedJobIds: results.flatMap((result) => result.removedJobId ?? []),
+    unremovableJobIds: results.flatMap((result) => result.unremovableJobId ?? []),
     failures: results.flatMap((result) => result.failure ?? []),
   };
 };
@@ -100,5 +122,6 @@ export type {
   PushSyncJobResult,
   PushSyncTrigger,
   RemoveUserSyncJobsOutcome,
+  SyncJobQueue,
   SyncJobRemovalFailure,
 };

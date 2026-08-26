@@ -4,6 +4,8 @@ interface PolarCustomerDeletionClient {
   };
 }
 
+const POLAR_CUSTOMER_DELETE_TIMEOUT_MS = 5000;
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
@@ -15,22 +17,44 @@ const isResourceNotFoundError = (error: unknown): boolean => {
   return error.error === "ResourceNotFound";
 };
 
+const NO_FAILURE = Symbol("no-failure");
+const DEADLINE_REACHED = Symbol("deadline-reached");
+
 const deletePolarCustomerByExternalId = async (
   polarClient: PolarCustomerDeletionClient,
   externalId: string,
 ): Promise<void> => {
+  const failure = polarClient.customers
+    .deleteExternal({ externalId })
+    .then(
+      (): unknown => NO_FAILURE,
+      (error: unknown) => error,
+    );
+
+  const deadline = Promise.withResolvers<typeof DEADLINE_REACHED>();
+  const deadlineTimer = setTimeout(
+    () => deadline.resolve(DEADLINE_REACHED),
+    POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+  );
+
   try {
-    await polarClient.customers.deleteExternal({
-      externalId,
-    });
-  } catch (error) {
-    if (isResourceNotFoundError(error)) {
+    const outcome = await Promise.race([failure, deadline.promise]);
+
+    if (outcome === DEADLINE_REACHED) {
+      throw new Error(
+        `Polar customer deletion for ${externalId} exceeded ${POLAR_CUSTOMER_DELETE_TIMEOUT_MS}ms`,
+      );
+    }
+
+    if (outcome === NO_FAILURE || isResourceNotFoundError(outcome)) {
       return;
     }
 
-    throw error;
+    throw outcome;
+  } finally {
+    clearTimeout(deadlineTimer);
   }
 };
 
-export { deletePolarCustomerByExternalId };
+export { deletePolarCustomerByExternalId, POLAR_CUSTOMER_DELETE_TIMEOUT_MS };
 export type { PolarCustomerDeletionClient };
