@@ -1,5 +1,3 @@
-import { writeAuthStderr } from "./runtime-environment";
-
 interface PolarCustomerDeletionClient {
   customers: {
     deleteExternal: (payload: { externalId: string }) => Promise<unknown>;
@@ -17,18 +15,6 @@ const isResourceNotFoundError = (error: unknown): boolean => {
   return error.error === "ResourceNotFound";
 };
 
-const toErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (isRecord(error) && typeof error.detail === "string") {
-    return error.detail;
-  }
-
-  return "Unknown error";
-};
-
 const deletePolarCustomerByExternalId = async (
   polarClient: PolarCustomerDeletionClient,
   externalId: string,
@@ -42,9 +28,7 @@ const deletePolarCustomerByExternalId = async (
       return;
     }
 
-    writeAuthStderr(
-      `[auth] Failed to delete Polar customer for user ${externalId}: ${toErrorMessage(error)}\n`,
-    );
+    throw error;
   }
 };
 

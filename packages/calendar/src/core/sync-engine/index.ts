@@ -92,7 +92,10 @@ const createTimedProvider = (
   };
 };
 
-const resolveOutcome = (superseded: boolean): string => {
+const resolveOutcome = (superseded: boolean, aborted: boolean): string => {
+  if (aborted) {
+    return "aborted";
+  }
   if (superseded) {
     return "superseded";
   }
@@ -382,6 +385,7 @@ const processDeleteResults = (
 };
 
 interface ExecuteRemoteResult {
+  aborted: boolean;
   changes: PendingChanges;
   result: SyncResult;
   conflictsResolved: number;
@@ -510,6 +514,7 @@ const chunkOperations = <TOperation>(operations: TOperation[], size: number): TO
 };
 
 interface ChunkedExecutionState {
+  aborted: boolean;
   changes: PendingChanges;
   result: SyncResult;
   conflictsResolved: number;
@@ -553,6 +558,20 @@ const checkSuperseded = async (
     return true;
   }
   return false;
+};
+
+const checkUserDeleted = async (
+  state: ChunkedExecutionState,
+  isUserDeleted?: () => Promise<boolean>,
+): Promise<boolean> => {
+  if (!isUserDeleted) {
+    return false;
+  }
+  if (!(await isUserDeleted())) {
+    return false;
+  }
+  state.aborted = true;
+  return true;
 };
 
 const executeAdds = async (
@@ -741,6 +760,7 @@ const executeRemoteOperations = async (
   isCurrent?: () => Promise<boolean>,
   onRunComplete?: ProgressCallback,
   checkpoint?: CheckpointCallback,
+  isUserDeleted?: () => Promise<boolean>,
 ): Promise<ExecuteRemoteResult> => {
   const mappingsByRemoteIdentity = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
@@ -753,6 +773,7 @@ const executeRemoteOperations = async (
   const operationChunks = chunkOperations(operations, OPERATION_CHUNK_SIZE);
   const totalOperations = getTotalOperationCount(operations);
   const state: ChunkedExecutionState = {
+    aborted: false,
     changes: { inserts: [], deletes: [], updates: [] },
     result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
@@ -767,6 +788,10 @@ const executeRemoteOperations = async (
 
   for (const chunk of operationChunks) {
     if (state.superseded || state.checkpointRejected) {
+      break;
+    }
+
+    if (await checkUserDeleted(state, isUserDeleted)) {
       break;
     }
 
@@ -823,6 +848,7 @@ const executeRemoteOperations = async (
   }
 
   return {
+    aborted: state.aborted,
     changes: state.changes,
     result: state.result,
     conflictsResolved: state.conflictsResolved,
@@ -844,6 +870,7 @@ interface SyncCalendarOptions {
     remoteEvents: RemoteEvent[];
   }>;
   isCurrent: () => Promise<boolean>;
+  isUserDeleted?: () => Promise<boolean>;
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
@@ -962,6 +989,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     provider,
     readState,
     isCurrent,
+    isUserDeleted,
     flush,
     onSyncEvent,
     onProgress,
@@ -1071,6 +1099,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         flushed = true;
         return true;
       },
+      isUserDeleted,
     );
 
     wideEvent["events.added"] = outcome.result.added;
@@ -1080,6 +1109,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["events.conflicts_resolved"] = outcome.conflictsResolved;
     wideEvent["events.update_fallbacks"] = outcome.updateFallbacks;
     wideEvent["superseded"] = outcome.superseded;
+    wideEvent["aborted"] = outcome.aborted;
     appendPushEchoFields(wideEvent, outcome.pushEcho);
 
     if (outcome.errors.length > 0) {
@@ -1096,7 +1126,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       flushed = true;
     }
 
-    wideEvent["outcome"] = resolveOutcome(outcome.superseded);
+    wideEvent["outcome"] = resolveOutcome(outcome.superseded, outcome.aborted);
     wideEvent["flushed"] = flushed;
     wideEvent["flush.inserts"] = outcome.changes.inserts.length;
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;

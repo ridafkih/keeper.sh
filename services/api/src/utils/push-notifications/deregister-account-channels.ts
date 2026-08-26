@@ -25,9 +25,9 @@ const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const LIVE_STATES = ["active", "degraded", "registering"];
 
-interface DeregisterAccountPushChannelsDependencies {
+interface DeregisterPushChannelsDependencies {
   createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
-  listLiveChannels: (accountId: string) => Promise<StoredPushChannel[]>;
+  listLiveChannels: (scopeId: string) => Promise<StoredPushChannel[]>;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
@@ -36,7 +36,7 @@ interface DeregisterAccountPushChannelsDependencies {
 
 const stopChannel = async (
   channel: StoredPushChannel,
-  dependencies: DeregisterAccountPushChannelsDependencies,
+  dependencies: DeregisterPushChannelsDependencies,
 ): Promise<boolean> => {
   const registrar = dependencies.resolveRegistrar(channel.provider);
   if (!registrar || channel.providerChannelId === null) {
@@ -52,9 +52,9 @@ const stopChannel = async (
   }
 };
 
-const runDeregisterAccountPushChannels = async (
-  accountId: string,
-  dependencies: DeregisterAccountPushChannelsDependencies,
+const runDeregisterPushChannels = async (
+  scopeId: string,
+  dependencies: DeregisterPushChannelsDependencies,
 ): Promise<number> => {
   if (!dependencies.webhookConfigured) {
     return 0;
@@ -62,7 +62,7 @@ const runDeregisterAccountPushChannels = async (
 
   let channels: StoredPushChannel[] = [];
   try {
-    channels = await dependencies.listLiveChannels(accountId);
+    channels = await dependencies.listLiveChannels(scopeId);
   } catch (error) {
     dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
     return 0;
@@ -129,11 +129,11 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
 
 const deregisterPushChannelsWithin = async (
   scopeId: string,
-  scopeColumn: "accountId" | "calendarId",
+  scopeColumn: "accountId" | "calendarId" | "userId",
 ): Promise<number> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
 
-  return await runDeregisterAccountPushChannels(scopeId, {
+  return await runDeregisterPushChannels(scopeId, {
     createRegistrarContext: async (channel) => {
       if (webhookConfig === null) {
         throw new Error(
@@ -222,10 +222,19 @@ const deregisterAccountPushChannels = async (accountId: string): Promise<number>
 const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> =>
   await deregisterPushChannelsWithin(calendarId, "calendarId");
 
+const deregisterUserPushChannels = async (userId: string): Promise<number> =>
+  await deregisterPushChannelsWithin(userId, "userId");
+
+const runDeregisterAccountPushChannels = runDeregisterPushChannels;
+const runDeregisterUserPushChannels = runDeregisterPushChannels;
+
 export {
   DEREGISTRATION_FAILED_SLUG,
   deregisterAccountPushChannels,
   deregisterCalendarPushChannels,
+  deregisterUserPushChannels,
   runDeregisterAccountPushChannels,
+  runDeregisterPushChannels,
+  runDeregisterUserPushChannels,
 };
-export type { DeregisterAccountPushChannelsDependencies };
+export type { DeregisterPushChannelsDependencies };

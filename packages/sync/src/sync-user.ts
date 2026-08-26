@@ -5,6 +5,7 @@ import {
   createDatabaseFlush,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
+  createUserDeletedCheck,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -817,6 +818,7 @@ const syncDestinationsForUser = async (
   }
 
   const syncLock = createSyncLock(redis, "background");
+  const isUserDeleted = createUserDeletedCheck(redis, userId);
 
   let added = 0;
   let addFailed = 0;
@@ -1036,6 +1038,7 @@ const syncDestinationsForUser = async (
           provider: providerRef,
           readState: () => Promise.resolve(reconciliationState),
           isCurrent: isAttemptCurrent,
+          isUserDeleted,
           flush: createDatabaseFlush(database),
           onProgress: callbacks?.onProgress,
           onSyncEvent: (event) => {

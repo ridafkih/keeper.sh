@@ -1,6 +1,6 @@
 import { createAuthEndpoint } from "better-auth/api";
 import { APIError } from "better-call";
-import { z } from "zod";
+import zod from "zod";
 import type { UsernameOnlyConfig } from "../utils/config";
 import type { User } from "../types";
 
@@ -8,10 +8,10 @@ const createSignUpEndpoint = (config: UsernameOnlyConfig) =>
   createAuthEndpoint(
     "/username-only/sign-up",
     {
-      body: z.object({
-        name: z.string().optional(),
-        password: z.string().min(config.minPasswordLength).max(config.maxPasswordLength),
-        username: z
+      body: zod.object({
+        name: zod.string().optional(),
+        password: zod.string().min(config.minPasswordLength).max(config.maxPasswordLength),
+        username: zod
           .string()
           .min(config.minUsernameLength)
           .max(config.maxUsernameLength)

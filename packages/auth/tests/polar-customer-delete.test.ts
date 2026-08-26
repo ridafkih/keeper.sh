@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
 
 describe("deletePolarCustomerByExternalId", () => {
-  it("ignores ResourceNotFound responses from Polar", () => {
+  it("ignores ResourceNotFound responses from Polar", async () => {
     const resourceNotFoundError = Object.assign(new Error("Not found"), {
       detail: "Not found",
       error: "ResourceNotFound",
     });
     const deleteExternal = vi.fn(() => Promise.reject(resourceNotFoundError));
 
-    expect(
+    await expect(
       deletePolarCustomerByExternalId(
         { customers: { deleteExternal } },
         "user-1",
@@ -20,33 +20,33 @@ describe("deletePolarCustomerByExternalId", () => {
     expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
   });
 
-  it("does not throw when Polar deletion fails unexpectedly", () => {
+  it("propagates an unexpected Polar failure instead of orphaning the customer", async () => {
     const deleteExternal = vi.fn(() => Promise.reject(new Error("polar unavailable")));
 
-    expect(
+    await expect(
       deletePolarCustomerByExternalId(
         { customers: { deleteExternal } },
         "user-1",
       ),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow("polar unavailable");
   });
 
-  it("does not write to stderr during tests when deletion fails unexpectedly", () => {
+  it("reports an unexpected failure by rejecting rather than by writing to stderr", async () => {
     const deleteExternal = vi.fn(() => Promise.reject(new Error("polar unavailable")));
     const stderrWrite = vi.fn(() => true);
     const originalNodeEnv = process.env.NODE_ENV;
     const originalStderrWrite = process.stderr.write.bind(process.stderr);
 
-    process.env.NODE_ENV = "test";
+    process.env.NODE_ENV = "production";
     process.stderr.write = stderrWrite;
 
     try {
-      expect(
+      await expect(
         deletePolarCustomerByExternalId(
           { customers: { deleteExternal } },
           "user-1",
         ),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow("polar unavailable");
 
       expect(stderrWrite).not.toHaveBeenCalled();
     } finally {

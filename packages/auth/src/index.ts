@@ -11,6 +11,10 @@ import { Polar } from "@polar-sh/sdk";
 import { Resend } from "resend";
 import { usernameOnly } from "./plugins/username-only";
 import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
+import {
+  createDeleteUserTeardown,
+  runDeleteUserTeardown,
+} from "./delete-user-teardown";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
@@ -30,7 +34,17 @@ import {
   verification as verificationTable,
 } from "@keeper.sh/database/auth-schema";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { BetterAuthPlugin, User } from "better-auth";
+import type { BetterAuthOptions, BetterAuthPlugin, User } from "better-auth";
+import type {
+  DeleteUserTeardown,
+  DeleteUserTeardownStep,
+} from "./delete-user-teardown";
+
+type DeleteUserOptions = NonNullable<
+  NonNullable<BetterAuthOptions["user"]>["deleteUser"]
+>;
+
+type BeforeDeleteUser = NonNullable<DeleteUserOptions["beforeDelete"]>;
 
 interface EmailUser {
   email: string;
@@ -60,6 +74,7 @@ interface AuthConfig {
   trustedOrigins?: string[];
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
+  deleteUserTeardown?: DeleteUserTeardown;
 }
 
 interface KeeperMcpAuthSession {
@@ -137,6 +152,7 @@ const createAuth = (config: AuthConfig) => {
     trustedOrigins,
     mcpResourceUrl,
     mcpApiBaseUrl,
+    deleteUserTeardown = runDeleteUserTeardown,
   } = config;
 
   const buildResendClient = (): Resend | null => {
@@ -174,6 +190,33 @@ const createAuth = (config: AuthConfig) => {
   };
 
   const polarClient = buildPolarClient();
+
+  const buildPolarTeardownSteps = (): DeleteUserTeardownStep[] => {
+    if (!polarClient) {
+      return [];
+    }
+
+    return [
+      {
+        name: "polar_customer",
+        run: (userId) => deletePolarCustomerByExternalId(polarClient, userId),
+      },
+    ];
+  };
+
+  const teardown = createDeleteUserTeardown([
+    ...buildPolarTeardownSteps(),
+    { name: "sync", run: deleteUserTeardown },
+  ]);
+
+  const beforeDelete: BeforeDeleteUser = async (user) => {
+    await teardown(user.id);
+  };
+
+  const deleteUser: DeleteUserOptions = {
+    beforeDelete,
+    enabled: true,
+  };
 
   if (polarClient) {
     const buildCheckoutSuccessUrl = (): string => {
@@ -340,16 +383,7 @@ const createAuth = (config: AuthConfig) => {
     socialProviders,
     trustedOrigins,
     user: {
-      deleteUser: {
-        afterDelete: async (user) => {
-          if (!polarClient) {
-            return;
-          }
-
-          await deletePolarCustomerByExternalId(polarClient, user.id);
-        },
-        enabled: true,
-      },
+      deleteUser,
     },
   });
 

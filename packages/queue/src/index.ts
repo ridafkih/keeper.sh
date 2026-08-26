@@ -40,5 +40,65 @@ const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPa
     },
   });
 
-export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue };
-export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };
+const syncJobId = (userId: string, calendarId: string) => `sync-${userId}-${calendarId}`;
+
+const removalFailureMessage = (error: unknown) => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
+interface SyncJobRemovalFailure {
+  jobId: string;
+  message: string;
+}
+
+interface SyncJobRemovalResult {
+  removedJobId?: string;
+  failure?: SyncJobRemovalFailure;
+}
+
+interface RemoveUserSyncJobsOutcome {
+  removedJobIds: string[];
+  failures: SyncJobRemovalFailure[];
+}
+
+const removeUserSyncJobs = async (
+  queue: Pick<Queue<PushSyncJobPayload, PushSyncJobResult>, "remove">,
+  userId: string,
+  calendarIds: string[],
+): Promise<RemoveUserSyncJobsOutcome> => {
+  const results = await Promise.all(
+    calendarIds.map(async (calendarId): Promise<SyncJobRemovalResult> => {
+      const jobId = syncJobId(userId, calendarId);
+
+      try {
+        const removedCount = await queue.remove(jobId);
+
+        if (removedCount > 0) {
+          return { removedJobId: jobId };
+        }
+
+        return {};
+      } catch (error) {
+        return { failure: { jobId, message: removalFailureMessage(error) } };
+      }
+    }),
+  );
+
+  return {
+    removedJobIds: results.flatMap((result) => result.removedJobId ?? []),
+    failures: results.flatMap((result) => result.failure ?? []),
+  };
+};
+
+export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue, removeUserSyncJobs };
+export type {
+  PushSyncJobPayload,
+  PushSyncJobResult,
+  PushSyncTrigger,
+  RemoveUserSyncJobsOutcome,
+  SyncJobRemovalFailure,
+};
