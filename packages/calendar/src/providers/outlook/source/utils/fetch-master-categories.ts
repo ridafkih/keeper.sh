@@ -11,10 +11,7 @@ interface CategoryColorsCacheEntry {
   expiresAt: number;
 }
 
-/*
- * Keyed by access token: the per-calendar ingest loop carries no account
- * handle, and one token identifies one account for the length of a run.
- */
+/* Token-keyed: the ingest loop carries no account handle, and one token maps to one account per run. */
 const categoryColorsCache = new Map<string, CategoryColorsCacheEntry>();
 
 const fetchMasterCategoryColors = async (

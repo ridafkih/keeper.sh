@@ -33,9 +33,8 @@ const CALENDAR_NON_STANDARD_VALUES: ParseNonStandardValues<CalendarNonStandardVa
 };
 
 /*
- * Only X-prefixed properties reach ts-ics's nonStandard bag, so RFC 7986
- * COLOR (valid on VCALENDAR and VEVENT) would otherwise be dropped. Property
- * names always start a physical line; folded continuations cannot match.
+ * Only X-prefixed properties reach ts-ics's nonStandard bag, so RFC 7986 COLOR would be dropped.
+ * Property names start a physical line, so folded continuations cannot match.
  */
 const prefixRfc7986ColorProperties = (icsString: string): string =>
   icsString.replaceAll(/(^|\r?\n)COLOR(?=[;:])/gi, "$1X-COLOR");

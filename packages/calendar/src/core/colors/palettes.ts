@@ -1,7 +1,4 @@
-/*
- * Google's modern UI palette, not the classic hexes colors.get returns;
- * users expect the shades Google Calendar renders.
- */
+/* Google's modern UI palette, not the classic hexes colors.get returns. */
 const GOOGLE_EVENT_COLORS: Record<string, string> = {
   "1": "#7986cb",
   "2": "#33b679",
@@ -16,10 +13,7 @@ const GOOGLE_EVENT_COLORS: Record<string, string> = {
   "11": "#d50000",
 };
 
-/*
- * Microsoft publishes preset names but no hexes; these are community-measured
- * Outlook 2019/365 swatches.
- */
+/* Microsoft publishes preset names but no hexes; community-measured 365 swatches. */
 const OUTLOOK_PRESET_COLORS: Record<string, string> = {
   preset0: "#dc626d",
   preset1: "#e8825d",
@@ -48,10 +42,7 @@ const OUTLOOK_PRESET_COLORS: Record<string, string> = {
   preset24: "#c34e98",
 };
 
-/*
- * Fallback when calendar.hexColor is empty; unofficial approximations of the
- * OWA swatches, as the enum has no published hexes.
- */
+/* Fallback when hexColor is empty; unofficial OWA swatch approximations. */
 const OUTLOOK_CALENDAR_ENUM_COLORS: Record<string, string | null> = {
   auto: null,
   lightBlue: "#71afe5",
