@@ -294,6 +294,7 @@ export {
   getEventMappingsForDestination,
   createEventMapping,
   deleteEventMapping,
+  namesEventInDestination,
   type EventMapping,
 } from "./core/events/mappings";
 export {

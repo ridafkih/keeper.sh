@@ -9,6 +9,7 @@ import {
 const result = (overrides: Partial<Parameters<typeof hasNoSuccessfulOperations>[0]> = {}) => ({
   added: 0,
   addFailed: 0,
+  updated: 0,
   conflictsResolved: 0,
   removed: 0,
   removeFailed: 0,
@@ -79,6 +80,12 @@ describe("hasNoSuccessfulOperations", () => {
     expect(hasNoSuccessfulOperations(result({ addFailed: 3, added: 2 }))).toBe(false);
   });
 
+  /* Every provider echoes back the uid the mapping already holds on an ordinary in-place update, so
+     a run that only edited mirrors reports added 0 and would otherwise read as a total failure. */
+  it("does not report a sync that updated a mirror in place alongside failures", () => {
+    expect(hasNoSuccessfulOperations(result({ addFailed: 1, updated: 2 }))).toBe(false);
+  });
+
   it("treats a resolved conflict as progress", () => {
     expect(hasNoSuccessfulOperations(result({ addFailed: 1, conflictsResolved: 1 }))).toBe(false);
   });
@@ -92,6 +99,15 @@ describe("resolveDestinationAttemptVerdict", () => {
   it("succeeds a run that made progress alongside failures", () => {
     expect(resolveDestinationAttemptVerdict(result({ added: 1, addFailed: 3 }), false))
       .toBe("succeeded");
+  });
+
+  it("succeeds a run that repaired mirrors in place alongside a durable failure", () => {
+    expect(resolveDestinationAttemptVerdict(result({ addFailed: 1, updated: 2 }), false))
+      .toBe("succeeded");
+  });
+
+  it("counts an in-place update as an attempt a superseded run may be judged on", () => {
+    expect(resolveDestinationAttemptVerdict(result({ updated: 1 }), true)).toBe("succeeded");
   });
 
   it("succeeds a run that found the destination already in sync", () => {

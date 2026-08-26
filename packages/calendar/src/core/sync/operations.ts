@@ -1,4 +1,5 @@
 import type { EventMapping } from "../events/mappings";
+import { namesEventInDestination } from "../events/mappings";
 import type {
   MaterializedSyncableEvent,
   RemoteEvent,
@@ -436,6 +437,15 @@ const identifyStaleMappings = (
       authoritativeMappingIds,
       unverifiedMappingIds,
     );
+    /* The destination calendar holds no object for this mapping: a read already established that,
+       by finding the customer's copy outside the calendar this sync owns. Calling it remote-missing
+       plans a replace whose only ending is another write to that out-of-destination copy, cycle
+       after cycle, forever. The mapping heals the moment the destination listing returns the mirror
+       again -- the only evidence that could put an identifier back on it. */
+    if (!remoteEvent && !namesEventInDestination(mapping)) {
+      continue;
+    }
+
     if (localEventExists && !remoteEvent && remoteReadCoversMapping) {
       staleReasonCounts.remoteMissing += 1;
       remoteMissingMappingIds.add(mapping.id);
@@ -524,6 +534,10 @@ const buildRemoveOperationsForMappings = (mappings: EventMapping[]): SyncOperati
  * batch request resolving that UID back to an event id, doubling the rate-limit cost
  * of the delete. Reconciliation has just listed the remote copy, so its provider id is
  * already in hand and the lookup is only needed when no remote copy was matched.
+ *
+ * A mapping that names nothing in this destination calendar keeps naming nothing: the identifier
+ * it once held is dead and the live copy was seen outside the calendar, so the operation carries
+ * no identifier and the execution refuses to delete by it.
  */
 const resolveMappingDeleteId = (
   mapping: EventMapping,

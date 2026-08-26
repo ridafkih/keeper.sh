@@ -70,6 +70,7 @@ interface CalendarRow {
 interface SyncOutcome {
   added?: number;
   addFailed?: number;
+  updated?: number;
   conflictsResolved?: number;
   removed?: number;
   removeFailed?: number;
@@ -127,9 +128,12 @@ const config = (database: unknown) => ({
   plan: "pro" as never,
 });
 
+/* The real syncCalendar always reports every counter, `updated` included: a double that omits it is
+   kinder than the real engine and would let a wholly failed run read as a success. */
 const EMPTY_SYNC_RESULT = {
   added: 0,
   addFailed: 0,
+  updated: 0,
   conflictsResolved: 0,
   removed: 0,
   removeFailed: 0,

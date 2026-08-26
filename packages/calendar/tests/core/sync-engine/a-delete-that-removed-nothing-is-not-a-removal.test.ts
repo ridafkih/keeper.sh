@@ -154,6 +154,7 @@ describe("a delete that removed nothing is not a removal", () => {
       {
         added: outcome.result.added,
         addFailed: outcome.result.addFailed,
+        updated: outcome.result.updated,
         conflictsResolved: outcome.conflictsResolved,
         removed: outcome.result.removed,
         removeFailed: outcome.result.removeFailed,

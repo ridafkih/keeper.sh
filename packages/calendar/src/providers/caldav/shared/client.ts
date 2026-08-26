@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient, DAVNamespace, DAVNamespaceShort, getDAVAttribute } from "tsdav";
+import { Parser } from "htmlparser2";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
@@ -209,16 +210,45 @@ const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: stri
   ),
 ];
 
-const DAV_STATUS_PATTERN = /^\S+\s(?<code>\d{3})\s/u;
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
 
-const toStatusCode = (status: unknown): number | null => {
-  if (typeof status !== "string") {
+const toTextParts = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => toTextParts(entry));
+  }
+  return [];
+};
+
+/* A parsed element is a plain string only when it carried nothing but text; a CDATA-wrapped body
+   arrives under _cdata, a body the server split across several CDATA sections arrives as several
+   runs, and a mixed text/CDATA element carries both keys at once. Every run belongs to the same
+   value, so they are read whole and only the ends of the joined value are trimmed. */
+const readElementText = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!isRecord(value)) {
     return null;
   }
-  const code = DAV_STATUS_PATTERN.exec(status)?.groups?.code;
+  const text = [...toTextParts(value._text), ...toTextParts(value._cdata)].join("").trim();
+  if (text.length === 0) {
+    return null;
+  }
+  return text;
+};
+
+const DAV_STATUS_PATTERN = /^\S+\s(?<code>\d{3})\s/u;
+
+const toStatusCode = (status: unknown): number | null => {
+  const text = readElementText(status);
+  if (text === null) {
+    return null;
+  }
+  const code = DAV_STATUS_PATTERN.exec(text)?.groups?.code;
   if (!code) {
     return null;
   }
@@ -247,8 +277,12 @@ const readPropStatProp = (propstat: Record<string, unknown>): Record<string, unk
 const readCalendarData = (response: Record<string, unknown>): string | null => {
   for (const propstat of toElementList(response.propstat)) {
     const prop = readPropStatProp(propstat);
-    if (prop && typeof prop.calendarData === "string") {
-      return prop.calendarData;
+    if (!prop) {
+      continue;
+    }
+    const body = readElementText(prop.calendarData);
+    if (body !== null) {
+      return body;
     }
   }
   return null;
@@ -285,8 +319,8 @@ const toObjectAnswer = (
   response: Record<string, unknown>,
   calendarUrl: string,
 ): CalDAVObjectAnswer | null => {
-  const { href } = response;
-  if (typeof href !== "string" || href.length === 0) {
+  const href = readElementText(response.href);
+  if (href === null) {
     return null;
   }
 
@@ -315,14 +349,99 @@ const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
   },
 });
 
-/* The tsdav mapping folds every propstat of an href into one prop bag and keeps only a
-   response-wide status, erasing "gone" versus "refused". The raw multistatus still holds it. */
+/* Element names are compared without their namespace prefix, and hyphenated names are folded to
+   the camelCase the rest of this file reads them by. */
+const toElementKey = (name: string): string => {
+  const localName = name.slice(name.indexOf(":") + 1);
+  const [head, ...rest] = localName.split("-");
+  return [head, ...rest.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))]
+    .join("");
+};
+
+const appendChildElement = (
+  parent: Record<string, unknown>,
+  key: string,
+  child: Record<string, unknown>,
+): void => {
+  if (!Object.hasOwn(parent, key)) {
+    parent[key] = child;
+    return;
+  }
+  const existing = parent[key];
+  if (Array.isArray(existing)) {
+    existing.push(child);
+    return;
+  }
+  parent[key] = [existing, child];
+};
+
+const appendTextRun = (element: Record<string, unknown>, key: string, text: string): void => {
+  const existing = element[key];
+  if (typeof existing === "string") {
+    element[key] = existing + text;
+    return;
+  }
+  element[key] = text;
+};
+
+const toTextRunKey = (cdataDepth: number): string => {
+  if (cdataDepth > 0) {
+    return "_cdata";
+  }
+  return "_text";
+};
+
+/* The tsdav multistatus parse runs xml-js under trim: true, which trims every text and CDATA run it
+   reads: a body the server split across two CDATA sections loses the line break between them, and
+   verification compares the ICS it reads byte for byte. Reading the XML here keeps every run
+   whole, and keeps each href's own propstats instead of the single prop bag tsdav folds them into,
+   which erases "gone" versus "refused". */
+const parseMultiStatusXml = (xml: string): Record<string, unknown> => {
+  const root: Record<string, unknown> = {};
+  const openElements: Record<string, unknown>[] = [root];
+  let cdataDepth = 0;
+
+  const currentElement = (): Record<string, unknown> => openElements.at(-1) ?? root;
+
+  const parser = new Parser(
+    {
+      oncdataend: () => {
+        cdataDepth -= 1;
+      },
+      oncdatastart: () => {
+        cdataDepth += 1;
+      },
+      onclosetag: () => {
+        if (openElements.length > 1) {
+          openElements.pop();
+        }
+      },
+      onopentag: (name) => {
+        const element: Record<string, unknown> = {};
+        appendChildElement(currentElement(), toElementKey(name), element);
+        openElements.push(element);
+      },
+      ontext: (text) => {
+        appendTextRun(currentElement(), toTextRunKey(cdataDepth), text);
+      },
+    },
+    { decodeEntities: true, xmlMode: true },
+  );
+  parser.write(xml);
+  parser.end();
+  return root;
+};
+
 const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] => {
   const raw = responses[0]?.raw;
-  if (!isRecord(raw) || !isRecord(raw.multistatus)) {
+  if (typeof raw !== "string" || raw.length === 0) {
     return [];
   }
-  return toElementList(raw.multistatus.response);
+  const parsed = parseMultiStatusXml(raw);
+  if (!isRecord(parsed.multistatus)) {
+    return [];
+  }
+  return toElementList(parsed.multistatus.response);
 };
 
 class CalDAVClient {
@@ -532,6 +651,7 @@ class CalDAVClient {
             method: "REPORT",
             namespace: DAVNamespaceShort.CALDAV,
           },
+          parseOutgoing: false,
           url: params.calendarUrl,
         }));
 

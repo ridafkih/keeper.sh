@@ -303,6 +303,12 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     };
   };
 
+  /* The create-side sub-request pushEvents would batch, built and discarded, so an event Google's
+     import verb cannot be serialized for is known before anything is deleted for it. */
+  const prepareEvent = (event: MaterializedSyncableEvent): void => {
+    buildPushRequest(event);
+  };
+
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
 
@@ -756,7 +762,16 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return { identifier, status: "unknown" };
     }
 
-    const [item] = googleEventListSchema.assert(response.body).items ?? [];
+    const items = googleEventListSchema.assert(response.body).items ?? [];
+    /* Every occurrence of a recurring series carries the master's iCalUID, so this list can hold
+       several entries in unspecified order. Reading only the first one would call a live series
+       absent, or point a repair at an instance rather than the master; an ambiguous read is
+       "unknown", which repairs, creates and deletes nothing. */
+    if (items.length > 1) {
+      return { identifier, status: "unknown" };
+    }
+
+    const [item] = items;
     if (!item || isCancelledGoogleEvent(item)) {
       return { identifier, status: "absent" };
     }
@@ -835,6 +850,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     getRemoteEventsByIds,
     listRemoteEvents,
     normalizeEvent: normalizeGoogleEvent,
+    prepareEvent,
     pushEvents,
     updateEvents,
     verifyEventsExist,

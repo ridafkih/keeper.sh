@@ -9,6 +9,7 @@ import {
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
   getMappedSourceCalendarIds,
+  namesEventInDestination,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
@@ -544,6 +545,11 @@ const planTargetedDestinationRead = (
   const mappingIds = new Set<string>();
   for (const localEvent of localEvents) {
     for (const mapping of mappingsBySyncEventId.get(localEvent.id) ?? []) {
+      /* A mapping the destination calendar holds no event for has no identifier to read by, and
+         asking anyway is a request for the whole mailbox rather than for one event. */
+      if (!namesEventInDestination(mapping)) {
+        continue;
+      }
       deleteIdentifiers.add(mapping.deleteIdentifier);
       mappingIds.add(mapping.id);
     }
@@ -730,12 +736,11 @@ const selectBudgetedMappings = (
   if (sortedMappings.length <= DESTINATION_VERIFICATION_LIMIT) {
     return sortedMappings;
   }
-  const fromCursor = sortedMappings.slice(
-    rotationStart,
-    rotationStart + DESTINATION_VERIFICATION_LIMIT,
-  );
-  const wrapped = sortedMappings.slice(0, DESTINATION_VERIFICATION_LIMIT - fromCursor.length);
-  return [...fromCursor, ...wrapped];
+  /* A cycle that reaches the end of the set stops there rather than filling the remaining budget
+     from the top: wrapping would re-ask identifiers this same rotation just covered and leave the
+     resume position behind where it already was, so the walk stopped moving forward. The next
+     cycle starts from the top on its own, because a cursor at the end resumes at index zero. */
+  return sortedMappings.slice(rotationStart, rotationStart + DESTINATION_VERIFICATION_LIMIT);
 };
 
 /* Nothing was left out, so the next cycle starts from the top rather than resuming mid-set. */
@@ -768,6 +773,9 @@ const withVerifiedUnconfirmedMappings = async (
   const unconfirmedMappings = existingMappings
     .filter((mapping) =>
       !remoteUids.has(mapping.destinationEventUid)
+      /* Nothing to verify: the calendar this sync owns already answered that it holds no event for
+         this mapping, and the copy the read found outside it is not this calendar's to act on. */
+      && namesEventInDestination(mapping)
       && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
     .toSorted((first, second) =>
       first.deleteIdentifier.localeCompare(second.deleteIdentifier));
@@ -852,6 +860,10 @@ interface CalendarSyncCompletion {
   userId: string;
   added: number;
   addFailed: number;
+  /* Edits delivered to mirrors the mapping already named. Reported apart from `added` because a
+     healthy in-place update never creates anything, so without this number a run that pushed a
+     hundred edits is byte-identical to one that pushed none. */
+  updated: number;
   removed: number;
   removeFailed: number;
   conflictsResolved: number;
@@ -977,6 +989,30 @@ const resetDestinationBackoffIfNeeded = async (
  * the attempt is superseded later: a destination that keeps being cut short would otherwise re-ask
  * about the same prefix forever, which is the starvation the rotation exists to end.
  */
+/*
+ * A report that carries no cursor field is the by-id read saying it has no opinion on the rotation,
+ * which is not the same as an explicit null asking the next cycle to start from the top. Handing
+ * back a wrapper keeps the two apart at the persistence seam, where reading the bare field would
+ * collapse "no opinion" into "start from the top" and discard the position a windowed cycle paid
+ * round trips for.
+ */
+interface ReportedVerificationCursor {
+  value: string | null;
+}
+
+const readReportedVerificationCursor = (
+  report: DestinationVerificationReport,
+): ReportedVerificationCursor | null => {
+  if (!("nextVerificationCursor" in report)) {
+    return null;
+  }
+  const reported = report.nextVerificationCursor;
+  if (reported === globalThis.undefined) {
+    return null;
+  }
+  return { value: reported };
+};
+
 const persistDestinationVerificationCursor = async (
   database: BunSQLDatabase,
   destination: DestinationAttempt,
@@ -1235,11 +1271,13 @@ const syncDestinationsForUser = async (
               ({ authoritativeMappingIds } = read);
               verification = read.verification ?? null;
               unverifiedMappingIds = verification?.unverifiedMappingIds ?? new Set<string>();
-              if (read.verification) {
+              const reportedCursor = read.verification
+                && readReportedVerificationCursor(read.verification);
+              if (reportedCursor) {
                 await persistDestinationVerificationCursor(
                   database,
                   destination,
-                  read.verification.nextVerificationCursor ?? null,
+                  reportedCursor.value,
                 );
               }
               return read.remoteEvents;
@@ -1387,6 +1425,7 @@ const syncDestinationsForUser = async (
           userId: destination.userId,
           added: result.added,
           addFailed: result.addFailed,
+          updated: result.updated,
           removed: result.removed,
           removeFailed: result.removeFailed,
           conflictsResolved: result.conflictsResolved,

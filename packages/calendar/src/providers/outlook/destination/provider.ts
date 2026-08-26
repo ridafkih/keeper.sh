@@ -56,7 +56,16 @@ interface OutlookSyncProviderConfig {
   signal?: AbortSignal;
 }
 
-const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
+/* Whether a request for this object actually left the process. The serializer runs before the
+   body exists, so a refusal it raises is ours alone: recording that here is what keeps the engine
+   from grading a repetition of it as the destination answering about the object. */
+interface RequestAttempt {
+  sent: boolean;
+}
+
+const unsentAttempt = (): RequestAttempt => ({ sent: false });
+
+const createCaughtFailure = (error: unknown, attempt?: RequestAttempt): PushResult | DeleteResult => {
   if (isThrottledError(error)) {
     return {
       error: error.message,
@@ -69,7 +78,12 @@ const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
   if (error instanceof Error) {
     errorType = error.name;
   }
-  return { error: getErrorMessage(error), errorType, success: false };
+  return {
+    error: getErrorMessage(error),
+    errorType,
+    ...(attempt?.sent === false && { requestSent: false }),
+    success: false,
+  };
 };
 
 const readGraphErrorMessage = async (response: Response): Promise<string> => {
@@ -193,7 +207,25 @@ const readSoleEventForUid = (events: OutlookEvent[], uid: string): OutlookEvent 
   return matched[0] ?? null;
 };
 
-const readCalendarIdsFromPage = (body: unknown): string[] | null => {
+/* A calendar Graph reports without any owner info at all: some tenants omit it for the account's
+   own default calendar, so the source side keeps such a calendar rather than discarding it. */
+interface MailboxCalendarEntry {
+  id: string;
+  ownerAddress: string | null;
+}
+
+const readCalendarOwnerAddress = (value: unknown): string | null => {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const owner = value as { address?: unknown };
+  if (typeof owner.address !== "string") {
+    return null;
+  }
+  return owner.address;
+};
+
+const readCalendarEntriesFromPage = (body: unknown): MailboxCalendarEntry[] | null => {
   if (typeof body !== "object" || body === null) {
     return null;
   }
@@ -202,18 +234,48 @@ const readCalendarIdsFromPage = (body: unknown): string[] | null => {
     return null;
   }
 
-  const identifiers: string[] = [];
+  const entries: MailboxCalendarEntry[] = [];
   for (const entry of page.value) {
     if (typeof entry !== "object" || entry === null) {
       return null;
     }
-    const calendar = entry as { id?: unknown };
+    const calendar = entry as { id?: unknown; owner?: unknown };
     if (typeof calendar.id !== "string") {
       return null;
     }
-    identifiers.push(calendar.id);
+    entries.push({ id: calendar.id, ownerAddress: readCalendarOwnerAddress(calendar.owner) });
   }
-  return identifiers;
+  return entries;
+};
+
+const isSameAddress = (left: string, right: string): boolean =>
+  left.toLowerCase() === right.toLowerCase();
+
+/* /me/calendars also hands back calendars a colleague shared or delegated to the account. This is
+   the source side's rule (source/utils/list-calendars.ts): a calendar owned by a different mailbox
+   is not the connected account's, and a calendar with no owner info at all is kept. */
+const belongsToConnectedMailbox = (
+  entry: MailboxCalendarEntry,
+  mailboxAddress: string,
+): boolean => {
+  if (!entry.ownerAddress) {
+    return true;
+  }
+  return isSameAddress(entry.ownerAddress, mailboxAddress);
+};
+
+const readMailboxAddressFromProfile = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const profile = body as { mail?: unknown; userPrincipalName?: unknown };
+  if (typeof profile.mail === "string" && profile.mail.length > 0) {
+    return profile.mail;
+  }
+  if (typeof profile.userPrincipalName === "string" && profile.userPrincipalName.length > 0) {
+    return profile.userPrincipalName;
+  }
+  return null;
 };
 
 /* Graph names its query parameters with a literal "$" and hands the next page back as a link that
@@ -268,11 +330,17 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     throttleMetrics.retryAfterMs += retry.delayMs;
   };
 
-  const sendRequest = async (url: URL, init: RequestInit): Promise<Response> => {
+  const sendRequest = async (url: URL, init: RequestInit, attempt?: RequestAttempt): Promise<Response> => {
     if (config.rateLimiter) {
       await config.rateLimiter.acquire(1, config.signal);
     }
 
+    /* Marked on the last line before the request goes out, so everything that can still refuse
+       above it - the serializer, the body encoding, the rate limiter - stays a failure that never
+       left the process. */
+    if (attempt) {
+      attempt.sent = true;
+    }
     const response = await fetchWithTimeout(
       url,
       init,
@@ -292,8 +360,8 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     );
   };
 
-  const sendRequestWithRetry = (url: URL, init: RequestInit): Promise<Response> =>
-    withBackoff(() => sendRequest(url, init), {
+  const sendRequestWithRetry = (url: URL, init: RequestInit, attempt?: RequestAttempt): Promise<Response> =>
+    withBackoff(() => sendRequest(url, init, attempt), {
       getRetryDelayMs: getThrottleRetryDelayMs,
       maxRetries: OUTLOOK_MAX_THROTTLE_RETRIES,
       onRetry: recordThrottleRetry,
@@ -301,11 +369,18 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       signal: config.signal,
     });
 
+  /* The very serialization the POST below runs, with nothing sent: an event Graph's create verb
+     cannot be encoded for refuses here too, so a caller can learn that before it deletes. */
+  const prepareEvent = (event: MaterializedSyncableEvent): void => {
+    JSON.stringify(serializeOutlookEvent(event));
+  };
+
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
     const results: PushResult[] = [];
 
     for (const event of events) {
+      const attempt = unsentAttempt();
       try {
         const resource = serializeOutlookEvent(event);
         const url = new URL(calendarEventsUrl);
@@ -317,7 +392,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
             Prefer: `outlook.body-content-type="text"`,
           },
           method: "POST",
-        });
+        }, attempt);
 
         if (!response.ok) {
           results.push({
@@ -341,7 +416,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         if (config.signal?.aborted) {
           throw error;
         }
-        results.push(createCaughtFailure(error));
+        results.push(createCaughtFailure(error, attempt));
       }
     }
 
@@ -353,6 +428,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     const results: PushResult[] = [];
 
     for (const update of updates) {
+      const attempt = unsentAttempt();
       try {
         config.signal?.throwIfAborted();
         const resource = serializeOutlookEvent(update.event);
@@ -365,7 +441,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
             Prefer: `outlook.body-content-type="text"`,
           },
           method: "PATCH",
-        });
+        }, attempt);
 
         if (!response.ok) {
           results.push({
@@ -389,7 +465,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         if (config.signal?.aborted) {
           throw error;
         }
-        results.push(createCaughtFailure(error));
+        results.push(createCaughtFailure(error, attempt));
       }
     }
 
@@ -638,14 +714,60 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       return new URL(nextLink);
     }
     const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars`);
-    url.searchParams.set("$select", "id");
+    /* Graph answers with exactly the fields asked for, and the owner is what separates the
+       account's own folders from the ones a colleague shared into this list. */
+    url.searchParams.set("$select", "id,owner");
     return url;
+  };
+
+  /* The address of the account /me names, read the way the source side learns it — from the
+     account's own profile — rather than inferred from the calendar list. */
+  const readProfileMailboxAddress = async (): Promise<string | null> => {
+    config.signal?.throwIfAborted();
+    const response = await readVerificationResponse(new URL(`${MICROSOFT_GRAPH_API}/me`));
+    if (!response.ok) {
+      await response.body?.cancel?.();
+      return null;
+    }
+    return readMailboxAddressFromProfile(await response.json());
+  };
+
+  const readDestinationOwnerAddress = (entries: MailboxCalendarEntry[]): string | null => {
+    const destination = entries.find((entry) => entry.id === config.externalCalendarId);
+    if (!destination) {
+      return null;
+    }
+    return destination.ownerAddress;
+  };
+
+  /* Which mailbox this verification may walk. Two independent readings name it: the profile of the
+     account /me addresses, and the owner of the very folder this sync writes its mirrors into — a
+     mirror dragged out of that folder can only land in another folder of the mailbox holding it.
+     Where both are readable they must agree; a disagreement means a delegated destination, where
+     neither reading can say which folders form one mailbox, so nothing is walked. Nothing readable
+     at all is equally unanswered. Every one of those leaves absence unsettled rather than falling
+     back to walking the whole list. */
+  const resolveMailboxAddress = async (
+    entries: MailboxCalendarEntry[],
+  ): Promise<string | null> => {
+    const profileAddress = await readProfileMailboxAddress();
+    const destinationAddress = readDestinationOwnerAddress(entries);
+    if (!profileAddress) {
+      return destinationAddress;
+    }
+    if (!destinationAddress) {
+      return profileAddress;
+    }
+    if (!isSameAddress(profileAddress, destinationAddress)) {
+      return null;
+    }
+    return profileAddress;
   };
 
   /* A folder-scoped listing answers only about its own folder, so the mailbox's folders have to be
      enumerated before absence can mean "nowhere". A listing we could not read leaves that unanswered. */
   const readMailboxCalendarIds = async (): Promise<string[] | null> => {
-    const identifiers: string[] = [];
+    const entries: MailboxCalendarEntry[] = [];
     let nextLink: string | null = null;
     do {
       config.signal?.throwIfAborted();
@@ -656,15 +778,28 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       }
 
       const body = await response.json();
-      const page = readCalendarIdsFromPage(body);
+      const page = readCalendarEntriesFromPage(body);
       if (!page) {
         return null;
       }
-      identifiers.push(...page);
+      entries.push(...page);
       nextLink = readNextCalendarLink(body);
     } while (nextLink);
 
-    return identifiers;
+    /* Nothing in this list claims an owner, so no calendar can be told apart from the account's
+       own and the profile read would decide nothing. */
+    if (entries.every((entry) => !entry.ownerAddress)) {
+      return entries.map((entry) => entry.id);
+    }
+
+    const mailboxAddress = await resolveMailboxAddress(entries);
+    if (!mailboxAddress) {
+      return null;
+    }
+
+    return entries
+      .filter((entry) => belongsToConnectedMailbox(entry, mailboxAddress))
+      .map((entry) => entry.id);
   };
 
   /* Every target settled inside one verification call is asking about the same mailbox, so its
@@ -810,6 +945,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     getThrottleMetrics,
     listRemoteEvents,
     normalizeEvent: normalizeOutlookEvent,
+    prepareEvent,
     pushEvents,
     updateEvents,
     verifyEventsExist,

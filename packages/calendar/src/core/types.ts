@@ -89,6 +89,11 @@ type DestinationAnswer = "answered" | "unanswered";
 interface PushResult {
   success: boolean;
   destinationAnswer?: DestinationAnswer;
+  /* False when the failure was raised while building the request - a serializer that refused the
+     event, a body that could not be encoded - so no request for this object ever left the process.
+     Nothing was learned about the destination's copy, and no number of repetitions can turn that
+     into evidence. Absent means the provider does not report it. */
+  requestSent?: boolean;
   remoteId?: string;
   deleteId?: string;
   echo?: PushEchoComparison;
@@ -147,6 +152,11 @@ interface ProviderThrottleMetrics {
 interface SyncResult {
   added: number;
   addFailed: number;
+  /* An edit that landed on the mirror the mapping already names. It is kept apart from `added`
+     because `added` is what an operator watches for duplicate churn on a create-only destination,
+     while a run that repaired mirrors in place still did successful work: without its own counter
+     an all-update run reads as zero successes and suspends the whole destination for six hours. */
+  updated: number;
   removed: number;
   removeFailed: number;
 }

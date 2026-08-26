@@ -255,6 +255,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
      back the path it wrote to rather than the UID it derived the filename from. */
   const toObjectPath = (uid: string): string => new URL(`${uid}.ics`, calendarBaseUrl).pathname;
 
+  /* The same iCalendar body pushEvents writes on a create, built and thrown away: the create verb
+     refuses exactly the events this refuses, and nothing reaches the server. */
+  const prepareEvent = (event: MaterializedSyncableEvent): void => {
+    eventToICalString(event, generateDeterministicEventUid(event.id));
+  };
+
   const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
@@ -529,6 +535,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   return {
+    prepareEvent,
     pushEvents,
     updateEvents,
     deleteEvents,

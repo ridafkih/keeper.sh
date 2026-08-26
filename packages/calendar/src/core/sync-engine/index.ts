@@ -11,6 +11,7 @@ import type {
 } from "../types";
 import { hasPushEchoDivergence } from "../events/push-echo";
 import type { EventMapping } from "../events/mappings";
+import { NO_DESTINATION_EVENT_IDENTIFIER, namesEventInDestination } from "../events/mappings";
 import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
@@ -348,6 +349,16 @@ const learnedNothingFromDestination = (pushResult: PushResult | undefined): bool
   return UNDELIVERED_BATCH_ERROR_TYPES.has(pushResult.errorType ?? "");
 };
 
+/*
+ * The failure was raised while the provider was still building the request, so no bytes for this
+ * object ever reached the destination. It stands exactly where learnedNothingFromDestination
+ * stands: nothing was learned about the destination's copy, and repeating it learns nothing
+ * again. The discriminator is the provider's own record of whether a request went out - not a
+ * status allowlist, and not a provider's opinion of how trustworthy its own failure is.
+ */
+const noRequestLeftTheProcess = (pushResult: PushResult | undefined): boolean =>
+  pushResult?.requestSent === false;
+
 const isTransportError = (errorType: string | undefined): boolean => {
   if (!errorType) {
     return false;
@@ -368,12 +379,14 @@ const isRetryableStatus = (statusCode: number): boolean => {
 /*
  * Which failures may count towards the replacement fallback. A result carrying no answer from
  * the destination never counts, however many cycles repeat it. Everything above is excluded
- * because escalating it would risk deleting a live event for nothing; a failure carrying no
- * status and no transport error is ours - an unaddressable target URL, a serializer - and will
- * repeat forever, so it is the one thing that must eventually escape.
+ * because escalating it would risk deleting a live event for nothing. A failure for which no
+ * request was ever sent counts for nothing either, however long it repeats: a serializer that
+ * refuses this event refuses it identically on the create verb, so the delete such evidence would
+ * license destroys the live mirror and the recreate cannot even be built. Repetition can only
+ * prove something about the destination's copy once something reached the destination.
  */
 const isDurableUpdateFailure = (pushResult: PushResult | undefined): boolean => {
-  if (learnedNothingFromDestination(pushResult)) {
+  if (learnedNothingFromDestination(pushResult) || noRequestLeftTheProcess(pushResult)) {
     return false;
   }
   const { errorType, statusCode } = pushResult ?? {};
@@ -393,21 +406,6 @@ const isDurableUpdateFailure = (pushResult: PushResult | undefined): boolean => 
     return true;
   }
   return !isTransportError(errorType);
-};
-
-/*
- * Which escape a promoted failure has earned. A refusal the destination itself answered came back
- * from an identifier the destination could resolve, so the verification read on that identifier
- * means something and is the only escape allowed: nothing may be deleted to break a stall. A
- * failure carrying no answer at all is ours - an unaddressable target, a serializer - and the read
- * would have to trust the very identifier that failure says is unusable, so that one still escapes
- * by delete-then-add.
- */
-const destinationAnsweredTheRefusal = (pushResult: PushResult | undefined): boolean => {
-  if (pushResult?.destinationAnswer === "answered") {
-    return true;
-  }
-  return typeof pushResult?.statusCode === "number" && pushResult.statusCode > 0;
 };
 
 /* Positive evidence is the same durable failure observed on this mapping in this many
@@ -438,18 +436,67 @@ const toFailureCarry = (mapping: EventMapping, consecutiveUpdateFailures: number
   syncEventId: mapping.syncEventId,
 });
 
-/* A promotion goes to the one escape its evidence has earned: the verification read when the
-   destination answered, the delete-then-add when the failure was ours and no read could tell us
-   anything the failing identifier did not already. */
+/*
+ * Which escape a promoted failure has earned. A refusal the destination itself answered came back
+ * from an identifier the destination could resolve, so the verification read on that identifier
+ * means something and is the only escape allowed: nothing may be deleted to break a stall. A
+ * failure carrying no answer at all is ours - an unaddressable target - and the read would have to
+ * trust the very identifier that failure says is unusable, so that one escapes by delete-then-add,
+ * but only once the recreate is known to be buildable.
+ */
+const destinationAnsweredTheRefusal = (pushResult: PushResult | undefined): boolean => {
+  if (pushResult?.destinationAnswer === "answered") {
+    return true;
+  }
+  return typeof pushResult?.statusCode === "number" && pushResult.statusCode > 0;
+};
+
+/* A recreate is only possible if the create-side payload for this exact event can be produced, so
+   it is produced here - by the provider, running the same serialization its create verb runs - and
+   nothing is sent. */
+const readPreparationFailure = (
+  prepareEvent: NonNullable<CalendarSyncProvider["prepareEvent"]>,
+  event: MaterializedSyncableEvent,
+): string | null => {
+  try {
+    prepareEvent(event);
+    return null;
+  } catch (error) {
+    return getErrorMessage(error);
+  }
+};
+
+/* Whether a create for this exact event could be built at all, established by the provider running
+   its create verb's own serialization with nothing sent. It is not a status, not an error name and
+   not a provider's opinion of its own failure: an event the create serializer refuses is an event
+   no POST can carry, whatever the update verb's failure looked like. A provider that offers no
+   preparation hook can establish nothing, so it keeps the routing it had. */
+const recreateCannotBeBuilt = (
+  provider: CalendarSyncProvider,
+  event: MaterializedSyncableEvent,
+): boolean => {
+  const { prepareEvent } = provider;
+  if (!prepareEvent) {
+    return false;
+  }
+  return readPreparationFailure(prepareEvent, event) !== null;
+};
+
+/* A promotion goes to the one escape its evidence has earned. A delete-then-add whose recreate
+   cannot be built spends the customer's live mirror on nothing, so those go to the verification
+   read: it destroys nothing, and it is the only thing that can still tell a mirror the recipient
+   deleted from one that is standing there stale. Routing it here rather than stopping it at the
+   recreate gate is the whole difference - the gate never asks the destination anything. */
 const recordPromotion = (
   operation: Extract<SyncOperation, { type: "replace" }>,
   pushResult: PushResult | undefined,
+  provider: CalendarSyncProvider,
   destinations: {
     refused: Extract<SyncOperation, { type: "replace" }>[];
     unresolved: Extract<SyncOperation, { type: "replace" }>[];
   },
 ): void => {
-  if (destinationAnsweredTheRefusal(pushResult)) {
+  if (destinationAnsweredTheRefusal(pushResult) || recreateCannotBeBuilt(provider, operation.event)) {
     destinations.refused.push(operation);
     return;
   }
@@ -482,13 +529,27 @@ const describeUpdateFailure = (
   return `update failed for event ${operation.event.id}: ${cause} (${status})`;
 };
 
+/* The error line a failed update reports. A refusal raised before any request has no status line
+   to quote, so the spread leaves it off rather than inventing one. */
+const toUpdateFailureError = (
+  operation: Extract<SyncOperation, { type: "replace" }>,
+  pushResult: PushResult | undefined,
+): OperationError => ({
+  type: "update",
+  error: pushResult?.error ?? describeUpdateFailure(operation, pushResult),
+  ...(pushResult?.errorType && { errorType: pushResult.errorType }),
+  ...(typeof pushResult?.statusCode === "number" && { statusCode: pushResult.statusCode }),
+});
+
 const processUpdateResults = (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   pushResults: PushResult[],
   mappingsById: Map<string, EventMapping>,
+  provider: CalendarSyncProvider,
 ): {
   changes: PendingChanges;
   created: number;
+  updated: number;
   updateFailed: number;
   conflictsResolved: number;
   errors: OperationError[];
@@ -500,6 +561,7 @@ const processUpdateResults = (
   const unresolved: Extract<SyncOperation, { type: "replace" }>[] = [];
   const refused: Extract<SyncOperation, { type: "replace" }>[] = [];
   let created = 0;
+  let updated = 0;
   let updateFailed = 0;
   let conflictsResolved = 0;
 
@@ -512,6 +574,22 @@ const processUpdateResults = (
     }
 
     if (!pushResult?.success) {
+      /* Counted and named here, before any branch: a promotion is a request that some other path
+         act, never a report that the update landed, and a receiver that stays quiet about it
+         (updateRelocatedMirrors did, for both of these branches) turns the failure into a run an
+         operator cannot tell from a calendar with nothing to do. */
+      updateFailed += 1;
+      errors.push(toUpdateFailureError(operation, pushResult));
+
+      /* Nothing left the process, so there is no evidence here to accumulate and there never will
+         be: the counter stays exactly where it was and the mapping takes the read-first escape now.
+         The read destroys nothing, and it is the only thing that can still notice a mirror the
+         recipient deleted while this refusal repeats. */
+      if (noRequestLeftTheProcess(pushResult)) {
+        refused.push(operation);
+        continue;
+      }
+
       if (needsReplacementFallback(pushResult)) {
         unresolved.push(operation);
         continue;
@@ -520,7 +598,7 @@ const processUpdateResults = (
       if (failingMapping && isDurableUpdateFailure(pushResult)) {
         const failures = countUpdateFailure(failingMapping);
         if (failures >= UPDATE_FAILURES_BEFORE_REPLACEMENT) {
-          recordPromotion(operation, pushResult, { refused, unresolved });
+          recordPromotion(operation, pushResult, provider, { refused, unresolved });
           /* The evidence has been spent on this promotion. Leaving it standing would re-promote
              the same mapping every cycle for as long as the replacement keeps failing. */
           updates.push(toFailureCarry(failingMapping, 0));
@@ -528,16 +606,13 @@ const processUpdateResults = (
         }
         updates.push(toFailureCarry(failingMapping, failures));
       }
-      updateFailed += 1;
-      errors.push({
-        type: "update",
-        error: pushResult?.error ?? describeUpdateFailure(operation, pushResult),
-        ...(pushResult?.errorType && { errorType: pushResult.errorType }),
-        ...(typeof pushResult?.statusCode === "number" && { statusCode: pushResult.statusCode }),
-      });
       continue;
     }
 
+    /* The destination accepted the edit, so the mirror now carries the source's content whether
+       the answer named the mapping's own uid or a re-keyed one. That is a successful operation
+       even when it is not an add. */
+    updated += 1;
     if (createdANewMirror(pushResult, mappingsById.get(operation.staleMappingId))) {
       created += 1;
     }
@@ -556,7 +631,7 @@ const processUpdateResults = (
     });
   }
 
-  return { changes: { inserts: [], deletes: [], updates }, created, updateFailed, conflictsResolved, errors, unresolved, refused };
+  return { changes: { inserts: [], deletes: [], updates }, created, updated, updateFailed, conflictsResolved, errors, unresolved, refused };
 };
 
 /* A delete reporting success is not evidence that anything left the destination: Outlook maps a
@@ -659,7 +734,7 @@ const executeAddRun = async (
   tallyPushEcho(pushEcho, pushResults);
   return {
     changes,
-    result: { added, addFailed, removed: 0, removeFailed: 0 },
+    result: { added, addFailed, updated: 0, removed: 0, removeFailed: 0 },
     conflictsResolved,
     errors,
     pushEcho,
@@ -733,7 +808,7 @@ const failedUpdateRun = (
 ): UpdateRunResult => ({
   runResult: {
     changes: { inserts: [], deletes: [], updates: [] },
-    result: { added: 0, addFailed: replacements.length, removed: 0, removeFailed: 0 },
+    result: { added: 0, addFailed: replacements.length, updated: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
     errors: [runFailure],
   },
@@ -745,6 +820,7 @@ const executeUpdateRun = async (
   replacements: Extract<SyncOperation, { type: "replace" }>[],
   updateEvents: NonNullable<CalendarSyncProvider["updateEvents"]>,
   mappingsById: Map<string, EventMapping>,
+  provider: CalendarSyncProvider,
 ): Promise<UpdateRunResult> => {
   const updates: EventUpdate[] = replacements.map((operation) => ({
     deleteId: operation.deleteId,
@@ -755,17 +831,18 @@ const executeUpdateRun = async (
     return failedUpdateRun(replacements, outcome.runFailure);
   }
   const { pushResults } = outcome;
-  const { created, updateFailed, conflictsResolved, changes, errors, unresolved, refused } = processUpdateResults(
+  const { created, updated, updateFailed, conflictsResolved, changes, errors, unresolved, refused } = processUpdateResults(
     replacements,
     pushResults,
     mappingsById,
+    provider,
   );
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
     runResult: {
       changes,
-      result: { added: created, addFailed: updateFailed, removed: 0, removeFailed: 0 },
+      result: { added: created, addFailed: updateFailed, updated, removed: 0, removeFailed: 0 },
       conflictsResolved,
       errors,
       pushEcho,
@@ -785,7 +862,7 @@ const executeRemoveRun = async (
   const { removed, removeFailed, deleteIds, errors } = processDeleteResults(removes, deleteResults, mappingsByRemoteIdentity);
   return {
     changes: { inserts: [], deletes: deleteIds },
-    result: { added: 0, addFailed: 0, removed, removeFailed },
+    result: { added: 0, addFailed: 0, updated: 0, removed, removeFailed },
     conflictsResolved: 0,
     errors,
   };
@@ -806,6 +883,7 @@ const mergeRunResult = (
   state.result = {
     added: state.result.added + runResult.result.added,
     addFailed: state.result.addFailed + runResult.result.addFailed,
+    updated: state.result.updated + runResult.result.updated,
     removed: state.result.removed + runResult.result.removed,
     removeFailed: state.result.removeFailed + runResult.result.removeFailed,
   };
@@ -907,6 +985,32 @@ const executeAdds = async (
   await checkSuperseded(state, isCurrent);
 };
 
+/* An identifier the destination calendar itself never returned may not reach a delete: Outlook's
+   delete verb is an unconditional mailbox-wide DELETE /me/events/{id}, so an identifier last seen in
+   another folder destroys the customer's only copy. A mapping whose mirror the read located outside
+   this calendar carries no identifier at all, and there is nothing in this calendar to remove.
+
+   The mapping itself is kept rather than retired: it is what still recognises the customer's copy as
+   ours if it is ever moved back, and a forgotten copy is what the next full listing sweeps away as
+   an unmapped orphan. */
+const namesNoDestinationEvent = (operation: Extract<SyncOperation, { type: "remove" }>): boolean =>
+  operation.deleteId === NO_DESTINATION_EVENT_IDENTIFIER;
+
+const recordUnremovableMirrors = (
+  state: ChunkedExecutionState,
+  unremovable: Extract<SyncOperation, { type: "remove" }>[],
+): void => {
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: unremovable.length },
+    conflictsResolved: 0,
+    errors: unremovable.map((operation) => ({
+      type: "remove" as const,
+      error: `nothing was removed for mapping ${operation.mappingId ?? operation.uid}: this destination calendar holds no event for it, and the copy the read found outside it may never be deleted`,
+    })),
+  }, false);
+};
+
 const executeRemoves = async (
   removes: Extract<SyncOperation, { type: "remove" }>[],
   provider: CalendarSyncProvider,
@@ -921,7 +1025,13 @@ const executeRemoves = async (
     return;
   }
 
-  const actionable = removes.filter((operation) => !state.protectedRemoteUids.has(operation.uid));
+  const unremovable = removes.filter((operation) => namesNoDestinationEvent(operation));
+  if (unremovable.length > 0) {
+    recordUnremovableMirrors(state, unremovable);
+  }
+
+  const actionable = removes.filter((operation) =>
+    !namesNoDestinationEvent(operation) && !state.protectedRemoteUids.has(operation.uid));
   if (actionable.length > 0) {
     const runResult = await executeRemoveRun(actionable, provider, mappingsByRemoteIdentity);
     mergeRunResult(state, runResult);
@@ -932,6 +1042,50 @@ const executeRemoves = async (
   state.processed += removes.length;
   onRunComplete?.(state.processed, totalOperations);
   await checkSuperseded(state, isCurrent);
+};
+
+/* No delete went out and none ever will while this keeps failing, so the mirror is alive and the
+   mapping still names it. Named rather than acted on, in the shape recordUnrepairableRefusal uses:
+   an operator sees which mapping is frozen and why, and a later cycle retries it. */
+const recordUnbuildableRecreate = (
+  state: ChunkedExecutionState,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+  cause: string,
+): void => {
+  state.errors.push({
+    type: "update",
+    error: `refusing to delete the mirror for mapping ${replacement.staleMappingId}: its replacement cannot be built, so nothing could be put back: ${cause}`,
+  });
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: [],
+  }, false);
+};
+
+/* The gate every destructive delete-then-add passes first. A provider that offers no preparation
+   hook keeps today's behaviour; one that does may only delete for operations whose replacement
+   really built. */
+const withBuildableRecreate = (
+  replacements: Extract<SyncOperation, { type: "replace" }>[],
+  provider: CalendarSyncProvider,
+  state: ChunkedExecutionState,
+): Extract<SyncOperation, { type: "replace" }>[] => {
+  const { prepareEvent } = provider;
+  if (!prepareEvent) {
+    return replacements;
+  }
+  const buildable: Extract<SyncOperation, { type: "replace" }>[] = [];
+  for (const replacement of replacements) {
+    const failure = readPreparationFailure(prepareEvent, replacement.event);
+    if (failure === null) {
+      buildable.push(replacement);
+      continue;
+    }
+    recordUnbuildableRecreate(state, replacement, failure);
+  }
+  return buildable;
 };
 
 const replaceViaDeleteThenAdd = async (
@@ -955,7 +1109,12 @@ const replaceViaDeleteThenAdd = async (
     return deleteResult?.success === true;
   };
 
-  const removes: Extract<SyncOperation, { type: "remove" }>[] = replacements.map((operation) => ({
+  const buildable = withBuildableRecreate(replacements, provider, state);
+  if (buildable.length === 0) {
+    return true;
+  }
+
+  const removes: Extract<SyncOperation, { type: "remove" }>[] = buildable.map((operation) => ({
     deleteId: operation.deleteId,
     startTime: operation.event.startTime,
     type: "remove",
@@ -973,6 +1132,7 @@ const replaceViaDeleteThenAdd = async (
     result: {
       added: 0,
       addFailed: 0,
+      updated: 0,
       removed: processedRemoves.removed,
       removeFailed: processedRemoves.removeFailed,
     },
@@ -982,8 +1142,8 @@ const replaceViaDeleteThenAdd = async (
 
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
   const unchanged: OperationError[] = [];
-  for (let index = 0; index < replacements.length; index++) {
-    const replacement = replacements[index];
+  for (let index = 0; index < buildable.length; index++) {
+    const replacement = buildable[index];
     if (!replacement) {
       continue;
     }
@@ -1011,7 +1171,7 @@ const replaceViaDeleteThenAdd = async (
   if (unchanged.length > 0) {
     mergeRunResult(state, {
       changes: { inserts: [], deletes: [] },
-      result: { added: 0, addFailed: unchanged.length, removed: 0, removeFailed: 0 },
+      result: { added: 0, addFailed: unchanged.length, updated: 0, removed: 0, removeFailed: 0 },
       conflictsResolved: 0,
       errors: unchanged,
     }, false);
@@ -1222,13 +1382,30 @@ const verifyMirrors = async (
    live object, so the ending is the same -- update it in place by the id the read actually saw.
    Nothing else in the run carries this observation: without it the mapping keeps naming whatever it
    held, the pending edit never lands, and the identical dead plan is recomputed every cycle. */
+
+/* Where the read saw it is the whole difference between an identifier that may be written down and
+   one that may not: inDestination was returned by the calendar this sync owns, so it is the delete
+   identifier; outside was found in another folder of the mailbox, so it is a handle for this run's
+   update and nothing more. */
+interface SurvivingMirror {
+  event: RemoteEvent;
+  inDestination: boolean;
+}
+
 const survivingMirror = (
   verdicts: MirrorVerdicts,
   replacement: Extract<SyncOperation, { type: "replace" }>,
-): RemoteEvent | null =>
-  verdicts.located.get(replacement.deleteId)
-    ?? verdicts.elsewhere.get(replacement.deleteId)
-    ?? null;
+): SurvivingMirror | null => {
+  const located = verdicts.located.get(replacement.deleteId);
+  if (located) {
+    return { event: located, inDestination: true };
+  }
+  const outside = verdicts.elsewhere.get(replacement.deleteId);
+  if (outside) {
+    return { event: outside, inDestination: false };
+  }
+  return null;
+};
 
 /* Carries the mapping forward with the id the read actually saw, so the repair survives even when
    the update that follows it does not land. The content hash stays as it was: the pending edit has
@@ -1246,6 +1423,53 @@ const toRelocationRepair = (
   syncEventHash: mapping.syncEventHash,
   syncEventId: mapping.syncEventId,
 });
+
+/* The mirror is alive in another folder, so the id it wears there is the only handle this run has on
+   the customer's copy -- and it may never be written down. mapping.deleteIdentifier IS the delete
+   identifier: the remove path builds its operation straight from it, with no presence check and no
+   calendar scoping, and Outlook deletes mailbox-wide. So the mapping learns the thing the read
+   actually proved instead: this destination calendar holds no event for it. */
+const toOutsideDestinationRepair = (mapping: EventMapping): PendingUpdate => ({
+  deleteIdentifier: NO_DESTINATION_EVENT_IDENTIFIER,
+  destinationEventUid: mapping.destinationEventUid,
+  endTime: mapping.endTime,
+  id: mapping.id,
+  startTime: mapping.startTime,
+  syncEventHash: mapping.syncEventHash,
+  syncEventId: mapping.syncEventId,
+});
+
+/* The edit still reaches the customer's copy this run, but the calendar this sync owns holds no
+   mirror for the mapping at all: what the read found is outside it, that identifier may never be
+   written down, and nothing here can put a mirror back without duplicating the copy the customer
+   already has. The mapping is going to stay wrong, so it is named rather than passed off as a
+   healthy update. */
+const recordMirrorOutsideDestination = (
+  state: ChunkedExecutionState,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+  located: RemoteEvent,
+): void => {
+  state.errors.push({
+    type: "update",
+    error: `mapping ${replacement.staleMappingId} has no mirror in this destination calendar: the read found its event at ${located.deleteId} outside the calendar, so nothing here may be deleted by that identifier`,
+  });
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: [],
+  }, false);
+};
+
+const toSurvivingMirrorRepair = (
+  mapping: EventMapping,
+  surviving: SurvivingMirror,
+): PendingUpdate => {
+  if (!surviving.inDestination) {
+    return toOutsideDestinationRepair(mapping);
+  }
+  return toRelocationRepair(mapping, surviving.event.deleteId, surviving.event.uid);
+};
 
 const toInPlaceUpdate = (
   replacement: Extract<SyncOperation, { type: "replace" }>,
@@ -1272,7 +1496,7 @@ const mergeRepairsNotAlreadyRecorded = (
   }
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [], updates: unrecorded },
-    result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
+    result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
     errors: [],
   });
@@ -1303,13 +1527,92 @@ const withoutAddCredit = (runResult: RunResult): RunResult => ({
   result: { ...runResult.result, added: 0 },
 });
 
+/* The push echoes the id of the copy it just wrote to, and for a mirror found outside this calendar
+   that echo is an out-of-destination identifier. Letting it land on the mapping is exactly the write
+   the remove path would later delete by, so the delivery records what the repair records: the
+   accepted content hash, the uid the mapping already held, and no destination identifier at all. */
+const withoutDestinationIdentity = (
+  updates: PendingUpdate[],
+  outsideByMappingId: Map<string, EventMapping>,
+): PendingUpdate[] =>
+  updates.map((update) => {
+    const mapping = outsideByMappingId.get(update.id);
+    if (!mapping) {
+      return update;
+    }
+    return {
+      ...update,
+      deleteIdentifier: NO_DESTINATION_EVENT_IDENTIFIER,
+      destinationEventUid: mapping.destinationEventUid,
+    };
+  });
+
+/* The mirror is alive at the very identity the update just addressed, so there is nothing to
+   recreate, nothing to repair, and nothing that would license deleting it to force an escape. The
+   stall is real and it is now named: an operator can see which mapping is frozen at stale content,
+   which is the whole difference between a mirror that is permanently wrong and one that is wrong
+   in silence. */
+const recordUnrepairableRefusal = (
+  state: ChunkedExecutionState,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+  reason: string,
+): void => {
+  state.errors.push({
+    type: "update",
+    error: `the update for mapping ${replacement.staleMappingId} keeps failing and its mirror stands: ${reason}`,
+  });
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: 1, updated: 0, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: [],
+  }, false);
+};
+
+/* The write to the identifier the read located answered that it is gone, so the read's own verdict
+   is already stale: the object was re-keyed again, or the recipient deleted it between the two
+   calls. Nothing here may act on that -- a create needs proof of absence this run does not have,
+   and a delete-then-add would buy a speculative DELETE against a mirror the read just called alive
+   -- so the mapping keeps the identifier it arrived with and the stuck mapping is named. */
+const recordUnreachableRelocation = (
+  state: ChunkedExecutionState,
+  replacement: Extract<SyncOperation, { type: "replace" }>,
+): void => {
+  state.verificationUnsettled += 1;
+  state.errors.push({
+    type: "update",
+    error: `the update for mapping ${replacement.staleMappingId} could not reach the mirror the read located at ${replacement.deleteId}: the destination answered that it is gone, so the mapping keeps the identifier it already held`,
+  });
+};
+
+/* A promotion the relocated path handles in this same run has not spent its evidence: the mapping
+   is still refusing, and zeroing the counter here is what made it rebuild the identical case and
+   throw it away again, cycle after cycle, forever. */
+const withCarriedEvidence = (
+  updates: PendingUpdate[],
+  promotedMappingIds: Set<string>,
+  mappingsById: Map<string, EventMapping>,
+): PendingUpdate[] =>
+  updates.map((update) => {
+    if (!promotedMappingIds.has(update.id)) {
+      return update;
+    }
+    const mapping = mappingsById.get(update.id);
+    if (!mapping) {
+      return update;
+    }
+    return { ...update, consecutiveUpdateFailures: countUpdateFailure(mapping) };
+  });
+
 /* Deliver the pending edit to the id the read located, in this run: the mapping repair alone would
    leave the mirror a cycle behind the source, and a delete-then-add would duplicate it permanently
-   on a create-only provider. */
+   on a create-only provider. Whatever the update run could not settle is routed from here: nobody
+   else receives these promotions, and a promotion nobody receives is a failure nobody reports. */
 const updateRelocatedMirrors = async (
   relocated: Extract<SyncOperation, { type: "replace" }>[],
   repairs: PendingUpdate[],
   locatedByMappingId: Map<string, RemoteEvent>,
+  outsideByMappingId: Map<string, EventMapping>,
   provider: CalendarSyncProvider,
   mappingsById: Map<string, EventMapping>,
   state: ChunkedExecutionState,
@@ -1321,22 +1624,55 @@ const updateRelocatedMirrors = async (
     return checkpointRun(state, { inserts: [], deletes: [], updates: unrecorded }, checkpoint);
   }
 
-  const { runResult } = await executeUpdateRun(relocated, updateEvents, mappingsById);
-  const delivered = withLocatedIdentity(runResult.changes.updates ?? [], locatedByMappingId);
+  const { runResult, refused, unresolved } = await executeUpdateRun(relocated, updateEvents, mappingsById, provider);
+  /* The identifier the read located is exactly the one that just answered 404, and the hash beside
+     it is the pre-edit one, so writing it down would tell the next cycle a mirror that never
+     received the edit is settled. */
+  const unreachable = new Set(unresolved.map((operation) => operation.staleMappingId));
+  const promoted = new Set(refused.map((operation) => operation.staleMappingId));
+  const written = (runResult.changes.updates ?? []).filter((update) => !unreachable.has(update.id));
+  const delivered = withoutDestinationIdentity(
+    withLocatedIdentity(
+      withCarriedEvidence(written, promoted, mappingsById),
+      locatedByMappingId,
+    ),
+    outsideByMappingId,
+  );
   const repairedRunResult: RunResult = {
     ...withoutAddCredit(runResult),
     changes: { ...runResult.changes, updates: delivered },
   };
   mergeRunResult(state, repairedRunResult);
-  const unrecorded = mergeRepairsNotAlreadyRecorded(state, repairs, delivered);
+  const reachedRepairs = repairs.filter((repair) => !unreachable.has(repair.id));
+  const unrecorded = mergeRepairsNotAlreadyRecorded(state, reachedRepairs, delivered);
   for (const replacement of relocated) {
     state.protectedRemoteUids.add(replacement.uid);
   }
-  return checkpointRun(state, {
+  state.updateFallbacks += unresolved.length + refused.length;
+  if (!(await checkpointRun(state, {
     deletes: runResult.changes.deletes,
     inserts: runResult.changes.inserts,
     updates: [...delivered, ...unrecorded],
-  }, checkpoint);
+  }, checkpoint))) {
+    return false;
+  }
+
+  for (const replacement of unresolved) {
+    recordUnreachableRelocation(state, replacement);
+  }
+
+  /* This run already holds the read the refusal escape would go and ask for: the mirror was
+     located, addressed, and refused again on the identity the read handed back. Asking a second
+     time could only answer the same thing, so the stall is named here - counted, attributed to its
+     mapping, and never bought out of with a delete. */
+  for (const replacement of refused) {
+    recordUnrepairableRefusal(
+      state,
+      replacement,
+      `the destination keeps refusing the update to the mirror it located at ${replacement.deleteId}, so the stale copy stands`,
+    );
+  }
+  return true;
 };
 
 /* A mirror the read could not settle is a restore that did not happen, and the counters alone say
@@ -1358,28 +1694,6 @@ const recordUnsettledMirrors = (
       error: `verification could not settle the mirror for mapping ${replacement.staleMappingId}: ${verdicts.unsettledReason}`,
     });
   }
-};
-
-/* The mirror is alive at the very identity the update just addressed, so there is nothing to
-   recreate, nothing to repair, and nothing that would license deleting it to force an escape. The
-   stall is real and it is now named: an operator can see which mapping is frozen at stale content,
-   which is the whole difference between a mirror that is permanently wrong and one that is wrong
-   in silence. */
-const recordUnrepairableRefusal = (
-  state: ChunkedExecutionState,
-  replacement: Extract<SyncOperation, { type: "replace" }>,
-  reason: string,
-): void => {
-  state.errors.push({
-    type: "update",
-    error: `the destination keeps refusing the update for mapping ${replacement.staleMappingId}: ${reason}`,
-  });
-  mergeRunResult(state, {
-    changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 1, removed: 0, removeFailed: 0 },
-    conflictsResolved: 0,
-    errors: [],
-  }, false);
 };
 
 /* The read handed back the object under the same key and uid the refused update already used, so
@@ -1414,9 +1728,11 @@ const resolveVerifiedMirrors = async (
   const relocated: Extract<SyncOperation, { type: "replace" }>[] = [];
   const repairs: PendingUpdate[] = [];
   const locatedByMappingId = new Map<string, RemoteEvent>();
+  const outsideByMappingId = new Map<string, EventMapping>();
   for (const replacement of replacements) {
-    const located = survivingMirror(verdicts, replacement);
-    if (located) {
+    const surviving = survivingMirror(verdicts, replacement);
+    if (surviving) {
+      const located = surviving.event;
       if (updateAlreadyRefused && isTheSameMirror(located, replacement)) {
         recordUnrepairableRefusal(
           state,
@@ -1427,9 +1743,17 @@ const resolveVerifiedMirrors = async (
       }
       const mapping = mappingsById.get(replacement.staleMappingId);
       if (mapping) {
-        repairs.push(toRelocationRepair(mapping, located.deleteId, located.uid));
+        repairs.push(toSurvivingMirrorRepair(mapping, surviving));
       }
-      locatedByMappingId.set(replacement.staleMappingId, located);
+      if (surviving.inDestination) {
+        locatedByMappingId.set(replacement.staleMappingId, located);
+      }
+      if (!surviving.inDestination) {
+        recordMirrorOutsideDestination(state, replacement, located);
+      }
+      if (!surviving.inDestination && mapping) {
+        outsideByMappingId.set(replacement.staleMappingId, mapping);
+      }
       relocated.push(toInPlaceUpdate(replacement, located.deleteId));
       continue;
     }
@@ -1449,6 +1773,7 @@ const resolveVerifiedMirrors = async (
       relocated,
       repairs,
       locatedByMappingId,
+      outsideByMappingId,
       provider,
       mappingsById,
       state,
@@ -1489,14 +1814,20 @@ const recreateMissingMirrors = async (
     );
   }
 
-  const deleteResults = await provider.deleteEvents(replacements.map((operation) => operation.deleteId));
+  /* This branch deletes in order to recreate too, so it earns the delete the same way. */
+  const buildable = withBuildableRecreate(replacements, provider, state);
+  if (buildable.length === 0) {
+    return true;
+  }
+
+  const deleteResults = await provider.deleteEvents(buildable.map((operation) => operation.deleteId));
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
   const errors: OperationError[] = [];
   let removed = 0;
   let removeFailed = 0;
 
-  for (let index = 0; index < replacements.length; index++) {
-    const replacement = replacements[index];
+  for (let index = 0; index < buildable.length; index++) {
+    const replacement = buildable[index];
     if (!replacement) {
       continue;
     }
@@ -1530,7 +1861,7 @@ const recreateMissingMirrors = async (
 
   mergeRunResult(state, {
     changes: { inserts: [], deletes: [] },
-    result: { added: 0, addFailed: 0, removed, removeFailed },
+    result: { added: 0, addFailed: 0, updated: 0, removed, removeFailed },
     conflictsResolved: 0,
     errors,
   }, false);
@@ -1613,6 +1944,7 @@ const executeReplacements = async (
         present,
         updateEvents,
         mappingsById,
+        provider,
       );
       unresolved = unresolvedUpdates;
       refused = refusedUpdates;
@@ -1774,6 +2106,43 @@ const repairRekeyedMirrorPlan = (
   };
 };
 
+const readOperationMappingId = (operation: SyncOperation): string | null => {
+  if (operation.type === "remove") {
+    return operation.mappingId ?? null;
+  }
+  return operation.staleMappingId ?? null;
+};
+
+/* A mapping the destination calendar holds no event for produces no operation at all: there is
+   nothing here to update, a create would duplicate the copy the customer already has on a
+   create-only push, and the identifier the copy wears outside this calendar may never reach a
+   delete. Doing nothing is the only safe ending -- and doing nothing quietly, cycle after cycle, is
+   how a mirror stays permanently wrong without anyone knowing, so every such mapping is named. */
+const recordMirrorsOutsideDestination = (
+  state: ChunkedExecutionState,
+  existingMappings: EventMapping[],
+  plannedOperations: SyncOperation[],
+): void => {
+  const plannedMappingIds = new Set(
+    plannedOperations.map((operation) => readOperationMappingId(operation)).filter((id) => id !== null),
+  );
+  const unplanned = existingMappings.filter((mapping) =>
+    !namesEventInDestination(mapping) && !plannedMappingIds.has(mapping.id));
+  if (unplanned.length === 0) {
+    return;
+  }
+
+  mergeRunResult(state, {
+    changes: { inserts: [], deletes: [] },
+    result: { added: 0, addFailed: unplanned.length, updated: 0, removed: 0, removeFailed: 0 },
+    conflictsResolved: 0,
+    errors: unplanned.map((mapping) => ({
+      type: "update" as const,
+      error: `this destination calendar holds no event for mapping ${mapping.id}: the read located the customer's copy outside it, so the mirror stays out of sync until it is back in the calendar`,
+    })),
+  }, false);
+};
+
 const getOperationWeight = (operation: SyncOperation): number => {
   if (operation.type === "replace") {
     return 2;
@@ -1808,7 +2177,7 @@ const executeRemoteOperations = async (
   const totalOperations = getTotalOperationCount(plannedOperations);
   const state: ChunkedExecutionState = {
     changes: { inserts: [], deletes: [], updates: [...repairs] },
-    result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
+    result: { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
     errors: [],
     processed: 0,
@@ -1823,6 +2192,8 @@ const executeRemoteOperations = async (
   /* The repaired identifier only helps the customer once it is written down: without this flush the
      mapping keeps naming the dead id and the same destructive plan is recomputed every cycle. */
   await checkpointRun(state, { inserts: [], deletes: [], updates: repairs }, checkpoint);
+
+  recordMirrorsOutsideDestination(state, existingMappings, plannedOperations);
 
   for (const chunk of operationChunks) {
     if (state.superseded || state.checkpointRejected) {
@@ -1916,7 +2287,7 @@ interface SyncCalendarResult extends SyncResult {
   errors: string[];
 }
 
-const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
+const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
 
 const appendDatabaseErrorFields = (
   event: Record<string, unknown>,
@@ -2108,6 +2479,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["flushed"] = false;
       wideEvent["events.added"] = 0;
       wideEvent["events.add_failed"] = 0;
+      wideEvent["events.updated"] = 0;
       wideEvent["events.removed"] = 0;
       wideEvent["events.remove_failed"] = 0;
       return EMPTY_RESULT;
@@ -2136,6 +2508,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 
     wideEvent["events.added"] = outcome.result.added;
     wideEvent["events.add_failed"] = outcome.result.addFailed;
+    wideEvent["events.updated"] = outcome.result.updated;
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
     wideEvent["events.conflicts_resolved"] = outcome.conflictsResolved;

@@ -84,7 +84,7 @@ describe("executeReplacements without an update-capable provider", () => {
       "/calendar/remote-2@keeper.sh.ics",
     ]]);
     expect(pushCalls).toEqual([[replacements[0]?.event, replacements[1]?.event]]);
-    expect(outcome.result).toEqual({ added: 2, addFailed: 0, removed: 2, removeFailed: 0 });
+    expect(outcome.result).toEqual({ added: 2, addFailed: 0, updated: 0, removed: 2, removeFailed: 0 });
     expect(outcome.changes.deletes).toEqual(["map-1", "map-2"]);
     expect(outcome.changes.inserts).toHaveLength(2);
     expect(outcome.changes.inserts[0]).toMatchObject({
@@ -111,7 +111,7 @@ describe("executeReplacements without an update-capable provider", () => {
 
     expect(deleteCalls).toHaveLength(1);
     expect(pushCalls).toEqual([[replacements[1]?.event]]);
-    expect(outcome.result).toEqual({ added: 1, addFailed: 0, removed: 1, removeFailed: 1 });
+    expect(outcome.result).toEqual({ added: 1, addFailed: 0, updated: 0, removed: 1, removeFailed: 1 });
     expect(outcome.changes.deletes).toEqual(["map-2"]);
     expect(outcome.changes.inserts).toHaveLength(1);
     expect(outcome.errors).toEqual([

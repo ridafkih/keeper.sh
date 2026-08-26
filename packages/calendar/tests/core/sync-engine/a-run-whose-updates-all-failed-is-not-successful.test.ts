@@ -92,10 +92,17 @@ const createProvider = (updateOutcome: (update: EventUpdate) => PushResult) => {
   return { deletedIds, provider, pushedEvents, updatedBatches };
 };
 
+/* Every real destination echoes back the uid the mapping already holds on an ordinary in-place
+   update - CalDAV's generateDeterministicEventUid(event.id), Google's getEchoedICalUid(body) ??
+   entry.uid, Outlook's updated.iCalUId - so answering with the source event id instead would make
+   an ordinary edit look like a brand new mirror and hide what this run really did. */
+const uidHeldByMapping = (deleteId: string): string =>
+  deleteId.replace("/calendar/", "").replace(".ics", "");
+
 const acceptUpdate = (update: EventUpdate): PushResult => ({
   success: true,
   deleteId: update.deleteId,
-  remoteId: update.event.id,
+  remoteId: uidHeldByMapping(update.deleteId),
 });
 
 const rejectUpdate = (): PushResult => REJECTED_UPDATE;
@@ -161,7 +168,9 @@ describe("a run whose updates all failed is not successful", () => {
     const wideEvent = await runSyncCalendar(provider, mappings);
 
     expect(wideEvent["outcome"]).toBe("success");
-    expect(wideEvent["events.added"]).toBe(EVENT_INDEXES.length);
+    // Nothing new landed: three mirrors the mapping already named were edited where they stood.
+    expect(wideEvent["events.added"]).toBe(0);
+    expect(wideEvent["events.updated"]).toBe(EVENT_INDEXES.length);
     expect(wideEvent["events.add_failed"]).toBe(0);
     expect(wideEvent["events.remove_failed"]).toBe(0);
     expect(wideEvent["operation_errors.count"]).toBeUndefined();

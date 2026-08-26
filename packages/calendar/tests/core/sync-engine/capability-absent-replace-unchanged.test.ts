@@ -87,7 +87,7 @@ describe("a destination without the update capability", () => {
       "delete:remote-1@keeper.sh,remote-2@keeper.sh",
       "push:ev-1,ev-2",
     ]);
-    expect(outcome.result).toEqual({ added: 2, addFailed: 0, removed: 2, removeFailed: 0 });
+    expect(outcome.result).toEqual({ added: 2, addFailed: 0, updated: 0, removed: 2, removeFailed: 0 });
     expect(outcome.updateFallbacks).toBe(0);
     expect(outcome.changes.updates ?? []).toEqual([]);
     expect(outcome.changes.deletes).toEqual(["map-1", "map-2"]);
@@ -109,7 +109,7 @@ describe("a destination without the update capability", () => {
     const outcome = await executeRemoteOperations(replacements, mappings, "dest-shared", provider);
 
     expect(calls).toEqual(["delete:remote-1@keeper.sh"]);
-    expect(outcome.result).toEqual({ added: 0, addFailed: 0, removed: 0, removeFailed: 1 });
+    expect(outcome.result).toEqual({ added: 0, addFailed: 0, updated: 0, removed: 0, removeFailed: 1 });
     expect(outcome.updateFallbacks).toBe(0);
     expect(outcome.changes.deletes).toEqual([]);
     expect(outcome.changes.inserts).toEqual([]);
@@ -134,7 +134,7 @@ describe("a capability-less destination across chunk boundaries", () => {
     const batchSizes = calls.map((call) => call.split(":")[1]?.split(",").length ?? 0);
     expect(calls.map((call) => call.split(":")[0])).toEqual(["delete", "push", "delete", "push"]);
     expect(batchSizes).toEqual([50, 50, 1, 1]);
-    expect(outcome.result).toEqual({ added: count, addFailed: 0, removed: count, removeFailed: 0 });
+    expect(outcome.result).toEqual({ added: count, addFailed: 0, updated: 0, removed: count, removeFailed: 0 });
     expect(outcome.updateFallbacks).toBe(0);
     expect(outcome.changes.updates ?? []).toEqual([]);
     expect(outcome.changes.deletes).toHaveLength(count);

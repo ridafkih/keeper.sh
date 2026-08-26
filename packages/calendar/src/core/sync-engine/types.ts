@@ -17,6 +17,12 @@ interface EventUpdate {
 interface CalendarSyncProvider {
   // Must run before reconciliation, not in the serializer, or mapping and remote disagree and churn forever.
   normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
+  /* Builds the create-side payload for one event with no side effect, running exactly the
+     serialization pushEvents runs. It exists so a caller can prove a recreate is possible BEFORE
+     it destroys the live mirror: a serializer refusal is ours, it repeats every cycle, and a
+     DELETE issued ahead of it buys nothing but the permanent loss of the customer's only copy.
+     It throws for the same events the create verb throws for. */
+  prepareEvent?: (event: MaterializedSyncableEvent) => void;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
