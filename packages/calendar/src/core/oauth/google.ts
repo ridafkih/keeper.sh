@@ -6,11 +6,13 @@ import type { ValidatedState, OAuthStateStore } from "./state";
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const REQUEST_TIMEOUT_MS = 15_000;
+const GOOGLE_REVOKE_TIMEOUT_MS = 1000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
 const isRequestTimeoutError = (error: unknown): boolean =>
@@ -262,6 +264,56 @@ const createGoogleOAuthService = (
   };
 };
 
+type GoogleRevocationFetch = (input: string, init: RequestInit) => Promise<Response>;
+
+interface GoogleGrantRevocationOptions {
+  fetchImpl: GoogleRevocationFetch;
+  signal?: AbortSignal;
+}
+
+interface GoogleGrantRevocationOutcome {
+  body: string;
+  revoked: boolean;
+  status: number;
+}
+
+const revocationSignal = (signal: AbortSignal | undefined): AbortSignal => {
+  const expiry = AbortSignal.timeout(GOOGLE_REVOKE_TIMEOUT_MS);
+
+  if (!signal) {
+    return expiry;
+  }
+
+  return AbortSignal.any([signal, expiry]);
+};
+
+const revokeGoogleGrant = async (
+  token: string,
+  options: GoogleGrantRevocationOptions,
+): Promise<GoogleGrantRevocationOutcome> => {
+  const response = await options.fetchImpl(GOOGLE_REVOKE_URL, {
+    body: new URLSearchParams({ token }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    method: "POST",
+    signal: revocationSignal(options.signal),
+  }).catch((error: unknown) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(
+        `Google grant revocation timed out after ${GOOGLE_REVOKE_TIMEOUT_MS}ms`,
+        { cause: error },
+      );
+    }
+
+    throw error;
+  });
+
+  return {
+    body: await response.text(),
+    revoked: response.ok,
+    status: response.status,
+  };
+};
+
 const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -286,6 +338,9 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 
 export {
   createGoogleTokenRefresher,
+  GOOGLE_REVOKE_TIMEOUT_MS,
+  GOOGLE_REVOKE_URL,
+  revokeGoogleGrant,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,
@@ -301,4 +356,7 @@ export type {
   GoogleOAuthService,
   GoogleTokenResponse,
   GoogleUserInfo,
+  GoogleGrantRevocationOptions,
+  GoogleGrantRevocationOutcome,
+  GoogleRevocationFetch,
 };

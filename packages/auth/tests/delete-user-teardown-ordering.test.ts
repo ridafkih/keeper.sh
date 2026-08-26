@@ -9,6 +9,9 @@ const buildAuth = (overrides: Record<string, unknown> = {}) =>
   createAuth({
     baseUrl: "http://localhost:3000",
     database: {} as BunSQLDatabase,
+    deleteUserTeardown: async () => {},
+    deleteUserResidueRecorder: async () => {},
+    deleteUserTeardownRollback: async () => {},
     polarAccessToken: "polar-test-token",
     polarMode: "sandbox",
     secret: "test-secret",

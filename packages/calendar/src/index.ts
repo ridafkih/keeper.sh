@@ -59,6 +59,7 @@ export {
 export {
   FULL_POLL_INTERVAL_MS,
   LIVE_PUSH_CHANNEL_STATES,
+  PUSH_CHANNEL_STATES,
   PUSH_HEALTHY_POLL_FLOOR_MS,
   STALE_REGISTERING_MS,
   isPushChannelGoneError,
@@ -305,8 +306,14 @@ export {
 export {
   createGoogleOAuthService,
   createGoogleTokenRefresher,
+  GOOGLE_REVOKE_TIMEOUT_MS,
+  GOOGLE_REVOKE_URL,
+  revokeGoogleGrant,
+  type GoogleGrantRevocationOptions,
+  type GoogleGrantRevocationOutcome,
   type GoogleOAuthCredentials,
   type GoogleOAuthService,
+  type GoogleRevocationFetch,
 } from "./core/oauth/google";
 export {
   createMicrosoftOAuthService,
@@ -409,3 +416,27 @@ export { createManagePushChannelsDependencies } from "./core/source/manage-push-
 export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
 export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
+export {
+  OAUTH_GRANT_RESIDUE_KIND,
+  POLAR_CUSTOMER_RESIDUE_KIND,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  RESIDUE_LIFETIME_MS,
+} from "./core/deletion/teardown-residue";
+export type {
+  TeardownResidueCredential,
+  TeardownResidueDraft,
+  TeardownResidueRecord,
+  TeardownResidueRecorder,
+  TeardownResidueStore,
+} from "./core/deletion/teardown-residue";
+export {
+  createTeardownResidueReaper,
+  RESIDUE_REPAIR_FAILED_SLUG,
+  RESIDUE_STALE_SLUG,
+} from "./core/deletion/teardown-residue-reaper";
+export type {
+  TeardownResidueReaperDependencies,
+  TeardownResidueReaperOutcome,
+} from "./core/deletion/teardown-residue-reaper";
+export { createTeardownResidueStore } from "./core/deletion/teardown-residue-store";
+export type { TeardownResidueStoreConfig } from "./core/deletion/teardown-residue-store";

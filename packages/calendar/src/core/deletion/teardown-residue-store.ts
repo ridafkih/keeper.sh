@@ -1,0 +1,164 @@
+import { eq, isNull, lte, or, sql } from "drizzle-orm";
+import { decryptPassword, encryptPassword } from "@keeper.sh/database";
+import { deletionResidueTable } from "@keeper.sh/database/schema";
+import { RESIDUE_LIFETIME_MS } from "./teardown-residue";
+import type {
+  TeardownResidueCredential,
+  TeardownResidueDraft,
+  TeardownResidueRecord,
+  TeardownResidueStore,
+} from "./teardown-residue";
+import type { BunSQLClient } from "../database-client";
+
+const RETRY_BASE_SECONDS = 300;
+const RETRY_CAP_SECONDS = 3600;
+const RETRY_BACKOFF_EXPONENT_CAP = 6;
+
+type DeletionResidueRow = typeof deletionResidueTable.$inferSelect;
+
+interface TeardownResidueStoreConfig {
+  database: BunSQLClient;
+  encryptionKey: string | null;
+  now: () => Date;
+}
+
+const requireEncryptionKey = (encryptionKey: string | null): string => {
+  if (encryptionKey === null) {
+    throw new Error(
+      "Teardown residue holds provider credentials and cannot be read or written without ENCRYPTION_KEY",
+    );
+  }
+
+  return encryptionKey;
+};
+
+const encryptOptional = (value: string | null, encryptionKey: string): string | null => {
+  if (value === null) {
+    return null;
+  }
+
+  return encryptPassword(value, encryptionKey);
+};
+
+const decryptOptional = (value: string | null, encryptionKey: string): string | null => {
+  if (value === null) {
+    return null;
+  }
+
+  return decryptPassword(value, encryptionKey);
+};
+
+const decryptCredential = (
+  row: DeletionResidueRow,
+  encryptionKey: string | null,
+): TeardownResidueCredential | null => {
+  if (row.encryptedAccessToken === null) {
+    return null;
+  }
+
+  const key = requireEncryptionKey(encryptionKey);
+
+  return {
+    accessToken: decryptPassword(row.encryptedAccessToken, key),
+    expiresAt: row.credentialExpiresAt,
+    refreshToken: decryptOptional(row.encryptedRefreshToken, key),
+  };
+};
+
+const toResidueRecord = (
+  row: DeletionResidueRow,
+  encryptionKey: string | null,
+): TeardownResidueRecord => {
+  const credential = decryptCredential(row, encryptionKey);
+
+  return {
+    attempts: row.attempts,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    id: row.id,
+    kind: row.kind,
+    userId: row.userId,
+    ...(credential !== null && { credential }),
+    ...(row.externalId !== null && { externalId: row.externalId }),
+    ...(row.provider !== null && { provider: row.provider }),
+    ...(row.providerChannelId !== null && { providerChannelId: row.providerChannelId }),
+    ...(row.providerResourceId !== null && {
+      providerResourceId: row.providerResourceId,
+    }),
+  };
+};
+
+const encryptCredential = (
+  credential: TeardownResidueCredential | undefined,
+  encryptionKey: string | null,
+) => {
+  if (!credential) {
+    return {};
+  }
+
+  const key = requireEncryptionKey(encryptionKey);
+
+  return {
+    credentialExpiresAt: credential.expiresAt,
+    encryptedAccessToken: encryptPassword(credential.accessToken, key),
+    encryptedRefreshToken: encryptOptional(credential.refreshToken, key),
+  };
+};
+
+const nextAttemptExpression = (claimedAt: Date) =>
+  sql`${claimedAt.toISOString()}::timestamptz + least(
+    ${sql.raw(String(RETRY_CAP_SECONDS))},
+    ${sql.raw(String(RETRY_BASE_SECONDS))} * power(
+      2,
+      least(${deletionResidueTable.attempts}, ${sql.raw(String(RETRY_BACKOFF_EXPONENT_CAP))})
+    )
+  ) * interval '1 second'`;
+
+const createTeardownResidueStore = (
+  config: TeardownResidueStoreConfig,
+): TeardownResidueStore => ({
+  clear: async (residueId) => {
+    await config.database
+      .delete(deletionResidueTable)
+      .where(eq(deletionResidueTable.id, residueId));
+  },
+  list: async () => {
+    const claimedAt = config.now();
+    const rows = await config.database
+      .update(deletionResidueTable)
+      .set({
+        attempts: sql`${deletionResidueTable.attempts} + 1`,
+        lastAttemptAt: claimedAt,
+        nextAttemptAt: nextAttemptExpression(claimedAt),
+      })
+      .where(or(
+        isNull(deletionResidueTable.nextAttemptAt),
+        lte(deletionResidueTable.nextAttemptAt, claimedAt),
+      ))
+      .returning();
+
+    return rows.map((row) => toResidueRecord(row, config.encryptionKey));
+  },
+  record: async (draft: TeardownResidueDraft) => {
+    const recordedAt = config.now();
+
+    await config.database.insert(deletionResidueTable).values({
+      createdAt: recordedAt,
+      expiresAt: new Date(recordedAt.getTime() + RESIDUE_LIFETIME_MS),
+      kind: draft.kind,
+      userId: draft.userId,
+      ...encryptCredential(draft.credential, config.encryptionKey),
+      ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
+      ...(typeof draft.provider === "string" && { provider: draft.provider }),
+      ...(typeof draft.providerChannelId === "string" && {
+        providerChannelId: draft.providerChannelId,
+      }),
+      ...(typeof draft.providerResourceId === "string" && {
+        providerResourceId: draft.providerResourceId,
+      }),
+    });
+  },
+});
+
+export { createTeardownResidueStore };
+export type { TeardownResidueStoreConfig };

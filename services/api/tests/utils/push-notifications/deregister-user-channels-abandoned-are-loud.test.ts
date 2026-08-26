@@ -251,11 +251,18 @@ describe("a push channel the provider refused to stop is a loud failure", () => 
       }),
       deregisterPushChannels: async (userId: string, signal: AbortSignal) =>
         await deregisterUserPushChannels(userId, signal),
+      fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       redis: {
         del: () => Promise.resolve(1),
         exists: () => Promise.resolve(1),
         set: () => Promise.resolve("OK"),
+      },
+      residue: {
+        clear: () => Promise.resolve(),
+        list: () => Promise.resolve([]),
+        record: () => Promise.resolve(),
       },
     });
 

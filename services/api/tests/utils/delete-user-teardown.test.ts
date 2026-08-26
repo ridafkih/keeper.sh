@@ -178,6 +178,10 @@ const seedCalendarIds = (channels: StoredPushChannel[]): Map<string, string[]> =
   const calendarIds = new Map<string, string[]>();
 
   for (const channel of channels) {
+    if (channel.calendarId === null) {
+      continue;
+    }
+
     calendarIds.set(channel.userId, [
       ...(calendarIds.get(channel.userId) ?? []),
       channel.calendarId,
@@ -294,11 +298,18 @@ const makeHarness = async (overrides: HarnessOverrides = {}): Promise<Harness> =
     dependencies: {
       createQueue: () => queue,
       deregisterPushChannels: overrides.deregisterPushChannels ?? composedDeregister,
+      fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: (userId: string) => {
         events.push(`list-calendars:${userId}`);
         return Promise.resolve(calendarIds.get(userId) ?? []);
       },
+      listOAuthCredentials: () => Promise.resolve([]),
       redis: trackingRedis,
+      residue: {
+        clear: () => Promise.resolve(),
+        list: () => Promise.resolve([]),
+        record: () => Promise.resolve(),
+      },
     },
     events,
     loggedErrors,

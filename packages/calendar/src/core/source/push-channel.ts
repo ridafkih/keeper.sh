@@ -1,4 +1,5 @@
 import { pushChannelStateSchema } from "@keeper.sh/data-schemas";
+import type { PushChannelStateValue } from "@keeper.sh/data-schemas";
 import { getDeterministicRefreshOffset } from "../oauth/sync-window";
 import {
   resolvePushProviderProfile,
@@ -14,9 +15,17 @@ const PUSH_NOTIFICATION_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 const STALE_REGISTERING_MS = 10 * 60 * 1000;
 const PULL_CAPABILITY = "pull";
 
-type PushChannelState = "active" | "degraded" | "failed" | "registering" | "removed";
+type PushChannelState = PushChannelStateValue;
 type PushChannelActionType = "deregister" | "register" | "renew";
 type PushClaimKind = "change" | "lifecycle" | "sync";
+
+const PUSH_CHANNEL_STATES: readonly PushChannelState[] = Object.keys({
+  active: true,
+  degraded: true,
+  failed: true,
+  registering: true,
+  removed: true,
+} satisfies Record<PushChannelState, true>) as PushChannelState[];
 
 const LIVE_PUSH_CHANNEL_STATES = new Set<PushChannelState>([
   "active",
@@ -588,6 +597,7 @@ export {
   FULL_POLL_INTERVAL_MS,
   isPushChannelGoneError,
   LIVE_PUSH_CHANNEL_STATES,
+  PUSH_CHANNEL_STATES,
   neverReachedProvider,
   planPushChannelActions,
   PUSH_HEALTHY_POLL_FLOOR_MS,

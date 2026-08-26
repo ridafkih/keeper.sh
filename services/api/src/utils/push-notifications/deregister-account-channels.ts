@@ -1,5 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  LIVE_PUSH_CHANNEL_STATES,
+  PUSH_CHANNEL_STATES,
   createCoordinatedRefresher,
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
@@ -8,9 +10,11 @@ import {
   toPushChannelState,
 } from "@keeper.sh/calendar";
 import type {
+  PushChannelState,
   RegistrarContext,
   SourcePushRegistrar,
   StoredPushChannel,
+  TeardownResidueCredential,
   TokenState,
   WebhookConfig,
 } from "@keeper.sh/calendar";
@@ -28,7 +32,27 @@ const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
 const SERIAL_CONCURRENCY = 1;
-const LIVE_STATES = ["active", "degraded", "registering"];
+
+interface AbandonedPushChannelResidue {
+  credential: TeardownResidueCredential | null;
+  provider: string;
+  providerChannelId: string;
+  providerResourceId: string | null;
+}
+
+class AbandonedPushChannelError extends Error {
+  readonly residue: AbandonedPushChannelResidue;
+
+  constructor(
+    message: string,
+    residue: AbandonedPushChannelResidue,
+    options: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "AbandonedPushChannelError";
+    this.residue = residue;
+  }
+}
 
 interface DeregisterPushChannelsDependencies {
   createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
@@ -36,6 +60,7 @@ interface DeregisterPushChannelsDependencies {
   markChannelsStopped?: (channelIds: string[]) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
+  resolveResidueCredential?: (channel: StoredPushChannel) => TeardownResidueCredential | null;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
   webhookConfigured: boolean;
 }
@@ -49,6 +74,7 @@ interface AbandonedPushChannel {
   id: string;
   provider: string;
   providerChannelId: string;
+  providerResourceId: string | null;
 }
 
 const combineSignals = (signals: AbortSignal[]): AbortSignal[] => {
@@ -58,7 +84,11 @@ const combineSignals = (signals: AbortSignal[]): AbortSignal[] => {
   return [AbortSignal.any(signals)];
 };
 
-type ChannelStopOutcome = { reason: unknown; stopped: false } | { stopped: true };
+type ChannelDialOutcome = { context: RegistrarContext } | { reason: unknown };
+
+type ChannelStopOutcome =
+  | { context: RegistrarContext | null; reason: unknown; stopped: false }
+  | { stopped: true };
 
 const stopChannel = async (
   channel: StoredPushChannel,
@@ -66,8 +96,20 @@ const stopChannel = async (
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null,
 ): Promise<ChannelStopOutcome> => {
+  const dialed = await dependencies
+    .createRegistrarContext(channel)
+    .then(
+      (registrarContext): ChannelDialOutcome => ({ context: registrarContext }),
+      (error: unknown) => ({ reason: error }),
+    );
+
+  if (!("context" in dialed)) {
+    return { context: null, reason: dialed.reason, stopped: false };
+  }
+
+  const { context } = dialed;
+
   try {
-    const context = await dependencies.createRegistrarContext(channel);
     const [effectiveSignal] = combineSignals(
       [signal, context.signal ?? null].filter(
         (candidate): candidate is AbortSignal => candidate !== null,
@@ -80,7 +122,7 @@ const stopChannel = async (
     });
     return { stopped: true };
   } catch (error) {
-    return { reason: error, stopped: false };
+    return { context, reason: error, stopped: false };
   }
 };
 
@@ -119,9 +161,19 @@ const describeReason = (reason: unknown): string => {
   return `Unknown reason ${String(reason)}`;
 };
 
-const describeAbandonment = (channel: AbandonedPushChannel, reason: unknown): Error =>
-  new Error(
+const describeAbandonment = (
+  channel: AbandonedPushChannel,
+  reason: unknown,
+  credential: TeardownResidueCredential | null,
+): Error =>
+  new AbandonedPushChannelError(
     `Push channel ${channel.id} (${channel.provider} channel ${channel.providerChannelId}) was not confirmed stopped at the provider: ${describeReason(reason)}`,
+    {
+      credential,
+      provider: channel.provider,
+      providerChannelId: channel.providerChannelId,
+      providerResourceId: channel.providerResourceId,
+    },
     { cause: reason },
   );
 
@@ -137,19 +189,36 @@ const describeAbandoned = (
       id: channel.id,
       provider: channel.provider,
       providerChannelId: String(channel.providerChannelId),
+      providerResourceId: channel.providerResourceId,
     }));
 };
 
 const carriesProviderIdentifier = (channel: StoredPushChannel): boolean =>
   channel.providerChannelId !== null;
 
-const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] => {
-  const orphanRiskStates = new Set(LIVE_STATES);
-
-  return channels
+const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] =>
+  channels
     .filter((channel) =>
-      !carriesProviderIdentifier(channel) && orphanRiskStates.has(channel.state))
+      !carriesProviderIdentifier(channel)
+      && LIVE_PUSH_CHANNEL_STATES.has(channel.state))
     .map((channel) => `${channel.provider}:${channel.id}:${channel.state}`);
+
+const residueCredentialFor = (
+  channel: StoredPushChannel,
+  context: RegistrarContext | null,
+  dependencies: DeregisterPushChannelsDependencies,
+): TeardownResidueCredential | null => {
+  const stored = dependencies.resolveResidueCredential?.(channel) ?? null;
+
+  if (stored !== null) {
+    return stored;
+  }
+
+  if (context === null) {
+    return null;
+  }
+
+  return { accessToken: context.accessToken, expiresAt: null, refreshToken: null };
 };
 
 const restateStoppedChannels = async (
@@ -210,6 +279,7 @@ const runDeregisterPushChannelsOutcome = async (
   const queued = [...dialable];
   const stoppedChannelIds: string[] = [];
   const failureReasons = new Map<string, unknown>();
+  const residueCredentials = new Map<string, TeardownResidueCredential>();
 
   const workers = Array.from(
     { length: Math.min(concurrency, queued.length) },
@@ -231,8 +301,14 @@ const runDeregisterPushChannelsOutcome = async (
         const outcome = await stopChannel(channel, registrar, dependencies, signal);
         if (outcome.stopped) {
           stoppedChannelIds.push(channel.id);
-        } else {
-          failureReasons.set(channel.id, outcome.reason);
+          continue;
+        }
+
+        failureReasons.set(channel.id, outcome.reason);
+
+        const credential = residueCredentialFor(channel, outcome.context, dependencies);
+        if (credential !== null) {
+          residueCredentials.set(channel.id, credential);
         }
       }
     },
@@ -245,7 +321,7 @@ const runDeregisterPushChannelsOutcome = async (
     reason: resolveAbandonmentReason(channel.id, failureReasons, signal),
   }));
   const abandonments = abandoned.map(({ channel, reason }) =>
-    describeAbandonment(channel, reason));
+    describeAbandonment(channel, reason, residueCredentials.get(channel.id) ?? null));
 
   if (recordAbandonments) {
     for (const abandonment of abandonments) {
@@ -344,12 +420,13 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
 const deregisterPushChannelsWithin = async (
   scopeId: string,
   scopeColumn: "accountId" | "calendarId" | "userId",
-  states: string[],
+  states: PushChannelState[],
   signal: AbortSignal | null,
   requireEveryChannelStopped: boolean,
   concurrency: number,
 ): Promise<number> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
+  const credentialsByChannel = new Map<string, TeardownResidueCredential>();
 
   const outcome = await runDeregisterPushChannelsOutcome(scopeId, {
     createRegistrarContext: async (channel) => {
@@ -403,6 +480,12 @@ const deregisterPushChannelsWithin = async (
         }));
       }
 
+      credentialsByChannel.set(channel.id, {
+        accessToken: tokenState.accessToken,
+        expiresAt: tokenState.accessTokenExpiresAt,
+        refreshToken: tokenState.refreshToken,
+      });
+
       return {
         accessToken: tokenState.accessToken,
         channelId: channel.providerChannelId,
@@ -448,6 +531,7 @@ const deregisterPushChannelsWithin = async (
       });
     },
     resolveRegistrar: resolvePushRegistrar,
+    resolveResidueCredential: (channel) => credentialsByChannel.get(channel.id) ?? null,
     webhookConfigured: webhookConfig !== null,
   }, signal, concurrency, true);
 
@@ -462,7 +546,7 @@ const deregisterAccountPushChannels = async (accountId: string): Promise<number>
   await deregisterPushChannelsWithin(
     accountId,
     "accountId",
-    LIVE_STATES,
+    [...LIVE_PUSH_CHANNEL_STATES],
     null,
     false,
     SERIAL_CONCURRENCY,
@@ -472,7 +556,7 @@ const deregisterCalendarPushChannels = async (calendarId: string): Promise<numbe
   await deregisterPushChannelsWithin(
     calendarId,
     "calendarId",
-    LIVE_STATES,
+    [...LIVE_PUSH_CHANNEL_STATES],
     null,
     false,
     SERIAL_CONCURRENCY,
@@ -485,7 +569,7 @@ const deregisterUserPushChannels = async (
   await deregisterPushChannelsWithin(
     userId,
     "userId",
-    [...LIVE_STATES, "failed"],
+    PUSH_CHANNEL_STATES.filter((state) => state !== STOPPED_STATE),
     signal,
     true,
     DISCONNECT_CONCURRENCY,
@@ -506,6 +590,7 @@ const runDeregisterUserPushChannels = async (
   await runDeregisterPushChannels(userId, dependencies, signal, DISCONNECT_CONCURRENCY);
 
 export {
+  AbandonedPushChannelError,
   DEREGISTRATION_FAILED_SLUG,
   RESTATE_FAILED_SLUG,
   deregisterAccountPushChannels,
@@ -518,6 +603,7 @@ export {
 };
 export type {
   AbandonedPushChannel,
+  AbandonedPushChannelResidue,
   DeregisterPushChannelsDependencies,
   DeregisterPushChannelsOutcome,
 };

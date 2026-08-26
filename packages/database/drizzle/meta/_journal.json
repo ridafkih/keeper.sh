@@ -652,6 +652,13 @@
       "when": 1787491011577,
       "tag": "0092_flowery_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1787760393990,
+      "tag": "0093_sticky_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

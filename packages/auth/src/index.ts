@@ -17,7 +17,10 @@ import {
 } from "./polar-customer-delete";
 import {
   createDeleteUserTeardown,
+  createSkippedDeleteUserTeardown,
+  deleteUserTeardownUnavailable,
   SYNC_TEARDOWN_TIMEOUT_MS,
+  TEARDOWN_BUDGET_MS,
 } from "./delete-user-teardown";
 import { createDeleteUserCompensationScope } from "./delete-user-compensation";
 import { writeAuthStderr } from "./runtime-environment";
@@ -41,8 +44,8 @@ import {
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { BetterAuthOptions, BetterAuthPlugin, User } from "better-auth";
 import type {
+  DeleteUserResidueRecorder,
   DeleteUserTeardown,
-  DeleteUserTeardownStep,
 } from "./delete-user-teardown";
 
 type DeleteUserOptions = NonNullable<
@@ -81,8 +84,9 @@ interface AuthConfig {
   trustedOrigins?: string[];
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
-  deleteUserTeardown?: DeleteUserTeardown;
-  deleteUserTeardownRollback?: DeleteUserTeardown;
+  deleteUserResidueRecorder: DeleteUserResidueRecorder;
+  deleteUserTeardown: DeleteUserTeardown;
+  deleteUserTeardownRollback: DeleteUserTeardown;
 }
 
 interface KeeperMcpAuthSession {
@@ -160,9 +164,28 @@ const createAuth = (config: AuthConfig) => {
     trustedOrigins,
     mcpResourceUrl,
     mcpApiBaseUrl,
-    deleteUserTeardown = createDeleteUserTeardown([]),
-    deleteUserTeardownRollback = createDeleteUserTeardown([]),
+    deleteUserResidueRecorder,
+    deleteUserTeardown,
+    deleteUserTeardownRollback,
   } = config;
+
+  if (typeof deleteUserTeardown !== "function") {
+    throw new TypeError(
+      "createAuth requires a deleteUserTeardown; without one an account deletion would quiesce nothing",
+    );
+  }
+
+  if (typeof deleteUserTeardownRollback !== "function") {
+    throw new TypeError(
+      "createAuth requires a deleteUserTeardownRollback to undo the deleteUserTeardown when the user row survives",
+    );
+  }
+
+  if (typeof deleteUserResidueRecorder !== "function") {
+    throw new TypeError(
+      "createAuth requires a deleteUserResidueRecorder; without one a failed teardown step would leave provider state behind with no way back",
+    );
+  }
 
   const buildResendClient = (): Resend | null => {
     if (resendApiKey) {
@@ -207,33 +230,43 @@ const createAuth = (config: AuthConfig) => {
 
   const polarClient = buildPolarClient();
 
-  const buildPolarTeardownSteps = (): DeleteUserTeardownStep[] => {
+  const buildDestroyExternalState = (): DeleteUserTeardown => {
     if (!polarClient) {
-      return [];
+      return createSkippedDeleteUserTeardown("no_polar_client");
     }
 
-    return [
-      {
-        name: "polar_customer",
-        run: (userId) => deletePolarCustomerByExternalId(polarClient, userId),
-        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
-      },
-    ];
+    return createDeleteUserTeardown(
+      [
+        {
+          name: "polar_customer",
+          run: (userId) => deletePolarCustomerByExternalId(polarClient, userId),
+          timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+        },
+      ],
+      TEARDOWN_BUDGET_MS,
+      { recordResidue: deleteUserResidueRecorder },
+    );
   };
 
-  const quiesce = createDeleteUserTeardown([
-    { name: "sync", run: deleteUserTeardown, timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS },
-  ]);
+  const quiesce = createDeleteUserTeardown(
+    [{ name: "sync", run: deleteUserTeardown, timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS }],
+    TEARDOWN_BUDGET_MS,
+    { recordResidue: null },
+  );
 
-  const destroyExternalState = createDeleteUserTeardown(buildPolarTeardownSteps());
+  const destroyExternalState = buildDestroyExternalState();
 
-  const rollbackQuiesce = createDeleteUserTeardown([
-    {
-      name: "sync_rollback",
-      run: deleteUserTeardownRollback,
-      timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS,
-    },
-  ]);
+  const rollbackQuiesce = createDeleteUserTeardown(
+    [
+      {
+        name: "sync_rollback",
+        run: deleteUserTeardownRollback,
+        timeoutMs: SYNC_TEARDOWN_TIMEOUT_MS,
+      },
+    ],
+    TEARDOWN_BUDGET_MS,
+    { recordResidue: null },
+  );
 
   const beforeDelete: BeforeDeleteUser = async (user) => {
     startDeleteUserAttempt(user.id);
@@ -255,11 +288,19 @@ const createAuth = (config: AuthConfig) => {
     await destroyExternalState(userId);
   };
 
-  const deleteUser: DeleteUserOptions = {
-    afterDelete,
-    beforeDelete,
-    enabled: true,
+  const deletionQuiesceable =
+    deleteUserTeardown !== deleteUserTeardownUnavailable &&
+    deleteUserTeardownRollback !== deleteUserTeardownUnavailable;
+
+  const buildDeleteUserOptions = (): DeleteUserOptions => {
+    if (!deletionQuiesceable) {
+      return { enabled: false };
+    }
+
+    return { afterDelete, beforeDelete, enabled: true };
   };
+
+  const deleteUser = buildDeleteUserOptions();
 
   if (polarClient) {
     const buildCheckoutSuccessUrl = (): string => {
@@ -539,8 +580,15 @@ export {
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
 } from "./mcp-config";
-export { SYNC_TEARDOWN_TIMEOUT_MS } from "./delete-user-teardown";
+export {
+  deleteUserResidueUnavailable,
+  deleteUserTeardownUnavailable,
+  RESIDUE_WRITE_FAILED_SLUG,
+  SYNC_TEARDOWN_TIMEOUT_MS,
+} from "./delete-user-teardown";
 export type {
+  DeleteUserResidueDraft,
+  DeleteUserResidueRecorder,
   DeleteUserTeardown,
   DeleteUserTeardownStep,
 } from "./delete-user-teardown";

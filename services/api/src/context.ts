@@ -19,6 +19,7 @@ import {
   createDeleteUserSyncTeardownRollback,
   TEARDOWN_QUEUE_CONNECTION_OPTIONS,
 } from "@/utils/delete-user-teardown";
+import { createApiTeardownResidueStore } from "@/utils/teardown-residue-reaper";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
@@ -74,6 +75,11 @@ const deleteUserSyncQueue = createPushSyncQueue({
   ...TEARDOWN_QUEUE_CONNECTION_OPTIONS,
 });
 
+const teardownResidueStore = createApiTeardownResidueStore({
+  database,
+  encryptionKey: env.ENCRYPTION_KEY ?? null,
+});
+
 const { auth, capabilities: authCapabilities } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
@@ -91,10 +97,12 @@ const { auth, capabilities: authCapabilities } = createAuth({
   passkeyOrigin: env.PASSKEY_ORIGIN,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
+  deleteUserResidueRecorder: teardownResidueStore.record,
   deleteUserTeardown: createApiDeleteUserSyncTeardown({
     database,
     queue: deleteUserSyncQueue,
     redis,
+    residue: teardownResidueStore,
   }),
   deleteUserTeardownRollback: createDeleteUserSyncTeardownRollback({ redis }),
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),

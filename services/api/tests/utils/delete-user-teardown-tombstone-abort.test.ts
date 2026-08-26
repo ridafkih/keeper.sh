@@ -54,8 +54,15 @@ describe("delete user teardown tombstone abort", () => {
     const teardown = createDeleteUserSyncTeardown({
       createQueue: createUnusedQueue,
       deregisterPushChannels: () => Promise.resolve(0),
+      fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       redis,
+      residue: {
+        clear: () => Promise.resolve(),
+        list: () => Promise.resolve([]),
+        record: () => Promise.resolve(),
+      },
     });
 
     await teardown(USER_ID);

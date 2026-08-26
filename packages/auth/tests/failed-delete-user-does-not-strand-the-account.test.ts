@@ -69,6 +69,7 @@ interface DeletionHarness {
 const buildHarness = (outcome: DeletionOutcome): Promise<DeletionHarness> => {
   const tombstones = createTombstoneStore();
   const polarDeletions: string[] = [];
+  const residue: unknown[] = [];
   const sequence: string[] = [];
   const users = new Map<string, { id: string }>([[USER_ID, { id: USER_ID }]]);
 
@@ -85,6 +86,10 @@ const buildHarness = (outcome: DeletionOutcome): Promise<DeletionHarness> => {
   const { auth, polarClient } = createAuth({
     baseUrl: "http://localhost:3000",
     database: {} as BunSQLDatabase,
+    deleteUserResidueRecorder: (draft: unknown) => {
+      residue.push(draft);
+      return Promise.resolve();
+    },
     deleteUserTeardown,
     deleteUserTeardownRollback,
     polarAccessToken: "polar-test-token",

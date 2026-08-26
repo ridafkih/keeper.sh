@@ -116,7 +116,7 @@ const removeUserSyncJobs = async (
   };
 };
 
-export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue, removeUserSyncJobs };
+export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue, removeUserSyncJobs, syncJobId };
 export type {
   PushSyncJobPayload,
   PushSyncJobResult,

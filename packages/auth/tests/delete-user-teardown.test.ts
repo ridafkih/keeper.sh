@@ -8,6 +8,9 @@ const buildAuth = (overrides: Record<string, unknown> = {}) =>
   createAuth({
     baseUrl: "http://localhost:3000",
     database: {} as BunSQLDatabase,
+    deleteUserTeardown: async () => {},
+    deleteUserResidueRecorder: async () => {},
+    deleteUserTeardownRollback: async () => {},
     secret: "test-secret",
     ...overrides,
   } as Parameters<typeof createAuth>[0]);

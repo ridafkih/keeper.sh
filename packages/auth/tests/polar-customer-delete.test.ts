@@ -68,6 +68,9 @@ const buildPolarAuth = () =>
   createAuth({
     baseUrl: "http://localhost:3000",
     database: stubDatabase,
+    deleteUserTeardown: async () => {},
+    deleteUserResidueRecorder: async () => {},
+    deleteUserTeardownRollback: async () => {},
     polarAccessToken: "polar-test-token",
     polarMode: "sandbox",
     secret: "test-secret",
