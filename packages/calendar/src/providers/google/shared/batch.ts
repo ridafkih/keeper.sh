@@ -226,10 +226,16 @@ const parseBatchResponseBody = (
     const contentIndex = parseContentId(partHeaders);
     const parsed = parseHttpResponse(httpBlock);
 
-    let index = results.size;
-    if (contentIndex !== null) {
-      index = contentIndex;
+    if (contentIndex === null) {
+      /* Content-ID is the only thing that says which sub-request a part answers, so a part
+         without a readable one answers none of them. Falling back to a positional guess would
+         overwrite whichever sibling already claimed that slot by a real Content-ID; dropping it
+         leaves that sibling's answer intact and the guessed slot unanswered, which is the truth
+         about what the destination told us. */
+      continue;
     }
+
+    const index = contentIndex;
 
     if (isOutsideRange(index)) {
       /* A part claiming a Content-ID this request never sent answers no sub-request of ours.

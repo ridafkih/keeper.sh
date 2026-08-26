@@ -69,9 +69,38 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   return null;
 };
 
-const createFailureResult = (error: unknown): {
+/* Whether a request for this object actually left the process, and what the destination answered
+   if it did. An href resolution or a serialization refusal is raised before any bytes exist, so it
+   is ours alone: recording that here is what keeps the engine from grading a repetition of it as
+   the destination answering about the object. The status is stamped from the answer the client
+   carries back, so a refusal the destination really sent still reads as one. */
+interface RequestAttempt {
+  sent: boolean;
+  status: number | null;
+}
+
+const unsentAttempt = (): RequestAttempt => ({ sent: false, status: null });
+
+/*
+ * The create runs this same serializer, so a refusal here repeats on the recreate. Returning it
+ * rather than throwing keeps that one failure distinguishable from everything the destination
+ * itself refuses.
+ */
+const serializeUpdateBody = (
+  event: MaterializedSyncableEvent,
+  uid: string,
+): { iCalString: string } | { error: unknown } => {
+  try {
+    return { iCalString: eventToICalString(event, uid) };
+  } catch (error) {
+    return { error };
+  }
+};
+
+const createFailureResult = (error: unknown, attempt?: RequestAttempt): {
   error: string;
   errorType: string;
+  requestSent?: boolean;
   statusCode?: number;
   success: false;
 } => {
@@ -80,10 +109,12 @@ const createFailureResult = (error: unknown): {
   if (error instanceof Error) {
     errorType = error.name;
   }
+  const status = httpError?.status ?? attempt?.status ?? null;
   return {
     error: getErrorMessage(error),
     errorType,
-    ...(httpError && { statusCode: httpError.status }),
+    ...(attempt?.sent === false && { requestSent: false }),
+    ...(typeof status === "number" && { statusCode: status }),
     success: false,
   };
 };
@@ -265,11 +296,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     Promise.all(
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
+          const attempt = unsentAttempt();
           try {
             const uid = generateDeterministicEventUid(event.id);
             const iCalString = eventToICalString(event, uid);
 
             try {
+              attempt.sent = true;
               await client.createCalendarObject({
                 calendarUrl: config.calendarUrl,
                 filename: `${uid}.ics`,
@@ -304,7 +337,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),
@@ -335,12 +368,34 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     Promise.all(
       updates.map(({ deleteId, event }) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
+          const attempt = unsentAttempt();
+          const uid = generateDeterministicEventUid(event.id);
+
+          /*
+           * The create runs this same serializer, so a refusal here repeats on the recreate and
+           * nothing can put the mirror back. That makes it the only failure this verb raises which
+           * a delete-then-add cannot repair, and so the only one recorded as unsent.
+           */
+          const serialized = serializeUpdateBody(event, uid);
+          if ("error" in serialized) {
+            if (config.safeFetchOptions?.signal?.aborted) {
+              throw serialized.error;
+            }
+            return createFailureResult(serialized.error, attempt);
+          }
+          const { iCalString } = serialized;
+
           try {
-            const uid = generateDeterministicEventUid(event.id);
+            /*
+             * A stored href this event can never address is the opposite case: the recreate writes
+             * one derived from the UID, correct by construction, so this has to stay promotable
+             * rather than being read as having learned nothing.
+             */
             const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
 
+            attempt.sent = true;
             await client.updateCalendarObjectByUrl({
-              iCalString: eventToICalString(event, uid),
+              iCalString,
               objectUrl,
             });
 
@@ -368,12 +423,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   /* Listed deleteIds are object paths; deleteIds stored before path recording are bare UIDs. */
-  const deleteEventObject = (deleteId: string): Promise<void> => {
+  const deleteEventObject = (deleteId: string, attempt: RequestAttempt): Promise<void> => {
     if (deleteId.includes("/")) {
-      return client.deleteCalendarObjectByUrl({
-        objectUrl: new URL(deleteId, config.calendarUrl).href,
-      });
+      const objectUrl = new URL(deleteId, config.calendarUrl).href;
+      attempt.sent = true;
+      return client.deleteCalendarObjectByUrl({ objectUrl });
     }
+    attempt.sent = true;
     return client.deleteCalendarObject({
       calendarUrl: config.calendarUrl,
       filename: `${deleteId}.ics`,
@@ -384,6 +440,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     Promise.all(
       eventIds.map((deleteId) =>
         rateLimiter.execute(async (): Promise<DeleteResult> => {
+          const attempt = unsentAttempt();
           removeAttempts += 1;
           if (deleteId.includes("/")) {
             removeCounts.byPath += 1;
@@ -392,7 +449,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           }
 
           try {
-            await deleteEventObject(deleteId);
+            await deleteEventObject(deleteId, attempt);
             removeCounts.succeeded += 1;
             return { removedObject: true, success: true };
           } catch (error) {
@@ -405,7 +462,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               return { success: true };
             }
             recordRemoveFailure(error);
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),

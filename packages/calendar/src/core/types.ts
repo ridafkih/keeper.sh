@@ -96,6 +96,12 @@ interface PushResult {
   requestSent?: boolean;
   remoteId?: string;
   deleteId?: string;
+  /* Which observation named the object this result points at. "echo" is the destination's own
+     answer to the write; "read" is a follow-up read of the destination, which is the only way back
+     to an object a create already put on the calendar under an answer that could not be parsed.
+     A mapping recovered by reading is the only thing standing between the customer and a second
+     permanent copy on a create-only push, so it is written down once and immediately. */
+  identitySource?: "echo" | "read";
   echo?: PushEchoComparison;
   error?: string;
   errorType?: string;

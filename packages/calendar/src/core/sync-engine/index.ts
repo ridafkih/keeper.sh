@@ -238,12 +238,57 @@ const appendPushEchoFields = (
   }
 };
 
+/* A write the destination accepted can still carry something the operator has to see - an echo the
+   provider could not read is the clearest case: the object is there, and what it now looks like is
+   unknown. Silence about that is its own failure, so a successful result that names an error is
+   reported without being counted as a failed operation. */
+const toAcknowledgedWriteError = (
+  type: OperationError["type"],
+  pushResult: PushResult,
+): OperationError | null => {
+  if (!pushResult.error) {
+    return null;
+  }
+  return {
+    type,
+    error: pushResult.error,
+    ...(pushResult.errorType && { errorType: pushResult.errorType }),
+    ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+  };
+};
+
+/* Where the mapping for a created object is written down. One a read recovered is kept out of the
+   returned changes and flushed on its own: the object is already on a create-only calendar, so the
+   record of it may be written exactly once - losing it, or writing it twice, is a duplicate. */
+const recordInsert = (
+  insert: PendingChanges["inserts"][number],
+  pushResult: PushResult,
+  changes: PendingChanges,
+  recovered: PendingChanges["inserts"],
+): void => {
+  if (pushResult.identitySource === "read") {
+    recovered.push(insert);
+    return;
+  }
+  changes.inserts.push(insert);
+};
+
 const processAddResults = (
   addOperations: Extract<SyncOperation, { type: "add" }>[],
   pushResults: PushResult[],
   calendarId: string,
-): { changes: PendingChanges; added: number; addFailed: number; conflictsResolved: number; errors: OperationError[] } => {
+): {
+  changes: PendingChanges;
+  added: number;
+  addFailed: number;
+  conflictsResolved: number;
+  errors: OperationError[];
+  recovered: PendingChanges["inserts"];
+} => {
   const changes: PendingChanges = { inserts: [], deletes: [] };
+  /* Mappings for objects the destination already holds, recovered by reading it rather than named
+     by the write's own answer. They are kept apart because they may be written down exactly once. */
+  const recovered: PendingChanges["inserts"] = [];
   const errors: OperationError[] = [];
   let added = 0;
   let addFailed = 0;
@@ -274,10 +319,14 @@ const processAddResults = (
     }
 
     added += 1;
+    const acknowledgedError = toAcknowledgedWriteError("add", pushResult);
+    if (acknowledgedError) {
+      errors.push(acknowledgedError);
+    }
     if (pushResult.conflictResolved) {
       conflictsResolved += 1;
     }
-    changes.inserts.push({
+    const insert = {
       eventStateId: operation.event.eventStateId ?? operation.event.id,
       sourceCalendarId: operation.event.calendarId,
       syncEventId: operation.event.id,
@@ -287,13 +336,14 @@ const processAddResults = (
       syncEventHash: createSyncEventContentHash(operation.event),
       startTime: operation.event.startTime,
       endTime: operation.event.endTime,
-    });
+    };
+    recordInsert(insert, pushResult, changes, recovered);
     if (operation.staleMappingId) {
       changes.deletes.push(operation.staleMappingId);
     }
   }
 
-  return { changes, added, addFailed, conflictsResolved, errors };
+  return { changes, added, addFailed, conflictsResolved, errors, recovered };
 };
 
 const GONE_STATUS_CODES = new Set([404, 410]);
@@ -613,6 +663,10 @@ const processUpdateResults = (
        the answer named the mapping's own uid or a re-keyed one. That is a successful operation
        even when it is not an add. */
     updated += 1;
+    const acknowledgedError = toAcknowledgedWriteError("update", pushResult);
+    if (acknowledgedError) {
+      errors.push(acknowledgedError);
+    }
     if (createdANewMirror(pushResult, mappingsById.get(operation.staleMappingId))) {
       created += 1;
     }
@@ -711,6 +765,9 @@ interface RunResult {
   conflictsResolved: number;
   errors: OperationError[];
   pushEcho?: PushEchoCounts;
+  /* Mappings for objects the destination already holds that a read had to recover. They are flushed
+     by commitAddRun, which writes them down exactly once. */
+  recovered?: PendingChanges["inserts"];
 }
 
 interface UpdateRunResult {
@@ -729,7 +786,7 @@ const executeAddRun = async (
 ): Promise<RunResult> => {
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
-  const { added, addFailed, conflictsResolved, changes, errors } = processAddResults(adds, pushResults, calendarId);
+  const { added, addFailed, conflictsResolved, changes, errors, recovered } = processAddResults(adds, pushResults, calendarId);
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
   return {
@@ -738,6 +795,7 @@ const executeAddRun = async (
     conflictsResolved,
     errors,
     pushEcho,
+    recovered,
   };
 };
 
@@ -946,6 +1004,41 @@ const checkpointRun = async (
   return true;
 };
 
+/*
+ * Records a run of creates. Ordinary inserts keep the path they always had. An insert a read
+ * recovered - the identity of an object a create already put on the calendar under an answer the
+ * provider could not read - is flushed through the checkpoint instead, because that is what makes
+ * it durable: until it is written down, the next cycle plans the very same create and Outlook's
+ * create-only POST leaves a second copy the customer can never get rid of. It travels in the
+ * returned changes only when there is no checkpoint to flush it, so it is recorded exactly once
+ * either way, and its uid is protected the moment it is known.
+ */
+const commitAddRun = async (
+  state: ChunkedExecutionState,
+  addResult: RunResult,
+  checkpoint?: CheckpointCallback,
+): Promise<boolean> => {
+  mergeRunResult(state, addResult);
+  const recovered = addResult.recovered ?? [];
+  if (recovered.length === 0) {
+    return await checkpointRun(state, addResult.changes, checkpoint);
+  }
+
+  for (const insert of recovered) {
+    state.protectedRemoteUids.add(insert.destinationEventUid);
+  }
+  if (!checkpoint) {
+    state.changes.inserts.push(...recovered);
+    return true;
+  }
+
+  return await checkpointRun(state, {
+    deletes: addResult.changes.deletes,
+    inserts: [...addResult.changes.inserts, ...recovered],
+    ...(addResult.changes.updates && { updates: addResult.changes.updates }),
+  }, checkpoint);
+};
+
 const checkSuperseded = async (
   state: ChunkedExecutionState,
   isCurrent?: () => Promise<boolean>,
@@ -976,8 +1069,7 @@ const executeAdds = async (
   }
 
   const runResult = await executeAddRun(adds, calendarId, provider);
-  mergeRunResult(state, runResult);
-  if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
+  if (!(await commitAddRun(state, runResult, checkpoint))) {
     return;
   }
   state.processed += adds.length;
@@ -1179,8 +1271,7 @@ const replaceViaDeleteThenAdd = async (
 
   if (adds.length > 0) {
     const addResult = await executeAddRun(adds, calendarId, provider);
-    mergeRunResult(state, addResult);
-    if (!(await checkpointRun(state, addResult.changes, checkpoint))) {
+    if (!(await commitAddRun(state, addResult, checkpoint))) {
       return false;
     }
   }
@@ -1789,8 +1880,7 @@ const resolveVerifiedMirrors = async (
   }
 
   const addResult = await executeAddRun(adds, calendarId, provider);
-  mergeRunResult(state, addResult);
-  return checkpointRun(state, addResult.changes, checkpoint);
+  return await commitAddRun(state, addResult, checkpoint);
 };
 
 const recreateMissingMirrors = async (
@@ -1871,8 +1961,7 @@ const recreateMissingMirrors = async (
   }
 
   const addResult = await executeAddRun(adds, calendarId, provider);
-  mergeRunResult(state, addResult);
-  return checkpointRun(state, addResult.changes, checkpoint);
+  return await commitAddRun(state, addResult, checkpoint);
 };
 
 /* The escape for a refusal the destination answered on the same mapping cycle after cycle. It may
