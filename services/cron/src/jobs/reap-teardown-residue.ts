@@ -13,6 +13,7 @@ import {
   calendarRowProviderIdentity,
 } from "@keeper.sh/database/provider-account-identity";
 import {
+  createCoordinatedRefresher,
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createTeardownResidueReaper,
@@ -474,7 +475,6 @@ const listCensusBlockingCalendarRows = (
       and(
         inArray(oauthCredentialsTable.id, credentialIds),
         isNull(calendarRowProviderIdentity()),
-        eq(oauthCredentialsTable.needsReauthentication, false),
       ),
     );
 
@@ -506,16 +506,18 @@ const resolveBlockingRowAccessToken = async (
     refreshToken: row.refreshToken,
   };
 
-  await ensureValidToken(tokenState, refresher);
+  const { refreshLockStore } = await import("@/context");
 
-  await database
-    .update(oauthCredentialsTable)
-    .set({
-      accessToken: tokenState.accessToken,
-      expiresAt: tokenState.accessTokenExpiresAt,
-      refreshToken: tokenState.refreshToken,
-    })
-    .where(eq(oauthCredentialsTable.id, row.credentialId));
+  await ensureValidToken(
+    tokenState,
+    createCoordinatedRefresher({
+      calendarAccountId: row.accountRowId,
+      database,
+      oauthCredentialId: row.credentialId,
+      rawRefresh: refresher,
+      refreshLockStore,
+    }),
+  );
 
   return tokenState.accessToken;
 };
@@ -601,6 +603,25 @@ const createDefaultReaper = async () => {
       now: () => new Date(),
     }),
     resolveRegistrar: resolvePushRegistrar,
+    resolveResidueProviderAccountId: (record) => {
+      const { provider } = record;
+
+      if (!provider) {
+        return Promise.resolve(null);
+      }
+
+      const fetchUserInfo = resolveUserInfoFetch(provider);
+
+      if (!fetchUserInfo) {
+        return Promise.resolve(null);
+      }
+
+      return resolveProviderAccountIdentity({
+        fetchUserInfo,
+        resolveAccessToken: () => resolveResidueAccessToken(record, provider),
+        subject: `teardown residue ${record.id}`,
+      });
+    },
     revokeOAuthGrant,
     waitForRepairDeadline: (deadlineMs) =>
       new Promise((resolve) => {

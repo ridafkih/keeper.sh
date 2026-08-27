@@ -56,6 +56,9 @@ interface TeardownResidueReaperDependencies {
   repairDeadlineMs: number;
   residue: TeardownResidueStore;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
+  resolveResidueProviderAccountId?: (
+    record: TeardownResidueRecord,
+  ) => Promise<string | null>;
   revokeOAuthGrant: (record: TeardownResidueRecord, token: string) => Promise<void>;
   waitForRepairDeadline: (deadlineMs: number) => Promise<void>;
 }
@@ -142,6 +145,23 @@ const revocationTokenFromResidue = (record: TeardownResidueRecord): string => {
   return credential.refreshToken ?? credential.accessToken;
 };
 
+const resolveGrantProviderAccountId = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+): Promise<string | null> => {
+  if (record.providerAccountId) {
+    return record.providerAccountId;
+  }
+
+  try {
+    return (await dependencies.resolveResidueProviderAccountId?.(record)) ?? null;
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_IDENTITY_UNRESOLVED_SLUG);
+
+    return null;
+  }
+};
+
 const repairOAuthGrant = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
@@ -152,11 +172,15 @@ const repairOAuthGrant = async (
     );
   }
 
-  if (!record.providerAccountId) {
+  const resolved = await resolveGrantProviderAccountId(record, dependencies);
+
+  if (!resolved) {
     return { blockingCredentialIds: [], status: "revocation_unresolved" };
   }
 
-  const census = await dependencies.countSurvivingAccountLinks(record);
+  const identified = { ...record, providerAccountId: resolved };
+
+  const census = await dependencies.countSurvivingAccountLinks(identified);
 
   if (!census.identityResolved) {
     return {
@@ -169,7 +193,7 @@ const repairOAuthGrant = async (
     return { status: "revocation_skipped" };
   }
 
-  await dependencies.revokeOAuthGrant(record, revocationTokenFromResidue(record));
+  await dependencies.revokeOAuthGrant(identified, revocationTokenFromResidue(identified));
 
   return { status: "repaired" };
 };

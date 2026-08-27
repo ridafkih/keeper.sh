@@ -132,7 +132,7 @@ const googleTokenResponseSchema = type({
 type GoogleTokenResponse = typeof googleTokenResponseSchema.infer;
 
 const googleUserInfoSchema = type({
-  email: "string",
+  "email?": "string",
   "family_name?": "string",
   "given_name?": "string",
   id: "string",

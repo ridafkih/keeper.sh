@@ -63,6 +63,13 @@ const createOAuthProviders = (
       exchangeCodeForTokens: googleService.exchangeCodeForTokens,
       fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
         const info = await fetchGoogleUserInfo(accessToken);
+
+        if (!info.email) {
+          throw new Error(
+            "Google returned no email address for the connected account, so the calendar account cannot be identified",
+          );
+        }
+
         return { email: info.email, id: info.id };
       },
       getAuthorizationUrl: googleService.getAuthorizationUrl,

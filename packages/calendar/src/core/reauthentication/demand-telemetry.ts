@@ -1,7 +1,7 @@
 import { widelog } from "widelogger";
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { getErrorMessage } from "../utils/error";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -82,7 +82,7 @@ interface PriorReauthenticationState {
 }
 
 const readPriorReauthenticationState = async (
-  database: Pick<BunSQLDatabase, "select">,
+  database: Pick<PgDatabase<PgQueryResultHKT>, "select">,
   accountId: string,
 ): Promise<PriorReauthenticationState | null> => {
   try {

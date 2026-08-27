@@ -85,6 +85,21 @@ const executeWithDistributedLock = async (
   }
 };
 
+const joinInFlightRefresh = (
+  inFlight: Promise<CredentialRefreshResult>,
+  acquireBudgetMs: number,
+): Promise<CredentialRefreshResult> => {
+  const budgetExpiry = new Promise<never>((_resolve, reject) => {
+    const budgetTimer = setTimeout(() => {
+      reject(new Error("Token refresh already in progress on another instance"));
+    }, acquireBudgetMs);
+    const stopBudgetTimer = (): void => clearTimeout(budgetTimer);
+    inFlight.finally(stopBudgetTimer).catch(() => null);
+  });
+
+  return Promise.race([inFlight, budgetExpiry]);
+};
+
 const runWithCredentialRefreshLock = (
   oauthCredentialId: string,
   runRefresh: () => Promise<CredentialRefreshResult>,
@@ -100,7 +115,7 @@ const runWithCredentialRefreshLock = (
      * logged from inside it without landing on a foreign wide event.
      */
     widelog.set("token.refresh_coalesced", true);
-    return inFlight;
+    return joinInFlightRefresh(inFlight, acquireBudgetMs);
   }
 
   const lockKey = `${REFRESH_LOCK_PREFIX}${oauthCredentialId}`;
