@@ -97,7 +97,7 @@ const insertStranger = async (
   );
 };
 
-describe("a credential whose calendar row names a different account does not block another account's residue", () => {
+describe("an email-only difference does not prove a credential names a different account", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
@@ -105,21 +105,21 @@ describe("a credential whose calendar row names a different account does not blo
     await client.exec(DDL);
   });
 
-  it("resolves the census when the stranger's calendar row names a different account email", async () => {
+  it("defers when only the calendar row email differs and the row names no account id", async () => {
     await insertStranger(null, "stranger@keeper.sh");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
       coHolders: 0,
-      identityResolved: true,
+      identityResolved: false,
     });
   });
 
-  it("resolves the census when the stranger's credential email and calendar email both differ", async () => {
+  it("defers when the credential email and calendar email both differ but no account id is named", async () => {
     await insertStranger("stranger@gmail.com", "stranger-calendar@keeper.sh");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
       coHolders: 0,
-      identityResolved: true,
+      identityResolved: false,
     });
   });
 

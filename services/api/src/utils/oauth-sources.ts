@@ -4,10 +4,10 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import type { database as contextDatabase } from "@/context";
+import type { database as contextDatabase, oauthProviders as contextOAuthProviders } from "@/context";
 import { spawnBackgroundJob } from "./background-task";
 import {
   createSourceCalendarInsertDependencies,
@@ -18,6 +18,7 @@ import { enqueuePushSync } from "./enqueue-push-sync";
 import { registerAccountPushChannels } from "./push-notifications/register-account-channels";
 
 const FIRST_RESULT_LIMIT = 1;
+const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 type OAuthSourceDatabase = Pick<typeof contextDatabase, "insert" | "select" | "selectDistinct" | "update">;
@@ -214,6 +215,7 @@ interface CreateOAuthSourceOptions {
   name: string;
   provider: string;
   oauthCredentialId: string;
+  providerAccountId?: string | null;
   excludeFocusTime?: boolean;
   excludeOutOfOffice?: boolean;
 }
@@ -236,17 +238,14 @@ interface CreateOAuthSourceDependencies {
     email: string | null;
     oauthCredentialId: string;
     provider: string;
+    providerAccountId: string | null;
     userId: string;
   }) => Promise<string | null>;
   findCredentialEmail: (
     userId: string,
     oauthCredentialId: string,
   ) => Promise<{ email: string | null; exists: boolean }>;
-  findExistingAccountId: (options: {
-    userId: string;
-    provider: string;
-    oauthCredentialId: string;
-  }) => Promise<string | null>;
+  findExistingAccountId: (options: FindOAuthAccountOptions) => Promise<string | null>;
   hasExistingCalendar: (options: {
     externalCalendarId: string;
     oauthCredentialId: string;
@@ -350,7 +349,11 @@ const adoptProviderAccountIdWithDatabase = async (
     .where(
       and(
         eq(calendarAccountsTable.id, options.accountRowId),
-        isNull(calendarAccountsTable.accountId),
+        or(
+          isNull(calendarAccountsTable.accountId),
+          eq(calendarAccountsTable.accountId, ""),
+          sql`${calendarAccountsTable.accountId} = ${calendarAccountsTable.id}::text`,
+        ),
       ),
     );
 };
@@ -422,13 +425,25 @@ const createOAuthSourceRecordWithDatabase = async (
   };
 };
 
-const findCredentialEmailWithDatabase = async (
+interface OAuthSourceCredential {
+  accessToken: string;
+  email: string | null;
+  expiresAt: Date;
+  refreshToken: string;
+}
+
+const findCredentialWithDatabase = async (
   databaseClient: OAuthSourceDatabase,
   userId: string,
   oauthCredentialId: string,
-): Promise<{ email: string | null; exists: boolean }> => {
+): Promise<OAuthSourceCredential | null> => {
   const [credential] = await databaseClient
-    .select({ email: oauthCredentialsTable.email })
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      email: oauthCredentialsTable.email,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      refreshToken: oauthCredentialsTable.refreshToken,
+    })
     .from(oauthCredentialsTable)
     .where(
       and(
@@ -438,10 +453,58 @@ const findCredentialEmailWithDatabase = async (
     )
     .limit(FIRST_RESULT_LIMIT);
 
+  return credential ?? null;
+};
+
+const findCredentialEmailWithDatabase = async (
+  databaseClient: OAuthSourceDatabase,
+  userId: string,
+  oauthCredentialId: string,
+): Promise<{ email: string | null; exists: boolean }> => {
+  const credential = await findCredentialWithDatabase(databaseClient, userId, oauthCredentialId);
+
   return {
     email: credential?.email ?? null,
     exists: Boolean(credential),
   };
+};
+
+type OAuthSourceProvider = Pick<
+  NonNullable<ReturnType<typeof contextOAuthProviders.getProvider>>,
+  "fetchUserInfo" | "refreshAccessToken"
+>;
+
+const resolveCredentialAccessToken = async (
+  provider: OAuthSourceProvider,
+  credential: OAuthSourceCredential,
+): Promise<string> => {
+  if (credential.expiresAt.getTime() - TOKEN_EXPIRY_SKEW_MS > Date.now()) {
+    return credential.accessToken;
+  }
+
+  const refreshed = await provider.refreshAccessToken(credential.refreshToken);
+  return refreshed.access_token;
+};
+
+const resolveProviderAccountId = async (
+  providerId: string,
+  credential: OAuthSourceCredential,
+): Promise<string> => {
+  const { oauthProviders } = await import("@/context");
+  const provider = oauthProviders.getProvider(providerId);
+
+  if (!provider) {
+    throw new Error(`No OAuth provider registered for ${providerId}`);
+  }
+
+  const accessToken = await resolveCredentialAccessToken(provider, credential);
+  const userInfo = await provider.fetchUserInfo(accessToken);
+
+  if (!userInfo.id) {
+    throw new Error(`${providerId} returned no account id for the connected credential`);
+  }
+
+  return userInfo.id;
 };
 
 const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependencies => ({
@@ -450,11 +513,19 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
     return premiumService.canAddAccount(userId, currentCount);
   },
   countUserAccounts,
-  createCalendarAccount: async ({ displayName, email, oauthCredentialId, provider, userId }) => {
+  createCalendarAccount: async ({
+    displayName,
+    email,
+    oauthCredentialId,
+    provider,
+    providerAccountId,
+    userId,
+  }) => {
     const { database } = await import("@/context");
     const [insertedAccount] = await database
       .insert(calendarAccountsTable)
       .values({
+        accountId: providerAccountId,
         authType: "oauth",
         displayName: email ?? displayName,
         email: email ?? displayName,
@@ -500,6 +571,7 @@ const createOAuthSourceWithDependencies = async (
     name,
     provider,
     oauthCredentialId,
+    providerAccountId = null,
     excludeFocusTime = false,
     excludeOutOfOffice = false,
   } = options;
@@ -513,6 +585,7 @@ const createOAuthSourceWithDependencies = async (
   const existingAccountId = await dependencies.findExistingAccountId({
     oauthCredentialId,
     provider,
+    providerAccountId,
     userId,
   });
 
@@ -540,6 +613,7 @@ const createOAuthSourceWithDependencies = async (
       email: credential.email,
       oauthCredentialId,
       provider,
+      providerAccountId,
       userId,
     });
 
@@ -585,29 +659,41 @@ const createOAuthSource = async (
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${options.userId}))`,
     );
 
+    const credential = await findCredentialWithDatabase(
+      tx,
+      options.userId,
+      options.oauthCredentialId,
+    );
+
+    if (!credential) {
+      throw new Error("Source credential not found");
+    }
+
+    const providerAccountId = await resolveProviderAccountId(options.provider, credential);
     const dependencies = createDefaultCreateOAuthSourceDependencies();
 
-    return createOAuthSourceWithDependencies(options, {
+    return createOAuthSourceWithDependencies({ ...options, providerAccountId }, {
       ...dependencies,
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
-      createCalendarAccount: async ({ displayName, email, oauthCredentialId, provider, userId }) => {
+      createCalendarAccount: async (payload) => {
         const [insertedAccount] = await tx
           .insert(calendarAccountsTable)
           .values({
+            accountId: payload.providerAccountId,
             authType: "oauth",
-            displayName: email ?? displayName,
-            email: email ?? displayName,
+            displayName: payload.email ?? payload.displayName,
+            email: payload.email ?? payload.displayName,
             id: crypto.randomUUID(),
-            oauthCredentialId,
-            provider,
-            userId,
+            oauthCredentialId: payload.oauthCredentialId,
+            provider: payload.provider,
+            userId: payload.userId,
           })
           .returning({ id: calendarAccountsTable.id });
         return insertedAccount?.id ?? null;
       },
-      findCredentialEmail: (userId, oauthCredentialId) =>
-        findCredentialEmailWithDatabase(tx, userId, oauthCredentialId),
+      findCredentialEmail: () =>
+        Promise.resolve({ email: credential.email, exists: true }),
       findExistingAccountId: (accountOptions) => findOAuthAccountIdWithDatabase(tx, accountOptions),
       hasExistingCalendar: (calendarOptions) => hasExistingOAuthCalendarWithDatabase(tx, calendarOptions),
     });

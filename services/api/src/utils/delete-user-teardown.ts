@@ -30,27 +30,31 @@ const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const STEP_ABORT_SETTLE_MS = 400;
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
-const LATE_RESIDUE_SETTLE_TIMEOUT_MS = 2000;
+const LATE_RESIDUE_SETTLE_TIMEOUT_MS = 5000;
 const RESIDUE_DISCARD_STEP_TIMEOUT_MS = LATE_RESIDUE_SETTLE_TIMEOUT_MS + RESIDUE_DISCARD_TIMEOUT_MS;
 const TOMBSTONE_ROLLBACK_STEP = "tombstone_rollback";
 const RESIDUE_DISCARD_ROLLBACK_STEP = "residue_discard_rollback";
-const SYNC_JOBS_TIMEOUT_MS = 1200;
+const SYNC_JOBS_TIMEOUT_MS = 1000;
 const PUSH_CHANNELS_TIMEOUT_MS = 3000;
-const OAUTH_GRANTS_TIMEOUT_MS = 1200;
+const OAUTH_GRANTS_TIMEOUT_MS = 1000;
+const RESIDUE_WRITE_RESERVE_MS = 800;
 const REVOCABLE_OAUTH_PROVIDER = "google";
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
-const TEARDOWN_BUDGET_MS = [
+const TEARDOWN_STEPS_BUDGET_MS = [
   TOMBSTONE_TIMEOUT_MS,
   SYNC_JOBS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
   OAUTH_GRANTS_TIMEOUT_MS,
 ].reduce((total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS, 0);
 
+const TEARDOWN_BUDGET_MS = TEARDOWN_STEPS_BUDGET_MS + RESIDUE_WRITE_RESERVE_MS;
+
 if (TEARDOWN_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
   throw new Error(
-    `Delete user teardown budget of ${TEARDOWN_BUDGET_MS}ms does not fit inside the ` +
+    `Delete user teardown budget of ${TEARDOWN_STEPS_BUDGET_MS}ms of steps plus ` +
+      `${RESIDUE_WRITE_RESERVE_MS}ms reserved for residue writes does not fit inside the ` +
       `${SYNC_TEARDOWN_TIMEOUT_MS}ms auth deadline supervising it`,
   );
 }
@@ -431,7 +435,10 @@ const takeLateResidueWrites = (residue: object, userId: string): Promise<void>[]
   return pending;
 };
 
-const settleLateResidueWrites = async (pending: Promise<void>[]): Promise<boolean> => {
+const settleLateResidueWrites = async (
+  pending: Promise<void>[],
+  timeoutMs: number,
+): Promise<boolean> => {
   if (pending.length === 0) {
     return true;
   }
@@ -441,7 +448,7 @@ const settleLateResidueWrites = async (pending: Promise<void>[]): Promise<boolea
   const expiry = new Promise<false>((resolve) => {
     timer = setTimeout(() => {
       resolve(false);
-    }, LATE_RESIDUE_SETTLE_TIMEOUT_MS);
+    }, timeoutMs);
   });
 
   try {
@@ -477,18 +484,42 @@ const trackLateResidueWrite = (
   return registerLateResidueWrite(store, userId, write);
 };
 
+const remainingLateResidueDrainMs = (
+  steps: DeleteUserSyncStep[],
+  index: number,
+  teardownDeadlineAt: number,
+): number => {
+  const reservedMs = steps
+    .slice(index + 1)
+    .reduce((total, step) => total + step.timeoutMs + STEP_ABORT_SETTLE_MS, 0);
+
+  return Math.max(0, teardownDeadlineAt - Date.now() - reservedMs);
+};
+
 const createDeleteUserSyncTeardown =
   (dependencies: DeleteUserSyncTeardownDependencies): DeleteUserTeardown =>
   async (userId: string) => {
-    const lateResidueWrites: Promise<void>[] = [];
+    const steps = buildDeleteUserSyncSteps(dependencies);
+    const teardownDeadlineAt = Date.now() + TEARDOWN_BUDGET_MS;
 
-    for (const step of buildDeleteUserSyncSteps(dependencies)) {
+    let lateResidueWriteCount = 0;
+
+    for (const [index, step] of steps.entries()) {
+      const lateResidueWrites: Promise<void>[] = [];
+
       try {
         await runWithDeadline(step.name, step.timeoutMs, (signal) => step.run(userId, signal));
       } catch (error) {
         reportStepFailure(error, step.name, userId, TEARDOWN_FAILED_SLUG);
 
-        await recordAbandonedChannels(dependencies.residue, userId, step.name, error);
+        lateResidueWrites.push(
+          trackLateResidueWrite(
+            dependencies,
+            userId,
+            step.name,
+            recordAbandonedChannels(dependencies.residue, userId, step.name, error),
+          ),
+        );
 
         if (error instanceof DeadlineExceededError) {
           lateResidueWrites.push(
@@ -506,9 +537,29 @@ const createDeleteUserSyncTeardown =
           );
         }
       }
+
+      const settled = await settleLateResidueWrites(
+        lateResidueWrites,
+        remainingLateResidueDrainMs(steps, index, teardownDeadlineAt),
+      );
+
+      if (!settled) {
+        reportStepFailure(
+          new Error(
+            `Teardown step ${step.name} for user ${userId} ran out of budget waiting for `
+              + `${lateResidueWrites.length} in-flight residue write(s), so the grant residue `
+              + `may become durable before the push residue`,
+          ),
+          step.name,
+          userId,
+          RESIDUE_WRITE_FAILED_SLUG,
+        );
+      }
+
+      lateResidueWriteCount += lateResidueWrites.length;
     }
 
-    widelog.setFields({ "delete_user.late_residue_writes": lateResidueWrites.length });
+    widelog.setFields({ "delete_user.late_residue_writes": lateResidueWriteCount });
   };
 
 interface DeleteUserSyncTeardownRollbackDependencies
@@ -531,7 +582,7 @@ const discardRecordedResidue = async (
   }
 
   const pending = takeLateResidueWrites(dependencies.residue, userId);
-  const settled = await settleLateResidueWrites(pending);
+  const settled = await settleLateResidueWrites(pending, LATE_RESIDUE_SETTLE_TIMEOUT_MS);
 
   widelog.setFields({
     "delete_user.late_residue_writes_awaited": pending.length,

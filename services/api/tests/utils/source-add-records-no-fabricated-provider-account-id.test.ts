@@ -8,6 +8,8 @@ let createOAuthSource: typeof createOAuthSourceFn = () =>
 let calendarAccountInserts: Record<string, unknown>[] = [];
 let selectResults: unknown[][] = [];
 let txInstance: object = {};
+let fetchUserInfoCalls: string[] = [];
+let providerAccountId = "google-sub-x";
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -110,6 +112,21 @@ beforeAll(async () => {
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
     },
     encryptionKey: "encryption-key",
+    oauthProviders: {
+      getProvider: (providerId: string) => ({
+        exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
+        fetchUserInfo: (accessToken: string) => {
+          fetchUserInfoCalls.push(accessToken);
+          return Promise.resolve({ email: `${providerId}@example.com`, id: providerAccountId });
+        },
+        getAuthorizationUrl: () => Promise.reject(new Error("not used")),
+        hasRequiredScopes: () => true,
+        refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
+      }),
+      hasRequiredScopes: () => true,
+      isOAuthProvider: () => true,
+      validateState: () => Promise.resolve(null),
+    },
     premiumService: {
       canAddAccount: () => Promise.resolve(true),
       getAccountLimit: () => Number.MAX_SAFE_INTEGER,
@@ -124,6 +141,10 @@ beforeAll(async () => {
 
   vi.mock("../../src/utils/enqueue-push-sync", () => ({
     enqueuePushSync: () => {},
+  }));
+
+  vi.mock("../../src/utils/push-notifications/register-account-channels", () => ({
+    registerAccountPushChannels: () => Promise.resolve(),
   }));
 
   vi.mock("@keeper.sh/database", () => ({
@@ -164,21 +185,27 @@ afterAll(() => {
 beforeEach(() => {
   calendarAccountInserts = [];
   selectResults = [];
+  fetchUserInfoCalls = [];
+  providerAccountId = "google-sub-x";
   txInstance = createTxInstance();
 });
 
+const CREDENTIAL_ROW = {
+  accessToken: "access-token-1",
+  email: "person@example.com",
+  expiresAt: new Date(Date.now() + 3_600_000),
+  needsReauthentication: false,
+  provider: "google",
+  refreshToken: "refresh-token-1",
+};
+
 describe("Source add records no fabricated provider account id", () => {
-  it("leaves calendar_accounts.accountId unset when no provider account id is known", async () => {
-    selectResults = [
-      [{ email: "person@example.com" }],
-      [],
-      [],
-      [],
-    ];
+  it("records the provider's own account id on the calendar account row", async () => {
+    selectResults = [[CREDENTIAL_ROW], [], [], []];
 
     await createOAuthSource({
-      externalCalendarId: "external-1",
-      name: "Team Calendar",
+      externalCalendarId: "primary",
+      name: "Work",
       oauthCredentialId: "credential-1",
       provider: "google",
       userId: "user-1",
@@ -188,20 +215,16 @@ describe("Source add records no fabricated provider account id", () => {
 
     const [accountRow] = calendarAccountInserts;
 
-    expect(accountRow?.accountId ?? null).toBeNull();
+    expect(accountRow?.accountId).toBe("google-sub-x");
+    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
   });
 
   it("does not reuse the row id as a stand-in provider account id", async () => {
-    selectResults = [
-      [{ email: "person@example.com" }],
-      [],
-      [],
-      [],
-    ];
+    selectResults = [[CREDENTIAL_ROW], [], [], []];
 
     await createOAuthSource({
-      externalCalendarId: "external-1",
-      name: "Team Calendar",
+      externalCalendarId: "primary",
+      name: "Work",
       oauthCredentialId: "credential-1",
       provider: "google",
       userId: "user-1",
@@ -210,5 +233,6 @@ describe("Source add records no fabricated provider account id", () => {
     const [accountRow] = calendarAccountInserts;
 
     expect(accountRow?.accountId).not.toBe(accountRow?.id);
+    expect(accountRow?.accountId).not.toBe("credential-1");
   });
 });

@@ -33,6 +33,8 @@ const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
 const SERIAL_CONCURRENCY = 1;
+const LISTING_ATTEMPTS = 3;
+const LISTING_RETRY_DELAY_MS = 50;
 
 interface AbandonedPushChannelResidue {
   credential: TeardownResidueCredential | null;
@@ -269,12 +271,54 @@ const restateStoppedChannels = async (
   }
 };
 
+const delayBeforeListingRetry = async (signal: AbortSignal | null): Promise<void> =>
+  await new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    const settled = new AbortController();
+    const timer = setTimeout(() => {
+      settled.abort();
+      resolve();
+    }, LISTING_RETRY_DELAY_MS);
+
+    signal?.addEventListener("abort", () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    }, { once: true, signal: settled.signal });
+  });
+
+const listLiveChannelsWithRetry = async (
+  scopeId: string,
+  dependencies: DeregisterPushChannelsDependencies,
+  signal: AbortSignal | null,
+): Promise<StoredPushChannel[]> => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await dependencies.listLiveChannels(scopeId);
+    } catch (error) {
+      if (attempt >= LISTING_ATTEMPTS || signal?.aborted) {
+        throw error;
+      }
+
+      try {
+        await delayBeforeListingRetry(signal);
+      } catch {
+        throw error;
+      }
+    }
+  }
+};
+
 const runDeregisterPushChannelsOutcome = async (
   scopeId: string,
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
   concurrency: number = DISCONNECT_CONCURRENCY,
   recordAbandonments = false,
+  requireChannelListing = recordAbandonments,
 ): Promise<DeregisterPushChannelsOutcome> => {
   if (!Number.isInteger(concurrency) || concurrency < 1) {
     throw new Error(
@@ -288,9 +332,12 @@ const runDeregisterPushChannelsOutcome = async (
 
   let channels: StoredPushChannel[] = [];
   try {
-    channels = await dependencies.listLiveChannels(scopeId);
+    channels = await listLiveChannelsWithRetry(scopeId, dependencies, signal);
   } catch (error) {
     dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
+    if (requireChannelListing) {
+      throw error;
+    }
     return { abandonments: [], deregisteredCount: 0 };
   }
 
@@ -394,6 +441,7 @@ const runDeregisterPushChannels = async (
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
   concurrency: number = DISCONNECT_CONCURRENCY,
+  requireChannelListing = false,
 ): Promise<number> => {
   const outcome = await runDeregisterPushChannelsOutcome(
     scopeId,
@@ -401,6 +449,7 @@ const runDeregisterPushChannels = async (
     signal,
     concurrency,
     true,
+    requireChannelListing,
   );
 
   return outcome.deregisteredCount;
@@ -594,7 +643,7 @@ const deregisterPushChannelsWithin = async (
       };
     },
     webhookConfigured: webhookConfig !== null,
-  }, signal, concurrency, true);
+  }, signal, concurrency, true, requireEveryChannelStopped);
 
   if (requireEveryChannelStopped && outcome.abandonments.length > 0) {
     throw describeAbandonedScope(`${scopeColumn} ${scopeId}`, outcome.abandonments);
@@ -641,14 +690,26 @@ const runDeregisterAccountPushChannels = async (
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
 ): Promise<number> =>
-  await runDeregisterPushChannels(accountId, dependencies, signal, SERIAL_CONCURRENCY);
+  await runDeregisterPushChannels(
+    accountId,
+    dependencies,
+    signal,
+    SERIAL_CONCURRENCY,
+    false,
+  );
 
 const runDeregisterUserPushChannels = async (
   userId: string,
   dependencies: DeregisterPushChannelsDependencies,
   signal: AbortSignal | null = null,
 ): Promise<number> =>
-  await runDeregisterPushChannels(userId, dependencies, signal, DISCONNECT_CONCURRENCY);
+  await runDeregisterPushChannels(
+    userId,
+    dependencies,
+    signal,
+    DISCONNECT_CONCURRENCY,
+    true,
+  );
 
 export {
   AbandonedPushChannelError,

@@ -1,5 +1,5 @@
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
-import { and, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { database, oauthProviders } from "@/context";
 import { context, destroy, widelog } from "@/utils/logging";
 
@@ -45,6 +45,7 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
       or(
         isNull(calendarAccountsTable.accountId),
         eq(calendarAccountsTable.accountId, ""),
+        sql`${calendarAccountsTable.accountId} = ${calendarAccountsTable.id}::text`,
       ),
     ));
 
@@ -145,3 +146,5 @@ const run = (): Promise<void> =>
 
 await run();
 await destroy();
+
+export { selectCandidates };

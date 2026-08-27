@@ -4,6 +4,10 @@ import { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 
+interface CreateOAuthSourceCredentialOptions {
+  onCredentialCreated: (credentialId: string) => void;
+}
+
 interface CreateOAuthSourceCredentialData {
   provider: string;
   email: string | null;
@@ -15,6 +19,7 @@ interface CreateOAuthSourceCredentialData {
 const createOAuthSourceCredential = async (
   userId: string,
   data: CreateOAuthSourceCredentialData,
+  options: CreateOAuthSourceCredentialOptions,
 ): Promise<string> => {
   const [existing] = await database
     .select({ id: oauthCredentialsTable.id })
@@ -58,7 +63,23 @@ const createOAuthSourceCredential = async (
     throw new Error("Failed to create OAuth source credential");
   }
 
+  options.onCredentialCreated(credential.id);
+
   return credential.id;
 };
 
-export { createOAuthSourceCredential };
+const deleteOAuthSourceCredential = async (
+  userId: string,
+  credentialId: string,
+): Promise<void> => {
+  await database
+    .delete(oauthCredentialsTable)
+    .where(
+      and(
+        eq(oauthCredentialsTable.id, credentialId),
+        eq(oauthCredentialsTable.userId, userId),
+      ),
+    );
+};
+
+export { createOAuthSourceCredential, deleteOAuthSourceCredential };

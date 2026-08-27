@@ -3,7 +3,6 @@ import type { AbandonedPushChannelResidue } from "@/utils/push-notifications/der
 
 const DELETED_USER = "A";
 const SETTLE_AFTER_ABORT_WINDOW_MS = 3600;
-const RESIDUE_GRACE_MS = 2000;
 
 interface ResidueDraft {
   kind: string;
@@ -23,24 +22,6 @@ vi.mock("@/context", () => ({
   },
   webhookConfig: null,
 }));
-
-interface DeferredDraft {
-  promise: Promise<ResidueDraft>;
-  resolve: (draft: ResidueDraft) => void;
-}
-
-const createDeferredDraft = (): DeferredDraft => {
-  let capture: ((draft: ResidueDraft) => void) | null = null;
-  const promise = new Promise<ResidueDraft>((resolve) => {
-    capture = resolve;
-  });
-
-  if (capture === null) {
-    throw new Error("Promise executor did not run synchronously");
-  }
-
-  return { promise, resolve: capture };
-};
 
 const abandonedResidue = (): AbandonedPushChannelResidue => ({
   credential: {
@@ -123,26 +104,25 @@ const makeDependencies = (
 
 describe("push channel work that settles after the abort window", () => {
   it(
-    "records the abandoned channel as residue without making the delete wait for it",
+    "makes the abandoned channel durable before the grant residue",
     async () => {
       const { abandonment, createDeleteUserSyncTeardown } = await loadTeardown();
 
-      let slowWorkSettled = false;
-      const pushChannelDraft = createDeferredDraft();
+      const pushChannelWorkEvents: string[] = [];
 
       const drafts: ResidueDraft[] = [];
       const teardown = createDeleteUserSyncTeardown(
         makeDependencies(
           (draft) => {
             drafts.push(draft);
-            if (draft.kind === "push_channel") {
-              pushChannelDraft.resolve(draft);
-            }
           },
-          () =>
+          (_userId: string, signal: AbortSignal) =>
             new Promise<number>((_resolve, reject) => {
+              signal.addEventListener("abort", () => {
+                pushChannelWorkEvents.push("aborted");
+              });
               setTimeout(() => {
-                slowWorkSettled = true;
+                pushChannelWorkEvents.push("settled");
                 reject(abandonment());
               }, SETTLE_AFTER_ABORT_WINDOW_MS);
             }),
@@ -151,25 +131,17 @@ describe("push channel work that settles after the abort window", () => {
 
       await teardown(DELETED_USER);
 
-      expect(slowWorkSettled).toBe(false);
-      expect(drafts.some((draft) => draft.kind === "push_channel")).toBe(false);
+      expect(drafts.map((draft) => draft.kind)).toEqual(["push_channel", "oauth_grant"]);
 
-      const recorded = await Promise.race([
-        pushChannelDraft.promise,
-        new Promise<"no push_channel residue was recorded">((resolve) => {
-          setTimeout(() => {
-            resolve("no push_channel residue was recorded");
-          }, SETTLE_AFTER_ABORT_WINDOW_MS + RESIDUE_GRACE_MS);
-        }),
-      ]);
-
-      expect(recorded).toMatchObject({
+      expect(drafts[0]).toMatchObject({
         kind: "push_channel",
         provider: "google",
         providerChannelId: "google-A-1",
         providerResourceId: "resource-A-1",
         userId: DELETED_USER,
       });
+
+      expect(pushChannelWorkEvents).toEqual(["aborted", "settled"]);
     },
     20_000,
   );

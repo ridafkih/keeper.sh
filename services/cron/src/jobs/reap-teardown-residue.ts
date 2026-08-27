@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, lt, notExists, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
@@ -33,6 +33,8 @@ const RESIDUE_REPAIR_DEADLINE_MS = 15_000;
 const POLAR_RESOURCE_NOT_FOUND = "ResourceNotFound";
 const NO_UNKNOWABLE_CREDENTIALS = 0;
 const GOOGLE_INVALID_TOKEN_ERROR = "invalid_token";
+const ORPHAN_CREDENTIAL_SWEEP_PROVIDERS = ["google", "outlook"];
+const ORPHAN_CREDENTIAL_SAFETY_AGE_MS = 60 * 60 * 1000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -210,6 +212,9 @@ const revokeOAuthGrant = async (
   );
 };
 
+const calendarRowCarriesAProviderIdentity = (): SQL =>
+  sql`${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '' and ${calendarAccountsTable.accountId} <> ${calendarAccountsTable.id}::text`;
+
 const credentialHoldsTheAccount = (
   provider: string,
   accountEmail: string,
@@ -219,7 +224,7 @@ const credentialHoldsTheAccount = (
     return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail})`;
   }
 
-  return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or (${oauthCredentialsTable.email} is null and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} = ${providerAccountId})) or exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and lower(${calendarAccountsTable.email}) = lower(${accountEmail}))`;
+  return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or (${oauthCredentialsTable.email} is null and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarRowCarriesAProviderIdentity()} and ${calendarAccountsTable.accountId} = ${providerAccountId})) or exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and lower(${calendarAccountsTable.email}) = lower(${accountEmail}))`;
 };
 
 const calendarRowNamesADifferentAccount = (
@@ -227,7 +232,7 @@ const calendarRowNamesADifferentAccount = (
   accountEmail: string,
   providerAccountId: string,
 ): SQL =>
-  sql`exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ((${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '' and ${calendarAccountsTable.accountId} <> ${providerAccountId}) or (${calendarAccountsTable.email} is not null and lower(${calendarAccountsTable.email}) <> lower(${accountEmail}))))`;
+  sql`exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ((${calendarRowCarriesAProviderIdentity()} and ${calendarAccountsTable.accountId} <> ${providerAccountId}) or (${calendarRowCarriesAProviderIdentity()} and ${calendarAccountsTable.email} is not null and lower(${calendarAccountsTable.email}) <> lower(${accountEmail}))))`;
 
 const credentialHasACalendarRowForTheProvider = (provider: string): SQL =>
   sql`exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider})`;
@@ -237,7 +242,7 @@ const calendarRowsNameNoAccountAtAll = (
   accountEmail: string,
   providerAccountId: string,
 ): SQL =>
-  sql`${credentialHasACalendarRowForTheProvider(provider)} and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '') and not ${calendarRowNamesADifferentAccount(provider, accountEmail, providerAccountId)}`;
+  sql`${credentialHasACalendarRowForTheProvider(provider)} and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarRowCarriesAProviderIdentity()}) and not ${calendarRowNamesADifferentAccount(provider, accountEmail, providerAccountId)}`;
 
 const credentialIsLinkedToNoCalendarAccount = (provider: string): SQL =>
   sql`${oauthCredentialsTable.email} is not null and not ${credentialHasACalendarRowForTheProvider(provider)}`;
@@ -377,6 +382,36 @@ const countSurvivingAccountLinks = async (
   };
 };
 
+const sweepOrphanedOAuthCredentials = async ({
+  database,
+  minimumAgeMs,
+  now,
+}: {
+  database: PgDatabase<PgQueryResultHKT>;
+  minimumAgeMs: number;
+  now: () => Date;
+}): Promise<number> => {
+  const createdBefore = new Date(now().getTime() - minimumAgeMs);
+
+  const swept = await database
+    .delete(oauthCredentialsTable)
+    .where(
+      and(
+        inArray(oauthCredentialsTable.provider, ORPHAN_CREDENTIAL_SWEEP_PROVIDERS),
+        lt(oauthCredentialsTable.createdAt, createdBefore),
+        notExists(
+          database
+            .select({ id: calendarAccountsTable.id })
+            .from(calendarAccountsTable)
+            .where(eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id)),
+        ),
+      ),
+    )
+    .returning({ id: oauthCredentialsTable.id });
+
+  return swept.length;
+};
+
 const createDefaultReaper = async () => {
   const { database } = await import("@/context");
   const { default: environment } = await import("@/env");
@@ -415,12 +450,19 @@ const createDefaultReaper = async () => {
 
 export default withCronWideEvent({
   async callback() {
+    const { database } = await import("@/context");
     const reap = await createDefaultReaper();
     await reap();
+    const sweptOrphanedCredentials = await sweepOrphanedOAuthCredentials({
+      database,
+      minimumAgeMs: ORPHAN_CREDENTIAL_SAFETY_AGE_MS,
+      now: () => new Date(),
+    });
+    widelog.setFields({ sweptOrphanedCredentials });
   },
   cron: "@every_5_minutes",
   name: import.meta.file,
   overrunProtection: true,
 }) satisfies CronOptions;
 
-export { countSurvivingAccountLinks, revokeOAuthGrant };
+export { countSurvivingAccountLinks, revokeOAuthGrant, sweepOrphanedOAuthCredentials };

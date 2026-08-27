@@ -9,11 +9,74 @@ import {
   fetchUserInfo,
   validateState,
 } from "@/utils/destinations";
-import { createOAuthSourceCredential } from "@/utils/oauth-source-credentials";
+import {
+  createOAuthSourceCredential,
+  deleteOAuthSourceCredential,
+} from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
 import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
+
+interface ConnectOAuthAccountOptions {
+  accessToken: string;
+  email: string | null;
+  expiresAt: Date;
+  provider: string;
+  providerAccountId: string;
+  refreshToken: string;
+  userId: string;
+}
+
+const discardCreatedCredential = async (
+  userId: string,
+  credentialId: string,
+): Promise<void> => {
+  try {
+    await deleteOAuthSourceCredential(userId, credentialId);
+  } catch (error) {
+    widelog.errorFields(error, { slug: "oauth-callback-credential-discard-failed" });
+  }
+};
+
+const connectOAuthAccount = async ({
+  accessToken,
+  email,
+  expiresAt,
+  provider,
+  providerAccountId,
+  refreshToken,
+  userId,
+}: ConnectOAuthAccountOptions): Promise<string> => {
+  let createdCredentialId: string | null = null;
+
+  const credentialId = await createOAuthSourceCredential(
+    userId,
+    { accessToken, email, expiresAt, provider, refreshToken },
+    {
+      onCredentialCreated: (id: string) => {
+        createdCredentialId = id;
+      },
+    },
+  );
+
+  try {
+    return await importOAuthAccountCalendars({
+      accessToken,
+      email,
+      oauthCredentialId: credentialId,
+      provider,
+      providerAccountId,
+      userId,
+    });
+  } catch (error) {
+    if (createdCredentialId !== null) {
+      await discardCreatedCredential(userId, createdCredentialId);
+    }
+
+    throw error;
+  }
+};
 
 const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {
@@ -65,20 +128,13 @@ const GET = withWideEvent(async ({ request, params }) => {
     const userInfo = await fetchUserInfo(provider, tokens.access_token);
     const expiresAt = new Date(Date.now() + tokens.expires_in * MS_PER_SECOND);
 
-    const credentialId = await createOAuthSourceCredential(userId, {
+    const accountId = await connectOAuthAccount({
       accessToken: tokens.access_token,
       email: userInfo.email,
       expiresAt,
       provider,
-      refreshToken: tokens.refresh_token,
-    });
-
-    const accountId = await importOAuthAccountCalendars({
-      accessToken: tokens.access_token,
-      email: userInfo.email,
-      oauthCredentialId: credentialId,
-      provider,
       providerAccountId: userInfo.id,
+      refreshToken: tokens.refresh_token,
       userId,
     });
 
