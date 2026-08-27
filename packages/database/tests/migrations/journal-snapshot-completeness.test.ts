@@ -116,11 +116,14 @@ describe("drizzle journal and snapshot consistency", () => {
     expect(unparseable).toEqual([]);
   });
 
-  it("records calendars.verificationCursor in the 0094 snapshot", async () => {
-    const snapshot = Bun.file(`${META_DIRECTORY}/0094_snapshot.json`);
+  it("records every column the schema declares in the newest snapshot", async () => {
+    const journal = await readJournal();
+    const [newest] = journal.entries.toSorted((first, second) => second.idx - first.idx);
+    const snapshot = await Bun.file(snapshotPathFor(newest as JournalEntry)).text();
 
-    expect(await snapshot.exists()).toBe(true);
-    expect(await snapshot.text()).toContain("verificationCursor");
+    for (const column of ["verificationCursor", "consecutiveUpdateFailures", "consecutiveUnsettledReads"]) {
+      expect(snapshot).toContain(column);
+    }
   });
 
   it("ships a snapshot for the newest journal entry", async () => {
