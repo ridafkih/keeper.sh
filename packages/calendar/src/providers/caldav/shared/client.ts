@@ -1,5 +1,6 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { createDAVClient, DAVNamespaceShort } from "tsdav";
+import { createDAVClient, DAVNamespace, DAVNamespaceShort, getDAVAttribute } from "tsdav";
+import { Parser } from "htmlparser2";
 import { chunkArray } from "../../../core/utils/chunk";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
@@ -23,6 +24,14 @@ interface CalendarObject {
   url: string;
   etag?: string;
   data?: string;
+}
+
+type CalDAVObjectPresence = "absent" | "present" | "unknown";
+
+interface CalDAVObjectAnswer {
+  data: string | null;
+  path: string;
+  presence: CalDAVObjectPresence;
 }
 
 interface CalDAVListingStats {
@@ -198,6 +207,305 @@ const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: stri
       .filter((path) => isCalendarObjectPath(path)),
   ),
 ];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const toTextParts = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => toTextParts(entry));
+  }
+  return [];
+};
+
+const readElementText = (value: unknown): string | null => {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (!isRecord(value)) {
+    return null;
+  }
+  const text = [...toTextParts(value._text), ...toTextParts(value._cdata)].join("").trim();
+  if (text.length === 0) {
+    return null;
+  }
+  return text;
+};
+
+const DAV_STATUS_PATTERN = /^\S+\s(?<code>\d{3})\s/u;
+
+const toStatusCode = (status: unknown): number | null => {
+  const text = readElementText(status);
+  if (text === null) {
+    return null;
+  }
+  const code = DAV_STATUS_PATTERN.exec(text)?.groups?.code;
+  if (!code) {
+    return null;
+  }
+  return Number.parseInt(code, 10);
+};
+
+const toElementList = (value: unknown): Record<string, unknown>[] => {
+  if (Array.isArray(value)) {
+    return value.filter((entry) => isRecord(entry));
+  }
+  if (isRecord(value)) {
+    return [value];
+  }
+  return [];
+};
+
+const readPropStatProp = (propstat: Record<string, unknown>): Record<string, unknown> | null => {
+  if (!isRecord(propstat.prop)) {
+    return null;
+  }
+  return propstat.prop;
+};
+
+const readCalendarData = (response: Record<string, unknown>): string | null => {
+  for (const propstat of toElementList(response.propstat)) {
+    const prop = readPropStatProp(propstat);
+    if (!prop) {
+      continue;
+    }
+    const body = readElementText(prop.calendarData);
+    if (body !== null) {
+      return body;
+    }
+  }
+  return null;
+};
+
+const isHrefNotFound = (response: Record<string, unknown>): boolean => {
+  const responseStatus = toStatusCode(response.status);
+  if (responseStatus !== null) {
+    return responseStatus === HTTP_STATUS.NOT_FOUND;
+  }
+
+  const propstatStatuses = toElementList(response.propstat).map((propstat) =>
+    toStatusCode(propstat.status));
+  if (propstatStatuses.length === 0) {
+    return false;
+  }
+  return propstatStatuses.every((status) => status === HTTP_STATUS.NOT_FOUND);
+};
+
+const toObjectAnswerKey = (href: string, calendarUrl: string): string => {
+  const path = toCalendarObjectPath(href, calendarUrl);
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+};
+
+const toObjectAnswer = (
+  response: Record<string, unknown>,
+  calendarUrl: string,
+): CalDAVObjectAnswer | null => {
+  const href = readElementText(response.href);
+  if (href === null) {
+    return null;
+  }
+
+  const path = toCalendarObjectPath(href, calendarUrl);
+  const data = readCalendarData(response);
+  if (data !== null) {
+    return { data, path, presence: "present" };
+  }
+  if (isHrefNotFound(response)) {
+    return { data: null, path, presence: "absent" };
+  }
+  return { data: null, path, presence: "unknown" };
+};
+
+const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
+  "calendar-multiget": {
+    _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
+    [`${DAVNamespaceShort.DAV}:prop`]: {
+      [`${DAVNamespaceShort.DAV}:getetag`]: {},
+      [`${DAVNamespaceShort.CALDAV}:calendar-data`]: {},
+    },
+    [`${DAVNamespaceShort.DAV}:href`]: objectUrls,
+  },
+});
+
+const buildUidQueryBody = (uid: string): Record<string, unknown> => ({
+  "calendar-query": {
+    _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
+    [`${DAVNamespaceShort.DAV}:prop`]: {
+      [`${DAVNamespaceShort.DAV}:getetag`]: {},
+      [`${DAVNamespaceShort.CALDAV}:calendar-data`]: {},
+    },
+    [`${DAVNamespaceShort.CALDAV}:filter`]: {
+      [`${DAVNamespaceShort.CALDAV}:comp-filter`]: {
+        _attributes: { name: "VCALENDAR" },
+        [`${DAVNamespaceShort.CALDAV}:comp-filter`]: {
+          _attributes: { name: "VEVENT" },
+          [`${DAVNamespaceShort.CALDAV}:prop-filter`]: {
+            _attributes: { name: "UID" },
+            [`${DAVNamespaceShort.CALDAV}:text-match`]: {
+              _attributes: { collation: "i;octet" },
+              _text: uid,
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+const readIcsUid = (data: string): string | null => {
+  const unfolded = data.replaceAll(/\r?\n[ \t]/gu, "");
+  for (const line of unfolded.split(/\r?\n/u)) {
+    if (line.startsWith("UID:")) {
+      return line.slice("UID:".length).trim();
+    }
+  }
+  return null;
+};
+
+const answerCarryingUid = (
+  answers: CalDAVObjectAnswer[],
+  uid: string,
+  requestedPath: string,
+): CalDAVObjectAnswer | null => {
+  for (const answer of answers) {
+    if (answer.presence !== "present" || answer.data === null) {
+      continue;
+    }
+    if (answer.path === requestedPath || readIcsUid(answer.data) !== uid) {
+      continue;
+    }
+    return answer;
+  }
+  return null;
+};
+
+const toElementKey = (name: string): string => {
+  const localName = name.slice(name.indexOf(":") + 1);
+  const [head, ...rest] = localName.split("-");
+  return [head, ...rest.map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))]
+    .join("");
+};
+
+const appendChildElement = (
+  parent: Record<string, unknown>,
+  key: string,
+  child: Record<string, unknown>,
+): void => {
+  if (!Object.hasOwn(parent, key)) {
+    parent[key] = child;
+    return;
+  }
+  const existing = parent[key];
+  if (Array.isArray(existing)) {
+    existing.push(child);
+    return;
+  }
+  parent[key] = [existing, child];
+};
+
+const appendTextRun = (element: Record<string, unknown>, key: string, text: string): void => {
+  const existing = element[key];
+  if (typeof existing === "string") {
+    element[key] = existing + text;
+    return;
+  }
+  element[key] = text;
+};
+
+const toTextRunKey = (cdataDepth: number): string => {
+  if (cdataDepth > 0) {
+    return "_cdata";
+  }
+  return "_text";
+};
+
+const parseMultiStatusXml = (xml: string): Record<string, unknown> => {
+  const root: Record<string, unknown> = {};
+  const openElements: Record<string, unknown>[] = [root];
+  let cdataDepth = 0;
+
+  const currentElement = (): Record<string, unknown> => openElements.at(-1) ?? root;
+
+  const parser = new Parser(
+    {
+      oncdataend: () => {
+        cdataDepth -= 1;
+      },
+      oncdatastart: () => {
+        cdataDepth += 1;
+      },
+      onclosetag: () => {
+        if (openElements.length > 1) {
+          openElements.pop();
+        }
+      },
+      onopentag: (name) => {
+        const element: Record<string, unknown> = {};
+        appendChildElement(currentElement(), toElementKey(name), element);
+        openElements.push(element);
+      },
+      ontext: (text) => {
+        appendTextRun(currentElement(), toTextRunKey(cdataDepth), text);
+      },
+    },
+    { decodeEntities: true, xmlMode: true },
+  );
+  parser.write(xml);
+  parser.end();
+  return root;
+};
+
+const toParsedMultiStatusResponses = (
+  responses: { raw?: unknown }[],
+): Record<string, unknown>[] | null => {
+  const raw = responses[0]?.raw;
+  if (typeof raw !== "string" || raw.length === 0) {
+    return null;
+  }
+  const parsed = parseMultiStatusXml(raw);
+  if (!isRecord(parsed.multistatus)) {
+    return null;
+  }
+  return toElementList(parsed.multistatus.response);
+};
+
+const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] =>
+  toParsedMultiStatusResponses(responses) ?? [];
+
+const toAnsweredMultiStatusResponses = (
+  responses: { ok?: unknown; raw?: unknown }[],
+): Record<string, unknown>[] | null => {
+  if (responses[0]?.ok === false) {
+    return null;
+  }
+  return toParsedMultiStatusResponses(responses);
+};
+
+type CalDAVUidSearchResult =
+  | { answer: CalDAVObjectAnswer; kind: "found" }
+  | { kind: "not-found" }
+  | { kind: "unanswered" };
+
+const toAnswerFromUidSearch = (
+  search: CalDAVUidSearchResult,
+  answered: CalDAVObjectAnswer,
+  path: string,
+): CalDAVObjectAnswer => {
+  if (search.kind === "found") {
+    return search.answer;
+  }
+  if (search.kind === "unanswered") {
+    return { data: null, path, presence: "unknown" };
+  }
+  return answered;
+};
 
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
@@ -385,6 +693,98 @@ class CalDAVClient {
     });
   }
 
+  verifyCalendarObjectsByUrls(params: {
+    calendarUrl: string;
+    objectUrls: string[];
+    uids?: (string | undefined)[];
+  }): Promise<CalDAVObjectAnswer[]> {
+    return mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      const answersByKey = new Map<string, CalDAVObjectAnswer>();
+
+      for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
+        const responses = await measureProviderRequest(() => client.davRequest({
+          init: {
+            body: buildMultiGetBody(objectUrls),
+            headers: { depth: "1" },
+            method: "REPORT",
+            namespace: DAVNamespaceShort.CALDAV,
+          },
+          parseOutgoing: false,
+          url: params.calendarUrl,
+        }));
+
+        for (const response of toMultiStatusResponses(responses)) {
+          const answer = toObjectAnswer(response, params.calendarUrl);
+          if (answer) {
+            answersByKey.set(toObjectAnswerKey(answer.path, params.calendarUrl), answer);
+          }
+        }
+      }
+
+      const answers: CalDAVObjectAnswer[] = [];
+      for (const [index, objectUrl] of params.objectUrls.entries()) {
+        const path = toCalendarObjectPath(objectUrl, params.calendarUrl);
+        const answered = answersByKey.get(toObjectAnswerKey(objectUrl, params.calendarUrl));
+        if (!answered) {
+          answers.push({ data: null, path, presence: "unknown" });
+          continue;
+        }
+        if (answered.presence !== "absent") {
+          answers.push(answered);
+          continue;
+        }
+        const uid = params.uids?.[index];
+        if (!uid) {
+          answers.push(answered);
+          continue;
+        }
+        const search = await this.findObjectByUid(params.calendarUrl, uid, path);
+        answers.push(toAnswerFromUidSearch(search, answered, path));
+      }
+
+      return answers;
+    });
+  }
+
+  private async findObjectByUid(
+    calendarUrl: string,
+    uid: string,
+    requestedPath: string,
+  ): Promise<CalDAVUidSearchResult> {
+    try {
+      const client = await this.getClient();
+      const responses = await measureProviderRequest(() => client.davRequest({
+        init: {
+          body: buildUidQueryBody(uid),
+          headers: { depth: "1" },
+          method: "REPORT",
+          namespace: DAVNamespaceShort.CALDAV,
+        },
+        parseOutgoing: false,
+        url: calendarUrl,
+      }));
+      const parsed = toAnsweredMultiStatusResponses(responses);
+      if (!parsed) {
+        return { kind: "unanswered" };
+      }
+      const found: CalDAVObjectAnswer[] = [];
+      for (const response of parsed) {
+        const answer = toObjectAnswer(response, calendarUrl);
+        if (answer) {
+          found.push(answer);
+        }
+      }
+      const carrying = answerCarryingUid(found, uid, requestedPath);
+      if (!carrying) {
+        return { kind: "not-found" };
+      }
+      return { answer: carrying, kind: "found" };
+    } catch {
+      return { kind: "unanswered" };
+    }
+  }
+
   fetchCalendarObjects(params: {
     calendarUrl: string;
     onListing?: (stats: CalDAVListingStats) => void;
@@ -488,4 +888,4 @@ export {
   CalDAVWithheldCredentialsError,
   createCalDAVClient,
 };
-export type { CalDAVListingStats };
+export type { CalDAVListingStats, CalDAVObjectAnswer, CalendarObject };

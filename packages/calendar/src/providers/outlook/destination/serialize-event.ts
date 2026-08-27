@@ -11,6 +11,16 @@ import {
 import { buildOutlookRecurrence } from "./serialize-recurrence";
 
 const UTC_TIME_ZONE = "UTC";
+const NON_PRIVATE_SENSITIVITY = "normal";
+const PRIVATE_SENSITIVITY = "private";
+
+const resolveSensitivity = (isPrivate?: boolean): string => {
+  if (isPrivate) {
+    return PRIVATE_SENSITIVITY;
+  }
+
+  return NON_PRIVATE_SENSITIVITY;
+};
 
 const toGraphWallValue = (value: Date): string => value.toISOString().replace("Z", "");
 
@@ -84,11 +94,11 @@ const serializeOutlookEvent = (event: MaterializedSyncableEvent): OutlookEvent =
   return {
     ...(body && { body }),
     ...(location && { location }),
-    ...(event.isPrivate && { sensitivity: "private" }),
     ...(recurrence && { recurrence }),
     categories: [KEEPER_CATEGORY],
     end: buildOutlookDateTime(event.endTime, eventTimeZone, isAllDay),
     isAllDay,
+    sensitivity: resolveSensitivity(event.isPrivate),
     showAs: getShowAs(event.availability),
     start: buildOutlookDateTime(event.startTime, eventTimeZone, isAllDay),
     subject: event.summary,

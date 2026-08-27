@@ -71,6 +71,7 @@ interface CalendarRow {
 interface SyncOutcome {
   added?: number;
   addFailed?: number;
+  updated?: number;
   conflictsResolved?: number;
   removed?: number;
   removeFailed?: number;
@@ -131,6 +132,7 @@ const config = (database: unknown) => ({
 const EMPTY_SYNC_RESULT = {
   added: 0,
   addFailed: 0,
+  updated: 0,
   conflictsResolved: 0,
   removed: 0,
   removeFailed: 0,

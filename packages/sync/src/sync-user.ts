@@ -9,6 +9,7 @@ import {
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
   getMappedSourceCalendarIds,
+  namesEventInDestination,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
@@ -26,6 +27,9 @@ import type {
   MaterializedSyncableEvent,
   ReconciliationScope,
   RefreshLockStore,
+  EventPresence,
+  EventPresenceStatus,
+  EventVerificationTarget,
   RemoteEvent,
   SyncProgressUpdate,
   SyncWindow,
@@ -167,6 +171,7 @@ interface DestinationReconciliationContext {
   remoteReadDurationMs: number;
   sourceCalendarIdsAtLocalRead: string[];
   sourceCalendarIdsBeforeRemoteRead: string[];
+  verification?: DestinationVerificationReport | null;
   verifiedSourceCalendarCount: number;
 }
 
@@ -355,6 +360,7 @@ interface DestinationReconciliationScopeContext {
   eventReadDiagnostics: DestinationEventReadDiagnostics;
   requestedWindow: SyncWindow;
   sourceCalendarIdsAtLocalRead: string[];
+  unverifiedMappingIds?: ReadonlySet<string>;
 }
 
 /*
@@ -373,10 +379,34 @@ const createDestinationReconciliationScope = (
   authoritativeWindow: context.authoritativeWindow,
   configuredSourceCalendarIds: new Set(context.sourceCalendarIdsAtLocalRead),
   requestedWindow: context.requestedWindow,
+  ...(context.unverifiedMappingIds && {
+    unverifiedMappingIds: context.unverifiedMappingIds,
+  }),
   withheldSourceEventStateIds: new Set(
     context.eventReadDiagnostics.overBudgetSourceEventStateIds,
   ),
 });
+
+interface DestinationVerificationReport {
+  nextVerificationCursor?: string | null;
+  unverifiedCount: number;
+  unverifiedMappingIds: ReadonlySet<string>;
+  verifiedAbsentCount: number;
+  verifiedPresentCount: number;
+}
+
+const createVerificationWideEventFields = (
+  verification?: DestinationVerificationReport | null,
+): Record<string, number> => {
+  if (!verification) {
+    return {};
+  }
+  return {
+    "reconciliation.verification.unverified_count": verification.unverifiedCount,
+    "reconciliation.verification.verified_absent_count": verification.verifiedAbsentCount,
+    "reconciliation.verification.verified_present_count": verification.verifiedPresentCount,
+  };
+};
 
 const createDestinationReconciliationWideEventFields = (
   context: DestinationReconciliationContext,
@@ -403,6 +433,7 @@ const createDestinationReconciliationWideEventFields = (
     context.sourceCalendarIdsAtLocalRead,
   ),
   "reconciliation.authority.verified": context.authoritativeWindow !== null,
+  ...createVerificationWideEventFields(context.verification),
   "reconciliation.window.requested_time_max": context.requestedWindow.timeMax.toISOString(),
   "reconciliation.window.requested_time_min": context.requestedWindow.timeMin.toISOString(),
   ...(context.authoritativeWindow && {
@@ -456,7 +487,7 @@ interface TargetedDestinationReadProvider {
    * recurring series whose own start/dateTime is its first, possibly long-past, occurrence) -
    * that must not read as "gone", or the mapping is deleted and re-created every cycle.
    */
-  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
+  verifyEventsExist?: (targets: EventVerificationTarget[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface DestinationRemoteReadContext {
@@ -464,6 +495,7 @@ interface DestinationRemoteReadContext {
   localEvents: MaterializedSyncableEvent[];
   provider: TargetedDestinationReadProvider;
   requestedWindow: SyncWindow;
+  verificationCursor?: string | null;
 }
 
 interface DestinationRemoteRead {
@@ -473,6 +505,7 @@ interface DestinationRemoteRead {
    */
   authoritativeMappingIds: ReadonlySet<string> | null;
   remoteEvents: RemoteEvent[];
+  verification?: DestinationVerificationReport;
 }
 
 interface TargetedDestinationReadPlan {
@@ -494,11 +527,38 @@ const planTargetedDestinationRead = (
   const mappingIds = new Set<string>();
   for (const localEvent of localEvents) {
     for (const mapping of mappingsBySyncEventId.get(localEvent.id) ?? []) {
+      if (!namesEventInDestination(mapping)) {
+        continue;
+      }
       deleteIdentifiers.add(mapping.deleteIdentifier);
       mappingIds.add(mapping.id);
     }
   }
   return { deleteIdentifiers: [...deleteIdentifiers], mappingIds };
+};
+
+const reportTargetedDestinationRead = (
+  plan: TargetedDestinationReadPlan,
+  existingMappings: EventMapping[],
+  remoteEvents: RemoteEvent[],
+): DestinationVerificationReport => {
+  const askedDeleteIds = new Set(plan.deleteIdentifiers);
+  const presentDeleteIds = new Set(
+    remoteEvents
+      .map((remoteEvent) => remoteEvent.deleteId)
+      .filter((deleteId) => askedDeleteIds.has(deleteId)),
+  );
+  const unverifiedMappingIds = new Set(
+    existingMappings
+      .filter((mapping) => !plan.mappingIds.has(mapping.id))
+      .map((mapping) => mapping.id),
+  );
+  return {
+    unverifiedCount: unverifiedMappingIds.size,
+    unverifiedMappingIds,
+    verifiedAbsentCount: askedDeleteIds.size - presentDeleteIds.size,
+    verifiedPresentCount: presentDeleteIds.size,
+  };
 };
 
 /*
@@ -508,28 +568,185 @@ const planTargetedDestinationRead = (
  * pass gets one more, authoritative check before it is treated as gone: a direct by-id lookup,
  * for providers that expose one.
  */
+const toConfirmedRemoteEvents = (verified: EventPresence[] | RemoteEvent[]): RemoteEvent[] => {
+  const confirmed: RemoteEvent[] = [];
+  for (const entry of verified) {
+    if (!("status" in entry)) {
+      confirmed.push(entry);
+      continue;
+    }
+    if (entry.status === "present" && entry.event) {
+      confirmed.push(entry.event);
+    }
+  }
+  return confirmed;
+};
+
+const createDefaultPresence = (
+  verified: EventPresence[] | RemoteEvent[],
+): EventPresenceStatus => {
+  if (verified.some((entry) => "status" in entry)) {
+    return "unknown";
+  }
+  return "absent";
+};
+
+const readReportedPresence = (entry: EventPresence): EventPresenceStatus => {
+  if ((entry.status === "present" || entry.status === "elsewhere") && !entry.event) {
+    return "unknown";
+  }
+  return entry.status;
+};
+
+const readVerifiedPresence = (
+  askedDeleteIds: string[],
+  verified: EventPresence[] | RemoteEvent[],
+): Map<string, EventPresenceStatus> => {
+  const presence = new Map<string, EventPresenceStatus>(
+    askedDeleteIds.map((deleteId) => [deleteId, createDefaultPresence(verified)]),
+  );
+  for (const entry of verified) {
+    if ("status" in entry) {
+      presence.set(entry.identifier, readReportedPresence(entry));
+      continue;
+    }
+    presence.set(entry.deleteId, "present");
+  }
+  return presence;
+};
+
+interface VerifiedDestinationRead {
+  remoteEvents: RemoteEvent[];
+  verification?: DestinationVerificationReport;
+}
+
+const countVerifiedPresence = (
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+  status: EventPresenceStatus,
+): number => [...presenceByDeleteId.values()].filter((value) => value === status).length;
+
+const countMirrorsTheReadLocated = (
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+): number =>
+  countVerifiedPresence(presenceByDeleteId, "present")
+  + countVerifiedPresence(presenceByDeleteId, "elsewhere");
+
+const collectUnverifiedMappingIds = (
+  budgetedMappings: EventMapping[],
+  beyondBudgetMappings: EventMapping[],
+  presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
+): Set<string> => {
+  const unverifiedMappingIds = new Set(beyondBudgetMappings.map((mapping) => mapping.id));
+  for (const mapping of budgetedMappings) {
+    if (presenceByDeleteId.get(mapping.deleteIdentifier) === "unknown") {
+      unverifiedMappingIds.add(mapping.id);
+    }
+  }
+  return unverifiedMappingIds;
+};
+
+interface VerificationRotation {
+  cursor: string | null;
+}
+
+const readVerificationRotation = (
+  context: DestinationRemoteReadContext,
+): VerificationRotation | null => {
+  if (!("verificationCursor" in context)) {
+    return null;
+  }
+  return { cursor: context.verificationCursor ?? null };
+};
+
+const findVerificationRotationStart = (
+  sortedMappings: EventMapping[],
+  verificationCursor: string | null | undefined,
+): number => {
+  if (!verificationCursor) {
+    return 0;
+  }
+  const resumeIndex = sortedMappings.findIndex((mapping) =>
+    mapping.deleteIdentifier.localeCompare(verificationCursor) > 0);
+  if (resumeIndex === -1) {
+    return 0;
+  }
+  return resumeIndex;
+};
+
+const selectBudgetedMappings = (
+  sortedMappings: EventMapping[],
+  rotationStart: number,
+): EventMapping[] => {
+  if (sortedMappings.length <= DESTINATION_VERIFICATION_LIMIT) {
+    return sortedMappings;
+  }
+  return sortedMappings.slice(rotationStart, rotationStart + DESTINATION_VERIFICATION_LIMIT);
+};
+
+const readNextVerificationCursor = (
+  sortedMappings: EventMapping[],
+  budgetedMappings: EventMapping[],
+  rotation: VerificationRotation | null,
+): { nextVerificationCursor?: string | null } => {
+  if (!rotation) {
+    return {};
+  }
+  const lastAsked = budgetedMappings.at(-1);
+  if (budgetedMappings.length >= sortedMappings.length || !lastAsked) {
+    return { nextVerificationCursor: null };
+  }
+  return { nextVerificationCursor: lastAsked.deleteIdentifier };
+};
+
 const withVerifiedUnconfirmedMappings = async (
   provider: TargetedDestinationReadProvider,
   existingMappings: EventMapping[],
   remoteEvents: RemoteEvent[],
   requestedWindow: SyncWindow,
-): Promise<RemoteEvent[]> => {
+  rotation: VerificationRotation | null,
+): Promise<VerifiedDestinationRead> => {
   if (!provider.verifyEventsExist) {
-    return remoteEvents;
+    return { remoteEvents };
   }
   const remoteUids = new Set(remoteEvents.map((event) => event.uid));
-  const unconfirmedDeleteIds = existingMappings
+  const unconfirmedMappings = existingMappings
     .filter((mapping) =>
       !remoteUids.has(mapping.destinationEventUid)
+      && namesEventInDestination(mapping)
       && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
-    .map((mapping) => mapping.deleteIdentifier)
-    .toSorted((first, second) => first.localeCompare(second))
-    .slice(0, DESTINATION_VERIFICATION_LIMIT);
-  if (unconfirmedDeleteIds.length === 0) {
-    return remoteEvents;
+    .toSorted((first, second) =>
+      first.deleteIdentifier.localeCompare(second.deleteIdentifier));
+  const budgetedMappings = selectBudgetedMappings(
+    unconfirmedMappings,
+    findVerificationRotationStart(unconfirmedMappings, rotation?.cursor),
+  );
+  const budgetedMappingIds = new Set(budgetedMappings.map((mapping) => mapping.id));
+  const beyondBudgetMappings = unconfirmedMappings
+    .filter((mapping) => !budgetedMappingIds.has(mapping.id));
+  if (budgetedMappings.length === 0) {
+    return { remoteEvents };
   }
-  const verifiedEvents = await provider.verifyEventsExist(unconfirmedDeleteIds);
-  return [...remoteEvents, ...verifiedEvents];
+  const askedDeleteIds = budgetedMappings.map((mapping) => mapping.deleteIdentifier);
+  const verified = await provider.verifyEventsExist(budgetedMappings.map((mapping) => ({
+    deleteId: mapping.deleteIdentifier,
+    uid: mapping.destinationEventUid,
+  })));
+  const presenceByDeleteId = readVerifiedPresence(askedDeleteIds, verified);
+  const unverifiedMappingIds = collectUnverifiedMappingIds(
+    budgetedMappings,
+    beyondBudgetMappings,
+    presenceByDeleteId,
+  );
+  return {
+    remoteEvents: [...remoteEvents, ...toConfirmedRemoteEvents(verified)],
+    verification: {
+      ...readNextVerificationCursor(unconfirmedMappings, budgetedMappings, rotation),
+      unverifiedCount: unverifiedMappingIds.size,
+      unverifiedMappingIds,
+      verifiedAbsentCount: countVerifiedPresence(presenceByDeleteId, "absent"),
+      verifiedPresentCount: countMirrorsTheReadLocated(presenceByDeleteId),
+    },
+  };
 };
 
 const readDestinationRemoteEvents = async (
@@ -546,19 +763,20 @@ const readDestinationRemoteEvents = async (
       timeMax: context.requestedWindow.timeMax,
       timeMin: context.requestedWindow.timeMin,
     });
-    return {
-      authoritativeMappingIds: null,
-      remoteEvents: await withVerifiedUnconfirmedMappings(
-        context.provider,
-        context.existingMappings,
-        remoteEvents,
-        context.requestedWindow,
-      ),
-    };
+    const verified = await withVerifiedUnconfirmedMappings(
+      context.provider,
+      context.existingMappings,
+      remoteEvents,
+      context.requestedWindow,
+      readVerificationRotation(context),
+    );
+    return { authoritativeMappingIds: null, ...verified };
   }
+  const remoteEvents = await lookUpByIds(plan.deleteIdentifiers);
   return {
     authoritativeMappingIds: plan.mappingIds,
-    remoteEvents: await lookUpByIds(plan.deleteIdentifiers),
+    remoteEvents,
+    verification: reportTargetedDestinationRead(plan, context.existingMappings, remoteEvents),
   };
 };
 
@@ -578,6 +796,7 @@ interface CalendarSyncCompletion {
   userId: string;
   added: number;
   addFailed: number;
+  updated: number;
   removed: number;
   removeFailed: number;
   conflictsResolved: number;
@@ -634,6 +853,7 @@ interface DestinationAttempt {
   syncFutureRange: string;
   syncHistoricRange: string;
   userId: string;
+  verificationCursor: string | null;
 }
 
 const getDestinationAttempt = async (
@@ -651,6 +871,7 @@ const getDestinationAttempt = async (
       syncFutureRange: calendarsTable.syncFutureRange,
       syncHistoricRange: calendarsTable.syncHistoricRange,
       userId: calendarsTable.userId,
+      verificationCursor: calendarsTable.verificationCursor,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -694,6 +915,37 @@ const resetDestinationBackoffIfNeeded = async (
   if (destination.failureCount > 0) {
     await resetDestinationBackoff(database, destination.calendarId);
   }
+};
+
+interface ReportedVerificationCursor {
+  value: string | null;
+}
+
+const readReportedVerificationCursor = (
+  report: DestinationVerificationReport,
+): ReportedVerificationCursor | null => {
+  if (!("nextVerificationCursor" in report)) {
+    return null;
+  }
+  const reported = report.nextVerificationCursor;
+  if (reported === globalThis.undefined) {
+    return null;
+  }
+  return { value: reported };
+};
+
+const persistDestinationVerificationCursor = async (
+  database: BunSQLDatabase,
+  destination: DestinationAttempt,
+  nextVerificationCursor: string | null,
+): Promise<void> => {
+  if (nextVerificationCursor === destination.verificationCursor) {
+    return;
+  }
+  await database
+    .update(calendarsTable)
+    .set({ verificationCursor: nextVerificationCursor })
+    .where(eq(calendarsTable.id, destination.calendarId));
 };
 
 const hasSameRetryState = (
@@ -924,6 +1176,8 @@ const syncDestinationsForUser = async (
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
         let sourceCalendarsChangedDuringRemoteRead = false;
         let authoritativeMappingIds: ReadonlySet<string> | null = null;
+        let verification: DestinationVerificationReport | null = null;
+        let unverifiedMappingIds: ReadonlySet<string> = new Set<string>();
         const reconciliationState = await readDestinationReconciliationState(
           async (localState) => {
             const startedAt = performance.now();
@@ -933,8 +1187,20 @@ const syncDestinationsForUser = async (
                 localEvents: localState.localEvents,
                 provider: providerRef,
                 requestedWindow,
+                verificationCursor: destination.verificationCursor,
               });
               ({ authoritativeMappingIds } = read);
+              verification = read.verification ?? null;
+              unverifiedMappingIds = verification?.unverifiedMappingIds ?? new Set<string>();
+              const reportedCursor = read.verification
+                && readReportedVerificationCursor(read.verification);
+              if (reportedCursor) {
+                await persistDestinationVerificationCursor(
+                  database,
+                  destination,
+                  reportedCursor.value,
+                );
+              }
               return read.remoteEvents;
             } finally {
               remoteReadDurationMs = roundDuration(performance.now() - startedAt);
@@ -1021,6 +1287,7 @@ const syncDestinationsForUser = async (
           remoteReadDurationMs,
           sourceCalendarIdsAtLocalRead,
           sourceCalendarIdsBeforeRemoteRead: sourceCalendarIds,
+          verification,
           verifiedSourceCalendarCount: authoritativeSourceWindows.size,
         });
         const isAttemptCurrent = (): Promise<boolean> => {
@@ -1068,6 +1335,7 @@ const syncDestinationsForUser = async (
             eventReadDiagnostics,
             requestedWindow,
             sourceCalendarIdsAtLocalRead,
+            unverifiedMappingIds,
           }),
         });
 
@@ -1078,6 +1346,7 @@ const syncDestinationsForUser = async (
           userId: destination.userId,
           added: result.added,
           addFailed: result.addFailed,
+          updated: result.updated,
           removed: result.removed,
           removeFailed: result.removeFailed,
           conflictsResolved: result.conflictsResolved,

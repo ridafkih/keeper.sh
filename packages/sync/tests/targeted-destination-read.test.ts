@@ -169,6 +169,7 @@ describe("the push path reads only what it writes", () => {
     expect(targeted.operations).toContainEqual({
       deleteId: "destination-event-2",
       event: localEvents[1],
+      remoteMissing: true,
       staleMappingId: "mapping-2",
       type: "replace",
       uid: "destination-uid-2",

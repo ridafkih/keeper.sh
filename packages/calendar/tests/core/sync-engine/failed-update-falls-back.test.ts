@@ -38,7 +38,7 @@ const makeReplacement = (index: number): Extract<SyncOperation, { type: "replace
 
 const createUpdateCapableProvider = (
   updateResults: PushResult[],
-  deleteResults: DeleteResult[] = [{ success: true }, { success: true }],
+  deleteResults: DeleteResult[] = [{ removedObject: true, success: true }, { removedObject: true, success: true }],
 ) => {
   const deleteCalls: string[][] = [];
   const pushCalls: MaterializedSyncableEvent[][] = [];

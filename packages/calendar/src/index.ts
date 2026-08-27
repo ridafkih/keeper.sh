@@ -294,6 +294,7 @@ export {
   getEventMappingsForDestination,
   createEventMapping,
   deleteEventMapping,
+  namesEventInDestination,
   type EventMapping,
 } from "./core/events/mappings";
 export {
@@ -331,6 +332,9 @@ export type {
   SyncResult,
   RemoteEvent,
   EventAvailability,
+  EventPresence,
+  EventPresenceStatus,
+  EventVerificationTarget,
   ProviderConfig,
   OAuthProviderConfig,
   GoogleCalendarConfig,

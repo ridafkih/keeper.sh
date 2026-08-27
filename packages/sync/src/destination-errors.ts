@@ -44,23 +44,29 @@ const isBackoffEligibleError = (error: unknown): boolean => {
 interface DestinationOperationCounts {
   added: number;
   addFailed: number;
+  updated: number;
   conflictsResolved: number;
   removed: number;
   removeFailed: number;
+  parked?: number;
 }
 
+const hasSuccessfulOperation = (result: DestinationOperationCounts): boolean =>
+  result.added > 0
+  || result.updated > 0
+  || result.removed > 0
+  || result.conflictsResolved > 0;
+
+const hasActionableFailure = (result: DestinationOperationCounts): boolean =>
+  result.addFailed + result.removeFailed - (result.parked ?? 0) > 0;
+
 const hasNoSuccessfulOperations = (result: DestinationOperationCounts): boolean =>
-  result.added === 0
-  && result.removed === 0
-  && result.conflictsResolved === 0
-  && result.addFailed + result.removeFailed > 0;
+  !hasSuccessfulOperation(result)
+  && hasActionableFailure(result);
 
 const hasAttemptedOperations = (result: DestinationOperationCounts): boolean =>
-  result.added
-  + result.removed
-  + result.conflictsResolved
-  + result.addFailed
-  + result.removeFailed > 0;
+  hasSuccessfulOperation(result)
+  || hasActionableFailure(result);
 
 type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
 

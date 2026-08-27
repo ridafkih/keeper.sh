@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   EventMapping,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   RemoteEvent,
@@ -76,8 +77,8 @@ const createProviderDouble = () => {
       return Promise.resolve([]);
     },
     verifiedIds,
-    verifyEventsExist: (deleteIds: string[]): Promise<RemoteEvent[]> => {
-      verifiedIds.push(...deleteIds);
+    verifyEventsExist: (targets: EventVerificationTarget[]): Promise<RemoteEvent[]> => {
+      verifiedIds.push(...targets.map((target) => target.deleteId));
       return Promise.resolve([]);
     },
   };

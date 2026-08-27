@@ -6,6 +6,8 @@ const DEFAULT_COUNT = 0;
 
 interface EventMapping {
   id: string;
+  consecutiveUpdateFailures?: number;
+  consecutiveUnsettledReads?: number;
   eventStateId: string | null;
   syncEventId: string;
   calendarId: string;
@@ -16,6 +18,11 @@ interface EventMapping {
   startTime: Date;
   endTime: Date;
 }
+
+const NO_DESTINATION_EVENT_IDENTIFIER = "";
+
+const namesEventInDestination = (mapping: { deleteIdentifier: string }): boolean =>
+  mapping.deleteIdentifier !== NO_DESTINATION_EVENT_IDENTIFIER;
 
 const requireMappingSyncEventId = (
   mapping: { eventStateId: string | null; id: string; syncEventId: string | null },
@@ -49,6 +56,8 @@ const getEventMappingsForDestination = async (
   const mappings = await database
     .select({
       calendarId: eventMappingsTable.calendarId,
+      consecutiveUnsettledReads: eventMappingsTable.consecutiveUnsettledReads,
+      consecutiveUpdateFailures: eventMappingsTable.consecutiveUpdateFailures,
       deleteIdentifier: eventMappingsTable.deleteIdentifier,
       destinationEventUid: eventMappingsTable.destinationEventUid,
       endTime: eventMappingsTable.endTime,
@@ -138,6 +147,8 @@ const countMappingsForDestination = async (
 };
 
 export {
+  NO_DESTINATION_EVENT_IDENTIFIER,
+  namesEventInDestination,
   getEventMappingsForDestination,
   createEventMapping,
   deleteEventMapping,

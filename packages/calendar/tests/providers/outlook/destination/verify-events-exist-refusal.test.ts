@@ -29,7 +29,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing when the token expired mid-loop", async () => {
@@ -39,7 +39,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing on a server error", async () => {
@@ -49,7 +49,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report an id as missing when the request fails at the transport", async () => {
@@ -59,7 +59,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["mapped-event-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([{ identifier: "mapped-event-id", status: "unknown" }]);
   });
 
   it("does not report a batch of ids as missing when the service is unavailable", async () => {
@@ -69,12 +69,37 @@ describe("verifyEventsExist refusals never vote to delete", () => {
     );
 
     await expect(createProvider().verifyEventsExist(["first-id", "second-id"]))
-      .rejects.toThrow();
+      .resolves.toEqual([
+        { identifier: "first-id", status: "unknown" },
+        { identifier: "second-id", status: "unknown" },
+      ]);
   });
 
-  it("reports an id as missing only when the destination definitively says not found", async () => {
-    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
+  it("reports a bare 404 id as unknown, and one the mailbox holds nowhere as missing", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      const url = new URL(input.toString());
+      if (url.pathname.endsWith("/calendars")) {
+        return Promise.resolve(Response.json({
+          value: [
+            { id: "the-mailbox-default-calendar", isDefaultCalendar: true, name: "Calendar" },
+            { id: "external-cal-1", isDefaultCalendar: false, name: "Keeper" },
+            { id: "external-cal-2", isDefaultCalendar: false, name: "Personal" },
+          ],
+        }));
+      }
+      if (url.searchParams.has("$filter")) {
+        return Promise.resolve(Response.json({ value: [] }));
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }));
 
-    await expect(createProvider().verifyEventsExist(["deleted-event-id"])).resolves.toEqual([]);
+    const provider = createProvider();
+
+    await expect(provider.verifyEventsExist(["deleted-event-id"])).resolves.toEqual([
+      { identifier: "deleted-event-id", status: "unknown" },
+    ]);
+    await expect(
+      provider.verifyEventsExist([{ deleteId: "deleted-event-id", uid: "deleted-event-uid" }]),
+    ).resolves.toEqual([{ identifier: "deleted-event-id", status: "absent" }]);
   });
 });

@@ -1,5 +1,7 @@
 import type {
   DeleteResult,
+  EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -10,11 +12,13 @@ import type {
 interface EventUpdate {
   deleteId: string;
   event: MaterializedSyncableEvent;
+  verifiedUid?: string;
 }
 
 interface CalendarSyncProvider {
   // Must run before reconciliation, not in the serializer, or mapping and remote disagree and churn forever.
   normalizeEvent?: (event: MaterializedSyncableEvent) => MaterializedSyncableEvent;
+  prepareEvent?: (event: MaterializedSyncableEvent) => void;
   pushEvents: (events: MaterializedSyncableEvent[]) => Promise<PushResult[]>;
   updateEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
   deleteEvents: (eventIds: string[]) => Promise<DeleteResult[]>;
@@ -22,7 +26,7 @@ interface CalendarSyncProvider {
   getRemoteEventsByIds?: (eventIds: string[]) => Promise<RemoteEvent[]>;
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
-  verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
+  verifyEventsExist?: (targets: EventVerificationTarget[]) => Promise<EventPresence[] | RemoteEvent[]>;
 }
 
 interface PendingInsert {
@@ -38,11 +42,14 @@ interface PendingInsert {
 }
 
 interface PendingUpdate {
+  consecutiveUpdateFailures?: number;
+  consecutiveUnsettledReads?: number;
   deleteIdentifier: string;
+  destinationEventUid?: string;
   endTime: Date;
   id: string;
   startTime: Date;
-  syncEventHash: string;
+  syncEventHash: string | null;
   syncEventId: string;
 }
 

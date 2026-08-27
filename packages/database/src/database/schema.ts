@@ -144,6 +144,7 @@ const calendarsTable = pgTable(
     originalName: text(),
     syncToken: text(),
     storedEventCount: integer(),
+    verificationCursor: text(),
     syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
     unavailableSince: timestamp({ withTimezone: true }),
@@ -375,6 +376,8 @@ const eventMappingsTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    consecutiveUpdateFailures: integer().notNull().default(0),
+    consecutiveUnsettledReads: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     deleteIdentifier: text(),
     destinationEventUid: text().notNull(),

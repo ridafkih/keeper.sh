@@ -105,17 +105,21 @@ describe("createOutlookSyncProvider", () => {
     expect(requestedUrl).not.toBeNull();
     expect(new URL(requestedUrl ?? "").pathname).toContain("/events/series-master-id-1");
     expect(verified).toEqual([
-      expect.objectContaining({ deleteId: "series-master-id-1", uid: "series-uid-1" }),
+      expect.objectContaining({
+        event: expect.objectContaining({ deleteId: "series-master-id-1", uid: "series-uid-1" }),
+        identifier: "series-master-id-1",
+        status: "present",
+      }),
     ]);
   });
 
-  it("verifyEventsExist omits ids the destination responds 404 for", async () => {
+  it("verifyEventsExist reports an id the destination responds 404 for as unknown", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
 
     const provider = createProvider();
     const verified = await provider.verifyEventsExist(["deleted-event-id"]);
 
-    expect(verified).toEqual([]);
+    expect(verified).toEqual([{ identifier: "deleted-event-id", status: "unknown" }]);
   });
 
   it("aborts a pending Graph event creation", async () => {
@@ -492,7 +496,7 @@ describe("createOutlookSyncProvider", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
-      { success: true },
+      { removedObject: true, success: true },
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

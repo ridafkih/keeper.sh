@@ -1,7 +1,7 @@
 import type { BunSQLClient } from "../database-client";
 import { eventMappingsTable } from "@keeper.sh/database/schema";
 import { eq, inArray } from "drizzle-orm";
-import type { PendingChanges } from "./types";
+import type { PendingChanges, PendingUpdate } from "./types";
 
 const FLUSH_BATCH_SIZE = 5000;
 
@@ -12,6 +12,21 @@ const chunk = <TItem>(items: TItem[], size: number): TItem[][] => {
   }
   return chunks;
 };
+
+const toMappingUpdateValues = (update: PendingUpdate) => ({
+  ...(typeof update.consecutiveUpdateFailures === "number" && {
+    consecutiveUpdateFailures: update.consecutiveUpdateFailures,
+  }),
+  ...(typeof update.consecutiveUnsettledReads === "number" && {
+    consecutiveUnsettledReads: update.consecutiveUnsettledReads,
+  }),
+  deleteIdentifier: update.deleteIdentifier,
+  ...(update.destinationEventUid && { destinationEventUid: update.destinationEventUid }),
+  endTime: update.endTime,
+  startTime: update.startTime,
+  syncEventHash: update.syncEventHash,
+  syncEventId: update.syncEventId,
+});
 
 const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) => Promise<void> =>
   async (changes: PendingChanges): Promise<void> => {
@@ -55,13 +70,7 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
           for (const update of batch) {
             await transaction
               .update(eventMappingsTable)
-              .set({
-                deleteIdentifier: update.deleteIdentifier,
-                syncEventHash: update.syncEventHash,
-                syncEventId: update.syncEventId,
-                startTime: update.startTime,
-                endTime: update.endTime,
-              })
+              .set(toMappingUpdateValues(update))
               .where(eq(eventMappingsTable.id, update.id));
           }
         }

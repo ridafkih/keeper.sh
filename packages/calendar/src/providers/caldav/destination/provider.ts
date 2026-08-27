@@ -1,5 +1,6 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
 import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import { toVerificationTarget } from "../../../core/events/verification-targets";
 import {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
@@ -9,13 +10,15 @@ import { getErrorMessage } from "../../../core/utils/error";
 import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
+  EventPresence,
+  EventVerificationTarget,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushResult,
   RemoteEvent,
 } from "../../../core/types";
 import { CalDAVClient, CalDAVCreateConflictError, CalDAVHttpError } from "../shared/client";
-import type { CalDAVListingStats } from "../shared/client";
+import type { CalDAVListingStats, CalDAVObjectAnswer } from "../shared/client";
 import {
   assertAllEventsSupported,
   assertAllResourcesRead,
@@ -66,9 +69,28 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   return null;
 };
 
-const createFailureResult = (error: unknown): {
+interface RequestAttempt {
+  sent: boolean;
+  status: number | null;
+}
+
+const unsentAttempt = (): RequestAttempt => ({ sent: false, status: null });
+
+const serializeUpdateBody = (
+  event: MaterializedSyncableEvent,
+  uid: string,
+): { iCalString: string } | { error: unknown } => {
+  try {
+    return { iCalString: eventToICalString(event, uid) };
+  } catch (error) {
+    return { error };
+  }
+};
+
+const createFailureResult = (error: unknown, attempt?: RequestAttempt): {
   error: string;
   errorType: string;
+  requestSent?: boolean;
   statusCode?: number;
   success: false;
 } => {
@@ -77,10 +99,12 @@ const createFailureResult = (error: unknown): {
   if (error instanceof Error) {
     errorType = error.name;
   }
+  const status = httpError?.status ?? attempt?.status ?? null;
   return {
     error: getErrorMessage(error),
     errorType,
-    ...(httpError && { statusCode: httpError.status }),
+    ...(attempt?.sent === false && { requestSent: false }),
+    ...(typeof status === "number" && { statusCode: status }),
     success: false,
   };
 };
@@ -177,6 +201,11 @@ const toCalendarBaseUrl = (calendarUrl: string): string => {
   return `${calendarUrl}/`;
 };
 
+const toUnknownPresence = (deleteId: string): EventPresence => ({
+  identifier: deleteId,
+  status: "unknown",
+});
+
 const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
   const resources = parseICalCalendarsToRemoteEvents(
     [data],
@@ -247,15 +276,25 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     }
   };
 
+  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
+
+  const toObjectPath = (uid: string): string => new URL(`${uid}.ics`, calendarBaseUrl).pathname;
+
+  const prepareEvent = (event: MaterializedSyncableEvent): void => {
+    eventToICalString(event, generateDeterministicEventUid(event.id));
+  };
+
   const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
     Promise.all(
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
+          const attempt = unsentAttempt();
           try {
             const uid = generateDeterministicEventUid(event.id);
             const iCalString = eventToICalString(event, uid);
 
             try {
+              attempt.sent = true;
               await client.createCalendarObject({
                 calendarUrl: config.calendarUrl,
                 filename: `${uid}.ics`,
@@ -273,25 +312,28 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               }
               return {
                 conflictResolved: true,
-                deleteId: uid,
+                deleteId: toObjectPath(uid),
                 echo: CALDAV_PUSH_ECHO,
                 remoteId: uid,
                 success: true,
               };
             }
 
-            return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
+            return {
+              deleteId: toObjectPath(uid),
+              echo: CALDAV_PUSH_ECHO,
+              remoteId: uid,
+              success: true,
+            };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),
     );
-
-  const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
 
   const toObjectUrl = (deleteId: string): string => {
     if (deleteId.includes("/")) {
@@ -305,8 +347,11 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
    * "@". Comparing decoded basenames keeps the write on the object the mapping
    * already points at instead of a reconstructed href that never matches.
    */
-  const resolveUpdateTargetUrl = (deleteId: string, uid: string): string => {
+  const resolveUpdateTargetUrl = (deleteId: string, uid: string, verifiedUid?: string): string => {
     const objectUrl = toObjectUrl(deleteId);
+    if (verifiedUid === uid) {
+      return objectUrl;
+    }
     const filename = decodeURIComponent(new URL(objectUrl).pathname.split("/").at(-1) ?? "");
     if (filename !== `${uid}.ics`) {
       throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
@@ -316,14 +361,26 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
     Promise.all(
-      updates.map(({ deleteId, event }) =>
+      updates.map(({ deleteId, event, verifiedUid }) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
-          try {
-            const uid = generateDeterministicEventUid(event.id);
-            const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
+          const attempt = unsentAttempt();
+          const uid = generateDeterministicEventUid(event.id);
 
+          const serialized = serializeUpdateBody(event, uid);
+          if ("error" in serialized) {
+            if (config.safeFetchOptions?.signal?.aborted) {
+              throw serialized.error;
+            }
+            return createFailureResult(serialized.error, attempt);
+          }
+          const { iCalString } = serialized;
+
+          try {
+            const objectUrl = resolveUpdateTargetUrl(deleteId, uid, verifiedUid);
+
+            attempt.sent = true;
             await client.updateCalendarObjectByUrl({
-              iCalString: eventToICalString(event, uid),
+              iCalString,
               objectUrl,
             });
 
@@ -332,7 +389,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),
@@ -350,12 +407,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   /* Listed deleteIds are object paths; deleteIds stored before path recording are bare UIDs. */
-  const deleteEventObject = (deleteId: string): Promise<void> => {
+  const deleteEventObject = (deleteId: string, attempt: RequestAttempt): Promise<void> => {
     if (deleteId.includes("/")) {
-      return client.deleteCalendarObjectByUrl({
-        objectUrl: new URL(deleteId, config.calendarUrl).href,
-      });
+      const objectUrl = new URL(deleteId, config.calendarUrl).href;
+      attempt.sent = true;
+      return client.deleteCalendarObjectByUrl({ objectUrl });
     }
+    attempt.sent = true;
     return client.deleteCalendarObject({
       calendarUrl: config.calendarUrl,
       filename: `${deleteId}.ics`,
@@ -366,6 +424,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     Promise.all(
       eventIds.map((deleteId) =>
         rateLimiter.execute(async (): Promise<DeleteResult> => {
+          const attempt = unsentAttempt();
           removeAttempts += 1;
           if (deleteId.includes("/")) {
             removeCounts.byPath += 1;
@@ -374,9 +433,9 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           }
 
           try {
-            await deleteEventObject(deleteId);
+            await deleteEventObject(deleteId, attempt);
             removeCounts.succeeded += 1;
-            return { success: true };
+            return { removedObject: true, success: true };
           } catch (error) {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
@@ -387,7 +446,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               return { success: true };
             }
             recordRemoveFailure(error);
-            return createFailureResult(error);
+            return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
       ),
@@ -465,7 +524,94 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const answeredPathOf = (deleteId: string, answer: CalDAVObjectAnswer): string => {
+    const requestedPath = new URL(toObjectUrl(deleteId)).pathname;
+    const answeredPath = new URL(answer.path, calendarBaseUrl).pathname;
+    if (answeredPath === requestedPath) {
+      return deleteId;
+    }
+    return answeredPath;
+  };
+
+  const parsedEventForUid = (
+    data: string,
+    uid: string,
+  ): ParsedCalendarEvent | undefined => {
+    const parsedEvents = parseCalendarObjectEvents(data);
+    const [objectEvent] = parsedEvents;
+    if (!objectEvent || objectEvent.uid !== uid) {
+      return globalThis.undefined;
+    }
+    const components = parsedEvents.filter((parsed) => parsed.uid === uid);
+    return components.find((parsed) => !parsed.recurrenceId) ?? objectEvent;
+  };
+
+  const readAnsweredEvent = (
+    target: EventVerificationTarget,
+    data: string,
+  ): ParsedCalendarEvent | undefined => {
+    if (!target.uid) {
+      const [first] = parseCalendarObjectEvents(data);
+      return first;
+    }
+    return parsedEventForUid(data, target.uid);
+  };
+
+  const presenceOfAnswer = (
+    target: EventVerificationTarget,
+    answer: CalDAVObjectAnswer | undefined,
+  ): EventPresence => {
+    const { deleteId } = target;
+    if (!answer || answer.presence === "unknown") {
+      return { identifier: deleteId, status: "unknown" };
+    }
+    if (answer.presence === "absent") {
+      return { identifier: deleteId, status: "absent" };
+    }
+    if (!answer.data) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    const parsed = readAnsweredEvent(target, answer.data);
+    if (!parsed || !isKeeperEvent(parsed.uid)) {
+      return { identifier: deleteId, status: "unknown" };
+    }
+
+    return {
+      event: toCalDAVRemoteEvent(parsed, answeredPathOf(deleteId, answer)),
+      identifier: deleteId,
+      status: "present",
+    };
+  };
+
+  const verifyEventsExist = async (
+    targets: (EventVerificationTarget | string)[],
+  ): Promise<EventPresence[]> => {
+    const verificationTargets = targets.map((target) => toVerificationTarget(target));
+    const deleteIds = verificationTargets.map((target) => target.deleteId);
+    if (deleteIds.length === 0) {
+      return [];
+    }
+
+    try {
+      const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+      const answers = await client.verifyCalendarObjectsByUrls({
+        calendarUrl,
+        objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
+        uids: verificationTargets.map((target) => target.uid),
+      });
+
+      return verificationTargets.map((target, index) => presenceOfAnswer(target, answers[index]));
+    } catch (error) {
+      if (config.safeFetchOptions?.signal?.aborted) {
+        throw error;
+      }
+      return deleteIds.map((deleteId) => toUnknownPresence(deleteId));
+    }
+  };
+
   return {
+    prepareEvent,
     pushEvents,
     updateEvents,
     deleteEvents,
@@ -473,6 +619,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeCalDAVEvent,
+    verifyEventsExist,
   };
 };
 

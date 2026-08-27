@@ -349,7 +349,7 @@ describe("createCalDAVSyncProvider", () => {
 
     const results = await provider.deleteEvents([deleteId]);
 
-    expect(results).toEqual([{ success: true }]);
+    expect(results).toEqual([{ removedObject: true, success: true }]);
     expect(clientMocks.deleteCalendarObjectByUrl).toHaveBeenCalledWith({
       objectUrl: `https://caldav.example.com/calendar/${fileUid}.ics`,
     });
@@ -363,7 +363,7 @@ describe("createCalDAVSyncProvider", () => {
 
     const results = await provider.deleteEvents([uid]);
 
-    expect(results).toEqual([{ success: true }]);
+    expect(results).toEqual([{ removedObject: true, success: true }]);
     expect(clientMocks.deleteCalendarObject).toHaveBeenCalledWith({
       calendarUrl: "https://caldav.example.com/calendar/",
       filename: `${uid}.ics`,
@@ -394,7 +394,7 @@ describe("createCalDAVSyncProvider", () => {
 
     const results = await provider.deleteEvents(["gone-uid", "present-uid"]);
 
-    expect(results).toEqual([{ success: true }, { success: true }]);
+    expect(results).toEqual([{ success: true }, { removedObject: true, success: true }]);
     expect(provider.getSyncDiagnostics()).toMatchObject({
       "events.remove_not_found": 1,
       "events.remove_succeeded": 1,

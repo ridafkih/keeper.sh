@@ -78,10 +78,15 @@ type MaterializedSyncableEvent = Omit<
   recurrenceRule?: never;
 };
 
+type DestinationAnswer = "answered" | "unanswered";
+
 interface PushResult {
   success: boolean;
+  destinationAnswer?: DestinationAnswer;
+  requestSent?: boolean;
   remoteId?: string;
   deleteId?: string;
+  identitySource?: "echo" | "read";
   echo?: PushEchoComparison;
   error?: string;
   errorType?: string;
@@ -121,6 +126,7 @@ type PushEchoComparison =
 
 interface DeleteResult {
   success: boolean;
+  removedObject?: boolean;
   error?: string;
   errorType?: string;
   statusCode?: number;
@@ -135,13 +141,16 @@ interface ProviderThrottleMetrics {
 interface SyncResult {
   added: number;
   addFailed: number;
+  updated: number;
   removed: number;
   removeFailed: number;
+  parked?: number;
 }
 
 interface RemoteEvent {
   uid: string;
   deleteId: string;
+  summary?: string;
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;
@@ -149,6 +158,19 @@ interface RemoteEvent {
   editableContentHash?: string;
   editableAvailability?: EventAvailability;
   supportedAvailabilities?: EventAvailability[];
+}
+
+type EventPresenceStatus = "absent" | "elsewhere" | "present" | "unknown";
+
+interface EventPresence {
+  event?: RemoteEvent;
+  identifier: string;
+  status: EventPresenceStatus;
+}
+
+interface EventVerificationTarget {
+  deleteId: string;
+  uid?: string;
 }
 
 type SyncOperation =
@@ -160,6 +182,7 @@ type SyncOperation =
     staleMappingId: string;
     uid: string;
     deleteId: string;
+    remoteMissing?: boolean;
   };
 
 interface ListRemoteEventsOptions {
@@ -220,6 +243,7 @@ interface SourceEvent {
 
 export type {
   AuthType,
+  DestinationAnswer,
   EventAvailability,
   SourceEventType,
   CalDAVProviderConfig,
@@ -239,6 +263,9 @@ export type {
   DeleteResult,
   SyncResult,
   RemoteEvent,
+  EventPresence,
+  EventPresenceStatus,
+  EventVerificationTarget,
   SyncOperation,
   ListRemoteEventsOptions,
   BroadcastSyncStatus,

@@ -402,7 +402,7 @@ describe("createGoogleSyncProvider", () => {
       .mockResolvedValueOnce([batchResponse(204, null)]);
 
     await expect(createProvider().deleteEvents(["keeper-event@keeper.sh"])).resolves.toEqual([
-      { success: true },
+      { removedObject: true, success: true },
     ]);
     expect(batchMocks.executeBatchChunked).toHaveBeenCalledTimes(2);
     expect(batchMocks.executeBatchChunked.mock.calls[1]?.[0]).toEqual([
