@@ -210,6 +210,7 @@ const createTeardownDependencies = (options: {
   listCalendarIds: () => Promise.resolve([]),
   listOAuthCredentials: (userId: string) =>
     Promise.resolve(options.credentials.filter((row) => row.userId === userId)),
+  listPushChannels: () => Promise.resolve([]),
   redis: options.redis,
   residue: options.residue,
 });

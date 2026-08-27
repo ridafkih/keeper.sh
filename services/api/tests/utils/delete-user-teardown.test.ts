@@ -65,9 +65,25 @@ class FakeIoRedis {
 
 vi.mock("ioredis", () => ({ default: FakeIoRedis }));
 
+interface EmptyRowQuery {
+  from: () => EmptyRowQuery;
+  leftJoin: () => EmptyRowQuery;
+  where: () => Promise<never[]>;
+}
+
+const emptyRowQuery = (): EmptyRowQuery => {
+  const query: EmptyRowQuery = {
+    from: () => query,
+    leftJoin: () => query,
+    where: () => Promise.resolve([]),
+  };
+
+  return query;
+};
+
 vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  createDatabase: () => Promise.resolve({}),
+  createDatabase: () => Promise.resolve({ select: () => emptyRowQuery() }),
 }));
 
 vi.mock("@keeper.sh/broadcast", () => ({
@@ -304,6 +320,7 @@ const makeHarness = async (overrides: HarnessOverrides = {}): Promise<Harness> =
         return Promise.resolve(calendarIds.get(userId) ?? []);
       },
       listOAuthCredentials: () => Promise.resolve([]),
+      listPushChannels: () => Promise.resolve([]),
       redis: trackingRedis,
       residue: {
         clear: () => Promise.resolve(),

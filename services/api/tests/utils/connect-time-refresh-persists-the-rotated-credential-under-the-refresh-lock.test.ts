@@ -5,12 +5,19 @@ import type { createOAuthSource as createOAuthSourceFn } from "../../src/utils/o
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
-let calendarAccountInserts: Record<string, unknown>[] = [];
-let calendarAccountUpdates: Record<string, unknown>[] = [];
+interface RecordedUpdate {
+  table: string;
+  values: Record<string, unknown>;
+}
+
+let recordedUpdates: RecordedUpdate[] = [];
+let refreshCalls: string[] = [];
+let userInfoTokens: string[] = [];
+let lockedCredentialIds: string[] = [];
+let refreshRanUnderLock: boolean[] = [];
+let lockDepth = 0;
 let selectResults: unknown[][] = [];
 let txInstance: object = {};
-let fetchUserInfoCalls: string[] = [];
-let providerAccountId = "google-sub-x";
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -30,10 +37,8 @@ const createSelectBuilder = (result: unknown[]): SelectPromise => {
   return chain;
 };
 
-const createInsertBuilder = (result: unknown, record: (values: unknown) => void) => ({
-  values: (values: unknown) => {
-    record(values);
-
+const createInsertBuilder = (result: unknown) => ({
+  values: () => {
     const conflictChain = Promise.resolve() as Promise<void> & {
       returning: () => Promise<unknown>;
     };
@@ -67,27 +72,23 @@ const insertForTable = (table: unknown) => {
   const tableName = getTableName(table as never);
 
   if (tableName === "calendar_accounts") {
-    return createInsertBuilder([{ id: "account-1" }], (values) => {
-      calendarAccountInserts.push(values as Record<string, unknown>);
-    });
+    return createInsertBuilder([{ id: "account-1" }]);
   }
 
   if (tableName === "ical_feeds") {
-    return createInsertBuilder([DEFAULT_FEED_ROW], () => {});
+    return createInsertBuilder([DEFAULT_FEED_ROW]);
   }
 
   if (tableName === "ical_feed_calendars") {
-    return createInsertBuilder([], () => {});
+    return createInsertBuilder([]);
   }
 
-  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], () => {});
+  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }]);
 };
 
-const createUpdateBuilder = (table: unknown) => ({
-  set: (values: unknown) => {
-    if (getTableName(table as never) === "calendar_accounts") {
-      calendarAccountUpdates.push(values as Record<string, unknown>);
-    }
+const updateForTable = (table: unknown) => ({
+  set: (values: Record<string, unknown>) => {
+    recordedUpdates.push({ table: getTableName(table as never), values });
 
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
@@ -101,7 +102,7 @@ const createUpdateBuilder = (table: unknown) => ({
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
   insert: insertForTable,
-  update: createUpdateBuilder,
+  update: updateForTable,
   select: () => createSelectBuilder(selectResults.shift() ?? []),
   selectDistinct: () => ({
     from: () => ({}),
@@ -117,28 +118,33 @@ beforeAll(async () => {
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
-      insert: () => {
-        throw new Error("global database.insert should not be used");
-      },
-      select: () => {
-        throw new Error("global database.select should not be used");
-      },
+      insert: insertForTable,
+      select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),
       }),
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
+      update: updateForTable,
     },
     encryptionKey: "encryption-key",
     oauthProviders: {
-      getProvider: (providerId: string) => ({
+      getProvider: () => ({
         exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
         fetchUserInfo: (accessToken: string) => {
-          fetchUserInfoCalls.push(accessToken);
-          return Promise.resolve({ email: `${providerId}@example.com`, id: providerAccountId });
+          userInfoTokens.push(accessToken);
+          return Promise.resolve({ email: "person@example.com", id: "google-sub-x" });
         },
         getAuthorizationUrl: () => Promise.reject(new Error("not used")),
         hasRequiredScopes: () => true,
-        refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
+        refreshAccessToken: (refreshToken: string) => {
+          refreshCalls.push(refreshToken);
+          refreshRanUnderLock.push(lockDepth > 0);
+          return Promise.resolve({
+            access_token: "fresh-access-token",
+            expires_in: 3600,
+            refresh_token: "rotated-refresh-token",
+          });
+        },
       }),
       hasRequiredScopes: () => true,
       isOAuthProvider: () => true,
@@ -190,6 +196,18 @@ beforeAll(async () => {
     isCalDAVProvider: () => false,
     isOAuthProvider: () => true,
     isProviderId: () => true,
+    runWithCredentialRefreshLock: async (
+      oauthCredentialId: string,
+      runRefresh: () => Promise<unknown>,
+    ) => {
+      lockedCredentialIds.push(oauthCredentialId);
+      lockDepth += 1;
+      try {
+        return await runRefresh();
+      } finally {
+        lockDepth -= 1;
+      }
+    },
   }));
 
   ({ createOAuthSource } = await import("../../src/utils/oauth-sources"));
@@ -200,73 +218,64 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  calendarAccountInserts = [];
-  calendarAccountUpdates = [];
+  recordedUpdates = [];
+  refreshCalls = [];
+  userInfoTokens = [];
+  lockedCredentialIds = [];
+  refreshRanUnderLock = [];
+  lockDepth = 0;
   selectResults = [];
-  fetchUserInfoCalls = [];
-  providerAccountId = "google-sub-x";
   txInstance = createTxInstance();
 });
 
-const CREDENTIAL_ROW = {
-  accessToken: "access-token-1",
+const nearlyExpiredCredentialRow = () => ({
+  accessToken: "stale-access-token",
   email: "person@example.com",
-  expiresAt: new Date(Date.now() + 3_600_000),
+  expiresAt: new Date(Date.now() + 30_000),
   needsReauthentication: false,
-  provider: "google",
-  refreshToken: "refresh-token-1",
-};
+  provider: "outlook",
+  refreshToken: "stored-refresh-token",
+});
 
-describe("Source add records no fabricated provider account id", () => {
-  it("records the provider's own account id on the calendar account row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    await createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    expect(calendarAccountInserts).toHaveLength(1);
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).toBe("google-sub-x");
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
+const connect = () =>
+  createOAuthSource({
+    externalCalendarId: "primary",
+    name: "Work",
+    oauthCredentialId: "credential-1",
+    provider: "outlook",
+    userId: "user-1",
   });
 
-  it("does not reuse the row id as a stand-in provider account id", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
+describe("Connect time refresh persists the rotated credential under the refresh lock", () => {
+  it("writes the rotated refresh token and the new expiry to oauth_credentials", async () => {
+    selectResults = [[nearlyExpiredCredentialRow()], [], [], []];
+    const before = Date.now();
 
-    await createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
+    await connect();
 
-    const [accountRow] = calendarAccountInserts;
+    expect(refreshCalls).toEqual(["stored-refresh-token"]);
+    expect(userInfoTokens).toEqual(["fresh-access-token"]);
 
-    expect(accountRow?.accountId).not.toBe(accountRow?.id);
-    expect(accountRow?.accountId).not.toBe("credential-1");
+    const credentialUpdates = recordedUpdates.filter(
+      (update) => update.table === "oauth_credentials",
+    );
+
+    expect(credentialUpdates).toHaveLength(1);
+    expect(credentialUpdates[0]?.values.accessToken).toBe("fresh-access-token");
+    expect(credentialUpdates[0]?.values.refreshToken).toBe("rotated-refresh-token");
+
+    const expiresAt = credentialUpdates[0]?.values.expiresAt as Date;
+    expect(expiresAt).toBeInstanceOf(Date);
+    expect(expiresAt.getTime()).toBeGreaterThanOrEqual(before + 3_600_000 - 5000);
+    expect(expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 3_600_000 + 5000);
   });
 
-  it("adopts the provider account id onto a reused calendar row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [{ id: "account-legacy" }], []];
+  it("runs the connect time refresh inside the credential refresh lock", async () => {
+    selectResults = [[nearlyExpiredCredentialRow()], [], [], []];
 
-    await createOAuthSource({
-      externalCalendarId: "secondary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
+    await connect();
 
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-    expect(calendarAccountInserts).toEqual([]);
-    expect(calendarAccountUpdates).toEqual([{ accountId: "google-sub-x" }]);
+    expect(lockedCredentialIds).toEqual(["credential-1"]);
+    expect(refreshRanUnderLock).toEqual([true]);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { widelog, widelogger } from "widelogger";
+import { createDeleteUserTeardown } from "../src/delete-user-teardown";
 import { createAuth } from "../src/index";
 import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -217,5 +218,60 @@ describe("polar customer removal during deletion", () => {
       parsedErrorMessages.includes("polar unavailable");
 
     expect(surfaced).toBe(true);
+  });
+});
+
+const blockingFailure = () =>
+  Object.assign(new Error("push_channels residue for user-1 could not be captured"), {
+    name: "TeardownBlockedError",
+  });
+
+describe("a blocking teardown failure reaches beforeDelete", () => {
+  it("rethrows the blocking failure and never runs the steps behind it", async () => {
+    const later = vi.fn(() => Promise.resolve());
+    const recordResidue = vi.fn(() => Promise.resolve());
+    const quiesce = createDeleteUserTeardown(
+      [
+        { name: "sync", run: () => Promise.reject(blockingFailure()) },
+        { name: "later", run: later },
+      ],
+      9000,
+      { recordResidue },
+    );
+
+    await captureWideEvents(async () => {
+      const outcome: unknown = await quiesce("user-1").then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(outcome).toBeInstanceOf(Error);
+      expect((outcome as Error).name).toBe("TeardownBlockedError");
+      expect(later).not.toHaveBeenCalled();
+    });
+  });
+
+  it("keeps swallowing an ordinary step failure and still records its residue", async () => {
+    const later = vi.fn(() => Promise.resolve());
+    const recordResidue = vi.fn(() => Promise.resolve());
+    const quiesce = createDeleteUserTeardown(
+      [
+        { name: "polar_customer", run: () => Promise.reject(new Error("polar unavailable")) },
+        { name: "later", run: later },
+      ],
+      9000,
+      { recordResidue },
+    );
+
+    await captureWideEvents(async () => {
+      await expect(quiesce("user-1")).resolves.toBeUndefined();
+    });
+
+    expect(later).toHaveBeenCalledWith("user-1");
+    expect(recordResidue).toHaveBeenCalledWith({
+      externalId: "user-1",
+      kind: "polar_customer",
+      userId: "user-1",
+    });
   });
 });

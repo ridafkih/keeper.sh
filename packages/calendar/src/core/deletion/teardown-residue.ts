@@ -7,6 +7,7 @@ const OAUTH_GRANT_RESIDUE_KIND = "oauth_grant";
 const PUSH_CHANNEL_RESIDUE_KIND = "push_channel";
 const POLAR_CUSTOMER_RESIDUE_KIND = "polar_customer";
 const RESIDUE_REPAIR_MARGIN_MS = 24 * 60 * 60 * 1000;
+const MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION = 5;
 
 const RESIDUE_LIFETIME_MS =
   Math.max(GOOGLE_WATCH_MAX_LIFETIME_MS, GRAPH_SUBSCRIPTION_MAX_LIFETIME_MS)
@@ -46,6 +47,7 @@ interface TeardownResidueRecord extends TeardownResidueDraft {
 interface TeardownResidueStore {
   clear: (residueId: string) => Promise<void>;
   deleteForUser: (userId: string, kind: string) => Promise<number>;
+  hasUnreapedPushResidue?: (userId: string, provider: string) => Promise<boolean>;
   list: () => Promise<TeardownResidueRecord[]>;
   purgeOrphaned: (now: Date) => Promise<string[]>;
   record: (draft: TeardownResidueDraft) => Promise<void>;
@@ -54,6 +56,7 @@ interface TeardownResidueStore {
 type TeardownResidueRecorder = TeardownResidueStore["record"];
 
 export {
+  MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
   OAUTH_GRANT_RESIDUE_KIND,
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,

@@ -24,6 +24,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
+import type { database as databaseInstance } from "@/context";
 
 const DEREGISTRATION_ERROR_PREFIX = "push_channel.disconnect_error";
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
@@ -508,9 +509,92 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
   throw new Error(`No push notification url is defined for provider ${provider}`);
 };
 
+type PushChannelScopeColumn = "accountId" | "calendarId" | "userId";
+
+interface TeardownPushChannel {
+  credential: TeardownResidueCredential | null;
+  provider: string;
+  providerChannelId: string | null;
+  providerResourceId: string | null;
+  userId: string;
+}
+
+const selectLivePushChannels = async (
+  database: typeof databaseInstance,
+  scopeColumn: PushChannelScopeColumn,
+  scope: string,
+  states: PushChannelState[],
+): Promise<StoredPushChannel[]> => {
+  const rows = await database
+    .select()
+    .from(calendarPushChannelsTable)
+    .where(and(
+      eq(calendarPushChannelsTable[scopeColumn], scope),
+      inArray(calendarPushChannelsTable.state, states),
+    ));
+
+  return rows.map((row) => ({ ...row, state: toPushChannelState(row.state) }));
+};
+
+const userTeardownPushChannelStates = (): PushChannelState[] =>
+  PUSH_CHANNEL_STATES.filter((state) => state !== STOPPED_STATE);
+
+const teardownResidueCredentialOf = (row: {
+  accessToken: string | null;
+  expiresAt: Date | null;
+  refreshToken: string | null;
+}): TeardownResidueCredential | null => {
+  if (row.accessToken === null) {
+    return null;
+  }
+
+  return {
+    accessToken: row.accessToken,
+    expiresAt: row.expiresAt,
+    refreshToken: row.refreshToken,
+  };
+};
+
+const listUserTeardownPushChannels = async (
+  userId: string,
+): Promise<TeardownPushChannel[]> => {
+  const { database } = await import("@/context");
+  const rows = await database
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      provider: calendarPushChannelsTable.provider,
+      providerChannelId: calendarPushChannelsTable.providerChannelId,
+      providerResourceId: calendarPushChannelsTable.providerResourceId,
+      refreshToken: oauthCredentialsTable.refreshToken,
+      userId: calendarPushChannelsTable.userId,
+    })
+    .from(calendarPushChannelsTable)
+    .leftJoin(
+      calendarAccountsTable,
+      eq(calendarAccountsTable.id, calendarPushChannelsTable.accountId),
+    )
+    .leftJoin(
+      oauthCredentialsTable,
+      eq(oauthCredentialsTable.id, calendarAccountsTable.oauthCredentialId),
+    )
+    .where(and(
+      eq(calendarPushChannelsTable.userId, userId),
+      inArray(calendarPushChannelsTable.state, userTeardownPushChannelStates()),
+    ));
+
+  return rows.map((row) => ({
+    credential: teardownResidueCredentialOf(row),
+    provider: row.provider,
+    providerChannelId: row.providerChannelId,
+    providerResourceId: row.providerResourceId,
+    userId: row.userId,
+  }));
+};
+
 const deregisterPushChannelsWithin = async (
   scopeId: string,
-  scopeColumn: "accountId" | "calendarId" | "userId",
+  scopeColumn: PushChannelScopeColumn,
   states: PushChannelState[],
   signal: AbortSignal | null,
   requireEveryChannelStopped: boolean,
@@ -593,16 +677,7 @@ const deregisterPushChannelsWithin = async (
         signal: AbortSignal.timeout(DISCONNECT_TIMEOUT_MS),
       };
     },
-    listLiveChannels: async (scope) => {
-      const rows = await database
-        .select()
-        .from(calendarPushChannelsTable)
-        .where(and(
-          eq(calendarPushChannelsTable[scopeColumn], scope),
-          inArray(calendarPushChannelsTable.state, states),
-        ));
-      return rows.map((row) => ({ ...row, state: toPushChannelState(row.state) }));
-    },
+    listLiveChannels: (scope) => selectLivePushChannels(database, scopeColumn, scope, states),
     markChannelsStopped: async (channelIds) => {
       await database
         .update(calendarPushChannelsTable)
@@ -679,7 +754,7 @@ const deregisterUserPushChannels = async (
   await deregisterPushChannelsWithin(
     userId,
     "userId",
-    PUSH_CHANNEL_STATES.filter((state) => state !== STOPPED_STATE),
+    userTeardownPushChannelStates(),
     signal,
     true,
     DISCONNECT_CONCURRENCY,
@@ -718,6 +793,7 @@ export {
   deregisterAccountPushChannels,
   deregisterCalendarPushChannels,
   deregisterUserPushChannels,
+  listUserTeardownPushChannels,
   runDeregisterAccountPushChannels,
   runDeregisterPushChannels,
   runDeregisterPushChannelsOutcome,
@@ -728,4 +804,5 @@ export type {
   AbandonedPushChannelResidue,
   DeregisterPushChannelsDependencies,
   DeregisterPushChannelsOutcome,
+  TeardownPushChannel,
 };

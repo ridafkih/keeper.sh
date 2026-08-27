@@ -110,12 +110,12 @@ describe("a google credential linked to no calendar account does not block every
     });
   });
 
-  it("resolves the identity when the only survivor is an unlinked null-email credential", async () => {
+  it("leaves the identity unresolved when the only survivor is an unlinked null-email credential", async () => {
     await insertUnrelatedSurvivor(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
       coHolders: 0,
-      identityResolved: true,
+      identityResolved: false,
     });
   });
 

@@ -57,6 +57,7 @@ describe("delete user teardown tombstone abort", () => {
       fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: () => Promise.resolve([]),
       listOAuthCredentials: () => Promise.resolve([]),
+      listPushChannels: () => Promise.resolve([]),
       redis,
       residue: {
         clear: () => Promise.resolve(),

@@ -590,6 +590,7 @@ export {
   deleteUserTeardownUnavailable,
   RESIDUE_WRITE_FAILED_SLUG,
   SYNC_TEARDOWN_TIMEOUT_MS,
+  TEARDOWN_BLOCKED_ERROR_NAME,
 } from "./delete-user-teardown";
 export type {
   DeleteUserResidueDraft,

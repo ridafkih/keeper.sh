@@ -189,6 +189,7 @@ describe("a rolled back delete discards push residue that lands after the abort 
             },
           ]),
         redis,
+        listPushChannels: () => Promise.resolve([]),
         residue: residue.store,
       };
 

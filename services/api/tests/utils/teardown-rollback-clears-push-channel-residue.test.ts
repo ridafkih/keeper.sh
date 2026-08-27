@@ -181,6 +181,7 @@ describe("a rolled back delete clears push channel residue, not only oauth grant
             userId: ROLLED_BACK_USER,
           },
         ]),
+      listPushChannels: () => Promise.resolve([]),
       redis: redis.redis,
       residue: residue.store,
     };

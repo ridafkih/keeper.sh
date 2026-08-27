@@ -1,8 +1,12 @@
-import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { decryptPassword, encryptPassword } from "@keeper.sh/database";
 import { user } from "@keeper.sh/database/auth-schema";
 import { deletionResidueTable } from "@keeper.sh/database/schema";
-import { RESIDUE_LIFETIME_MS } from "./teardown-residue";
+import {
+  MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  RESIDUE_LIFETIME_MS,
+} from "./teardown-residue";
 import type {
   TeardownResidueCredential,
   TeardownResidueDraft,
@@ -155,6 +159,24 @@ const createTeardownResidueStore = (
       .returning({ id: deletionResidueTable.id });
 
     return rows.length;
+  },
+  hasUnreapedPushResidue: async (userId: string, provider: string) => {
+    const rows = await config.database
+      .select({ id: deletionResidueTable.id })
+      .from(deletionResidueTable)
+      .where(and(
+        eq(deletionResidueTable.userId, userId),
+        eq(deletionResidueTable.provider, provider),
+        eq(deletionResidueTable.kind, PUSH_CHANNEL_RESIDUE_KIND),
+        lt(
+          deletionResidueTable.attempts,
+          MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
+        ),
+        sql`not ${userRowExists()}`,
+      ))
+      .limit(1);
+
+    return rows.length > 0;
   },
   list: async () => {
     const claimedAt = config.now();

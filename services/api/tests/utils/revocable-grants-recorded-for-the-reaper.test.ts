@@ -200,6 +200,7 @@ const makeDependencies = (options: {
   listCalendarIds: () => Promise.resolve([]),
   listOAuthCredentials: (userId: string) =>
     Promise.resolve(options.credentials.filter((row) => row.userId === userId)),
+  listPushChannels: () => Promise.resolve([]),
   redis: {
     del: () => Promise.resolve(1),
     exists: () => Promise.resolve(0),

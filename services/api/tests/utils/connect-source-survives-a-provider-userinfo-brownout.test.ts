@@ -6,11 +6,9 @@ let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
 let calendarAccountInserts: Record<string, unknown>[] = [];
-let calendarAccountUpdates: Record<string, unknown>[] = [];
+let calendarSourceInserts: Record<string, unknown>[] = [];
 let selectResults: unknown[][] = [];
 let txInstance: object = {};
-let fetchUserInfoCalls: string[] = [];
-let providerAccountId = "google-sub-x";
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -80,15 +78,13 @@ const insertForTable = (table: unknown) => {
     return createInsertBuilder([], () => {});
   }
 
-  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], () => {});
+  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], (values) => {
+    calendarSourceInserts.push(...(values as Record<string, unknown>[]));
+  });
 };
 
-const createUpdateBuilder = (table: unknown) => ({
-  set: (values: unknown) => {
-    if (getTableName(table as never) === "calendar_accounts") {
-      calendarAccountUpdates.push(values as Record<string, unknown>);
-    }
-
+const createUpdateBuilder = () => ({
+  set: () => {
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
     };
@@ -117,25 +113,19 @@ beforeAll(async () => {
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
-      insert: () => {
-        throw new Error("global database.insert should not be used");
-      },
-      select: () => {
-        throw new Error("global database.select should not be used");
-      },
+      insert: insertForTable,
+      select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),
       }),
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
+      update: createUpdateBuilder,
     },
     encryptionKey: "encryption-key",
     oauthProviders: {
-      getProvider: (providerId: string) => ({
+      getProvider: () => ({
         exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
-        fetchUserInfo: (accessToken: string) => {
-          fetchUserInfoCalls.push(accessToken);
-          return Promise.resolve({ email: `${providerId}@example.com`, id: providerAccountId });
-        },
+        fetchUserInfo: () => Promise.reject(new Error("userinfo 503: backend error")),
         getAuthorizationUrl: () => Promise.reject(new Error("not used")),
         hasRequiredScopes: () => true,
         refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
@@ -201,10 +191,8 @@ afterAll(() => {
 
 beforeEach(() => {
   calendarAccountInserts = [];
-  calendarAccountUpdates = [];
+  calendarSourceInserts = [];
   selectResults = [];
-  fetchUserInfoCalls = [];
-  providerAccountId = "google-sub-x";
   txInstance = createTxInstance();
 });
 
@@ -217,11 +205,11 @@ const CREDENTIAL_ROW = {
   refreshToken: "refresh-token-1",
 };
 
-describe("Source add records no fabricated provider account id", () => {
-  it("records the provider's own account id on the calendar account row", async () => {
+describe("Connect source survives a provider userinfo brownout", () => {
+  it("creates the source with a null provider account id when userinfo fails", async () => {
     selectResults = [[CREDENTIAL_ROW], [], [], []];
 
-    await createOAuthSource({
+    const source = await createOAuthSource({
       externalCalendarId: "primary",
       name: "Work",
       oauthCredentialId: "credential-1",
@@ -229,44 +217,9 @@ describe("Source add records no fabricated provider account id", () => {
       userId: "user-1",
     });
 
+    expect(source.id).toBe("source-1");
+    expect(calendarSourceInserts).toHaveLength(1);
     expect(calendarAccountInserts).toHaveLength(1);
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).toBe("google-sub-x");
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-  });
-
-  it("does not reuse the row id as a stand-in provider account id", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    await createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).not.toBe(accountRow?.id);
-    expect(accountRow?.accountId).not.toBe("credential-1");
-  });
-
-  it("adopts the provider account id onto a reused calendar row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [{ id: "account-legacy" }], []];
-
-    await createOAuthSource({
-      externalCalendarId: "secondary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-    expect(calendarAccountInserts).toEqual([]);
-    expect(calendarAccountUpdates).toEqual([{ accountId: "google-sub-x" }]);
+    expect(calendarAccountInserts[0]?.accountId).toBeNull();
   });
 });

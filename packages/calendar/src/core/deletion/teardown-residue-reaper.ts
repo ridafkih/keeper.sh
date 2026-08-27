@@ -1,4 +1,5 @@
 import {
+  MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
   OAUTH_GRANT_RESIDUE_KIND,
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
@@ -14,8 +15,8 @@ import type {
 const RESIDUE_REPAIR_FAILED_SLUG = "teardown-residue-repair-failed";
 const RESIDUE_STALE_SLUG = "teardown-residue-stale";
 const RESIDUE_IDENTITY_UNRESOLVED_SLUG = "teardown-residue-identity-unresolved";
+const RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG = "teardown-residue-retired-unrevoked";
 const NO_ATTEMPTS = 0;
-const MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION = 5;
 const MAX_RESIDUE_REPAIR_ATTEMPTS = 6;
 const PERMANENT_FAILURE_ATTEMPT_CAP = 24;
 const NO_SURVIVING_ACCOUNT_LINKS = 0;
@@ -266,12 +267,11 @@ const outlivesItsProviderChannel = (
   now: Date,
 ): boolean => record.kind === PUSH_CHANNEL_RESIDUE_KIND && isPastExpiry(record, now);
 
-const awaitsPushChannelReaping = (
+const claimedBatchHoldsPushResidue = (
   record: TeardownResidueRecord,
   records: TeardownResidueRecord[],
 ): boolean =>
-  record.kind === OAUTH_GRANT_RESIDUE_KIND
-  && records.some(
+  records.some(
     (candidate) =>
       candidate.kind === PUSH_CHANNEL_RESIDUE_KIND
       && candidate.userId === record.userId
@@ -279,6 +279,41 @@ const awaitsPushChannelReaping = (
       && (candidate.attempts ?? NO_ATTEMPTS)
         < MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
   );
+
+const storeHoldsPushResidue = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+): Promise<boolean> => {
+  const askStore = dependencies.residue.hasUnreapedPushResidue;
+
+  if (!askStore || !record.provider) {
+    return false;
+  }
+
+  try {
+    return await askStore(record.userId, record.provider);
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
+
+    return true;
+  }
+};
+
+const awaitsPushChannelReaping = (
+  record: TeardownResidueRecord,
+  records: TeardownResidueRecord[],
+  dependencies: TeardownResidueReaperDependencies,
+): Promise<boolean> => {
+  if (record.kind !== OAUTH_GRANT_RESIDUE_KIND) {
+    return Promise.resolve(false);
+  }
+
+  if (claimedBatchHoldsPushResidue(record, records)) {
+    return Promise.resolve(true);
+  }
+
+  return storeHoldsPushResidue(record, dependencies);
+};
 
 const residueRecordedAt = (record: TeardownResidueRecord): Date | null => {
   if (record.createdAt instanceof Date) {
@@ -309,24 +344,75 @@ const awaitsTheInFlightPushResidueWindow = (
   return now.getTime() - recordedAt.getTime() < GRANT_REVOCATION_QUIET_PERIOD_MS;
 };
 
+const clearResidueOrRecordFailure = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+  failedIds: string[],
+): Promise<boolean> => {
+  try {
+    await dependencies.residue.clear(record.id);
+
+    return true;
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
+    failedIds.push(record.id);
+
+    return false;
+  }
+};
+
+interface ResidueRetirementLedger {
+  expiredIds: string[];
+  failedIds: string[];
+  retirementReasons: Record<string, ResidueRetirementReason>;
+}
+
+const retireResidue = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+  reason: ResidueRetirementReason,
+  ledger: ResidueRetirementLedger,
+): Promise<void> => {
+  if (!(await clearResidueOrRecordFailure(record, dependencies, ledger.failedIds))) {
+    return;
+  }
+
+  ledger.expiredIds.push(record.id);
+  ledger.retirementReasons[record.id] = reason;
+};
+
+const purgeOrphanedOrRecordFailure = async (
+  dependencies: TeardownResidueReaperDependencies,
+  now: Date,
+): Promise<string[]> => {
+  try {
+    return await dependencies.residue.purgeOrphaned(now);
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
+
+    return [];
+  }
+};
+
 const createTeardownResidueReaper = (
   dependencies: TeardownResidueReaperDependencies,
 ) =>
 async (): Promise<TeardownResidueReaperOutcome> => {
   const now = dependencies.now();
-  const purgedIds = await dependencies.residue.purgeOrphaned(now);
+  const purgedIds = await purgeOrphanedOrRecordFailure(dependencies, now);
   const records = await dependencies.residue.list();
   const clearedIds: string[] = [];
   const deferredIds: string[] = [];
   const expiredIds: string[] = [];
   const retirementReasons: Record<string, ResidueRetirementReason> = {};
   const failedIds: string[] = [];
+  const retiredUnrevokedIds: string[] = [];
   const revocationSkippedIds: string[] = [];
   const unresolvedIds: string[] = [];
 
   for (const record of records) {
     if (
-      awaitsPushChannelReaping(record, records)
+      (await awaitsPushChannelReaping(record, records, dependencies))
       || awaitsTheInFlightPushResidueWindow(record, now)
     ) {
       deferredIds.push(record.id);
@@ -334,9 +420,11 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     }
 
     if (outlivesItsProviderChannel(record, now)) {
-      await dependencies.residue.clear(record.id);
-      expiredIds.push(record.id);
-      retirementReasons[record.id] = "outlived_its_provider_channel";
+      await retireResidue(record, dependencies, "outlived_its_provider_channel", {
+        expiredIds,
+        failedIds,
+        retirementReasons,
+      });
       continue;
     }
 
@@ -360,9 +448,18 @@ async (): Promise<TeardownResidueReaperOutcome> => {
         const unresolvedRetirement = retirementReason(record, now);
 
         if (unresolvedRetirement) {
-          await dependencies.residue.clear(record.id);
-          expiredIds.push(record.id);
-          retirementReasons[record.id] = unresolvedRetirement;
+          dependencies.recordError(
+            new Error(
+              `OAuth grant residue ${record.id} for user ${record.userId} is being retired without revoking the ${record.provider} grant held for ${record.accountEmail ?? "an unknown account"}; that refresh token stays live and unaccounted for`,
+            ),
+            RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
+          );
+          retiredUnrevokedIds.push(record.id);
+          await retireResidue(record, dependencies, unresolvedRetirement, {
+            expiredIds,
+            failedIds,
+            retirementReasons,
+          });
           continue;
         }
 
@@ -376,7 +473,10 @@ async (): Promise<TeardownResidueReaperOutcome> => {
         continue;
       }
 
-      await dependencies.residue.clear(record.id);
+      if (!(await clearResidueOrRecordFailure(record, dependencies, failedIds))) {
+        continue;
+      }
+
       clearedIds.push(record.id);
 
       if (repairOutcome === "revocation_skipped") {
@@ -388,9 +488,11 @@ async (): Promise<TeardownResidueReaperOutcome> => {
       const failureRetirement = retirementReason(record, now);
 
       if (failureRetirement) {
-        await dependencies.residue.clear(record.id);
-        expiredIds.push(record.id);
-        retirementReasons[record.id] = failureRetirement;
+        await retireResidue(record, dependencies, failureRetirement, {
+          expiredIds,
+          failedIds,
+          retirementReasons,
+        });
         continue;
       }
 
@@ -407,6 +509,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
       (id) => retirementReasons[id] === "permanent_failure_attempt_cap",
     ).length,
     "teardown_residue.purged_count": purgedIds.length,
+    "teardown_residue.retired_unrevoked_count": retiredUnrevokedIds.length,
     "teardown_residue.retirement_reasons": retirementReasons,
     "teardown_residue.revocation_skipped_count": revocationSkippedIds.length,
     "teardown_residue.scanned_count": records.length,
@@ -428,6 +531,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 export {
   createTeardownResidueReaper,
   GRANT_REVOCATION_QUIET_PERIOD_MS,
+  RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
   RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,
   RESIDUE_STALE_SLUG,

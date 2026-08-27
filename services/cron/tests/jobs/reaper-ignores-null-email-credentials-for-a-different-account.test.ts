@@ -124,11 +124,11 @@ describe("a null-email credential proven to hold a different account is not a co
     expect(census.identityResolved).toBe(true);
   });
 
-  it("resolves the answer for a null-email credential with no calendar account row at all", async () => {
+  it("leaves the answer unresolved for a null-email credential with no calendar account row at all", async () => {
     await insertSurvivorWithNullEmailCredential();
 
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    ).toEqual({ coHolders: 0, identityResolved: false });
   });
 });

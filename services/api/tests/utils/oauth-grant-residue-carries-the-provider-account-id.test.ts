@@ -32,6 +32,7 @@ class AbandonedPushChannelError extends Error {}
 vi.mock("@/utils/push-notifications/deregister-account-channels", () => ({
   AbandonedPushChannelError,
   deregisterUserPushChannels: () => Promise.resolve(0),
+  listUserTeardownPushChannels: () => Promise.resolve([]),
 }));
 
 const DDL = `

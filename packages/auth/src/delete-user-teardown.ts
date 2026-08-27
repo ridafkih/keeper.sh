@@ -3,6 +3,7 @@ import { widelog } from "widelogger";
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const RESIDUE_WRITE_FAILED_SLUG = "delete-user-teardown-residue-write-failed";
 const TEARDOWN_BUDGET_MS = 9000;
+const TEARDOWN_BLOCKED_ERROR_NAME = "TeardownBlockedError";
 const SYNC_TEARDOWN_TIMEOUT_MS = 8000;
 
 interface DeleteUserTeardownStep {
@@ -26,6 +27,9 @@ interface DeleteUserTeardownOptions {
 }
 
 const NO_RESIDUE: DeleteUserTeardownOptions = { recordResidue: null };
+
+const isBlockingTeardownFailure = (error: unknown): boolean =>
+  error instanceof Error && error.name === TEARDOWN_BLOCKED_ERROR_NAME;
 
 const runWithDeadline = async (
   name: string,
@@ -110,6 +114,10 @@ const createDeleteUserTeardown = (
         reportStepFailure(error, step.name, userId, TEARDOWN_FAILED_SLUG);
 
         await recordStepResidue(options.recordResidue, step.name, userId);
+
+        if (isBlockingTeardownFailure(error)) {
+          throw error;
+        }
       }
     }
   };
@@ -138,6 +146,7 @@ const deleteUserTeardownUnavailable: DeleteUserTeardown = (userId: string) =>
 
 export {
   createDeleteUserTeardown,
+  TEARDOWN_BLOCKED_ERROR_NAME,
   RESIDUE_WRITE_FAILED_SLUG,
   createSkippedDeleteUserTeardown,
   deleteUserResidueUnavailable,

@@ -6,18 +6,27 @@ import {
   calendarsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
+import { calendarRowProviderIdentity } from "@keeper.sh/database/provider-account-identity";
 import { widelog } from "@/utils/logging";
 import {
   AbandonedPushChannelError,
   deregisterUserPushChannels,
+  listUserTeardownPushChannels,
 } from "@/utils/push-notifications/deregister-account-channels";
-import { RESIDUE_WRITE_FAILED_SLUG, SYNC_TEARDOWN_TIMEOUT_MS } from "@keeper.sh/auth";
+import {
+  RESIDUE_WRITE_FAILED_SLUG,
+  SYNC_TEARDOWN_TIMEOUT_MS,
+  TEARDOWN_BLOCKED_ERROR_NAME,
+} from "@keeper.sh/auth";
 import {
   OAUTH_GRANT_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
   TEARDOWN_RESIDUE_KINDS,
 } from "@keeper.sh/calendar";
-import type { AbandonedPushChannelResidue } from "@/utils/push-notifications/deregister-account-channels";
+import type {
+  AbandonedPushChannelResidue,
+  TeardownPushChannel,
+} from "@/utils/push-notifications/deregister-account-channels";
 import type {
   GoogleRevocationFetch,
   RedisTombstoneClient,
@@ -39,6 +48,7 @@ const PUSH_CHANNELS_TIMEOUT_MS = 3000;
 const OAUTH_GRANTS_TIMEOUT_MS = 1000;
 const RESIDUE_WRITE_RESERVE_MS = 800;
 const REVOCABLE_OAUTH_PROVIDER = "google";
+const PUSH_CHANNELS_STEP = "push_channels";
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
@@ -98,6 +108,7 @@ interface DeleteUserSyncTeardownDependencies {
   fetchImpl: GoogleRevocationFetch;
   listCalendarIds: (userId: string) => Promise<string[]>;
   listOAuthCredentials: (userId: string) => Promise<DeleteUserOAuthCredential[]>;
+  listPushChannels: (userId: string) => Promise<TeardownPushChannel[]>;
   redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
   residue: TeardownResidueStore;
 }
@@ -177,6 +188,130 @@ const recordOAuthGrantResidue = async (
   }
 };
 
+interface PushChannelCapture {
+  captured: number;
+  dialable: number;
+}
+
+class TeardownBlockedError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = TEARDOWN_BLOCKED_ERROR_NAME;
+  }
+}
+
+const requireOwnPushChannels = (
+  channels: TeardownPushChannel[],
+  userId: string,
+): TeardownPushChannel[] => {
+  const foreign = channels.filter((channel) => channel.userId !== userId);
+
+  if (foreign.length > 0) {
+    throw new Error(
+      `Refusing to record push channel residue for user ${userId}: ${foreign.length} channel `
+        + `rows carry another user id`,
+    );
+  }
+
+  return channels;
+};
+
+const recordPushChannelResidue = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  channel: TeardownPushChannel,
+  providerChannelId: string,
+): Promise<boolean> => {
+  try {
+    await residue.record({
+      kind: PUSH_CHANNEL_RESIDUE_KIND,
+      provider: channel.provider,
+      providerChannelId,
+      userId,
+      ...(channel.credential !== null && { credential: channel.credential }),
+      ...(channel.providerResourceId !== null && {
+        providerResourceId: channel.providerResourceId,
+      }),
+    });
+
+    return true;
+  } catch (error) {
+    reportStepFailure(error, PUSH_CHANNELS_STEP, userId, RESIDUE_WRITE_FAILED_SLUG);
+
+    return false;
+  }
+};
+
+const dialableTeardownChannels = (
+  channels: TeardownPushChannel[],
+): { channel: TeardownPushChannel; providerChannelId: string }[] =>
+  channels.flatMap((channel) => {
+    const { providerChannelId } = channel;
+
+    if (typeof providerChannelId !== "string" || providerChannelId.length === 0) {
+      return [];
+    }
+
+    return [{ channel, providerChannelId }];
+  });
+
+const captureLivePushChannels = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  channels: TeardownPushChannel[],
+): Promise<PushChannelCapture> => {
+  const dialable = dialableTeardownChannels(channels);
+  const recordings: boolean[] = [];
+
+  for (const { channel, providerChannelId } of dialable) {
+    recordings.push(
+      await recordPushChannelResidue(residue, userId, channel, providerChannelId),
+    );
+  }
+
+  const captured = recordings.filter(Boolean).length;
+
+  return { captured, dialable: dialable.length };
+};
+
+const readLivePushChannels = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+): Promise<PushChannelCapture> => {
+  try {
+    return await captureLivePushChannels(
+      dependencies.residue,
+      userId,
+      requireOwnPushChannels(await dependencies.listPushChannels(userId), userId),
+    );
+  } catch (error) {
+    reportStepFailure(error, PUSH_CHANNELS_STEP, userId, RESIDUE_WRITE_FAILED_SLUG);
+
+    throw new TeardownBlockedError(
+      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} could not read the live push `
+        + `channels it must capture, so the delete is blocked rather than cascading them away`,
+      { cause: error },
+    );
+  }
+};
+
+const capturePushChannelResidue = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+): Promise<PushChannelCapture> => {
+  const capture = await readLivePushChannels(dependencies, userId);
+
+  if (capture.captured < capture.dialable) {
+    throw new TeardownBlockedError(
+      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} captured ${capture.captured} of `
+        + `${capture.dialable} live push channels, so the delete is blocked rather than `
+        + `cascading the uncaptured channels away`,
+    );
+  }
+
+  return capture;
+};
+
 const buildDeleteUserSyncSteps = (
   dependencies: DeleteUserSyncTeardownDependencies,
 ): DeleteUserSyncStep[] => [
@@ -219,11 +354,28 @@ const buildDeleteUserSyncSteps = (
     timeoutMs: SYNC_JOBS_TIMEOUT_MS,
   },
   {
-    name: "push_channels",
+    name: PUSH_CHANNELS_STEP,
     run: async (userId, signal) => {
+      const capture = await capturePushChannelResidue(dependencies, userId);
+
+      widelog.setFields({ "delete_user.push_channels_captured": capture.captured });
+
+      throwIfAborted(signal, PUSH_CHANNELS_STEP);
+
       const deregistered = await dependencies.deregisterPushChannels(userId, signal);
 
       widelog.setFields({ "delete_user.push_channels_deregistered": deregistered });
+
+      if (capture.captured === 0 || deregistered < capture.captured) {
+        return;
+      }
+
+      const cleared = await dependencies.residue.deleteForUser(
+        userId,
+        PUSH_CHANNEL_RESIDUE_KIND,
+      );
+
+      widelog.setFields({ "delete_user.push_channels_residue_cleared": cleared });
     },
     timeoutMs: PUSH_CHANNELS_TIMEOUT_MS,
   },
@@ -512,6 +664,10 @@ const createDeleteUserSyncTeardown =
       } catch (error) {
         reportStepFailure(error, step.name, userId, TEARDOWN_FAILED_SLUG);
 
+        if (error instanceof TeardownBlockedError) {
+          throw error;
+        }
+
         lateResidueWrites.push(
           trackLateResidueWrite(
             dependencies,
@@ -697,6 +853,7 @@ const createApiDeleteUserSyncTeardown = (
         .where(eq(calendarsTable.userId, userId));
       return rows.map((row) => row.id);
     },
+    listPushChannels: listUserTeardownPushChannels,
     listOAuthCredentials: (userId) =>
       context.database
         .select({
@@ -704,7 +861,7 @@ const createApiDeleteUserSyncTeardown = (
           accountId: oauthCredentialsTable.id,
           email: oauthCredentialsTable.email,
           provider: oauthCredentialsTable.provider,
-          providerAccountId: sql<string | null>`max(${calendarAccountsTable.accountId})`,
+          providerAccountId: sql<string | null>`max(${calendarRowProviderIdentity()})`,
           refreshToken: oauthCredentialsTable.refreshToken,
           userId: oauthCredentialsTable.userId,
         })
@@ -732,6 +889,7 @@ export {
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,
   TEARDOWN_QUEUE_CONNECTION_OPTIONS,
+  TeardownBlockedError,
 };
 export type {
   DeleteUserOAuthCredential,

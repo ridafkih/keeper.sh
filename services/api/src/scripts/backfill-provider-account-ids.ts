@@ -1,3 +1,4 @@
+import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { database, oauthProviders } from "@/context";
@@ -5,9 +6,11 @@ import { context, destroy, widelog } from "@/utils/logging";
 
 const PUSH_PROVIDERS = ["google", "outlook"];
 const EXPIRY_SKEW_MS = 60_000;
+const MS_PER_SECOND = 1000;
 
 interface BackfillRow {
   accountRowId: string;
+  oauthCredentialId: string;
   provider: string;
   email: string | null;
   accessToken: string;
@@ -27,6 +30,7 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
   database
     .select({
       accountRowId: calendarAccountsTable.id,
+      oauthCredentialId: oauthCredentialsTable.id,
       provider: calendarAccountsTable.provider,
       email: calendarAccountsTable.email,
       accessToken: oauthCredentialsTable.accessToken,
@@ -59,7 +63,21 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
     throw new Error(`No OAuth provider registered for ${row.provider}`);
   }
 
-  const refreshed = await provider.refreshAccessToken(row.refreshToken);
+  const refreshed = await runWithCredentialRefreshLock(row.oauthCredentialId, async () => {
+    const result = await provider.refreshAccessToken(row.refreshToken);
+
+    await database
+      .update(oauthCredentialsTable)
+      .set({
+        accessToken: result.access_token,
+        expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
+        refreshToken: result.refresh_token ?? row.refreshToken,
+      })
+      .where(eq(oauthCredentialsTable.id, row.oauthCredentialId));
+
+    return result;
+  });
+
   return refreshed.access_token;
 };
 
@@ -147,4 +165,4 @@ const run = (): Promise<void> =>
 await run();
 await destroy();
 
-export { selectCandidates };
+export { resolveAccessToken, selectCandidates };

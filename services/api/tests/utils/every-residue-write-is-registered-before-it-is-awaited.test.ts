@@ -191,6 +191,7 @@ describe("every residue write is registered before it is awaited", () => {
             },
           ]),
         redis,
+        listPushChannels: () => Promise.resolve([]),
         residue: residue.store,
       };
 

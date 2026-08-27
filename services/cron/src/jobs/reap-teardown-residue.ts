@@ -7,6 +7,7 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { account as authAccountTable } from "@keeper.sh/database/auth-schema";
+import { calendarRowCarriesAProviderIdentity } from "@keeper.sh/database/provider-account-identity";
 import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
@@ -212,9 +213,6 @@ const revokeOAuthGrant = async (
   );
 };
 
-const calendarRowCarriesAProviderIdentity = (): SQL =>
-  sql`${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '' and ${calendarAccountsTable.accountId} <> ${calendarAccountsTable.id}::text`;
-
 const credentialHoldsTheAccount = (
   provider: string,
   accountEmail: string,
@@ -245,7 +243,7 @@ const calendarRowsNameNoAccountAtAll = (
   sql`${credentialHasACalendarRowForTheProvider(provider)} and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarRowCarriesAProviderIdentity()}) and not ${calendarRowNamesADifferentAccount(provider, accountEmail, providerAccountId)}`;
 
 const credentialIsLinkedToNoCalendarAccount = (provider: string): SQL =>
-  sql`${oauthCredentialsTable.email} is not null and not ${credentialHasACalendarRowForTheProvider(provider)}`;
+  sql`not ${credentialHasACalendarRowForTheProvider(provider)}`;
 
 const credentialIdentityIsUnknowable = (
   provider: string,
@@ -451,14 +449,14 @@ const createDefaultReaper = async () => {
 export default withCronWideEvent({
   async callback() {
     const { database } = await import("@/context");
-    const reap = await createDefaultReaper();
-    await reap();
     const sweptOrphanedCredentials = await sweepOrphanedOAuthCredentials({
       database,
       minimumAgeMs: ORPHAN_CREDENTIAL_SAFETY_AGE_MS,
       now: () => new Date(),
     });
     widelog.setFields({ sweptOrphanedCredentials });
+    const reap = await createDefaultReaper();
+    await reap();
   },
   cron: "@every_5_minutes",
   name: import.meta.file,

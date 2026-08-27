@@ -5,28 +5,64 @@ import type { createOAuthSource as createOAuthSourceFn } from "../../src/utils/o
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
+let providerCalls: string[] = [];
 let calendarAccountInserts: Record<string, unknown>[] = [];
-let calendarAccountUpdates: Record<string, unknown>[] = [];
-let selectResults: unknown[][] = [];
+let calendarSourceInserts: Record<string, unknown>[] = [];
 let txInstance: object = {};
-let fetchUserInfoCalls: string[] = [];
-let providerAccountId = "google-sub-x";
+
+const CREDENTIAL_ROW = {
+  accessToken: "access-token-1",
+  email: "person@example.com",
+  expiresAt: new Date(Date.now() + 3_600_000),
+  needsReauthentication: false,
+  provider: "google",
+  refreshToken: "refresh-token-1",
+};
+
+const STORED_ACCOUNT_ROW = {
+  accountId: "google-account-77",
+  email: "person@example.com",
+  id: "account-existing",
+  oauthCredentialId: "credential-1",
+  provider: "google",
+  userId: "user-1",
+};
 
 type SelectPromise = Promise<unknown[]> & {
-  from: () => SelectPromise;
+  from: (table: unknown) => SelectPromise;
   innerJoin: () => SelectPromise;
   leftJoin: () => SelectPromise;
   where: () => SelectPromise;
   limit: () => Promise<unknown[]>;
 };
 
-const createSelectBuilder = (result: unknown[]): SelectPromise => {
-  const chain = Promise.resolve(result) as SelectPromise;
-  chain.from = () => chain;
+const rowsForTable = (table: unknown): unknown[] => {
+  const tableName = getTableName(table as never);
+
+  if (tableName === "oauth_credentials") {
+    return [CREDENTIAL_ROW];
+  }
+
+  if (tableName === "calendar_accounts") {
+    return [STORED_ACCOUNT_ROW];
+  }
+
+  return [];
+};
+
+const createSelectBuilder = (): SelectPromise => {
+  let rows: unknown[] = [];
+  const chain = new Promise<unknown[]>((resolve) => {
+    queueMicrotask(() => resolve(rows));
+  }) as SelectPromise;
+  chain.from = (table: unknown) => {
+    rows = rowsForTable(table);
+    return chain;
+  };
   chain.innerJoin = () => chain;
   chain.leftJoin = () => chain;
   chain.where = () => chain;
-  chain.limit = () => Promise.resolve(result);
+  chain.limit = () => Promise.resolve(rows);
   return chain;
 };
 
@@ -67,7 +103,7 @@ const insertForTable = (table: unknown) => {
   const tableName = getTableName(table as never);
 
   if (tableName === "calendar_accounts") {
-    return createInsertBuilder([{ id: "account-1" }], (values) => {
+    return createInsertBuilder([{ id: "account-created" }], (values) => {
       calendarAccountInserts.push(values as Record<string, unknown>);
     });
   }
@@ -80,15 +116,13 @@ const insertForTable = (table: unknown) => {
     return createInsertBuilder([], () => {});
   }
 
-  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], () => {});
+  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], (values) => {
+    calendarSourceInserts.push(...(values as Record<string, unknown>[]));
+  });
 };
 
-const createUpdateBuilder = (table: unknown) => ({
-  set: (values: unknown) => {
-    if (getTableName(table as never) === "calendar_accounts") {
-      calendarAccountUpdates.push(values as Record<string, unknown>);
-    }
-
+const createUpdateBuilder = () => ({
+  set: () => {
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
     };
@@ -101,11 +135,11 @@ const createUpdateBuilder = (table: unknown) => ({
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
   insert: insertForTable,
-  update: createUpdateBuilder,
-  select: () => createSelectBuilder(selectResults.shift() ?? []),
+  select: createSelectBuilder,
   selectDistinct: () => ({
     from: () => ({}),
   }),
+  update: createUpdateBuilder,
 });
 
 beforeAll(async () => {
@@ -117,28 +151,28 @@ beforeAll(async () => {
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
-      insert: () => {
-        throw new Error("global database.insert should not be used");
-      },
-      select: () => {
-        throw new Error("global database.select should not be used");
-      },
+      insert: insertForTable,
+      select: createSelectBuilder,
       selectDistinct: () => ({
         from: () => ({}),
       }),
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
+      update: createUpdateBuilder,
     },
     encryptionKey: "encryption-key",
     oauthProviders: {
-      getProvider: (providerId: string) => ({
+      getProvider: () => ({
         exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
-        fetchUserInfo: (accessToken: string) => {
-          fetchUserInfoCalls.push(accessToken);
-          return Promise.resolve({ email: `${providerId}@example.com`, id: providerAccountId });
+        fetchUserInfo: () => {
+          providerCalls.push("fetchUserInfo");
+          return Promise.resolve({ email: "person@example.com", id: "google-account-77" });
         },
         getAuthorizationUrl: () => Promise.reject(new Error("not used")),
         hasRequiredScopes: () => true,
-        refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
+        refreshAccessToken: () => {
+          providerCalls.push("refreshAccessToken");
+          return Promise.resolve({ access_token: "access-token-2", expires_in: 3600 });
+        },
       }),
       hasRequiredScopes: () => true,
       isOAuthProvider: () => true,
@@ -200,28 +234,15 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  providerCalls = [];
   calendarAccountInserts = [];
-  calendarAccountUpdates = [];
-  selectResults = [];
-  fetchUserInfoCalls = [];
-  providerAccountId = "google-sub-x";
+  calendarSourceInserts = [];
   txInstance = createTxInstance();
 });
 
-const CREDENTIAL_ROW = {
-  accessToken: "access-token-1",
-  email: "person@example.com",
-  expiresAt: new Date(Date.now() + 3_600_000),
-  needsReauthentication: false,
-  provider: "google",
-  refreshToken: "refresh-token-1",
-};
-
-describe("Source add records no fabricated provider account id", () => {
-  it("records the provider's own account id on the calendar account row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    await createOAuthSource({
+describe("Connect source skips the provider call when the account identity is already stored", () => {
+  it("creates the source without any provider round-trip", async () => {
+    const source = await createOAuthSource({
       externalCalendarId: "primary",
       name: "Work",
       oauthCredentialId: "credential-1",
@@ -229,44 +250,9 @@ describe("Source add records no fabricated provider account id", () => {
       userId: "user-1",
     });
 
-    expect(calendarAccountInserts).toHaveLength(1);
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).toBe("google-sub-x");
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-  });
-
-  it("does not reuse the row id as a stand-in provider account id", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    await createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).not.toBe(accountRow?.id);
-    expect(accountRow?.accountId).not.toBe("credential-1");
-  });
-
-  it("adopts the provider account id onto a reused calendar row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [{ id: "account-legacy" }], []];
-
-    await createOAuthSource({
-      externalCalendarId: "secondary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-    expect(calendarAccountInserts).toEqual([]);
-    expect(calendarAccountUpdates).toEqual([{ accountId: "google-sub-x" }]);
+    expect(providerCalls).toEqual([]);
+    expect(source.id).toBe("source-1");
+    expect(calendarSourceInserts).toHaveLength(1);
+    expect(calendarAccountInserts).toHaveLength(0);
   });
 });

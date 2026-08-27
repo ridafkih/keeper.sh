@@ -228,6 +228,7 @@ const makeHarness = (): Harness => {
       deregisterPushChannels: (userId: string) =>
         runDeregisterPushChannels(userId, deregisterDependencies as never),
       listCalendarIds: () => Promise.resolve([]),
+      listPushChannels: () => Promise.resolve([]),
       markChannelStopped: channelStore.markChannelStopped,
       markChannelsStopped: channelStore.markChannelsStopped,
       redis: tombstoneRedis,

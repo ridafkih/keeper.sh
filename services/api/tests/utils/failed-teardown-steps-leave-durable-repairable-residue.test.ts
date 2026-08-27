@@ -233,6 +233,7 @@ const makeSyncDependencies = (
   deregisterPushChannels: (userId: string) =>
     abandonEveryChannel(userId, channels, capture.loggedErrors, capture.loggedFields),
   listCalendarIds: () => Promise.resolve([]),
+  listPushChannels: () => Promise.resolve([]),
   redis: {
     del: () => Promise.resolve(1),
     exists: () => Promise.resolve(1),

@@ -349,6 +349,7 @@ describe("a registering push channel is never silently reported stopped", () => 
       fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: () => Promise.resolve([]),
       listOAuthCredentials: () => Promise.resolve([]),
+      listPushChannels: () => Promise.resolve([]),
       redis: {
         del: () => Promise.resolve(1),
         exists: () => Promise.resolve(1),

@@ -254,6 +254,7 @@ describe("a push channel the provider refused to stop is a loud failure", () => 
       fetchImpl: () => Promise.reject(new Error("no oauth revocation expected here")),
       listCalendarIds: () => Promise.resolve([]),
       listOAuthCredentials: () => Promise.resolve([]),
+      listPushChannels: () => Promise.resolve([]),
       redis: {
         del: () => Promise.resolve(1),
         exists: () => Promise.resolve(1),

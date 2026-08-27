@@ -244,6 +244,16 @@ const createGoogleOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(
+          `Token exchange timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+
+      throw error;
     });
 
     if (!response.ok) {
@@ -317,6 +327,16 @@ const revokeGoogleGrant = async (
 const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(
+        `Failed to fetch user info: timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        { cause: error },
+      );
+    }
+
+    throw error;
   });
 
   if (!response.ok) {

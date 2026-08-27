@@ -111,6 +111,16 @@ const createMicrosoftOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(
+          `Token exchange timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+
+      throw error;
     });
 
     if (!response.ok) {
@@ -134,6 +144,13 @@ const createMicrosoftOAuthService = (
 const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> => {
   const response = await fetch(MICROSOFT_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  }).catch((error) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(`Failed to fetch user info: timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    }
+
+    throw error;
   });
 
   if (!response.ok) {

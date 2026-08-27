@@ -100,6 +100,7 @@ const makeDependencies = (
         userId: DELETED_USER,
       },
     ]),
+  listPushChannels: () => Promise.resolve([]),
   redis: {
     del: () => Promise.resolve(1),
     exists: () => Promise.resolve(1),

@@ -109,6 +109,7 @@ describe("createOAuthSourceWithDependencies", () => {
         userId: "user-1",
       },
       {
+        adoptProviderAccountId: () => Promise.resolve(),
         canAddAccount: (userId, currentCount) => {
           canAddAccountCalls.push([userId, currentCount]);
           return Promise.resolve(true);
@@ -155,6 +156,7 @@ describe("createOAuthSourceWithDependencies", () => {
         userId: "user-1",
       },
       {
+        adoptProviderAccountId: () => Promise.resolve(),
         canAddAccount: (userId, currentCount) => {
           canAddAccountCalls.push([userId, currentCount]);
           return Promise.resolve(false);
@@ -209,6 +211,7 @@ describe("createOAuthSourceWithDependencies", () => {
           userId: "user-1",
         },
         {
+          adoptProviderAccountId: () => Promise.resolve(),
           canAddAccount: (userId, currentCount) => {
             canAddAccountCalls.push([userId, currentCount]);
             return Promise.resolve(canAddAccountResult);

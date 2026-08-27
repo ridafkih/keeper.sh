@@ -182,6 +182,7 @@ describe("a rollback whose tombstone erase fails still discards the residue it r
             userId: ROLLED_BACK_USER,
           },
         ]),
+      listPushChannels: () => Promise.resolve([]),
       redis: redis.redis,
       residue: residue.store,
     };

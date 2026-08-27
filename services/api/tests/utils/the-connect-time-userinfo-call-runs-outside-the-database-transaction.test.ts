@@ -6,11 +6,15 @@ let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
 let calendarAccountInserts: Record<string, unknown>[] = [];
-let calendarAccountUpdates: Record<string, unknown>[] = [];
+let calendarSourceInserts: Record<string, unknown>[] = [];
 let selectResults: unknown[][] = [];
 let txInstance: object = {};
-let fetchUserInfoCalls: string[] = [];
-let providerAccountId = "google-sub-x";
+let transactionOpen = false;
+let transactionOpenDuringUserInfo: boolean | null = null;
+let userInfoEntered: () => void = () => {};
+let userInfoEnteredPromise: Promise<void> = Promise.resolve();
+let releaseUserInfo: () => void = () => {};
+let userInfoGate: Promise<void> = Promise.resolve();
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -80,15 +84,13 @@ const insertForTable = (table: unknown) => {
     return createInsertBuilder([], () => {});
   }
 
-  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], () => {});
+  return createInsertBuilder([{ id: "source-1", name: "Team Calendar" }], (values) => {
+    calendarSourceInserts.push(...(values as Record<string, unknown>[]));
+  });
 };
 
-const createUpdateBuilder = (table: unknown) => ({
-  set: (values: unknown) => {
-    if (getTableName(table as never) === "calendar_accounts") {
-      calendarAccountUpdates.push(values as Record<string, unknown>);
-    }
-
+const createUpdateBuilder = () => ({
+  set: () => {
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
     };
@@ -117,24 +119,30 @@ beforeAll(async () => {
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
-      insert: () => {
-        throw new Error("global database.insert should not be used");
-      },
-      select: () => {
-        throw new Error("global database.select should not be used");
-      },
+      insert: insertForTable,
+      select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
         from: () => ({}),
       }),
-      transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
+      transaction: async (callback: (tx: object) => Promise<unknown>) => {
+        transactionOpen = true;
+        try {
+          return await callback(txInstance);
+        } finally {
+          transactionOpen = false;
+        }
+      },
+      update: createUpdateBuilder,
     },
     encryptionKey: "encryption-key",
     oauthProviders: {
-      getProvider: (providerId: string) => ({
+      getProvider: () => ({
         exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
-        fetchUserInfo: (accessToken: string) => {
-          fetchUserInfoCalls.push(accessToken);
-          return Promise.resolve({ email: `${providerId}@example.com`, id: providerAccountId });
+        fetchUserInfo: async () => {
+          transactionOpenDuringUserInfo = transactionOpen;
+          userInfoEntered();
+          await userInfoGate;
+          return { email: "person@example.com", id: "google-sub-x" };
         },
         getAuthorizationUrl: () => Promise.reject(new Error("not used")),
         hasRequiredScopes: () => true,
@@ -201,11 +209,17 @@ afterAll(() => {
 
 beforeEach(() => {
   calendarAccountInserts = [];
-  calendarAccountUpdates = [];
+  calendarSourceInserts = [];
   selectResults = [];
-  fetchUserInfoCalls = [];
-  providerAccountId = "google-sub-x";
+  transactionOpen = false;
+  transactionOpenDuringUserInfo = null;
   txInstance = createTxInstance();
+  userInfoEnteredPromise = new Promise<void>((resolve) => {
+    userInfoEntered = resolve;
+  });
+  userInfoGate = new Promise<void>((resolve) => {
+    releaseUserInfo = resolve;
+  });
 });
 
 const CREDENTIAL_ROW = {
@@ -217,56 +231,49 @@ const CREDENTIAL_ROW = {
   refreshToken: "refresh-token-1",
 };
 
-describe("Source add records no fabricated provider account id", () => {
-  it("records the provider's own account id on the calendar account row", async () => {
+describe("The connect time userinfo call runs outside the database transaction", () => {
+  it("holds no open transaction while the provider userinfo call is pending", async () => {
     selectResults = [[CREDENTIAL_ROW], [], [], []];
 
-    await createOAuthSource({
+    const pending = createOAuthSource({
       externalCalendarId: "primary",
       name: "Work",
       oauthCredentialId: "credential-1",
       provider: "google",
       userId: "user-1",
     });
+
+    await userInfoEnteredPromise;
+
+    expect(transactionOpenDuringUserInfo).toBe(false);
+
+    releaseUserInfo();
+    await pending;
+  });
+
+  it("writes the same rows once the provider answers", async () => {
+    selectResults = [[CREDENTIAL_ROW], [], [], []];
+
+    const pending = createOAuthSource({
+      externalCalendarId: "primary",
+      name: "Work",
+      oauthCredentialId: "credential-1",
+      provider: "google",
+      userId: "user-1",
+    });
+
+    await userInfoEnteredPromise;
+    releaseUserInfo();
+    await pending;
 
     expect(calendarAccountInserts).toHaveLength(1);
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).toBe("google-sub-x");
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-  });
-
-  it("does not reuse the row id as a stand-in provider account id", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    await createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    const [accountRow] = calendarAccountInserts;
-
-    expect(accountRow?.accountId).not.toBe(accountRow?.id);
-    expect(accountRow?.accountId).not.toBe("credential-1");
-  });
-
-  it("adopts the provider account id onto a reused calendar row", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [{ id: "account-legacy" }], []];
-
-    await createOAuthSource({
-      externalCalendarId: "secondary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    expect(fetchUserInfoCalls).toEqual(["access-token-1"]);
-    expect(calendarAccountInserts).toEqual([]);
-    expect(calendarAccountUpdates).toEqual([{ accountId: "google-sub-x" }]);
+    expect(calendarAccountInserts[0]?.accountId).toBe("google-sub-x");
+    expect(calendarAccountInserts[0]?.email).toBe("person@example.com");
+    expect(calendarAccountInserts[0]?.provider).toBe("google");
+    expect(calendarAccountInserts[0]?.oauthCredentialId).toBe("credential-1");
+    expect(calendarSourceInserts).toHaveLength(1);
+    expect(calendarSourceInserts[0]?.accountId).toBe("account-1");
+    expect(calendarSourceInserts[0]?.externalCalendarId).toBe("primary");
+    expect(calendarSourceInserts[0]?.calendarType).toBe("oauth");
   });
 });

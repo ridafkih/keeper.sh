@@ -61,6 +61,7 @@ const hangingRun = () => {
         return hangForever();
       },
       listCalendarIds: () => Promise.resolve(["cal1"]),
+      listPushChannels: () => Promise.resolve([]),
       redis: { set: () => Promise.resolve("OK") },
     },
     grantedDeadlineMs: (stepName: string): number | null => {
