@@ -114,6 +114,10 @@ describe("a surviving calendar account row counts as a co-holder of the grant", 
   it("still counts zero when no calendar account row holds the provider account", async () => {
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    ).toEqual({
+      blockingCredentialIds: [],
+      coHolders: 0,
+      identityResolved: true,
+    });
   });
 });

@@ -6,6 +6,7 @@ import {
   RESIDUE_LIFETIME_MS,
 } from "./teardown-residue";
 import type { TeardownResidueRecord, TeardownResidueStore } from "./teardown-residue";
+import { GOOGLE_PUSH_PROFILE } from "../source/push-provider-profile";
 import type {
   RegistrarContext,
   SourcePushRegistrar,
@@ -15,24 +16,30 @@ import type {
 const RESIDUE_REPAIR_FAILED_SLUG = "teardown-residue-repair-failed";
 const RESIDUE_STALE_SLUG = "teardown-residue-stale";
 const RESIDUE_IDENTITY_UNRESOLVED_SLUG = "teardown-residue-identity-unresolved";
+const RESIDUE_CENSUS_STALLED_SLUG = "teardown-residue-census-stalled";
 const RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG = "teardown-residue-retired-unrevoked";
+const RESIDUE_UNSTOPPABLE_SLUG = "teardown-residue-unstoppable-without-resource-id";
+const RESOURCE_ID_REQUIRING_PUSH_PROVIDER = GOOGLE_PUSH_PROFILE.provider;
 const NO_ATTEMPTS = 0;
 const MAX_RESIDUE_REPAIR_ATTEMPTS = 6;
 const PERMANENT_FAILURE_ATTEMPT_CAP = 24;
 const NO_SURVIVING_ACCOUNT_LINKS = 0;
+const NO_BLOCKING_CREDENTIALS = 0;
 const GRANT_REVOCATION_QUIET_PERIOD_MS = 15 * 60 * 1000;
 
 type ResidueRetirementReason =
   | "expired_after_max_attempts"
   | "outlived_its_provider_channel"
-  | "permanent_failure_attempt_cap";
+  | "permanent_failure_attempt_cap"
+  | "unstoppable_without_resource_id";
 
 type ResidueRepairOutcome =
-  | "repaired"
-  | "revocation_skipped"
-  | "revocation_unresolved";
+  | { blockingCredentialIds: string[]; status: "revocation_unresolved" }
+  | { status: "repaired" }
+  | { status: "revocation_skipped" };
 
 interface SurvivingAccountLinkCensus {
+  blockingCredentialIds: string[];
   coHolders: number;
   identityResolved: boolean;
 }
@@ -119,7 +126,7 @@ const repairPushChannel = async (
     context,
   );
 
-  return "repaired";
+  return { status: "repaired" };
 };
 
 const revocationTokenFromResidue = (record: TeardownResidueRecord): string => {
@@ -145,22 +152,25 @@ const repairOAuthGrant = async (
   }
 
   if (!record.providerAccountId) {
-    return "revocation_unresolved";
+    return { blockingCredentialIds: [], status: "revocation_unresolved" };
   }
 
   const census = await dependencies.countSurvivingAccountLinks(record);
 
   if (!census.identityResolved) {
-    return "revocation_unresolved";
+    return {
+      blockingCredentialIds: census.blockingCredentialIds,
+      status: "revocation_unresolved",
+    };
   }
 
   if (census.coHolders > NO_SURVIVING_ACCOUNT_LINKS) {
-    return "revocation_skipped";
+    return { status: "revocation_skipped" };
   }
 
   await dependencies.revokeOAuthGrant(record, revocationTokenFromResidue(record));
 
-  return "repaired";
+  return { status: "repaired" };
 };
 
 const repairPolarCustomer = async (
@@ -175,7 +185,7 @@ const repairPolarCustomer = async (
 
   await dependencies.deletePolarCustomer(record.externalId);
 
-  return "repaired";
+  return { status: "repaired" };
 };
 
 const repairResidue = (
@@ -267,6 +277,11 @@ const outlivesItsProviderChannel = (
   now: Date,
 ): boolean => record.kind === PUSH_CHANNEL_RESIDUE_KIND && isPastExpiry(record, now);
 
+const isUnstoppableWithoutResourceId = (record: TeardownResidueRecord): boolean =>
+  record.kind === PUSH_CHANNEL_RESIDUE_KIND
+  && record.provider === RESOURCE_ID_REQUIRING_PUSH_PROVIDER
+  && !record.providerResourceId;
+
 const claimedBatchHoldsPushResidue = (
   record: TeardownResidueRecord,
   records: TeardownResidueRecord[],
@@ -276,6 +291,7 @@ const claimedBatchHoldsPushResidue = (
       candidate.kind === PUSH_CHANNEL_RESIDUE_KIND
       && candidate.userId === record.userId
       && candidate.provider === record.provider
+      && !isUnstoppableWithoutResourceId(candidate)
       && (candidate.attempts ?? NO_ATTEMPTS)
         < MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
   );
@@ -409,6 +425,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
   const retiredUnrevokedIds: string[] = [];
   const revocationSkippedIds: string[] = [];
   const unresolvedIds: string[] = [];
+  const blockingCredentialIds = new Set<string>();
 
   for (const record of records) {
     if (
@@ -421,6 +438,21 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 
     if (outlivesItsProviderChannel(record, now)) {
       await retireResidue(record, dependencies, "outlived_its_provider_channel", {
+        expiredIds,
+        failedIds,
+        retirementReasons,
+      });
+      continue;
+    }
+
+    if (isUnstoppableWithoutResourceId(record)) {
+      dependencies.recordError(
+        new Error(
+          `Push channel residue ${record.id} for user ${record.userId} names ${record.provider} channel ${String(record.providerChannelId)} with no recorded resource id, so the channel can never be stopped and is being retired as orphaned at the provider`,
+        ),
+        RESIDUE_UNSTOPPABLE_SLUG,
+      );
+      await retireResidue(record, dependencies, "unstoppable_without_resource_id", {
         expiredIds,
         failedIds,
         retirementReasons,
@@ -444,7 +476,11 @@ async (): Promise<TeardownResidueReaperOutcome> => {
         now,
       );
 
-      if (repairOutcome === "revocation_unresolved") {
+      if (repairOutcome.status === "revocation_unresolved") {
+        for (const credentialId of repairOutcome.blockingCredentialIds) {
+          blockingCredentialIds.add(credentialId);
+        }
+
         const unresolvedRetirement = retirementReason(record, now);
 
         if (unresolvedRetirement) {
@@ -479,7 +515,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 
       clearedIds.push(record.id);
 
-      if (repairOutcome === "revocation_skipped") {
+      if (repairOutcome.status === "revocation_skipped") {
         revocationSkippedIds.push(record.id);
       }
     } catch (error) {
@@ -498,6 +534,15 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 
       failedIds.push(record.id);
     }
+  }
+
+  if (blockingCredentialIds.size > NO_BLOCKING_CREDENTIALS) {
+    dependencies.recordError(
+      new Error(
+        `The teardown residue census cannot resolve provider account identity while ${blockingCredentialIds.size} oauth credential(s) carry no usable provider identity, so every OAuth grant residue in the fleet defers; repair these credentials: ${[...blockingCredentialIds].join(", ")}`,
+      ),
+      RESIDUE_CENSUS_STALLED_SLUG,
+    );
   }
 
   dependencies.observe({
@@ -531,6 +576,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
 export {
   createTeardownResidueReaper,
   GRANT_REVOCATION_QUIET_PERIOD_MS,
+  RESIDUE_CENSUS_STALLED_SLUG,
   RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
   RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,

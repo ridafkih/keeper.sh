@@ -148,6 +148,19 @@ const createTeardownResidueStore = (
       .delete(deletionResidueTable)
       .where(eq(deletionResidueTable.id, residueId));
   },
+  delete: async (userId, kind, providerChannelId) => {
+    const rows = await config.database
+      .delete(deletionResidueTable)
+      .where(and(
+        eq(deletionResidueTable.userId, userId),
+        eq(deletionResidueTable.kind, kind),
+        eq(deletionResidueTable.providerChannelId, providerChannelId),
+        userRowExists(),
+      ))
+      .returning({ id: deletionResidueTable.id });
+
+    return rows.length;
+  },
   deleteForUser: async (userId, kind) => {
     const rows = await config.database
       .delete(deletionResidueTable)

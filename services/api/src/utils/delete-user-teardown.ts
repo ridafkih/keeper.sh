@@ -189,7 +189,7 @@ const recordOAuthGrantResidue = async (
 };
 
 interface PushChannelCapture {
-  captured: number;
+  capturedChannelIds: string[];
   dialable: number;
 }
 
@@ -261,17 +261,15 @@ const captureLivePushChannels = async (
   channels: TeardownPushChannel[],
 ): Promise<PushChannelCapture> => {
   const dialable = dialableTeardownChannels(channels);
-  const recordings: boolean[] = [];
+  const capturedChannelIds: string[] = [];
 
   for (const { channel, providerChannelId } of dialable) {
-    recordings.push(
-      await recordPushChannelResidue(residue, userId, channel, providerChannelId),
-    );
+    if (await recordPushChannelResidue(residue, userId, channel, providerChannelId)) {
+      capturedChannelIds.push(providerChannelId);
+    }
   }
 
-  const captured = recordings.filter(Boolean).length;
-
-  return { captured, dialable: dialable.length };
+  return { capturedChannelIds, dialable: dialable.length };
 };
 
 const readLivePushChannels = async (
@@ -301,15 +299,101 @@ const capturePushChannelResidue = async (
 ): Promise<PushChannelCapture> => {
   const capture = await readLivePushChannels(dependencies, userId);
 
-  if (capture.captured < capture.dialable) {
+  if (capture.capturedChannelIds.length < capture.dialable) {
     throw new TeardownBlockedError(
-      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} captured ${capture.captured} of `
-        + `${capture.dialable} live push channels, so the delete is blocked rather than `
-        + `cascading the uncaptured channels away`,
+      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} captured `
+        + `${capture.capturedChannelIds.length} of ${capture.dialable} live push channels, so `
+        + `the delete is blocked rather than cascading the uncaptured channels away`,
     );
   }
 
   return capture;
+};
+
+interface PushChannelDeregistration {
+  abandonedChannelIds: string[];
+  deregistered: number | null;
+  failure: { error: unknown } | null;
+}
+
+const attributedAbandonments = (
+  error: unknown,
+): AbandonedPushChannelResidue[] | null => {
+  if (error instanceof AbandonedPushChannelError) {
+    return [error.residue];
+  }
+
+  if (error instanceof AggregateError) {
+    const nested = error.errors.map((inner: unknown) => attributedAbandonments(inner));
+
+    if (nested.some((entry) => entry === null)) {
+      return null;
+    }
+
+    return nested.flatMap((entry) => entry ?? []);
+  }
+
+  return null;
+};
+
+const deregisterLivePushChannels = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+  signal: AbortSignal,
+): Promise<PushChannelDeregistration> => {
+  try {
+    return {
+      abandonedChannelIds: [],
+      deregistered: await dependencies.deregisterPushChannels(userId, signal),
+      failure: null,
+    };
+  } catch (error) {
+    const abandoned = attributedAbandonments(error);
+
+    if (abandoned === null) {
+      throw error;
+    }
+
+    return {
+      abandonedChannelIds: abandoned.map((residue) => residue.providerChannelId),
+      deregistered: null,
+      failure: { error },
+    };
+  }
+};
+
+const clearStoppedPushChannelResidue = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  stoppedChannelIds: string[],
+  abandonedChannelIds: string[],
+): Promise<number> => {
+  if (stoppedChannelIds.length === 0) {
+    return 0;
+  }
+
+  if (abandonedChannelIds.length === 0) {
+    return await residue.deleteForUser(userId, PUSH_CHANNEL_RESIDUE_KIND);
+  }
+
+  const deleteResidue = residue.delete;
+
+  if (typeof deleteResidue !== "function") {
+    throw new TypeError(
+      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} cannot clear the residue of the `
+        + `${stoppedChannelIds.length} push channel(s) confirmed stopped while `
+        + `${abandonedChannelIds.length} were abandoned: the residue store exposes no `
+        + `per-channel delete`,
+    );
+  }
+
+  const cleared: number[] = [];
+
+  for (const providerChannelId of stoppedChannelIds) {
+    cleared.push(await deleteResidue(userId, PUSH_CHANNEL_RESIDUE_KIND, providerChannelId));
+  }
+
+  return cleared.reduce((total, count) => total + count, 0);
 };
 
 const buildDeleteUserSyncSteps = (
@@ -358,24 +442,36 @@ const buildDeleteUserSyncSteps = (
     run: async (userId, signal) => {
       const capture = await capturePushChannelResidue(dependencies, userId);
 
-      widelog.setFields({ "delete_user.push_channels_captured": capture.captured });
+      widelog.setFields({
+        "delete_user.push_channels_captured": capture.capturedChannelIds.length,
+      });
 
       throwIfAborted(signal, PUSH_CHANNELS_STEP);
 
-      const deregistered = await dependencies.deregisterPushChannels(userId, signal);
+      const outcome = await deregisterLivePushChannels(dependencies, userId, signal);
+      const abandoned = new Set(outcome.abandonedChannelIds);
+      const stoppedChannelIds = capture.capturedChannelIds.filter(
+        (providerChannelId) => !abandoned.has(providerChannelId),
+      );
 
-      widelog.setFields({ "delete_user.push_channels_deregistered": deregistered });
+      widelog.setFields({
+        "delete_user.push_channels_abandoned": outcome.abandonedChannelIds.length,
+        "delete_user.push_channels_deregistered": outcome.deregistered
+          ?? stoppedChannelIds.length,
+      });
 
-      if (capture.captured === 0 || deregistered < capture.captured) {
-        return;
-      }
-
-      const cleared = await dependencies.residue.deleteForUser(
+      const cleared = await clearStoppedPushChannelResidue(
+        dependencies.residue,
         userId,
-        PUSH_CHANNEL_RESIDUE_KIND,
+        stoppedChannelIds,
+        outcome.abandonedChannelIds,
       );
 
       widelog.setFields({ "delete_user.push_channels_residue_cleared": cleared });
+
+      if (outcome.failure !== null) {
+        throw outcome.failure.error;
+      }
     },
     timeoutMs: PUSH_CHANNELS_TIMEOUT_MS,
   },
@@ -444,6 +540,14 @@ class DeadlineExceededError extends Error {
   }
 }
 
+const deadlineFailure = (deadlineMessage: string, cause: unknown): Error => {
+  if (cause instanceof TeardownBlockedError) {
+    return new TeardownBlockedError(deadlineMessage, { cause });
+  }
+
+  return new Error(deadlineMessage, { cause });
+};
+
 const runWithDeadline = async (
   name: string,
   deadlineMs: number,
@@ -471,7 +575,7 @@ const runWithDeadline = async (
   const afterAbort = await settleWithin(settlement, STEP_ABORT_SETTLE_MS);
 
   if (afterAbort !== null && afterAbort.status === "rejected") {
-    throw new Error(deadlineMessage, { cause: afterAbort.error });
+    throw deadlineFailure(deadlineMessage, afterAbort.error);
   }
 
   throw new DeadlineExceededError(deadlineMessage, settlement);

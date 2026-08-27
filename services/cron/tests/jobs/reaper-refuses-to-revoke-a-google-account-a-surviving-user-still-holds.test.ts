@@ -146,6 +146,7 @@ describe("the reaper refuses to revoke a google account a surviving user still h
     await insertSurvivorHoldingTheSameGoogleAccount();
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [],
       coHolders: 1,
       identityResolved: true,
     });

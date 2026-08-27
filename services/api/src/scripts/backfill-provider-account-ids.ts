@@ -1,4 +1,6 @@
+import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
+import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { database, oauthProviders } from "@/context";
@@ -7,6 +9,7 @@ import { context, destroy, widelog } from "@/utils/logging";
 const PUSH_PROVIDERS = ["google", "outlook"];
 const EXPIRY_SKEW_MS = 60_000;
 const MS_PER_SECOND = 1000;
+const FIRST_RESULT_LIMIT = 1;
 
 interface BackfillRow {
   accountRowId: string;
@@ -53,6 +56,32 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
       ),
     ));
 
+const readFreshCredential = async (oauthCredentialId: string) => {
+  const [stored] = await database
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      expiresAt: oauthCredentialsTable.expiresAt,
+    })
+    .from(oauthCredentialsTable)
+    .where(eq(oauthCredentialsTable.id, oauthCredentialId))
+    .limit(FIRST_RESULT_LIMIT);
+
+  if (!stored?.accessToken || !stored.expiresAt) {
+    return null;
+  }
+
+  const remainingMs = stored.expiresAt.getTime() - Date.now();
+
+  if (remainingMs <= TOKEN_REFRESH_BUFFER_MS) {
+    return null;
+  }
+
+  return {
+    access_token: stored.accessToken,
+    expires_in: Math.floor(remainingMs / MS_PER_SECOND),
+  };
+};
+
 const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
   if (row.expiresAt.getTime() - EXPIRY_SKEW_MS > Date.now()) {
     return row.accessToken;
@@ -63,20 +92,36 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
     throw new Error(`No OAuth provider registered for ${row.provider}`);
   }
 
-  const refreshed = await runWithCredentialRefreshLock(row.oauthCredentialId, async () => {
-    const result = await provider.refreshAccessToken(row.refreshToken);
+  const lockStore: RefreshLockStore = {
+    release: async (key) => {
+      const { refreshLockStore } = await import("@/context");
+      await refreshLockStore.release(key);
+    },
+    tryAcquire: async (key, ttlSeconds) => {
+      const { refreshLockStore } = await import("@/context");
+      return refreshLockStore.tryAcquire(key, ttlSeconds);
+    },
+  };
 
-    await database
-      .update(oauthCredentialsTable)
-      .set({
-        accessToken: result.access_token,
-        expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
-        refreshToken: result.refresh_token ?? row.refreshToken,
-      })
-      .where(eq(oauthCredentialsTable.id, row.oauthCredentialId));
+  const refreshed = await runWithCredentialRefreshLock(
+    row.oauthCredentialId,
+    async () => {
+      const result = await provider.refreshAccessToken(row.refreshToken);
 
-    return result;
-  });
+      await database
+        .update(oauthCredentialsTable)
+        .set({
+          accessToken: result.access_token,
+          expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
+          refreshToken: result.refresh_token ?? row.refreshToken,
+        })
+        .where(eq(oauthCredentialsTable.id, row.oauthCredentialId));
+
+      return result;
+    },
+    lockStore,
+    () => readFreshCredential(row.oauthCredentialId),
+  );
 
   return refreshed.access_token;
 };

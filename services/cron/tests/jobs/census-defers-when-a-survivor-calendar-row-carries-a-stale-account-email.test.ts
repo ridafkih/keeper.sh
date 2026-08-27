@@ -156,7 +156,11 @@ describe("a renamed account leaves a stale-email calendar row's identity unknowa
 
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: false });
+    ).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 
   it("leaves the census unresolved when that stale-email row carries an empty account id", async () => {
@@ -164,7 +168,11 @@ describe("a renamed account leaves a stale-email calendar row's identity unknowa
 
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: false });
+    ).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 
   it("posts no revocation and defers the residue instead", async () => {
@@ -189,6 +197,10 @@ describe("a renamed account leaves a stale-email calendar row's identity unknowa
 
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    ).toEqual({
+      blockingCredentialIds: [],
+      coHolders: 0,
+      identityResolved: true,
+    });
   });
 });

@@ -384,6 +384,24 @@ const isRegistrationRetryDue = (channel: StoredPushChannel, now: Date): boolean 
   return isStaleRegistering(channel, now);
 };
 
+const UNSTOPPABLE_PUSH_CHANNEL_REASON = "unstoppable_without_resource_id";
+
+class UnstoppablePushChannelError extends Error {
+  readonly reason: typeof UNSTOPPABLE_PUSH_CHANNEL_REASON;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "UnstoppablePushChannelError";
+    this.reason = UNSTOPPABLE_PUSH_CHANNEL_REASON;
+  }
+}
+
+const isUnstoppablePushChannelError = (error: unknown): boolean =>
+  typeof error === "object"
+  && error !== null
+  && "reason" in error
+  && (error as { reason: unknown }).reason === UNSTOPPABLE_PUSH_CHANNEL_REASON;
+
 const isPushChannelGoneError = (error: unknown): boolean =>
   typeof error === "object"
   && error !== null
@@ -596,6 +614,7 @@ const shouldRetainPushChannelAction = (
 export {
   FULL_POLL_INTERVAL_MS,
   isPushChannelGoneError,
+  isUnstoppablePushChannelError,
   LIVE_PUSH_CHANNEL_STATES,
   PUSH_CHANNEL_STATES,
   neverReachedProvider,
@@ -607,6 +626,8 @@ export {
   shouldRetainPushChannelAction,
   STALE_REGISTERING_MS,
   toPushChannelState,
+  UNSTOPPABLE_PUSH_CHANNEL_REASON,
+  UnstoppablePushChannelError,
 };
 export type {
   AccountCalendarRow,

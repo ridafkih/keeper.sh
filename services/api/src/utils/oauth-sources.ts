@@ -6,6 +6,8 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, not, sql } from "drizzle-orm";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
+import type { RefreshLockStore } from "@keeper.sh/calendar";
+import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase, oauthProviders as contextOAuthProviders } from "@/context";
@@ -21,6 +23,7 @@ import { registerAccountPushChannels } from "./push-notifications/register-accou
 
 const FIRST_RESULT_LIMIT = 1;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
+const CONNECT_REFRESH_ACQUIRE_BUDGET_MS = 5000;
 const MS_PER_SECOND = 1000;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -510,6 +513,43 @@ const resolveCredentialAccessToken = async (
 
   const { database } = await import("@/context");
 
+  const lockStore: RefreshLockStore = {
+    release: async (key) => {
+      const { refreshLockStore } = await import("@/context");
+      await refreshLockStore.release(key);
+    },
+    tryAcquire: async (key, ttlSeconds) => {
+      const { refreshLockStore } = await import("@/context");
+      return refreshLockStore.tryAcquire(key, ttlSeconds);
+    },
+  };
+
+  const readFreshCredential = async () => {
+    const [stored] = await database
+      .select({
+        accessToken: oauthCredentialsTable.accessToken,
+        expiresAt: oauthCredentialsTable.expiresAt,
+      })
+      .from(oauthCredentialsTable)
+      .where(eq(oauthCredentialsTable.id, oauthCredentialId))
+      .limit(FIRST_RESULT_LIMIT);
+
+    if (!stored?.accessToken || !stored.expiresAt) {
+      return null;
+    }
+
+    const remainingMs = stored.expiresAt.getTime() - Date.now();
+
+    if (remainingMs <= TOKEN_REFRESH_BUFFER_MS) {
+      return null;
+    }
+
+    return {
+      access_token: stored.accessToken,
+      expires_in: Math.floor(remainingMs / MS_PER_SECOND),
+    };
+  };
+
   const refreshed = await runWithCredentialRefreshLock(
     oauthCredentialId,
     async () => {
@@ -526,6 +566,9 @@ const resolveCredentialAccessToken = async (
 
       return result;
     },
+    lockStore,
+    readFreshCredential,
+    CONNECT_REFRESH_ACQUIRE_BUDGET_MS,
   );
 
   return refreshed.access_token;
@@ -1086,6 +1129,7 @@ const importOAuthAccountCalendars = async (
 };
 
 export {
+  CONNECT_REFRESH_ACQUIRE_BUDGET_MS,
   OAuthSourceLimitError,
   DestinationNotFoundError,
   DestinationProviderMismatchError,

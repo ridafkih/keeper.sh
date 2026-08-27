@@ -15,11 +15,11 @@ import { countSurvivingAccountLinks } from "../../src/jobs/reap-teardown-residue
 const client = new PGlite();
 const database = drizzle(client);
 
-const RESIDUE_ID = "44444444-4444-4444-4444-444444444444";
-const SURVIVOR_CREDENTIAL_ID = "55555555-5555-5555-5555-555555555555";
-const SHARED_ACCOUNT_ID = "google-sub-shared";
-const RENAMED_ACCOUNT_EMAIL = "new-name@workspace.example";
-const STALE_ACCOUNT_EMAIL = "old-name@workspace.example";
+const FIRST_RESIDUE_ID = "11111111-1111-1111-1111-111111111111";
+const SECOND_RESIDUE_ID = "22222222-2222-2222-2222-222222222222";
+const BLOCKING_CREDENTIAL_ID = "44444444-4444-4444-4444-444444444444";
+const BLOCKING_CALENDAR_ACCOUNT_ID = "88888888-8888-8888-8888-888888888888";
+const STRANGER_EMAIL = "stranger@example.com";
 
 const DDL = `
 create table "user" (
@@ -69,42 +69,41 @@ create table calendar_accounts (
 );
 `;
 
-const oauthGrantResidue = (): TeardownResidueRecord => ({
-  accountEmail: RENAMED_ACCOUNT_EMAIL,
+const oauthGrantResidue = (
+  residueId: string,
+  userId: string,
+): TeardownResidueRecord => ({
+  accountEmail: `${userId}@example.com`,
   createdAt: new Date("2026-08-26T11:00:00.000Z"),
   credential: {
-    accessToken: "a-access",
+    accessToken: `${userId}-access`,
     expiresAt: new Date("2026-08-26T13:00:00.000Z"),
-    refreshToken: "a-refresh",
+    refreshToken: `${userId}-refresh`,
   },
   expiresAt: new Date("2026-09-30T12:00:00.000Z"),
-  id: RESIDUE_ID,
+  id: residueId,
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
-  providerAccountId: SHARED_ACCOUNT_ID,
-  userId: "user-a",
+  providerAccountId: `google-sub-${userId}`,
+  userId,
 });
 
-const insertSurvivorWithStaleEmailAndUnbackfilledAccountId = async (
-  accountId: string | null,
-): Promise<void> => {
-  const accountIdLiteral = accountId === null ? "null" : `'${accountId}'`;
-
+const insertStrangerWhoseCalendarRowNamesItself = async (): Promise<void> => {
   await client.query(
-    `insert into "user" ("email", "id", "name") values ('b@keeper.sh', 'user-b', 'Survivor B')`,
+    `insert into "user" ("email", "id", "name") values ('${STRANGER_EMAIL}', 'stranger', 'Stranger')`,
   );
   await client.query(
     `insert into oauth_credentials ("accessToken", "email", "expiresAt", "id", "provider", "refreshToken", "userId")
-     values ('b-access', '${STALE_ACCOUNT_EMAIL}', now() + interval '1 hour', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'b-refresh', 'user-b')`,
+     values ('stranger-access', '${STRANGER_EMAIL}', now() + interval '1 hour', '${BLOCKING_CREDENTIAL_ID}', 'google', 'stranger-refresh', 'stranger')`,
   );
   await client.query(
-    `insert into calendar_accounts ("accountId", "oauthCredentialId", "provider", "userId")
-     values (${accountIdLiteral}, '${SURVIVOR_CREDENTIAL_ID}', 'google', 'user-b')`,
+    `insert into calendar_accounts ("accountId", "email", "id", "oauthCredentialId", "provider", "userId")
+     values (null, '${STRANGER_EMAIL}', '${BLOCKING_CALENDAR_ACCOUNT_ID}', '${BLOCKING_CREDENTIAL_ID}', 'google', 'stranger')`,
   );
+  await client.query(`update calendar_accounts set "accountId" = "id"::text`);
 };
 
-const createHarness = () => {
-  const records = [oauthGrantResidue()];
+const createHarness = (records: TeardownResidueRecord[]) => {
   const clearedIds: string[] = [];
   const errors: { error: unknown; slug: string }[] = [];
   const revokedTokens: string[] = [];
@@ -128,79 +127,65 @@ const createHarness = () => {
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
     now: () => new Date("2026-08-26T12:00:00.000Z"),
-    observe: () => {},
+    observe: () => undefined,
     recordError: (error: unknown, slug: string) => {
       errors.push({ error, slug });
     },
+    repairDeadlineMs: 15_000,
     residue: store,
     resolveRegistrar: () => null,
     revokeOAuthGrant: (_record: TeardownResidueRecord, token: string) => {
       revokedTokens.push(token);
       return Promise.resolve();
     },
-  } as unknown as Parameters<typeof createTeardownResidueReaper>[0]);
+    waitForRepairDeadline: () => new Promise<void>(() => {}),
+  });
 
   return { clearedIds, errors, reap, revokedTokens };
 };
 
-describe("a renamed account leaves a stale-email credential's identity unknowable", () => {
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+const stallReports = (errors: { error: unknown; slug: string }[]) =>
+  errors.filter((entry) => entry.slug !== RESIDUE_IDENTITY_UNRESOLVED_SLUG);
+
+describe("a fleet-wide census stall names the credentials a human has to repair", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
     );
     await client.exec(DDL);
+    await insertStrangerWhoseCalendarRowNamesItself();
   });
 
-  it("leaves the census unresolved when the survivor's only calendar account row carries a null account id", async () => {
-    await insertSurvivorWithStaleEmailAndUnbackfilledAccountId(null);
-
-    expect(
-      await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({
-      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
-      coHolders: 0,
-      identityResolved: false,
-    });
-  });
-
-  it("leaves the census unresolved when that row carries an empty account id", async () => {
-    await insertSurvivorWithStaleEmailAndUnbackfilledAccountId("");
-
-    expect(
-      await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({
-      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
-      coHolders: 0,
-      identityResolved: false,
-    });
-  });
-
-  it("posts no revocation and defers the residue instead", async () => {
-    await insertSurvivorWithStaleEmailAndUnbackfilledAccountId(null);
-
-    const harness = createHarness();
+  it("reports the blocking credential under its own slug while the residue still defers", async () => {
+    const harness = createHarness([oauthGrantResidue(FIRST_RESIDUE_ID, "deleted-one")]);
     const outcome = await harness.reap();
 
     expect(harness.revokedTokens).toEqual([]);
-    expect(harness.clearedIds).not.toContain(RESIDUE_ID);
-    expect(outcome.clearedIds).not.toContain(RESIDUE_ID);
-    expect(outcome.unresolvedIds).toContain(RESIDUE_ID);
+    expect(outcome.unresolvedIds).toContain(FIRST_RESIDUE_ID);
     expect(harness.errors.map((entry) => entry.slug)).toContain(
       RESIDUE_IDENTITY_UNRESOLVED_SLUG,
     );
+
+    const stalls = stallReports(harness.errors);
+
+    expect(stalls).toHaveLength(1);
+    expect(messageOf(stalls[0]?.error)).toContain(BLOCKING_CREDENTIAL_ID);
   });
 
-  it("resolves the census when a backfilled account id proves the survivor holds a different account", async () => {
-    await insertSurvivorWithStaleEmailAndUnbackfilledAccountId(
-      "google-sub-other",
-    );
+  it("reports the stall once per pass, not once per blocked residue", async () => {
+    const harness = createHarness([
+      oauthGrantResidue(FIRST_RESIDUE_ID, "deleted-one"),
+      oauthGrantResidue(SECOND_RESIDUE_ID, "deleted-two"),
+    ]);
+    const outcome = await harness.reap();
 
+    expect(outcome.unresolvedIds).toEqual([FIRST_RESIDUE_ID, SECOND_RESIDUE_ID]);
     expect(
-      await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({
-      blockingCredentialIds: [],
-      coHolders: 0,
-      identityResolved: true,
-    });
+      harness.errors.filter((entry) => entry.slug === RESIDUE_IDENTITY_UNRESOLVED_SLUG),
+    ).toHaveLength(2);
+    expect(stallReports(harness.errors)).toHaveLength(1);
   });
 });

@@ -268,8 +268,9 @@ const censusSurvivingCredentialLinks = async (
     .select({
       surviving: sql<number>`count(*) filter (where ${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)})`
         .mapWith(Number),
-      unknowable: sql<number>`count(*) filter (where ${credentialIdentityIsUnknowable(provider, accountEmail, providerAccountId)})`
-        .mapWith(Number),
+      unknowableIds: sql<
+        string[]
+      >`coalesce(array_agg(${oauthCredentialsTable.id}) filter (where ${credentialIdentityIsUnknowable(provider, accountEmail, providerAccountId)}), '{}')`,
     })
     .from(oauthCredentialsTable)
     .where(eq(oauthCredentialsTable.provider, provider));
@@ -281,8 +282,9 @@ const censusSurvivingCredentialLinks = async (
   }
 
   return {
+    blockingCredentialIds: row.unknowableIds,
     coHolders: row.surviving,
-    identityResolved: row.unknowable === NO_UNKNOWABLE_CREDENTIALS,
+    identityResolved: row.unknowableIds.length === NO_UNKNOWABLE_CREDENTIALS,
   };
 };
 
@@ -375,6 +377,7 @@ const countSurvivingAccountLinks = async (
   );
 
   return {
+    blockingCredentialIds: credentialCensus.blockingCredentialIds,
     coHolders: credentialCensus.coHolders + signInLinks + calendarAccountLinks,
     identityResolved: credentialCensus.identityResolved,
   };

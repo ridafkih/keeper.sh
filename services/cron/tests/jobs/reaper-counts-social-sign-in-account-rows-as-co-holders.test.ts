@@ -165,6 +165,7 @@ describe("a social sign-in account row counts as a co-holder of the grant", () =
 
   it("still counts zero when no user holds the google account any more", async () => {
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [],
       coHolders: 0,
       identityResolved: true,
     });

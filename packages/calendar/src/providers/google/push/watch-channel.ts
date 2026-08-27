@@ -3,7 +3,10 @@ import {
   clampToProviderLifetime,
   GOOGLE_WATCH_MAX_LIFETIME_MS,
 } from "../../../core/source/push-provider-profile";
-import { neverReachedProvider } from "../../../core/source/push-channel";
+import {
+  neverReachedProvider,
+  UnstoppablePushChannelError,
+} from "../../../core/source/push-channel";
 import type {
   PushChannelRegistration,
   PushChannelScope,
@@ -191,9 +194,8 @@ const stopGoogleWatchChannel = async (
     if (neverReachedProvider(channel)) {
       return;
     }
-    throw new GoogleWatchChannelError(
+    throw new UnstoppablePushChannelError(
       `Google push deregistration of channel ${String(channel.providerChannelId)} requires a resource id that was never recorded`,
-      0,
     );
   }
 

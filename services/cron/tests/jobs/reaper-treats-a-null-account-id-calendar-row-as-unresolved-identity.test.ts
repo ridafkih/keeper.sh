@@ -159,6 +159,7 @@ describe("a calendar account row with a null account id proves nothing about a c
     await linkSurvivorCalendarAccount(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -169,6 +170,7 @@ describe("a calendar account row with a null account id proves nothing about a c
     await linkSurvivorCalendarAccount("");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -203,6 +205,7 @@ describe("a calendar account row with a null account id proves nothing about a c
     await insertSurvivor(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });

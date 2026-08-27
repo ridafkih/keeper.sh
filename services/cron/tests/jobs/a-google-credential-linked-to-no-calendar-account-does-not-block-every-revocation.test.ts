@@ -105,6 +105,7 @@ describe("a google credential linked to no calendar account does not block every
 
   it("resolves the identity when no credential survives at all", async () => {
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [],
       coHolders: 0,
       identityResolved: true,
     });
@@ -114,6 +115,7 @@ describe("a google credential linked to no calendar account does not block every
     await insertUnrelatedSurvivor(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [UNRELATED_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -133,6 +135,7 @@ describe("a google credential linked to no calendar account does not block every
     await linkUnrelatedCredentialToCalendarAccount(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [UNRELATED_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });

@@ -94,6 +94,7 @@ const createHarness = (
     countSurvivingAccountLinks: (record: TeardownResidueRecord) => {
       countedRecordIds.push(record.id);
       return Promise.resolve({
+        blockingCredentialIds: [],
         coHolders: survivingAccountLinks,
         identityResolved: true,
       });

@@ -91,7 +91,11 @@ const createHarness = (seed: TeardownResidueRecord[]) => {
 
   const reap = createTeardownResidueReaper({
     countSurvivingAccountLinks: () =>
-      Promise.resolve({ coHolders: 0, identityResolved: false }),
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),

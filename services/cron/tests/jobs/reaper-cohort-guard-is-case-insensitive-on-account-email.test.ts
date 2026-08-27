@@ -68,7 +68,11 @@ describe("counting co-holders of a google account behind oauth grant residue", (
 
     expect(
       await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
-    ).toEqual({ coHolders: 1, identityResolved: true });
+    ).toEqual({
+      blockingCredentialIds: [],
+      coHolders: 1,
+      identityResolved: true,
+    });
   });
 
   it("counts a surviving row whose email matches exactly", async () => {
@@ -76,7 +80,11 @@ describe("counting co-holders of a google account behind oauth grant residue", (
 
     expect(
       await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
-    ).toEqual({ coHolders: 1, identityResolved: true });
+    ).toEqual({
+      blockingCredentialIds: [],
+      coHolders: 1,
+      identityResolved: true,
+    });
   });
 
   it("counts no co-holder when the surviving row is a different account", async () => {
@@ -84,6 +92,10 @@ describe("counting co-holders of a google account behind oauth grant residue", (
 
     expect(
       await countSurvivingAccountLinks(database, residueFor("bob@gmail.com")),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    ).toEqual({
+      blockingCredentialIds: [],
+      coHolders: 0,
+      identityResolved: true,
+    });
   });
 });

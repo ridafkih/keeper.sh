@@ -109,6 +109,7 @@ describe("an email-only difference does not prove a credential names a different
     await insertStranger(null, "stranger@keeper.sh");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [STRANGER_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -118,6 +119,7 @@ describe("an email-only difference does not prove a credential names a different
     await insertStranger("stranger@gmail.com", "stranger-calendar@keeper.sh");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [STRANGER_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -137,6 +139,7 @@ describe("an email-only difference does not prove a credential names a different
     );
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [STRANGER_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });

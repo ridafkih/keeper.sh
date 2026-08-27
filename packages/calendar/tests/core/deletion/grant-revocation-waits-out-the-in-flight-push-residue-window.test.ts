@@ -66,7 +66,11 @@ const createReaper = (record: TeardownResidueRecord) => {
 
   const reap = createTeardownResidueReaper({
     countSurvivingAccountLinks: () =>
-      Promise.resolve({ coHolders: 0, identityResolved: true }),
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: true,
+      }),
     createRegistrarContext: () =>
       Promise.reject(new Error("push channels are not part of this test")),
     deletePolarCustomer: () =>

@@ -8,6 +8,7 @@ import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
@@ -16,8 +17,6 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
 const HTTP_METHOD_NOT_ALLOWED = 405;
 const HTTP_INTERNAL_SERVER_ERROR = 500;
-
-const SERVER_IDLE_TIMEOUT_SECONDS = 30;
 
 const router = new Bun.FileSystemRouter({
   dir: join(import.meta.dirname, "routes"),

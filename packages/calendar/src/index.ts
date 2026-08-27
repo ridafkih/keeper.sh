@@ -432,6 +432,7 @@ export type {
 } from "./core/deletion/teardown-residue";
 export {
   createTeardownResidueReaper,
+  RESIDUE_CENSUS_STALLED_SLUG,
   RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
   RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,

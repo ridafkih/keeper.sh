@@ -161,7 +161,11 @@ describe("a null-email google credential linked to no calendar account is unknow
 
     const census = await countSurvivingAccountLinks(database, oauthGrantResidue());
 
-    expect(census).toEqual({ coHolders: 0, identityResolved: false });
+    expect(census).toEqual({
+      blockingCredentialIds: [expect.any(String)],
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 
   it("revokes nothing and keeps the residue while that null-email credential is unaccounted for", async () => {

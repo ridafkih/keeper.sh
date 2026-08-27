@@ -153,7 +153,11 @@ const createReaper = (options: {
 
   const reap = createTeardownResidueReaper({
     countSurvivingAccountLinks: () =>
-      Promise.resolve({ coHolders: 0, identityResolved: true }),
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: true,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () => Promise.reject(new Error("polar is not part of this test")),
     now: () => NOW,

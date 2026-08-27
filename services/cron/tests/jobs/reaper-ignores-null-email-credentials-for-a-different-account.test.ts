@@ -109,6 +109,7 @@ describe("a null-email credential proven to hold a different account is not a co
     await linkSurvivorCredentialToCalendarAccount(UNRELATED_ACCOUNT_ID);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [],
       coHolders: 0,
       identityResolved: true,
     });
@@ -129,6 +130,10 @@ describe("a null-email credential proven to hold a different account is not a co
 
     expect(
       await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: false });
+    ).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 });

@@ -131,6 +131,7 @@ interface ResidueRow {
   provider?: string;
   providerAccountId?: string;
   providerChannelId?: string;
+  providerResourceId?: string;
   userId: string;
 }
 
@@ -393,6 +394,7 @@ describe("revocable grants are recorded for the reaper", () => {
         kind: PUSH_CHANNEL_KIND,
         provider: "google",
         providerChannelId: "google-A-1",
+        providerResourceId: "resource-A-1",
         userId: DELETED_USER,
       },
     ]);

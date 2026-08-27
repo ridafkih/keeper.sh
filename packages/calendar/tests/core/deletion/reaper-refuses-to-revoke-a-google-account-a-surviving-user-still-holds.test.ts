@@ -94,6 +94,7 @@ const createHarness = (survivingAccountLinks: number) => {
         provider: record.provider,
       });
       return Promise.resolve({
+        blockingCredentialIds: [],
         coHolders: survivingAccountLinks,
         identityResolved: true,
       });

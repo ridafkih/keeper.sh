@@ -46,6 +46,7 @@ interface TeardownResidueRecord extends TeardownResidueDraft {
 
 interface TeardownResidueStore {
   clear: (residueId: string) => Promise<void>;
+  delete?: (userId: string, kind: string, providerChannelId: string) => Promise<number>;
   deleteForUser: (userId: string, kind: string) => Promise<number>;
   hasUnreapedPushResidue?: (userId: string, provider: string) => Promise<boolean>;
   list: () => Promise<TeardownResidueRecord[]>;

@@ -105,6 +105,7 @@ describe("a calendar account id fabricated from the row's own id carries no prov
     await insertSurvivor(SURVIVOR_CALENDAR_ACCOUNT_ID);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [SURVIVOR_CREDENTIAL_ID],
       coHolders: 0,
       identityResolved: false,
     });
@@ -114,6 +115,7 @@ describe("a calendar account id fabricated from the row's own id carries no prov
     await insertSurvivor("google-sub-other");
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      blockingCredentialIds: [],
       coHolders: 0,
       identityResolved: true,
     });
