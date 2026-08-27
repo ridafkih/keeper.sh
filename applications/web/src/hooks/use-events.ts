@@ -8,6 +8,8 @@ export interface CalendarEvent {
   eventStateId: string | null;
   startTime: Date;
   endTime: Date;
+  color: string | null;
+  calendarColor: string | null;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;
@@ -31,6 +33,8 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
     eventStateId: event.eventStateId,
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
+    color: event.color ?? null,
+    calendarColor: event.calendarColor ?? null,
     calendarId: event.calendarId,
     calendarName: event.calendarName,
     calendarProvider: event.calendarProvider,

@@ -112,6 +112,7 @@ const calendarsTable = pgTable(
       .references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
     calendarType: text().notNull(),
     calendarUrl: text(),
+    color: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     excludeAllDayEvents: boolean().notNull().default(false),
     excludeEventDescription: boolean().notNull().default(true),
@@ -264,6 +265,7 @@ const eventStatesTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    color: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     description: text(),
     endTime: timestamp({ withTimezone: true }).notNull(),

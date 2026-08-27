@@ -16,6 +16,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
 }
 
 type StoredEventTimeSlot = EventTimeSlot & {

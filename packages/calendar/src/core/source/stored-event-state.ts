@@ -8,6 +8,7 @@ import { buildSourceEventInstanceKey } from "./event-instance";
 
 interface StoredSourceEventState {
   availability?: string | null;
+  color?: string | null;
   description?: string | null;
   endTime: Date;
   exceptionDates: string | null;

@@ -68,6 +68,7 @@ const makeCalendar = (capabilities: string[]): CalendarDetail => ({
   calendarType: "oauth",
   calendarUrl: null,
   capabilities,
+  color: null,
   createdAt: "2026-01-01T00:00:00.000Z",
   customEventName: "",
   destinationIds: [],

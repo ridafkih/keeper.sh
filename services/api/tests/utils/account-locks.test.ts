@@ -199,6 +199,8 @@ beforeAll(async () => {
     isCalDAVProvider: () => true,
     isOAuthProvider: () => false,
     isProviderId: () => false,
+    resolveGoogleCalendarColor: () => null,
+    resolveOutlookCalendarColor: () => null,
   }));
 
   ({

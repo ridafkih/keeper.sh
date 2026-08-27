@@ -33,7 +33,7 @@ describe("reconcileAccountCalendars condemnation guards", () => {
 
   it("never flags a row created after the enumeration began", () => {
     const plan = reconcileAccountCalendars(
-      [{ externalId: "ext-1", name: "Still There" }],
+      [{ color: null, externalId: "ext-1", name: "Still There" }],
       [
         {
           createdAt: BEFORE_ENUMERATION,
@@ -56,7 +56,7 @@ describe("reconcileAccountCalendars condemnation guards", () => {
 
   it("still flags a row that predates the enumeration when the listing is partial", () => {
     const plan = reconcileAccountCalendars(
-      [{ externalId: "ext-1", name: "Still There" }],
+      [{ color: null, externalId: "ext-1", name: "Still There" }],
       [
         {
           createdAt: BEFORE_ENUMERATION,

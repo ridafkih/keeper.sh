@@ -65,6 +65,7 @@ interface FetchEventsResult {
   skippedResourceReasons?: string[];
   unsupportedEventUids?: string[];
   syncWindow?: SyncWindow;
+  calendarColor?: string | null;
   coverage?: {
     futureRange: SyncRange;
     historicRange: SyncRange;
@@ -78,6 +79,7 @@ interface IngestionChanges {
   snapshot?: CalendarSnapshotChange;
   syncToken?: string | null;
   coverage?: FetchEventsResult["coverage"];
+  calendarColor?: string | null;
 }
 
 interface CalendarSnapshotChange {
@@ -136,6 +138,21 @@ interface IngestionResult {
 }
 
 const EMPTY_RESULT: IngestionResult = { eventsAdded: 0, eventsRemoved: 0 };
+
+const applyAuxiliaryFetchChanges = (
+  changes: IngestionChanges,
+  fetchResult: FetchEventsResult,
+): void => {
+  if (fetchResult.snapshot) {
+    changes.snapshot = fetchResult.snapshot;
+  }
+  if (fetchResult.coverage) {
+    changes.coverage = fetchResult.coverage;
+  }
+  if (fetchResult.calendarColor !== globalThis.undefined) {
+    changes.calendarColor = fetchResult.calendarColor;
+  }
+};
 
 /*
  * Delta sources only: a snapshot source's diff already removes what it stopped reporting, so
@@ -366,17 +383,17 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       wideEvent["events.removed"] = eventStateIdsToRemove.length;
 
       if (eventsToAdd.length === 0 && eventStateIdsToRemove.length === 0) {
-        if (fetchResult.nextSyncToken || fetchResult.snapshot || fetchResult.coverage) {
+        if (
+          fetchResult.nextSyncToken
+          || fetchResult.snapshot
+          || fetchResult.coverage
+          || fetchResult.calendarColor !== globalThis.undefined
+        ) {
           const changes: IngestionChanges = { inserts: [], deletes: [] };
           if (fetchResult.nextSyncToken) {
             changes.syncToken = fetchResult.nextSyncToken;
           }
-          if (fetchResult.snapshot) {
-            changes.snapshot = fetchResult.snapshot;
-          }
-          if (fetchResult.coverage) {
-            changes.coverage = fetchResult.coverage;
-          }
+          applyAuxiliaryFetchChanges(changes, fetchResult);
           await flush(changes);
           flushed = true;
           wideEvent["outcome"] = "in-sync";
@@ -397,12 +414,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
       if (typeof fetchResult.nextSyncToken === "string") {
         changes.syncToken = fetchResult.nextSyncToken;
       }
-      if (fetchResult.snapshot) {
-        changes.snapshot = fetchResult.snapshot;
-      }
-      if (fetchResult.coverage) {
-        changes.coverage = fetchResult.coverage;
-      }
+      applyAuxiliaryFetchChanges(changes, fetchResult);
 
       await flush(changes);
 

@@ -64,6 +64,7 @@ type CreateSource = typeof createSourceSchema.infer;
 const stringSchema = type("string");
 
 const googleEventSchema = type({
+  "colorId?": "string",
   "description?": "string",
   "end?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "eventType?": "string",
@@ -207,6 +208,18 @@ const outlookEventListSchema = type({
   "value?": outlookEventSchema.array(),
 });
 type OutlookEventList = typeof outlookEventListSchema.infer;
+
+const outlookCategorySchema = type({
+  "color?": "string | null",
+  "displayName?": "string",
+});
+type OutlookCategory = typeof outlookCategorySchema.infer;
+
+const outlookCategoryListSchema = type({
+  "@odata.nextLink?": "string",
+  "value?": outlookCategorySchema.array(),
+});
+type OutlookCategoryList = typeof outlookCategoryListSchema.infer;
 
 const outlookCalendarViewEventSchema = type({
   "id?": "string",
@@ -554,6 +567,8 @@ export {
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,
+  outlookCategorySchema,
+  outlookCategoryListSchema,
   outlookCalendarViewEventSchema,
   outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
@@ -608,6 +623,8 @@ export type {
   MicrosoftUserInfo,
   OutlookEvent,
   OutlookEventList,
+  OutlookCategory,
+  OutlookCategoryList,
   OutlookCalendarViewEvent,
   OutlookCalendarViewList,
   MicrosoftApiError,

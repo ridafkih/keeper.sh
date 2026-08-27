@@ -7,6 +7,8 @@ import { synthesizeMissingVtimezones } from "./synthesize-vtimezones";
 
 interface CalendarNonStandardValues {
   wrTimezone?: string;
+  color?: string;
+  appleCalendarColor?: string;
 }
 
 interface ParseIcsCalendarOptions {
@@ -20,7 +22,22 @@ const CALENDAR_NON_STANDARD_VALUES: ParseNonStandardValues<CalendarNonStandardVa
     name: "X-WR-TIMEZONE",
     convert: parseTextLine,
   },
+  color: {
+    name: "X-COLOR",
+    convert: parseTextLine,
+  },
+  appleCalendarColor: {
+    name: "X-APPLE-CALENDAR-COLOR",
+    convert: parseTextLine,
+  },
 };
+
+/*
+ * Only X-prefixed properties reach ts-ics's nonStandard bag, so RFC 7986 COLOR would be dropped.
+ * Property names start a physical line, so folded continuations cannot match.
+ */
+const prefixRfc7986ColorProperties = (icsString: string): string =>
+  icsString.replaceAll(/(^|\r?\n)COLOR(?=[;:])/gi, "$1X-COLOR");
 
 const CALENDAR_BEGIN_PATTERN = /(?:^|[\r\n])BEGIN:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
 
@@ -54,7 +71,9 @@ const withProjectedTimezones = (
  * into zero events would read downstream as "delete everything".
  */
 const parseIcsCalendar = (options: ParseIcsCalendarOptions) => {
-  const icsString = synthesizeMissingVtimezones(stripIcsByteOrderMark(options.icsString));
+  const icsString = synthesizeMissingVtimezones(
+    prefixRfc7986ColorProperties(stripIcsByteOrderMark(options.icsString)),
+  );
   if (!CALENDAR_BEGIN_PATTERN.test(icsString)) {
     throw new Error("Not an iCalendar document: no BEGIN:VCALENDAR line");
   }

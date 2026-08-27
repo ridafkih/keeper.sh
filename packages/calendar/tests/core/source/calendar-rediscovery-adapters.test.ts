@@ -18,11 +18,25 @@ describe("toDiscoveredGoogleCalendars", () => {
     expect(calendars.map(({ writable }) => writable)).toEqual([true, true, false, false]);
     expect(calendars[0]).toEqual({
       calendarUrl: null,
+      color: null,
       externalCalendarId: "owned@group.calendar.google.com",
       identityKey: "owned@group.calendar.google.com",
       name: "Owned",
       writable: true,
     });
+  });
+
+  it("normalizes the calendar list background color", () => {
+    const calendars = toDiscoveredGoogleCalendars([
+      {
+        accessRole: "owner",
+        backgroundColor: "#9FE1E7",
+        id: "colored@group.calendar.google.com",
+        summary: "Colored",
+      },
+    ]);
+
+    expect(calendars[0]?.color).toBe("#9fe1e7");
   });
 });
 
@@ -37,11 +51,22 @@ describe("toDiscoveredOutlookCalendars", () => {
     expect(calendars.map(({ writable }) => writable)).toEqual([true, false, false]);
     expect(calendars[1]).toEqual({
       calendarUrl: null,
+      color: null,
       externalCalendarId: "AAMkAD-readonly",
       identityKey: "AAMkAD-readonly",
       name: "Shared",
       writable: false,
     });
+  });
+
+  it("prefers hexColor and falls back to the color enum", () => {
+    const calendars = toDiscoveredOutlookCalendars([
+      { color: "lightBlue", hexColor: "#FF8C00", id: "AAMkAD-hex", name: "Hex" },
+      { color: "lightBlue", id: "AAMkAD-enum", name: "Enum" },
+      { color: "auto", id: "AAMkAD-auto", name: "Auto" },
+    ]);
+
+    expect(calendars.map(({ color }) => color)).toEqual(["#ff8c00", "#71afe5", null]);
   });
 });
 
@@ -57,11 +82,24 @@ describe("toDiscoveredCalDAVCalendars", () => {
 
     expect(calendars).toEqual([{
       calendarUrl: "http://cloud.example.com:8080/remote.php/dav/calendars/bob/work/",
+      color: null,
       externalCalendarId: null,
       identityKey: "/remote.php/dav/calendars/bob/work",
       name: "Work",
       writable: true,
     }]);
+  });
+
+  it("carries the discovered calendar color", () => {
+    const calendars = toDiscoveredCalDAVCalendars([
+      {
+        color: "#711a76",
+        displayName: "Personal",
+        url: "https://cloud.example.com/dav/bob/personal/",
+      },
+    ]);
+
+    expect(calendars[0]?.color).toBe("#711a76");
   });
 });
 
@@ -72,6 +110,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        color: null,
         createdAt,
         externalCalendarId: "external-1",
         id: "calendar-1",
@@ -82,6 +121,7 @@ describe("toExistingCalendars", () => {
 
     expect(rows).toEqual([{
       calendarUrl: null,
+      color: null,
       createdAt,
       id: "calendar-1",
       identityKey: "external-1",
@@ -93,6 +133,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: "https://cloud.example.com/dav/bob/My%20Work/",
+        color: null,
         createdAt,
         externalCalendarId: null,
         id: "calendar-1",
@@ -109,6 +150,7 @@ describe("toExistingCalendars", () => {
     expect(() => toExistingCalendars(
       [{
         calendarUrl: "not-a-url",
+        color: null,
         createdAt,
         externalCalendarId: null,
         id: "calendar-broken",
@@ -123,6 +165,7 @@ describe("toExistingCalendars", () => {
       [
         {
           calendarUrl: null,
+          color: null,
           createdAt,
           externalCalendarId: null,
           id: "calendar-destination",
@@ -130,6 +173,7 @@ describe("toExistingCalendars", () => {
         },
         {
           calendarUrl: null,
+          color: null,
           createdAt,
           externalCalendarId: "external-1",
           id: "calendar-source",
@@ -146,6 +190,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        color: null,
         createdAt,
         externalCalendarId: null,
         id: "calendar-destination",
