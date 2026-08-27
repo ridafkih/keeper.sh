@@ -109,6 +109,12 @@ const recoverCreateConflict = async (
     return;
   }
 
+  if (remoteEvent?.uid !== uid) {
+    throw new Error(
+      `CalDAV object ${uid}.ics carries uid ${remoteEvent?.uid ?? "none"}, so it is not this event's mirror`,
+    );
+  }
+
   if (!existing.etag) {
     throw new Error(`CalDAV event ${uid} already exists but has no ETag for a safe recreation`);
   }
