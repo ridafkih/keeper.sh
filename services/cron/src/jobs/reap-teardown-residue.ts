@@ -8,9 +8,9 @@ import {
 } from "@keeper.sh/database/schema";
 import { account as authAccountTable } from "@keeper.sh/database/auth-schema";
 import {
-  adoptsProviderAccountIdentity,
   calendarRowCarriesAProviderIdentity,
   calendarRowProviderIdentity,
+  reconcileProviderAccountIdentity,
 } from "@keeper.sh/database/provider-account-identity";
 import {
   createCoordinatedRefresher,
@@ -40,6 +40,7 @@ import { widelog } from "@/utils/logging";
 
 const RESIDUE_STOP_TIMEOUT_MS = 5000;
 const RESIDUE_REPAIR_DEADLINE_MS = 15_000;
+const CENSUS_REPAIR_BUDGET_MS = 60_000;
 const POLAR_RESOURCE_NOT_FOUND = "ResourceNotFound";
 const NO_UNKNOWABLE_CREDENTIALS = 0;
 const GOOGLE_INVALID_TOKEN_ERROR = "invalid_token";
@@ -48,6 +49,9 @@ const ORPHAN_CREDENTIAL_SAFETY_AGE_MS = 60 * 60 * 1000;
 const CENSUS_REPAIR_FAILED_SLUG = "teardown-residue-census-repair-failed";
 const NO_BLOCKING_CREDENTIALS = 0;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
+const CENSUS_REPAIR_BATCH_LIMIT = 10;
+const NO_REMAINING_BLOCKING_ROWS = 0;
+const NO_ORPHANED_CREDENTIALS = 0;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -406,23 +410,46 @@ const sweepOrphanedOAuthCredentials = async ({
 }): Promise<number> => {
   const createdBefore = new Date(now().getTime() - minimumAgeMs);
 
-  const swept = await database
-    .delete(oauthCredentialsTable)
-    .where(
-      and(
-        inArray(oauthCredentialsTable.provider, ORPHAN_CREDENTIAL_SWEEP_PROVIDERS),
-        lt(oauthCredentialsTable.createdAt, createdBefore),
-        notExists(
-          database
-            .select({ id: calendarAccountsTable.id })
-            .from(calendarAccountsTable)
-            .where(eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id)),
-        ),
-      ),
-    )
-    .returning({ id: oauthCredentialsTable.id });
+  const hasNoCalendarAccount = (executor: PgDatabase<PgQueryResultHKT>) =>
+    notExists(
+      executor
+        .select({ id: calendarAccountsTable.id })
+        .from(calendarAccountsTable)
+        .where(eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id)),
+    );
 
-  return swept.length;
+  return await database.transaction(async (transaction) => {
+    const claimed = await transaction
+      .select({ id: oauthCredentialsTable.id })
+      .from(oauthCredentialsTable)
+      .where(
+        and(
+          inArray(oauthCredentialsTable.provider, ORPHAN_CREDENTIAL_SWEEP_PROVIDERS),
+          lt(oauthCredentialsTable.createdAt, createdBefore),
+          hasNoCalendarAccount(transaction),
+        ),
+      )
+      .for("update");
+
+    if (claimed.length === NO_ORPHANED_CREDENTIALS) {
+      return NO_ORPHANED_CREDENTIALS;
+    }
+
+    const swept = await transaction
+      .delete(oauthCredentialsTable)
+      .where(
+        and(
+          inArray(
+            oauthCredentialsTable.id,
+            claimed.map((credential) => credential.id),
+          ),
+          hasNoCalendarAccount(transaction),
+        ),
+      )
+      .returning({ id: oauthCredentialsTable.id });
+
+    return swept.length;
+  });
 };
 
 interface CensusBlockingCalendarRow {
@@ -434,8 +461,14 @@ interface CensusBlockingCalendarRow {
   refreshToken: string;
 }
 
+interface CensusRepairBudget {
+  budgetMs: number;
+  now: () => Date;
+}
+
 interface CensusRepairTally {
   attempted: number;
+  remaining: number;
   repaired: number;
 }
 
@@ -451,6 +484,34 @@ const resolveUserInfoFetch = (
   }
 
   return null;
+};
+
+const censusBlockingRowsWhere = (credentialIds: string[]): SQL | undefined =>
+  and(
+    inArray(oauthCredentialsTable.id, credentialIds),
+    isNull(calendarRowProviderIdentity()),
+  );
+
+const countCensusBlockingCalendarRows = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  credentialIds: string[],
+): Promise<number> => {
+  const [row] = await database
+    .select({ blocking: count() })
+    .from(calendarAccountsTable)
+    .innerJoin(
+      oauthCredentialsTable,
+      eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
+    )
+    .where(censusBlockingRowsWhere(credentialIds));
+
+  if (!row) {
+    throw new Error(
+      "Counting the calendar rows blocking the teardown residue census returned no row",
+    );
+  }
+
+  return row.blocking;
 };
 
 const listCensusBlockingCalendarRows = (
@@ -471,12 +532,8 @@ const listCensusBlockingCalendarRows = (
       oauthCredentialsTable,
       eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
     )
-    .where(
-      and(
-        inArray(oauthCredentialsTable.id, credentialIds),
-        isNull(calendarRowProviderIdentity()),
-      ),
-    );
+    .where(censusBlockingRowsWhere(credentialIds))
+    .limit(CENSUS_REPAIR_BATCH_LIMIT);
 
 const resolveBlockingRowAccessToken = async (
   database: PgDatabase<PgQueryResultHKT>,
@@ -540,23 +597,39 @@ const repairCensusBlockingRow = async (
     subject: `calendar account ${row.accountRowId}`,
   });
 
-  await database.execute(
-    sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.accountId.name)} = ${providerAccountId} where ${adoptsProviderAccountIdentity(row.accountRowId)}`,
-  );
+  await reconcileProviderAccountIdentity({
+    accountRowId: row.accountRowId,
+    adopt: (unclaimedIdentity) =>
+      database.execute(
+        sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.accountId.name)} = ${providerAccountId} where ${unclaimedIdentity}`,
+      ),
+    database,
+    providerAccountId,
+  });
 };
 
 const repairCensusBlockingCredentials = async (
   database: PgDatabase<PgQueryResultHKT>,
   credentialIds: string[],
+  {
+    budgetMs = CENSUS_REPAIR_BUDGET_MS,
+    now = () => new Date(),
+  }: Partial<CensusRepairBudget> = {},
 ): Promise<CensusRepairTally> => {
   if (credentialIds.length === NO_BLOCKING_CREDENTIALS) {
-    return { attempted: 0, repaired: 0 };
+    return { attempted: 0, remaining: NO_REMAINING_BLOCKING_ROWS, repaired: 0 };
   }
 
+  const blocking = await countCensusBlockingCalendarRows(database, credentialIds);
   const rows = await listCensusBlockingCalendarRows(database, credentialIds);
+  const startedAt = now().getTime();
   const results: boolean[] = [];
 
   for (const row of rows) {
+    if (now().getTime() - startedAt >= budgetMs) {
+      break;
+    }
+
     try {
       await repairCensusBlockingRow(database, row);
       results.push(true);
@@ -571,6 +644,7 @@ const repairCensusBlockingCredentials = async (
 
   return {
     attempted: results.length,
+    remaining: Math.max(blocking - results.length, NO_REMAINING_BLOCKING_ROWS),
     repaired: results.filter(Boolean).length,
   };
 };
@@ -647,6 +721,7 @@ export default withCronWideEvent({
     );
     widelog.setFields({
       "teardown_residue.census_repair_attempted_count": censusRepair.attempted,
+      "teardown_residue.census_repair_remaining_count": censusRepair.remaining,
       "teardown_residue.census_repair_repaired_count": censusRepair.repaired,
     });
   },
@@ -656,6 +731,7 @@ export default withCronWideEvent({
 }) satisfies CronOptions;
 
 export {
+  CENSUS_REPAIR_BATCH_LIMIT,
   countSurvivingAccountLinks,
   repairCensusBlockingCredentials,
   revokeOAuthGrant,

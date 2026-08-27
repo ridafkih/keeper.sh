@@ -361,6 +361,8 @@ describe("a registering push channel is never silently reported stopped", () => 
         list: () => Promise.resolve([]),
         purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
+        spendRepairAttempt: () =>
+          Promise.reject(new Error("the teardown never spends a repair attempt")),
       },
     });
 

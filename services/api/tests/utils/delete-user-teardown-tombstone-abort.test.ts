@@ -65,6 +65,8 @@ describe("delete user teardown tombstone abort", () => {
         list: () => Promise.resolve([]),
         purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
+        spendRepairAttempt: () =>
+          Promise.reject(new Error("the teardown never spends a repair attempt")),
       },
     });
 

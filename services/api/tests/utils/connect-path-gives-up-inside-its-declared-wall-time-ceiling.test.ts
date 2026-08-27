@@ -7,8 +7,7 @@ import type { createOAuthSource as createOAuthSourceFn } from "../../src/utils/o
 
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
-let connectRefreshAcquireBudgetMs = Number.NaN;
-let connectWallTimeCeilingMs = Number.NaN;
+let connectWallTimeCeilingMs: unknown = globalThis.undefined;
 
 interface RecordedInsert {
   table: string;
@@ -17,20 +16,40 @@ interface RecordedInsert {
 
 let recordedInserts: RecordedInsert[] = [];
 let recordedWideFields: Record<string, unknown> = {};
-let refreshedWithTokens: string[] = [];
-let lockAcquireAttempts: string[] = [];
+let providerCallsThatSawNoSignal: string[] = [];
 let txInstance: object = {};
 
-const CONNECT_ACCESS_TOKEN = "connect-snapshot-access-token";
-const CONNECT_REFRESH_TOKEN = "connect-snapshot-refresh-token";
-const NOTHING_ADOPTABLE_REMAINING_MS = Math.floor(TOKEN_REFRESH_BUFFER_MS / 2);
-const CASE_TIMEOUT_MS = 60_000;
+const DECLARED_CONNECT_WALL_TIME_CEILING_MS = 10_000;
+const PROVIDER_STALL_MS = 12_000;
+const CASE_TIMEOUT_MS = 120_000;
 const MS_PER_SECOND = 1000;
+const NOTHING_ADOPTABLE_REMAINING_MS = Math.floor(TOKEN_REFRESH_BUFFER_MS / 2);
+const CONNECT_ACCESS_TOKEN = "connect-stalled-access-token";
+const CONNECT_REFRESH_TOKEN = "connect-stalled-refresh-token";
+
+const stalledProviderCall = (label: string, signal?: AbortSignal): Promise<never> => {
+  if (!signal) {
+    providerCallsThatSawNoSignal.push(label);
+  }
+
+  return new Promise<never>((_resolve, reject) => {
+    const stallTimer = setTimeout(() => {
+      reject(new Error(`${label} brownout: provider accepted the connection and went silent`));
+    }, PROVIDER_STALL_MS);
+
+    signal?.addEventListener("abort", () => {
+      clearTimeout(stallTimer);
+      reject(new Error(`${label} aborted`));
+    });
+  });
+};
 
 const storedCredentialRow = () => ({
   accessToken: CONNECT_ACCESS_TOKEN,
   email: "person@example.com",
   expiresAt: new Date(Date.now() - MS_PER_SECOND),
+  needsReauthentication: false,
+  provider: "google",
   refreshToken: CONNECT_REFRESH_TOKEN,
 });
 
@@ -175,18 +194,12 @@ vi.mock("../../src/context", () => ({
   oauthProviders: {
     getProvider: () => ({
       exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
-      fetchUserInfo: () =>
-        Promise.reject(new Error("no access token should reach the provider")),
+      fetchUserInfo: (_accessToken: string, options?: { signal?: AbortSignal }) =>
+        stalledProviderCall("fetchUserInfo", options?.signal),
       getAuthorizationUrl: () => Promise.reject(new Error("not used")),
       hasRequiredScopes: () => true,
-      refreshAccessToken: (refreshToken: string) => {
-        refreshedWithTokens.push(refreshToken);
-        return Promise.resolve({
-          access_token: "connect-path-rotated-access-token",
-          expires_in: 3600,
-          refresh_token: "connect-path-rotated-refresh-token",
-        });
-      },
+      refreshAccessToken: (_refreshToken: string, options?: { signal?: AbortSignal }) =>
+        stalledProviderCall("refreshAccessToken", options?.signal),
     }),
     hasRequiredScopes: () => true,
     isOAuthProvider: () => true,
@@ -200,10 +213,7 @@ vi.mock("../../src/context", () => ({
   },
   refreshLockStore: {
     release: () => Promise.resolve(),
-    tryAcquire: (key: string) => {
-      lockAcquireAttempts.push(key);
-      return Promise.resolve(false);
-    },
+    tryAcquire: () => Promise.resolve(true),
   },
 }));
 
@@ -249,15 +259,13 @@ vi.mock("@keeper.sh/calendar", () => ({
 }));
 
 beforeAll(async () => {
-  const {
-    CONNECT_REFRESH_ACQUIRE_BUDGET_MS: budgetMs,
-    CONNECT_WALL_TIME_CEILING_MS: ceilingMs,
-    createOAuthSource: createOAuthSourceImplementation,
-  } = await import("../../src/utils/oauth-sources");
+  const oauthSources = await import("../../src/utils/oauth-sources");
+
+  const { createOAuthSource: createOAuthSourceImplementation } = oauthSources;
 
   createOAuthSource = createOAuthSourceImplementation;
-  connectRefreshAcquireBudgetMs = budgetMs;
-  connectWallTimeCeilingMs = ceilingMs;
+  connectWallTimeCeilingMs =
+    (oauthSources as Record<string, unknown>).CONNECT_WALL_TIME_CEILING_MS;
 });
 
 afterAll(() => {
@@ -267,8 +275,7 @@ afterAll(() => {
 beforeEach(() => {
   recordedInserts = [];
   recordedWideFields = {};
-  refreshedWithTokens = [];
-  lockAcquireAttempts = [];
+  providerCallsThatSawNoSignal = [];
   txInstance = createTxInstance();
 });
 
@@ -277,20 +284,20 @@ const connect = () =>
     externalCalendarId: "primary",
     name: "Work",
     oauthCredentialId: `credential-${crypto.randomUUID()}`,
-    provider: "outlook",
+    provider: "google",
     userId: "user-1",
   });
 
-describe("Connect path refresh gives up inside the request budget", () => {
-  it("creates the source without a fabricated account id while the lock stays held", async () => {
+describe("Connect path gives up inside its declared wall time ceiling", () => {
+  it("settles the whole refresh and userinfo composition inside one deadline", async () => {
     const startedAt = Date.now();
 
     const source = await connect();
+    const elapsedMs = Date.now() - startedAt;
 
-    expect(Date.now() - startedAt).toBeLessThan(connectWallTimeCeilingMs);
-    expect(source).toBeTruthy();
-    expect(lockAcquireAttempts.length).toBeGreaterThan(0);
-    expect(refreshedWithTokens).toEqual([]);
+    expect(elapsedMs).toBeLessThan(DECLARED_CONNECT_WALL_TIME_CEILING_MS);
+    expect(providerCallsThatSawNoSignal).toEqual([]);
+    expect(source.id).toBe("source-1");
     expect(recordedWideFields["oauth_source.provider_account_id_resolution"])
       .toBe("provider_failure");
 
@@ -302,12 +309,11 @@ describe("Connect path refresh gives up inside the request budget", () => {
     expect(accountInserts[0]?.values.accountId ?? null).toBeNull();
   }, CASE_TIMEOUT_MS);
 
-  it("keeps the connect budget below the server idle timeout", async () => {
+  it("declares a ceiling below the server idle timeout", async () => {
     const constants = await import("@keeper.sh/constants");
 
-    expect(Number.isNaN(connectRefreshAcquireBudgetMs)).toBe(false);
-    expect(typeof constants.SERVER_IDLE_TIMEOUT_SECONDS).toBe("number");
-    expect(connectRefreshAcquireBudgetMs)
+    expect(connectWallTimeCeilingMs).toBe(DECLARED_CONNECT_WALL_TIME_CEILING_MS);
+    expect(connectWallTimeCeilingMs as number)
       .toBeLessThan(constants.SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND);
   });
 });

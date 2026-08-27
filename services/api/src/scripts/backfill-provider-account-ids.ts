@@ -5,8 +5,13 @@ import {
 } from "@keeper.sh/calendar";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { reconcileProviderAccountIdentity } from "@keeper.sh/database/provider-account-identity";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { database, oauthProviders } from "@/context";
+import {
+  CONNECT_REFRESH_ACQUIRE_BUDGET_MS,
+  CONNECT_WALL_TIME_CEILING_MS,
+} from "@/utils/oauth-sources";
 import { context, destroy, widelog } from "@/utils/logging";
 
 const PUSH_PROVIDERS = ["google", "outlook"];
@@ -85,7 +90,24 @@ const readFreshCredential = async (oauthCredentialId: string) => {
   };
 };
 
-const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
+interface BackfillDeadline {
+  remainingMs: () => number;
+  signal: AbortSignal;
+}
+
+const openBackfillDeadline = (): BackfillDeadline => {
+  const expiresAt = Date.now() + CONNECT_WALL_TIME_CEILING_MS;
+
+  return {
+    remainingMs: () => Math.max(0, expiresAt - Date.now()),
+    signal: AbortSignal.timeout(CONNECT_WALL_TIME_CEILING_MS),
+  };
+};
+
+const resolveAccessToken = async (
+  row: BackfillRow,
+  deadline: BackfillDeadline = openBackfillDeadline(),
+): Promise<string> => {
   if (row.expiresAt.getTime() - EXPIRY_SKEW_MS > Date.now()) {
     return row.accessToken;
   }
@@ -109,7 +131,9 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
   const refreshed = await runWithCredentialRefreshLock(
     row.oauthCredentialId,
     async () => {
-      const result = await provider.refreshAccessToken(row.refreshToken);
+      const result = await provider.refreshAccessToken(row.refreshToken, {
+        signal: deadline.signal,
+      });
 
       await database
         .update(oauthCredentialsTable)
@@ -124,25 +148,33 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
     },
     lockStore,
     () => readFreshCredential(row.oauthCredentialId),
+    Math.min(CONNECT_REFRESH_ACQUIRE_BUDGET_MS, deadline.remainingMs()),
   );
 
   return refreshed.access_token;
 };
 
-const resolveProviderAccountId = (row: BackfillRow): Promise<string> => {
+const resolveProviderAccountId = (
+  row: BackfillRow,
+  deadline: BackfillDeadline,
+): Promise<string> => {
   const provider = oauthProviders.getProvider(row.provider);
   if (!provider) {
     throw new Error(`No OAuth provider registered for ${row.provider}`);
   }
 
   return resolveProviderAccountIdentity({
-    fetchUserInfo: (accessToken) => provider.fetchUserInfo(accessToken),
-    resolveAccessToken: () => resolveAccessToken(row),
+    fetchUserInfo: (accessToken) => provider.fetchUserInfo(accessToken, { signal: deadline.signal }),
+    resolveAccessToken: () => resolveAccessToken(row, deadline),
     subject: `calendar account ${row.accountRowId}`,
   });
 };
 
-const backfillRow = (row: BackfillRow, tally: BackfillTally): Promise<void> =>
+const backfillRow = (
+  row: BackfillRow,
+  tally: BackfillTally,
+  deadline: BackfillDeadline = openBackfillDeadline(),
+): Promise<void> =>
   context(async () => {
     widelog.set("operation.name", "backfill-provider-account-id");
     widelog.set("operation.type", "script");
@@ -158,15 +190,22 @@ const backfillRow = (row: BackfillRow, tally: BackfillTally): Promise<void> =>
     }
 
     try {
-      const providerAccountId = await resolveProviderAccountId(row);
+      const providerAccountId = await resolveProviderAccountId(row, deadline);
 
-      await database
-        .update(calendarAccountsTable)
-        .set({ accountId: providerAccountId })
-        .where(eq(calendarAccountsTable.id, row.accountRowId));
+      const reconciliation = await reconcileProviderAccountIdentity({
+        accountRowId: row.accountRowId,
+        adopt: (unclaimedIdentity) =>
+          database
+            .update(calendarAccountsTable)
+            .set({ accountId: providerAccountId })
+            .where(unclaimedIdentity),
+        database,
+        providerAccountId,
+      });
 
       tally.updated += 1;
       widelog.set("provider.account_id", providerAccountId);
+      widelog.set("provider.identity_reconciliation", reconciliation);
       widelog.set("outcome", "success");
     } catch (error) {
       tally.failed += 1;
@@ -210,4 +249,4 @@ const run = (): Promise<void> =>
 await run();
 await destroy();
 
-export { resolveAccessToken, selectCandidates };
+export { backfillRow, resolveAccessToken, selectCandidates };

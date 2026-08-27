@@ -266,6 +266,8 @@ describe("a push channel the provider refused to stop is a loud failure", () => 
         list: () => Promise.resolve([]),
         purgeOrphaned: () => Promise.resolve([]),
         record: () => Promise.resolve(),
+        spendRepairAttempt: () =>
+          Promise.reject(new Error("the teardown never spends a repair attempt")),
       },
     });
 

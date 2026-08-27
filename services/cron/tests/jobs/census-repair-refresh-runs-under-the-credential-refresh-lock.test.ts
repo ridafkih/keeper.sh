@@ -221,6 +221,6 @@ describe("the census repair refreshes under the credential refresh lock", () => 
     expect(observed.userInfoTokens).toEqual([PEER_ACCESS_TOKEN]);
     expect(await survivorCalendarAccountId()).toBe(SURVIVOR_PROVIDER_ACCOUNT_ID);
     expect(await survivorNeedsReauthentication()).toBe(false);
-    expect(tally).toEqual({ attempted: 1, repaired: 1 });
+    expect(tally).toEqual({ attempted: 1, remaining: 0, repaired: 1 });
   });
 });

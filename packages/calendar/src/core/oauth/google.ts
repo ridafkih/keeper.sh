@@ -15,6 +15,19 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const GOOGLE_REVOKE_TIMEOUT_MS = 1000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
+const signalWithExpiry = (
+  signal: AbortSignal | undefined,
+  expiryMs: number,
+): AbortSignal => {
+  const expiry = AbortSignal.timeout(expiryMs);
+
+  if (!signal) {
+    return expiry;
+  }
+
+  return AbortSignal.any([signal, expiry]);
+};
+
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === "AbortError" || error.name === "TimeoutError");
@@ -34,7 +47,10 @@ interface AuthorizationUrlOptions {
 interface GoogleOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
-  refreshAccessToken: (refreshToken: string) => Promise<GoogleTokenResponse>;
+  refreshAccessToken: (
+    refreshToken: string,
+    signal?: AbortSignal,
+  ) => Promise<GoogleTokenResponse>;
 }
 
 interface GoogleTokenErrorPayload {
@@ -116,7 +132,10 @@ const createGoogleTokenRefresher = (
 ) => {
   const { clientId, clientSecret } = credentials;
 
-  return async (refreshToken: string): Promise<GoogleTokenResponse> => {
+  return async (
+    refreshToken: string,
+    signal?: AbortSignal,
+  ): Promise<GoogleTokenResponse> => {
     for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
       const response = await fetch(GOOGLE_TOKEN_URL, {
         body: new URLSearchParams({
@@ -127,7 +146,7 @@ const createGoogleTokenRefresher = (
         }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         method: "POST",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
       }).catch((error) => {
         if (isRequestTimeoutError(error)) {
           const timeoutError = new GoogleOAuthRefreshError(
@@ -287,15 +306,6 @@ interface GoogleGrantRevocationOutcome {
   status: number;
 }
 
-const revocationSignal = (signal: AbortSignal | undefined): AbortSignal => {
-  const expiry = AbortSignal.timeout(GOOGLE_REVOKE_TIMEOUT_MS);
-
-  if (!signal) {
-    return expiry;
-  }
-
-  return AbortSignal.any([signal, expiry]);
-};
 
 const revokeGoogleGrant = async (
   token: string,
@@ -305,7 +315,7 @@ const revokeGoogleGrant = async (
     body: new URLSearchParams({ token }),
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     method: "POST",
-    signal: revocationSignal(options.signal),
+    signal: signalWithExpiry(options.signal, GOOGLE_REVOKE_TIMEOUT_MS),
   }).catch((error: unknown) => {
     if (isRequestTimeoutError(error)) {
       throw new Error(
@@ -324,10 +334,13 @@ const revokeGoogleGrant = async (
   };
 };
 
-const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
+const fetchUserInfo = async (
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
   }).catch((error: unknown) => {
     if (isRequestTimeoutError(error)) {
       throw new Error(

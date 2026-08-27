@@ -123,6 +123,13 @@ const createResidueHarness = (seeded: Omit<ResidueRow, "id">[] = []) => {
       list: () => Promise.resolve([...rows.values()]),
       purgeOrphaned: () => Promise.resolve([]),
       record,
+      spendRepairAttempt: (residueId: string): Promise<number> => {
+        if (!rows.has(residueId)) {
+          return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+        }
+
+        return Promise.resolve(0);
+      },
     },
     rowsOfKind: (kind: string, userId: string): ResidueRow[] =>
       [...rows.values()].filter((row) => row.kind === kind && row.userId === userId),

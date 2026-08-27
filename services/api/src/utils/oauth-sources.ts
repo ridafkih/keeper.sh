@@ -28,6 +28,8 @@ import { registerAccountPushChannels } from "./push-notifications/register-accou
 const FIRST_RESULT_LIMIT = 1;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const CONNECT_REFRESH_ACQUIRE_BUDGET_MS = 5000;
+const CONNECT_WALL_TIME_CEILING_MS = 10_000;
+const CONNECT_DEADLINE_SETTLE_RESERVE_MS = 500;
 const MS_PER_SECOND = 1000;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -498,10 +500,26 @@ type OAuthSourceProvider = Pick<
   "fetchUserInfo" | "refreshAccessToken"
 >;
 
+interface ConnectDeadline {
+  remainingMs: () => number;
+  signal: AbortSignal;
+}
+
+const openConnectDeadline = (): ConnectDeadline => {
+  const providerIoBudgetMs = CONNECT_WALL_TIME_CEILING_MS - CONNECT_DEADLINE_SETTLE_RESERVE_MS;
+  const expiresAt = Date.now() + providerIoBudgetMs;
+
+  return {
+    remainingMs: () => Math.max(0, expiresAt - Date.now()),
+    signal: AbortSignal.timeout(providerIoBudgetMs),
+  };
+};
+
 const resolveCredentialAccessToken = async (
   provider: OAuthSourceProvider,
   oauthCredentialId: string,
   credential: OAuthSourceCredential,
+  deadline: ConnectDeadline,
 ): Promise<string> => {
   if (credential.expiresAt.getTime() - TOKEN_EXPIRY_SKEW_MS > Date.now()) {
     return credential.accessToken;
@@ -549,7 +567,9 @@ const resolveCredentialAccessToken = async (
   const refreshed = await runWithCredentialRefreshLock(
     oauthCredentialId,
     async () => {
-      const result = await provider.refreshAccessToken(credential.refreshToken);
+      const result = await provider.refreshAccessToken(credential.refreshToken, {
+        signal: deadline.signal,
+      });
 
       await database
         .update(oauthCredentialsTable)
@@ -564,7 +584,7 @@ const resolveCredentialAccessToken = async (
     },
     lockStore,
     readFreshCredential,
-    CONNECT_REFRESH_ACQUIRE_BUDGET_MS,
+    Math.min(CONNECT_REFRESH_ACQUIRE_BUDGET_MS, deadline.remainingMs()),
   );
 
   return refreshed.access_token;
@@ -582,9 +602,16 @@ const resolveProviderAccountId = async (
     throw new Error(`No OAuth provider registered for ${providerId}`);
   }
 
+  const deadline = openConnectDeadline();
+
   try {
-    const accessToken = await resolveCredentialAccessToken(provider, oauthCredentialId, credential);
-    const userInfo = await provider.fetchUserInfo(accessToken);
+    const accessToken = await resolveCredentialAccessToken(
+      provider,
+      oauthCredentialId,
+      credential,
+      deadline,
+    );
+    const userInfo = await provider.fetchUserInfo(accessToken, { signal: deadline.signal });
 
     if (!userInfo.id) {
       widelog.set("oauth_source.provider_account_id_resolution", "missing_id");
@@ -1126,6 +1153,7 @@ const importOAuthAccountCalendars = async (
 
 export {
   CONNECT_REFRESH_ACQUIRE_BUDGET_MS,
+  CONNECT_WALL_TIME_CEILING_MS,
   OAuthSourceLimitError,
   DestinationNotFoundError,
   DestinationProviderMismatchError,

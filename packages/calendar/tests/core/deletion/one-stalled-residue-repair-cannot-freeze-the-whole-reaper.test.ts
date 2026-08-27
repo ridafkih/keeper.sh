@@ -60,6 +60,7 @@ const createHarness = () => {
     list: () => Promise.resolve([stalledPolarRecord(), oauthGrantRecord()]),
     purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
+    spendRepairAttempt: () => Promise.resolve(0),
   };
 
   const reap = createTeardownResidueReaper({

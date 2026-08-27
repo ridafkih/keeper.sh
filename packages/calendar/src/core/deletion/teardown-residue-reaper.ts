@@ -70,6 +70,7 @@ interface TeardownResidueReaperOutcome {
   expiredIds: string[];
   failedIds: string[];
   purgedIds: string[];
+  retiredUnrevokedIds: string[];
   revocationSkippedIds: string[];
   scannedCount: number;
   unresolvedIds: string[];
@@ -385,6 +386,24 @@ const awaitsTheInFlightPushResidueWindow = (
   return now.getTime() - recordedAt.getTime() < GRANT_REVOCATION_QUIET_PERIOD_MS;
 };
 
+const spendRepairAttemptOrRecordFailure = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+  failedIds: string[],
+): Promise<TeardownResidueRecord | null> => {
+  try {
+    return {
+      ...record,
+      attempts: await dependencies.residue.spendRepairAttempt(record.id),
+    };
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
+    failedIds.push(record.id);
+
+    return null;
+  }
+};
+
 const clearResidueOrRecordFailure = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
@@ -420,6 +439,23 @@ const retireResidue = async (
 
   ledger.expiredIds.push(record.id);
   ledger.retirementReasons[record.id] = reason;
+};
+
+const retireGrantUnrevoked = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+  reason: ResidueRetirementReason,
+  ledger: ResidueRetirementLedger,
+  retiredUnrevokedIds: string[],
+): Promise<void> => {
+  dependencies.recordError(
+    new Error(
+      `OAuth grant residue ${record.id} for user ${record.userId} is being retired without revoking the ${record.provider} grant held for ${record.accountEmail ?? "an unknown account"}; that refresh token stays live and unaccounted for`,
+    ),
+    RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
+  );
+  retiredUnrevokedIds.push(record.id);
+  await retireResidue(record, dependencies, reason, ledger);
 };
 
 const purgeOrphanedOrRecordFailure = async (
@@ -494,9 +530,19 @@ async (): Promise<TeardownResidueReaperOutcome> => {
       );
     }
 
+    const attempted = await spendRepairAttemptOrRecordFailure(
+      record,
+      dependencies,
+      failedIds,
+    );
+
+    if (!attempted) {
+      continue;
+    }
+
     try {
       const repairOutcome = await repairResidueWithinDeadline(
-        record,
+        attempted,
         dependencies,
         now,
       );
@@ -506,21 +552,16 @@ async (): Promise<TeardownResidueReaperOutcome> => {
           blockingCredentialIds.add(credentialId);
         }
 
-        const unresolvedRetirement = retirementReason(record, now);
+        const unresolvedRetirement = retirementReason(attempted, now);
 
         if (unresolvedRetirement) {
-          dependencies.recordError(
-            new Error(
-              `OAuth grant residue ${record.id} for user ${record.userId} is being retired without revoking the ${record.provider} grant held for ${record.accountEmail ?? "an unknown account"}; that refresh token stays live and unaccounted for`,
-            ),
-            RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
+          await retireGrantUnrevoked(
+            attempted,
+            dependencies,
+            unresolvedRetirement,
+            { expiredIds, failedIds, retirementReasons },
+            retiredUnrevokedIds,
           );
-          retiredUnrevokedIds.push(record.id);
-          await retireResidue(record, dependencies, unresolvedRetirement, {
-            expiredIds,
-            failedIds,
-            retirementReasons,
-          });
           continue;
         }
 
@@ -546,10 +587,21 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     } catch (error) {
       dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
 
-      const failureRetirement = retirementReason(record, now);
+      const failureRetirement = retirementReason(attempted, now);
 
       if (failureRetirement) {
-        await retireResidue(record, dependencies, failureRetirement, {
+        if (attempted.kind === OAUTH_GRANT_RESIDUE_KIND) {
+          await retireGrantUnrevoked(
+            attempted,
+            dependencies,
+            failureRetirement,
+            { expiredIds, failedIds, retirementReasons },
+            retiredUnrevokedIds,
+          );
+          continue;
+        }
+
+        await retireResidue(attempted, dependencies, failureRetirement, {
           expiredIds,
           failedIds,
           retirementReasons,
@@ -593,6 +645,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     expiredIds,
     failedIds,
     purgedIds,
+    retiredUnrevokedIds,
     revocationSkippedIds,
     scannedCount: records.length,
     unresolvedIds,

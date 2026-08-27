@@ -96,6 +96,7 @@ interface DeleteUserOAuthCredential {
   accessToken: string;
   accountId: string;
   email: string | null;
+  expiresAt: Date | null;
   provider: string;
   providerAccountId?: string | null;
   refreshToken: string | null;
@@ -167,7 +168,7 @@ const recordOAuthGrantResidue = async (
     await residue.record({
       credential: {
         accessToken: credential.accessToken,
-        expiresAt: null,
+        expiresAt: credential.expiresAt,
         refreshToken: credential.refreshToken,
       },
       externalId: credential.accountId,
@@ -964,6 +965,7 @@ const createApiDeleteUserSyncTeardown = (
           accessToken: oauthCredentialsTable.accessToken,
           accountId: oauthCredentialsTable.id,
           email: oauthCredentialsTable.email,
+          expiresAt: oauthCredentialsTable.expiresAt,
           provider: oauthCredentialsTable.provider,
           providerAccountId: sql<string | null>`max(${calendarRowProviderIdentity()})`,
           refreshToken: oauthCredentialsTable.refreshToken,

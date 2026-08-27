@@ -62,6 +62,7 @@ interface TeardownResidueStore {
   list: () => Promise<TeardownResidueRecord[]>;
   purgeOrphaned: (now: Date) => Promise<string[]>;
   record: (draft: TeardownResidueDraft) => Promise<void>;
+  spendRepairAttempt: (residueId: string) => Promise<number>;
 }
 
 type TeardownResidueRecorder = TeardownResidueStore["record"];

@@ -156,6 +156,13 @@ const makeResidueHarness = (seeded: Omit<ResidueRow, "id">[] = []) => {
         rows.set(`residue-${issued.count}`, { ...draft, id: `residue-${issued.count}` });
         return Promise.resolve();
       },
+      spendRepairAttempt: (residueId: string): Promise<number> => {
+        if (!rows.has(residueId)) {
+          return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+        }
+
+        return Promise.resolve(0);
+      },
     },
     rowsOfKind: (kind: string): ResidueRow[] =>
       [...rows.values()].filter((row) => row.kind === kind),

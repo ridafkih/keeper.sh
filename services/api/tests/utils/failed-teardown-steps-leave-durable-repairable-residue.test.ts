@@ -92,6 +92,7 @@ interface ResidueHarness {
     list: () => Promise<TeardownResidueRecord[]>;
     purgeOrphaned: () => Promise<string[]>;
     record: (draft: Omit<TeardownResidueRecord, "id">) => Promise<void>;
+    spendRepairAttempt: (residueId: string) => Promise<number>;
   };
 }
 
@@ -119,6 +120,13 @@ const makeResidueHarness = (events: string[]): ResidueHarness => {
         events.push(`residue:${draft.kind}:${draft.userId}`);
         rows.set(id, { ...draft, id });
         return Promise.resolve();
+      },
+      spendRepairAttempt: (residueId: string) => {
+        if (!rows.has(residueId)) {
+          return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+        }
+
+        return Promise.resolve(0);
       },
     },
   };

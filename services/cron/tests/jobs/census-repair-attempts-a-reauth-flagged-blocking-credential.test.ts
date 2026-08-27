@@ -159,7 +159,7 @@ describe("census repair attempts a reauth flagged blocking credential", () => {
       SURVIVOR_CREDENTIAL_ID,
     ]);
 
-    expect(tally).toEqual({ attempted: 1, repaired: 1 });
+    expect(tally).toEqual({ attempted: 1, remaining: 0, repaired: 1 });
     expect(seenUserInfoTokens).toContain(SURVIVOR_ACCESS_TOKEN);
     expect(await survivorCalendarAccountId()).toBe(SURVIVOR_PROVIDER_ACCOUNT_ID);
   });

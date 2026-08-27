@@ -65,6 +65,15 @@ const createStore = (seed: TeardownResidueRecord[]) => {
     list: () => Promise.resolve([...rows.values()]),
     purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
+    spendRepairAttempt: (residueId: string) => {
+      const claimed = rows.get(residueId);
+
+      if (!claimed) {
+        return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+      }
+
+      return Promise.resolve(claimed.attempts ?? 0);
+    },
   };
 
   return { rows, store };

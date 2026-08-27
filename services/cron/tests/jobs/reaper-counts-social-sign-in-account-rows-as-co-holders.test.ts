@@ -108,6 +108,15 @@ const createHarness = () => {
     list: () => Promise.resolve(records),
     purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
+    spendRepairAttempt: (residueId: string) => {
+      const claimed = records.find((candidate) => candidate.id === residueId);
+
+      if (!claimed) {
+        return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+      }
+
+      return Promise.resolve(claimed.attempts ?? 0);
+    },
   };
 
   const reap = createTeardownResidueReaper({

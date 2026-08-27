@@ -195,7 +195,6 @@ const createTeardownResidueStore = (
       const rows = await config.database
         .update(deletionResidueTable)
         .set({
-          attempts: sql`${deletionResidueTable.attempts} + 1`,
           lastAttemptAt: claimedAt,
           nextAttemptAt: nextAttemptExpression(claimedAt),
         })
@@ -241,6 +240,22 @@ const createTeardownResidueStore = (
           providerResourceId: draft.providerResourceId,
         }),
       });
+    },
+    spendRepairAttempt: async (residueId: string) => {
+      const rows = await config.database
+        .update(deletionResidueTable)
+        .set({ attempts: sql`${deletionResidueTable.attempts} + 1` })
+        .where(eq(deletionResidueTable.id, residueId))
+        .returning({ attempts: deletionResidueTable.attempts });
+      const [row] = rows;
+
+      if (!row) {
+        throw new Error(
+          `Teardown residue ${residueId} vanished before its repair attempt could be counted`,
+        );
+      }
+
+      return row.attempts;
     },
   };
 };

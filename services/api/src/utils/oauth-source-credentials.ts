@@ -38,6 +38,7 @@ const createOAuthSourceCredential = async (
       .update(oauthCredentialsTable)
       .set({
         accessToken: data.accessToken,
+        createdAt: new Date(),
         expiresAt: data.expiresAt,
         needsReauthentication: false,
         refreshToken: data.refreshToken,

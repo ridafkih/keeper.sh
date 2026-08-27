@@ -24,6 +24,10 @@ interface NormalizedUserInfo {
   email: string;
 }
 
+interface ProviderRequestOptions {
+  signal?: AbortSignal;
+}
+
 interface OAuthTokens {
   access_token: string;
   refresh_token?: string;
@@ -34,8 +38,14 @@ interface OAuthTokens {
 interface OAuthProvider {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
   exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<OAuthTokens>;
-  fetchUserInfo: (accessToken: string) => Promise<NormalizedUserInfo>;
-  refreshAccessToken: (refreshToken: string) => Promise<OAuthTokens>;
+  fetchUserInfo: (
+    accessToken: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<NormalizedUserInfo>;
+  refreshAccessToken: (
+    refreshToken: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<OAuthTokens>;
   hasRequiredScopes: (grantedScopes: string) => boolean;
 }
 
@@ -61,8 +71,8 @@ const createOAuthProviders = (
     const googleService = createGoogleOAuthService(config.google, stateStore);
     providers.google = {
       exchangeCodeForTokens: googleService.exchangeCodeForTokens,
-      fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
-        const info = await fetchGoogleUserInfo(accessToken);
+      fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
+        const info = await fetchGoogleUserInfo(accessToken, options?.signal);
 
         if (!info.email) {
           throw new Error(
@@ -74,7 +84,8 @@ const createOAuthProviders = (
       },
       getAuthorizationUrl: googleService.getAuthorizationUrl,
       hasRequiredScopes: hasRequiredGoogleScopes,
-      refreshAccessToken: googleService.refreshAccessToken,
+      refreshAccessToken: (refreshToken, options) =>
+        googleService.refreshAccessToken(refreshToken, options?.signal),
     };
   }
 
@@ -82,13 +93,14 @@ const createOAuthProviders = (
     const microsoftService = createMicrosoftOAuthService(config.microsoft, stateStore);
     providers.outlook = {
       exchangeCodeForTokens: microsoftService.exchangeCodeForTokens,
-      fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
-        const info = await fetchMicrosoftUserInfo(accessToken);
+      fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
+        const info = await fetchMicrosoftUserInfo(accessToken, options?.signal);
         return { email: info.mail ?? info.userPrincipalName ?? "", id: info.id };
       },
       getAuthorizationUrl: microsoftService.getAuthorizationUrl,
       hasRequiredScopes: hasRequiredMicrosoftScopes,
-      refreshAccessToken: microsoftService.refreshAccessToken,
+      refreshAccessToken: (refreshToken, options) =>
+        microsoftService.refreshAccessToken(refreshToken, options?.signal),
     };
   }
 
@@ -118,6 +130,7 @@ export type {
   OAuthTokens,
   OAuthProvider,
   OAuthProvidersConfig,
+  ProviderRequestOptions,
   OAuthProviders,
   OAuthStateStore,
 };

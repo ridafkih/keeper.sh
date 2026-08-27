@@ -55,6 +55,15 @@ const createReaper = (record: TeardownResidueRecord) => {
     list: () => Promise.resolve([...remaining]),
     purgeOrphaned: () => Promise.resolve([]),
     record: () => Promise.resolve(),
+    spendRepairAttempt: (residueId: string) => {
+      const claimed = remaining.find((candidate) => candidate.id === residueId);
+
+      if (!claimed) {
+        return Promise.reject(new Error(`residue ${residueId} is not in this batch`));
+      }
+
+      return Promise.resolve(claimed.attempts ?? 0);
+    },
   };
 
   const fetchImpl = (input: string, init: RequestInit): Promise<Response> => {
