@@ -17,6 +17,7 @@ import {
   revokeGoogleGrant,
 } from "@keeper.sh/calendar";
 import type {
+  GoogleRevocationFetch,
   RegistrarContext,
   SurvivingAccountLinkCensus,
   TeardownResidueRecord,
@@ -31,6 +32,7 @@ const RESIDUE_STOP_TIMEOUT_MS = 5000;
 const RESIDUE_REPAIR_DEADLINE_MS = 15_000;
 const POLAR_RESOURCE_NOT_FOUND = "ResourceNotFound";
 const NO_UNKNOWABLE_CREDENTIALS = 0;
+const GOOGLE_INVALID_TOKEN_ERROR = "invalid_token";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -169,9 +171,24 @@ const deletePolarCustomer = async (externalId: string): Promise<void> => {
   }
 };
 
+const parseRefusalBody = (body: string): unknown => {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+};
+
+const grantIsAlreadyNotInForce = (body: string): boolean => {
+  const parsed = parseRefusalBody(body);
+
+  return isRecord(parsed) && parsed.error === GOOGLE_INVALID_TOKEN_ERROR;
+};
+
 const revokeOAuthGrant = async (
   record: TeardownResidueRecord,
   token: string,
+  options?: { fetchImpl: GoogleRevocationFetch },
 ): Promise<void> => {
   if (record.provider !== "google") {
     throw new Error(
@@ -179,14 +196,18 @@ const revokeOAuthGrant = async (
     );
   }
 
-  const outcome = await revokeGoogleGrant(token, { fetchImpl: globalThis.fetch });
+  const outcome = await revokeGoogleGrant(token, {
+    fetchImpl: options?.fetchImpl ?? globalThis.fetch,
+  });
 
-  if (!outcome.revoked) {
-    throw new Error(
-      `Google refused to revoke the grant behind residue ${record.id} `
-        + `(${outcome.status}): ${outcome.body}`,
-    );
+  if (outcome.revoked || grantIsAlreadyNotInForce(outcome.body)) {
+    return;
   }
+
+  throw new Error(
+    `Google refused to revoke the grant behind residue ${record.id} `
+      + `(${outcome.status}): ${outcome.body}`,
+  );
 };
 
 const credentialHoldsTheAccount = (
@@ -198,8 +219,28 @@ const credentialHoldsTheAccount = (
     return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail})`;
   }
 
-  return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or (${oauthCredentialsTable.email} is null and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} = ${providerAccountId}))`;
+  return sql`lower(${oauthCredentialsTable.email}) = lower(${accountEmail}) or (${oauthCredentialsTable.email} is null and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} = ${providerAccountId})) or exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and lower(${calendarAccountsTable.email}) = lower(${accountEmail}))`;
 };
+
+const calendarRowNamesADifferentAccount = (
+  provider: string,
+  accountEmail: string,
+  providerAccountId: string,
+): SQL =>
+  sql`exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ((${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '' and ${calendarAccountsTable.accountId} <> ${providerAccountId}) or (${calendarAccountsTable.email} is not null and lower(${calendarAccountsTable.email}) <> lower(${accountEmail}))))`;
+
+const credentialHasACalendarRowForTheProvider = (provider: string): SQL =>
+  sql`exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider})`;
+
+const calendarRowsNameNoAccountAtAll = (
+  provider: string,
+  accountEmail: string,
+  providerAccountId: string,
+): SQL =>
+  sql`${credentialHasACalendarRowForTheProvider(provider)} and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '') and not ${calendarRowNamesADifferentAccount(provider, accountEmail, providerAccountId)}`;
+
+const credentialIsLinkedToNoCalendarAccount = (provider: string): SQL =>
+  sql`${oauthCredentialsTable.email} is not null and not ${credentialHasACalendarRowForTheProvider(provider)}`;
 
 const credentialIdentityIsUnknowable = (
   provider: string,
@@ -210,7 +251,7 @@ const credentialIdentityIsUnknowable = (
     return sql`${oauthCredentialsTable.email} is null`;
   }
 
-  return sql`(${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)}) is not true and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider}) and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '')`;
+  return sql`(${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)}) is not true and ((${calendarRowsNameNoAccountAtAll(provider, accountEmail, providerAccountId)}) or (${credentialIsLinkedToNoCalendarAccount(provider)}))`;
 };
 
 const censusSurvivingCredentialLinks = async (
@@ -382,4 +423,4 @@ export default withCronWideEvent({
   overrunProtection: true,
 }) satisfies CronOptions;
 
-export { countSurvivingAccountLinks };
+export { countSurvivingAccountLinks, revokeOAuthGrant };

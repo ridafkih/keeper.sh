@@ -53,6 +53,7 @@ create table "account" (
 );
 create table calendar_accounts (
   "accountId" text,
+  "email" text,
   "id" uuid primary key default gen_random_uuid(),
   "oauthCredentialId" uuid references oauth_credentials("id") on delete cascade,
   "provider" text not null,

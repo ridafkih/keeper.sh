@@ -4,7 +4,6 @@ import { removeUserSyncJobs } from "@keeper.sh/queue";
 import {
   calendarAccountsTable,
   calendarsTable,
-  deletionResidueTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
@@ -31,6 +30,8 @@ const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const STEP_ABORT_SETTLE_MS = 400;
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
+const LATE_RESIDUE_SETTLE_TIMEOUT_MS = 2000;
+const RESIDUE_DISCARD_STEP_TIMEOUT_MS = LATE_RESIDUE_SETTLE_TIMEOUT_MS + RESIDUE_DISCARD_TIMEOUT_MS;
 const TOMBSTONE_ROLLBACK_STEP = "tombstone_rollback";
 const RESIDUE_DISCARD_ROLLBACK_STEP = "residue_discard_rollback";
 const SYNC_JOBS_TIMEOUT_MS = 1200;
@@ -50,6 +51,16 @@ const TEARDOWN_BUDGET_MS = [
 if (TEARDOWN_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
   throw new Error(
     `Delete user teardown budget of ${TEARDOWN_BUDGET_MS}ms does not fit inside the ` +
+      `${SYNC_TEARDOWN_TIMEOUT_MS}ms auth deadline supervising it`,
+  );
+}
+
+const ROLLBACK_BUDGET_MS =
+  Math.max(TOMBSTONE_TIMEOUT_MS, RESIDUE_DISCARD_STEP_TIMEOUT_MS) + STEP_ABORT_SETTLE_MS;
+
+if (ROLLBACK_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
+  throw new Error(
+    `Delete user rollback budget of ${ROLLBACK_BUDGET_MS}ms does not fit inside the ` +
       `${SYNC_TEARDOWN_TIMEOUT_MS}ms auth deadline supervising it`,
   );
 }
@@ -370,6 +381,102 @@ const recordChannelsAbandonedAfterTheAbortWindow = async (
   }
 };
 
+const LATE_RESIDUE_WRITES: unique symbol = Symbol.for(
+  "keeper.sh/delete-user-teardown/late-residue-writes",
+);
+
+type LateResidueWriteRegistry = Map<string, Promise<void>[]>;
+
+interface LateResidueWriteHolder {
+  [LATE_RESIDUE_WRITES]?: LateResidueWriteRegistry;
+}
+
+const lateResidueWritesOf = (residue: object): LateResidueWriteRegistry => {
+  const holder = residue as LateResidueWriteHolder;
+  const registry: LateResidueWriteRegistry = holder[LATE_RESIDUE_WRITES] ?? new Map();
+
+  holder[LATE_RESIDUE_WRITES] = registry;
+
+  return registry;
+};
+
+const registerLateResidueWrite = (
+  residue: object,
+  userId: string,
+  write: Promise<void>,
+): Promise<void> => {
+  const registry = lateResidueWritesOf(residue);
+  const tracked: Promise<void> = write.finally(() => {
+    const remaining = (registry.get(userId) ?? []).filter((entry) => entry !== tracked);
+
+    if (remaining.length === 0) {
+      registry.delete(userId);
+      return;
+    }
+
+    registry.set(userId, remaining);
+  });
+
+  registry.set(userId, [...(registry.get(userId) ?? []), tracked]);
+
+  return tracked;
+};
+
+const takeLateResidueWrites = (residue: object, userId: string): Promise<void>[] => {
+  const registry = lateResidueWritesOf(residue);
+  const pending = registry.get(userId) ?? [];
+
+  registry.delete(userId);
+
+  return pending;
+};
+
+const settleLateResidueWrites = async (pending: Promise<void>[]): Promise<boolean> => {
+  if (pending.length === 0) {
+    return true;
+  }
+
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const expiry = new Promise<false>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, LATE_RESIDUE_SETTLE_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([Promise.allSettled(pending).then(() => true), expiry]);
+  } finally {
+    if (timer !== null) {
+      clearTimeout(timer);
+    }
+  }
+};
+
+const trackLateResidueWrite = (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+  stepName: string,
+  write: Promise<void>,
+): Promise<void> => {
+  const store: unknown = dependencies.residue;
+
+  if (typeof store !== "object" || store === null) {
+    reportStepFailure(
+      new TypeError(
+        `Teardown step ${stepName} for user ${userId} cannot track its in-flight residue write: no residue store was injected, so a rollback cannot wait for it`,
+      ),
+      stepName,
+      userId,
+      RESIDUE_WRITE_FAILED_SLUG,
+    );
+
+    return write;
+  }
+
+  return registerLateResidueWrite(store, userId, write);
+};
+
 const createDeleteUserSyncTeardown =
   (dependencies: DeleteUserSyncTeardownDependencies): DeleteUserTeardown =>
   async (userId: string) => {
@@ -385,11 +492,16 @@ const createDeleteUserSyncTeardown =
 
         if (error instanceof DeadlineExceededError) {
           lateResidueWrites.push(
-            recordChannelsAbandonedAfterTheAbortWindow(
-              dependencies.residue,
+            trackLateResidueWrite(
+              dependencies,
               userId,
               step.name,
-              error.settlement,
+              recordChannelsAbandonedAfterTheAbortWindow(
+                dependencies.residue,
+                userId,
+                step.name,
+                error.settlement,
+              ),
             ),
           );
         }
@@ -418,6 +530,14 @@ const discardRecordedResidue = async (
     );
   }
 
+  const pending = takeLateResidueWrites(dependencies.residue, userId);
+  const settled = await settleLateResidueWrites(pending);
+
+  widelog.setFields({
+    "delete_user.late_residue_writes_awaited": pending.length,
+    "delete_user.late_residue_writes_settled": settled,
+  });
+
   const discardedPerKind = await Promise.all(
     TEARDOWN_RESIDUE_KINDS.map((kind) => deleteForUser(userId, kind)),
   );
@@ -428,6 +548,12 @@ const discardRecordedResidue = async (
       0,
     ),
   });
+
+  if (!settled) {
+    throw new Error(
+      `Rollback for user ${userId} waited ${LATE_RESIDUE_SETTLE_TIMEOUT_MS}ms for ${pending.length} in-flight residue write(s) that never settled, so residue recorded after the discard is left behind`,
+    );
+  }
 };
 
 const describeRollbackFailure = (error: unknown): string => {
@@ -454,7 +580,7 @@ const createDeleteUserSyncTeardownRollback =
       {
         name: RESIDUE_DISCARD_ROLLBACK_STEP,
         run: (): Promise<void> => discardRecordedResidue(dependencies, userId),
-        timeoutMs: RESIDUE_DISCARD_TIMEOUT_MS,
+        timeoutMs: RESIDUE_DISCARD_STEP_TIMEOUT_MS,
       },
     ];
 
@@ -542,27 +668,7 @@ const createApiDeleteUserSyncTeardown = (
         .where(eq(oauthCredentialsTable.userId, userId))
         .groupBy(oauthCredentialsTable.id),
     redis: context.redis,
-    residue: {
-      ...context.residue,
-      list: async () => {
-        const rows = await context.database
-          .select({
-            id: deletionResidueTable.id,
-            kind: deletionResidueTable.kind,
-            provider: deletionResidueTable.provider,
-            userId: deletionResidueTable.userId,
-          })
-          .from(deletionResidueTable)
-          .where(eq(deletionResidueTable.kind, PUSH_CHANNEL_RESIDUE_KIND));
-
-        return rows.map((row) => ({
-          id: row.id,
-          kind: row.kind,
-          userId: row.userId,
-          ...(row.provider !== null && { provider: row.provider }),
-        }));
-      },
-    },
+    residue: context.residue,
   });
 
 export {

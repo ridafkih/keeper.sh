@@ -20,6 +20,7 @@ import type {
 
 const NOW = new Date("2026-08-26T12:00:00.000Z");
 const FUTURE = new Date("2026-09-30T12:00:00.000Z");
+const PAST = new Date("2026-08-25T12:00:00.000Z");
 const INVALID_TOKEN_BODY = JSON.stringify({ error: "invalid_token" });
 const PERMANENT_FAILURE_ATTEMPT_CAP = 24;
 const ATTEMPTS_BELOW_THE_CAP = 6;
@@ -136,8 +137,8 @@ const createReaper = (seed: TeardownResidueRecord[]) => {
 };
 
 describe("a permanently failing residue repair retires at its attempt cap", () => {
-  it("retires an oauth grant residue at the attempt cap even though its expiry is in the future", async () => {
-    const harness = createReaper([failingOAuthRecord()]);
+  it("retires an oauth grant residue at the attempt cap once its expiry has passed", async () => {
+    const harness = createReaper([failingOAuthRecord({ expiresAt: PAST })]);
 
     const outcome = await harness.reap();
 
@@ -147,7 +148,7 @@ describe("a permanently failing residue repair retires at its attempt cap", () =
   });
 
   it("stops re-posting a capped revocation to the provider on later passes", async () => {
-    const harness = createReaper([failingOAuthRecord()]);
+    const harness = createReaper([failingOAuthRecord({ expiresAt: PAST })]);
 
     await harness.reap();
     const second = await harness.reap();
@@ -157,7 +158,7 @@ describe("a permanently failing residue repair retires at its attempt cap", () =
   });
 
   it("retires a push residue whose repair can never succeed once it reaches the cap", async () => {
-    const harness = createReaper([unrepairablePushRecord()]);
+    const harness = createReaper([unrepairablePushRecord({ expiresAt: PAST })]);
 
     const outcome = await harness.reap();
 

@@ -28,6 +28,7 @@ import { widelog } from "@/utils/logging";
 const DEREGISTRATION_ERROR_PREFIX = "push_channel.disconnect_error";
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const RESTATE_FAILED_SLUG = "push-channel-restate-failed";
+const RESIDUE_CREDENTIAL_FAILED_SLUG = "push-channel-residue-credential-failed";
 const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
 const DISCONNECT_CONCURRENCY = 8;
@@ -60,7 +61,9 @@ interface DeregisterPushChannelsDependencies {
   markChannelsStopped?: (channelIds: string[]) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
-  resolveResidueCredential?: (channel: StoredPushChannel) => TeardownResidueCredential | null;
+  resolveResidueCredential?: (
+    channel: StoredPushChannel,
+  ) => Promise<TeardownResidueCredential | null> | TeardownResidueCredential | null;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
   webhookConfigured: boolean;
 }
@@ -203,12 +206,29 @@ const describePossiblyOrphaned = (channels: StoredPushChannel[]): string[] =>
       && LIVE_PUSH_CHANNEL_STATES.has(channel.state))
     .map((channel) => `${channel.provider}:${channel.id}:${channel.state}`);
 
-const residueCredentialFor = (
+const storedResidueCredentialFor = async (
+  channel: StoredPushChannel,
+  dependencies: DeregisterPushChannelsDependencies,
+): Promise<TeardownResidueCredential | null> => {
+  const { resolveResidueCredential } = dependencies;
+  if (!resolveResidueCredential) {
+    return null;
+  }
+
+  try {
+    return await resolveResidueCredential(channel);
+  } catch (error) {
+    dependencies.recordError(error, RESIDUE_CREDENTIAL_FAILED_SLUG);
+    return null;
+  }
+};
+
+const residueCredentialFor = async (
   channel: StoredPushChannel,
   context: RegistrarContext | null,
   dependencies: DeregisterPushChannelsDependencies,
-): TeardownResidueCredential | null => {
-  const stored = dependencies.resolveResidueCredential?.(channel) ?? null;
+): Promise<TeardownResidueCredential | null> => {
+  const stored = await storedResidueCredentialFor(channel, dependencies);
 
   if (stored !== null) {
     return stored;
@@ -306,7 +326,11 @@ const runDeregisterPushChannelsOutcome = async (
 
         failureReasons.set(channel.id, outcome.reason);
 
-        const credential = residueCredentialFor(channel, outcome.context, dependencies);
+        const credential = await residueCredentialFor(
+          channel,
+          outcome.context,
+          dependencies,
+        );
         if (credential !== null) {
           residueCredentials.set(channel.id, credential);
         }
@@ -320,8 +344,26 @@ const runDeregisterPushChannelsOutcome = async (
     channel,
     reason: resolveAbandonmentReason(channel.id, failureReasons, signal),
   }));
-  const abandonments = abandoned.map(({ channel, reason }) =>
-    describeAbandonment(channel, reason, residueCredentials.get(channel.id) ?? null));
+  const dialableById = new Map(dialable.map((channel) => [channel.id, channel]));
+  const abandonments = await Promise.all(abandoned.map(async ({ channel, reason }) => {
+    const dialed = residueCredentials.get(channel.id) ?? null;
+    if (dialed !== null) {
+      return describeAbandonment(channel, reason, dialed);
+    }
+
+    const stored = dialableById.get(channel.id) ?? null;
+    if (stored === null) {
+      throw new Error(
+        `Abandoned push channel ${channel.id} is missing from the dialable channels it was drawn from`,
+      );
+    }
+
+    return describeAbandonment(
+      channel,
+      reason,
+      await residueCredentialFor(stored, null, dependencies),
+    );
+  }));
 
   if (recordAbandonments) {
     for (const abandonment of abandonments) {
@@ -428,6 +470,32 @@ const deregisterPushChannelsWithin = async (
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
   const credentialsByChannel = new Map<string, TeardownResidueCredential>();
 
+  const readStoredCredentials = async (accountId: string) => {
+    const [credentials] = await database
+      .select({
+        accessToken: oauthCredentialsTable.accessToken,
+        calendarAccountId: calendarAccountsTable.id,
+        expiresAt: oauthCredentialsTable.expiresAt,
+        oauthCredentialId: oauthCredentialsTable.id,
+        refreshToken: oauthCredentialsTable.refreshToken,
+      })
+      .from(calendarAccountsTable)
+      .innerJoin(
+        oauthCredentialsTable,
+        eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
+      )
+      .where(eq(calendarAccountsTable.id, accountId))
+      .limit(1);
+
+    if (!credentials) {
+      throw new Error(
+        `No OAuth credentials found for push channel account ${accountId}`,
+      );
+    }
+
+    return credentials;
+  };
+
   const outcome = await runDeregisterPushChannelsOutcome(scopeId, {
     createRegistrarContext: async (channel) => {
       if (webhookConfig === null) {
@@ -436,27 +504,7 @@ const deregisterPushChannelsWithin = async (
         );
       }
 
-      const [credentials] = await database
-        .select({
-          accessToken: oauthCredentialsTable.accessToken,
-          calendarAccountId: calendarAccountsTable.id,
-          expiresAt: oauthCredentialsTable.expiresAt,
-          oauthCredentialId: oauthCredentialsTable.id,
-          refreshToken: oauthCredentialsTable.refreshToken,
-        })
-        .from(calendarAccountsTable)
-        .innerJoin(
-          oauthCredentialsTable,
-          eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
-        )
-        .where(eq(calendarAccountsTable.id, channel.accountId))
-        .limit(1);
-
-      if (!credentials) {
-        throw new Error(
-          `No OAuth credentials found for push channel account ${channel.accountId}`,
-        );
-      }
+      const credentials = await readStoredCredentials(channel.accountId);
 
       const tokenState: TokenState = {
         accessToken: credentials.accessToken,
@@ -531,7 +579,20 @@ const deregisterPushChannelsWithin = async (
       });
     },
     resolveRegistrar: resolvePushRegistrar,
-    resolveResidueCredential: (channel) => credentialsByChannel.get(channel.id) ?? null,
+    resolveResidueCredential: async (channel) => {
+      const dialed = credentialsByChannel.get(channel.id) ?? null;
+      if (dialed !== null) {
+        return dialed;
+      }
+
+      const credentials = await readStoredCredentials(channel.accountId);
+
+      return {
+        accessToken: credentials.accessToken,
+        expiresAt: credentials.expiresAt,
+        refreshToken: credentials.refreshToken,
+      };
+    },
     webhookConfigured: webhookConfig !== null,
   }, signal, concurrency, true);
 

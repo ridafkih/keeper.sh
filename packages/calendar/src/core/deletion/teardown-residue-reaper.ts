@@ -246,11 +246,15 @@ const retirementReason = (
 ): ResidueRetirementReason | null => {
   const attempts = record.attempts ?? NO_ATTEMPTS;
 
+  if (!isPastExpiry(record, now)) {
+    return null;
+  }
+
   if (attempts >= PERMANENT_FAILURE_ATTEMPT_CAP) {
     return "permanent_failure_attempt_cap";
   }
 
-  if (isPastExpiry(record, now) && attempts >= MAX_RESIDUE_REPAIR_ATTEMPTS) {
+  if (attempts >= MAX_RESIDUE_REPAIR_ATTEMPTS) {
     return "expired_after_max_attempts";
   }
 

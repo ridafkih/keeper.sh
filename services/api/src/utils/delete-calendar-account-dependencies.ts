@@ -1,5 +1,5 @@
-import { calendarAccountsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { and, eq, notExists } from "drizzle-orm";
 import { database } from "@/context";
 import { widelog } from "@/utils/logging";
 import { getCalendarsAffectedByAccountMutation } from "@/utils/invalidate-calendars";
@@ -33,7 +33,34 @@ const createDeleteCalendarAccountDependencies = (): DeleteCalendarAccountDepende
               eq(calendarAccountsTable.userId, userId),
             ),
           )
-          .returning({ id: calendarAccountsTable.id });
+          .returning({
+            id: calendarAccountsTable.id,
+            oauthCredentialId: calendarAccountsTable.oauthCredentialId,
+          });
+
+        const orphanedCredentialId = deletedAccount?.oauthCredentialId;
+        if (orphanedCredentialId) {
+          await transaction
+            .delete(oauthCredentialsTable)
+            .where(
+              and(
+                eq(oauthCredentialsTable.id, orphanedCredentialId),
+                eq(oauthCredentialsTable.userId, userId),
+                notExists(
+                  transaction
+                    .select({ id: calendarAccountsTable.id })
+                    .from(calendarAccountsTable)
+                    .where(
+                      and(
+                        eq(calendarAccountsTable.oauthCredentialId, orphanedCredentialId),
+                        eq(calendarAccountsTable.userId, userId),
+                      ),
+                    ),
+                ),
+              ),
+            );
+        }
+
         return deletedAccount;
       }),
     );

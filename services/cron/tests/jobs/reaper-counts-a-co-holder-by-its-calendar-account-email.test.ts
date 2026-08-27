@@ -9,9 +9,10 @@ const client = new PGlite();
 const database = drizzle(client);
 
 const RESIDUE_ID = "66666666-6666-6666-6666-666666666666";
-const RESIDUE_ACCOUNT_ID = "999999999999999999999";
-const UNRELATED_ACCOUNT_ID = "111111111111111111111";
 const SURVIVOR_CREDENTIAL_ID = "77777777-7777-7777-7777-777777777777";
+const SHARED_ACCOUNT_ID = "google-sub-shared";
+const RENAMED_ACCOUNT_EMAIL = "new-name@workspace.example";
+const STALE_ACCOUNT_EMAIL = "old-name@workspace.example";
 
 const DDL = `
 create table "user" (
@@ -62,7 +63,7 @@ create table calendar_accounts (
 `;
 
 const oauthGrantResidue = (): TeardownResidueRecord => ({
-  accountEmail: "deleted@gmail.com",
+  accountEmail: RENAMED_ACCOUNT_EMAIL,
   createdAt: new Date("2026-08-26T11:00:00.000Z"),
   credential: {
     accessToken: "a-access",
@@ -73,30 +74,25 @@ const oauthGrantResidue = (): TeardownResidueRecord => ({
   id: RESIDUE_ID,
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
-  providerAccountId: RESIDUE_ACCOUNT_ID,
+  providerAccountId: SHARED_ACCOUNT_ID,
   userId: "user-a",
 });
 
-const insertSurvivorWithNullEmailCredential = async (): Promise<void> => {
+const insertSurvivorKnownOnlyByCalendarAccountEmail = async (): Promise<void> => {
   await client.query(
-    `insert into "user" ("email", "id", "name") values ('c@keeper.sh', 'user-c', 'Survivor C')`,
+    `insert into "user" ("email", "id", "name") values ('b@keeper.sh', 'user-b', 'Survivor B')`,
   );
   await client.query(
     `insert into oauth_credentials ("accessToken", "email", "expiresAt", "id", "provider", "refreshToken", "userId")
-     values ('c-access', null, now() + interval '1 hour', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'c-refresh', 'user-c')`,
+     values ('b-access', '${STALE_ACCOUNT_EMAIL}', now() + interval '1 hour', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'b-refresh', 'user-b')`,
   );
-};
-
-const linkSurvivorCredentialToCalendarAccount = async (
-  accountId: string,
-): Promise<void> => {
   await client.query(
-    `insert into calendar_accounts ("accountId", "oauthCredentialId", "provider", "userId")
-     values ('${accountId}', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'user-c')`,
+    `insert into calendar_accounts ("accountId", "email", "oauthCredentialId", "provider", "userId")
+     values (null, '${RENAMED_ACCOUNT_EMAIL}', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'user-b')`,
   );
 };
 
-describe("a null-email credential proven to hold a different account is not a co-holder", () => {
+describe("the census counts a co-holder by its calendar account email", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
@@ -104,31 +100,35 @@ describe("a null-email credential proven to hold a different account is not a co
     await client.exec(DDL);
   });
 
-  it("does not count a null-email credential whose calendar account is a different google account", async () => {
-    await insertSurvivorWithNullEmailCredential();
-    await linkSurvivorCredentialToCalendarAccount(UNRELATED_ACCOUNT_ID);
+  it("counts a null-account-id calendar row whose email matches the residue account email", async () => {
+    await insertSurvivorKnownOnlyByCalendarAccountEmail();
 
-    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
-      coHolders: 0,
-      identityResolved: true,
-    });
+    const surviving = await countSurvivingAccountLinks(
+      database,
+      oauthGrantResidue(),
+    );
+
+    expect(surviving.coHolders).toBeGreaterThanOrEqual(1);
   });
 
-  it("still counts a null-email credential whose calendar account is the residue's own account", async () => {
-    await insertSurvivorWithNullEmailCredential();
-    await linkSurvivorCredentialToCalendarAccount(RESIDUE_ACCOUNT_ID);
+  it("matches the calendar account email case-insensitively", async () => {
+    await client.query(
+      `insert into "user" ("email", "id", "name") values ('c@keeper.sh', 'user-c', 'Survivor C')`,
+    );
+    await client.query(
+      `insert into oauth_credentials ("accessToken", "email", "expiresAt", "id", "provider", "refreshToken", "userId")
+       values ('c-access', '${STALE_ACCOUNT_EMAIL}', now() + interval '1 hour', '88888888-8888-8888-8888-888888888888', 'google', 'c-refresh', 'user-c')`,
+    );
+    await client.query(
+      `insert into calendar_accounts ("accountId", "email", "oauthCredentialId", "provider", "userId")
+       values (null, 'NEW-NAME@Workspace.Example', '88888888-8888-8888-8888-888888888888', 'google', 'user-c')`,
+    );
 
-    const census = await countSurvivingAccountLinks(database, oauthGrantResidue());
+    const surviving = await countSurvivingAccountLinks(
+      database,
+      oauthGrantResidue(),
+    );
 
-    expect(census.coHolders).toBeGreaterThanOrEqual(1);
-    expect(census.identityResolved).toBe(true);
-  });
-
-  it("resolves the answer for a null-email credential with no calendar account row at all", async () => {
-    await insertSurvivorWithNullEmailCredential();
-
-    expect(
-      await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    expect(surviving.coHolders).toBeGreaterThanOrEqual(1);
   });
 });
