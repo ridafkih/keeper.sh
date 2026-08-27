@@ -5,13 +5,6 @@ import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/desti
 import { CalDAVCreateConflictError } from "../../../../src/providers/caldav/shared/client";
 import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
 
-/*
- * Our object names are deterministic from the source event, so two keeper customers mirroring the
- * same source event into the same shared calendar derive the same UID and therefore the same href.
- * The second one's create conflicts, and the recovery then decided what to do about an object it
- * did not put there. Deleting it and writing ours in its place destroys the first customer's event
- * and reports conflictResolved. The same fall-through catches an object we merely could not parse.
- */
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
   deleteCalendarObject: vi.fn(),
