@@ -146,6 +146,7 @@ const deleteUserTeardownUnavailable: DeleteUserTeardown = (userId: string) =>
 
 export {
   createDeleteUserTeardown,
+  recordStepResidue as recordDeleteUserResidue,
   TEARDOWN_BLOCKED_ERROR_NAME,
   RESIDUE_WRITE_FAILED_SLUG,
   createSkippedDeleteUserTeardown,

@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import { and, count, eq, inArray, lt, notExists, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, lt, notExists, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
@@ -7,18 +7,26 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { account as authAccountTable } from "@keeper.sh/database/auth-schema";
-import { calendarRowCarriesAProviderIdentity } from "@keeper.sh/database/provider-account-identity";
+import {
+  adoptsProviderAccountIdentity,
+  calendarRowCarriesAProviderIdentity,
+  calendarRowProviderIdentity,
+} from "@keeper.sh/database/provider-account-identity";
 import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createTeardownResidueReaper,
   createTeardownResidueStore,
   ensureValidToken,
+  fetchGoogleUserInfo,
+  fetchMicrosoftUserInfo,
+  resolveProviderAccountIdentity,
   resolvePushRegistrar,
   revokeGoogleGrant,
 } from "@keeper.sh/calendar";
 import type {
   GoogleRevocationFetch,
+  ProviderUserInfo,
   RegistrarContext,
   SurvivingAccountLinkCensus,
   TeardownResidueRecord,
@@ -36,6 +44,9 @@ const NO_UNKNOWABLE_CREDENTIALS = 0;
 const GOOGLE_INVALID_TOKEN_ERROR = "invalid_token";
 const ORPHAN_CREDENTIAL_SWEEP_PROVIDERS = ["google", "outlook"];
 const ORPHAN_CREDENTIAL_SAFETY_AGE_MS = 60 * 60 * 1000;
+const CENSUS_REPAIR_FAILED_SLUG = "teardown-residue-census-repair-failed";
+const NO_BLOCKING_CREDENTIALS = 0;
+const TOKEN_EXPIRY_SKEW_MS = 60_000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -413,6 +424,155 @@ const sweepOrphanedOAuthCredentials = async ({
   return swept.length;
 };
 
+interface CensusBlockingCalendarRow {
+  accessToken: string;
+  accountRowId: string;
+  credentialId: string;
+  expiresAt: Date;
+  provider: string;
+  refreshToken: string;
+}
+
+interface CensusRepairTally {
+  attempted: number;
+  repaired: number;
+}
+
+const resolveUserInfoFetch = (
+  provider: string,
+): ((accessToken: string) => Promise<ProviderUserInfo>) | null => {
+  if (provider === "google") {
+    return fetchGoogleUserInfo;
+  }
+
+  if (provider === "outlook") {
+    return fetchMicrosoftUserInfo;
+  }
+
+  return null;
+};
+
+const listCensusBlockingCalendarRows = (
+  database: PgDatabase<PgQueryResultHKT>,
+  credentialIds: string[],
+): Promise<CensusBlockingCalendarRow[]> =>
+  database
+    .select({
+      accessToken: oauthCredentialsTable.accessToken,
+      accountRowId: calendarAccountsTable.id,
+      credentialId: oauthCredentialsTable.id,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      provider: calendarAccountsTable.provider,
+      refreshToken: oauthCredentialsTable.refreshToken,
+    })
+    .from(calendarAccountsTable)
+    .innerJoin(
+      oauthCredentialsTable,
+      eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
+    )
+    .where(
+      and(
+        inArray(oauthCredentialsTable.id, credentialIds),
+        isNull(calendarRowProviderIdentity()),
+        eq(oauthCredentialsTable.needsReauthentication, false),
+      ),
+    );
+
+const resolveBlockingRowAccessToken = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  row: CensusBlockingCalendarRow,
+): Promise<string> => {
+  if (row.expiresAt.getTime() - TOKEN_EXPIRY_SKEW_MS > Date.now()) {
+    return row.accessToken;
+  }
+
+  const { default: environment } = await import("@/env");
+  const refresher = resolveTokenRefresher(row.provider, {
+    googleClientId: environment.GOOGLE_CLIENT_ID,
+    googleClientSecret: environment.GOOGLE_CLIENT_SECRET,
+    microsoftClientId: environment.MICROSOFT_CLIENT_ID,
+    microsoftClientSecret: environment.MICROSOFT_CLIENT_SECRET,
+  });
+
+  if (!refresher) {
+    throw new Error(
+      `The access token behind calendar account ${row.accountRowId} has expired and no ${row.provider} refresher is configured, so its provider identity cannot be resolved`,
+    );
+  }
+
+  const tokenState: TokenState = {
+    accessToken: row.accessToken,
+    accessTokenExpiresAt: row.expiresAt,
+    refreshToken: row.refreshToken,
+  };
+
+  await ensureValidToken(tokenState, refresher);
+
+  await database
+    .update(oauthCredentialsTable)
+    .set({
+      accessToken: tokenState.accessToken,
+      expiresAt: tokenState.accessTokenExpiresAt,
+      refreshToken: tokenState.refreshToken,
+    })
+    .where(eq(oauthCredentialsTable.id, row.credentialId));
+
+  return tokenState.accessToken;
+};
+
+const repairCensusBlockingRow = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  row: CensusBlockingCalendarRow,
+): Promise<void> => {
+  const fetchUserInfo = resolveUserInfoFetch(row.provider);
+
+  if (!fetchUserInfo) {
+    throw new Error(
+      `Calendar account ${row.accountRowId} names provider ${row.provider}, which has no user info endpoint wired, so the stalled census cannot be repaired`,
+    );
+  }
+
+  const providerAccountId = await resolveProviderAccountIdentity({
+    fetchUserInfo,
+    resolveAccessToken: () => resolveBlockingRowAccessToken(database, row),
+    subject: `calendar account ${row.accountRowId}`,
+  });
+
+  await database.execute(
+    sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.accountId.name)} = ${providerAccountId} where ${adoptsProviderAccountIdentity(row.accountRowId)}`,
+  );
+};
+
+const repairCensusBlockingCredentials = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  credentialIds: string[],
+): Promise<CensusRepairTally> => {
+  if (credentialIds.length === NO_BLOCKING_CREDENTIALS) {
+    return { attempted: 0, repaired: 0 };
+  }
+
+  const rows = await listCensusBlockingCalendarRows(database, credentialIds);
+  const results: boolean[] = [];
+
+  for (const row of rows) {
+    try {
+      await repairCensusBlockingRow(database, row);
+      results.push(true);
+    } catch (error) {
+      widelog.errorFields(error, {
+        retriable: true,
+        slug: CENSUS_REPAIR_FAILED_SLUG,
+      });
+      results.push(false);
+    }
+  }
+
+  return {
+    attempted: results.length,
+    repaired: results.filter(Boolean).length,
+  };
+};
+
 const createDefaultReaper = async () => {
   const { database } = await import("@/context");
   const { default: environment } = await import("@/env");
@@ -459,11 +619,24 @@ export default withCronWideEvent({
     });
     widelog.setFields({ sweptOrphanedCredentials });
     const reap = await createDefaultReaper();
-    await reap();
+    const outcome = await reap();
+    const censusRepair = await repairCensusBlockingCredentials(
+      database,
+      outcome.blockingCredentialIds,
+    );
+    widelog.setFields({
+      "teardown_residue.census_repair_attempted_count": censusRepair.attempted,
+      "teardown_residue.census_repair_repaired_count": censusRepair.repaired,
+    });
   },
   cron: "@every_5_minutes",
   name: import.meta.file,
   overrunProtection: true,
 }) satisfies CronOptions;
 
-export { countSurvivingAccountLinks, revokeOAuthGrant, sweepOrphanedOAuthCredentials };
+export {
+  countSurvivingAccountLinks,
+  repairCensusBlockingCredentials,
+  revokeOAuthGrant,
+  sweepOrphanedOAuthCredentials,
+};

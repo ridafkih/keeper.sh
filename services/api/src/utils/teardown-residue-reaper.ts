@@ -4,7 +4,7 @@ import type { database as databaseInstance } from "@/context";
 
 interface ApiTeardownResidueContext {
   database: typeof databaseInstance;
-  encryptionKey: string | null;
+  encryptionKey: string;
 }
 
 const createApiTeardownResidueStore = (

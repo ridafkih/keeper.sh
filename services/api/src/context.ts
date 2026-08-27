@@ -77,7 +77,7 @@ const deleteUserSyncQueue = createPushSyncQueue({
 
 const teardownResidueStore = createApiTeardownResidueStore({
   database,
-  encryptionKey: env.ENCRYPTION_KEY ?? null,
+  encryptionKey: env.ENCRYPTION_KEY,
 });
 
 const { auth, capabilities: authCapabilities } = createAuth({

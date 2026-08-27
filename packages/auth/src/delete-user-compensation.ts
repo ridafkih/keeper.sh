@@ -20,7 +20,7 @@ interface UserRowDeleter {
 }
 
 interface DeleteUserCompensation {
-  compensate: (userId: string) => Promise<void>;
+  compensate: (userId: string, survival: UnresolvedUserRowSurvival) => Promise<void>;
   finish: (userId: string) => Promise<void>;
   prepare: () => Promise<void>;
   userRowExists: UserRowProbe;
@@ -60,24 +60,32 @@ type AuthRequestHandler = (request: Request) => Promise<Response>;
 
 type UserRowProbe = (userId: string) => Promise<boolean>;
 
+type UserRowSurvival = "gone" | "survived" | "unresolvable";
+
+type UnresolvedUserRowSurvival = Exclude<UserRowSurvival, "gone">;
+
 const userRowSurvived = async (
   userId: string,
   userRowExists: UserRowProbe,
-): Promise<boolean> => {
+): Promise<UserRowSurvival> => {
   try {
-    return await userRowExists(userId);
+    if (await userRowExists(userId)) {
+      return "survived";
+    }
+
+    return "gone";
   } catch (error) {
     widelog.errorFields(error, {
       retriable: false,
       slug: "delete-user-row-probe-failed",
     });
-    return true;
+    return "unresolvable";
   }
 };
 
 const settleDeleteUserAttempt = async (
   unfinished: UnfinishedDeleteUserAttempt,
-  compensate: (userId: string) => Promise<void>,
+  compensate: (userId: string, survival: UnresolvedUserRowSurvival) => Promise<void>,
   finish: (userId: string) => Promise<void>,
   userRowExists: UserRowProbe,
 ): Promise<void> => {
@@ -86,13 +94,15 @@ const settleDeleteUserAttempt = async (
     return;
   }
 
-  if (!(await userRowSurvived(unfinished.userId, userRowExists))) {
+  const survival = await userRowSurvived(unfinished.userId, userRowExists);
+
+  if (survival === "gone") {
     widelog.setFields({ "delete_user.committed_without_acknowledgement": true });
     await finish(unfinished.userId);
     return;
   }
 
-  await compensate(unfinished.userId);
+  await compensate(unfinished.userId, survival);
 };
 
 interface DeleteUserCompensationScope {
@@ -173,6 +183,8 @@ export type {
   DeleteUserAttempt,
   DeleteUserCompensation,
   DeleteUserCompensationScope,
+  UnresolvedUserRowSurvival,
   UserRowDeleter,
   UserRowProbe,
+  UserRowSurvival,
 };

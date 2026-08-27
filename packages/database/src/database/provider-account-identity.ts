@@ -8,4 +8,11 @@ const calendarRowCarriesAProviderIdentity = (): SQL<boolean> =>
 const calendarRowProviderIdentity = (): SQL<string | null> =>
   sql<string | null>`case when ${calendarRowCarriesAProviderIdentity()} then ${calendarAccountsTable.accountId} end`;
 
-export { calendarRowCarriesAProviderIdentity, calendarRowProviderIdentity };
+const adoptsProviderAccountIdentity = (accountRowId: string): SQL =>
+  sql`${calendarAccountsTable.id} = ${accountRowId} and not (${calendarRowCarriesAProviderIdentity()})`;
+
+export {
+  adoptsProviderAccountIdentity,
+  calendarRowCarriesAProviderIdentity,
+  calendarRowProviderIdentity,
+};

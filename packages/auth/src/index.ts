@@ -18,6 +18,7 @@ import {
 import {
   createDeleteUserTeardown,
   createSkippedDeleteUserTeardown,
+  recordDeleteUserResidue,
   deleteUserTeardownUnavailable,
   SYNC_TEARDOWN_TIMEOUT_MS,
   TEARDOWN_BUDGET_MS,
@@ -47,6 +48,7 @@ import type {
   DeleteUserResidueRecorder,
   DeleteUserTeardown,
 } from "./delete-user-teardown";
+import type { UnresolvedUserRowSurvival } from "./delete-user-compensation";
 
 type DeleteUserOptions = NonNullable<
   NonNullable<BetterAuthOptions["user"]>["deleteUser"]
@@ -127,6 +129,9 @@ const hasOAuthProviderApi = (
   }
   return true;
 };
+
+const POLAR_REQUEST_TIMEOUT_MS = 10_000;
+const POLAR_CUSTOMER_RESIDUE_KIND = "polar_customer";
 
 const mcpJwtClaimsSchema = type({
   scope: "string",
@@ -223,6 +228,7 @@ const createAuth = (config: AuthConfig) => {
       return new Polar({
         accessToken: polarAccessToken,
         server: polarMode,
+        timeoutMs: POLAR_REQUEST_TIMEOUT_MS,
       });
     }
     return null;
@@ -238,7 +244,7 @@ const createAuth = (config: AuthConfig) => {
     return createDeleteUserTeardown(
       [
         {
-          name: "polar_customer",
+          name: POLAR_CUSTOMER_RESIDUE_KIND,
           run: (userId) => deletePolarCustomerByExternalId(polarClient, userId),
           timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
         },
@@ -278,7 +284,24 @@ const createAuth = (config: AuthConfig) => {
     await destroyExternalState(user.id);
   };
 
-  const compensateDeleteUser = async (userId: string): Promise<void> => {
+  const compensateDeleteUser = async (
+    userId: string,
+    survival: UnresolvedUserRowSurvival,
+  ): Promise<void> => {
+    if (survival === "unresolvable") {
+      widelog.setFields({ "delete_user.teardown_rollback_withheld": true });
+
+      if (polarClient) {
+        await recordDeleteUserResidue(
+          deleteUserResidueRecorder,
+          POLAR_CUSTOMER_RESIDUE_KIND,
+          userId,
+        );
+      }
+
+      return;
+    }
+
     widelog.setFields({ "delete_user.teardown_compensated": true });
     await rollbackQuiesce(userId);
   };

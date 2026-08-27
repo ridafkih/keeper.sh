@@ -12,6 +12,7 @@ process.env.API_PORT ??= "3000";
 process.env.BETTER_AUTH_SECRET ??= "test-secret";
 process.env.BETTER_AUTH_URL ??= "http://localhost:3000";
 process.env.DATABASE_URL ??= "postgres://localhost:5432/keeper";
+process.env.ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString("base64");
 process.env.REDIS_URL ??= "redis://localhost:6379";
 
 class FakeIoRedis {

@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import { createDeleteUserTeardown } from "../src/delete-user-teardown";
 import { createAuth } from "../src/index";
-import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
+import {
+  deletePolarCustomerByExternalId,
+  POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+} from "../src/polar-customer-delete";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const buildAuth = (overrides: Record<string, unknown> = {}) =>
@@ -158,7 +161,13 @@ describe("polar customer removal during deletion", () => {
       deletePolarCustomerByExternalId({ customers: { deleteExternal } }, "user-1"),
     ).resolves.toBeUndefined();
 
-    expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
+    expect(deleteExternal).toHaveBeenCalledWith(
+      { externalId: "user-1" },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      }),
+    );
   });
 
   it("removes the Polar customer only once the user row is actually gone", async () => {
@@ -184,7 +193,13 @@ describe("polar customer removal during deletion", () => {
 
     await resolveAfterDelete(auth)({ id: "user-1" });
 
-    expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
+    expect(deleteExternal).toHaveBeenCalledWith(
+      { externalId: "user-1" },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      }),
+    );
   });
 
   it("surfaces a Polar teardown failure on the active wide event", async () => {

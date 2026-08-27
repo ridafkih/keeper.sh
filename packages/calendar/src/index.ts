@@ -308,6 +308,7 @@ export {
   createGoogleTokenRefresher,
   GOOGLE_REVOKE_TIMEOUT_MS,
   GOOGLE_REVOKE_URL,
+  fetchUserInfo as fetchGoogleUserInfo,
   revokeGoogleGrant,
   type GoogleGrantRevocationOptions,
   type GoogleGrantRevocationOutcome,
@@ -316,8 +317,14 @@ export {
   type GoogleRevocationFetch,
 } from "./core/oauth/google";
 export {
+  resolveProviderAccountIdentity,
+  type ProviderAccountIdentityRequest,
+  type ProviderUserInfo,
+} from "./core/oauth/provider-account-identity";
+export {
   createMicrosoftOAuthService,
   createMicrosoftTokenRefresher,
+  fetchUserInfo as fetchMicrosoftUserInfo,
   type MicrosoftOAuthCredentials,
   type MicrosoftOAuthService,
 } from "./core/oauth/microsoft";
@@ -418,9 +425,11 @@ export { createRegistrarContextFactory } from "./core/source/push-registrar-cont
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
 export {
   OAUTH_GRANT_RESIDUE_KIND,
+  OAUTH_GRANT_RESIDUE_LIFETIME_MS,
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
   RESIDUE_LIFETIME_MS,
+  residueLifetimeMs,
   TEARDOWN_RESIDUE_KINDS,
 } from "./core/deletion/teardown-residue";
 export type {

@@ -1,5 +1,8 @@
 import type { RefreshLockStore } from "@keeper.sh/calendar";
-import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
+import {
+  resolveProviderAccountIdentity,
+  runWithCredentialRefreshLock,
+} from "@keeper.sh/calendar";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
@@ -126,20 +129,17 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
   return refreshed.access_token;
 };
 
-const resolveProviderAccountId = async (row: BackfillRow): Promise<string> => {
+const resolveProviderAccountId = (row: BackfillRow): Promise<string> => {
   const provider = oauthProviders.getProvider(row.provider);
   if (!provider) {
     throw new Error(`No OAuth provider registered for ${row.provider}`);
   }
 
-  const accessToken = await resolveAccessToken(row);
-  const userInfo = await provider.fetchUserInfo(accessToken);
-
-  if (!userInfo.id) {
-    throw new Error(`${row.provider} returned no account id for account ${row.accountRowId}`);
-  }
-
-  return userInfo.id;
+  return resolveProviderAccountIdentity({
+    fetchUserInfo: (accessToken) => provider.fetchUserInfo(accessToken),
+    resolveAccessToken: () => resolveAccessToken(row),
+    subject: `calendar account ${row.accountRowId}`,
+  });
 };
 
 const backfillRow = (row: BackfillRow, tally: BackfillTally): Promise<void> =>

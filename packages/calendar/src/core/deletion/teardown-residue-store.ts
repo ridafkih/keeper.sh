@@ -5,7 +5,7 @@ import { deletionResidueTable } from "@keeper.sh/database/schema";
 import {
   MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
   PUSH_CHANNEL_RESIDUE_KIND,
-  RESIDUE_LIFETIME_MS,
+  residueLifetimeMs,
 } from "./teardown-residue";
 import type {
   TeardownResidueCredential,
@@ -57,24 +57,22 @@ const decryptOptional = (value: string | null, encryptionKey: string): string | 
 
 const decryptCredential = (
   row: DeletionResidueRow,
-  encryptionKey: string | null,
+  encryptionKey: string,
 ): TeardownResidueCredential | null => {
   if (row.encryptedAccessToken === null) {
     return null;
   }
 
-  const key = requireEncryptionKey(encryptionKey);
-
   return {
-    accessToken: decryptPassword(row.encryptedAccessToken, key),
+    accessToken: decryptPassword(row.encryptedAccessToken, encryptionKey),
     expiresAt: row.credentialExpiresAt,
-    refreshToken: decryptOptional(row.encryptedRefreshToken, key),
+    refreshToken: decryptOptional(row.encryptedRefreshToken, encryptionKey),
   };
 };
 
 const toResidueRecord = (
   row: DeletionResidueRow,
-  encryptionKey: string | null,
+  encryptionKey: string,
 ): TeardownResidueRecord => {
   const credential = decryptCredential(row, encryptionKey);
 
@@ -99,18 +97,16 @@ const toResidueRecord = (
 
 const encryptCredential = (
   credential: TeardownResidueCredential | undefined,
-  encryptionKey: string | null,
+  encryptionKey: string,
 ) => {
   if (!credential) {
     return {};
   }
 
-  const key = requireEncryptionKey(encryptionKey);
-
   return {
     credentialExpiresAt: credential.expiresAt,
-    encryptedAccessToken: encryptPassword(credential.accessToken, key),
-    encryptedRefreshToken: encryptOptional(credential.refreshToken, key),
+    encryptedAccessToken: encryptPassword(credential.accessToken, encryptionKey),
+    encryptedRefreshToken: encryptOptional(credential.refreshToken, encryptionKey),
   };
 };
 
@@ -142,108 +138,112 @@ const dueBatch = (claimedAt: Date, batchLimit: number) =>
 
 const createTeardownResidueStore = (
   config: TeardownResidueStoreConfig,
-): TeardownResidueStore => ({
-  clear: async (residueId) => {
-    await config.database
-      .delete(deletionResidueTable)
-      .where(eq(deletionResidueTable.id, residueId));
-  },
-  delete: async (userId, kind, providerChannelId) => {
-    const rows = await config.database
-      .delete(deletionResidueTable)
-      .where(and(
-        eq(deletionResidueTable.userId, userId),
-        eq(deletionResidueTable.kind, kind),
-        eq(deletionResidueTable.providerChannelId, providerChannelId),
-        userRowExists(),
-      ))
-      .returning({ id: deletionResidueTable.id });
+): TeardownResidueStore => {
+  const encryptionKey = requireEncryptionKey(config.encryptionKey);
 
-    return rows.length;
-  },
-  deleteForUser: async (userId, kind) => {
-    const rows = await config.database
-      .delete(deletionResidueTable)
-      .where(and(
-        eq(deletionResidueTable.userId, userId),
-        eq(deletionResidueTable.kind, kind),
-        userRowExists(),
-      ))
-      .returning({ id: deletionResidueTable.id });
+  return {
+    clear: async (residueId) => {
+      await config.database
+        .delete(deletionResidueTable)
+        .where(eq(deletionResidueTable.id, residueId));
+    },
+    delete: async (userId, kind, providerChannelId) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.kind, kind),
+          eq(deletionResidueTable.providerChannelId, providerChannelId),
+          userRowExists(),
+        ))
+        .returning({ id: deletionResidueTable.id });
 
-    return rows.length;
-  },
-  hasUnreapedPushResidue: async (userId: string, provider: string) => {
-    const rows = await config.database
-      .select({ id: deletionResidueTable.id })
-      .from(deletionResidueTable)
-      .where(and(
-        eq(deletionResidueTable.userId, userId),
-        eq(deletionResidueTable.provider, provider),
-        eq(deletionResidueTable.kind, PUSH_CHANNEL_RESIDUE_KIND),
-        lt(
-          deletionResidueTable.attempts,
-          MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
-        ),
-        sql`not ${userRowExists()}`,
-      ))
-      .limit(1);
+      return rows.length;
+    },
+    deleteForUser: async (userId, kind) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.kind, kind),
+          userRowExists(),
+        ))
+        .returning({ id: deletionResidueTable.id });
 
-    return rows.length > 0;
-  },
-  list: async () => {
-    const claimedAt = config.now();
-    const rows = await config.database
-      .update(deletionResidueTable)
-      .set({
-        attempts: sql`${deletionResidueTable.attempts} + 1`,
-        lastAttemptAt: claimedAt,
-        nextAttemptAt: nextAttemptExpression(claimedAt),
-      })
-      .where(and(
-        or(
-          isNull(deletionResidueTable.nextAttemptAt),
-          lte(deletionResidueTable.nextAttemptAt, claimedAt),
-        ),
-        sql`not ${userRowExists()}`,
-        dueBatch(claimedAt, config.batchLimit ?? DEFAULT_RESIDUE_BATCH_LIMIT),
-      ))
-      .returning();
+      return rows.length;
+    },
+    hasUnreapedPushResidue: async (userId: string, provider: string) => {
+      const rows = await config.database
+        .select({ id: deletionResidueTable.id })
+        .from(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.provider, provider),
+          eq(deletionResidueTable.kind, PUSH_CHANNEL_RESIDUE_KIND),
+          lt(
+            deletionResidueTable.attempts,
+            MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
+          ),
+          sql`not ${userRowExists()}`,
+        ))
+        .limit(1);
 
-    return rows.map((row) => toResidueRecord(row, config.encryptionKey));
-  },
-  purgeOrphaned: async (now: Date) => {
-    const rows = await config.database
-      .delete(deletionResidueTable)
-      .where(and(lte(deletionResidueTable.expiresAt, now), userRowExists()))
-      .returning({ id: deletionResidueTable.id });
+      return rows.length > 0;
+    },
+    list: async () => {
+      const claimedAt = config.now();
+      const rows = await config.database
+        .update(deletionResidueTable)
+        .set({
+          attempts: sql`${deletionResidueTable.attempts} + 1`,
+          lastAttemptAt: claimedAt,
+          nextAttemptAt: nextAttemptExpression(claimedAt),
+        })
+        .where(and(
+          or(
+            isNull(deletionResidueTable.nextAttemptAt),
+            lte(deletionResidueTable.nextAttemptAt, claimedAt),
+          ),
+          sql`not ${userRowExists()}`,
+          dueBatch(claimedAt, config.batchLimit ?? DEFAULT_RESIDUE_BATCH_LIMIT),
+        ))
+        .returning();
 
-    return rows.map((row) => row.id);
-  },
-  record: async (draft: TeardownResidueDraft) => {
-    const recordedAt = config.now();
+      return rows.map((row) => toResidueRecord(row, encryptionKey));
+    },
+    purgeOrphaned: async (now: Date) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(lte(deletionResidueTable.expiresAt, now), userRowExists()))
+        .returning({ id: deletionResidueTable.id });
 
-    await config.database.insert(deletionResidueTable).values({
-      createdAt: recordedAt,
-      expiresAt: new Date(recordedAt.getTime() + RESIDUE_LIFETIME_MS),
-      kind: draft.kind,
-      userId: draft.userId,
-      ...(typeof draft.accountEmail === "string" && { accountEmail: draft.accountEmail }),
-      ...encryptCredential(draft.credential, config.encryptionKey),
-      ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
-      ...(typeof draft.provider === "string" && { provider: draft.provider }),
-      ...(typeof draft.providerAccountId === "string" && {
-        providerAccountId: draft.providerAccountId,
-      }),
-      ...(typeof draft.providerChannelId === "string" && {
-        providerChannelId: draft.providerChannelId,
-      }),
-      ...(typeof draft.providerResourceId === "string" && {
-        providerResourceId: draft.providerResourceId,
-      }),
-    });
-  },
-});
+      return rows.map((row) => row.id);
+    },
+    record: async (draft: TeardownResidueDraft) => {
+      const recordedAt = config.now();
+
+      await config.database.insert(deletionResidueTable).values({
+        createdAt: recordedAt,
+        expiresAt: new Date(recordedAt.getTime() + residueLifetimeMs(draft.kind)),
+        kind: draft.kind,
+        userId: draft.userId,
+        ...(typeof draft.accountEmail === "string" && { accountEmail: draft.accountEmail }),
+        ...encryptCredential(draft.credential, encryptionKey),
+        ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
+        ...(typeof draft.provider === "string" && { provider: draft.provider }),
+        ...(typeof draft.providerAccountId === "string" && {
+          providerAccountId: draft.providerAccountId,
+        }),
+        ...(typeof draft.providerChannelId === "string" && {
+          providerChannelId: draft.providerChannelId,
+        }),
+        ...(typeof draft.providerResourceId === "string" && {
+          providerResourceId: draft.providerResourceId,
+        }),
+      });
+    },
+  };
+};
 
 export { createTeardownResidueStore };
 export type { TeardownResidueStoreConfig };

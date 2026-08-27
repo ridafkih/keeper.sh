@@ -4,13 +4,17 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, count, eq, inArray, not, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase, oauthProviders as contextOAuthProviders } from "@/context";
+import {
+  adoptsProviderAccountIdentity,
+  calendarRowCarriesAProviderIdentity,
+} from "@keeper.sh/database/provider-account-identity";
 import { spawnBackgroundJob } from "./background-task";
 import { widelog } from "./logging";
 import {
@@ -344,9 +348,6 @@ const findOAuthAccountId = async (
   return findOAuthAccountIdWithDatabase(database, options);
 };
 
-const storedProviderAccountIdIsPlaceholder = () =>
-  sql`(${calendarAccountsTable.accountId} is null or ${calendarAccountsTable.accountId} = '' or ${calendarAccountsTable.accountId} = ${calendarAccountsTable.id}::text)`;
-
 const adoptProviderAccountIdWithDatabase = async (
   databaseClient: OAuthSourceDatabase,
   options: { accountRowId: string; providerAccountId: string | null },
@@ -358,12 +359,7 @@ const adoptProviderAccountIdWithDatabase = async (
   await databaseClient
     .update(calendarAccountsTable)
     .set({ accountId: options.providerAccountId })
-    .where(
-      and(
-        eq(calendarAccountsTable.id, options.accountRowId),
-        storedProviderAccountIdIsPlaceholder(),
-      ),
-    );
+    .where(adoptsProviderAccountIdentity(options.accountRowId));
 };
 
 const findStoredProviderAccountIdWithDatabase = async (
@@ -378,7 +374,7 @@ const findStoredProviderAccountIdWithDatabase = async (
         eq(calendarAccountsTable.userId, options.userId),
         eq(calendarAccountsTable.provider, options.provider),
         eq(calendarAccountsTable.oauthCredentialId, options.oauthCredentialId),
-        not(storedProviderAccountIdIsPlaceholder()),
+        calendarRowCarriesAProviderIdentity(),
       ),
     )
     .limit(FIRST_RESULT_LIMIT);

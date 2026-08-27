@@ -3,7 +3,7 @@ import {
   OAUTH_GRANT_RESIDUE_KIND,
   POLAR_CUSTOMER_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
-  RESIDUE_LIFETIME_MS,
+  residueLifetimeMs,
 } from "./teardown-residue";
 import type { TeardownResidueRecord, TeardownResidueStore } from "./teardown-residue";
 import { GOOGLE_PUSH_PROFILE } from "../source/push-provider-profile";
@@ -61,6 +61,7 @@ interface TeardownResidueReaperDependencies {
 }
 
 interface TeardownResidueReaperOutcome {
+  blockingCredentialIds: string[];
   clearedIds: string[];
   deferredIds: string[];
   expiredIds: string[];
@@ -337,7 +338,7 @@ const residueRecordedAt = (record: TeardownResidueRecord): Date | null => {
   }
 
   if (record.expiresAt instanceof Date) {
-    return new Date(record.expiresAt.getTime() - RESIDUE_LIFETIME_MS);
+    return new Date(record.expiresAt.getTime() - residueLifetimeMs(record.kind));
   }
 
   return null;
@@ -562,6 +563,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
   });
 
   return {
+    blockingCredentialIds: [...blockingCredentialIds],
     clearedIds,
     deferredIds,
     expiredIds,

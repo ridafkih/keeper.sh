@@ -1,6 +1,14 @@
+interface PolarCustomerDeletionRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
+
 interface PolarCustomerDeletionClient {
   customers: {
-    deleteExternal: (payload: { externalId: string }) => Promise<unknown>;
+    deleteExternal: (
+      payload: { externalId: string },
+      options?: PolarCustomerDeletionRequestOptions,
+    ) => Promise<unknown>;
   };
 }
 
@@ -24,8 +32,16 @@ const deletePolarCustomerByExternalId = async (
   const NO_FAILURE = Symbol("no-failure");
   const DEADLINE_REACHED = Symbol("deadline-reached");
 
+  const transport = new AbortController();
+
   const failure = polarClient.customers
-    .deleteExternal({ externalId })
+    .deleteExternal(
+      { externalId },
+      {
+        signal: transport.signal,
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      },
+    )
     .then(
       (): unknown => NO_FAILURE,
       (error: unknown) => error,
@@ -53,8 +69,13 @@ const deletePolarCustomerByExternalId = async (
     throw outcome;
   } finally {
     clearTimeout(deadlineTimer);
+    transport.abort(
+      new Error(
+        `Polar customer deletion for ${externalId} was cancelled after ${POLAR_CUSTOMER_DELETE_TIMEOUT_MS}ms`,
+      ),
+    );
   }
 };
 
 export { deletePolarCustomerByExternalId, POLAR_CUSTOMER_DELETE_TIMEOUT_MS };
-export type { PolarCustomerDeletionClient };
+export type { PolarCustomerDeletionClient, PolarCustomerDeletionRequestOptions };

@@ -350,7 +350,13 @@ describe("a Polar deletion the provider refused leaves durable repairable residu
 
     const rows = await residue.list();
 
-    expect(deleteExternal).toHaveBeenCalledWith({ externalId: DELETED_USER });
+    expect(deleteExternal).toHaveBeenCalledWith(
+      { externalId: DELETED_USER },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      }),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       externalId: DELETED_USER,

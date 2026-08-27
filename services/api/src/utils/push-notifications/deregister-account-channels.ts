@@ -328,6 +328,16 @@ const runDeregisterPushChannelsOutcome = async (
   }
 
   if (!dependencies.webhookConfigured) {
+    if (requireChannelListing) {
+      const error = new Error(
+        `Push channel deregistration for ${scopeId} cannot dial any channel because WEBHOOK_PUBLIC_URL is not configured`,
+      );
+
+      dependencies.recordError(error, DEREGISTRATION_FAILED_SLUG);
+
+      throw error;
+    }
+
     return { abandonments: [], deregisteredCount: 0 };
   }
 

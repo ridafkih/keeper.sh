@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "../src/index";
-import { deletePolarCustomerByExternalId } from "../src/polar-customer-delete";
+import {
+  deletePolarCustomerByExternalId,
+  POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+} from "../src/polar-customer-delete";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 describe("deletePolarCustomerByExternalId", () => {
@@ -19,7 +22,13 @@ describe("deletePolarCustomerByExternalId", () => {
     ).resolves.toBeUndefined();
 
     expect(deleteExternal).toHaveBeenCalledTimes(1);
-    expect(deleteExternal).toHaveBeenCalledWith({ externalId: "user-1" });
+    expect(deleteExternal).toHaveBeenCalledWith(
+      { externalId: "user-1" },
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      }),
+    );
   });
 
   it("propagates an unexpected Polar failure instead of orphaning the customer", async () => {
