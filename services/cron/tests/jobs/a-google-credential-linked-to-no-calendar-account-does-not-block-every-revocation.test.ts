@@ -10,8 +10,7 @@ const database = drizzle(client);
 
 const RESIDUE_ID = "66666666-6666-6666-6666-666666666666";
 const RESIDUE_ACCOUNT_ID = "999999999999999999999";
-const UNRELATED_ACCOUNT_ID = "111111111111111111111";
-const SURVIVOR_CREDENTIAL_ID = "77777777-7777-7777-7777-777777777777";
+const UNRELATED_CREDENTIAL_ID = "77777777-7777-7777-7777-777777777777";
 
 const DDL = `
 create table "user" (
@@ -76,26 +75,26 @@ const oauthGrantResidue = (): TeardownResidueRecord => ({
   userId: "user-a",
 });
 
-const insertSurvivorWithNullEmailCredential = async (): Promise<void> => {
+const insertUnrelatedSurvivor = async (email: string | null): Promise<void> => {
   await client.query(
-    `insert into "user" ("email", "id", "name") values ('c@keeper.sh', 'user-c', 'Survivor C')`,
+    `insert into "user" ("email", "id", "name") values ('z@keeper.sh', 'user-z', 'Survivor Z')`,
   );
   await client.query(
     `insert into oauth_credentials ("accessToken", "email", "expiresAt", "id", "provider", "refreshToken", "userId")
-     values ('c-access', null, now() + interval '1 hour', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'c-refresh', 'user-c')`,
+     values ('z-access', ${email === null ? "null" : `'${email}'`}, now() + interval '1 hour', '${UNRELATED_CREDENTIAL_ID}', 'google', 'z-refresh', 'user-z')`,
   );
 };
 
-const linkSurvivorCredentialToCalendarAccount = async (
-  accountId: string,
+const linkUnrelatedCredentialToCalendarAccount = async (
+  accountId: string | null,
 ): Promise<void> => {
   await client.query(
     `insert into calendar_accounts ("accountId", "oauthCredentialId", "provider", "userId")
-     values ('${accountId}', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'user-c')`,
+     values (${accountId === null ? "null" : `'${accountId}'`}, '${UNRELATED_CREDENTIAL_ID}', 'google', 'user-z')`,
   );
 };
 
-describe("a null-email credential proven to hold a different account is not a co-holder", () => {
+describe("a google credential linked to no calendar account does not block every revocation", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
@@ -103,9 +102,15 @@ describe("a null-email credential proven to hold a different account is not a co
     await client.exec(DDL);
   });
 
-  it("does not count a null-email credential whose calendar account is a different google account", async () => {
-    await insertSurvivorWithNullEmailCredential();
-    await linkSurvivorCredentialToCalendarAccount(UNRELATED_ACCOUNT_ID);
+  it("resolves the identity when no credential survives at all", async () => {
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 0,
+      identityResolved: true,
+    });
+  });
+
+  it("resolves the identity when the only survivor is an unlinked null-email credential", async () => {
+    await insertUnrelatedSurvivor(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
       coHolders: 0,
@@ -113,9 +118,8 @@ describe("a null-email credential proven to hold a different account is not a co
     });
   });
 
-  it("still counts a null-email credential whose calendar account is the residue's own account", async () => {
-    await insertSurvivorWithNullEmailCredential();
-    await linkSurvivorCredentialToCalendarAccount(RESIDUE_ACCOUNT_ID);
+  it("still counts an unlinked credential whose email matches the residue account", async () => {
+    await insertUnrelatedSurvivor("deleted@gmail.com");
 
     const census = await countSurvivingAccountLinks(database, oauthGrantResidue());
 
@@ -123,11 +127,13 @@ describe("a null-email credential proven to hold a different account is not a co
     expect(census.identityResolved).toBe(true);
   });
 
-  it("resolves the answer for a null-email credential with no calendar account row at all", async () => {
-    await insertSurvivorWithNullEmailCredential();
+  it("leaves the identity unresolved for a null-email credential whose calendar account row carries a null account id", async () => {
+    await insertUnrelatedSurvivor(null);
+    await linkUnrelatedCredentialToCalendarAccount(null);
 
-    expect(
-      await countSurvivingAccountLinks(database, oauthGrantResidue()),
-    ).toEqual({ coHolders: 0, identityResolved: true });
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 });

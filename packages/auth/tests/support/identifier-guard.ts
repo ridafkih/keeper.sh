@@ -27,7 +27,9 @@ const remediationTestFiles = () => [
   "packages/auth/tests/delete-user-teardown.test.ts",
   "packages/auth/tests/failed-delete-user-does-not-strand-the-account.test.ts",
   "packages/auth/tests/polar-customer-delete.test.ts",
+  "packages/calendar/tests/core/deletion/a-permanently-failing-residue-repair-retires-at-its-attempt-cap.test.ts",
   "packages/calendar/tests/core/deletion/expired-oauth-grant-residue-is-retired-instead-of-retried-forever.test.ts",
+  "packages/calendar/tests/core/deletion/grant-revocation-waits-out-the-in-flight-push-residue-window.test.ts",
   "packages/calendar/tests/core/deletion/one-stalled-residue-repair-cannot-freeze-the-whole-reaper.test.ts",
   "packages/calendar/tests/core/deletion/reaper-refuses-oauth-residue-without-account-email.test.ts",
   "packages/calendar/tests/core/deletion/reaper-refuses-to-revoke-a-google-account-a-surviving-user-still-holds.test.ts",
@@ -63,8 +65,10 @@ const remediationTestFiles = () => [
   "services/api/tests/utils/residue-list-claims-a-bounded-batch.test.ts",
   "services/api/tests/utils/residue-orphaned-by-a-crashed-delete-is-purged.test.ts",
   "services/api/tests/utils/revocable-grants-recorded-for-the-reaper.test.ts",
+  "services/api/tests/utils/rollback-discards-recorded-residue-even-when-the-tombstone-erase-fails.test.ts",
   "services/api/tests/utils/teardown-rollback-clears-push-channel-residue.test.ts",
   "services/api/tests/utils/teardown-rollback-fails-loudly-when-its-residue-store-cannot-delete.test.ts",
+  "services/cron/tests/jobs/a-google-credential-linked-to-no-calendar-account-does-not-block-every-revocation.test.ts",
   "services/cron/tests/jobs/reaper-cohort-guard-is-case-insensitive-on-account-email.test.ts",
   "services/cron/tests/jobs/reaper-counts-calendar-account-holders-as-co-holders.test.ts",
   "services/cron/tests/jobs/reaper-counts-social-sign-in-account-rows-as-co-holders.test.ts",
@@ -72,6 +76,7 @@ const remediationTestFiles = () => [
   "services/cron/tests/jobs/reaper-ignores-null-email-credentials-for-a-different-account.test.ts",
   "services/cron/tests/jobs/reaper-refuses-to-revoke-a-google-account-a-surviving-user-still-holds.test.ts",
   "services/cron/tests/jobs/reaper-treats-a-null-account-id-calendar-row-as-unresolved-identity.test.ts",
+  "services/cron/tests/jobs/reaper-treats-a-stale-email-credential-with-a-null-account-id-as-unresolved.test.ts",
   "services/cron/tests/jobs/unknown-identity-credential-row-defers-instead-of-blocking-every-revocation.test.ts",
 ];
 

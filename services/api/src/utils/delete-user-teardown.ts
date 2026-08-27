@@ -30,6 +30,9 @@ import type { database as databaseInstance } from "@/context";
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const STEP_ABORT_SETTLE_MS = 400;
 const TOMBSTONE_TIMEOUT_MS = 500;
+const RESIDUE_DISCARD_TIMEOUT_MS = 500;
+const TOMBSTONE_ROLLBACK_STEP = "tombstone_rollback";
+const RESIDUE_DISCARD_ROLLBACK_STEP = "residue_discard_rollback";
 const SYNC_JOBS_TIMEOUT_MS = 1200;
 const PUSH_CHANNELS_TIMEOUT_MS = 3000;
 const OAUTH_GRANTS_TIMEOUT_MS = 1200;
@@ -427,16 +430,68 @@ const discardRecordedResidue = async (
   });
 };
 
+const describeRollbackFailure = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
+};
+
 const createDeleteUserSyncTeardownRollback =
   (dependencies: DeleteUserSyncTeardownRollbackDependencies): DeleteUserTeardown =>
   async (userId: string) => {
-    await runWithDeadline("tombstone_rollback", TOMBSTONE_TIMEOUT_MS, async () => {
-      await clearUserDeleted(dependencies.redis, userId);
+    const steps = [
+      {
+        name: TOMBSTONE_ROLLBACK_STEP,
+        run: async (): Promise<void> => {
+          await clearUserDeleted(dependencies.redis, userId);
 
-      widelog.setFields({ "delete_user.tombstone_cleared": true });
+          widelog.setFields({ "delete_user.tombstone_cleared": true });
+        },
+        timeoutMs: TOMBSTONE_TIMEOUT_MS,
+      },
+      {
+        name: RESIDUE_DISCARD_ROLLBACK_STEP,
+        run: (): Promise<void> => discardRecordedResidue(dependencies, userId),
+        timeoutMs: RESIDUE_DISCARD_TIMEOUT_MS,
+      },
+    ];
 
-      await discardRecordedResidue(dependencies, userId);
+    const settlements = await Promise.all(
+      steps.map(async (step) => {
+        try {
+          await runWithDeadline(step.name, step.timeoutMs, () => step.run());
+
+          return [];
+        } catch (error) {
+          return [{ error, name: step.name }];
+        }
+      }),
+    );
+
+    const failures = settlements.flat();
+
+    widelog.setFields({
+      "delete_user.residue_left_behind": failures.some(
+        (failure) => failure.name === RESIDUE_DISCARD_ROLLBACK_STEP,
+      ),
     });
+
+    if (failures.length === 0) {
+      return;
+    }
+
+    for (const failure of failures) {
+      reportStepFailure(failure.error, failure.name, userId, TEARDOWN_FAILED_SLUG);
+    }
+
+    throw new AggregateError(
+      failures.map((failure) => failure.error),
+      `Delete user rollback for user ${userId} failed: ${failures
+        .map((failure) => `${failure.name}: ${describeRollbackFailure(failure.error)}`)
+        .join("; ")}`,
+    );
   };
 
 const TEARDOWN_QUEUE_CONNECTION_OPTIONS = {

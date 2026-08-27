@@ -203,13 +203,14 @@ const credentialHoldsTheAccount = (
 
 const credentialIdentityIsUnknowable = (
   provider: string,
+  accountEmail: string,
   providerAccountId: string | null,
 ): SQL => {
   if (providerAccountId === null) {
     return sql`${oauthCredentialsTable.email} is null`;
   }
 
-  return sql`${oauthCredentialsTable.email} is null and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '')`;
+  return sql`(${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)}) is not true and exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider}) and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '')`;
 };
 
 const censusSurvivingCredentialLinks = async (
@@ -223,7 +224,7 @@ const censusSurvivingCredentialLinks = async (
     .select({
       surviving: sql<number>`count(*) filter (where ${credentialHoldsTheAccount(provider, accountEmail, providerAccountId)})`
         .mapWith(Number),
-      unknowable: sql<number>`count(*) filter (where ${credentialIdentityIsUnknowable(provider, providerAccountId)})`
+      unknowable: sql<number>`count(*) filter (where ${credentialIdentityIsUnknowable(provider, accountEmail, providerAccountId)})`
         .mapWith(Number),
     })
     .from(oauthCredentialsTable)

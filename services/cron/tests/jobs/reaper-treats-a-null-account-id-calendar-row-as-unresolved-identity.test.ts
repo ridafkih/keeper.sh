@@ -198,12 +198,12 @@ describe("a calendar account row with a null account id proves nothing about a c
     expect(census.coHolders).toBeGreaterThanOrEqual(1);
   });
 
-  it("leaves the census unresolved for a null-email credential with no calendar account row at all", async () => {
+  it("resolves the census for a null-email credential with no calendar account row at all", async () => {
     await insertSurvivor(null);
 
     expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
       coHolders: 0,
-      identityResolved: false,
+      identityResolved: true,
     });
   });
 });

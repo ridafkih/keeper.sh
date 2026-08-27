@@ -90,6 +90,10 @@ const insertStrangerWithLegacyNullEmailCredential = async (): Promise<void> => {
     `insert into oauth_credentials ("accessToken", "email", "expiresAt", "provider", "refreshToken", "userId")
      values ('stranger-access', null, now() + interval '1 hour', 'google', 'stranger-refresh', 'stranger')`,
   );
+  await client.query(
+    `insert into calendar_accounts ("accountId", "oauthCredentialId", "provider", "userId")
+     select null, "id", 'google', 'stranger' from oauth_credentials where "userId" = 'stranger'`,
+  );
 };
 
 const deleteStrangerLegacyCredential = async (): Promise<void> => {
