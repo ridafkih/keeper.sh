@@ -47,8 +47,8 @@ const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
 
 const GRID_EDGE_FADE_SIZE = 24;
 
-// Vertical only: a horizontal fade would dim the gutter labels and the outermost column.
-const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDGE_FADE_SIZE}px, black calc(100% - ${GRID_EDGE_FADE_SIZE}px), transparent)`;
+// Bottom only: a horizontal fade would dim the gutter labels and the outermost column, and a top one would wash out the band the header dissolves into.
+const GRID_EDGE_FADE = `linear-gradient(to bottom, black calc(100% - ${GRID_EDGE_FADE_SIZE}px), transparent)`;
 
 interface DayHeaderCellProps {
   day: Date;

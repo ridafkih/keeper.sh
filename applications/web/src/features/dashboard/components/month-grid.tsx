@@ -26,8 +26,9 @@ const CELL_RULES: CSSProperties = {
   backgroundRepeat: "repeat-x, repeat-y",
 };
 
+// Vertical fades at the bottom only; a top fade would wash out the band the header dissolves into.
 const EDGE_FADE = [
-  `linear-gradient(to bottom, transparent, black ${EDGE_FADE_SIZE}px, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
+  `linear-gradient(to bottom, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
   `linear-gradient(to right, transparent, black ${EDGE_FADE_SIZE}px, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
 ].join(", ");
 const RULE_LAYER_STYLE: CSSProperties = {
