@@ -9,8 +9,6 @@ import type { PendingChanges, PendingUpdate } from "../../../src/core/sync-engin
 import type { EventMapping } from "../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The sync writes into a calendar the customer created, so a folder-scoped listing is the only read
-   that answers about the calendar this sync owns. */
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 
@@ -71,8 +69,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* /me/events addresses the mailbox default collection; only /me/calendars/{id}/events addresses the
-   folder the sync writes to. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -124,9 +120,6 @@ interface Mailbox {
   requests: GraphRequest[];
 }
 
-/* A synthetic Graph mailbox with the real shape: an item id addresses one event mailbox-wide, a
-   listing only ever answers about the folder its URL names, and a DELETE really removes the item
-   and answers 204 -- which is precisely how the customer's only copy disappears for good. */
 const installGraphMailbox = (events: MailboxEvent[]): Mailbox => {
   const requests: GraphRequest[] = [];
   const held = [...events];
@@ -203,8 +196,6 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The customer renamed the meeting after dragging their copy into the mailbox default folder, so
-   the first cycle carries a real pending edit. */
 const localEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -236,8 +227,6 @@ const WINDOW = {
   timeMin: new Date("2000-01-01T00:00:00.000Z"),
 };
 
-/* The plan is small, so sync-user takes the targeted getRemoteEventsByIds branch: the dead id 404s,
-   that branch never verifies, and the mapping reaches reconciliation as remoteMissing. */
 const TARGETED_READ_SCOPE = {
   authoritativeMappingIds: new Set([MAPPING_ID]),
   authoritativeWindow: WINDOW,
@@ -289,9 +278,6 @@ const runCycle = async (
   };
 };
 
-/* Production's flush.ts toMappingUpdateValues writes deleteIdentifier unconditionally, so the repair
-   here is exactly as generous as production: whatever identifier the run put on the update lands on
-   the mapping, and from there it is the identifier the remove path deletes by. */
 const applyRepairs = (existing: EventMapping, updates: PendingUpdate[]): EventMapping => {
   const repair = updates.find((update) => update.id === existing.id);
   if (!repair) {
@@ -316,9 +302,6 @@ describe("an elsewhere mirror never becomes the mapping's delete identifier", ()
     vi.unstubAllGlobals();
   });
 
-  /* The item the "elsewhere" verdict located lives in the customer's own default calendar. Outlook's
-     deleteEvents is an unconditional mailbox-wide DELETE /me/events/{id}, so the moment that id sits
-     on mapping.deleteIdentifier the next removal cycle destroys the customer's only copy. */
   it("issues no DELETE against the located id when the source event later disappears", async () => {
     const mailbox = installGraphMailbox([
       makeMailboxEvent(REKEYED_ID, MIRROR_UID, DEFAULT_FOLDER_ID),
@@ -327,7 +310,6 @@ describe("an elsewhere mirror never becomes the mapping's delete identifier", ()
     const first = await runCycle([localEvent], [mapping], mailbox);
     const persisted = applyRepairs(mapping, first.updates);
 
-    /* The source event is gone this cycle, so the mapping is planned for removal. */
     const { operations } = computeSyncOperations([], [persisted], [], TARGETED_READ_SCOPE);
     expect(operations).toHaveLength(1);
     expect(operations[0]).toMatchObject({ mappingId: MAPPING_ID, type: "remove" });
@@ -335,13 +317,9 @@ describe("an elsewhere mirror never becomes the mapping's delete identifier", ()
     const second = await runCycle([], [persisted], mailbox);
 
     expect(requestsOfMethod(second.requests, "DELETE")).toEqual([]);
-    /* The customer's only copy is still sitting in their own calendar, where they dragged it. */
     expect(holdsIdentifier(mailbox, REKEYED_ID)).toBe(true);
   });
 
-  /* Secondary harm, same root cause: an identifier only ever seen outside the destination calendar
-     is never in the destination listing, so the mapping re-plans as remoteMissing every cycle and
-     keeps PATCHing the customer's out-of-destination event forever. */
   it("does not keep writing to an out-of-destination id on every steady-state cycle", async () => {
     const mailbox = installGraphMailbox([
       makeMailboxEvent(REKEYED_ID, MIRROR_UID, DEFAULT_FOLDER_ID),

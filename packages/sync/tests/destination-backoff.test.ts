@@ -128,8 +128,6 @@ const config = (database: unknown) => ({
   plan: "pro" as never,
 });
 
-/* The real syncCalendar always reports every counter, `updated` included: a double that omits it is
-   kinder than the real engine and would let a wholly failed run read as a success. */
 const EMPTY_SYNC_RESULT = {
   added: 0,
   addFailed: 0,

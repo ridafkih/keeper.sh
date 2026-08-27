@@ -41,7 +41,6 @@ const makeReplacement = (index: number): Extract<SyncOperation, { type: "replace
   deleteId: `/calendar/remote-${index}@keeper.sh.ics`,
 });
 
-/* A bare success is what every real provider answers for a delete that found nothing. */
 const FOUND_NOTHING: DeleteResult = { success: true };
 
 const createProvider = (updateResults: PushResult[], deleteResult: DeleteResult = FOUND_NOTHING) => {
@@ -104,15 +103,6 @@ describe("a transient update failure does not delete the event", () => {
     });
   }
 
-  /*
-   * Overturned. This asserted a push followed a bare delete success, on the reasoning that a 404
-   * from the update proved the target was gone. It does not: a mirror the recipient deleted and
-   * one mapped under a stale identifier answer a delete identically, and on a create-only
-   * destination guessing wrong leaves a second copy of a live event forever. A promotion has no
-   * listing behind it to tell them apart, so it deletes what it can prove it removed and leaves
-   * the rest to the next reconcile, where recreateMissingMirrors has the listing and the
-   * verification read. The delete itself is unchanged -- only the speculative create is gone.
-   */
   it("deletes but does not recreate when nothing proves the target was removed", async () => {
     const replacements = [makeReplacement(2)];
     const mappings = [makeMapping(2)];

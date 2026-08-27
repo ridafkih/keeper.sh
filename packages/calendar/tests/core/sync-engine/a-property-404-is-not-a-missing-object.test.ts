@@ -5,12 +5,6 @@ import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destinat
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* Inside a propstat the status describes the property, not the resource (RFC 4918 13.9): a server
-   that holds the object but will not hand back its body files calendar-data under 404 while the
-   same href carries a live getetag. Reading that as a missing object recreates an event the server
-   just proved it still holds, which on a customer calendar is a permanent duplicate. Absence needs
-   a 404 spoken about the href itself. */
-
 const SERVER_URL = "https://caldav.example.test";
 const PRINCIPAL_PATH = "/principals/user/";
 const HOME_PATH = "/cal/u/";
@@ -55,7 +49,6 @@ const mappingFor = (
   syncEventId: event.id,
 });
 
-// The mirror is believed gone, which is the only route into the verification the spec governs.
 const replacementFor = (
   event: MaterializedSyncableEvent,
   uid: string,
@@ -100,11 +93,9 @@ const supportedReportSetResponse = (): Response =>
     `<d:response><d:href>${CALENDAR_PATH}</d:href><d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:prop><d:supported-report-set/></d:prop></d:propstat></d:response>`,
   );
 
-/* The object is there — the server answers its etag — and only its body is refused. */
 const bodyRefusedResponse = (href: string): string =>
   `<d:response><d:href>${href}</d:href><d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:prop><d:getetag>"etag-${href}"</d:getetag></d:prop></d:propstat><d:propstat><d:status>HTTP/1.1 404 Not Found</d:status><d:prop><c:calendar-data/></d:prop></d:propstat></d:response>`;
 
-/* The href itself is gone: the server files the whole response under 404, props and all. */
 const hrefGoneResponse = (href: string): string =>
   `<d:response><d:href>${href}</d:href><d:status>HTTP/1.1 404 Not Found</d:status></d:response>`;
 
@@ -141,10 +132,6 @@ const discoveryServer: Responder = (request) => {
   if (request.method === "PUT") {
     return Promise.resolve(new Response("", { status: 201, statusText: "Created" }));
   }
-  /* A real server answers a uid calendar-query, and this collection genuinely holds nothing under
-     any other href - so it answers a well-formed empty multistatus. A double that refused the
-     query instead would leave the uid unspoken for, which is not an absence and would suppress the
-     recreate this fixture is about. */
   if (isUidQuery(request)) {
     return Promise.resolve(multistatus(""));
   }

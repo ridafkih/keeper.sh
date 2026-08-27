@@ -101,8 +101,6 @@ const buildGoogleEchoObservation = (resource: GoogleEvent): PushEchoObservation 
   };
 };
 
-/* Google answers a read for a recipient-deleted event with HTTP 200 and a tombstone carrying
-   status "cancelled" rather than a 404, so a cancelled resource is evidence of absence, never a mirror. */
 const isCancelledGoogleEvent = (event: GoogleEvent): boolean => event.status === "cancelled";
 
 const toGoogleRemoteEvent = (event: GoogleEvent): RemoteEvent | null => {
@@ -170,11 +168,6 @@ const getImportedEventId = (body: unknown): string | null => {
   return body.id;
 };
 
-/*
- * Whether Google itself said anything about this object. The batch parser is the only place that
- * knows: it either read a real status line for this index or it did not. A status of 0 is what a
- * part that never arrived is filled in with, so it is the absence of an answer, never one.
- */
 const observedAnswer = (response: BatchSubResponse): DestinationAnswer => {
   if (response.answer) {
     return response.answer;
@@ -303,8 +296,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     };
   };
 
-  /* The create-side sub-request pushEvents would batch, built and discarded, so an event Google's
-     import verb cannot be serialized for is known before anything is deleted for it. */
   const prepareEvent = (event: MaterializedSyncableEvent): void => {
     buildPushRequest(event);
   };
@@ -680,7 +671,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     if (isDirectEventId(identifier)) {
       return { method: "GET", path: `${eventsPath}/${encodeURIComponent(identifier)}` };
     }
-    // A legacy mapping holds the iCalUID, which Google only resolves through the list query.
     return { method: "GET", path: `${eventsPath}?iCalUID=${encodeURIComponent(identifier)}` };
   };
 
@@ -704,7 +694,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const readLegacyLookup = (response: BatchSubResponse): RemoteEvent[] => {
-    // Absence here must be proven by an empty item list, never inferred from a status.
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw new GoogleCalendarApiError(response.statusCode, JSON.stringify(response.body));
     }
@@ -726,8 +715,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return readLegacyLookup(response);
   };
 
-  /* The key itself is dead. That is all this status proves: the object behind it may be deleted,
-     or it may be alive under a new id after an import, a move or a restore re-keyed it. */
   const isDeadKeyRead = (response: BatchSubResponse): boolean =>
     response.statusCode === HTTP_STATUS.NOT_FOUND || response.statusCode === GONE_STATUS;
 
@@ -758,7 +745,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const presenceOfLegacyLookup = (identifier: string, response: BatchSubResponse): EventPresence => {
-    // Absence here is proven by an empty item list, never inferred from a status.
     if (response.statusCode < 200 || response.statusCode >= 300) {
       return { identifier, status: "unknown" };
     }
@@ -768,10 +754,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
 
     const items = googleEventListSchema.assert(response.body).items ?? [];
-    /* Every occurrence of a recurring series carries the master's iCalUID, so this list can hold
-       several entries in unspecified order. Reading only the first one would call a live series
-       absent, or point a repair at an instance rather than the master; an ambiguous read is
-       "unknown", which repairs, creates and deletes nothing. */
     if (items.length > 1) {
       return { identifier, status: "unknown" };
     }
@@ -807,25 +789,16 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
   });
 
-  /* An id read that came back 404 has only proved that the key is dead, and on Google a key dies
-     for two very different reasons: the event was deleted, or an import, a move between calendars
-     or a restore re-keyed it and the customer's copy is still sitting there under the same
-     iCalUID. Absence is the one verdict that licenses a create with nothing else asked, so it has
-     to be earned against the uid the mapping names -- otherwise a re-key turns into a second
-     permanent copy of an event the customer already has. */
   const needsUidConfirmation = (
     target: EventVerificationTarget,
     response: BatchSubResponse | undefined,
   ): boolean => {
     if (!response || !isDeadKeyRead(response)) {
-      /* Any other answer observed the object itself - a cancelled tombstone included, which is the
-         id still resolving to a resource Google marked deleted. Nothing there is stale. */
       return false;
     }
     if (!target.uid) {
       return false;
     }
-    // A legacy mapping was already read by its uid, so the lookup would only ask the same question.
     return isDirectEventId(target.deleteId);
   };
 
@@ -864,12 +837,9 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       }
       const response = lookups[position];
       if (!response) {
-        // The lookup never answered, so the id read's absence stays unproven rather than standing.
         confirmed[entry.index] = { identifier: entry.target.deleteId, status: "unknown" };
         continue;
       }
-      /* The lookup is scoped to the destination calendar, so whatever it names is a mirror this
-         sync owns and the verdict is keyed by the identifier the mapping still holds. */
       confirmed[entry.index] = presenceOfLegacyLookup(entry.target.deleteId, response);
     }
 
@@ -887,7 +857,6 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return [];
     }
 
-    // One batched request per chunk, so verifying a whole destination costs a handful of requests.
     const requests: BatchSubRequest[] = verificationTargets.map((target) => buildTargetedReadRequest(target.deleteId));
 
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });

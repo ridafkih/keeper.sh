@@ -7,22 +7,11 @@ import type {
   MaterializedSyncableEvent,
   RemoteEvent,
 } from "@keeper.sh/calendar";
-/* Imported by path rather than by package name: a worktree carries no node_modules of its own, so
-   the bare specifier can resolve to the main checkout and quietly exercise pre-branch code. */
 import {
   createEditableEventContentHash,
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
 } from "../../calendar/src/core/events/content-hash";
-
-/* ------------------------------------------------------------------------------------------------
-   A cycle that verified nothing must not throw away the rotation position the previous cycle paid
-   round trips for. The by-id read speaks only for the push plan, so its report carries no
-   nextVerificationCursor at all - "this path has no opinion", as distinct from an explicit null
-   meaning "the rotation wrapped, start from the top". Collapsing the two at the persistence seam
-   parks the destination on the same 200-identifier prefix forever, and a mirror the recipient
-   really deleted that sorts past that prefix is never verified, never restored, and stays gone.
-   ------------------------------------------------------------------------------------------------ */
 
 const USER_ID = "user-1";
 const SOURCE_CALENDAR_ID = "source-1";
@@ -34,7 +23,6 @@ const REQUESTED_WINDOW = {
   timeMin: new Date("2026-08-01T00:00:00.000Z"),
 };
 
-/* Wide enough that the window the engine derives from the stored ranges contains every fixture. */
 const SOURCE_COVERAGE_ROW = {
   id: SOURCE_CALENDAR_ID,
   ingestFutureRange: "12_months",
@@ -47,7 +35,6 @@ const SOURCE_COVERAGE_ROW = {
 const VERIFICATION_BUDGET = 200;
 const LIVE_MAPPING_COUNT = 260;
 const DELETED_DELETE_IDENTIFIER = "id-zz-deleted";
-/* The last identifier the first windowed cycle can afford, and so the position it reports back. */
 const FIRST_CYCLE_CURSOR = "id-live-199";
 
 const createStart = (index: number): Date =>
@@ -121,7 +108,6 @@ const requireLocalEvent = (mapping: EventMapping): MaterializedSyncableEvent => 
   return localEvent;
 };
 
-/* The recipient deleted exactly one mirror; every other identifier is still on the calendar. */
 const liveRemoteEventsByDeleteId = new Map(liveMappings.map((mapping) => [
   mapping.deleteIdentifier,
   createLiveRemoteEvent(mapping, requireLocalEvent(mapping)),
@@ -135,19 +121,12 @@ const answerVerification = (target: EventVerificationTarget): EventPresence => {
   return { event: liveEvent, identifier: target.deleteId, status: "present" };
 };
 
-/*
- * Shaped like the real destination providers: google, outlook and caldav each expose BOTH
- * getRemoteEventsByIds and verifyEventsExist, and resolve-provider hands them over unwrapped,
- * so a targeted cycle really can land between two windowed ones in production.
- */
 const createProviderDouble = () => {
   const verifiedIds: string[] = [];
   const readByIdCalls: string[][] = [];
   return {
     getRemoteEventsByIds: (deleteIds: string[]): Promise<RemoteEvent[]> => {
       readByIdCalls.push([...deleteIds]);
-      /* Like all three real providers, it returns only what it found: an identifier it leaves
-         out is the mirror the recipient deleted. */
       const found: RemoteEvent[] = [];
       for (const deleteId of deleteIds) {
         const remoteEvent = liveRemoteEventsByDeleteId.get(deleteId);
@@ -157,8 +136,6 @@ const createProviderDouble = () => {
       }
       return Promise.resolve(found);
     },
-    /* The discovery listing finds nothing, exactly as it does for series starting before the
-       window, so every mapping falls through to the budgeted verification pass. */
     listRemoteEvents: (_options: ListRemoteEventsOptions): Promise<RemoteEvent[]> =>
       Promise.resolve([]),
     readByIdCalls,
@@ -282,8 +259,6 @@ const requireVerification = (read: CycleRead): VerificationReport => {
   return read.verification;
 };
 
-/* ---------------------------------------------------------------------------------------------- */
-
 interface CalendarRow {
   failureCount: number;
   lastFailureAt: Date | null;
@@ -318,7 +293,6 @@ const createSeamHarness = (storedCursor: string | null) => {
         innerJoin: () => ({
           where: () => ({ limit: () => Promise.resolve([attemptRow()]) }),
         }),
-        /* The source-authority read: the only bare from().where() query on this path. */
         where: () => Promise.resolve([SOURCE_COVERAGE_ROW]),
       }),
     }),
@@ -409,7 +383,6 @@ describe("what a targeted by-id read says about the rotation position", () => {
   });
 
   it("carries no cursor field on the supersede branch's empty read", async () => {
-    /* The shape the run returns when the mapped source set changed under the locks. */
     const { read } = await runCycle([], [], FIRST_CYCLE_CURSOR);
 
     expect(read.authoritativeMappingIds).not.toBeNull();
@@ -444,7 +417,6 @@ describe("the persistence seam", () => {
   });
 
   it("still persists an explicit null when the rotation wrapped", async () => {
-    /* Every mapping fits inside one budget, so the pass wrapped and the position resets. */
     const withinBudget = allMappings.slice(0, VERIFICATION_BUDGET);
 
     const { row, writes } = await runSeamCycle(
@@ -470,7 +442,6 @@ describe("the mirror the recipient deleted, three cycles in", () => {
       allLocalEvents.slice(0, 5),
     );
 
-    /* Cycle three resumes from whatever the seam left behind - the whole point of storing it. */
     const thirdCycle = await runCycle(allMappings, allLocalEvents, seam.row.verificationCursor);
 
     expect(thirdCycle.provider.verifiedIds).toContain(DELETED_DELETE_IDENTIFIER);

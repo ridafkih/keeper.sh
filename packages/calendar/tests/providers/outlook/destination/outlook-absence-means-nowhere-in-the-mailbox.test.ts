@@ -8,8 +8,6 @@ import type { EventPresence, MaterializedSyncableEvent } from "../../../../src/c
 import type { EventMapping } from "../../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The mailbox holds three folders: the default one the sync never writes to, the destination the
-   sync owns, and the folder the recipient drags a mirror into. */
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const OTHER_FOLDER_ID = "external-cal-2";
@@ -66,8 +64,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* Graph answers a listing about exactly the folder its path names, and /me/events names the
-   mailbox default calendar only — never the whole mailbox. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -102,8 +98,6 @@ const mailboxCalendars = [
   { id: OTHER_FOLDER_ID, isDefaultCalendar: false, name: "Personal" },
 ];
 
-/* A synthetic mailbox with real Graph shape: an item id addresses one event mailbox-wide, but a
-   listing only ever answers about the folder its own URL names. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -152,8 +146,6 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The engine names a mirror by the id a delete would target plus the uid the mapping carries;
-   Outlook needs both to tell a moved mirror from a deleted one. */
 interface VerificationTarget {
   deleteId: string;
   uid: string;
@@ -203,7 +195,6 @@ const RECONCILIATION_SCOPE = {
 };
 
 const planMissingMirrorReplacement = () => {
-  // The moved copy left the synced folder, so the windowed listing can only call the mirror missing.
   const { operations } = computeSyncOperations([localEvent], [mapping], [], RECONCILIATION_SCOPE);
   expect(operations).toHaveLength(1);
   expect(operations[0]?.type).toBe("replace");
@@ -226,8 +217,6 @@ describe("Outlook calls a mirror absent only when the uid names nothing anywhere
     vi.unstubAllGlobals();
   });
 
-  /* The recipient dragged the mirror into another folder of the same mailbox. Outlook's push is a
-     create-only POST, so a create decided here is a permanent duplicate nothing ever reaps. */
   it("never reports a mirror moved to another calendar of the mailbox as absent", async () => {
     installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)]);
 
@@ -246,8 +235,6 @@ describe("Outlook calls a mirror absent only when the uid names nothing anywhere
     expect(outcome.result.added).toBe(0);
   });
 
-  /* A mirror found outside the destination is not the same observation as one found inside it: the
-     sync still has to move or re-adopt it, so the two must stay distinguishable. */
   it("distinguishes a mirror found elsewhere in the mailbox from one found in the destination", async () => {
     installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)]);
     const moved = await verifyTargets([{ deleteId: MAPPED_ID, uid: MIRROR_UID }]);
@@ -261,8 +248,6 @@ describe("Outlook calls a mirror absent only when the uid names nothing anywhere
     expect(moved[0]?.status).not.toBe(inPlace[0]?.status);
   });
 
-  /* Absence has to stay provable, or a mirror the recipient really deleted is silently gone forever
-     while later source edits never reach it. */
   it("still reports a mirror deleted from the whole mailbox as absent, and restores it", async () => {
     const requests = installGraphMailbox([]);
 
@@ -276,8 +261,6 @@ describe("Outlook calls a mirror absent only when the uid names nothing anywhere
     expect(postedRequests(requests)).toHaveLength(1);
   });
 
-  /* The destination is not the mailbox default, so a read of /me/events answers about a folder the
-     sync never writes to and would call a live mirror gone. */
   it("never reports a live mirror in a non-default destination calendar as absent", async () => {
     const requests = installGraphMailbox([
       makeMailboxEvent(MOVED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),

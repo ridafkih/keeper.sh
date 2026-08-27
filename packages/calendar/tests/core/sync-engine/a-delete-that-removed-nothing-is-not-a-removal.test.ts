@@ -63,11 +63,6 @@ interface DestinationRecord {
   uid: string;
 }
 
-/*
- * Mirrors packages/calendar/src/providers/outlook/destination/provider.ts deleteEvents: a DELETE
- * that 404s is reported as { success: true } with no removedObject, and only a 2xx DELETE carries
- * removal evidence. pushEvents there is a create-only POST, so a wrong create duplicates forever.
- */
 const createOutlookLikeDestination = (seeded: DestinationRecord[], updateFailure: PushResult) => {
   const records = new Map<string, DestinationRecord>();
   for (const record of seeded) {
@@ -109,12 +104,6 @@ const createOutlookLikeDestination = (seeded: DestinationRecord[], updateFailure
       }));
     },
     updateEvents: (updates: EventUpdate[]) => Promise.resolve(updates.map((): PushResult => updateFailure)),
-    /*
-     * The real provider escalates a dead item id to a uid search before it will say absent, because
-     * Graph re-keys an event on a move and the copy is still there under the same iCalUId. A double
-     * that answers absent on the id alone is kinder to the engine than Graph is, and the absent
-     * branch creates -- which on a create-only POST is a second copy of a live event for ever.
-     */
     verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(
       ({ deleteId, uid }): EventPresence => {
         const mapped = records.get(deleteId);
@@ -164,13 +153,10 @@ describe("a delete that removed nothing is not a removal", () => {
       destination.provider,
     );
 
-    /* The read escalates to the uid and finds the re-keyed copy, so no speculative delete is
-       issued at all and nothing is recreated in its place: the live mirror stands untouched. */
     expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(outcome.result.removed).toBe(0);
 
-    // The suppressed half: the cycle achieved nothing, so it must surface as a failure.
     expect(outcome.result.addFailed).toBeGreaterThan(0);
     expect(outcome.errors.length).toBeGreaterThan(0);
 
@@ -186,7 +172,6 @@ describe("a delete that removed nothing is not a removal", () => {
       outcome.superseded,
     );
 
-    // 'succeeded' resets the failure count, so the mapping never reaches durable backoff.
     expect(verdict).not.toBe("succeeded");
   });
 });

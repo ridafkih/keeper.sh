@@ -8,8 +8,6 @@ import type {
   RemoteEvent,
   SyncOperation,
 } from "@keeper.sh/calendar";
-/* Imported by path rather than by package name: a worktree carries no node_modules of its own, so
-   the bare specifier can resolve to the main checkout and quietly exercise pre-branch code. */
 import {
   createEditableEventContentHash,
   createEditableEventContentSnapshot,
@@ -69,8 +67,6 @@ const createMapping = (
   syncEventId: `sync-event-${suffix}`,
 });
 
-/* The mirror the listing never returns but which verification positively locates, body and all -
-   exactly the recurring series whose own start lies before the requested window. */
 const createLiveRemoteEvent = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
@@ -117,7 +113,6 @@ const answerVerification = (target: EventVerificationTarget): EventPresence => {
   return { event: liveEvent, identifier: target.deleteId, status: "present" };
 };
 
-/* No getRemoteEventsByIds, so the read takes the windowed listing branch and its verification pass. */
 const createProviderDouble = () => {
   const verifiedIds: string[] = [];
   return {
@@ -147,7 +142,6 @@ interface CycleContext {
   localEvents: MaterializedSyncableEvent[];
   provider: ReturnType<typeof createProviderDouble>;
   requestedWindow: typeof REQUESTED_WINDOW;
-  /* Whatever position the fix persists between runs so the budget does not settle on one prefix. */
   verificationCursor?: string | null;
 }
 

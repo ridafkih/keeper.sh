@@ -54,8 +54,6 @@ interface DestinationRecord {
   uid: string;
 }
 
-/* The thrown-error branch of a real destination provider: no HTTP response was read, so the
-   failure carries a human-readable message and no structured statusCode. */
 const createTransportThrowingDestination = (seeded: DestinationRecord[], thrown: Error) => {
   const records = new Map<string, DestinationRecord>();
   for (const record of seeded) {
@@ -119,7 +117,6 @@ describe("an unknown delete failure never recreates", () => {
   it("creates nothing when the delete fails with no structured statusCode", async () => {
     const event = makeEvent("Team lunch");
     const mapping = makeMapping(createSyncEventContentHash(event));
-    // A gone-looking number inside prose must not be read as the object's fate.
     const thrown = new Error("DELETE request failed: 410 bytes read before the socket closed");
     const destination = createTransportThrowingDestination(
       [{ deleteId: REMOTE_DELETE_ID, summary: "Team lunch", uid: REMOTE_UID }],

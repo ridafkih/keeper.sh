@@ -66,10 +66,6 @@ interface DestinationRecord {
   uid: string;
 }
 
-/* Every destination here answers a delete against an unknown identifier exactly the way a real one
-   does: a bare success carrying no evidence that anything was removed. That answer is identical
-   whether the recipient deleted the mirror or the mapping merely points at a stale identifier, so
-   only a verification read can tell the two apart. */
 const createDestination = (
   seeded: DestinationRecord[],
   verifyEventsExist?: CalendarSyncProvider["verifyEventsExist"],
@@ -152,14 +148,12 @@ const reportAbsent = (targets: EventVerificationTarget[]): Promise<EventPresence
 const reportUnknown = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
   Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "unknown" })));
 
-/* Outlook answers with the events it actually found and throws when the read itself failed. */
 const reportNoneFound = (): Promise<RemoteEvent[]> => Promise.resolve([]);
 
 const reportUnreadable = (): Promise<RemoteEvent[]> =>
   Promise.reject(new Error("Graph read failed: 503 Service Unavailable"));
 
 const planMissingMirrorReplacement = (event: MaterializedSyncableEvent, mapping: EventMapping) => {
-  // A windowed listing never enumerates the mirror, so reconciliation can only call it "missing".
   const windowedListing: RemoteEvent[] = [];
   const { operations } = computeSyncOperations(
     [event],
@@ -273,8 +267,6 @@ describe("an event the recipient deleted is restored", () => {
     expect(destination.snapshot()).toEqual([live]);
   });
 
-  /* Outlook's create is a POST with no idempotency key, so a create decided on a failed read is a
-     duplicate the customer has to clean up by hand. */
   it("neither creates nor deletes when an Outlook verification read fails outright", async () => {
     const event = makeEvent("Team lunch");
     const mapping = makeMapping(OUTLOOK_DELETE_ID, OUTLOOK_UID, createSyncEventContentHash(event));

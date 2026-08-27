@@ -8,8 +8,6 @@ import type { MaterializedSyncableEvent, RemoteEvent } from "../../../src/core/t
 import type { EventMapping } from "../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The paying customer syncs into a calendar they created, not the mailbox default, so a folder-scoped
-   listing is the only read that answers about the calendar this sync actually writes to. */
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 
@@ -69,8 +67,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* /me/events addresses the mailbox default collection; only /me/calendars/{id}/events addresses the
-   folder the sync writes to. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -117,8 +113,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return parsed.subject;
 };
 
-/* A synthetic Graph mailbox with the real shape: an item id addresses one event mailbox-wide, a
-   listing only ever answers about the folder its URL names, and a DELETE really removes the item. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
   const held = [...events];
@@ -195,8 +189,6 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The source moved the meeting after Graph re-keyed the mirror, so this run carries a real customer
-   edit that has to land on whatever the destination still holds. */
 const localEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -228,8 +220,6 @@ const WINDOW = {
   timeMin: new Date("2000-01-01T00:00:00.000Z"),
 };
 
-/* The plan is small, so sync-user takes the targeted getRemoteEventsByIds branch: the stale id 404s,
-   that branch never verifies, and the mapping reaches reconciliation as remoteMissing. */
 const TARGETED_READ_SCOPE = {
   authoritativeMappingIds: new Set(["mapping-1"]),
   authoritativeWindow: WINDOW,
@@ -260,9 +250,6 @@ describe("a verification that located the mirror repairs the mapping", () => {
     vi.unstubAllGlobals();
   });
 
-  /* Shape (a): the targeted read 404s on the dead id, verification positively locates the mirror at
-     its new id, and today that observation is discarded — the run reports a clean no-op forever
-     while the source keeps changing and the mirror stays frozen. */
   it("writes the located id back onto the mapping and delivers the pending edit to it", async () => {
     const requests = installGraphMailbox([
       makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
@@ -288,13 +275,9 @@ describe("a verification that located the mirror repairs the mapping", () => {
     expect(readPatchedSubject(patches[0]?.body ?? null)).toBe(EDITED_SUBJECT);
 
     expect(outcome.errors).toEqual([]);
-    // Outlook's create is a create-only POST, so any create here is a permanent duplicate.
     expect(requestsOfMethod(requests, "POST")).toEqual([]);
   });
 
-  /* Shape (b): the full windowed listing returns the live mirror under its new id. Unmapped, it
-     reads as an orphan, removes sort ahead of replaces, and the customer's live event is DELETEd
-     and re-POSTed — reminders, categories and RSVP state destroyed on a create-only provider. */
   it("never deletes and recreates the live mirror the listing returned", async () => {
     const requests = installGraphMailbox([
       makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
@@ -323,8 +306,6 @@ describe("a verification that located the mirror repairs the mapping", () => {
     expect(outcome.result.added).toBe(0);
   });
 
-  /* Once repaired, the next cycle has to recognise the same live event, or the pair oscillates
-     between repair and orphan-removal forever. */
   it("emits no orphan remove on the cycle after the mapping learned the live id", () => {
     const repaired: EventMapping = { ...mapping, deleteIdentifier: REKEYED_ID };
 

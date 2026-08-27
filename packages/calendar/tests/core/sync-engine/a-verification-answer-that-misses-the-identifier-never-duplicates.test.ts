@@ -23,9 +23,6 @@ const GOOGLE_UID = "goo000000000001@google.example";
 const CALDAV_DELETE_ID = "/calendar/remote-1@keeper.sh.ics";
 const CALDAV_UID = "remote-1@keeper.sh";
 
-/* The identifier the mapping was written with, and the identifier the same live object answers to
-   today. A destination that renames an object on a move or under an immutable-id preference hands
-   back a body keyed by the second while we asked about the first. */
 const OUTLOOK_MAPPED_DELETE_ID = "AAMkAGMappedAtCreateTime";
 const OUTLOOK_CURRENT_DELETE_ID = "AAMkAGCurrentImmutableId";
 
@@ -143,7 +140,6 @@ const createDestination = (
 const reportAbsent = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
   Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "absent" })));
 
-/* Outlook's read answers with the objects it found rather than a verdict per identifier. */
 const reportNoneFound = (): Promise<RemoteEvent[]> => Promise.resolve([]);
 
 const reportFoundUnderCurrentIdentifier = (): Promise<RemoteEvent[]> => Promise.resolve([{
@@ -154,15 +150,12 @@ const reportFoundUnderCurrentIdentifier = (): Promise<RemoteEvent[]> => Promise.
   uid: OUTLOOK_CURRENT_DELETE_ID,
 }]);
 
-/* A presence report is keyed by identifier, so an answer about some other object says nothing
-   about the one we asked about. */
 const reportPresenceOfAnotherIdentifier = (): Promise<EventPresence[]> => Promise.resolve([{
   identifier: "goo000000000009",
   status: "absent",
 }]);
 
 const planMissingMirrorReplacement = (event: MaterializedSyncableEvent, mapping: EventMapping) => {
-  // A windowed listing never enumerates the mirror, so reconciliation can only call it "missing".
   const windowedListing: RemoteEvent[] = [];
   const { operations } = computeSyncOperations(
     [event],
@@ -229,9 +222,6 @@ describe("a verification answer that misses the identifier never duplicates", ()
     expect(outcome.result.added).toBe(1);
   });
 
-  /* The object is alive and answered the read; only its identifier moved. Outlook's create is a
-     POST with no idempotency key, so inferring absence here bills the customer a duplicate that
-     no later run can clean up. */
   it("neither creates nor deletes when an Outlook verification read answers with an object it cannot tie to the identifier asked about", async () => {
     const event = makeEvent();
     const mapping = makeMapping(OUTLOOK_MAPPED_DELETE_ID, OUTLOOK_MAPPED_DELETE_ID, createSyncEventContentHash(event));

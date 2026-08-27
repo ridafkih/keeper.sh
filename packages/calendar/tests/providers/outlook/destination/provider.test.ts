@@ -113,8 +113,6 @@ describe("createOutlookSyncProvider", () => {
     ]);
   });
 
-  /* Graph rewrites the item id on a cross-folder move, so a 404 on the mapped id is not evidence of
-     absence. Without a uid to resolve by, verification can only answer that it could not tell. */
   it("verifyEventsExist reports an id the destination responds 404 for as unknown", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
 

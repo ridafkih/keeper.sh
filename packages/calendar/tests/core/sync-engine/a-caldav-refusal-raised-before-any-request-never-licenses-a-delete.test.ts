@@ -7,9 +7,6 @@ import { CalDAVHttpError } from "../../../src/providers/caldav/shared/client";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* At least as capable as the real client: the provider's update verb writes through
-   updateCalendarObjectByUrl and its escapes read through verifyCalendarObjectsByUrls, so a double
-   missing either of them certifies whatever the missing verb would have done. */
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
   deleteCalendarObject: vi.fn(),
@@ -68,17 +65,12 @@ const DESTINATION_CALENDAR_ID = "dest-cal-reassign";
 const MAPPING_ID = "map-reassign-1";
 const CYCLES = 4;
 
-/* Occurrence reassignment: pairReidentifiedMaterializedOccurrences pairs a NEW local event with an
-   OLD mapping, so the replace it produces carries an event whose id is not the mapping's
-   syncEventId by construction. */
 const OLD_EVENT_ID = "occurrence-state-id-old";
 const NEW_EVENT_ID = "occurrence-state-id-new";
 
 const oldUid = generateDeterministicEventUid(OLD_EVENT_ID);
 const newUid = generateDeterministicEventUid(NEW_EVENT_ID);
 
-/* The href the server chose for the object, which is the one the mapping records. It can never
-   equal `${generateDeterministicEventUid(newEvent.id)}.ics`. */
 const serverHref = `/calendars/user/shared/${oldUid}.ics`;
 const serverObjectUrl = `https://caldav.example.com${serverHref}`;
 
@@ -133,12 +125,8 @@ const createProvider = () =>
     username: "user",
   });
 
-/* A synthetic stand-in for the customer's collection, so the assertions are about the live object
-   surviving rather than about which calls happened to be made. */
 const remoteObjects = new Map<string, string>();
 
-/* The serializer stamps DTSTAMP from the wall clock, so the live object is identified by the
-   content only it carries rather than by a byte-for-byte re-serialization. */
 const liveObjectStillHoldsThePreviousEvent = (): boolean => {
   const stored = remoteObjects.get(serverObjectUrl);
   if (!stored) {
@@ -246,7 +234,6 @@ beforeEach(() => {
         return [{ data, url }];
       })),
   );
-  /* Only the server's own 404 is absence; anything it holds comes back with its bytes. */
   clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
     ({ objectUrls }: { objectUrls: string[] }) =>
       Promise.resolve(objectUrls.map((url) => {
@@ -261,7 +248,6 @@ beforeEach(() => {
 
 describe("a CalDAV refusal raised before any request never licenses a delete", () => {
   it("issues no delete on the promotion cycle and leaves the live object standing", async () => {
-    /* The premise the reassignment builds: the stored href can never name the new event's uid. */
     expect(serverHref).not.toContain(newUid);
 
     const [cycle] = await runCycles(1);

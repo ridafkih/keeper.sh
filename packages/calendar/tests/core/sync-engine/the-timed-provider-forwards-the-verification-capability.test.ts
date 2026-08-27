@@ -10,7 +10,6 @@ import type {
 import type { EventMapping } from "../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
-/* Graph item ids are opaque and re-keyable, so the mapped id is the only handle a delete has. */
 const MAPPED_ID = "AAMkAGRemoteOne";
 const MIRROR_UID = "mirror-uid-1";
 
@@ -52,9 +51,6 @@ const mapping: EventMapping = {
   syncEventId: "sync-event-1",
 };
 
-/* Shaped like the real Outlook destination: Graph answers a delete of an object the recipient
-   already removed with a 404, which the provider maps to a bare success carrying no removedObject,
-   and its create is a create-only POST that would leave a permanent duplicate. */
 const createOutlookShapedProvider = () => {
   const calls: string[] = [];
 
@@ -72,8 +68,6 @@ const createOutlookShapedProvider = () => {
         success: true,
       })));
     },
-    /* The real Outlook destination PATCHes a live mirror in place, so a double without this
-       would route the replacement down a delete-then-add path production never takes. */
     updateEvents: (updates) => {
       calls.push(`update:${updates.length}`);
       return Promise.resolve(updates.map((update): PushResult => ({
@@ -103,7 +97,6 @@ const runSyncCalendar = (provider: CalendarSyncProvider) =>
     readState: () => Promise.resolve({
       existingMappings: [mapping],
       localEvents: [localEvent],
-      // The recipient deleted the mirror, so the windowed listing no longer holds it.
       remoteEvents: [],
     }),
     reconciliationScope: TEST_RECONCILIATION_SCOPE,

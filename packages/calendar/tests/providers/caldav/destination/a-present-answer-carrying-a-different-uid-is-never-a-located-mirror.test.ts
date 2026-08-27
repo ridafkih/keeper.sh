@@ -54,9 +54,6 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
 
 const CALENDAR_URL = "https://caldav.example.test/calendar/";
 
-/* One calendar object holding two Keeper VEVENTs. RFC 5545 allows it, and a collection reached that
-   state the ordinary way: an object named for the first uid was later rewritten to carry a second
-   component. The href therefore names the object, never one component inside it. */
 const FIRST_UID = generateDeterministicEventUid("event-state-id-first");
 const SECOND_UID = generateDeterministicEventUid("event-state-id-second");
 const SHARED_PATH = `/calendar/${FIRST_UID}.ics`;
@@ -107,9 +104,6 @@ describe("a present answer carrying a different uid is never a located mirror", 
   beforeEach(() => {
     vi.clearAllMocks();
     clientMocks.resolveCalendarUrl.mockResolvedValue(CALENDAR_URL);
-    /* A real multiget answer: the href the read asked about, and the whole calendar-data the server
-       returned for it. Handing back a pre-built EventPresence instead would certify nothing, since
-       the whole defect is in how the provider reads these bytes. */
     clientMocks.verifyCalendarObjectsByUrls.mockResolvedValue([
       {
         data: SHARED_OBJECT_ICS,
@@ -122,20 +116,13 @@ describe("a present answer carrying a different uid is never a located mirror", 
   it("never answers about the first VEVENT when it was asked about a different uid", async () => {
     const [presence] = await verificationOf()([{ deleteId: SHARED_PATH, uid: SECOND_UID }]);
 
-    /* The href holds an object the provider cannot address one component of: a PUT here rewrites
-       the whole object, so nothing has confirmed a mirror the update verb may safely aim at. */
     expect(presence?.status).toBe("unknown");
-    /* The concrete harm: answering "present" with the first component's identity makes the engine
-       treat the second mapping as located at the first event's object, and the second event's body
-       is then written over the first event's. */
     expect(presence?.event?.uid).not.toBe(FIRST_UID);
   });
 
   it("still answers present about the uid it was actually asked for", async () => {
     const [presence] = await verificationOf()([{ deleteId: SHARED_PATH, uid: FIRST_UID }]);
 
-    /* The control: a read poorer than the real server hides the fix, so the object the href really
-       does name for this target still has to come back located. */
     expect(presence?.status).toBe("present");
     expect(presence?.event?.uid).toBe(FIRST_UID);
     expect(presence?.event?.deleteId).toBe(SHARED_PATH);

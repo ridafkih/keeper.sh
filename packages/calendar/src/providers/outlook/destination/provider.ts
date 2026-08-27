@@ -57,12 +57,6 @@ interface OutlookSyncProviderConfig {
   signal?: AbortSignal;
 }
 
-/* Whether a request for this object actually left the process, and what the destination answered
-   if it did. The serializer runs before the body exists, so a refusal it raises is ours alone:
-   recording that here is what keeps the engine from grading a repetition of it as the destination
-   answering about the object. The status is stamped the moment a response is in hand, so a throw
-   raised AFTER the destination already answered - an unreadable 2xx echo - carries what the
-   destination said instead of arriving status-less and reading like a request nobody answered. */
 interface RequestAttempt {
   sent: boolean;
   status: number | null;
@@ -199,12 +193,6 @@ const buildOutlookUpdateBody = (resource: OutlookEvent): OutlookUpdateBody => ({
   recurrence: resource.recurrence ?? null,
 });
 
-/*
- * What a 2xx write's echo turned out to be. Reading it is kept apart from sending, because a write
- * the destination acknowledged has already landed on the customer's calendar: an echo that cannot
- * be read - a 204 with no body, a gateway's plain-text 200, a body arktype refuses - says nothing
- * about whether the object is there, only that we cannot see what it looks like.
- */
 type AcceptedEcho =
   | { kind: "read"; event: OutlookEvent }
   | { error: string; kind: "unreadable"; reason: PushEchoUncomparableReason };
@@ -245,11 +233,6 @@ const isMirrorOfEvent = (candidate: RemoteEvent, event: MaterializedSyncableEven
   return candidate.endTime.getTime() === event.endTime.getTime();
 };
 
-/* The object an accepted create put on the calendar, found by reading the destination instead of
-   writing again. Graph mints the identity, so the content the POST carried is the only handle left:
-   a Keeper mirror standing in the destination folder at exactly this event's times under exactly
-   this subject. Two candidates name no single object - adopting either could hand the mapping some
-   other mirror's identifier and point a later delete at it - so only a sole match resolves. */
 const readSoleCreatedMirror = (
   candidates: RemoteEvent[],
   event: MaterializedSyncableEvent,
@@ -261,12 +244,8 @@ const readSoleCreatedMirror = (
   return matched[0] ?? null;
 };
 
-/* Bounds a filtered uid walk so a mailbox that keeps handing back nextLinks cannot spin forever;
-   exceeding it yields "unreadable" because the walk never reached the end. */
 const OUTLOOK_UID_LISTING_PAGE_CAP = 100;
 
-/* Two events under one uid name no single object, so neither of them is an observation of the
-   mapped mirror and nothing about it is proven. */
 const readSoleEventForUid = (events: OutlookEvent[], uid: string): OutlookEvent | null => {
   const matched = events.filter((event) => event.iCalUId === uid);
   if (matched.length !== 1) {
@@ -275,8 +254,6 @@ const readSoleEventForUid = (events: OutlookEvent[], uid: string): OutlookEvent 
   return matched[0] ?? null;
 };
 
-/* A calendar Graph reports without any owner info at all: some tenants omit it for the account's
-   own default calendar, so the source side keeps such a calendar rather than discarding it. */
 interface MailboxCalendarEntry {
   id: string;
   ownerAddress: string | null;
@@ -319,9 +296,6 @@ const readCalendarEntriesFromPage = (body: unknown): MailboxCalendarEntry[] | nu
 const isSameAddress = (left: string, right: string): boolean =>
   left.toLowerCase() === right.toLowerCase();
 
-/* /me/calendars also hands back calendars a colleague shared or delegated to the account. This is
-   the source side's rule (source/utils/list-calendars.ts): a calendar owned by a different mailbox
-   is not the connected account's, and a calendar with no owner info at all is kept. */
 const belongsToConnectedMailbox = (
   entry: MailboxCalendarEntry,
   mailboxAddress: string,
@@ -346,10 +320,6 @@ const readMailboxAddressFromProfile = (body: unknown): string | null => {
   return null;
 };
 
-/* Graph names its query parameters with a literal "$" and hands the next page back as a link that
-   carries them that way. Re-serializing the link through URLSearchParams would percent-encode those
-   names, so the follow-up is rebuilt with the names as Graph wrote them and only the values escaped,
-   which keeps a $skiptoken byte-for-byte the token Graph issued. */
 const toGraphFollowUrl = (nextLink: string): URL => {
   const url = new URL(nextLink);
   const query: string[] = [];
@@ -403,9 +373,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       await config.rateLimiter.acquire(1, config.signal);
     }
 
-    /* Marked on the last line before the request goes out, so everything that can still refuse
-       above it - the serializer, the body encoding, the rate limiter - stays a failure that never
-       left the process. */
     if (attempt) {
       attempt.sent = true;
     }
@@ -441,8 +408,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       signal: config.signal,
     });
 
-  /* The very serialization the POST below runs, with nothing sent: an event Graph's create verb
-     cannot be encoded for refuses here too, so a caller can learn that before it deletes. */
   const prepareEvent = (event: MaterializedSyncableEvent): void => {
     JSON.stringify(serializeOutlookEvent(event));
   };
@@ -506,14 +471,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  /*
-   * A create Graph accepted whose echo could not be read. The object IS on the customer's calendar
-   * - Outlook's push is a create-only POST, so writing again would leave a second permanent copy -
-   * but its identity was in the answer we could not read. The only way back to it is reading the
-   * destination, so the calendar is listed over the event's own window and the mirror is adopted
-   * under the identifier the destination really holds. A read that locates nothing single is
-   * reported as a failure carrying the status Graph answered with, never as another create.
-   */
   const resolveAcceptedCreate = async (
     event: MaterializedSyncableEvent,
     status: number,
@@ -631,10 +588,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
         const echo = await readAcceptedEcho(response);
         if (echo.kind === "unreadable") {
-          /* Graph acknowledged the PATCH, so the edit is on the customer's calendar; only its echo
-             is unreadable. Grading that as a failure is what accumulates into a promotion and ends
-             in a DELETE of a live event, so it is reported as the successful edit it is, carrying
-             the identity the mapping already holds - nothing was learned that could re-key it. */
           results.push({
             deleteId: update.deleteId,
             echo: { comparable: false, reason: echo.reason },
@@ -688,7 +641,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         }
 
         await response.body?.cancel?.();
-        // A 404 means nothing was there to remove, so it carries no removal evidence.
         if (response.ok) {
           results.push({ removedObject: true, success: true });
           continue;
@@ -754,9 +706,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       method: "GET",
     });
 
-  /* A verdict that names where the item was seen but drops the item itself cannot repair anything:
-     the mapping's own id is dead by the time this is reached, so the id and uid the read is holding
-     at this instant are the only handles left on the customer's copy. They travel with the verdict. */
   const presenceOfObservedEvent = (
     identifier: string,
     body: unknown,
@@ -779,7 +728,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
   const buildUidListingUrl = (calendarId: string, uid: string, nextLink: string | null): URL => {
     if (nextLink) {
-      // Follow the link Graph handed back; re-deriving the filter here can skip past a page.
       return toGraphFollowUrl(nextLink);
     }
     const url = new URL(
@@ -793,17 +741,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return url;
   };
 
-  /* What the read saw, not what it returned: a listing that could not be read says nothing about the
-     uid, and that has to stay separate from a listing that positively held nothing under it. */
   type UidListingObservation =
     | { kind: "unreadable" }
     | { kind: "empty" }
     | { kind: "held"; events: OutlookEvent[] };
 
-  /* Graph does not promise a non-empty page before the last one, and this filter runs over the
-     non-indexed iCalUId, which is exactly the shape that hands back an empty page carrying a
-     $skiptoken. So "nothing here" is only true once the walk has reached the final page; a walk
-     that broke partway saw nothing about the uid and must say so. */
   const readUidListing = async (
     calendarId: string,
     uid: string,
@@ -815,7 +757,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     do {
       config.signal?.throwIfAborted();
       if (pagesRead >= OUTLOOK_UID_LISTING_PAGE_CAP) {
-        // A walk cut short by the cap is still a partial walk, so it proves no absence.
         return { kind: "unreadable" };
       }
 
@@ -847,14 +788,10 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       return new URL(nextLink);
     }
     const url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars`);
-    /* Graph answers with exactly the fields asked for, and the owner is what separates the
-       account's own folders from the ones a colleague shared into this list. */
     url.searchParams.set("$select", "id,owner");
     return url;
   };
 
-  /* The address of the account /me names, read the way the source side learns it — from the
-     account's own profile — rather than inferred from the calendar list. */
   const readProfileMailboxAddress = async (): Promise<string | null> => {
     config.signal?.throwIfAborted();
     const response = await readVerificationResponse(new URL(`${MICROSOFT_GRAPH_API}/me`));
@@ -873,13 +810,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return destination.ownerAddress;
   };
 
-  /* Which mailbox this verification may walk. Two independent readings name it: the profile of the
-     account /me addresses, and the owner of the very folder this sync writes its mirrors into — a
-     mirror dragged out of that folder can only land in another folder of the mailbox holding it.
-     Where both are readable they must agree; a disagreement means a delegated destination, where
-     neither reading can say which folders form one mailbox, so nothing is walked. Nothing readable
-     at all is equally unanswered. Every one of those leaves absence unsettled rather than falling
-     back to walking the whole list. */
   const resolveMailboxAddress = async (
     entries: MailboxCalendarEntry[],
   ): Promise<string | null> => {
@@ -897,8 +827,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return profileAddress;
   };
 
-  /* A folder-scoped listing answers only about its own folder, so the mailbox's folders have to be
-     enumerated before absence can mean "nowhere". A listing we could not read leaves that unanswered. */
   const readMailboxCalendarIds = async (): Promise<string[] | null> => {
     const entries: MailboxCalendarEntry[] = [];
     let nextLink: string | null = null;
@@ -919,8 +847,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       nextLink = readNextCalendarLink(body);
     } while (nextLink);
 
-    /* Nothing in this list claims an owner, so no calendar can be told apart from the account's
-       own and the profile read would decide nothing. */
     if (entries.every((entry) => !entry.ownerAddress)) {
       return entries.map((entry) => entry.id);
     }
@@ -935,14 +861,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       .map((entry) => entry.id);
   };
 
-  /* Every target settled inside one verification call is asking about the same mailbox, so its
-     folder list is read once for the whole batch instead of once per target — that multiplier is
-     what turns an emptied calendar into a throttling event.
-
-     The memo is built per call and dies with it: a folder the recipient creates between two calls
-     holds a real mirror, and deciding a create against a remembered list would duplicate it
-     permanently on a create-only push. An unreadable enumeration is never remembered either — it
-     observed nothing about the mailbox, so it may not stand in for the folder list. */
   interface MailboxFolderMemo {
     read: () => Promise<string[] | null>;
   }
@@ -965,14 +883,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     return { read };
   };
 
-  /* Graph re-keys an item when it moves between folders of a mailbox, so the dead item id proves
-     nothing on its own. The iCalUId survives the move and is the only handle that still names it.
-
-     No single query can settle this: the destination folder's listing cannot see a mirror dragged
-     out of it, and /me/events reads the mailbox default calendar, which a non-default destination
-     is not. So the uid is carried across the whole mailbox and the verdict follows where it was
-     found — in the destination it is present, in another folder it is still the customer's mirror
-     and a create would duplicate it permanently, and nowhere at all is the only proof of absence. */
   const resolvePresenceByUid = async (
     identifier: string,
     uid: string,
@@ -1015,7 +925,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       }
     }
 
-    // The uid named nothing in any folder of the mailbox, so the mirror is positively gone.
     return { identifier, status: "absent" };
   };
 
@@ -1035,7 +944,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     }
 
     await response.body?.cancel?.();
-    // A refusal is not an observation of the object, so it can never stand in for its absence.
     if (response.status !== HTTP_STATUS.NOT_FOUND) {
       return { identifier: target.deleteId, status: "unknown" };
     }
@@ -1064,7 +972,6 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
         if (config.signal?.aborted) {
           throw error;
         }
-        // A read that failed tells us nothing about the object, so it leaves the mirror unproven.
         report.push({ identifier: target.deleteId, status: "unknown" });
       }
     }

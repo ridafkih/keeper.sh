@@ -15,8 +15,6 @@ const CYCLES = 3;
 const RESPONSE_BOUNDARY = "batch_synthetic_boundary";
 const BATCH_URL = "https://www.googleapis.com/batch/calendar/v3";
 
-/* RFC 2046 5.1.1 lets the boundary parameter be quoted, so both spellings below describe the
-   byte-identical envelope Google really applied. */
 const QUOTED_CONTENT_TYPE = `multipart/mixed; boundary="${RESPONSE_BOUNDARY}"`;
 const UNQUOTED_CONTENT_TYPE = `multipart/mixed; boundary=${RESPONSE_BOUNDARY}`;
 
@@ -42,7 +40,6 @@ const mirroredEvents = [movedMeeting, secondMeeting];
 
 const googleEventIdFor = (index: number): string => `google-event-id-${index}`;
 
-/* The uid the real update path derives, so the fake echoes back exactly what Google would. */
 const keeperUidFor = (event: MaterializedSyncableEvent): string =>
   generateDeterministicEventUid(`${event.id}:${EXTERNAL_CALENDAR_ID}`);
 
@@ -167,7 +164,6 @@ interface ResponsePart {
 const buildResponsePart = (index: number, part: ResponsePart): string => {
   const lines = [
     "Content-Type: application/http",
-    /* Google really spells the response id this way, and parseContentId matches /item-(\d+)/. */
     `Content-ID: <response-item-${index}>`,
     "",
     part.statusLine,
@@ -203,10 +199,6 @@ const eventIdFromPath = (path: string): string => {
   return decodeURIComponent(segments.at(-1) ?? "");
 };
 
-/*
- * A Google that applies every sub-request it is given. The store starts holding the two mirrors
- * the mappings point at, so a GET or a DELETE addresses a real object rather than a hole.
- */
 const createAppliedGoogle = (): {
   respond: (requests: ParsedSubRequest[]) => ResponsePart[];
   store: Map<string, Record<string, unknown>>;

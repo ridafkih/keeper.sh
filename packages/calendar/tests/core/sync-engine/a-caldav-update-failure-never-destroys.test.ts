@@ -97,7 +97,6 @@ const refusalBody = [
   "</D:error>",
 ].join("");
 
-// RFC 4791 5.3.2 answers a payload precondition with 403 or 409, and a recreate carries the same refused bytes, so neither status is evidence that delete-then-create would restore the event.
 const updateFailures = [
   { body: refusalBody, label: "a 403 with a precondition error", status: 403, statusText: "Forbidden" },
   { body: refusalBody, label: "a 409 with a precondition error", status: 409, statusText: "Conflict" },

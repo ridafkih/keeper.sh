@@ -17,8 +17,6 @@ const graphError = (status: number, code: string, headers?: Record<string, strin
     { headers, status },
   );
 
-/* A refusal is not an observation of the object: it answers unknown, which never licenses a
-   recreate, rather than the absence a create would be decided on. */
 describe("verifyEventsExist refusals never vote to delete", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -77,11 +75,7 @@ describe("verifyEventsExist refusals never vote to delete", () => {
       ]);
   });
 
-  /* A dead item id is not proof of absence on Graph, which re-keys an item on a cross-folder move.
-     Absence needs the uid resolved too, so an unresolvable 404 answers unknown. */
   it("reports a bare 404 id as unknown, and one the mailbox holds nowhere as missing", async () => {
-    /* The mailbox holds three folders and none of them holds the uid, which is what absence takes:
-       a single folder's empty listing only ever speaks for that folder. */
     vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       const url = new URL(input.toString());
       if (url.pathname.endsWith("/calendars")) {

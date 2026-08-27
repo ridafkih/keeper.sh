@@ -28,8 +28,6 @@ interface CalendarObject {
 
 type CalDAVObjectPresence = "absent" | "present" | "unknown";
 
-/* What the server actually said about one requested href. Only its own 404 is absence; every other
-   answer, and every href it declined to answer, stays unknown. */
 interface CalDAVObjectAnswer {
   data: string | null;
   path: string;
@@ -223,10 +221,6 @@ const toTextParts = (value: unknown): string[] => {
   return [];
 };
 
-/* A parsed element is a plain string only when it carried nothing but text; a CDATA-wrapped body
-   arrives under _cdata, a body the server split across several CDATA sections arrives as several
-   runs, and a mixed text/CDATA element carries both keys at once. Every run belongs to the same
-   value, so they are read whole and only the ends of the joined value are trimmed. */
 const readElementText = (value: unknown): string | null => {
   if (typeof value === "string") {
     return value;
@@ -255,8 +249,6 @@ const toStatusCode = (status: unknown): number | null => {
   return Number.parseInt(code, 10);
 };
 
-/* One child element arrives as an object and a repeat arrives as an array, so both shapes are
-   read the same way. */
 const toElementList = (value: unknown): Record<string, unknown>[] => {
   if (Array.isArray(value)) {
     return value.filter((entry) => isRecord(entry));
@@ -288,10 +280,6 @@ const readCalendarData = (response: Record<string, unknown>): string | null => {
   return null;
 };
 
-/* Inside a propstat the status describes the property, not the resource (RFC 4918 13.9), so a 404
-   filed over calendar-data alongside a propstat the server answered is a withheld body, not a gone
-   object. Absence is a 404 spoken about the href itself: the response-wide status, or propstats
-   that all say 404 and so leave the server claiming nothing about this href. */
 const isHrefNotFound = (response: Record<string, unknown>): boolean => {
   const responseStatus = toStatusCode(response.status);
   if (responseStatus !== null) {
@@ -335,9 +323,6 @@ const toObjectAnswer = (
   return { data: null, path, presence: "unknown" };
 };
 
-/* The tsdav calendarMultiGet routes through collectionQuery, which throws as soon as any href
-   answers 4xx — the very answer that proves that href absent. Issuing the REPORT ourselves keeps
-   every href's own status intact. */
 const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
   "calendar-multiget": {
     _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
@@ -349,10 +334,6 @@ const buildMultiGetBody = (objectUrls: string[]): Record<string, unknown> => ({
   },
 });
 
-/* A server that re-keys an object it still holds answers 404 for the href the mapping stored while
-   the object itself is alive in this same collection under a href the server chose. Only a search by
-   UID can find it, and a href says nothing about the UID inside it, so this is the one question that
-   separates relocating the mapping from writing a permanent second copy of the customer's event. */
 const buildUidQueryBody = (uid: string): Record<string, unknown> => ({
   "calendar-query": {
     _attributes: getDAVAttribute([DAVNamespace.DAV, DAVNamespace.CALDAV]),
@@ -378,8 +359,6 @@ const buildUidQueryBody = (uid: string): Record<string, unknown> => ({
   },
 });
 
-/* Continuation lines are part of the value they continue (RFC 5545 3.1), so the body is unfolded
-   before its UID is read. */
 const readIcsUid = (data: string): string | null => {
   const unfolded = data.replaceAll(/\r?\n[ \t]/gu, "");
   for (const line of unfolded.split(/\r?\n/u)) {
@@ -390,10 +369,6 @@ const readIcsUid = (data: string): string | null => {
   return null;
 };
 
-/* A server free to ignore a filter it does not implement answers with whatever it likes, and acting
-   on that answer would put a stranger's object on the mapping - which the remove path would later
-   DELETE. So the object is accepted only when the bytes it came back with carry the very UID the
-   search asked about. */
 const answerCarryingUid = (
   answers: CalDAVObjectAnswer[],
   uid: string,
@@ -411,8 +386,6 @@ const answerCarryingUid = (
   return null;
 };
 
-/* Element names are compared without their namespace prefix, and hyphenated names are folded to
-   the camelCase the rest of this file reads them by. */
 const toElementKey = (name: string): string => {
   const localName = name.slice(name.indexOf(":") + 1);
   const [head, ...rest] = localName.split("-");
@@ -453,11 +426,6 @@ const toTextRunKey = (cdataDepth: number): string => {
   return "_text";
 };
 
-/* The tsdav multistatus parse runs xml-js under trim: true, which trims every text and CDATA run it
-   reads: a body the server split across two CDATA sections loses the line break between them, and
-   verification compares the ICS it reads byte for byte. Reading the XML here keeps every run
-   whole, and keeps each href's own propstats instead of the single prop bag tsdav folds them into,
-   which erases "gone" versus "refused". */
 const parseMultiStatusXml = (xml: string): Record<string, unknown> => {
   const root: Record<string, unknown> = {};
   const openElements: Record<string, unknown>[] = [root];
@@ -494,8 +462,6 @@ const parseMultiStatusXml = (xml: string): Record<string, unknown> => {
   return root;
 };
 
-/* Null means no multistatus body was parsed for this request at all - the server said nothing about
-   anything, which is a different fact from a body that listed no responses. */
 const toParsedMultiStatusResponses = (
   responses: { raw?: unknown }[],
 ): Record<string, unknown>[] | null => {
@@ -513,8 +479,6 @@ const toParsedMultiStatusResponses = (
 const toMultiStatusResponses = (responses: { raw?: unknown }[]): Record<string, unknown>[] =>
   toParsedMultiStatusResponses(responses) ?? [];
 
-/* Null means the request never answered the question: the server refused it outright, or what came
-   back held no multistatus body to read. Neither is a statement about what the collection holds. */
 const toAnsweredMultiStatusResponses = (
   responses: { ok?: unknown; raw?: unknown }[],
 ): Record<string, unknown>[] | null => {
@@ -524,16 +488,11 @@ const toAnsweredMultiStatusResponses = (
   return toParsedMultiStatusResponses(responses);
 };
 
-/* A UID search has three outcomes, and collapsing the last two loses the only fact that matters: the
-   search found the object, the search answered and proved the collection does not hold that uid, or
-   the search never answered at all. */
 type CalDAVUidSearchResult =
   | { answer: CalDAVObjectAnswer; kind: "found" }
   | { kind: "not-found" }
   | { kind: "unanswered" };
 
-/* Only a search that answered can leave the href's own 404 standing. When it did not answer, the
-   object is unknown - the engine parks the mapping rather than PUTting a second copy of this uid. */
 const toAnswerFromUidSearch = (
   search: CalDAVUidSearchResult,
   answered: CalDAVObjectAnswer,
@@ -734,16 +693,9 @@ class CalDAVClient {
     });
   }
 
-  /*
-   * Absence must come from the server's own words about that href: a 404 for it. An answer that
-   * refuses, withholds calendar-data, or never arrives at all leaves the object unknown, so a
-   * truncated multiget can never be read as the calendar no longer holding what it did not answer.
-   */
   verifyCalendarObjectsByUrls(params: {
     calendarUrl: string;
     objectUrls: string[];
-    /* The uid each href is expected to carry, positionally. A caller that knows it lets an href the
-       server answered 404 for be searched for by uid before it is reported gone. */
     uids?: (string | undefined)[];
   }): Promise<CalDAVObjectAnswer[]> {
     return mapAuthenticationFailure(async () => {
@@ -795,13 +747,6 @@ class CalDAVClient {
     });
   }
 
-  /* The href is gone, which says nothing about the object: the server may have re-keyed it and still
-     hold it in this collection under a href of its own choosing. Recreating it then writes a second
-     object bearing one uid in one collection, permanently, so the collection is asked by uid first.
-     A server that cannot answer the question - it threw, it refused, or it sent back nothing that
-     parsed as a multistatus - has said nothing about the uid, so it reports "unanswered" and the
-     404 does NOT stand: the simple servers that cannot run this REPORT are the same ones that will
-     not reject the duplicate PUT. Only a search that answered and found nothing proves absence. */
   private async findObjectByUid(
     calendarUrl: string,
     uid: string,

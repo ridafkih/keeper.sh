@@ -69,11 +69,6 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   return null;
 };
 
-/* Whether a request for this object actually left the process, and what the destination answered
-   if it did. An href resolution or a serialization refusal is raised before any bytes exist, so it
-   is ours alone: recording that here is what keeps the engine from grading a repetition of it as
-   the destination answering about the object. The status is stamped from the answer the client
-   carries back, so a refusal the destination really sent still reads as one. */
 interface RequestAttempt {
   sent: boolean;
   status: number | null;
@@ -81,11 +76,6 @@ interface RequestAttempt {
 
 const unsentAttempt = (): RequestAttempt => ({ sent: false, status: null });
 
-/*
- * The create runs this same serializer, so a refusal here repeats on the recreate. Returning it
- * rather than throwing keeps that one failure distinguishable from everything the destination
- * itself refuses.
- */
 const serializeUpdateBody = (
   event: MaterializedSyncableEvent,
   uid: string,
@@ -282,12 +272,8 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
 
-  /* CalDAV addresses an object by its href, and that is what a listing reports, so a create hands
-     back the path it wrote to rather than the UID it derived the filename from. */
   const toObjectPath = (uid: string): string => new URL(`${uid}.ics`, calendarBaseUrl).pathname;
 
-  /* The same iCalendar body pushEvents writes on a create, built and thrown away: the create verb
-     refuses exactly the events this refuses, and nothing reaches the server. */
   const prepareEvent = (event: MaterializedSyncableEvent): void => {
     eventToICalString(event, generateDeterministicEventUid(event.id));
   };
@@ -355,13 +341,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
    * "@". Comparing decoded basenames keeps the write on the object the mapping
    * already points at instead of a reconstructed href that never matches.
    */
-  /*
-   * A server that re-keys an object it still holds names it with an href of its own choosing, and
-   * that href says nothing about the UID inside - so the basename test below cannot pass for a
-   * mirror the verification read just located and would refuse the customer's edit forever. A read
-   * that saw this event's own UID on the object at that href has already answered the only question
-   * the basename was standing in for, so the write goes to the object the read proved.
-   */
   const resolveUpdateTargetUrl = (deleteId: string, uid: string, verifiedUid?: string): string => {
     const objectUrl = toObjectUrl(deleteId);
     if (verifiedUid === uid) {
@@ -381,11 +360,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           const attempt = unsentAttempt();
           const uid = generateDeterministicEventUid(event.id);
 
-          /*
-           * The create runs this same serializer, so a refusal here repeats on the recreate and
-           * nothing can put the mirror back. That makes it the only failure this verb raises which
-           * a delete-then-add cannot repair, and so the only one recorded as unsent.
-           */
           const serialized = serializeUpdateBody(event, uid);
           if ("error" in serialized) {
             if (config.safeFetchOptions?.signal?.aborted) {
@@ -396,12 +370,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           const { iCalString } = serialized;
 
           try {
-            /*
-             * A stored href this event can never address is refused here, before a single byte
-             * leaves: the server said nothing about its copy, so the attempt stays unsent and the
-             * engine reads it as a refusal that never learned anything rather than as evidence
-             * that would license destroying the object the href actually names.
-             */
             const objectUrl = resolveUpdateTargetUrl(deleteId, uid, verifiedUid);
 
             attempt.sent = true;
@@ -415,7 +383,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             if (config.safeFetchOptions?.signal?.aborted) {
               throw error;
             }
-            // A refused PUT is never evidence that delete-then-create would put the event back: RFC 4791 5.3.2 payload preconditions refuse the same bytes again.
             return createFailureResult(error, attempt);
           }
         }, config.safeFetchOptions?.signal),
@@ -551,10 +518,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return remoteEvents;
   };
 
-  /* Same object, same identifier: a bare-uid mapping and the href it resolves to name one object, and
-     a server free to answer with an absolute href names the same one again. Only a path that is not
-     the one the read asked about is a relocation, and then that path is the only handle anything has
-     on the customer's copy. */
   const answeredPathOf = (deleteId: string, answer: CalDAVObjectAnswer): string => {
     const requestedPath = new URL(toObjectUrl(deleteId)).pathname;
     const answeredPath = new URL(answer.path, calendarBaseUrl).pathname;
@@ -564,12 +527,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return answeredPath;
   };
 
-  /* An href names a whole object, never one component inside it, and a PUT to it rewrites every
-     component at once. So the object answers about exactly one event: the one its own leading
-     VEVENT identifies. Later components are that event's recurrence overrides -- which carry the
-     same uid, so several of them are ordinary -- or, on a collection that was re-keyed the ordinary
-     way, a sibling event nothing here may claim to have located. The master is preferred over an
-     override so the presence carries the series rather than one instance of it. */
   const parsedEventForUid = (
     data: string,
     uid: string,
@@ -583,9 +540,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return components.find((parsed) => !parsed.recurrenceId) ?? objectEvent;
   };
 
-  /* A caller that asked by bare identifier told us no uid to compare against, so the object the
-     href names is all the question there was; a caller that named a uid gets an answer about that
-     uid or no answer at all. */
   const readAnsweredEvent = (
     target: EventVerificationTarget,
     data: string,
@@ -597,12 +551,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return parsedEventForUid(data, target.uid);
   };
 
-  /* The read answers about an href, and a server that re-keyed the object answers about the href it
-     actually holds it under. That path is the only handle the update verb has on the customer's
-     copy, so the presence carries what the server answered about rather than what it was asked.
-     What it may never carry is somebody else's identity: an object standing at the href that holds
-     no component for the uid we asked about has told us nothing about our mirror, and calling that
-     "present" hands the engine a located mirror it would then write the wrong event's body into. */
   const presenceOfAnswer = (
     target: EventVerificationTarget,
     answer: CalDAVObjectAnswer | undefined,
@@ -644,8 +592,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       const answers = await client.verifyCalendarObjectsByUrls({
         calendarUrl,
         objectUrls: deleteIds.map((deleteId) => toObjectUrl(deleteId)),
-        /* Positional, so the read can look for a re-keyed object by the uid the mapping carries
-           instead of reporting the href it was asked about gone. */
         uids: verificationTargets.map((target) => target.uid),
       });
 
@@ -654,7 +600,6 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       if (config.safeFetchOptions?.signal?.aborted) {
         throw error;
       }
-      // A refused, throttled or failed read tells us nothing about the object, so it is never absence.
       return deleteIds.map((deleteId) => toUnknownPresence(deleteId));
     }
   };

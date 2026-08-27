@@ -59,8 +59,6 @@ vi.mock("../../../src/providers/caldav/shared/client", () => {
   };
 });
 
-/* Ten cycles is far past any bounded escape: the reproduction ran ten and the mapping was still
-   silently stalled on the tenth. */
 const CYCLES = 10;
 
 const DESTINATION_CALENDAR_ID = "cal-1";
@@ -73,8 +71,6 @@ const MIRROR_UID = "mirror-uid-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* The customer edited their copy, so every cycle from now on carries the same pending edit into the
-   same refusal. */
 const editedEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -167,9 +163,6 @@ const readRequestBody = (init?: RequestInit): string | null => {
   return init.body;
 };
 
-/* Graph's own refusal shape for a part of the payload only the PATCH carries: the update body sends
-   an explicit "recurrence": null that the create body never contains, so the create verb was never
-   offered these bytes and cannot be assumed to refuse them. */
 const refusedPayload = (): Response =>
   Response.json(
     {
@@ -185,8 +178,6 @@ interface MailboxOptions {
   refusePatch: boolean;
 }
 
-/* A synthetic Graph mailbox in which the mirror really is still there at its mapped id: a DELETE
-   would destroy the customer's only copy and a POST would duplicate it permanently. */
 const installGraphMailbox = (options: MailboxOptions): GraphRequest[] => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [mirrorInTheMailbox()];
@@ -291,8 +282,6 @@ interface CycleOutcome {
   namesTheMapping: boolean;
 }
 
-/* The mapping as the next cycle would read it back: whatever the run wrote down, checkpointed or
-   returned, applied on top of the row. */
 const carryMappingForward = (mapping: EventMapping, updates: PendingUpdate[]): EventMapping => {
   const written = updates.find((update) => update.id === mapping.id);
   if (!written) {
@@ -351,9 +340,6 @@ afterEach(() => {
 });
 
 describe("an update the destination durably refuses must not stall the mapping forever", () => {
-  /* The in-code justification for treating a 400 as never durable is that the create verb carries
-     the same bytes into the same refusal. On Graph it provably does not: the PATCH body carries
-     three properties the POST body never sends. */
   it("sends bytes on the create verb that the update verb never sent", async () => {
     const requests = installGraphMailbox({ refusePatch: false });
     const provider = createOutlookProvider();
@@ -387,8 +373,6 @@ describe("an update the destination durably refuses must not stall the mapping f
   it("accumulates evidence on the mapping when the same refusal repeats", async () => {
     const { cycles } = await runOutlookCycles();
 
-    /* One repeated refusal is one observation; the second cycle has to know the first happened, or
-       no amount of repetition can ever add up to anything. */
     expect(cycles[0]?.carriedCounter).toBe(1);
     expect(cycles[1]?.carriedCounter).toBe(2);
   });
@@ -401,8 +385,6 @@ describe("an update the destination durably refuses must not stall the mapping f
     expect(escaped).toBeLessThan(CYCLES);
   });
 
-  /* The escape may not be bought with the customer's event: the verification read finds the mirror
-     alive at its mapped id, so nothing licenses a delete and nothing licenses a duplicate. */
   it("never deletes or duplicates a mirror the read finds still present", async () => {
     const { requests } = await runOutlookCycles();
 
@@ -495,7 +477,6 @@ describe("the CalDAV counterpart still refuses to trade a live object for an esc
     clientMocks.deleteCalendarObject.mockImplementation(() => Promise.resolve());
     clientMocks.deleteCalendarObjectByUrl.mockImplementation(() => Promise.resolve());
     clientMocks.updateCalendarObjectByUrl.mockRejectedValue(caldavHttpError(400, "Bad Request"));
-    /* The object the mapping names is alive on the server, and the multiget hands back its bytes. */
     clientMocks.verifyCalendarObjectsByUrls.mockImplementation(() => Promise.resolve([
       {
         data: eventToICalString(editedEvent, caldavUid),

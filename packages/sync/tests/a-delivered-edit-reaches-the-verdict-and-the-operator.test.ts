@@ -1,15 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveDestinationAttemptVerdict } from "../src/destination-errors";
 
-/* ------------------------------------------------------------------------------------------------
-   Nine of ten edits delivered and one 503 is a working destination, and the counters are the only
-   thing that says so: `added` is 0 for every healthy in-place update because all three providers
-   answer under the uid the mapping already holds. Two consumers have to see the delivered edits --
-   the verdict, or the calendar is escalated toward a six-hour backoff nothing ever undoes, and the
-   operator's completion payload, or a run that pushed a hundred edits is byte-identical to one that
-   pushed none.
-   ------------------------------------------------------------------------------------------------ */
-
 const syncCalendarMock = vi.fn();
 const listRemoteEventsMock = vi.fn(() => Promise.resolve([]));
 const resolveSyncProviderMock = vi.fn();
@@ -70,8 +61,6 @@ const CALENDAR_ID = "destination-1";
 const START = new Date("2026-03-08T00:30:00.000Z");
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
-/* The counters the calendar engine really produces for a ten-replace run whose mirrors were all
-   present, nine of which the destination accepted in place and one of which answered 503. */
 const NINE_OF_TEN_DELIVERED = {
   added: 0,
   addFailed: 1,
@@ -172,8 +161,6 @@ interface DeliveredEditCount {
   updated?: number;
 }
 
-/* Read rather than destructured so a payload that never carries the number reads as absent instead
-   of as a run that delivered nothing. */
 const readDeliveredEdits = (completion: object): number | undefined =>
   (completion as DeliveredEditCount).updated;
 
@@ -248,15 +235,12 @@ describe("the verdict on a run that delivered edits", () => {
 });
 
 describe("the completion an operator sees", () => {
-  /* Without the number here the two runs below are the same report, and the one thing an operator
-     needs to know - whether the customer's edits are reaching their calendar - is unanswerable. */
   it("carries the delivered edits into the completion payload", async () => {
     const { database } = createHarness();
 
     const completion = await runAndCaptureCompletion(database);
 
     expect(readDeliveredEdits(completion ?? {})).toBe(9);
-    // The count of creates stays honest: an in-place edit is not a new mirror on create-only Outlook.
     expect(completion?.["added"]).toBe(0);
     expect(completion?.["addFailed"]).toBe(1);
   });

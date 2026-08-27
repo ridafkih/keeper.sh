@@ -50,13 +50,6 @@ const makeReplacement = (mapping: EventMapping): Extract<SyncOperation, { type: 
   uid: mapping.destinationEventUid,
 });
 
-/*
- * The two answers the destination layer emits when the batch carried no word about a mapping,
- * copied from provider.ts verbatim: the status-less protocol hole (the defensive branch for a
- * responses array shorter than the requests that produced it) and the status-carrying one
- * (parseHttpResponse and the synthetic fill in batch.ts both report 0 when no HTTP status line
- * was ever read for that index). The engine must find neither of them durable.
- */
 const missingBatchResponse = (): PushResult => ({
   error: "Missing batch response",
   errorType: "GoogleBatchProtocolError",
@@ -78,8 +71,6 @@ interface CycleRun {
   deletedMappingIds: string[];
 }
 
-/* A live Google event answers a 2xx to the batched DELETE, which is what licenses the engine
-   to record the object as really removed - so the double must say the same thing. */
 const createGoogleShapedProvider = (
   learnedNothing: () => PushResult,
   deleteCalls: string[][],
@@ -99,8 +90,6 @@ const createGoogleShapedProvider = (
   updateEvents: (updates) => Promise.resolve(updates.map(() => learnedNothing())),
 });
 
-/* A cycle that learned nothing durable carries no counter at all, so only the recorded ones
-   are evidence and a cycle that records none is the safe outcome. */
 const isRecordedFailureCount = (counter: number | undefined): counter is number =>
   typeof counter === "number";
 
@@ -152,8 +141,6 @@ const learnedNothingShapes = [
   { emit: zeroStatusResponse, label: "a part carrying no HTTP status line at all" },
 ];
 
-/* An outage and a throttle are already excluded, and they stay excluded: this test must not be
-   satisfied by a change that stops counting everything. */
 const genuineDestinationRefusals = [
   { label: "503", statusCode: 503 },
   { label: "429", statusCode: 429 },
@@ -178,8 +165,6 @@ const buildSubResponsePart = (contentId: string, eventId: string): string => {
   ].join("\r\n");
 };
 
-/* One plausible HTTP 200 from Google: the multipart envelope arrives intact but carries a
-   single sub-response, exactly what a proxy that truncated or renumbered the parts leaves. */
 const stubBatchFetchReturning = (contentId: string, eventId: string): (() => void) => {
   const originalFetch = globalThis.fetch;
   const responseText = `${buildSubResponsePart(contentId, eventId)}\r\n--${RESPONSE_BOUNDARY}--\r\n`;
@@ -254,9 +239,6 @@ describe("a google batch answer that learned nothing is never durable evidence",
 });
 
 describe("a real google batch response never lets one index answer for another", () => {
-  /* An envelope that answers fewer parts than the request sent leaves that index explicitly
-     unanswered rather than shortening the array, so the update it belonged to keeps its own
-     slot instead of inheriting the neighbour that happened to be answered. */
   it("reports an unanswered zero status for the index the batch omitted", async () => {
     const results = await updateTwoEventsThroughRealGoogle("response-item-0", GOOGLE_EVENT_ID);
 

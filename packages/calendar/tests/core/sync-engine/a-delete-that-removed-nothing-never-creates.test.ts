@@ -25,8 +25,6 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-/* The distinction this spec needs: a delete may report success without having removed anything.
-   Only removedObject is positive evidence that an object left the destination. */
 interface RemovalEvidence extends DeleteResult {
   removedObject?: boolean;
 }
@@ -61,8 +59,6 @@ interface DestinationRecord {
   uid: string;
 }
 
-/* Mirrors packages/calendar/src/providers/outlook/destination/provider.ts:346-355: a DELETE that
-   404s is NOT reported as a failure — the real provider pushes { success: true } for it. */
 const createOutlookLikeDestination = (seeded: DestinationRecord[]) => {
   const records = new Map<string, DestinationRecord>();
   for (const record of seeded) {
@@ -92,7 +88,6 @@ const createOutlookLikeDestination = (seeded: DestinationRecord[]) => {
       startTime: START_TIME,
       uid: record.uid,
     }))),
-    // Outlook's pushEvents is a create-only POST: it can never land on an existing object.
     pushEvents: (events) => {
       pushedEvents.push(...events);
       return Promise.resolve(events.map((event): PushResult => {
@@ -125,7 +120,6 @@ const createOutlookLikeDestination = (seeded: DestinationRecord[]) => {
 };
 
 const planMissingMirrorReplacement = (event: MaterializedSyncableEvent, mapping: EventMapping) => {
-  // The targeted read never enumerates unmapped events, so the mirror only looks absent.
   const windowedListing: RemoteEvent[] = [];
   const { operations } = computeSyncOperations(
     [event],
@@ -153,7 +147,6 @@ describe("a delete that removed nothing never creates", () => {
     await executeRemoteOperations(operations, [mapping], DESTINATION_CALENDAR_ID, destination.provider);
 
     expect(destination.deleteTargets).toEqual([STALE_DELETE_ID]);
-    // The delete reported success, but nothing left the destination: the live event is still there.
     expect(destination.pushedEvents).toHaveLength(0);
     expect(destination.snapshot()).toEqual([
       { deleteId: LIVE_DELETE_ID, summary: "Team lunch", uid: LIVE_UID },

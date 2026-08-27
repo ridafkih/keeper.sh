@@ -61,8 +61,6 @@ const CALENDAR_URL = "https://caldav.example.invalid/calendars/user/shared/";
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const CYCLES = 3;
 
-/* Summaries chosen so neither contains the other: the only way to tell which bytes the customer's
-   object is carrying is that one of the two is in it and the other is not. */
 const storedMeeting: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
@@ -81,8 +79,6 @@ const movedMeeting: MaterializedSyncableEvent = {
 
 const uid = generateDeterministicEventUid(movedMeeting.id);
 const ownedObjectPath = `/calendars/user/shared/${uid}.ics`;
-/* A server that names objects itself: operations.ts adopts the reported href, so the
-   stored basename never matches <uid>.ics again for this mapping. */
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
 const serverNamedObjectUrl = new URL(serverNamedObjectPath, CALENDAR_URL).href;
 
@@ -112,10 +108,6 @@ const httpError = (status: number, statusText: string): Error =>
 
 const notFound = (): Error => httpError(404, "Not Found");
 
-/* RFC 4791 5.3.2.1: a PUT that would leave a second object carrying a UID the collection already
-   holds fails the CALDAV:no-uid-conflict precondition, stores nothing, and names the href that
-   already holds it. A create double that accepted those bytes would certify exactly the permanent
-   duplicate a real server refuses. */
 const uidConflict = (heldAt: string): Error =>
   new CalDAVHttpError(
     new Response(
@@ -139,8 +131,6 @@ const createProvider = () =>
     username: "user",
   });
 
-/* The customer's collection, as a real one behaves: a PUT to an href it does not hold is a 404, a
-   create really puts bytes on the calendar, a delete really takes the object away. */
 const remoteObjects = new Map<string, string>();
 
 const uidOf = (iCalString: string): string =>
@@ -166,10 +156,6 @@ interface CycleRun {
   cycleOutcomes: CycleOutcome[];
 }
 
-/*
- * The engine reports whatever per-mapping state it wants carried to the next cycle as a
- * PendingUpdate on that mapping, so the harness replays the flush without naming the field.
- */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -230,8 +216,6 @@ beforeEach(() => {
   }
   remoteObjects.clear();
   clientMocks.resolveCalendarUrl.mockImplementation((url: string) => Promise.resolve(url));
-  /* Only what the collection holds answers present; a href it does not hold is the server's own
-     404, never a silent success. */
   clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
     ({ objectUrls }: { objectUrls: string[] }) => Promise.resolve(objectUrls.map((url) => {
       const data = remoteObjects.get(url);
@@ -282,10 +266,6 @@ beforeEach(() => {
 });
 
 describe("a durably rejected in-place update escapes instead of stalling forever", () => {
-  /* The read answered PRESENT at the server-chosen href, carrying this mapping's own uid, so the
-     repair is the write itself retried against that href. A create here would be a second object
-     bearing a live uid - refused by a compliant server, a permanent duplicate on a lenient one -
-     and the delete that follows it would destroy the customer's only copy. */
   it("rewrites the object at the server-chosen href in place, creating and deleting nothing", async () => {
     const { carriedMapping, cycleOutcomes } = await runCycles(serverNamedObjectPath);
 

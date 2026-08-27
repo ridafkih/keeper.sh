@@ -12,20 +12,6 @@ import type {
   SyncOperation,
 } from "../../../src/core/types";
 
-/* ------------------------------------------------------------------------------------------------
-   One event nobody can act on must not park the whole destination calendar.
-
-   Three per-event refusals reach the verdict as addFailed/removeFailed with no success beside them,
-   and those are the only failure inputs resolveDestinationAttemptVerdict reads. A calendar whose
-   only pending work is such an event therefore grades 'failed' every cycle, escalating
-   buildCalendarBackoffState from five minutes to the six-hour ceiling, after which every OTHER
-   event on that calendar waits up to six hours before any work is attempted. Backoff clears only on
-   'succeeded', which a quiet calendar holding one parked event can never reach.
-
-   The counters must keep being reported - the parked events stay in the run's errors - but they may
-   no longer drive calendar-wide backoff.
-   ------------------------------------------------------------------------------------------------ */
-
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const SOURCE_CALENDAR_ID = "source-cal-1";
 const USER_ID = "user-1";
@@ -33,8 +19,6 @@ const USER_ID = "user-1";
 const START_TIME = new Date("2026-05-12T09:00:00.000Z");
 const END_TIME = new Date("2026-05-12T10:00:00.000Z");
 
-/* The requested window rolled forward past the mapping: the second trigger for the same frozen
-   remove, and the one that fires even while the source event is alive. */
 const ROLLED_PAST_WINDOW = {
   timeMax: new Date("2026-09-01T00:00:00.000Z"),
   timeMin: new Date("2026-08-01T00:00:00.000Z"),
@@ -45,7 +29,6 @@ const WIDE_WINDOW = {
   timeMin: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-/* The shape createDestinationReconciliationScope builds in sync-user.ts, field for field. */
 const createScope = (requestedWindow: { timeMax: Date; timeMin: Date }) => ({
   authoritativeSourceWindows: new Map([[SOURCE_CALENDAR_ID, WIDE_WINDOW]]),
   authoritativeWindow: WIDE_WINDOW,
@@ -66,11 +49,6 @@ const sourceEvent = (index: number): MaterializedSyncableEvent => ({
   summary: `Standup ${index}`,
 });
 
-/* A mapping toOutsideDestinationRepair froze: the verification read located the customer's copy
-   outside the destination folder, so the mapping carries NO_DESTINATION_EVENT_IDENTIFIER - the
-   empty string - and there is nothing in this calendar any delete may target.
-   eventStateId is null because eventMappingsTable.eventStateId is ON DELETE SET NULL: the source
-   event row is gone and the mapping row survived it. */
 const frozenMapping = (): EventMapping => ({
   calendarId: DESTINATION_CALENDAR_ID,
   deleteIdentifier: "",
@@ -153,8 +131,6 @@ const runCycle = async (
   return { result, wideEvent };
 };
 
-/* The destination answered, and answered the same way every cycle: the refusal is real evidence,
-   which is what makes the mapping promotable rather than merely stuck. */
 const refusedUpdate = (): PushResult => ({
   destinationAnswer: "answered",
   error: "the recurrence property cannot be cleared on this event",
@@ -168,10 +144,6 @@ const namesFrozenMapping = (errors: string[]): boolean =>
   errors.some((error) => error.includes("mapping-frozen"));
 
 describe("one parked event does not back off the whole destination calendar", () => {
-  /* (1) The unremovable frozen remove: buildRemoveOperations builds a remove carrying the empty
-     identifier, executeRemoves filters it out and recordUnremovableMirrors reports removeFailed 1
-     with no changes.deletes, so the mapping is never retired and the identical refusal is rebuilt
-     next cycle, and the one after that, forever. */
   it("does not grade the calendar failed for a frozen mapping whose source was deleted", async () => {
     const mapping = frozenMapping();
     const { calls, provider } = createRecordingProvider([]);
@@ -188,7 +160,6 @@ describe("one parked event does not back off the whole destination calendar", ()
       expect(cycle.result.removed).toBe(0);
       expect(cycle.result.conflictsResolved).toBe(0);
 
-      /* The refusal is still reported: the fix stops the backoff, never the telemetry. */
       expect(namesFrozenMapping(cycle.result.errors)).toBe(true);
       expect(cycle.result.errors.some((error) =>
         error.includes("this destination calendar holds no event for it"))).toBe(true);
@@ -200,14 +171,12 @@ describe("one parked event does not back off the whole destination calendar", ()
       expect(verdict).not.toBe("failed");
     }
 
-    /* An identifier this calendar never returned may never reach Outlook's mailbox-wide DELETE. */
     expect(calls.deleted).toEqual([]);
     expect(calls.pushed).toEqual([]);
   });
 
   it("does not grade the calendar failed when the requested window rolled past the frozen mapping", async () => {
     const mapping = frozenMapping();
-    /* The source event is alive and in the local read; only the window moved on. */
     const { calls, provider } = createRecordingProvider([]);
     const scope = createScope(ROLLED_PAST_WINDOW);
     const state = {
@@ -236,9 +205,6 @@ describe("one parked event does not back off the whole destination calendar", ()
     expect(calls.deleted).toEqual([]);
   });
 
-  /* (2) recordMirrorsOutsideDestination merges addFailed for every frozen mapping on any cycle that
-     reaches execution. A cycle whose only work is a mapping rekey passes the EMPTY_RESULT
-     short-circuit (mappingUpdates.length > 0), attempts nothing, and grades 'failed'. */
   it("does not grade a mapping-updates-only cycle failed because a frozen mapping exists", async () => {
     const live = sourceEvent(2);
     const rekeyed: EventMapping = {
@@ -250,12 +216,9 @@ describe("one parked event does not back off the whole destination calendar", ()
       id: "mapping-rekeyed",
       sourceCalendarId: SOURCE_CALENDAR_ID,
       startTime: START_TIME,
-      // Matches the live event exactly, so nothing about it is stale: only its id moved.
       syncEventHash: createSyncEventContentHash(live),
       syncEventId: live.id,
     };
-    /* The destination returned the same mirror under a new id, which is the rekey case that
-       produces a mapping update and no operation at all. */
     const remoteEvents: RemoteEvent[] = [{
       deleteId: "AAMkAG-new-item-id",
       endTime: END_TIME,
@@ -264,7 +227,6 @@ describe("one parked event does not back off the whole destination calendar", ()
       uid: rekeyed.destinationEventUid,
     }];
 
-    /* The frozen mapping's own source is alive and in window, so it plans no operation at all. */
     const frozenWithLiveSource: EventMapping = { ...frozenMapping(), eventStateId: "sync-event-1" };
 
     const { calls, provider } = createRecordingProvider(remoteEvents);
@@ -280,7 +242,6 @@ describe("one parked event does not back off the whole destination calendar", ()
 
     expect(cycle.wideEvent["operations.total"]).toBe(0);
     expect(cycle.wideEvent["mapping_updates.count"]).toBe(1);
-    // The short-circuit must not fire: the mapping rekey still has to be written down.
     expect(cycle.wideEvent["outcome"]).toBe("success");
 
     expect(cycle.result.added).toBe(0);
@@ -288,24 +249,17 @@ describe("one parked event does not back off the whole destination calendar", ()
     expect(cycle.result.removed).toBe(0);
     expect(cycle.result.removeFailed).toBe(0);
 
-    /* Named as always: an operator still sees which mapping is parked and why. */
     expect(cycle.result.errors.some((error) =>
       error.includes("this destination calendar holds no event for mapping mapping-frozen"))).toBe(true);
 
     expect(resolveDestinationAttemptVerdict(cycle.result, false)).not.toBe("failed");
 
-    /* A superseded run that attempted nothing must still be inconclusive: addFailed > 0 is what
-       made hasAttemptedOperations true and defeated the guard. */
     expect(resolveDestinationAttemptVerdict(cycle.result, true)).toBe("inconclusive");
 
     expect(calls.deleted).toEqual([]);
     expect(calls.pushed).toEqual([]);
   });
 
-  /* (3) The permanently refused update the branch correctly refuses to delete-then-add: the
-     verification read finds the mirror alive at the very id the update addressed, so nothing may be
-     deleted and nothing may be recreated. updateFailed folds into addFailed, updated stays 0, and
-     toFailureCarry preserves the pre-edit hash, so the identical replace is re-planned forever. */
   it("does not grade the calendar failed for an escaped permanently-refused update", async () => {
     const edited: MaterializedSyncableEvent = {
       ...sourceEvent(3),
@@ -338,8 +292,6 @@ describe("one parked event does not back off the whole destination calendar", ()
 
       const { calls, provider } = createRecordingProvider([], {
         updateEvents: () => Promise.resolve([refusedUpdate()]),
-        /* The mirror really is still there at its mapped id: a DELETE would destroy the
-           customer's only copy, a POST would duplicate it permanently on Outlook. */
         verifyEventsExist: (targets) => Promise.resolve(targets.map((target): EventPresence => ({
           event: {
             deleteId: target.deleteId,
@@ -368,27 +320,18 @@ describe("one parked event does not back off the whole destination calendar", ()
       expect(result.removeFailed).toBe(0);
       expect(result.addFailed).toBeGreaterThan(0);
 
-      /* One entry has to carry both halves: which mapping is frozen, and the destination's own
-         words for why. The raw provider string alone names no mapping, so an operator reading the
-         run cannot tell which event stopped moving. */
       expect(outcome.errors.some((entry) =>
         entry.error.includes("mapping-refused")
         && entry.error.includes("the recurrence property cannot be cleared on this event"))).toBe(true);
 
-      /* The park is what pays for the failure: without it hasActionableFailure still sees an
-         actionable one and every other event on this calendar inherits the six-hour ceiling. */
       expect(result.parked ?? 0).toBeGreaterThan(0);
       expect(resolveDestinationAttemptVerdict(result, false)).not.toBe("failed");
 
-      /* The escape may never be bought with the customer's live event. */
       expect(calls.deleted).toEqual([]);
       expect(calls.pushed).toEqual([]);
     }
   });
 
-  /* The negative control, pinned in the same file so the fix cannot be a blanket downgrade: an
-     ordinary destination 500 with nothing else in the run is a real destination failure and must
-     still escalate the calendar's backoff. */
   it("still grades an ordinary destination 500 as failed", async () => {
     const event = sourceEvent(4);
     const { provider } = createRecordingProvider([], {

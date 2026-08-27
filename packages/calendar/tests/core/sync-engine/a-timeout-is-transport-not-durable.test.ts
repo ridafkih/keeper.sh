@@ -42,8 +42,6 @@ const makeReplacement = (): Extract<SyncOperation, { type: "replace" }> => ({
   uid: "remote-1@keeper.sh",
 });
 
-/* A socket that accepts the request and then says nothing is what a 30-second Graph or CalDAV
-   timeout looks like from here; only the abort ever settles it. */
 const stubHangingFetch = (): (() => void) => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((_input: unknown, init?: RequestInit) => new Promise((_resolve, reject) => {
@@ -59,8 +57,6 @@ const stubHangingFetch = (): (() => void) => {
   };
 };
 
-/* The name must come from the code that actually throws it, never from a string literal a test
-   author guessed. */
 const timeoutErrorFromRealRequest = async (): Promise<Error> => {
   const restoreFetch = stubHangingFetch();
   try {
@@ -73,8 +69,6 @@ const timeoutErrorFromRealRequest = async (): Promise<Error> => {
   throw new Error("the request did not time out");
 };
 
-/* A cycle that learned nothing durable carries no counter at all, so only the recorded ones are
-   evidence and the absent ones are the safe outcome. */
 const isRecordedFailureCount = (counter: number | undefined): counter is number =>
   typeof counter === "number";
 

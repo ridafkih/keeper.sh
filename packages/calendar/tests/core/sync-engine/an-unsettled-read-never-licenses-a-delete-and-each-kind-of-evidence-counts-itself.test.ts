@@ -14,8 +14,6 @@ const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* The customer's only copy on the destination. Every assertion in this file is about whether this
-   identifier survives a destination that will not say anything about it. */
 const LIVE_MIRROR_ID = "AAMkAG-live-mirror";
 const MIRROR_UID = "mirror-uid-1";
 const MAPPING_ID = "mapping-1";
@@ -23,8 +21,6 @@ const MAPPING_ID = "mapping-1";
 const MAPPED_SUBJECT = "Quarterly review";
 const EDITED_SUBJECT = "Quarterly review — moved to Thursday";
 
-/* The unsettled tally has to live somewhere that survives to the next cycle, and it may not be the
-   field the answered-refusal accumulator writes, or either kind of evidence tops the other up. */
 type CarriedMapping = EventMapping & { consecutiveUnsettledReads?: number };
 type CarriedUpdate = PendingUpdate & { consecutiveUnsettledReads?: number };
 
@@ -59,10 +55,6 @@ const readRequestBody = (init?: RequestInit): string | null => {
   return init.body;
 };
 
-/* A synthetic Graph mailbox holding the customer's live mirror. In "folder-read-throws" the folder
-   listing the uid walk needs blows up, which is what Outlook does for EVERY target the moment one
-   folder read fails or is throttled: the verdict comes back "unknown" through the provider's own
-   catch, never as a hand-written literal. */
 const installGraphMailbox = (mode: VerificationMode): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -72,7 +64,6 @@ const installGraphMailbox = (mode: VerificationMode): GraphRequest[] => {
     requests.push({ body: readRequestBody(init), method, url: url.toString() });
 
     if (method === "DELETE") {
-      // The item really is there, so Graph removes it and the provider reports removal evidence.
       return Promise.resolve(new Response(null, { status: 204 }));
     }
 
@@ -89,7 +80,6 @@ const installGraphMailbox = (mode: VerificationMode): GraphRequest[] => {
       }));
     }
 
-    // The mapped identifier is dead, so the verdict can only come from the uid walk above.
     if (url.searchParams.has("$filter")) {
       return Promise.resolve(Response.json({ value: [] }));
     }
@@ -133,8 +123,6 @@ const toReplacement = (mapping: CarriedMapping): SyncOperation => ({
   uid: mapping.destinationEventUid,
 });
 
-/* The serializer refused the update, so nothing ever left the process and the destination never had
-   a say. No number of repetitions can turn that into evidence about the customer's copy. */
 const refusedBeforeSending: PushResult = {
   error: "the event could not be serialized for the update verb",
   errorType: "EventSerializationError",
@@ -142,8 +130,6 @@ const refusedBeforeSending: PushResult = {
   success: false,
 };
 
-/* Graph answered about this object and rejected it. Durable evidence -- but only ever evidence that
-   the update fails, never that the mirror may be destroyed. */
 const answeredWithFourHundred: PushResult = {
   error: "Graph rejected the update",
   errorType: "MicrosoftGraphHttpError",
@@ -168,9 +154,6 @@ interface ProviderSpies {
   verifyCalls: number;
 }
 
-/* The real Outlook provider throughout -- its prepareEvent, its deleteEvents, its pushEvents and,
-   except where a cycle is explicitly throttled, its verifyEventsExist. Only the update verb is
-   replaced, because the whole case starts with an update that fails. */
 const createSpiedProvider = (
   pushResult: PushResult,
   readThrottled: boolean,
@@ -293,11 +276,8 @@ describe("an unsettled read never licenses a delete, and each kind of evidence c
 
     for (let cycle = 0; cycle < 5; cycle++) {
       const outcome = await runCycle(mapping, requests, refusedBeforeSending, false);
-      /* A destination declining to answer is not evidence about the customer's copy, so it can
-         never license destroying it -- on any cycle, at any counter value. */
       expect({ cycle, deleteCalls: outcome.deleteCalls }).toEqual({ cycle, deleteCalls: [] });
       expect({ cycle, deletes: outcome.deletes }).toEqual({ cycle, deletes: [] });
-      // Outlook's push is a create-only POST, so a create here is a permanent duplicate.
       expect({ cycle, posts: outcome.posts }).toEqual({ cycle, posts: [] });
       mapping = outcome.nextMapping;
     }
@@ -307,7 +287,6 @@ describe("an unsettled read never licenses a delete, and each kind of evidence c
     const requests = installGraphMailbox("folder-read-throws");
     let mapping = baseMapping;
 
-    /* Two ordinary Graph 400s, driven rather than planted: real history on the answered route. */
     for (let cycle = 0; cycle < 2; cycle++) {
       const answered = await runCycle(mapping, requests, answeredWithFourHundred, false);
       expect({ cycle, verifyCalls: answered.verifyCalls }).toEqual({ cycle, verifyCalls: 0 });
@@ -332,8 +311,6 @@ describe("an unsettled read never licenses a delete, and each kind of evidence c
       const outcome = await runCycle(mapping, requests, answeredWithFourHundred, true);
       if (outcome.verifyCalls > 0) {
         unsettledTallies.push(outcome.unsettledTally);
-        /* A mapping nobody can act on must be named and counted as parked, never as an actionable
-           failure: graded failed it pins the whole calendar at the six-hour backoff ceiling. */
         expect({ cycle, parked: outcome.parked }).toEqual({ cycle, parked: 1 });
         expect({ cycle, actionable: outcome.addFailed - outcome.parked })
           .toEqual({ cycle, actionable: 0 });
@@ -343,16 +320,12 @@ describe("an unsettled read never licenses a delete, and each kind of evidence c
       mapping = outcome.nextMapping;
     }
 
-    /* The tally must advance, not oscillate: a promotion spending the answered counter must not be
-       read back as the unsettled one. */
     expect(unsettledTallies.slice(0, 3)).toEqual([1, 2, 3]);
 
     vi.unstubAllGlobals();
     const answeringRequests = installGraphMailbox("mirror-is-absent");
     const restored = await runCycle(mapping, answeringRequests, answeredWithFourHundred, false);
 
-    /* Parking is the state while the destination stays mute, not the resting place of the event:
-       the cycle the read finally answers absent, the mirror comes back. */
     expect(restored.verifyCalls).toBe(1);
     expect(restored.posts).toHaveLength(1);
     expect(restored.deleteCalls).toEqual([]);

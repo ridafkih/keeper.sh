@@ -19,9 +19,6 @@ const CREATED_UID = "created-uid";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* Nothing exotic about this event: it serializes cleanly on the update verb AND on the create
-   verb, so no refusal in this file is ever ours. Every failure here is raised strictly after
-   Graph answered the write with a 2xx. */
 const editedEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -63,12 +60,6 @@ const mirrorInTheMailbox = (): MailboxEvent => ({
   subject: "Quarterly review",
 });
 
-/*
- * The three shapes of a 2xx Graph really sends that the provider cannot turn into an event object.
- * A 204 with no body is the most ordinary acknowledgement of a PATCH there is; a plain-text 200
- * comes back from a gateway in front of Graph; and a 200 whose location.displayName is null is a
- * body arktype refuses. Every one of them is the destination saying the write landed.
- */
 interface AcceptedButUnreadable {
   name: string;
   respond: (accepted: MailboxEvent) => Response;
@@ -147,15 +138,10 @@ interface SyntheticMailbox {
 }
 
 interface MailboxOptions {
-  /* Which write verb Graph acknowledges with a body the provider cannot read. Everything else
-     answers exactly as the real mailbox does, so nothing here is kinder than Graph. */
   unreadableOn: "PATCH" | "POST";
   variant: AcceptedButUnreadable;
 }
 
-/* A synthetic Graph mailbox that is no kinder than the real one: a DELETE of a held id really
-   removes the object, a PATCH of a held id really edits it, and a POST really puts another copy
-   on the calendar. The write under test is ACCEPTED - only its echo is unreadable. */
 const installGraphMailbox = (options: MailboxOptions): SyntheticMailbox => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [];
@@ -278,8 +264,6 @@ const replacementFor = (mapping: EventMapping): Extract<SyncOperation, { type: "
   uid: mapping.destinationEventUid,
 });
 
-/* The mapping as the next cycle reads it back: whatever the run wrote down, checkpointed or
-   returned, applied on top of the row. Without this the counter never reaches the promotion. */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -334,9 +318,6 @@ afterEach(() => {
 });
 
 describe("an Outlook write the destination accepted is never graded as unanswered", () => {
-  /* The premise: nothing in this file is a refusal of ours. The event serializes on the very verb
-     a delete-then-add would have to recreate it with, so every failure below was raised only after
-     Graph had already answered 2xx and the edit had already landed. */
   it("serializes cleanly on the create verb", () => {
     expect(() => serializeOutlookEvent(editedEvent)).not.toThrow();
   });
@@ -360,8 +341,6 @@ describe("an Outlook write the destination accepted is never graded as unanswere
         expect(run.held.map((event) => event.id)).toEqual([MIRROR_ITEM_ID]);
       });
 
-      /* Silence is the other half of the failure: the operator has to be able to see that the
-         provider could not read what the destination sent back. */
       it("still reports the unreadable acknowledgement to the operator", async () => {
         const run = await runThreeUpdateCycles(variant);
 
@@ -389,10 +368,6 @@ interface CreateRun {
   requests: GraphRequest[];
 }
 
-/* Three cycles of the same pending create, driven the way the planner drives them: an event that
-   the destination is already known to hold is not added again. A create whose 2xx echo could not
-   be read still put the object on the customer's calendar, so a cycle that learns nothing from it
-   is a cycle that POSTs a second permanent copy - Outlook's push is a create-only POST. */
 const runThreeCreateCycles = async (variant: AcceptedButUnreadable): Promise<CreateRun> => {
   const mailbox = installGraphMailbox({ unreadableOn: "POST", variant });
   const errors: { error: string }[] = [];
@@ -444,8 +419,6 @@ describe("a create the destination accepted is resolved by reading, never by cre
         expect(run.held).toHaveLength(1);
       });
 
-      /* The mapping is what stops the next cycle: the object the destination accepted has to be
-         located by reading the destination and written down under the identifier it really holds. */
       it("records a mapping naming the object the destination really holds", async () => {
         const run = await runThreeCreateCycles(variant);
 

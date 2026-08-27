@@ -6,11 +6,6 @@ const GATE_DELAY_MS = 50;
 const STATEMENT_DELAY_MS = 5;
 const WORK_CEILING_MS = 40;
 
-/*
- * The readings the engine will see, in call order: queued, gate-released, statement-started,
- * statement-finished. Driving them makes "the gate wait is not charged to work" an exact claim
- * rather than a wall-clock ceiling that only holds when the machine is idle.
- */
 const createClock = (readings: number[]): (() => number) => {
   let index = 0;
 

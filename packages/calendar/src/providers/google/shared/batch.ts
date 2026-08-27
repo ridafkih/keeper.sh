@@ -18,11 +18,6 @@ interface BatchSubResponse {
   statusCode: number;
   headers: Record<string, string>;
   body: unknown;
-  /*
-   * Whether Google really returned this sub-response. A part the batch omitted, or one whose
-   * status line we could not read, has no status at all - the 0 below is a placeholder for the
-   * missing number, never a verdict the destination handed down.
-   */
   answer?: DestinationAnswer;
 }
 
@@ -111,8 +106,6 @@ const parsePartHeaders = (headerBlock: string): Record<string, string> => {
   return headers;
 };
 
-/* Null rather than 0: a part whose first line is not `HTTP/x.y NNN` carries no status the
-   destination sent, and reporting that absence as a number invites it to be read as one. */
 const parseStatusCode = (statusLine: string): number | null => {
   const statusMatch = statusLine.match(/HTTP\/[\d.]+ (\d+)/);
   if (statusMatch && statusMatch[1]) {
@@ -168,16 +161,6 @@ const parseHttpResponse = (httpBlock: string): BatchSubResponse => {
 
 const DEFAULT_SEPARATOR_LENGTH = 2;
 
-/*
- * `expectedCount` is the number of sub-requests that went out in this envelope's own request.
- * The returned array is exactly that long, in sub-request order, because every caller downstream
- * (executeBatchChunked's concatenation, retryRateLimitedSubRequests' zip against `pending`, and
- * the provider's entry.batchIndex lookups) reads a response by its position alone. Deriving the
- * length from the largest Content-ID the envelope happened to claim instead let a short or
- * renumbered envelope shift every later answer onto another event's mapping. Omitting the count
- * leaves the length to the envelope's own largest Content-ID, for callers that parse a stored
- * body with no outgoing request in hand.
- */
 const UNBOUNDED_SUB_REQUEST_COUNT = Number.POSITIVE_INFINITY;
 
 const orderedLength = (expectedCount: number, maxIndex: number): number => {
@@ -227,20 +210,12 @@ const parseBatchResponseBody = (
     const parsed = parseHttpResponse(httpBlock);
 
     if (contentIndex === null) {
-      /* Content-ID is the only thing that says which sub-request a part answers, so a part
-         without a readable one answers none of them. Falling back to a positional guess would
-         overwrite whichever sibling already claimed that slot by a real Content-ID; dropping it
-         leaves that sibling's answer intact and the guessed slot unanswered, which is the truth
-         about what the destination told us. */
       continue;
     }
 
     const index = contentIndex;
 
     if (isOutsideRange(index)) {
-      /* A part claiming a Content-ID this request never sent answers no sub-request of ours.
-         Dropping it keeps it from displacing a sibling; the slot it would have taken stays
-         unanswered, which is the truth about what the destination told us. */
       continue;
     }
 
@@ -258,7 +233,6 @@ const parseBatchResponseBody = (
     if (entry) {
       ordered.push(entry);
     } else {
-      /* An index no part in the envelope claimed: Google never answered about this request. */
       ordered.push(unansweredSubResponse());
     }
   }
@@ -266,13 +240,6 @@ const parseBatchResponseBody = (
   return ordered;
 };
 
-/*
- * RFC 2045 5.1 lets any Content-Type parameter be spelled as a quoted-string, and RFC 2046 5.1.1
- * applies that to `boundary`. The quoted form may legally hold characters a bare token cannot -
- * `;` and spaces among them - so the value is read as a quoted-string first and only then as a
- * token. Matching the quoted form with a token character class keeps the quotes in the boundary,
- * and a boundary that never occurs in the body collapses the whole envelope into one part.
- */
 const BOUNDARY_PARAMETER = /boundary\s*=\s*(?:"([^"]*)"|([^\s;]+))/i;
 
 const extractResponseBoundary = (contentType: string | null): string | null => {
@@ -428,8 +395,6 @@ const retryRateLimitedSubRequests = async (
   }
 
   for (const entry of pending) {
-    /* Every attempt came back rate-limited, so the destination did answer - it just never got
-       past its own throttle. */
     results[entry.index] = {
       answer: "answered",
       body: null,

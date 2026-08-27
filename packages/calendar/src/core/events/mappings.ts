@@ -6,10 +6,7 @@ const DEFAULT_COUNT = 0;
 
 interface EventMapping {
   id: string;
-  // Absent on mappings built before the counter existed, which reads as "no failures yet".
   consecutiveUpdateFailures?: number;
-  /* Consecutive verification reads that settled nothing for this mapping. Kept apart from the
-     answered-refusal counter above so neither kind of evidence can top the other up. */
   consecutiveUnsettledReads?: number;
   eventStateId: string | null;
   syncEventId: string;
@@ -22,19 +19,8 @@ interface EventMapping {
   endTime: Date;
 }
 
-/* What the destination calendar this sync owns holds for a mapping, when it holds nothing. A read
-   that located the customer's copy in another folder of the mailbox proved exactly that: this
-   calendar names no object for the mapping, and the identifier the copy now wears was only ever
-   observed outside it. Recording that identifier here would hand it to the remove path, which
-   deletes mailbox-wide and would destroy the customer's only copy, so what gets recorded is the
-   emptiness itself.
-
-   It is deliberately not null: a null column is a row written before delete identifiers existed,
-   which means "never recorded" and still falls back to the uid. */
 const NO_DESTINATION_EVENT_IDENTIFIER = "";
 
-/* Whether the mapping still names an object the destination calendar itself returned. Nothing may
-   be deleted, read by id, or re-planned against a mapping that does not. */
 const namesEventInDestination = (mapping: { deleteIdentifier: string }): boolean =>
   mapping.deleteIdentifier !== NO_DESTINATION_EVENT_IDENTIFIER;
 

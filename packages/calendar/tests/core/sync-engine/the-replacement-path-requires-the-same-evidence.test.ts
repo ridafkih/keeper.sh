@@ -46,8 +46,6 @@ const makeMapping = (deleteIdentifier: string, syncEventHash: string): EventMapp
   syncEventId: "ev-1",
 });
 
-/* The mirror is present at the destination, so the plan is an in-place update; only the update
-   verb's own refusal can push this operation onto the delete-then-add path. */
 const makeReplacement = (mapping: EventMapping, event: MaterializedSyncableEvent): Extract<SyncOperation, { type: "replace" }> => ({
   deleteId: mapping.deleteIdentifier,
   event,
@@ -68,11 +66,6 @@ interface DestinationOptions {
   updateFailure?: PushResult;
 }
 
-/*
- * Mirrors packages/calendar/src/providers/outlook/destination/provider.ts:358-386: a DELETE that
- * 404s is reported as { success: true } with no removal evidence, and only a 2xx DELETE carries
- * removedObject. pushEvents there is a create-only POST, so it can never land on a live object.
- */
 const createOutlookLikeDestination = (options: DestinationOptions) => {
   const records = new Map<string, DestinationRecord>();
   for (const record of options.seeded) {
@@ -127,12 +120,6 @@ const createOutlookLikeDestination = (options: DestinationOptions) => {
       records.set(update.deleteId, { ...existing, summary: update.event.summary });
       return { deleteId: update.deleteId, remoteId: existing.uid, success: true };
     })),
-    /*
-     * The real provider escalates a dead item id to a uid search before it will say absent, because
-     * a move or a re-key leaves the copy standing under the same uid. Answering absent from the id
-     * alone is kinder than the destination is, and absent is the one verdict that licenses a create
-     * with nothing else asked -- so the kindness comes back as a second copy of a live event.
-     */
     verifyEventsExist: (targets: EventVerificationTarget[]) => Promise.resolve(targets.map(
       ({ deleteId, uid }): EventPresence => {
         if (records.has(deleteId)) {
@@ -165,8 +152,6 @@ const createOutlookLikeDestination = (options: DestinationOptions) => {
   };
 };
 
-/* The engine reports whatever per-mapping state it wants carried into the next cycle as a
-   PendingUpdate on that mapping, so the harness replays the flush without naming the field. */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -225,7 +210,6 @@ describe("the replacement path requires the same evidence its sibling demands", 
 
     await runCycles(destination.provider, event, mapping, CYCLES);
 
-    // The identical bytes would be refused by the create verb too, so escalating can only destroy.
     expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(destination.snapshot()).toEqual([
@@ -248,12 +232,6 @@ describe("the replacement path requires the same evidence its sibling demands", 
 
     await runCycles(destination.provider, event, mapping, 1);
 
-    /* This expected the speculative DELETE against the stale id, because that was the only way the
-       old path could learn anything. With the double answering as the destination does -- escalating
-       a dead id to a uid search rather than calling it absent -- the read finds the live copy under
-       its real key first, so there is nothing to guess at and no request to spend. What this case
-       exists to pin is unchanged and is the assertion below it: the live event never left, so a
-       create here would be a second copy of it. */
     expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(destination.snapshot()).toEqual([
@@ -266,7 +244,6 @@ describe("the replacement path requires the same evidence its sibling demands", 
     const mapping = makeMapping(LIVE_DELETE_ID, "stale-hash");
     const destination = createOutlookLikeDestination({
       seeded: [{ deleteId: LIVE_DELETE_ID, summary: "Board sync", uid: LIVE_UID }],
-      // No status and no transport error: ours, and it will repeat forever unless it escapes.
       updateFailure: {
         error: "no addressable update target",
         errorType: "UnaddressableTargetError",

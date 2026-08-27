@@ -5,19 +5,6 @@ import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destinat
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The href the mapping stored answers 404 while the customer's event is alive in this same
-   collection under a href the server chose. Only the UID search separates relocating the mapping
-   from writing a permanent second copy - so what that search does when it cannot answer decides
-   whether the customer keeps one event or two. A server that throws, and a server that cleanly
-   answers 501 with no multistatus body, have both said nothing about the UID; neither may let the
-   href's own 404 stand as a proven absence, because CalDAV's create is a PUT to the deterministic
-   `${uid}.ics` href and no listing ever reaps the duplicate it lays down.
-
-   The third case is the floor under the fix: a search that DID answer, found nothing, and was right
-   must still create. 'Never say absent' would be a different bug wearing this test's name. */
-
-/* Doubled at the wire, not at the client: the real CalDAVClient and the real destination provider
-   both run here, so the UID search fails the way the product's own request would fail. */
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   createCalendarObject: vi.fn(),
@@ -52,8 +39,6 @@ const EVENT_STATE_ID = "event-state-unanswered-uid-1";
 
 const mirrorUid = generateDeterministicEventUid(EVENT_STATE_ID);
 
-/* The href keeper wrote to, and the href the mapping therefore holds. It is also the href a
-   recreate would PUT to, which is why a duplicate here is a duplicate forever. */
 const mappedPath = `${CALENDAR_PATH}${mirrorUid}.ics`;
 
 const relocatedPath = `${CALENDAR_PATH}20260917t090000z-3f81c0d4-server-assigned.ics`;
@@ -116,7 +101,6 @@ const createProvider = () =>
     username: "user",
   });
 
-/* The customer's collection, keyed by href. */
 const remoteObjects = new Map<string, string>();
 
 const pathOf = (url: string): string => new URL(url, CALENDAR_URL).pathname;
@@ -124,8 +108,6 @@ const pathOf = (url: string): string => new URL(url, CALENDAR_URL).pathname;
 const uidOfIcs = (ics: string): string =>
   ics.split(/\r?\n/u).find((line) => line.startsWith("UID:"))?.slice(4) ?? "";
 
-/* The multiset of UIDs the collection holds. Counting keys alone would pass with two objects
-   carrying one UID, which is the exact damage under test. */
 const uidsInCollection = (): string[] => [...remoteObjects.values()].map((ics) => uidOfIcs(ics)).sort();
 
 const notFoundResponse = (): Response => new Response(null, { status: 404, statusText: "Not Found" });
@@ -163,8 +145,6 @@ const requestedHrefs = (body: unknown): string[] => {
 const isUidQuery = (body: unknown): boolean =>
   Boolean((body as Record<string, unknown> | undefined)?.["calendar-query"]);
 
-/* A multiget is answered href by href - and the mapped href is answered 404 in every case here,
-   because that 404 is the server's only true statement about it. */
 const answerMultiGet = (body: unknown): string =>
   multiStatusXml(requestedHrefs(body).map((href) => {
     const path = pathOf(href);
@@ -278,8 +258,6 @@ describe("a CalDAV UID search that did not answer is never an absence", () => {
     expect(uidsInCollection()).toEqual([mirrorUid]);
   });
 
-  /* The control: the search answered, found nothing, and the object really is gone. A real absence
-     is still a real absence, so the mirror is recreated. */
   it("still creates when a well-formed empty multistatus proves the object gone", async () => {
     remoteObjects.clear();
     davMocks.davRequest.mockImplementation(({ init }: { init: { body: unknown } }) => {

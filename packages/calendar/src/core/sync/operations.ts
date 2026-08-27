@@ -19,10 +19,6 @@ interface ReconciliationScope {
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
   requestedWindow: SyncWindow;
-  /*
-   * Mappings the destination read could not settle either way - an exhausted verification
-   * budget, or an answer that said so. Their absence from remoteEvents is not evidence.
-   */
   unverifiedMappingIds?: ReadonlySet<string>;
   withheldSourceEventStateIds?: ReadonlySet<string>;
 }
@@ -271,12 +267,6 @@ const matchRemoteEventsToMappings = (
       continue;
     }
 
-    /* The stored id found nothing, so fall back to the uid the destination preserves across an
-       in-place re-key: a modern Outlook mapping holds a Graph item id that Graph can retire while
-       the iCalUId survives, and refusing to recognise the mirror under its new id is what let the
-       run plan a delete against the customer's live event. Only a sole carrier of the uid may
-       stand in for the mapping - two events sharing it name no single mirror, so ambiguity stays
-       unmatched and the mapping is left for the stale path to reason about. */
     const uidMatches = remoteEventsByUid.get(mapping.destinationEventUid) ?? [];
     if (uidMatches.length === 1 && uidMatches[0]) {
       matches.set(mapping.id, uidMatches[0]);
@@ -398,11 +388,6 @@ const recordStaleReasons = (
   }
 };
 
-/*
- * A mirror missing from the read is only gone when something positively established that.
- * A mapping the read never covered, or could not settle, is unknown: recreating it
- * duplicates a live event and deleting it destroys one, so it is left exactly as it is.
- */
 const isRemoteAbsenceEstablished = (
   mappingId: string,
   authoritativeMappingIds?: ReadonlySet<string>,
@@ -437,11 +422,6 @@ const identifyStaleMappings = (
       authoritativeMappingIds,
       unverifiedMappingIds,
     );
-    /* The destination calendar holds no object for this mapping: a read already established that,
-       by finding the customer's copy outside the calendar this sync owns. Calling it remote-missing
-       plans a replace whose only ending is another write to that out-of-destination copy, cycle
-       after cycle, forever. The mapping heals the moment the destination listing returns the mirror
-       again -- the only evidence that could put an identifier back on it. */
     if (!remoteEvent && !namesEventInDestination(mapping)) {
       continue;
     }
@@ -534,10 +514,6 @@ const buildRemoveOperationsForMappings = (mappings: EventMapping[]): SyncOperati
  * batch request resolving that UID back to an event id, doubling the rate-limit cost
  * of the delete. Reconciliation has just listed the remote copy, so its provider id is
  * already in hand and the lookup is only needed when no remote copy was matched.
- *
- * A mapping that names nothing in this destination calendar keeps naming nothing: the identifier
- * it once held is dead and the live copy was seen outside the calendar, so the operation carries
- * no identifier and the execution refuses to delete by it.
  */
 const resolveMappingDeleteId = (
   mapping: EventMapping,

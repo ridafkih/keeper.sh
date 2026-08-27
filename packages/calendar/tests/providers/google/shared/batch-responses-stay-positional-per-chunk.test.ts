@@ -3,11 +3,6 @@ import { executeBatchChunked } from "../../../../src/providers/google/shared/bat
 import type { BatchSubRequest, BatchSubResponse } from "../../../../src/providers/google/shared/batch";
 import { GOOGLE_BATCH_MAX_SIZE } from "../../../../src/providers/google/shared/api";
 
-/*
- * The chunk boundary is where a miscounted envelope does its damage, so every case here sends
- * one more sub-request than a single chunk holds: the first chunk is full and the second chunk
- * carries the lone tail request whose answer must not slide up into its neighbour's slot.
- */
 const SUB_REQUEST_COUNT = GOOGLE_BATCH_MAX_SIZE + 1;
 const TAIL_INDEX = GOOGLE_BATCH_MAX_SIZE;
 const LAST_INDEX_OF_FIRST_CHUNK = GOOGLE_BATCH_MAX_SIZE - 1;
@@ -35,8 +30,6 @@ const readBoundary = (contentType: string): string => {
   return match[1];
 };
 
-/* Reads back what the batch layer actually put on the wire, so the stub answers the real
-   request rather than an order the test assumed. */
 const parseOutgoingParts = (init: RequestInit | undefined): OutgoingPart[] => {
   const headers = (init?.headers ?? {}) as Record<string, string>;
   const boundary = readBoundary(headers["Content-Type"] ?? "");
@@ -62,8 +55,6 @@ interface ResponsePart {
 
 const RESPONSE_BOUNDARY = "batch_response_boundary_synthetic";
 
-/* A real Google envelope: one MIME part per answer, each carrying its own Content-ID and a
-   genuine HTTP status line, wrapped by the boundary the Content-Type announces. */
 const buildEnvelope = (parts: ResponsePart[]): string => {
   const blocks = parts.map((part) =>
     [
@@ -161,8 +152,6 @@ describe("google batch responses stay positional per chunk", () => {
     const responses = await runChunkedBatch();
 
     expect(responses).toHaveLength(subRequests.length);
-    /* The part claiming a Content-ID past the end of its own chunk is not this chunk's answer,
-       so it may neither extend the chunk nor push the next chunk's answer along. */
     expect(answeredPath(responses[TAIL_INDEX])).toBe(subRequests[TAIL_INDEX]?.path);
     expect(responses[0]?.answer).toBe("unanswered");
   });

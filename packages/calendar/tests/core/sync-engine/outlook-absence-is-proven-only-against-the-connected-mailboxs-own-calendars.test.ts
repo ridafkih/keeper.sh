@@ -11,8 +11,6 @@ import type { EventMapping } from "../../../src/core/events/mappings";
 const DESTINATION_CALENDAR_ID = "cal-1";
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
-/* /me/calendars also hands back calendars a colleague shared or delegated to this account. The
-   sync can neither read nor write another mailbox's items through /me. */
 const FOREIGN_FOLDER_ID = "a-colleagues-shared-calendar";
 
 const CONNECTED_MAILBOX_ADDRESS = "owner@example.com";
@@ -22,8 +20,6 @@ const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
 const MAPPED_ID = "AAMkAGmirror-as-mapped";
-/* The colleague's own copy of the meeting: same uid, an item id that only their mailbox can
-   address, and never a thing this sync may write onto the mapping. */
 const FOREIGN_COPY_ID = "AAMkAGcopy-living-in-the-colleagues-mailbox";
 const MIRROR_UID = "mirror-uid-1";
 const MAPPING_ID = "mapping-1";
@@ -132,8 +128,6 @@ const readSelectedFields = (url: URL): string[] => {
   return select.split(",").map((field) => field.trim()).filter((field) => field.length > 0);
 };
 
-/* Graph hands back exactly the fields the caller selected. A double that volunteers `owner` to a
-   read that never asked for it would certify a filter the real mailbox cannot support. */
 const projectCalendarEntry = (folderId: string, selected: string[]): Record<string, unknown> => {
   const entry: Record<string, unknown> = {};
   if (selected.length === 0 || selected.includes("id")) {
@@ -160,9 +154,6 @@ const readRequestedSubject = (body: string | null): string => {
   return parsed.subject;
 };
 
-/* A synthetic Graph mailbox with the real shape: /me addresses only the connected mailbox, so an
-   item held in a colleague's shared calendar is unreachable through /me/events, and a folder-scoped
-   listing only ever answers about the folder its URL names. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
   const held = [...events];
@@ -340,8 +331,6 @@ describe("outlook absence is proven only against the connected mailbox's own cal
     vi.unstubAllGlobals();
   });
 
-  /* The recipient deleted the mirror from the destination. The only remaining copy of the uid lives
-     in a colleague's shared calendar, which /me/calendars hands back alongside the account's own. */
   it("calls the mirror absent when the only copy of the uid is in a foreign-owned calendar", async () => {
     installGraphMailbox([makeMailboxEvent(FOREIGN_COPY_ID, MIRROR_UID, FOREIGN_FOLDER_ID)]);
 
@@ -383,7 +372,6 @@ describe("outlook absence is proven only against the connected mailbox's own cal
     const creates = requestsOfMethod(cycle.requests, "POST");
     expect(creates).toHaveLength(1);
     expect(creates[0]?.url).toContain(DESTINATION_FOLDER_ID);
-    // The colleague's copy is not this sync's to touch.
     expect(requestsOfMethod(cycle.requests, "DELETE")).toEqual([]);
     expect(requestsTouchingForeignCalendar(cycle.requests)).toEqual([]);
     expect(

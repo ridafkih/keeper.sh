@@ -6,11 +6,6 @@ import { createOutlookSyncProvider } from "../../../src/providers/outlook/destin
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The same promotion route the CalDAV specs pin, driven through the two destinations whose
-   fixtures used to be CalDAV-shaped: a replacement the update verb could not address is promoted,
-   and the engine reaches for deleteEvents before it has asked either destination what is actually
-   there - even though both providers implement verifyEventsExist. */
-
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const MAPPING_ID = "mapping-1";
 const CYCLES = 3;
@@ -40,8 +35,6 @@ const replacementFor = (mapping: EventMapping): Extract<SyncOperation, { type: "
   uid: mapping.destinationEventUid,
 });
 
-/* The mapping as the next cycle reads it back, so consecutiveUpdateFailures accumulates across
-   cycles exactly as it does in the tracked durable-refusal spec. */
 const carryForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -71,12 +64,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/* ---------------------------------------------------------------- Outlook ---- */
-
 const OUTLOOK_FOLDER_ID = "external-cal-1";
 const OUTLOOK_DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
-/* Graph re-keys an item that is moved, so the id the mapping stored addresses nothing while the
-   customer's only copy is alive under a new id carrying the same iCalUId. */
 const MAPPED_ITEM_ID = "AAMkAGmirror-as-mapped";
 const LIVE_ITEM_ID = "AAMkAGmirror-after-the-move";
 const MIRROR_UID = "mirror-uid-1";
@@ -173,9 +162,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return parsed.subject;
 };
 
-/* A synthetic Graph mailbox with the real shape: an item id addresses one event mailbox-wide, a
-   listing only answers about the folder its URL names, a DELETE really removes the item and a POST
-   really adds one. */
 const installGraphMailbox = (): { held: MailboxEvent[]; requests: GraphRequest[] } => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [liveMailboxEvent()];
@@ -267,8 +253,6 @@ const outlookMapping = (): EventMapping => ({
   syncEventId: editedEvent.id,
 });
 
-/* The verification read is the only GET Graph is asked for the mapped id that carries a $select,
-   so it is distinguishable from every other request the run makes. */
 const isVerificationRead = (request: GraphRequest): boolean => {
   if (request.method !== "GET") {
     return false;
@@ -333,12 +317,8 @@ describe("a promoted replacement asks Outlook what is there before it deletes", 
   });
 });
 
-/* ----------------------------------------------------------------- Google ---- */
-
 const GOOGLE_CALENDAR_ID = "external-google-cal";
 const GOOGLE_EVENT_ID = "google-event-id-abc123";
-/* Google re-keys an event that is moved or restored, so the id the mapping stored addresses
-   nothing while the customer's only copy is alive under a new id carrying the same iCalUID. */
 const GOOGLE_LIVE_ID = "google-event-id-after-the-rekey";
 const GOOGLE_MIRROR_UID = "keeper-uid-1";
 const GOOGLE_EVENTS_PATH = `/calendar/v3/calendars/${encodeURIComponent(GOOGLE_CALENDAR_ID)}/events`;
@@ -424,8 +404,6 @@ const readImportedSummary = (body: unknown): string => {
   return body.summary;
 };
 
-/* A synthetic Google calendar that really mutates: an import writes the event, a DELETE removes it,
-   and every identifier the calendar does not hold answers 404 exactly as Google does. */
 const liveGoogleEvent = (): GoogleEventResource => ({
   end: { dateTime: END_TIME.toISOString() },
   iCalUID: GOOGLE_MIRROR_UID,
@@ -437,8 +415,6 @@ const liveGoogleEvent = (): GoogleEventResource => ({
 
 const installGoogleCalendar = (): { calls: BatchCall[]; held: GoogleEventResource[] } => {
   const calls: BatchCall[] = [];
-  /* The customer's only copy, alive under the id the re-key handed it. The mapping still names the
-     dead one, so the update verb cannot address it - the promotion route this spec is about. */
   const held: GoogleEventResource[] = [liveGoogleEvent()];
   let created = 0;
 
@@ -592,8 +568,6 @@ describe("a promoted replacement asks Google what is there before it deletes", (
     }
   });
 
-  /* Whatever the read settles, the one thing the promotion may never do is leave the calendar
-     emptier than it found it: a create-only import cannot put back what a DELETE removed. */
   it("leaves the customer's only copy standing across every cycle", async () => {
     const { cycles, held } = await runGoogleCycles();
 

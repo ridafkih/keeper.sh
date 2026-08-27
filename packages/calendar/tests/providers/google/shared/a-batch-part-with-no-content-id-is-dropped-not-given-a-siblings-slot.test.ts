@@ -21,8 +21,6 @@ const EXTERNAL_CALENDAR_ID = "primary";
 const START_TIME = "2026-03-15T09:00:00.000Z";
 const END_TIME = "2026-03-15T10:00:00.000Z";
 
-/* Google may return the parts of a batch in any order; Content-ID is the only thing that says
-   which sub-request a part answers, so a part that has none answers none of them. */
 const cidBearingPart = (contentId: string, statusLine: string, body: unknown): string => {
   const lines = ["Content-Type: application/http", `Content-ID: <${contentId}>`, "", statusLine];
   return appendBody(lines, body);
@@ -32,7 +30,6 @@ const cidLessPart = (statusLine: string, body: unknown): string => {
   const lines = ["Content-Type: application/http", "", statusLine];
   return appendBody(lines, body);
 };
-
 
 const envelopeOf = (parts: string[]): string => {
   const chunks = parts.map((part) => `--${RESPONSE_BOUNDARY}\r\n${part}`);

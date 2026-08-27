@@ -103,13 +103,6 @@ describe("CalDAV destination verifyEventsExist", () => {
     clientMocks.resolveCalendarUrl.mockResolvedValue(CALENDAR_URL);
   });
 
-  /*
-   * Overturned this round. This case asserted `{ identifier: DELETED_PATH, status: "absent" }`
-   * for an href the server simply did not answer. Omission is not proof: a truncated multiget,
-   * a withheld calendar-data and a per-href error all look identical to it, and reporting any
-   * of them as absent licenses a create that duplicates a live event. Only a per-response 404
-   * is absence now; the omission case moved to the test below it.
-   */
   it("reads the objects with a single multiget and reports a 404 answer as absent", async () => {
     clientMocks.verifyCalendarObjectsByUrls.mockResolvedValueOnce([
       {

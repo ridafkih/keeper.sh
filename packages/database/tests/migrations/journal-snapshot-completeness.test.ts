@@ -13,17 +13,6 @@ interface Journal {
   readonly entries: readonly JournalEntry[];
 }
 
-/*
- * 0077's snapshot was never committed and is absent from origin/main too. The
- * gap is benign because drizzle-kit diffs schema.ts against only the *newest*
- * snapshot it can find: 0078 was generated while 0077's snapshot still existed
- * on its author's machine, so 0078_snapshot.json already carries every column
- * 0077 added and nothing downstream ever reads the missing file. A missing
- * snapshot is only dangerous when it is the newest one, because then the next
- * generate diffs against a schema that predates the un-snapshotted migration
- * and re-emits its DDL. This exemption is by tag, not by rule: any other
- * missing snapshot must still fail.
- */
 const BENIGN_MISSING_SNAPSHOT_TAGS = new Set(["0077_married_dracula"]);
 
 const readJournal = async (): Promise<Journal> =>
@@ -127,14 +116,6 @@ describe("drizzle journal and snapshot consistency", () => {
     expect(unparseable).toEqual([]);
   });
 
-  /*
-   * The regression that motivated this suite: 0094 added
-   * calendars.verificationCursor without committing its snapshot, so the newest
-   * snapshot drizzle-kit could find (0093) did not know the column existed and
-   * the next generate re-emitted `ALTER TABLE "calendars" ADD COLUMN
-   * "verificationCursor" text;` with no IF NOT EXISTS, which fails 42701 on any
-   * database that already ran 0094 and blocks every migration after it.
-   */
   it("records calendars.verificationCursor in the 0094 snapshot", async () => {
     const snapshot = Bun.file(`${META_DIRECTORY}/0094_snapshot.json`);
 
@@ -142,10 +123,6 @@ describe("drizzle journal and snapshot consistency", () => {
     expect(await snapshot.text()).toContain("verificationCursor");
   });
 
-  /*
-   * The newest snapshot is the one drizzle-kit diffs against, so it must always
-   * be present even if an older intermediate gap is tolerated.
-   */
   it("ships a snapshot for the newest journal entry", async () => {
     const journal = await readJournal();
 

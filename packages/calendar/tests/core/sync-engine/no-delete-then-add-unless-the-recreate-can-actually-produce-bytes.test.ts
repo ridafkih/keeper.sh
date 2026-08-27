@@ -71,14 +71,8 @@ const MIRROR_UID = "mirror-uid-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* Graph really hands back TZIDs no IANA database knows - a mailbox configured with a custom rule
-   reports "Customized Time Zone" - and normalize-timezone passes an unmapped label through
-   verbatim, so the event reaches the serializer carrying a zone Intl cannot resolve. It is NOT
-   recurring, so validate-recurrence-input never withholds it. */
 const UNMAPPABLE_TIME_ZONE = "Customized Time Zone";
 
-/* The customer edited their copy, so every cycle carries the same pending edit into the same
-   serializer refusal, on the update verb and on the create verb alike. */
 const editedEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -177,9 +171,6 @@ interface SyntheticMailbox {
   requests: GraphRequest[];
 }
 
-/* A synthetic Graph mailbox that behaves like the real one: DELETE on a present id really removes
-   the object and answers 204, DELETE on an absent id answers 404, and POST really creates. Nothing
-   here is kinder than Graph - if the engine issues the DELETE, the customer's only copy is gone. */
 const installGraphMailbox = (): SyntheticMailbox => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [mirrorInTheMailbox()];
@@ -282,8 +273,6 @@ interface OutlookCycle {
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>;
 }
 
-/* The mapping as the next cycle would read it back: whatever the run wrote down, checkpointed or
-   returned, applied on top of the row. */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -330,9 +319,6 @@ afterEach(() => {
 });
 
 describe("no delete-then-add unless the recreate can actually produce bytes", () => {
-  /* The premise the whole promotion rests on: this failure is OURS, raised before any request
-     left, and the create verb runs the very same serializer. There is no payload for a POST to
-     carry, so a DELETE buys nothing but the loss of the live mirror. */
   it("refuses the same event on the create verb as on the update verb", () => {
     expect(() => serializeOutlookEvent(editedEvent)).toThrow(RangeError);
     expect(() => serializeOutlookEvent(editedEvent)).toThrow(/Unsupported calendar timezone/u);
@@ -373,8 +359,6 @@ describe("no delete-then-add unless the recreate can actually produce bytes", ()
 const CALDAV_CALENDAR_URL = "https://caldav.example.invalid/calendars/user/shared/";
 const CALDAV_MAPPING_ID = "caldav-map-1";
 
-/* Summaries chosen so neither contains the other: which of the two the customer's object carries
-   is then decidable from its bytes alone. */
 const storedMeeting: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
@@ -392,13 +376,9 @@ const movedMeeting: MaterializedSyncableEvent = {
 };
 
 const caldavUid = generateDeterministicEventUid(movedMeeting.id);
-/* A server that names objects itself: the stored basename can never match <uid>.ics again, so the
-   update verb refuses to address it before any byte leaves - and the read then answers PRESENT at
-   that very href, carrying this mapping's own uid. */
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
 const serverNamedObjectUrl = new URL(serverNamedObjectPath, CALDAV_CALENDAR_URL).href;
 
-/* The customer's collection, no kinder than a real one. */
 const remoteObjects = new Map<string, string>();
 
 const uidOf = (iCalString: string): string =>
@@ -419,8 +399,6 @@ const caldavHttpError = (status: number, statusText: string): Error =>
 
 const notFound = (): Error => caldavHttpError(404, "Not Found");
 
-/* RFC 4791 5.3.2.1: a PUT that would leave a second object carrying a UID the collection already
-   holds fails the CALDAV:no-uid-conflict precondition and stores nothing. */
 const uidConflict = (heldAt: string): Error =>
   new CalDAVHttpError(
     new Response(
@@ -514,8 +492,6 @@ describe("the CalDAV unaddressable-href escape repairs the located object in pla
     }
     remoteObjects.clear();
     clientMocks.resolveCalendarUrl.mockImplementation((url: string) => Promise.resolve(url));
-    /* Only what the collection holds answers present; an href it does not hold is the server's own
-       404, never a silent success. */
     clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
       ({ objectUrls }: { objectUrls: string[] }) => Promise.resolve(objectUrls.map((url) => {
         const data = remoteObjects.get(url);
@@ -567,10 +543,6 @@ describe("the CalDAV unaddressable-href escape repairs the located object in pla
     );
   });
 
-  /* A create here is not "the payload builds, so promote": the read proved the object present at
-     the server-chosen href carrying this mapping's own uid, so a create would put a SECOND object
-     bearing that live uid in the same collection, and the delete behind it would take the
-     customer's original away. The edit is delivered by one PUT to the href the read answered. */
   it("delivers the edit by one PUT to the href the read answered about", async () => {
     const { carriedMapping, deletedMappingIds, insertedUids } = await runCalDAVCycles();
 

@@ -6,18 +6,6 @@ import { CalDAVHttpError } from "../../../src/providers/caldav/shared/client";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The third destination this product writes to, on the one state its read can settle outright: the
-   recipient really deleted the object, so the collection holds nothing at the href the mapping
-   names and the multiget answers a per-response 404. That answer has already asked the only
-   question a DELETE could have asked, and it came back "there is nothing there" - so the
-   replacement is created on the read's word and no DELETE is issued at all. Spending one here is at
-   best wasted and at worst aimed at an object nobody verified, and the mapping must end up naming
-   the object the create actually wrote rather than the identifier the read just proved dead. */
-
-/* At least as capable as the real client: the provider's update verb writes through
-   updateCalendarObjectByUrl, its recreate writes through createCalendarObject, and it removes
-   through both delete verbs, so a double missing any of them certifies whatever the missing verb
-   would have done. */
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
   deleteCalendarObject: vi.fn(),
@@ -78,13 +66,9 @@ const EVENT_STATE_ID = "event-state-absent-1";
 
 const mirrorUid = generateDeterministicEventUid(EVENT_STATE_ID);
 
-/* The href the create writes to, which is what a listing would report for the new object. */
 const createdObjectPath = `/calendars/user/shared/${mirrorUid}.ics`;
 const createdObjectUrl = `https://caldav.example.com${createdObjectPath}`;
 
-/* A mapping stored before path recording holds the bare UID rather than the href, which the
-   provider still addresses - so the identifier the read proves dead is textually distinguishable
-   from the path the recreate hands back. */
 const STALE_DELETE_ID = mirrorUid;
 
 const editedEvent: MaterializedSyncableEvent = {
@@ -128,8 +112,6 @@ const createProvider = () =>
     username: "user",
   });
 
-/* A synthetic stand-in for the customer's collection. It starts empty because the recipient
-   deleted the mirror, which is the whole premise the read is about to prove. */
 const remoteObjects = new Map<string, string>();
 
 const notFound = (operation: "create" | "delete" | "update"): Error =>
@@ -214,7 +196,6 @@ beforeEach(() => {
         return [{ data, url }];
       })),
   );
-  /* Only the server's own per-response 404 is absence; anything it holds comes back with bytes. */
   clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
     ({ objectUrls }: { objectUrls: string[] }) =>
       Promise.resolve(objectUrls.map((url) => {

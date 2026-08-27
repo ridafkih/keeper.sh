@@ -8,7 +8,6 @@ class RequestTimeoutError extends Error {
   }
 }
 
-/* What the platform names the reason it aborts a request for AbortSignal.timeout. */
 const TIMEOUT_ABORT_REASON_NAME = "TimeoutError";
 
 interface TimeoutSignal {
@@ -74,9 +73,6 @@ const fetchWithTimeout = async (
   }
 };
 
-/* Callers that only ever see the name of a caught error - a provider result crossing into the
-   sync engine - must ask the module that throws, so a rename of the class travels with it
-   instead of leaving a guessed literal behind. */
 const isTimeoutErrorName = (name: string | undefined): boolean => {
   if (!name) {
     return false;

@@ -44,10 +44,6 @@ const isBackoffEligibleError = (error: unknown): boolean => {
 interface DestinationOperationCounts {
   added: number;
   addFailed: number;
-  /* Mirrors the run edited in place. Every provider echoes back the uid the mapping already holds
-     on an ordinary update, so such a run reports `added` 0 for ever; without counting it here a
-     destination that only ever needs edits looks like it never succeeds, and one permanently
-     refused event would escalate the whole calendar's backoff to six hours indefinitely. */
   updated: number;
   conflictsResolved: number;
   removed: number;
@@ -55,18 +51,12 @@ interface DestinationOperationCounts {
   parked?: number;
 }
 
-/* Stated as positive evidence of success rather than as an absence of it, so a counter that never
-   arrives cannot be read as a run that worked: the safe answer to a missing number is backoff. */
 const hasSuccessfulOperation = (result: DestinationOperationCounts): boolean =>
   result.added > 0
   || result.updated > 0
   || result.removed > 0
   || result.conflictsResolved > 0;
 
-/* A parked failure says nothing about the destination: it is the same one event being refused
-   again, and it will be refused on every future cycle too. Counting it as evidence lets a single
-   unactionable event escalate the whole calendar to the six-hour ceiling, where every other event
-   on it then waits, and backoff clears only on a success a quiet calendar can never reach. */
 const hasActionableFailure = (result: DestinationOperationCounts): boolean =>
   result.addFailed + result.removeFailed - (result.parked ?? 0) > 0;
 

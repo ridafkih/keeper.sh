@@ -9,8 +9,6 @@ interface CounterRecorder {
 
 interface MeasuredDatabaseDependencies {
   counters: CounterRecorder;
-  /* Injectable so a test can state the elapsed time it means rather than racing the scheduler:
-     a wall-clock assertion here measures how loaded the machine is, not what was charged. */
   now: () => number;
   recordSegment: (name: IngestSegmentKey, ms: number) => void;
 }

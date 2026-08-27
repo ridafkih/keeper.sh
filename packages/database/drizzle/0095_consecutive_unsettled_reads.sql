@@ -1,1 +1,0 @@
-ALTER TABLE "event_mappings" ADD COLUMN IF NOT EXISTS "consecutiveUnsettledReads" integer DEFAULT 0 NOT NULL;

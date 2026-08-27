@@ -14,10 +14,6 @@ import type {
   SyncOperation,
 } from "../../../src/core/types";
 
-/* A zone no ICU build knows. normalizeTimezone has no mapping for it and passes it through
-   verbatim, so resolveTimeZone throws a RangeError and the Outlook serializer refuses BEFORE any
-   request body exists - the shape an .ics-imported zone or a CalDAV custom VTIMEZONE TZID takes
-   once it reaches a destination that must name a real IANA zone. */
 const UNRESOLVABLE_TIME_ZONE = "Mideast/Riyadh87";
 
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
@@ -30,8 +26,6 @@ const MIRROR_UID = "mirror-uid-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* The customer edited their copy, so every cycle carries the same pending edit into the same
-   refusal, on the update verb and on the create verb alike. */
 const editedEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -130,9 +124,6 @@ interface SyntheticMailbox {
   requests: GraphRequest[];
 }
 
-/* A synthetic Graph mailbox that is no kinder than the real one: a DELETE of a held id really
-   removes the object and answers 204, a PATCH of a held id succeeds, and a POST really creates.
-   If the engine issues the DELETE here, the customer's only copy is gone. */
 const installGraphMailbox = (): SyntheticMailbox => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [mirrorInTheMailbox()];
@@ -227,8 +218,6 @@ const replacementFor = (mapping: EventMapping): Extract<SyncOperation, { type: "
   uid: mapping.destinationEventUid,
 });
 
-/* The mapping as the next cycle reads it back: whatever the run wrote down, checkpointed or
-   returned, applied on top of the row. Without this the counter never reaches the promotion. */
 const carryMappingForward = (
   mapping: EventMapping,
   outcome: Awaited<ReturnType<typeof executeRemoteOperations>>,
@@ -283,9 +272,6 @@ afterEach(() => {
 });
 
 describe("a failure that never left the process may not license a delete", () => {
-  /* The premise the whole promotion rests on: this refusal is OURS, raised before any request
-     body is built, and the create verb runs the very same serializer. There is no payload for a
-     POST to carry, so a DELETE buys nothing but the loss of the live mirror. */
   it("refuses the same event on the create verb as on the update verb", () => {
     expect(() => serializeOutlookEvent(editedEvent)).toThrow(RangeError);
     expect(() => serializeOutlookEvent(editedEvent)).toThrow(/Unsupported calendar timezone/u);
@@ -304,10 +290,6 @@ describe("a failure that never left the process may not license a delete", () =>
     expect(run.errors.some((entry) => entry.error.includes(MAPPING_ID))).toBe(true);
   });
 
-  /* Outlook implements verifyEventsExist, so the escape this promotion has earned is the read
-     that asks the destination whether the mirror is still there - the same escape a destination
-     refusal carrying a real status gets. Today the promotion is routed at the delete-first path
-     instead and is only stopped at the recreate gate, so the read is never asked for. */
   it("asks the destination about the mirror instead of routing at the delete-first escape", async () => {
     const run = await runThreeOutlookCycles();
 
@@ -346,19 +328,14 @@ const unitMapping: EventMapping = {
   syncEventId: unitEvent.id,
 };
 
-/* No status line, no destination answer: the provider generated this itself before a request
-   existed, and it says exactly the same thing on the create verb - which is why the provider below
-   also refuses to prepare the event. */
 const SERIALIZATION_REFUSAL: PushResult = {
   error: "cannot serialize this event",
   errorType: "EventSerializationError",
   success: false,
 };
 
-/* A delete that really removes the object, the way Graph and CalDAV both answer. */
 const REMOVED_THE_OBJECT: DeleteResult = { removedObject: true, success: true };
 
-/* The destination answers about the object it still holds, three-valued like the real ones. */
 const readPresence = (calendar: Set<string>, deleteId: string): EventPresenceStatus => {
   if (calendar.has(deleteId)) {
     return "present";
@@ -372,11 +349,6 @@ interface RecordingProvider {
   provider: CalendarSyncProvider;
 }
 
-/* The real providers all offer prepareEvent, and it runs the create verb's own serialization: an
-   event it throws for is an event no POST can carry, whatever the update verb's failure looked
-   like. This one throws for the event under replacement and verifies its mirrors, so the engine
-   can establish - without reading any error name - both that the recreate is impossible and that
-   the destination can be asked whether the mirror is still there. */
 const createRefusingProvider = (): RecordingProvider => {
   const calls: string[] = [];
   const calendar = new Set<string>([LIVE_ITEM_ID]);
@@ -440,10 +412,6 @@ describe("a push refusal whose recreate cannot be built never routes to delete-t
     expect(outcome.result.removed).toBe(0);
   });
 
-  /* The escape a promotion this provider earns is the read, not the delete: the destination can
-     be asked about the mirror, and asking destroys nothing. Routing at the delete-first escape and
-     being stopped one step later by the recreate gate leaves that question unasked, so a mirror
-     the recipient really deleted is never noticed. */
   it("asks the destination about the mirror rather than taking the delete-first escape", async () => {
     const { calls, provider } = createRefusingProvider();
 
@@ -452,8 +420,6 @@ describe("a push refusal whose recreate cannot be built never routes to delete-t
     expect(calls).toContain(`verify:${LIVE_ITEM_ID}`);
   });
 
-  /* Whichever escape it takes, the operator has to be able to see which mapping is frozen at
-     stale content - a silently wrong mirror is the failure nobody reports. */
   it("names the frozen mapping in the run's errors", async () => {
     const { provider } = createRefusingProvider();
 

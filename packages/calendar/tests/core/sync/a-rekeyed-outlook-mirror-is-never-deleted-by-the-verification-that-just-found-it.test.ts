@@ -3,10 +3,6 @@ import { computeSyncOperations } from "../../../src/core/sync/operations";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, RemoteEvent } from "../../../src/core/types";
 
-/* Graph re-keys an item in place, so the id the mapping holds dies while the iCalUId survives. A
-   modern Outlook mapping never has deleteIdentifier === destinationEventUid -- the first is a Graph
-   item id, the second an iCalUId -- so the uid fallback that recognises a re-keyed mirror is closed
-   to exactly the provider that re-keys. */
 const OLD_GRAPH_ID = "AAMkAGold-graph-id";
 const NEW_GRAPH_ID = "AAMkAGnew-graph-id";
 const MIRROR_UID = "keeper-uid-1@keeper.sh";
@@ -49,7 +45,6 @@ const mapping: EventMapping = {
   syncEventId: localEvent.id,
 };
 
-/* What the destination read hands back: the mapping's own mirror, alive, under its new item id. */
 const rekeyedMirror: RemoteEvent = {
   deleteId: NEW_GRAPH_ID,
   endTime: END_TIME,
@@ -68,8 +63,6 @@ describe("a re-keyed Outlook mirror is matched to its own mapping", () => {
       RECONCILIATION_SCOPE,
     );
 
-    /* A remove here is a DELETE of the customer's live event at its new id: attendee responses,
-       reminders and categories gone, then re-created by a create-only POST that may fail. */
     expect(operations.filter((operation) => operation.type === "remove")).toEqual([]);
   });
 

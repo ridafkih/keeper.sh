@@ -108,11 +108,6 @@ const writeSentKeys = (base: StoredEvent, sent: Record<string, unknown>): Stored
   return written;
 };
 
-/*
- * Merge semantics, which events.patch and PATCH /me/events/{id} both apply: a
- * property the request body has no key for keeps the value the destination
- * already holds, and only an explicit null clears it.
- */
 const mergeIntoStored = (stored: StoredEvent, sent: Record<string, unknown>): StoredEvent => {
   const kept: StoredEvent = {};
   for (const [key, value] of Object.entries(stored)) {
@@ -124,7 +119,6 @@ const mergeIntoStored = (stored: StoredEvent, sent: Record<string, unknown>): St
   return writeSentKeys(kept, sent);
 };
 
-// Replacement semantics: whatever the body omits is gone, bar the identifiers the destination owns.
 const replaceStored = (immutable: StoredEvent, sent: Record<string, unknown>): StoredEvent =>
   writeSentKeys(immutable, sent);
 

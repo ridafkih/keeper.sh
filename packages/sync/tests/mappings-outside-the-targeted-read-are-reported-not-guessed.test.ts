@@ -34,13 +34,6 @@ const createEventReadDiagnostics = (withheldEventStateIds: string[]) => ({
   syncableEventCount: 0,
 });
 
-/*
- * The by-id read is budgeted too: it only ever asks about the mappings the push plan
- * touches. A mapping whose source series the local read withheld for exceeding the
- * occurrence budget is not in that plan, so this run never establishes its state - and it
- * is deliberately neither recreated nor deleted, which is precisely the silent do-nothing
- * the spec requires be visible in production.
- */
 const PRESENT_INDEXES = [1, 2, 3];
 const ABSENT_INDEXES = [4, 5];
 const PLANNED_INDEXES = [...PRESENT_INDEXES, ...ABSENT_INDEXES];
@@ -98,7 +91,6 @@ const createRemoteEvent = (index: number): RemoteEvent => ({
   uid: createDestinationEventUid(index),
 });
 
-/* Only the planned events reach the local read; the rest are mapped but unseen this run. */
 const localEvents = PLANNED_INDEXES.map((index) => createLocalEvent(index));
 const existingMappings = [...PLANNED_INDEXES, ...WITHHELD_INDEXES]
   .map((index) => createMapping(index));
@@ -146,7 +138,6 @@ const readDestination = async () => {
   return read;
 };
 
-/* Absent the report, nothing is withheld - which is exactly the guess this spec forbids. */
 const resolveUnverifiedMappingIds = (
   read: { verification?: { unverifiedMappingIds: ReadonlySet<string> } },
 ): ReadonlySet<string> => {

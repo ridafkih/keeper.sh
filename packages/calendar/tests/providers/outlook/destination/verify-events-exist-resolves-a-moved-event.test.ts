@@ -11,8 +11,6 @@ const DESTINATION_CALENDAR_ID = "cal-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* Graph rewrites the item id when it moves an item, so the mapped id can 404 while the mirror is
-   still live in the destination. The iCalUId survives, so it is the only handle that names it. */
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 const MAPPED_ID = "AAMkAGmirror-as-mapped";
@@ -21,8 +19,6 @@ const MIRROR_UID = "mirror-uid-1";
 const REMOVED_ID = "AAMkAGmirror-the-recipient-deleted";
 const REMOVED_UID = "mirror-uid-2";
 
-/* The identifier the engine holds for a mirror is a pair: the id a delete would target and the uid
-   the mapping already carries. Outlook needs both to tell a moved event from a deleted one. */
 interface VerificationTarget {
   deleteId: string;
   uid: string;
@@ -77,8 +73,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* Graph answers a listing about exactly the folder its path names; /me/events names the mailbox
-   default calendar, never the whole mailbox. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -92,8 +86,6 @@ const readAddressedFolderId = (url: URL): string => {
   return decodeURIComponent(folderId);
 };
 
-/* A synthetic mailbox with real Graph shape: an item id addresses exactly one event mailbox-wide,
-   but a listing only ever answers about the folder its own URL names. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -182,7 +174,6 @@ const RECONCILIATION_SCOPE = {
 };
 
 const planMissingMirrorReplacement = () => {
-  // The moved copy left the synced folder, so the windowed listing can only call the mirror missing.
   const { operations } = computeSyncOperations([localEvent], [mapping], [], RECONCILIATION_SCOPE);
   expect(operations).toHaveLength(1);
   expect(operations[0]?.type).toBe("replace");
@@ -213,8 +204,6 @@ describe("Outlook resolves a moved mirror by iCalUId before concluding anything"
     expect(report).toEqual([{ identifier: REMOVED_ID, status: "absent" }]);
   });
 
-  /* Outlook's create is a create-only POST, so a create decided against a live-but-re-keyed event
-     is a duplicate on a paying customer's calendar that nothing ever reaps. */
   it("creates nothing when the engine reconciles a mirror that was only re-keyed", async () => {
     const requests = installGraphMailbox([makeMailboxEvent(MOVED_ID, MIRROR_UID)]);
 
@@ -228,8 +217,6 @@ describe("Outlook resolves a moved mirror by iCalUId before concluding anything"
     expect(requests.filter((request) => request.method === "POST")).toEqual([]);
     expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
     expect(outcome.result.added).toBe(0);
-    /* Locating the mirror is only half a repair. A mapping still naming the dead id makes the next
-       cycle call the same live event missing again, so the mirror never receives another edit. */
     expect(outcome.changes.updates ?? []).toContainEqual(
       expect.objectContaining({ deleteIdentifier: MOVED_ID, id: mapping.id }),
     );

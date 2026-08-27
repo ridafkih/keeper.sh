@@ -9,8 +9,6 @@ import type { EventMapping } from "../../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
 const DESTINATION_FOLDER_ID = "external-cal-1";
-/* A real mailbox is never a single folder: Graph provisions Calendar, Birthdays and Holidays before
-   the recipient adds anything, so the sibling sweep always has folders to walk. */
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 const BIRTHDAYS_FOLDER_ID = "the-mailbox-birthdays-calendar";
 const HOLIDAYS_FOLDER_ID = "the-mailbox-holidays-calendar";
@@ -24,7 +22,6 @@ const MAILBOX_FOLDER_IDS = [
   PERSONAL_FOLDER_ID,
 ];
 
-/* Every folder other than the destination itself has to be swept before absence means "nowhere". */
 const SIBLING_FOLDER_COUNT = MAILBOX_FOLDER_IDS.length - 1;
 
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
@@ -93,8 +90,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* Graph answers a listing about exactly the folder its path names, and /me/events names the
-   mailbox default calendar only — never the whole mailbox. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -143,8 +138,6 @@ interface Mailbox {
   enumerationStatus: number;
 }
 
-/* A synthetic Graph mailbox whose folder list and contents can change between calls, so a memo that
-   outlived the call it was built for becomes visible as a stale answer rather than a fast one. */
 const installGraphMailbox = (options: {
   events?: MailboxEvent[];
   folderIds?: string[];
@@ -260,9 +253,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     vi.unstubAllGlobals();
   });
 
-  /* The folder list is one property of one mailbox, and every target settled inside a single
-     verification call is asking about that same list. Reading it once per target is the whole
-     multiplier that makes an emptied calendar a throttling event. */
   it("reads /me/calendars exactly once for a verification call that settles ten targets", async () => {
     const mailbox = installGraphMailbox({});
 
@@ -272,15 +262,12 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     expect(countOf(mailbox, "enumeration")).toBe(1);
   });
 
-  /* The bill has to actually fall, not just move: one direct read, one destination listing and one
-     listing per sibling folder per target, plus a single enumeration for the whole call. */
   it("spends only the per-target folder reads plus one enumeration for the whole call", async () => {
     const mailbox = installGraphMailbox({});
     const targetCount = 10;
 
     await verifierOf(createProvider())(makeTargets(targetCount));
 
-    // The destination's own listing plus one per sibling folder.
     const listingsPerTarget = 1 + SIBLING_FOLDER_COUNT;
     const requestsPerTarget = 1 + listingsPerTarget;
     expect(countOf(mailbox, "direct-read")).toBe(targetCount);
@@ -288,8 +275,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     expect(mailbox.requests).toHaveLength(targetCount * requestsPerTarget + 1);
   });
 
-  /* Cheaper must not mean kinder: a mirror the recipient really deleted still has to be provably
-     gone, or restore silently stops restoring. */
   it("still calls every target of an emptied mailbox absent", async () => {
     installGraphMailbox({});
 
@@ -298,8 +283,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     expect(report.map((presence) => presence.status)).toEqual(Array.from({ length: 10 }, () => "absent"));
   });
 
-  /* A memoized failure is the dangerous kind: an enumeration that could not be read says nothing
-     about any uid, so no target may be settled as absent from it. */
   it("calls every target unknown when the mailbox enumeration cannot be read", async () => {
     installGraphMailbox({ enumerationStatus: 500 });
 
@@ -311,9 +294,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     }
   });
 
-  /* The memo answers for the call that built it and no longer. A folder the recipient creates
-     between two verification calls holds a real mirror, and a create decided against a remembered
-     folder list is a permanent duplicate on a create-only push. */
   it("sees a folder created between two verification calls on the same provider", async () => {
     const mailbox = installGraphMailbox({});
     const provider = createProvider();
@@ -331,8 +311,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     expect(after[0]?.status).not.toBe("absent");
   });
 
-  /* The engine's restore path carries no request budget of its own, so whatever verification passes
-     it runs over these identifiers must each cost at most one enumeration — never one per target. */
   it("does not re-enumerate per target when the engine drives the restore path", async () => {
     const mailbox = installGraphMailbox({});
     const targetCount = 4;
@@ -361,7 +339,6 @@ describe("Outlook proves absence without re-enumerating the mailbox once per tar
     );
 
     expect(verificationCalls).toBeGreaterThan(0);
-    // One enumeration per verification call at most — never one per target inside a call.
     expect(countOf(mailbox, "enumeration")).toBeLessThanOrEqual(verificationCalls);
     expect(countOf(mailbox, "enumeration")).toBeLessThan(targetCount);
   });

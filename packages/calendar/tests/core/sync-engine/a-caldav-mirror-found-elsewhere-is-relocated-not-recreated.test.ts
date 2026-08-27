@@ -5,17 +5,6 @@ import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destinat
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The state a CalDAV server puts the mirror in when it re-keys an object it still holds: the
-   customer's event is alive in this very calendar under a href the server chose, carrying the UID
-   the mapping names, while the href the mapping stored answers 404. The object exists, so a
-   recreate is a second object bearing one UID in one collection - permanent, and no listing reaps
-   it. The only safe ending is the one the other two destinations already reach: relocate the
-   mapping onto what the read found, create nothing, delete nothing, and let the next cycle edit
-   the object in place. */
-
-/* Doubled at the wire, not at the client: the real CalDAVClient and the real destination provider
-   both run here, so a read that cannot find the object under another href fails for the reason the
-   product would fail, and no capability the client lacks can be assumed into existence. */
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   createCalendarObject: vi.fn(),
@@ -50,11 +39,8 @@ const EVENT_STATE_ID = "event-state-relocated-1";
 
 const mirrorUid = generateDeterministicEventUid(EVENT_STATE_ID);
 
-/* The href keeper wrote to, and the href the mapping therefore holds. */
 const mappedPath = `${CALENDAR_PATH}${mirrorUid}.ics`;
 
-/* Where the server re-keyed it. Server-assigned hrefs are the server's to choose and say nothing
-   about the UID inside, which is exactly why a lookup by href alone cannot find it. */
 const relocatedPath = `${CALENDAR_PATH}20260917t090000z-3f81c0d4-server-assigned.ics`;
 
 const editedEvent: MaterializedSyncableEvent = {
@@ -120,8 +106,6 @@ const createProvider = () =>
     username: "user",
   });
 
-/* The customer's collection. It holds exactly one object: the mirror, alive, under the href the
-   server gave it. */
 const remoteObjects = new Map<string, string>();
 
 const pathOf = (url: string): string => new URL(url, CALENDAR_URL).pathname;
@@ -133,11 +117,6 @@ const notFoundResponse = (): Response => new Response(null, { status: 404, statu
 
 const okResponse = (): Response => new Response(null, { status: 200, statusText: "OK" });
 
-/* What RFC 4791 5.3.2.1 obliges a collection to answer when a PUT would put a second object
-   carrying a UID the collection already holds: the precondition CALDAV:no-uid-conflict fails, the
-   object is not stored, and the customer's edit does not land. A double that accepted the PUT
-   instead would be kinder than the server keeper actually writes to, and would certify the
-   duplicate as a working repair. */
 const uidConflictResponse = (): Response =>
   new Response(
     [
@@ -151,7 +130,6 @@ const uidConflictResponse = (): Response =>
     { status: 403, statusText: "Forbidden" },
   );
 
-/* The href, if any, at which the collection already holds this UID under a different name. */
 const conflictingPathFor = (path: string, ics: string): string | undefined => {
   const uid = uidOfIcs(ics);
   const holder = [...remoteObjects].find(([held, data]) => held !== path && uidOfIcs(data) === uid);
@@ -186,8 +164,6 @@ const requestedHrefs = (body: unknown): string[] => {
   return hrefs.map(String);
 };
 
-/* A filtering REPORT is answered with the objects whose UID the filter names, and with the whole
-   collection when it names none - the same latitude a real server has. */
 const filteredObjects = (body: unknown): [string, string][] => {
   const serialized = JSON.stringify(body ?? {});
   const named = [...remoteObjects].filter(([, data]) => serialized.includes(uidOfIcs(data)));
@@ -197,8 +173,6 @@ const filteredObjects = (body: unknown): [string, string][] => {
   return [...remoteObjects];
 };
 
-/* A REPORT naming hrefs is answered href by href; a REPORT that filters instead is answered by
-   filteredObjects. */
 const answerReport = (body: unknown): string => {
   const hrefs = requestedHrefs(body);
   if (hrefs.length > 0) {
@@ -308,10 +282,6 @@ describe("a CalDAV mirror found elsewhere is relocated, not recreated", () => {
     expect(outcome.changes.inserts).toEqual([]);
   });
 
-  /* The relocation is only worth the read it cost if the customer's edit actually reaches the
-     object the read found. The engine has the located href in hand at this point, so the pending
-     edit is written to it in this same run - not parked for a next cycle that will plan exactly
-     the same dead update all over again. */
   it("delivers the pending edit to the located object in the same run", async () => {
     await runCycle(mappingNaming(mappedPath), editedEvent);
 
@@ -323,9 +293,6 @@ describe("a CalDAV mirror found elsewhere is relocated, not recreated", () => {
     expect(remoteObjects.get(relocatedPath)).toContain(`SUMMARY:${editedEvent.summary}`);
   });
 
-  /* The safety floor the relocation must keep on every later cycle: whatever the update verb makes
-     of the located href, the identical dead plan may never be promoted into a delete-then-add of an
-     object that is standing right there. */
   it("never promotes the located object into a delete-then-add on the next cycle", async () => {
     await runCycle(mappingNaming(mappedPath), editedEvent);
     davMocks.createCalendarObject.mockClear();
@@ -338,9 +305,6 @@ describe("a CalDAV mirror found elsewhere is relocated, not recreated", () => {
     expect(second.result.added).toBe(0);
     expect(second.result.removed).toBe(0);
     expect([...remoteObjects.keys()]).toEqual([relocatedPath]);
-    /* The load-bearing half: the run must not merely refrain from churning, it must land the
-       customer's later edit on the object the read proved. A guard that only suppresses the create
-       leaves the mirror silently and permanently stale, which is the failure nobody sees. */
     expect(remoteObjects.get(relocatedPath)).toContain(`SUMMARY:${laterEvent.summary}`);
   });
 });

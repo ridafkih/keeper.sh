@@ -12,8 +12,6 @@ const OBJECT_URL = `${SERVER_URL}${OBJECT_PATH}`;
 
 const XML_HEADERS = { "content-type": "text/xml; charset=utf-8" };
 
-/* An ampersand and angle brackets in the summary keep the two payload shapes genuinely different
-   on the wire: one hides them inside CDATA, the other escapes them. */
 const ICS = [
   "BEGIN:VCALENDAR",
   "VERSION:2.0",
@@ -33,8 +31,6 @@ const escapeXml = (value: string): string =>
 
 const CDATA_PAYLOAD = `<c:calendar-data><![CDATA[${ICS}]]></c:calendar-data>`;
 const ESCAPED_PAYLOAD = `<c:calendar-data>${escapeXml(ICS)}</c:calendar-data>`;
-/* Some servers stream the body out in more than one CDATA section; xml-js keeps each section as a
-   separate entry under the same element. */
 const SPLIT_CDATA_PAYLOAD = `<c:calendar-data><![CDATA[${ICS.slice(0, ICS_SPLIT_AT)}]]><![CDATA[${ICS.slice(ICS_SPLIT_AT)}]]></c:calendar-data>`;
 
 const multistatus = (body: string): Response =>
@@ -68,13 +64,11 @@ const foundResponse = (payload: string): Response =>
     `<d:response><d:href>${OBJECT_PATH}</d:href><d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:prop><d:getetag>"etag-1"</d:getetag>${payload}</d:prop></d:propstat></d:response>`,
   );
 
-/* A 404 spoken about the href itself: the server claims nothing about this object. */
 const goneResponse = (): Response =>
   multistatus(
     `<d:response><d:href>${OBJECT_PATH}</d:href><d:propstat><d:status>HTTP/1.1 404 Not Found</d:status><d:prop><d:getetag/><c:calendar-data/></d:prop></d:propstat></d:response>`,
   );
 
-/* A 200 propstat answers the object while a 404 propstat withholds only calendar-data. */
 const withheldBodyResponse = (): Response =>
   multistatus(
     `<d:response><d:href>${OBJECT_PATH}</d:href><d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:prop><d:getetag>"etag-1"</d:getetag></d:prop></d:propstat><d:propstat><d:status>HTTP/1.1 404 Not Found</d:status><d:prop><c:calendar-data/></d:prop></d:propstat></d:response>`,

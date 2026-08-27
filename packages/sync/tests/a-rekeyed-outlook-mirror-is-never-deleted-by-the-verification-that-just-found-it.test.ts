@@ -14,7 +14,6 @@ const DESTINATION_CALENDAR_ID = "cal-1";
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 
-/* Graph re-keys an item in place: the id the mapping holds dies, the iCalUId survives. */
 const MAPPED_ID = "AAMkAGmirror-as-mapped";
 const MOVED_ID = "AAMkAGmirror-after-the-re-key";
 const MIRROR_UID = "keeper-uid-rekeyed@keeper.sh";
@@ -25,11 +24,6 @@ const REQUESTED_WINDOW = {
   timeMin: new Date("2026-08-01T00:00:00.000Z"),
 };
 
-/*
- * The push plan has to be larger than the by-id budget for the run to take the windowed listing,
- * which is the only path that verifies an unconfirmed mapping - and so the only path on which a
- * re-keyed mirror is ever found again. One cycle of a normal mailbox is exactly that size.
- */
 const MAPPED_EVENT_COUNT = TARGETED_DESTINATION_READ_LIMIT + 1;
 
 const createStartTime = (index: number): Date =>
@@ -45,7 +39,6 @@ const createMirrorId = (index: number): string => `AAMkAGmirror-${index}`;
 
 const createMirrorUid = (index: number): string => `keeper-uid-${index}@keeper.sh`;
 
-/* The source edit every mapping is still carrying: the summary the destination has not received. */
 const createLocalEvent = (index: number): MaterializedSyncableEvent => ({
   calendarId: SOURCE_CALENDAR_ID,
   calendarName: "Work",
@@ -73,7 +66,6 @@ const createMapping = (index: number): EventMapping => ({
 const localEvents = Array.from({ length: MAPPED_EVENT_COUNT }, (unused, index) =>
   createLocalEvent(index));
 
-/* Mapping 0 is the one Graph re-keyed, so its stored id is the dead one. */
 const existingMappings = localEvents.map((unused, index) => {
   if (index !== 0) {
     return createMapping(index);
@@ -94,12 +86,6 @@ interface MailboxEvent {
   iCalUId: string;
   id: string;
   isAllDay: boolean;
-  /*
-   * Graph's windowed page over a calendar is served from an index that has not caught up with an
-   * in-place re-key: the item is live, addressable by id and findable by iCalUId, but the listing
-   * that names the sync window does not offer it. That gap is the whole reason the run reaches
-   * verification for a mirror that never went anywhere.
-   */
   missingFromWindowedListing: boolean;
   showAs: string;
   start: { dateTime: string; timeZone: string };
@@ -146,7 +132,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* A folder-scoped listing answers only about the folder its own path names. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -194,8 +179,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return subject;
 };
 
-/* A synthetic Graph mailbox: an item id addresses exactly one item mailbox-wide, a calendar-scoped
-   listing answers only about its own folder, DELETE really removes and POST really appends. */
 const installGraphMailbox = (held: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -255,7 +238,6 @@ const installGraphMailbox = (held: MailboxEvent[]): GraphRequest[] => {
 
     const folderId = readAddressedFolderId(url);
     const uid = readFilteredUid(url);
-    /* The uid filter reads the folder itself, so it sees the re-keyed item the window page missed. */
     if (uid) {
       return Promise.resolve(Response.json({
         value: held.filter((event) => event.folderId === folderId && event.iCalUId === uid),
@@ -294,8 +276,6 @@ const EVENT_READ_DIAGNOSTICS = {
   syncableEventCount: 0,
 };
 
-/* The real chain: the destination read sync-user performs, the plan it computes from exactly what
-   that read returned, and the writes the engine issues for that plan. */
 const runOneDestinationCycle = async (provider: ReturnType<typeof createProvider>) => {
   const read = await readDestinationRemoteEvents({
     existingMappings,
@@ -340,8 +320,6 @@ describe("a re-keyed Outlook mirror is never deleted by the verification that ju
 
     const outcome = await runOneDestinationCycle(createProvider());
 
-    /* A DELETE here takes the customer's live event with its RSVPs, reminders and categories, and
-       the POST that follows is a create-only duplicate that nothing ever reaps. */
     expect(requests.filter((request) => request.method === "DELETE")).toEqual([]);
     expect(requests.filter((request) => request.method === "POST")).toEqual([]);
 
@@ -353,7 +331,6 @@ describe("a re-keyed Outlook mirror is never deleted by the verification that ju
     expect(patchesAtMirror).toHaveLength(1);
     expect(patchesAtMirror[0]?.url).toContain(MOVED_ID);
 
-    /* The pending source edit lands on the mirror that was there all along. */
     expect(held.find((event) => event.id === MOVED_ID)?.subject)
       .toBe(localEvents[0]?.summary);
     expect(outcome.result.added).toBe(0);

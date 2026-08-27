@@ -124,8 +124,6 @@ const createDestination = (
 const reportAbsent = (targets: EventVerificationTarget[]): Promise<EventPresence[]> =>
   Promise.resolve(targets.map(({ deleteId }): EventPresence => ({ identifier: deleteId, status: "absent" })));
 
-/* The recipient really deleted the mirror, so nothing is left for the pre-delete to remove: whatever
-   the destination answers that delete, only the verification read establishes the absence. */
 const restoreAfterRecipientDeletion = async (missingDeleteAnswer: () => DeleteResult) => {
   const event = makeEvent("Team lunch");
   const mapping = makeMapping(createSyncEventContentHash(event));

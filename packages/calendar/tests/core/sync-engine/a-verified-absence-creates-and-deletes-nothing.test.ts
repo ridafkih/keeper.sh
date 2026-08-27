@@ -6,14 +6,6 @@ import { createOutlookSyncProvider } from "../../../src/providers/outlook/destin
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The promotion route again, on the one destination state the read can settle outright: the
-   recipient really deleted the mirror, so no folder of the mailbox and no entry of the calendar
-   holds it any more. A read that proves that has already answered the only question a delete could
-   have asked, and it answered "there is nothing there" - so the replacement is created and no
-   delete is issued at all. A delete here is at best spent on nothing and at worst reaches an object
-   nobody verified, and the mapping must end up naming the thing that was actually created rather
-   than the identifier the read just proved dead. */
-
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const MAPPING_ID = "mapping-1";
 
@@ -57,8 +49,6 @@ const readRequestBody = (init?: RequestInit): string | null => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
-
-/* ---------------------------------------------------------------- Outlook ---- */
 
 const OUTLOOK_FOLDER_ID = "external-cal-1";
 const OUTLOOK_DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
@@ -128,9 +118,6 @@ const readFilteredUid = (url: URL): string | null => {
   return uid;
 };
 
-/* The same synthetic Graph mailbox the sibling promotion spec drives, emptied: the recipient
-   deleted the mirror, so no item id resolves and no folder listing holds the uid. That is the one
-   answer Graph gives that positively proves absence. */
 const installEmptiedGraphMailbox = (): { held: MailboxEvent[]; requests: GraphRequest[] } => {
   const requests: GraphRequest[] = [];
   const held: MailboxEvent[] = [];
@@ -266,8 +253,6 @@ describe("a verified absence creates and deletes nothing on Outlook", () => {
   });
 });
 
-/* ----------------------------------------------------------------- Google ---- */
-
 const GOOGLE_CALENDAR_ID = "external-google-cal";
 const GOOGLE_EVENT_ID = "google-event-id-abc123";
 const GOOGLE_IMPORTED_ID = "google-imported-1";
@@ -354,8 +339,6 @@ const readImportedSummary = (body: unknown): string => {
   return body.summary;
 };
 
-/* The same synthetic Google calendar, emptied: the mapped id 404s, which is exactly how Google
-   answers for an event a recipient really deleted. */
 const installEmptiedGoogleCalendar = (): { calls: BatchCall[]; held: GoogleEventResource[] } => {
   const calls: BatchCall[] = [];
   const held: GoogleEventResource[] = [];
@@ -381,9 +364,6 @@ const installEmptiedGoogleCalendar = (): { calls: BatchCall[]; held: GoogleEvent
       return { payload: imported, status: 200 };
     }
 
-    /* Google answers a uid query with a list - 200 and an items array, empty when nothing carries
-       the uid - never with the 404 an id read gets. A double that answered a status here would
-       make an unreadable answer out of the one question that can prove the mirror gone. */
     const [, query] = part.path.split("?");
     const lookupUid = new URLSearchParams(query ?? "").get("iCalUID");
     if (lookupUid !== null) {

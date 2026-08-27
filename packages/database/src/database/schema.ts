@@ -144,9 +144,6 @@ const calendarsTable = pgTable(
     originalName: text(),
     syncToken: text(),
     storedEventCount: integer(),
-    /* Where this destination's bounded verification pass stopped asking last cycle. The next pass
-       resumes after it and wraps, so a population larger than one budget is covered over
-       consecutive cycles instead of the same lexicographic prefix forever. */
     verificationCursor: text(),
     syncFutureRange: text().notNull().default(DEFAULT_FUTURE_SYNC_RANGE),
     syncHistoricRange: text().notNull().default(DEFAULT_HISTORIC_SYNC_RANGE),
@@ -379,14 +376,7 @@ const eventMappingsTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
-    /* Consecutive in-place update failures for this mapping. The sync engine promotes a mapping
-       to delete-then-add once the same update has been refused enough times to be durable, so a
-       mirror cannot stall forever on an object the update path can never write. */
     consecutiveUpdateFailures: integer().notNull().default(0),
-    /* Consecutive verification reads that settled nothing for this mapping. Separate from the
-       counter above because a destination declining to answer is not evidence about the object:
-       sharing one counter let an answered refusal top up what an unknown read was allowed to
-       spend, and a mirror was destroyed on the strength of a read that said nothing. */
     consecutiveUnsettledReads: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     deleteIdentifier: text(),

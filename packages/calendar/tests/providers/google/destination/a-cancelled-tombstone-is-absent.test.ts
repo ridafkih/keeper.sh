@@ -72,8 +72,6 @@ const batchResponse = (statusCode: number, body: unknown): BatchSubResponse => (
   statusCode,
 });
 
-/* Google answers events.get for an event the recipient deleted with HTTP 200 and a tombstone: the
-   resource is still returned, carrying status "cancelled". It never 404s. */
 const fullCancelledResource = () => ({
   end: { dateTime: END_TIME.toISOString() },
   iCalUID: MIRROR_UID,
@@ -83,7 +81,6 @@ const fullCancelledResource = () => ({
   summary: "Team lunch",
 });
 
-/* Google prunes a long-deleted event down to little more than its id and its cancelled status. */
 const minimalTombstone = () => ({
   id: MIRROR_EVENT_ID,
   status: "cancelled",
@@ -114,7 +111,6 @@ const makeMapping = (event: MaterializedSyncableEvent): EventMapping => ({
 });
 
 const planMissingMirrorReplacement = (event: MaterializedSyncableEvent, mapping: EventMapping) => {
-  // A windowed listing never enumerates a cancelled tombstone, so reconciliation calls it missing.
   const { operations } = computeSyncOperations([event], [mapping], [], TEST_RECONCILIATION_SCOPE);
   expect(operations).toHaveLength(1);
   const [replacement] = operations;
@@ -137,7 +133,6 @@ const importedPaths = (): string[] => {
 
 describe("Google treats a cancelled tombstone as absent", () => {
   beforeEach(() => {
-    // A queued-but-unconsumed response must never leak into the next test.
     batchMocks.executeBatchChunked.mockReset();
   });
 

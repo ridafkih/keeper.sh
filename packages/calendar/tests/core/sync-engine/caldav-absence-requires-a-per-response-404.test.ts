@@ -5,10 +5,6 @@ import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destinat
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The transport is the subject here: a multiget answers per href, and only a 404 for that href is
-   proof the calendar no longer holds it. Every other answer — a refusal, a withheld body, an href
-   the server never answered at all — is the server declining to say, so nothing may be recreated. */
-
 const SERVER_URL = "https://caldav.example.test";
 const PRINCIPAL_PATH = "/principals/user/";
 const HOME_PATH = "/cal/u/";
@@ -53,7 +49,6 @@ const mappingFor = (
   syncEventId: event.id,
 });
 
-// The mirror is believed gone, which is the only route into the verification the spec governs.
 const replacementFor = (
   event: MaterializedSyncableEvent,
   uid: string,
@@ -98,7 +93,6 @@ const supportedReportSetResponse = (): Response =>
     `<d:response><d:href>${CALENDAR_PATH}</d:href><d:propstat><d:status>HTTP/1.1 200 OK</d:status><d:prop><d:supported-report-set/></d:prop></d:propstat></d:response>`,
   );
 
-// A propstat carrying only a status is how a server answers an href it refuses or no longer holds.
 const statusOnlyResponse = (href: string, status: string): string =>
   `<d:response><d:href>${href}</d:href><d:propstat><d:status>${status}</d:status><d:prop><c:calendar-data/></d:prop></d:propstat></d:response>`;
 
@@ -138,10 +132,6 @@ const discoveryServer: Responder = (request) => {
   if (request.method === "PUT") {
     return Promise.resolve(new Response("", { status: 201, statusText: "Created" }));
   }
-  /* A real server answers a uid calendar-query, and this collection genuinely holds nothing under
-     any other href - so it answers a well-formed empty multistatus. A double that refused the
-     query instead would leave the uid unspoken for, which is not an absence and would suppress the
-     recreate this fixture is about. */
   if (isUidQuery(request)) {
     return Promise.resolve(multistatus(""));
   }
@@ -268,7 +258,6 @@ describe("CalDAV absence requires a per-response 404", () => {
   });
 
   it("creates nothing for an href a truncated multiget never answered", async () => {
-    // The server answered only the first href and stopped; the second was never spoken to.
     serve(serveMultigetBody(statusOnlyResponse(FIRST_PATH, "HTTP/1.1 404 Not Found")));
 
     const outcome = await runReplacements(

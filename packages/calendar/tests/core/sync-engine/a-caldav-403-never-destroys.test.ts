@@ -92,7 +92,6 @@ const replacement: Extract<SyncOperation, { type: "replace" }> = {
   uid,
 };
 
-// RFC 4791 5.3.2 payload preconditions: the server refuses these identical bytes on every request, PUT or recreate alike.
 const payloadPreconditions = [
   { element: "C:max-resource-size", label: "max-resource-size" },
   { element: "C:min-date-time", label: "min-date-time" },
@@ -122,7 +121,6 @@ const createProvider = () =>
     username: "user",
   });
 
-// A synthetic stand-in for the customer's calendar collection, so the assertion is about the remote object surviving rather than which calls were made.
 const remoteObjects = new Map<string, string>();
 
 beforeEach(() => {
@@ -154,7 +152,6 @@ describe("a CalDAV 403 never destroys the customer's event", () => {
         httpError(403, "Forbidden", preconditionBody(precondition.element));
 
       clientMocks.updateCalendarObjectByUrl.mockRejectedValue(refusal());
-      // The recreate carries the same bytes, so the server refuses it the same way.
       clientMocks.createCalendarObject.mockRejectedValue(refusal());
 
       const provider = createProvider();

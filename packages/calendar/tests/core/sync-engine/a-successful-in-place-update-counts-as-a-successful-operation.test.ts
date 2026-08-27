@@ -41,7 +41,6 @@ const makeMapping = (index: number): EventMapping => ({
   id: `map-${index}`,
   sourceCalendarId: "cal-1",
   startTime: START_TIME,
-  // Diverged from the event's current content, so reconciliation plans an in-place update.
   syncEventHash: "diverged-remote-hash",
   syncEventId: `ev-${index}`,
 });
@@ -62,13 +61,6 @@ const makeRemoteEvent = (mapping: EventMapping): RemoteEvent => ({
   uid: mapping.destinationEventUid,
 });
 
-/*
- * Every real destination echoes back the uid the mapping already holds on an ordinary in-place
- * update: CalDAV returns generateDeterministicEventUid(event.id) - the same uid the create wrote -
- * Google returns getEchoedICalUid(body) ?? entry.uid, and Outlook returns updated.iCalUId, which
- * the create path seeded the mapping from. A double that answers with the source event id instead
- * makes every ordinary edit look like a brand new mirror, which is exactly the bug under test.
- */
 const createEchoingDestination = (
   mappings: EventMapping[],
   updateOutcome: (mapping: EventMapping, update: EventUpdate) => PushResult,
@@ -151,12 +143,10 @@ describe("a successful in-place update counts as a successful operation", () => 
       destination.provider,
     );
 
-    // Nothing new landed on a create-only destination, so an operator watching for duplicate churn sees nothing.
     expect(outcome.result.added).toBe(0);
     expect(destination.pushedEvents).toEqual([]);
     expect(destination.deletedIds).toEqual([]);
 
-    // The three edits really happened, and the counters must carry that where the verdict reads them.
     expect(outcome.result.addFailed).toBe(0);
     expect(outcome.result.updated).toBe(EVENT_INDEXES.length);
     expect(outcome.errors).toEqual([]);
@@ -200,10 +190,8 @@ describe("a successful in-place update counts as a successful operation", () => 
     expect(destination.pushedEvents).toEqual([]);
     expect(destination.deletedIds).toEqual([]);
 
-    // Exactly the call sync-user.ts makes before it escalates the destination backoff.
     const verdict = resolveDestinationAttemptVerdict(result, wideEvent["superseded"] === true);
 
-    // 'failed' doubles the interval toward the six hour ceiling and only 'succeeded' ever resets it.
     expect(verdict).toBe("succeeded");
   });
 

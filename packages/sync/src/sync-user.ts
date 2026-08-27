@@ -387,18 +387,7 @@ const createDestinationReconciliationScope = (
   ),
 });
 
-/*
- * Verification is a bounded budget, so a run routinely ends with mappings whose state was
- * never established: the budget ran out before them, or the provider answered that it could
- * not tell. Counted apart from present and absent, a run that deliberately did nothing about
- * them is visible in production instead of reading like a healthy one.
- */
 interface DestinationVerificationReport {
-  /*
-   * Where this pass stopped asking, carried to the next cycle so the budget resumes after it.
-   * Null means the next cycle starts from the top: the pass covered every unconfirmed mapping,
-   * or the caller does not carry a cursor at all. Absent when the caller never asked to rotate.
-   */
   nextVerificationCursor?: string | null;
   unverifiedCount: number;
   unverifiedMappingIds: ReadonlySet<string>;
@@ -406,7 +395,6 @@ interface DestinationVerificationReport {
   verifiedPresentCount: number;
 }
 
-/* Counts sum across the destinations a run touches, so each is a run total, not a gauge. */
 const createVerificationWideEventFields = (
   verification?: DestinationVerificationReport | null,
 ): Record<string, number> => {
@@ -507,12 +495,6 @@ interface DestinationRemoteReadContext {
   localEvents: MaterializedSyncableEvent[];
   provider: TargetedDestinationReadProvider;
   requestedWindow: SyncWindow;
-  /*
-   * The position the previous cycle's verification pass stopped at, as persisted per destination.
-   * Carrying the field - even holding null - is what enrolls a caller in rotation: the resume
-   * position is only reported back to a caller that keeps one, since a caller that discards it
-   * would advance nothing and only ever re-ask about the same prefix.
-   */
   verificationCursor?: string | null;
 }
 
@@ -545,8 +527,6 @@ const planTargetedDestinationRead = (
   const mappingIds = new Set<string>();
   for (const localEvent of localEvents) {
     for (const mapping of mappingsBySyncEventId.get(localEvent.id) ?? []) {
-      /* A mapping the destination calendar holds no event for has no identifier to read by, and
-         asking anyway is a request for the whole mailbox rather than for one event. */
       if (!namesEventInDestination(mapping)) {
         continue;
       }
@@ -557,11 +537,6 @@ const planTargetedDestinationRead = (
   return { deleteIdentifiers: [...deleteIdentifiers], mappingIds };
 };
 
-/*
- * The by-id read speaks for exactly the identifiers it asked about, so one it did not return
- * is absent. It asks only about the mappings the push plan touches, and a mapping outside
- * that plan is never established either way: unknown, and left exactly as it is.
- */
 const reportTargetedDestinationRead = (
   plan: TargetedDestinationReadPlan,
   existingMappings: EventMapping[],
@@ -579,7 +554,6 @@ const reportTargetedDestinationRead = (
       .map((mapping) => mapping.id),
   );
   return {
-    /* The targeted read asks about the whole push plan, so it never leaves a position to resume. */
     unverifiedCount: unverifiedMappingIds.size,
     unverifiedMappingIds,
     verifiedAbsentCount: askedDeleteIds.size - presentDeleteIds.size,
@@ -594,8 +568,6 @@ const reportTargetedDestinationRead = (
  * pass gets one more, authoritative check before it is treated as gone: a direct by-id lookup,
  * for providers that expose one.
  */
-/* A three-valued report confirms only what it calls present: an absence, or a read that could not
-   tell, must never be dressed up as a live remote event. */
 const toConfirmedRemoteEvents = (verified: EventPresence[] | RemoteEvent[]): RemoteEvent[] => {
   const confirmed: RemoteEvent[] = [];
   for (const entry of verified) {
@@ -610,12 +582,6 @@ const toConfirmedRemoteEvents = (verified: EventPresence[] | RemoteEvent[]): Rem
   return confirmed;
 };
 
-/*
- * Google and CalDAV answer three-valued and always speak for every identifier asked about.
- * Outlook answers with the events it found and throws when it cannot tell, so an identifier
- * it left out is a 404: absent. Reading an omission from a three-valued answer as absence
- * would invent evidence, so it stays unknown.
- */
 const createDefaultPresence = (
   verified: EventPresence[] | RemoteEvent[],
 ): EventPresenceStatus => {
@@ -625,10 +591,6 @@ const createDefaultPresence = (
   return "absent";
 };
 
-/* An answer that names where the mirror is but carries no event body cannot be matched back to its
-   mapping, so it settles nothing: neither "present" nor "elsewhere" can be acted on without the
-   object, and a verdict nothing can act on has to leave the mapping unverified rather than let the
-   run walk past it as though the destination had been read. */
 const readReportedPresence = (entry: EventPresence): EventPresenceStatus => {
   if ((entry.status === "present" || entry.status === "elsewhere") && !entry.event) {
     return "unknown";
@@ -663,20 +625,12 @@ const countVerifiedPresence = (
   status: EventPresenceStatus,
 ): number => [...presenceByDeleteId.values()].filter((value) => value === status).length;
 
-/* A mirror found in another folder of the same mailbox was found: it is the customer's copy, alive,
-   and the reconciliation repairs it in place rather than recreating it. Counting it anywhere near
-   absent would say a live mirror is gone, and counting it nowhere at all is how it stayed invisible
-   while the mapping froze -- so it is reported with the mirrors the read positively located. */
 const countMirrorsTheReadLocated = (
   presenceByDeleteId: ReadonlyMap<string, EventPresenceStatus>,
 ): number =>
   countVerifiedPresence(presenceByDeleteId, "present")
   + countVerifiedPresence(presenceByDeleteId, "elsewhere");
 
-/*
- * Everything past the budget is never asked about at all, so it joins the mappings the
- * provider could not settle: unknown, and left exactly as it is.
- */
 const collectUnverifiedMappingIds = (
   budgetedMappings: EventMapping[],
   beyondBudgetMappings: EventMapping[],
@@ -691,19 +645,10 @@ const collectUnverifiedMappingIds = (
   return unverifiedMappingIds;
 };
 
-/*
- * A population larger than one budget used to be sliced from the same lexicographic start every
- * cycle, so the tail was never asked about even once: a mirror the recipient deleted past that
- * prefix stayed unverified forever and was never restored. The order stays deterministic, but the
- * window now opens just after where the previous cycle stopped, so successive cycles walk the
- * whole set. A cycle is still capped at the budget, and for a given cursor it asks about exactly
- * the same mappings whatever order the rows arrived in.
- */
 interface VerificationRotation {
   cursor: string | null;
 }
 
-/* Only a caller that carries the cursor between runs can advance it, so only that caller rotates. */
 const readVerificationRotation = (
   context: DestinationRemoteReadContext,
 ): VerificationRotation | null => {
@@ -722,7 +667,6 @@ const findVerificationRotationStart = (
   }
   const resumeIndex = sortedMappings.findIndex((mapping) =>
     mapping.deleteIdentifier.localeCompare(verificationCursor) > 0);
-  /* The cursor sits at or past the end - a mapping since removed, or the last one asked about. */
   if (resumeIndex === -1) {
     return 0;
   }
@@ -736,14 +680,9 @@ const selectBudgetedMappings = (
   if (sortedMappings.length <= DESTINATION_VERIFICATION_LIMIT) {
     return sortedMappings;
   }
-  /* A cycle that reaches the end of the set stops there rather than filling the remaining budget
-     from the top: wrapping would re-ask identifiers this same rotation just covered and leave the
-     resume position behind where it already was, so the walk stopped moving forward. The next
-     cycle starts from the top on its own, because a cursor at the end resumes at index zero. */
   return sortedMappings.slice(rotationStart, rotationStart + DESTINATION_VERIFICATION_LIMIT);
 };
 
-/* Nothing was left out, so the next cycle starts from the top rather than resuming mid-set. */
 const readNextVerificationCursor = (
   sortedMappings: EventMapping[],
   budgetedMappings: EventMapping[],
@@ -773,8 +712,6 @@ const withVerifiedUnconfirmedMappings = async (
   const unconfirmedMappings = existingMappings
     .filter((mapping) =>
       !remoteUids.has(mapping.destinationEventUid)
-      /* Nothing to verify: the calendar this sync owns already answered that it holds no event for
-         this mapping, and the copy the read found outside it is not this calendar's to act on. */
       && namesEventInDestination(mapping)
       && overlapsTimeWindow(mapping, requestedWindow.timeMin, requestedWindow.timeMax))
     .toSorted((first, second) =>
@@ -790,7 +727,6 @@ const withVerifiedUnconfirmedMappings = async (
     return { remoteEvents };
   }
   const askedDeleteIds = budgetedMappings.map((mapping) => mapping.deleteIdentifier);
-  /* Outlook can only tell a re-keyed mirror from a deleted one with the uid the mapping carries. */
   const verified = await provider.verifyEventsExist(budgetedMappings.map((mapping) => ({
     deleteId: mapping.deleteIdentifier,
     uid: mapping.destinationEventUid,
@@ -860,9 +796,6 @@ interface CalendarSyncCompletion {
   userId: string;
   added: number;
   addFailed: number;
-  /* Edits delivered to mirrors the mapping already named. Reported apart from `added` because a
-     healthy in-place update never creates anything, so without this number a run that pushed a
-     hundred edits is byte-identical to one that pushed none. */
   updated: number;
   removed: number;
   removeFailed: number;
@@ -984,18 +917,6 @@ const resetDestinationBackoffIfNeeded = async (
   }
 };
 
-/*
- * The pass has already spent its round trips by the time this runs, so the cursor advances even if
- * the attempt is superseded later: a destination that keeps being cut short would otherwise re-ask
- * about the same prefix forever, which is the starvation the rotation exists to end.
- */
-/*
- * A report that carries no cursor field is the by-id read saying it has no opinion on the rotation,
- * which is not the same as an explicit null asking the next cycle to start from the top. Handing
- * back a wrapper keeps the two apart at the persistence seam, where reading the bare field would
- * collapse "no opinion" into "start from the top" and discard the position a windowed cycle paid
- * round trips for.
- */
 interface ReportedVerificationCursor {
   value: string | null;
 }

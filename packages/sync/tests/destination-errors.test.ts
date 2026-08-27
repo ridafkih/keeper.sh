@@ -80,8 +80,6 @@ describe("hasNoSuccessfulOperations", () => {
     expect(hasNoSuccessfulOperations(result({ addFailed: 3, added: 2 }))).toBe(false);
   });
 
-  /* Every provider echoes back the uid the mapping already holds on an ordinary in-place update, so
-     a run that only edited mirrors reports added 0 and would otherwise read as a total failure. */
   it("does not report a sync that updated a mirror in place alongside failures", () => {
     expect(hasNoSuccessfulOperations(result({ addFailed: 1, updated: 2 }))).toBe(false);
   });

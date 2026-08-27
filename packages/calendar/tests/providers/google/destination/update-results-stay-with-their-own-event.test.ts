@@ -4,12 +4,6 @@ import { GOOGLE_BATCH_MAX_SIZE } from "../../../../src/providers/google/shared/a
 import type { EventUpdate } from "../../../../src/core/sync-engine/types";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 
-/*
- * Note: executeBatchChunked is deliberately NOT mocked here. A mocked batch layer hands back one
- * response per sub-request by construction, which is the very property under test, so the only
- * honest double is a fetch stub emitting the multipart envelope Google really sends.
- */
-
 const EXTERNAL_CALENDAR_ID = "primary";
 const UPDATE_COUNT = GOOGLE_BATCH_MAX_SIZE + 1;
 const LAST_INDEX_OF_FIRST_CHUNK = GOOGLE_BATCH_MAX_SIZE - 1;
@@ -56,8 +50,6 @@ const parseRequestBody = (segment: string): Record<string, unknown> => {
   return JSON.parse(segment.slice(braceIndex).trim()) as Record<string, unknown>;
 };
 
-/* Google's answer to a PUT is the stored resource, so the stub must echo back the event the
-   path actually named - the whole point is that the identity travels with its own sub-request. */
 const parseOutgoingParts = (init: RequestInit | undefined): OutgoingPart[] => {
   const headers = (init?.headers ?? {}) as Record<string, string>;
   const boundary = readBoundary(headers["Content-Type"] ?? "");
@@ -172,8 +164,6 @@ describe("an update result never carries another event's google identity", () =>
       expect(result.deleteId).toBe(update.deleteId);
     }
 
-    /* The shortfall lands exactly here: the update whose part the envelope dropped must report
-       a failure, never event 50's identity written under event 49's mapping. */
     expect(results[LAST_INDEX_OF_FIRST_CHUNK]?.success).toBe(false);
   });
 });

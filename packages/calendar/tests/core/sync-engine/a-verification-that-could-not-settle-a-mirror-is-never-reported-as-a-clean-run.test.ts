@@ -58,8 +58,6 @@ const makeMapping = (
   syncEventId: event.id,
 });
 
-/* A windowed listing never enumerates the mirror, so reconciliation can only call it "missing" --
-   which is the single plan shape that reaches the verification read at all. */
 const planMissingMirrorReplacements = (
   events: MaterializedSyncableEvent[],
   mappings: EventMapping[],
@@ -79,8 +77,6 @@ interface WriteLog {
   updated: string[];
 }
 
-/* Every write the destination could ever receive is recorded here: a verification that settled
-   nothing may issue none of them, and on Outlook a create is an unreapable duplicate. */
 const createWatchedDestination = (
   verifyEventsExist: NonNullable<CalendarSyncProvider["verifyEventsExist"]>,
 ): { log: WriteLog; provider: CalendarSyncProvider } => {
@@ -114,8 +110,6 @@ const createWatchedDestination = (
   return { log, provider };
 };
 
-/* The count the run has to carry out of the engine: mirrors the verification could not settle.
-   Read defensively so a build without the field fails as the missing behaviour it is. */
 interface UnsettledReport {
   verificationUnsettled?: number;
 }
@@ -185,8 +179,6 @@ describe("a verification that could not settle a mirror is never reported as a c
     expect(errorsNaming(outcome.errors, "map-1")).not.toEqual([]);
   });
 
-  /* A mirror omitted from the answer altogether was never settled either: silence about an
-     identifier is not a verdict about it. */
   it("counts the mapping the report never mentioned", async () => {
     const first = makeEvent("ev-1", "Team lunch");
     const second = makeEvent("ev-2", "Design review");
@@ -214,9 +206,6 @@ describe("a verification that could not settle a mirror is never reported as a c
     expect(errorsNaming(outcome.errors, "map-2")).not.toEqual([]);
   });
 
-  /* Outlook and CalDAV rethrow the abort deliberately. Swallowing it lets the run walk on to
-     pushEvents and POST a create to a real calendar after the run was cancelled -- on Outlook a
-     permanent duplicate. The second, provably absent, operation proves the run unwinds instead. */
   it("propagates a run-level abort out of the verification read and writes nothing after it", async () => {
     const first = makeEvent("ev-1", "Team lunch");
     const second = makeEvent("ev-2", "Design review");
@@ -290,8 +279,6 @@ const mailboxCalendars = [
   { id: REFUSING_FOLDER_ID, isDefaultCalendar: false, name: "Shared with me" },
 ];
 
-/* A synthetic mailbox whose events are all really gone, except that one sibling folder -- a
-   delegated calendar the account may not enumerate -- refuses its filtered listing with 403. */
 const installMailboxWithOneRefusingFolder = (): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -363,8 +350,6 @@ describe("one unreadable mailbox folder turns off restore for every mirror, and 
     );
   });
 
-  /* Indistinguishable from a healthy run is the whole defect: the customer's deleted mirror is
-     never restored, run after run, and nothing in the result ever says why. */
   it("surfaces that blanket unknown as unsettled rather than an all-zero clean run", async () => {
     const requests = installMailboxWithOneRefusingFolder();
     const event = makeEvent("ev-1", "Quarterly review");

@@ -4,25 +4,11 @@ import { createGoogleSyncProvider } from "../../../src/providers/google/destinat
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The promotion route reaches a create on one verdict only: the read proved the mapping's
-   identifier ABSENT, so the mirror is genuinely gone, nothing is there for a delete to remove and
-   the replacement is written on the read's word alone. That whole licence rests on "absent" meaning
-   the object is gone rather than the key being stale, and on Google the two are not the same thing:
-   an import, a move between calendars or a restore re-keys the event, the id the mapping holds
-   answers 404, and the customer's copy is sitting in the calendar under a new id with the very same
-   iCalUID. Outlook's read already refuses to call that absent - a 404 on the item id sends it round
-   the mailbox by uid before it will say the mirror is gone - and Google's must earn its absence the
-   same way, by asking about the uid the mapping names. Otherwise the one verdict that creates
-   without asking anything else is handed out on a stale key, and the create is a second permanent
-   copy of an event the customer already has. */
-
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const GOOGLE_CALENDAR_ID = "external-google-cal";
 const MAPPING_ID = "mapping-1";
 
-/* The id the mapping holds, which the destination no longer answers for. */
 const MAPPED_EVENT_ID = "google-event-id-abc123";
-/* The id the same object wears after the destination re-keyed it. */
 const REKEYED_EVENT_ID = "google-event-id-after-the-rekey";
 const MIRROR_UID = "keeper-uid-1@keeper.sh";
 
@@ -154,9 +140,6 @@ const readImportedSummary = (body: unknown): string => {
   return body.summary;
 };
 
-/* The uid a lookup sub-request asks about, or null for a request addressed to one event id. Google
-   answers a uid lookup with a list, so this is the shape of the only question that can tell a
-   deleted mirror from a re-keyed one. */
 const readLookupUid = (path: string): string | null => {
   const [, query] = path.split("?");
   if (!query) {
@@ -175,13 +158,6 @@ const isImport = (call: BatchCall): boolean =>
 
 const isUidLookup = (call: BatchCall): boolean => readLookupUid(call.path) === MIRROR_UID;
 
-/* A synthetic Google calendar behind the real provider. The mapped id is gone from it either way;
-   `seeded` is what the calendar still holds, so the same fixture serves the mirror the recipient
-   really deleted and the mirror the destination merely re-keyed.
-
-   The uid lookup is answered the way Google answers it - 200 with an items list, empty when nothing
-   carries the uid - never with the 404 the id read gets, because a status is not an item list and a
-   double that conflates them would certify a read that never asked. */
 const installGoogleCalendar = (
   seeded: GoogleEventResource[],
 ): { calls: BatchCall[]; held: GoogleEventResource[] } => {
@@ -310,7 +286,6 @@ describe("a verified absence is an absence the mapping's uid confirms", () => {
   it("asks what the mapping's uid names before an absence licenses the create", async () => {
     const { calls } = await runCycle([]);
 
-    // One target, so one question about its uid: the read either asks it or it does not.
     expect(calls.filter((call) => isUidLookup(call))).toHaveLength(1);
   });
 

@@ -1,5 +1,5 @@
 {
-  "id": "268844d6-e349-4f1b-9e6c-cf300eec44ae",
+  "id": "833d1cc4-5031-422c-b43d-a41c701d9bd9",
   "prevId": "cf1765f1-f8e1-484d-b8de-f35f0f76d1da",
   "version": "7",
   "dialect": "postgresql",
@@ -1103,6 +1103,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "verificationCursor": {
+          "name": "verificationCursor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "syncFutureRange": {
           "name": "syncFutureRange",
           "type": "text",
@@ -1260,6 +1266,13 @@
         },
         "consecutiveUpdateFailures": {
           "name": "consecutiveUpdateFailures",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "consecutiveUnsettledReads": {
+          "name": "consecutiveUnsettledReads",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,

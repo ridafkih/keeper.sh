@@ -22,12 +22,7 @@ const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 const EVENTS_PATH = `/calendar/v3/calendars/${encodeURIComponent(EXTERNAL_CALENDAR_ID)}/events`;
 const IMPORT_PATH = `${EVENTS_PATH}/import`;
 const EVENT_STATE_ID = "event-state-id-1";
-/* A row written before deleteIdentifier existed holds the iCalUID, so verification takes the
-   legacy ?iCalUID= path -- the only path that can answer with more than one item. */
 const LEGACY_UID = generateDeterministicEventUid(`${EVENT_STATE_ID}:${EXTERNAL_CALENDAR_ID}`);
-/* Google's ?iCalUID= list is over instances by default (singleEvents is false here, and no
-   showDeleted), and every occurrence of a recurring series carries the master's iCalUID: a
-   cancelled instance and its live master come back together, in unspecified order. */
 const MASTER_EVENT_ID = "googleeventidmaster11";
 const CANCELLED_INSTANCE_EVENT_ID = "googleeventidmaster11_20260315T090000Z";
 const LIVE_INSTANCE_EVENT_ID = "googleeventidfirstone";
@@ -165,9 +160,6 @@ describe("an ambiguous Google iCalUID lookup", () => {
   });
 });
 
-/* Google's own shape: the ?iCalUID= list answers with every occurrence sharing the uid, a get by
-   event id answers the stored resource, and import is an upsert on the uid that flattens whatever
-   series already wears it. */
 const createGoogleCalendarDouble = () => {
   const requestLog: { body?: unknown; method: string; path: string }[] = [];
 

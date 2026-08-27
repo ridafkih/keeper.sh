@@ -19,8 +19,6 @@ const MAPPED_ID = "AAMkAGmirror-as-mapped";
 const MOVED_ID = "AAMkAGmirror-after-the-move";
 const MIRROR_UID = "mirror-uid-1";
 
-/* Graph hands back a $skiptoken on the page it could not finish; the filtered listing over the
-   non-indexed iCalUId is exactly the shape that hands one back on an empty page. */
 const SKIP_TOKEN_PARAM = "$skiptoken";
 const SECOND_PAGE_TOKEN = "page-2";
 
@@ -114,13 +112,9 @@ const mailboxCalendars = [
 
 interface PagingMailboxOptions {
   events: MailboxEvent[];
-  // The folder whose second page Graph refuses, so no page of it is ever readable.
   brokenSecondPageFolderId?: string;
 }
 
-/* Same synthetic mailbox as the sibling-folder fixture, except this one PAGES the way Graph does:
-   the first response to a filtered uid listing is an empty page carrying a nextLink, and the
-   events only appear on the page that nextLink names. */
 const installPagingGraphMailbox = (options: PagingMailboxOptions): GraphRequest[] => {
   const requests: GraphRequest[] = [];
 
@@ -156,7 +150,6 @@ const installPagingGraphMailbox = (options: PagingMailboxOptions): GraphRequest[
     }
 
     if (!isSecondPageRead(url)) {
-      // Graph does not promise a non-empty value on a non-final page.
       return Promise.resolve(Response.json({
         "@odata.nextLink": buildNextLink(url),
         value: [],
@@ -263,8 +256,6 @@ describe("Outlook proves a uid absent only after walking every page of the filte
     vi.unstubAllGlobals();
   });
 
-  /* A live mirror sitting on page two of the destination folder's filtered listing. Reading only
-     the first, empty page calls it absent and Outlook's create-only push duplicates it forever. */
   it("follows the nextLink and reports a mirror held on page two of the destination as present", async () => {
     const requests = installPagingGraphMailbox({
       events: [makeMailboxEvent(MOVED_ID, MIRROR_UID, DESTINATION_FOLDER_ID)],
@@ -278,8 +269,6 @@ describe("Outlook proves a uid absent only after walking every page of the filte
     expect(secondPageReads(requests).length).toBeGreaterThan(0);
   });
 
-  /* The sibling-folder scan reads the same listing, so an unpaged read defeats the round-5 fix in
-     its own case: a mirror dragged to another folder and paged there reads as absent. */
   it("reports a mirror held on page two of a sibling folder as elsewhere, not absent", async () => {
     installPagingGraphMailbox({
       events: [makeMailboxEvent(MOVED_ID, MIRROR_UID, OTHER_FOLDER_ID)],
@@ -290,7 +279,6 @@ describe("Outlook proves a uid absent only after walking every page of the filte
     expect(report[0]?.status).toBe("elsewhere");
   });
 
-  /* A walk that broke partway saw nothing about the uid; only a completed walk can say "nothing". */
   it("reports unknown when a page mid-walk cannot be read", async () => {
     installPagingGraphMailbox({
       brokenSecondPageFolderId: DESTINATION_FOLDER_ID,

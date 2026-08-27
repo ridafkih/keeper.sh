@@ -19,7 +19,6 @@ const PRESENT_EVENT_ID = "googleeventidpresent1";
 const DELETED_EVENT_ID = "googleeventiddeleted1";
 const FLAKY_EVENT_ID = "googleeventidflaky111";
 const LEGACY_EVENT_ID = "googleeventidlegacy11";
-/* A mapping written before deleteIdentifier existed holds the iCalUID, not the Google event id. */
 const LEGACY_UID = generateDeterministicEventUid(`event-state-id-legacy:${EXTERNAL_CALENDAR_ID}`);
 const PRESENT_UID = generateDeterministicEventUid(`event-state-id-present:${EXTERNAL_CALENDAR_ID}`);
 const START_TIME = "2026-03-15T09:00:00.000Z";

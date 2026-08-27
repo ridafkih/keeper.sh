@@ -21,7 +21,6 @@ const EXTERNAL_CALENDAR_ID = "primary";
 const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 const EVENTS_PATH = `/calendar/v3/calendars/${encodeURIComponent(EXTERNAL_CALENDAR_ID)}/events`;
 const EVENT_STATE_ID = "event-state-id-1";
-/* A row written before deleteIdentifier existed: it holds the iCalUID, not the Google event id. */
 const LEGACY_UID = generateDeterministicEventUid(`${EVENT_STATE_ID}:${EXTERNAL_CALENDAR_ID}`);
 const LIVE_GOOGLE_EVENT_ID = "googleeventidabc123";
 const START_TIME = new Date("2026-03-15T09:00:00.000Z");
@@ -74,11 +73,6 @@ const createProvider = (): CalendarSyncProvider => createGoogleSyncProvider({
   userId: "user-1",
 });
 
-/*
- * Google's own behaviour, not a kinder stand-in: an event is addressable by its
- * event id only, a get by iCalUID path segment 404s, and the ?iCalUID= list is
- * the only way the legacy identifier resolves to the live event.
- */
 const notFound = (): BatchSubResponse => ({
   body: { error: { code: 404, message: "Not Found" } },
   headers: {},

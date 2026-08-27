@@ -11,11 +11,6 @@ import type { EventMapping } from "../../../src/core/events/mappings";
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const FAILURES_BEFORE_REPLACEMENT = 3;
 
-/*
- * A failure that carries no status and is not a transport error is ours -- an unaddressable
- * target, a serializer -- so it is durable on every destination. That keeps this about the
- * counter rather than about which statuses a given provider can escape.
- */
 const DURABLE_FAILURE: PushResult = {
   error: "no addressable update target",
   errorType: "UnaddressableTargetError",
@@ -85,7 +80,6 @@ const createProvider = (
   return { cycleProvider };
 };
 
-/* The counter only means anything if it survives the flush, so each cycle starts from the last. */
 const runCycles = async (outcomes: boolean[]): Promise<CycleRun> => {
   const deleteCalls: string[][] = [];
   const { cycleProvider } = createProvider(outcomes, deleteCalls);

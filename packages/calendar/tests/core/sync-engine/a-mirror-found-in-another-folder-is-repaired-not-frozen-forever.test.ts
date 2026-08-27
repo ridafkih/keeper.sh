@@ -9,8 +9,6 @@ import type { PendingChanges, PendingUpdate } from "../../../src/core/sync-engin
 import type { EventMapping } from "../../../src/core/events/mappings";
 
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The sync writes into a calendar the customer created, so a folder-scoped listing is the only read
-   that answers about the calendar this sync owns. */
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 
@@ -71,8 +69,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* /me/events addresses the mailbox default collection; only /me/calendars/{id}/events addresses the
-   folder the sync writes to. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -119,8 +115,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return parsed.subject;
 };
 
-/* A synthetic Graph mailbox with the real shape: an item id addresses one event mailbox-wide, a
-   listing only ever answers about the folder its URL names, and a DELETE really removes the item. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
   const held = [...events];
@@ -197,8 +191,6 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The customer renamed the meeting after dragging their copy into the mailbox default folder, so
-   every run from now on carries a real pending edit that has to reach the surviving item. */
 const localEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -230,8 +222,6 @@ const WINDOW = {
   timeMin: new Date("2000-01-01T00:00:00.000Z"),
 };
 
-/* The plan is small, so sync-user takes the targeted getRemoteEventsByIds branch: the dead id 404s,
-   that branch never verifies, and the mapping reaches reconciliation as remoteMissing. */
 const TARGETED_READ_SCOPE = {
   authoritativeMappingIds: new Set([MAPPING_ID]),
   authoritativeWindow: WINDOW,
@@ -257,7 +247,6 @@ interface CycleOutcome {
   updates: PendingUpdate[];
 }
 
-/* The two admissible endings for this run, and the third one the customer actually gets today. */
 const describeDisposition = (cycle: CycleOutcome): string => {
   const repairedInPlace = cycle.repairs.length > 0
     && cycle.patches.some((patch) =>
@@ -332,8 +321,6 @@ describe("a mirror found in another folder is repaired, not frozen forever", () 
     vi.unstubAllGlobals();
   });
 
-  /* The customer dragged their copy into the mailbox default folder. Graph re-keyed it, the mapping
-     names a dead id, and the uid walk finds the item — outside the destination calendar. */
   it("carries the located item id and uid on the elsewhere verdict", async () => {
     installGraphMailbox([makeMailboxEvent(REKEYED_ID, MIRROR_UID, DEFAULT_FOLDER_ID)]);
 
@@ -348,8 +335,6 @@ describe("a mirror found in another folder is repaired, not frozen forever", () 
 
     expect(report).toHaveLength(1);
     expect(report[0]).toMatchObject({ identifier: MAPPED_ID, status: "elsewhere" });
-    /* A verdict that drops the identity it was holding cannot repair anything downstream, so the
-       located item id and the uid have to travel with it. */
     expect(report[0]?.event).toMatchObject({ deleteId: REKEYED_ID, uid: MIRROR_UID });
   });
 
@@ -364,9 +349,7 @@ describe("a mirror found in another folder is repaired, not frozen forever", () 
 
     const cycle = await runCycle([mapping], requests);
 
-    // Outlook's push is a create-only POST, so any create here is a permanent duplicate.
     expect(requestsOfMethod(cycle.requests, "POST")).toEqual([]);
-    // The located item is the customer's only copy; deleting it is unrecoverable.
     expect(requestsOfMethod(cycle.requests, "DELETE")).toEqual([]);
   });
 
@@ -380,8 +363,6 @@ describe("a mirror found in another folder is repaired, not frozen forever", () 
     expect(describeDisposition(cycle)).not.toBe("silently idle: nothing written, nothing said");
   });
 
-  /* The whole harm is the repetition: the mapping keeps naming the dead pre-move id, so the same
-     dead plan is recomputed every cycle and the copy never changes again. */
   it("does not recompute the same dead no-op plan on the very next cycle", async () => {
     const requests = installGraphMailbox([
       makeMailboxEvent(REKEYED_ID, MIRROR_UID, DEFAULT_FOLDER_ID),

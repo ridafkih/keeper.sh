@@ -5,17 +5,6 @@ import { createOutlookSyncProvider } from "../../../src/providers/outlook/destin
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { MaterializedSyncableEvent, SyncOperation } from "../../../src/core/types";
 
-/* The promotion route on the destination state that is neither a live mirror at the mapped id nor a
-   proven absence: the item id the mapping holds is dead, and the read finds the very same event
-   alive under a new one. Graph re-keys an item when it is moved between folders of a mailbox, so
-   its uid is the only handle that still names it - and that uid fallback is what locates it here.
-
-   The customer's event exists, so a create would be a permanent second copy on a create-only POST
-   the folder listing never reaps, and a delete would destroy the only copy there is. The single
-   correct ending is a relocation: the mapping is carried onto the identifier the read located, and
-   the next cycle addresses that identifier with an ordinary in-place update instead of promoting
-   the identical dead plan all over again. */
-
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const MAPPING_ID = "mapping-1";
 
@@ -143,10 +132,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return parsed.subject;
 };
 
-/* The synthetic Graph mailbox holding the re-keyed mirror: the mapped item id resolves to nothing,
-   which is exactly how Graph answers after a move, and the uid still names the live item under its
-   new id inside the destination folder. Nothing here is kinder than the real thing - a PATCH to the
-   dead id 404s just as Graph's does, and only the uid filter can find the item again. */
 const installMailboxHoldingTheRelocatedMirror = (): {
   held: MailboxEvent[];
   requests: GraphRequest[];
@@ -261,8 +246,6 @@ const isOutlookCreate = (request: GraphRequest): boolean =>
 const isPatchOf = (request: GraphRequest, identifier: string): boolean =>
   request.method === "PATCH" && request.url.includes(encodeURIComponent(identifier));
 
-/* The identifier the mapping ends the run naming: the run either rewrites it in place through an
-   update or replaces the mapping outright through an insert, and both must end at the same id. */
 const storedIdentifierFor = (outcome: Outcome, mapping: EventMapping): string => {
   const rewritten = (outcome.changes.updates ?? []).find((update) => update.id === MAPPING_ID);
   if (rewritten) {

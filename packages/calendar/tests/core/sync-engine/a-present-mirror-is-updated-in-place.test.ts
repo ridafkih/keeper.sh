@@ -65,8 +65,6 @@ const createDestination = (seeded: DestinationRecord[]) => {
   const provider: CalendarSyncProvider = {
     deleteEvents: (eventIds) => {
       deleteTargets.push(...eventIds);
-      /* Real providers answer a delete for an identifier they do not hold with success and no
-         removal evidence (Outlook maps a 404 to success). */
       return Promise.resolve(eventIds.map((eventId): DeleteResult => {
         if (!records.has(eventId)) {
           return { success: true };

@@ -38,10 +38,6 @@ const EVENT_READ_DIAGNOSTICS = {
 
 const VERIFICATION_BUDGET = 200;
 
-/*
- * One run's worth of mappings the windowed listing did not turn up, deliberately wider than
- * the budget: the tail past PRESENT + ABSENT + UNKNOWN is never asked about at all.
- */
 const PRESENT_COUNT = 40;
 const ABSENT_COUNT = 140;
 const UNKNOWN_COUNT = 20;
@@ -54,7 +50,6 @@ const createStartTime = (index: number): Date =>
 const createEndTime = (index: number): Date =>
   new Date(createStartTime(index).getTime() + 30 * 60 * 1000);
 
-/* Zero padded so the budget's lexicographic ordering is the index ordering. */
 const createDeleteIdentifier = (index: number): string =>
   `destination-event-${String(index).padStart(3, "0")}`;
 
@@ -123,10 +118,6 @@ const createPresence = (index: number): EventPresence => {
 const indexOfDeleteIdentifier = (deleteIdentifier: string): number =>
   Number(deleteIdentifier.replace("destination-event-", ""));
 
-/*
- * The windowed listing turns up none of these mirrors - the false-absence case a by-id
- * verification exists to settle.
- */
 const createProviderDouble = () => {
   const listedWindows: ListRemoteEventsOptions[] = [];
   const verifiedIds: string[] = [];
@@ -173,7 +164,6 @@ const readDestination = async (): Promise<VerifiedDestinationRemoteRead> => {
   return read;
 };
 
-/* Absent the report, nothing is withheld - which is exactly the guess this spec forbids. */
 const resolveUnverifiedMappingIds = (
   read: VerifiedDestinationRemoteRead,
 ): ReadonlySet<string> => {

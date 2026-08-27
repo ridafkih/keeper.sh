@@ -61,9 +61,6 @@ const CALENDAR_URL = "https://caldav.example.invalid/calendars/user/shared/";
 const DESTINATION_CALENDAR_ID = "dest-cal-1";
 const CYCLES = 3;
 
-/* Every status in PAYLOAD_REFUSAL_STATUS_CODES. A real server refuses the create PUT for the
-   same reason it refused the update PUT: both send eventToICalString(event, uid) to the same
-   ${uid}.ics href, so a delete-then-add only destroys the object and leaves nothing behind. */
 const PAYLOAD_REFUSALS = [
   { status: 400, statusText: "Bad Request" },
   { status: 413, statusText: "Content Too Large" },
@@ -72,8 +69,6 @@ const PAYLOAD_REFUSALS = [
   { status: 431, statusText: "Request Header Fields Too Large" },
 ];
 
-/* Summaries chosen so neither contains the other: which of the two the customer's object carries
-   is then decidable from its bytes alone. */
 const storedMeeting: MaterializedSyncableEvent = {
   calendarId: "source-calendar-id",
   calendarName: "Source",
@@ -92,8 +87,6 @@ const movedMeeting: MaterializedSyncableEvent = {
 
 const uid = generateDeterministicEventUid(movedMeeting.id);
 const ownedObjectPath = `/calendars/user/shared/${uid}.ics`;
-/* A server that names objects itself: the stored basename never matches <uid>.ics, so the update
-   verb refuses to address it before any byte leaves the process. */
 const serverNamedObjectPath = "/calendars/user/shared/2f9c41d8-server-chosen.ics";
 const serverNamedObjectUrl = new URL(serverNamedObjectPath, CALENDAR_URL).href;
 
@@ -123,9 +116,6 @@ const httpError = (status: number, statusText: string): Error =>
 
 const notFound = (): Error => httpError(404, "Not Found");
 
-/* RFC 4791 5.3.2.1: a PUT that would leave a second object carrying a UID the collection already
-   holds fails the CALDAV:no-uid-conflict precondition and stores nothing. A create double that
-   accepted those bytes would certify the permanent duplicate a real server refuses. */
 const uidConflict = (heldAt: string): Error =>
   new CalDAVHttpError(
     new Response(
@@ -140,8 +130,6 @@ const uidConflict = (heldAt: string): Error =>
     "create",
   );
 
-/* The customer's collection, no kinder than a real one: a PUT to an href it does not hold is a
-   404, a create really puts bytes on the calendar, a delete really takes the object away. */
 const remoteObjects = new Map<string, string>();
 
 const uidOf = (iCalString: string): string =>
@@ -231,8 +219,6 @@ beforeEach(() => {
   }
   remoteObjects.clear();
   clientMocks.resolveCalendarUrl.mockImplementation((url: string) => Promise.resolve(url));
-  /* Only what the collection holds answers present; an href it does not hold is the server's own
-     404, never a silent success. */
   clientMocks.verifyCalendarObjectsByUrls.mockImplementation(
     ({ objectUrls }: { objectUrls: string[] }) => Promise.resolve(objectUrls.map((url) => {
       const data = remoteObjects.get(url);
@@ -299,10 +285,6 @@ describe("a payload refusal never promotes on any destination", () => {
     });
   }
 
-  /* A stored href the update verb cannot name is not a payload refusal either: the read answered
-     PRESENT at that href carrying this mapping's own uid, so the write is retried against the very
-     href the read answered about. A create would be a second object bearing a live uid, and the
-     delete behind it would destroy the customer's only copy. */
   it("rewrites a stored href the update path cannot name, in place, on the answered cycle", async () => {
     const { carriedMapping, cycleOutcomes } = await runCycles(serverNamedObjectPath);
 

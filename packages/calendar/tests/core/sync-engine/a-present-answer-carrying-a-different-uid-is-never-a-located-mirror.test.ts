@@ -21,9 +21,6 @@ const DESTINATION_CALENDAR_ID = "cal-1";
 const START_TIME = new Date("2026-09-01T15:00:00.000Z");
 const END_TIME = new Date("2026-09-01T16:00:00.000Z");
 
-/* Two different customer events. A's object is the one that physically lives at SHARED_PATH; B is
-   the event this run is trying to deliver an edit for, and its mapping still names A's href because
-   the href was recorded before the collection was re-keyed under it. */
 const UID_A = "uid-a@keeper.sh";
 const UID_B = "uid-b@keeper.sh";
 const SHARED_PATH = "/calendar/uid-a.ics";
@@ -55,8 +52,6 @@ const mappingB: EventMapping = {
   syncEventId: "ev-b",
 };
 
-/* The plan already read the destination this cycle and did not see B's mirror, which is what sends
-   the mapping into the verification path rather than into a plain in-place update. */
 const replacementB: SyncOperation = {
   deleteId: SHARED_PATH,
   event: localEventB,
@@ -66,10 +61,6 @@ const replacementB: SyncOperation = {
   uid: UID_B,
 };
 
-/* Event A's object, answered at the href the read asked about. This is exactly the shape today's
-   CalDAV presenceOfAnswer produces -- it hands back the FIRST VEVENT in the fetched object with no
-   uid comparison -- and the shape Outlook's verifyTarget produces from a direct item-id GET, so the
-   double is no kinder than either real provider. */
 const eventAAtSharedPath: RemoteEvent = {
   deleteId: SHARED_PATH,
   endTime: END_TIME,
@@ -91,8 +82,6 @@ interface ProviderCalls {
   updated: { deleteId: string; eventId: string }[];
 }
 
-/* Every verb records what it was asked to do and then answers success, so an assertion that a verb
-   was never called cannot be satisfied by a verb that failed for some unrelated reason. */
 const createProvider = (calls: ProviderCalls): CalendarSyncProvider => ({
   deleteEvents: (eventIds: string[]): Promise<DeleteResult[]> => {
     calls.deleted.push([...eventIds]);
@@ -139,11 +128,7 @@ describe("a present answer carrying a different uid is never a located mirror", 
       (_changes: PendingChanges) => Promise.resolve(true),
     );
 
-    /* The read never confirmed that SHARED_PATH holds B, so a PUT there overwrites A's attendees,
-       description and the recipient's own edits with B's body, unrecoverably. */
     expect(calls.updated).toEqual([]);
-    /* Nor is the answer an absence: A's object really is standing there, and on CalDAV a create
-       would post a second object under a uid the collection already holds. */
     expect(calls.pushed).toEqual([]);
     expect(calls.deleted).toEqual([]);
   });
@@ -161,8 +146,6 @@ describe("a present answer carrying a different uid is never a located mirror", 
       (_changes: PendingChanges) => Promise.resolve(true),
     );
 
-    /* Mapping map-b adopting A's identity is the durable half of the damage: B's later removal issues a
-       DELETE against A's object, and A's own mapping then reads remoteMissing. */
     const adoptedIdentity = (outcome.changes.updates ?? [])
       .filter((update) => update.destinationEventUid === UID_A);
     expect(adoptedIdentity).toEqual([]);
@@ -182,8 +165,6 @@ describe("a present answer carrying a different uid is never a located mirror", 
       (_changes: PendingChanges) => Promise.resolve(true),
     );
 
-    /* Doing nothing quietly is the failure that is hardest to notice, so the identity mismatch is
-       counted and named rather than swallowed. */
     expect(outcome.verificationUnsettled).toBe(1);
     expect(outcome.result.parked ?? 0).toBe(1);
     expect(outcome.result.updated).toBe(0);

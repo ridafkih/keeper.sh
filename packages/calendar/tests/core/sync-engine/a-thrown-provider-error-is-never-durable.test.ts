@@ -20,8 +20,6 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-/* Mirrors providers/google/shared/batch.ts: a whole-batch non-2xx is THROWN, and the numeric
-   status rides on the error rather than on any returned PushResult. */
 class GoogleBatchApiError extends Error {
   public readonly status: number;
   constructor(status: number, body: string) {
@@ -81,7 +79,6 @@ const createThrowingProvider = (throwWith: () => unknown) => {
         success: true,
       })));
     },
-    // Google's updateEvents has no try/catch, so the batch throw reaches the sync engine.
     updateEvents: (_updates: EventUpdate[]) => Promise.reject(throwWith()),
   };
 
@@ -119,7 +116,6 @@ const runThreeCycles = async (throwWith: () => unknown) => {
 
     const failures = failureCountFor(outcome.changes.updates, "map-1");
     counters.push(failures);
-    // Flush the counter back onto the mapping, exactly as the persisted row would carry it.
     mapping = { ...mapping, consecutiveUpdateFailures: failures };
   }
 
@@ -132,7 +128,6 @@ describe("a thrown provider error is never durable", () => {
       () => new GoogleBatchApiError(503, "backendError"),
     );
 
-    // A thrown 503 must classify exactly as a returned 503: retryable, never durable.
     expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(counters).toEqual([0, 0, 0]);
@@ -143,7 +138,6 @@ describe("a thrown provider error is never durable", () => {
       () => new Error("something went wrong inside the provider"),
     );
 
-    // No status and no transport signal is UNKNOWN, not positive evidence of a broken mapping.
     expect(destination.deleteTargets).toEqual([]);
     expect(destination.pushedEvents).toEqual([]);
     expect(counters).toEqual([0, 0, 0]);

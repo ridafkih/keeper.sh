@@ -19,16 +19,6 @@ import type {
 } from "../../../src/core/sync-engine/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 
-/* ------------------------------------------------------------------------------------------------
-   Trigger A: the verification read locates the mirror at a new id, and the follow-up update to that
-   id answers 404 -- the id retired again, or the recipient deleted the object between the two calls.
-   The relocated update path destructures only { runResult } from executeUpdateRun, so the 404's
-   promotion is dropped on the floor; processUpdateResults itself `continue`s before counting the
-   failure and before pushing an error, on the assumption that whoever receives the promotion will
-   report it. Nobody does, so the customer's edit never lands and the run is byte-identical to a
-   calendar with nothing to do.
-   ------------------------------------------------------------------------------------------------ */
-
 const DOUBLE_CALENDAR_ID = "dest-cal-a";
 const DOUBLE_START_TIME = new Date("2026-05-11T09:00:00.000Z");
 const DOUBLE_END_TIME = new Date("2026-05-11T10:00:00.000Z");
@@ -60,8 +50,6 @@ const mappedDoubleEvent: MaterializedSyncableEvent = {
   summary: "Quarterly review",
 };
 
-/* The customer edited the meeting, so every run from here on carries a real pending edit that has
-   to reach whatever copy the destination still holds. */
 const editedDoubleEvent: MaterializedSyncableEvent = {
   ...mappedDoubleEvent,
   summary: "Quarterly review — moved to Thursday",
@@ -86,8 +74,6 @@ interface DoubleWriteLog {
   updated: string[];
 }
 
-/* The read answers that the object is alive at a NEW id, and the update to that very id answers
-   404: a real Graph sequence when the item is re-keyed or deleted between the two calls. */
 const createRelocatingDestination = (): {
   log: DoubleWriteLog;
   provider: CalendarSyncProvider;
@@ -162,8 +148,6 @@ describe("a relocated mirror whose update fails is never a clean run", () => {
     vi.unstubAllGlobals();
   });
 
-  /* Silence is the whole harm: the counters and the error list of this run are the only signal an
-     operator has, and today they are indistinguishable from a calendar with nothing to do. */
   it("does not report the failed relocated update as an all-zero no-op", async () => {
     const destination = createRelocatingDestination();
 
@@ -174,7 +158,6 @@ describe("a relocated mirror whose update fails is never a clean run", () => {
       destination.provider,
     );
 
-    // The run really did address the relocated id, so the failure is about a write it attempted.
     expect(destination.log.updated).toEqual([DOUBLE_RELOCATED_ID]);
 
     const silent = outcome.errors.length === 0
@@ -198,9 +181,6 @@ describe("a relocated mirror whose update fails is never a clean run", () => {
       .not.toEqual([]);
   });
 
-  /* The identifier that just answered 404 is the one the remove path would later delete by, and the
-     hash written beside it is the pre-edit one, so installing it as a settled repair tells the next
-     cycle there is nothing to do about a mirror that never received the edit. */
   it("does not install the 404-ing identifier on the mapping as a settled repair", async () => {
     const destination = createRelocatingDestination();
     const checkpointed: PendingChanges[] = [];
@@ -224,16 +204,12 @@ describe("a relocated mirror whose update fails is never a clean run", () => {
     ];
     expect(written.filter((update) => update.deleteIdentifier === DOUBLE_RELOCATED_ID)).toEqual([]);
 
-    // Nothing here licenses a create on a create-only destination, or a delete of a live object.
     expect(destination.log.pushed).toEqual([]);
     expect(destination.log.deleted).toEqual([]);
   });
 });
 
-
 const DESTINATION_CALENDAR_ID = "cal-1";
-/* The sync writes into a calendar the customer created, so a folder-scoped listing is the only read
-   that answers about the calendar this sync owns. */
 const DESTINATION_FOLDER_ID = "external-cal-1";
 const DEFAULT_FOLDER_ID = "the-mailbox-default-calendar";
 
@@ -294,8 +270,6 @@ const readDirectEventId = (url: URL): string | null => {
   return decodeURIComponent(identifier);
 };
 
-/* /me/events addresses the mailbox default collection; only /me/calendars/{id}/events addresses the
-   folder the sync writes to. */
 const readAddressedFolderId = (url: URL): string => {
   const segments = readPathSegments(url);
   const calendarsIndex = segments.lastIndexOf("calendars");
@@ -342,8 +316,6 @@ const readPatchedSubject = (body: string | null): string | null => {
   return parsed.subject;
 };
 
-/* A synthetic Graph mailbox with the real shape: an item id addresses one event mailbox-wide, a
-   listing only ever answers about the folder its URL names, and a DELETE really removes the item. */
 const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
   const requests: GraphRequest[] = [];
   const held = [...events];
@@ -370,9 +342,6 @@ const installGraphMailbox = (events: MailboxEvent[]): GraphRequest[] => {
       if (!target) {
         return Promise.resolve(new Response(null, { status: 404 }));
       }
-      /* CHANGE 1 of 2 against the located-mirror fixture: Graph durably refuses the edit itself.
-         ErrorInvalidPropertyRequest is answered about the bytes, identically on every retry, so no
-         amount of repetition will ever make this PATCH land. */
       return Promise.resolve(Response.json({
         error: {
           code: "ErrorInvalidPropertyRequest",
@@ -424,8 +393,6 @@ const createProvider = () =>
     userId: "user-1",
   });
 
-/* The customer renamed the meeting after dragging their copy into the mailbox default folder, so
-   every run from now on carries a real pending edit that has to reach the surviving item. */
 const localEvent: MaterializedSyncableEvent = {
   calendarId: "source-cal-1",
   calendarName: "Work",
@@ -457,8 +424,6 @@ const WINDOW = {
   timeMin: new Date("2000-01-01T00:00:00.000Z"),
 };
 
-/* The plan is small, so sync-user takes the targeted getRemoteEventsByIds branch: the dead id 404s,
-   that branch never verifies, and the mapping reaches reconciliation as remoteMissing. */
 const TARGETED_READ_SCOPE = {
   authoritativeMappingIds: new Set([MAPPING_ID]),
   authoritativeWindow: WINDOW,
@@ -487,7 +452,6 @@ interface CycleOutcome {
   updates: PendingUpdate[];
 }
 
-/* The two admissible endings for this run, and the third one the customer actually gets today. */
 const describeDisposition = (cycle: CycleOutcome): string => {
   const repairedInPlace = cycle.repairs.length > 0
     && cycle.patches.some((patch) =>
@@ -554,9 +518,6 @@ const applyRepairs = (existing: EventMapping, updates: PendingUpdate[]): EventMa
   }
   return {
     ...existing,
-    /* CHANGE 2 of 2: flush.ts writes consecutiveUpdateFailures back onto the row whenever the
-       pending update carries one, so a cycle sequence that does not persist it cannot observe the
-       evidence the engine is accumulating -- or silently erasing. */
     ...(typeof repair.consecutiveUpdateFailures === "number" && {
       consecutiveUpdateFailures: repair.consecutiveUpdateFailures,
     }),
@@ -565,14 +526,6 @@ const applyRepairs = (existing: EventMapping, updates: PendingUpdate[]): EventMa
     syncEventHash: repair.syncEventHash ?? existing.syncEventHash,
   };
 };
-
-
-/* ------------------------------------------------------------------------------------------------
-   Trigger B, against the real Outlook provider: the relocated mirror's PATCH is durably refused.
-   The evidence accumulates for two cycles and is then spent on a promotion that nobody receives --
-   updateRelocatedMirrors discards the refused list -- while toFailureCarry(mapping, 0) erases the
-   counter. The mapping cycles 1, 2, silent reset, forever, and the mirror stays at stale content.
-   ------------------------------------------------------------------------------------------------ */
 
 const isSilentCycle = (cycle: CycleOutcome): boolean =>
   cycle.errors.length === 0
@@ -583,8 +536,6 @@ const isSilentCycle = (cycle: CycleOutcome): boolean =>
 const readCarriedCounter = (carried: EventMapping): number =>
   carried.consecutiveUpdateFailures ?? 0;
 
-/* RecordUnrepairableRefusal / escapeRefusedUpdates is the one ending a durably refused update on a
-   still-present mirror is allowed to reach: named, counted, and never deleted. */
 const reachedTheRefusalEscape = (errors: { error: string }[]): boolean =>
   errors.some((entry) => entry.error.includes("keeps refusing the update"));
 
@@ -597,9 +548,6 @@ interface RefusedRun {
 const SEVEN_CYCLES = 7;
 
 const runRefusedCycles = async (count: number): Promise<RefusedRun> => {
-  /* The mirror is alive in the calendar this sync owns, under the new id Graph re-keyed it to: the
-     verification read locates it, and the relocated update path is the one that has to deliver the
-     customer's edit to it, cycle after cycle. */
   const requests = installGraphMailbox([
     makeMailboxEvent(REKEYED_ID, MIRROR_UID, DESTINATION_FOLDER_ID),
   ]);
@@ -622,8 +570,6 @@ describe("a relocated mirror the destination durably refuses is never silently r
     vi.unstubAllGlobals();
   });
 
-  /* The promotion cycle is the one whose entire purpose is to escalate, and it is the quietest run
-     of the three: an operator watching counters and errors sees a calendar with nothing to do. */
   it("never produces a cycle that looks like a healthy no-op", async () => {
     const run = await runRefusedCycles(SEVEN_CYCLES);
 
@@ -633,15 +579,10 @@ describe("a relocated mirror the destination durably refuses is never silently r
       .map((entry) => entry.index);
 
     expect(silentCycles).toEqual([]);
-    /* The same judgement the located-mirror fixture already applies to a single run, applied to
-       every one of the seven. */
     expect(run.cycles.map((cycle) => describeDisposition(cycle)))
       .not.toContain("silently idle: nothing written, nothing said");
   });
 
-  /* Spending the evidence on a promotion nobody receives is worse than never gathering it: the
-     mapping is put back to zero, so the next three cycles rebuild the identical case and throw it
-     away again, forever. */
   it("does not reset the accumulated evidence to zero cycle after cycle", async () => {
     const run = await runRefusedCycles(SEVEN_CYCLES);
 
@@ -653,8 +594,6 @@ describe("a relocated mirror the destination durably refuses is never silently r
     const run = await runRefusedCycles(SEVEN_CYCLES);
 
     expect(reachedTheRefusalEscape(run.cycles.flatMap((cycle) => cycle.errors))).toBe(true);
-    /* The escape may never buy its way out by destroying the customer's copy, and Outlook's push is
-       a create-only POST, so neither verb may appear across any of the seven cycles. */
     expect(requestsOfMethod(run.requests, "DELETE")).toEqual([]);
     expect(requestsOfMethod(run.requests, "POST")).toEqual([]);
   });
