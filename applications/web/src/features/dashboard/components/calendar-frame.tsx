@@ -10,6 +10,10 @@ interface CalendarFrameProps {
 // Scoped to the column header rather than the whole header, so the fill starts dissolving right below the toolbar in both views.
 const HEADER_SURFACE_FADE = "linear-gradient(to bottom, black, transparent)";
 
+// The frame's 16px radius less its 1px border. View transitions lift named elements into a flat
+// overlay where the frame no longer clips them, so the filled ones have to round their own corners.
+const INNER_RADIUS = 15;
+
 export function CalendarFrame({
   toolbar,
   columnHeader,
@@ -21,7 +25,11 @@ export function CalendarFrame({
       <header className="shrink-0" style={{ viewTransitionName: "calendar-header" }}>
         <div
           className="flex items-center justify-between gap-3 bg-background-elevated px-4 py-3"
-          style={{ viewTransitionName: "calendar-toolbar" }}
+          style={{
+            viewTransitionName: "calendar-toolbar",
+            borderTopLeftRadius: INNER_RADIUS,
+            borderTopRightRadius: INNER_RADIUS,
+          }}
         >
           {toolbar}
         </div>
@@ -36,7 +44,12 @@ export function CalendarFrame({
       </header>
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden"
-        style={{ maxHeight: gridMaxHeight, viewTransitionName: "calendar-grid" }}
+        style={{
+          maxHeight: gridMaxHeight,
+          viewTransitionName: "calendar-grid",
+          borderBottomLeftRadius: INNER_RADIUS,
+          borderBottomRightRadius: INNER_RADIUS,
+        }}
       >
         {children}
       </div>
