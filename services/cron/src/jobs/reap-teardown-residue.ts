@@ -28,6 +28,7 @@ import { withCronWideEvent } from "@/utils/with-wide-event";
 import { widelog } from "@/utils/logging";
 
 const RESIDUE_STOP_TIMEOUT_MS = 5000;
+const RESIDUE_REPAIR_DEADLINE_MS = 15_000;
 const POLAR_RESOURCE_NOT_FOUND = "ResourceNotFound";
 const NO_UNKNOWABLE_CREDENTIALS = 0;
 
@@ -208,7 +209,7 @@ const credentialIdentityIsUnknowable = (
     return sql`${oauthCredentialsTable.email} is null`;
   }
 
-  return sql`${oauthCredentialsTable.email} is null and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider})`;
+  return sql`${oauthCredentialsTable.email} is null and not exists (select 1 from ${calendarAccountsTable} where ${calendarAccountsTable.oauthCredentialId} = ${oauthCredentialsTable.id} and ${calendarAccountsTable.provider} = ${provider} and ${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '')`;
 };
 
 const censusSurvivingCredentialLinks = async (
@@ -355,6 +356,7 @@ const createDefaultReaper = async () => {
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: true, slug });
     },
+    repairDeadlineMs: RESIDUE_REPAIR_DEADLINE_MS,
     residue: createTeardownResidueStore({
       database,
       encryptionKey: environment.ENCRYPTION_KEY,
@@ -362,6 +364,10 @@ const createDefaultReaper = async () => {
     }),
     resolveRegistrar: resolvePushRegistrar,
     revokeOAuthGrant,
+    waitForRepairDeadline: (deadlineMs) =>
+      new Promise((resolve) => {
+        setTimeout(resolve, deadlineMs);
+      }),
   });
 };
 

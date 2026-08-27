@@ -264,6 +264,16 @@ const settleWithin = async (
   }
 };
 
+class DeadlineExceededError extends Error {
+  readonly settlement: Promise<StepSettlement>;
+
+  constructor(message: string, settlement: Promise<StepSettlement>) {
+    super(message);
+    this.name = "DeadlineExceededError";
+    this.settlement = settlement;
+  }
+}
+
 const runWithDeadline = async (
   name: string,
   deadlineMs: number,
@@ -294,7 +304,7 @@ const runWithDeadline = async (
     throw new Error(deadlineMessage, { cause: afterAbort.error });
   }
 
-  throw new Error(deadlineMessage);
+  throw new DeadlineExceededError(deadlineMessage, settlement);
 };
 
 
@@ -338,9 +348,30 @@ const recordAbandonedChannels = async (
   }
 };
 
+const recordChannelsAbandonedAfterTheAbortWindow = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  stepName: string,
+  settlement: Promise<StepSettlement>,
+): Promise<void> => {
+  try {
+    const outcome = await settlement;
+
+    if (outcome.status !== "rejected") {
+      return;
+    }
+
+    await recordAbandonedChannels(residue, userId, stepName, outcome.error);
+  } catch (error) {
+    reportStepFailure(error, stepName, userId, RESIDUE_WRITE_FAILED_SLUG);
+  }
+};
+
 const createDeleteUserSyncTeardown =
   (dependencies: DeleteUserSyncTeardownDependencies): DeleteUserTeardown =>
   async (userId: string) => {
+    const lateResidueWrites: Promise<void>[] = [];
+
     for (const step of buildDeleteUserSyncSteps(dependencies)) {
       try {
         await runWithDeadline(step.name, step.timeoutMs, (signal) => step.run(userId, signal));
@@ -348,8 +379,21 @@ const createDeleteUserSyncTeardown =
         reportStepFailure(error, step.name, userId, TEARDOWN_FAILED_SLUG);
 
         await recordAbandonedChannels(dependencies.residue, userId, step.name, error);
+
+        if (error instanceof DeadlineExceededError) {
+          lateResidueWrites.push(
+            recordChannelsAbandonedAfterTheAbortWindow(
+              dependencies.residue,
+              userId,
+              step.name,
+              error.settlement,
+            ),
+          );
+        }
       }
     }
+
+    widelog.setFields({ "delete_user.late_residue_writes": lateResidueWrites.length });
   };
 
 interface DeleteUserSyncTeardownRollbackDependencies

@@ -14,10 +14,12 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 const RETRY_BASE_SECONDS = 300;
 const RETRY_CAP_SECONDS = 3600;
 const RETRY_BACKOFF_EXPONENT_CAP = 6;
+const DEFAULT_RESIDUE_BATCH_LIMIT = 100;
 
 type DeletionResidueRow = typeof deletionResidueTable.$inferSelect;
 
 interface TeardownResidueStoreConfig {
+  batchLimit?: number;
   database: PgDatabase<PgQueryResultHKT>;
   encryptionKey: string | null;
   now: () => Date;
@@ -120,6 +122,20 @@ const nextAttemptExpression = (claimedAt: Date) =>
     )
   ) * interval '1 second'`;
 
+const dueBatch = (claimedAt: Date, batchLimit: number) =>
+  sql`${deletionResidueTable.id} in (
+    select "due"."id"
+    from ${deletionResidueTable} as "due"
+    where (
+      "due"."nextAttemptAt" is null
+      or "due"."nextAttemptAt" <= ${claimedAt.toISOString()}::timestamptz
+    )
+    and not exists (select 1 from ${user} where ${user.id} = "due"."userId")
+    order by "due"."nextAttemptAt" nulls first
+    limit ${batchLimit}
+    for update skip locked
+  )`;
+
 const createTeardownResidueStore = (
   config: TeardownResidueStoreConfig,
 ): TeardownResidueStore => ({
@@ -131,7 +147,11 @@ const createTeardownResidueStore = (
   deleteForUser: async (userId, kind) => {
     const rows = await config.database
       .delete(deletionResidueTable)
-      .where(and(eq(deletionResidueTable.userId, userId), eq(deletionResidueTable.kind, kind)))
+      .where(and(
+        eq(deletionResidueTable.userId, userId),
+        eq(deletionResidueTable.kind, kind),
+        userRowExists(),
+      ))
       .returning({ id: deletionResidueTable.id });
 
     return rows.length;
@@ -151,6 +171,7 @@ const createTeardownResidueStore = (
           lte(deletionResidueTable.nextAttemptAt, claimedAt),
         ),
         sql`not ${userRowExists()}`,
+        dueBatch(claimedAt, config.batchLimit ?? DEFAULT_RESIDUE_BATCH_LIMIT),
       ))
       .returning();
 

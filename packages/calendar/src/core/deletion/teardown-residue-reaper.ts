@@ -37,9 +37,11 @@ interface TeardownResidueReaperDependencies {
   now: () => Date;
   observe: (fields: Record<string, unknown>) => void;
   recordError: (error: unknown, slug: string) => void;
+  repairDeadlineMs: number;
   residue: TeardownResidueStore;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
   revokeOAuthGrant: (record: TeardownResidueRecord, token: string) => Promise<void>;
+  waitForRepairDeadline: (deadlineMs: number) => Promise<void>;
 }
 
 interface TeardownResidueReaperOutcome {
@@ -189,6 +191,44 @@ const repairResidue = (
   );
 };
 
+const REPAIR_SETTLED_UNAIDED = Symbol("repair-settled-unaided");
+
+const nextEventLoopTurn = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+
+const abandonRepairOnDeadline = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+): Promise<ResidueRepairOutcome> => {
+  await dependencies.waitForRepairDeadline(dependencies.repairDeadlineMs);
+
+  throw new Error(
+    `Repair of teardown residue ${record.id} (${record.kind}) for user ${record.userId} outran its ${dependencies.repairDeadlineMs}ms deadline and was abandoned`,
+  );
+};
+
+const repairResidueWithinDeadline = async (
+  record: TeardownResidueRecord,
+  dependencies: TeardownResidueReaperDependencies,
+  now: Date,
+): Promise<ResidueRepairOutcome> => {
+  const repair = repairResidue(record, dependencies, now);
+  const settledUnaided = repair.then(
+    () => REPAIR_SETTLED_UNAIDED,
+    () => REPAIR_SETTLED_UNAIDED,
+  );
+
+  const probe = await Promise.race([settledUnaided, nextEventLoopTurn()]);
+
+  if (probe === REPAIR_SETTLED_UNAIDED) {
+    return repair;
+  }
+
+  return Promise.race([repair, abandonRepairOnDeadline(record, dependencies)]);
+};
+
 const isPastExpiry = (record: TeardownResidueRecord, now: Date): boolean =>
   record.expiresAt instanceof Date && record.expiresAt.getTime() <= now.getTime();
 
@@ -254,7 +294,11 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     }
 
     try {
-      const repairOutcome = await repairResidue(record, dependencies, now);
+      const repairOutcome = await repairResidueWithinDeadline(
+        record,
+        dependencies,
+        now,
+      );
 
       if (repairOutcome === "revocation_unresolved") {
         if (hasExhaustedItsRepairAttempts(record, now)) {

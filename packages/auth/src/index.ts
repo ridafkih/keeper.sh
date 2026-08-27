@@ -536,6 +536,11 @@ const createAuth = (config: AuthConfig) => {
 
         instrumentUserRowDelete(internalAdapter);
       },
+      userRowExists: async (userId: string) => {
+        const { internalAdapter } = await baseAuth.$context;
+
+        return Boolean(await internalAdapter.findUserById(userId));
+      },
     }),
   };
 

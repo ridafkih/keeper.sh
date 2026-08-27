@@ -261,6 +261,7 @@ describe("oauth grants are revoked only after the user row delete commits", () =
         compensate: createDeleteUserSyncTeardownRollback(dependencies as never),
         finish: () => Promise.reject(new Error("the delete never committed")),
         prepare: () => Promise.resolve(),
+        userRowExists: () => Promise.resolve(true),
       },
     );
 

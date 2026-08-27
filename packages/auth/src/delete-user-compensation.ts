@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { widelog } from "widelogger";
 
 type DeleteUserAttemptStage = "committed" | "finished" | "started";
 
@@ -22,6 +23,7 @@ interface DeleteUserCompensation {
   compensate: (userId: string) => Promise<void>;
   finish: (userId: string) => Promise<void>;
   prepare: () => Promise<void>;
+  userRowExists: UserRowProbe;
 }
 
 const createDeleteUserAttempt = (): DeleteUserAttempt => {
@@ -56,12 +58,36 @@ const createDeleteUserAttempt = (): DeleteUserAttempt => {
 
 type AuthRequestHandler = (request: Request) => Promise<Response>;
 
+type UserRowProbe = (userId: string) => Promise<boolean>;
+
+const userRowSurvived = async (
+  userId: string,
+  userRowExists: UserRowProbe,
+): Promise<boolean> => {
+  try {
+    return await userRowExists(userId);
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: false,
+      slug: "delete-user-row-probe-failed",
+    });
+    return true;
+  }
+};
+
 const settleDeleteUserAttempt = async (
   unfinished: UnfinishedDeleteUserAttempt,
   compensate: (userId: string) => Promise<void>,
   finish: (userId: string) => Promise<void>,
+  userRowExists: UserRowProbe,
 ): Promise<void> => {
   if (unfinished.committed) {
+    await finish(unfinished.userId);
+    return;
+  }
+
+  if (!(await userRowSurvived(unfinished.userId, userRowExists))) {
+    widelog.setFields({ "delete_user.committed_without_acknowledgement": true });
     await finish(unfinished.userId);
     return;
   }
@@ -114,9 +140,15 @@ const createDeleteUserCompensationScope = (): DeleteUserCompensationScope => {
     },
     withDeleteUserCompensation: (
       handler: AuthRequestHandler,
-      { compensate, finish, prepare }: DeleteUserCompensation,
-    ): AuthRequestHandler =>
-      async (request: Request): Promise<Response> => {
+      { compensate, finish, prepare, userRowExists }: DeleteUserCompensation,
+    ): AuthRequestHandler => {
+      if (typeof userRowExists !== "function") {
+        throw new TypeError(
+          "withDeleteUserCompensation requires a userRowExists probe; without one a committed delete would be rolled back",
+        );
+      }
+
+      return async (request: Request): Promise<Response> => {
         const attempt = createDeleteUserAttempt();
 
         await prepare();
@@ -127,10 +159,11 @@ const createDeleteUserCompensationScope = (): DeleteUserCompensationScope => {
           const unfinished = attempt.unfinished();
 
           if (unfinished !== null) {
-            await settleDeleteUserAttempt(unfinished, compensate, finish);
+            await settleDeleteUserAttempt(unfinished, compensate, finish, userRowExists);
           }
         }
-      },
+      };
+    },
   };
 };
 
@@ -141,4 +174,5 @@ export type {
   DeleteUserCompensation,
   DeleteUserCompensationScope,
   UserRowDeleter,
+  UserRowProbe,
 };

@@ -59,7 +59,7 @@ create table "account" (
   "userId" text not null references "user"("id") on delete cascade
 );
 create table calendar_accounts (
-  "accountId" text not null,
+  "accountId" text,
   "id" uuid primary key default gen_random_uuid(),
   "oauthCredentialId" uuid references oauth_credentials("id") on delete cascade,
   "provider" text not null,

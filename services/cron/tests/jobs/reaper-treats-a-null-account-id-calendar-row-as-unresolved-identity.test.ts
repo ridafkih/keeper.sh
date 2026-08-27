@@ -15,9 +15,9 @@ import { countSurvivingAccountLinks } from "../../src/jobs/reap-teardown-residue
 const client = new PGlite();
 const database = drizzle(client);
 
-const RESIDUE_ID = "33333333-3333-3333-3333-333333333333";
-const DELETED_ACCOUNT_EMAIL = "deleted-person@example.com";
-const DELETED_PROVIDER_ACCOUNT_ID = "google-sub-deleted";
+const RESIDUE_ID = "88888888-8888-8888-8888-888888888888";
+const RESIDUE_ACCOUNT_ID = "222222222222222222222";
+const SURVIVOR_CREDENTIAL_ID = "99999999-9999-9999-9999-999999999999";
 
 const DDL = `
 create table "user" (
@@ -67,34 +67,41 @@ create table calendar_accounts (
 `;
 
 const oauthGrantResidue = (): TeardownResidueRecord => ({
-  accountEmail: DELETED_ACCOUNT_EMAIL,
+  accountEmail: "deleted-user@gmail.com",
   createdAt: new Date("2026-08-26T11:00:00.000Z"),
   credential: {
-    accessToken: "deleted-person-access",
+    accessToken: "deleted-user-access",
     expiresAt: new Date("2026-08-26T13:00:00.000Z"),
-    refreshToken: "deleted-person-refresh",
+    refreshToken: "deleted-user-refresh",
   },
   expiresAt: new Date("2026-09-30T12:00:00.000Z"),
   id: RESIDUE_ID,
   kind: OAUTH_GRANT_RESIDUE_KIND,
   provider: "google",
-  providerAccountId: DELETED_PROVIDER_ACCOUNT_ID,
-  userId: "deleted-person",
+  providerAccountId: RESIDUE_ACCOUNT_ID,
+  userId: "deleted-user",
 });
 
-const insertStrangerWithLegacyNullEmailCredential = async (): Promise<void> => {
+const insertSurvivor = async (email: string | null): Promise<void> => {
+  const emailLiteral = email === null ? "null" : `'${email}'`;
+
   await client.query(
-    `insert into "user" ("email", "id", "name") values ('stranger@keeper.sh', 'stranger', 'Stranger')`,
+    `insert into "user" ("email", "id", "name") values ('b@keeper.sh', 'user-b', 'Survivor B')`,
   );
   await client.query(
-    `insert into oauth_credentials ("accessToken", "email", "expiresAt", "provider", "refreshToken", "userId")
-     values ('stranger-access', null, now() + interval '1 hour', 'google', 'stranger-refresh', 'stranger')`,
+    `insert into oauth_credentials ("accessToken", "email", "expiresAt", "id", "provider", "refreshToken", "userId")
+     values ('b-access', ${emailLiteral}, now() + interval '1 hour', '${SURVIVOR_CREDENTIAL_ID}', 'google', 'b-refresh', 'user-b')`,
   );
 };
 
-const deleteStrangerLegacyCredential = async (): Promise<void> => {
+const linkSurvivorCalendarAccount = async (
+  accountId: string | null,
+): Promise<void> => {
+  const accountIdLiteral = accountId === null ? "null" : `'${accountId}'`;
+
   await client.query(
-    `delete from oauth_credentials where "userId" = 'stranger'`,
+    `insert into calendar_accounts ("accountId", "oauthCredentialId", "provider", "userId")
+     values (${accountIdLiteral}, '${SURVIVOR_CREDENTIAL_ID}', 'google', 'user-b')`,
   );
 };
 
@@ -102,7 +109,6 @@ const createHarness = () => {
   const records = [oauthGrantResidue()];
   const clearedIds: string[] = [];
   const errors: { error: unknown; slug: string }[] = [];
-  const observed: Record<string, unknown>[] = [];
   const revokedTokens: string[] = [];
 
   const store: TeardownResidueStore = {
@@ -124,9 +130,7 @@ const createHarness = () => {
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
     now: () => new Date("2026-08-26T12:00:00.000Z"),
-    observe: (fields: Record<string, unknown>) => {
-      observed.push(fields);
-    },
+    observe: () => {},
     recordError: (error: unknown, slug: string) => {
       errors.push({ error, slug });
     },
@@ -138,10 +142,10 @@ const createHarness = () => {
     },
   } as unknown as Parameters<typeof createTeardownResidueReaper>[0]);
 
-  return { clearedIds, errors, observed, reap, revokedTokens };
+  return { clearedIds, errors, reap, revokedTokens };
 };
 
-describe("a credential row of unknown identity defers a revocation instead of blocking it forever", () => {
+describe("a calendar account row with a null account id proves nothing about a credential's identity", () => {
   beforeEach(async () => {
     await client.exec(
       `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
@@ -149,8 +153,29 @@ describe("a credential row of unknown identity defers a revocation instead of bl
     await client.exec(DDL);
   });
 
-  it("keeps the residue and revokes nothing while one stranger's null-email row makes the answer indeterminate", async () => {
-    await insertStrangerWithLegacyNullEmailCredential();
+  it("leaves the census unresolved for a null-email credential whose calendar account row carries a null account id", async () => {
+    await insertSurvivor(null);
+    await linkSurvivorCalendarAccount(null);
+
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 0,
+      identityResolved: false,
+    });
+  });
+
+  it("leaves the census unresolved when that row carries an empty account id", async () => {
+    await insertSurvivor(null);
+    await linkSurvivorCalendarAccount("");
+
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 0,
+      identityResolved: false,
+    });
+  });
+
+  it("revokes nothing and defers the residue while a null-account-id row is the only evidence", async () => {
+    await insertSurvivor(null);
+    await linkSurvivorCalendarAccount(null);
 
     const harness = createHarness();
     const outcome = await harness.reap();
@@ -158,41 +183,27 @@ describe("a credential row of unknown identity defers a revocation instead of bl
     expect(harness.revokedTokens).toEqual([]);
     expect(harness.clearedIds).not.toContain(RESIDUE_ID);
     expect(outcome.clearedIds).not.toContain(RESIDUE_ID);
-    expect(outcome.revocationSkippedIds).not.toContain(RESIDUE_ID);
     expect(outcome.unresolvedIds).toContain(RESIDUE_ID);
     expect(harness.errors.map((entry) => entry.slug)).toContain(
       RESIDUE_IDENTITY_UNRESOLVED_SLUG,
     );
   });
 
-  it("keeps deferring on the next pass rather than destroying the token", async () => {
-    await insertStrangerWithLegacyNullEmailCredential();
+  it("still counts a credential whose email matches the residue account as a co-holder", async () => {
+    await insertSurvivor("deleted-user@gmail.com");
+    await linkSurvivorCalendarAccount(null);
 
-    const harness = createHarness();
-    await harness.reap();
-    const outcome = await harness.reap();
+    const census = await countSurvivingAccountLinks(database, oauthGrantResidue());
 
-    expect(harness.revokedTokens).toEqual([]);
-    expect(harness.clearedIds).toEqual([]);
-    expect(outcome.unresolvedIds).toContain(RESIDUE_ID);
+    expect(census.coHolders).toBeGreaterThanOrEqual(1);
   });
 
-  it("revokes the deleted customer's grant once the legacy row is gone", async () => {
-    await insertStrangerWithLegacyNullEmailCredential();
+  it("leaves the census unresolved for a null-email credential with no calendar account row at all", async () => {
+    await insertSurvivor(null);
 
-    const blocked = createHarness();
-    await blocked.reap();
-
-    expect(blocked.revokedTokens).toEqual([]);
-
-    await deleteStrangerLegacyCredential();
-
-    const harness = createHarness();
-    const outcome = await harness.reap();
-
-    expect(harness.revokedTokens).toEqual(["deleted-person-refresh"]);
-    expect(outcome.clearedIds).toContain(RESIDUE_ID);
-    expect(outcome.unresolvedIds).toEqual([]);
-    expect(harness.errors).toEqual([]);
+    expect(await countSurvivingAccountLinks(database, oauthGrantResidue())).toEqual({
+      coHolders: 0,
+      identityResolved: false,
+    });
   });
 });
