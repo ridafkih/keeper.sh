@@ -24,6 +24,10 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
+import {
+  PUSH_CHANNELS_TIMEOUT_MS,
+  STEP_ABORT_SETTLE_MS,
+} from "@/utils/teardown-step-budgets";
 import type { database as databaseInstance } from "@/context";
 
 const DEREGISTRATION_ERROR_PREFIX = "push_channel.disconnect_error";
@@ -32,6 +36,7 @@ const RESTATE_FAILED_SLUG = "push-channel-restate-failed";
 const RESIDUE_CREDENTIAL_FAILED_SLUG = "push-channel-residue-credential-failed";
 const STOPPED_STATE = "removed";
 const DISCONNECT_TIMEOUT_MS = 5000;
+const REFRESH_LOCK_ACQUIRE_BUDGET_MS = PUSH_CHANNELS_TIMEOUT_MS - STEP_ABORT_SETTLE_MS;
 const DISCONNECT_CONCURRENCY = 8;
 const SERIAL_CONCURRENCY = 1;
 const LISTING_ATTEMPTS = 3;
@@ -663,6 +668,7 @@ const deregisterPushChannelsWithin = async (
       });
       if (rawRefresh) {
         await ensureValidToken(tokenState, createCoordinatedRefresher({
+          acquireBudgetMs: REFRESH_LOCK_ACQUIRE_BUDGET_MS,
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,

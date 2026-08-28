@@ -33,12 +33,15 @@ import type {
   TeardownResidueStore,
 } from "@keeper.sh/calendar";
 import type { DeleteUserTeardown } from "@keeper.sh/auth";
+import {
+  PUSH_CHANNELS_TIMEOUT_MS,
+  STEP_ABORT_SETTLE_MS,
+} from "@/utils/teardown-step-budgets";
 import type { database as databaseInstance } from "@/context";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const CONFLICTING_PROVIDER_IDENTITY_SLUG = "delete-user-teardown-conflicting-provider-identity";
 const SINGLE_PROVIDER_IDENTITY = 1;
-const STEP_ABORT_SETTLE_MS = 400;
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
 const LATE_RESIDUE_SETTLE_TIMEOUT_MS = 5000;
@@ -46,7 +49,6 @@ const RESIDUE_DISCARD_STEP_TIMEOUT_MS = LATE_RESIDUE_SETTLE_TIMEOUT_MS + RESIDUE
 const TOMBSTONE_ROLLBACK_STEP = "tombstone_rollback";
 const RESIDUE_DISCARD_ROLLBACK_STEP = "residue_discard_rollback";
 const SYNC_JOBS_TIMEOUT_MS = 1000;
-const PUSH_CHANNELS_TIMEOUT_MS = 2000;
 const OAUTH_GRANTS_TIMEOUT_MS = 1000;
 const RESIDUE_WRITE_RESERVE_MS = 800;
 const TEARDOWN_HEADROOM_MS = 1000;

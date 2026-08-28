@@ -24,6 +24,82 @@ interface IdentityHolder {
   id: string;
 }
 
+interface CredentialUsability {
+  createdAt: Date;
+  credentialId: string;
+  expiresAt: Date;
+  needsReauthentication: boolean;
+}
+
+interface CredentialLifetimeRow {
+  createdAt: Date | null;
+  expiresAt: Date | null;
+  needsReauthentication: boolean | null;
+}
+
+const credentialUsability = (
+  credentialId: string,
+  lifetime: CredentialLifetimeRow,
+  owner: string,
+): CredentialUsability => {
+  if (
+    lifetime.createdAt === null
+    || lifetime.expiresAt === null
+    || lifetime.needsReauthentication === null
+  ) {
+    throw new Error(
+      `Oauth credential ${credentialId} behind ${owner} is missing the lifetime fields needed to choose which duplicate grant survives`,
+    );
+  }
+
+  return {
+    createdAt: lifetime.createdAt,
+    credentialId,
+    expiresAt: lifetime.expiresAt,
+    needsReauthentication: lifetime.needsReauthentication,
+  };
+};
+
+const moreUsableCredential = (
+  left: CredentialUsability,
+  right: CredentialUsability,
+): CredentialUsability => {
+  if (left.needsReauthentication !== right.needsReauthentication) {
+    if (left.needsReauthentication) {
+      return right;
+    }
+
+    return left;
+  }
+
+  if (left.expiresAt.getTime() !== right.expiresAt.getTime()) {
+    if (left.expiresAt.getTime() > right.expiresAt.getTime()) {
+      return left;
+    }
+
+    return right;
+  }
+
+  if (left.createdAt.getTime() >= right.createdAt.getTime()) {
+    return left;
+  }
+
+  return right;
+};
+
+const orderCredentialsByUsability = (
+  left: CredentialUsability,
+  right: CredentialUsability,
+): { loser: CredentialUsability; survivor: CredentialUsability } => {
+  const survivor = moreUsableCredential(left, right);
+
+  if (survivor.credentialId === left.credentialId) {
+    return { loser: right, survivor };
+  }
+
+  return { loser: left, survivor };
+};
+
 const calendarRowCarriesAProviderIdentity = (): SQL<boolean> =>
   sql<boolean>`${calendarAccountsTable.accountId} is not null and ${calendarAccountsTable.accountId} <> '' and ${calendarAccountsTable.accountId} <> ${calendarAccountsTable.id}::text`;
 
@@ -85,11 +161,18 @@ const mergeOntoIdentityHolder = async (
   const [target] = await transaction
     .select({
       carriesIdentity: calendarRowCarriesAProviderIdentity(),
+      createdAt: oauthCredentialsTable.createdAt,
       credentialId: calendarAccountsTable.oauthCredentialId,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      needsReauthentication: oauthCredentialsTable.needsReauthentication,
       provider: calendarAccountsTable.provider,
       userId: calendarAccountsTable.userId,
     })
     .from(calendarAccountsTable)
+    .leftJoin(
+      oauthCredentialsTable,
+      eq(oauthCredentialsTable.id, calendarAccountsTable.oauthCredentialId),
+    )
     .where(eq(calendarAccountsTable.id, accountRowId));
 
   if (!target) {
@@ -114,6 +197,9 @@ const mergeOntoIdentityHolder = async (
 
   const [holderCredential] = await transaction
     .select({
+      createdAt: oauthCredentialsTable.createdAt,
+      expiresAt: oauthCredentialsTable.expiresAt,
+      needsReauthentication: oauthCredentialsTable.needsReauthentication,
       provider: oauthCredentialsTable.provider,
       userId: oauthCredentialsTable.userId,
     })
@@ -130,24 +216,39 @@ const mergeOntoIdentityHolder = async (
     );
   }
 
+  const holderUsability = credentialUsability(
+    holder.credentialId,
+    holderCredential,
+    `calendar account ${holder.id}`,
+  );
+  const targetUsability = credentialUsability(
+    target.credentialId,
+    target,
+    `calendar account ${accountRowId}`,
+  );
+  const { loser, survivor } = orderCredentialsByUsability(
+    holderUsability,
+    targetUsability,
+  );
+
   await transaction.execute(
-    sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.oauthCredentialId.name)} = ${holder.credentialId} where ${calendarAccountsTable.oauthCredentialId} = ${target.credentialId} and ${calendarAccountsTable.provider} = ${target.provider} and ${calendarAccountsTable.userId} = ${target.userId}`,
+    sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.oauthCredentialId.name)} = ${survivor.credentialId} where ${calendarAccountsTable.oauthCredentialId} = ${loser.credentialId} and ${calendarAccountsTable.provider} = ${target.provider} and ${calendarAccountsTable.userId} = ${target.userId}`,
   );
 
   const [remaining] = await transaction
     .select({ total: count() })
     .from(calendarAccountsTable)
-    .where(eq(calendarAccountsTable.oauthCredentialId, target.credentialId));
+    .where(eq(calendarAccountsTable.oauthCredentialId, loser.credentialId));
 
   if (!remaining || remaining.total > NO_REMAINING_ROWS) {
     throw new Error(
-      `Oauth credential ${target.credentialId} still carries calendar accounts that do not belong to ${target.provider} for user ${target.userId}, so the duplicate grant behind ${accountRowId} was left in place`,
+      `Oauth credential ${loser.credentialId} still carries calendar accounts that do not belong to ${target.provider} for user ${target.userId}, so the duplicate grant behind ${accountRowId} was left in place`,
     );
   }
 
   await transaction
     .delete(oauthCredentialsTable)
-    .where(eq(oauthCredentialsTable.id, target.credentialId));
+    .where(eq(oauthCredentialsTable.id, loser.credentialId));
 
   return "merged";
 };
