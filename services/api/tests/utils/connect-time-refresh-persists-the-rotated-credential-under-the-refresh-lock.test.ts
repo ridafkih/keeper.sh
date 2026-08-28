@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTableName } from "drizzle-orm";
 import type { createOAuthSource as createOAuthSourceFn } from "../../src/utils/oauth-sources";
+import { oneRowUpdated } from "../helpers/update-outcome";
+import type { UpdateOutcome } from "../helpers/update-outcome";
 
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -91,9 +93,9 @@ const updateForTable = (table: unknown) => ({
     recordedUpdates.push({ table: getTableName(table as never), values });
 
     const chain = Promise.resolve() as Promise<void> & {
-      where: () => Promise<void>;
+      where: () => Promise<UpdateOutcome>;
     };
-    chain.where = () => Promise.resolve();
+    chain.where = () => Promise.resolve(oneRowUpdated());
 
     return chain;
   },

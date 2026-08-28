@@ -64,7 +64,7 @@ const createDatabase = (
             return Promise.reject(failureOf());
           }
           persistence.stored.push(values);
-          return Promise.resolve([]);
+          return Promise.resolve(Object.assign([], { count: 1 }));
         },
       }),
     }),

@@ -43,6 +43,17 @@ const readBackendPidWithRecovery = async (
   return await readBackendPid(database);
 };
 
+const IDLE_IN_TRANSACTION_TIMEOUT_MS = 300;
+
+const armIdleInTransactionTimeout = async (
+  executor: Pick<Database, "execute">,
+  milliseconds: number,
+): Promise<void> => {
+  await executor.execute(
+    sql`select set_config('idle_in_transaction_session_timeout', ${String(milliseconds)}, true)`,
+  );
+};
+
 const terminationFailures: unknown[] = [];
 
 const scheduleTermination = (killer: Database, pid: number, delayMs: number): void => {
@@ -116,11 +127,9 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
 
     const error = await captureFailure(() =>
       database.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select set_config('idle_in_transaction_session_timeout', '300', true)`,
-        );
         await transaction.execute(sql`select 1`);
-        await Bun.sleep(1200);
+        await armIdleInTransactionTimeout(transaction, IDLE_IN_TRANSACTION_TIMEOUT_MS);
+        await Bun.sleep(IDLE_IN_TRANSACTION_TIMEOUT_MS * 4);
         await transaction.execute(sql`select 2`);
       }),
     );

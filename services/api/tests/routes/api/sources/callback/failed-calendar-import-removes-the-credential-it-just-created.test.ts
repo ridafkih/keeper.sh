@@ -10,6 +10,7 @@ const USER_ID = "user-1";
 const ACCOUNT_EMAIL = "person@gmail.test.invalid";
 const GOOGLE_SUB = "google-sub-1";
 const TOKEN_LIFETIME_SECONDS = 3600;
+const { IDLE_TIMEOUT_SECONDS } = vi.hoisted(() => ({ IDLE_TIMEOUT_SECONDS: 2 }));
 
 vi.mock("@/context", () => ({
   baseUrl: BASE_URL,
@@ -34,6 +35,11 @@ vi.mock("@/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
 
+vi.mock("@keeper.sh/constants", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  SERVER_IDLE_TIMEOUT_SECONDS: IDLE_TIMEOUT_SECONDS,
+}));
+
 vi.mock("@/utils/destinations", () => ({
   exchangeCodeForTokens: () =>
     Promise.resolve({
@@ -48,6 +54,7 @@ vi.mock("@/utils/destinations", () => ({
 
 const importControl = vi.hoisted(() => ({
   beforeThrow: null as ((oauthCredentialId: string) => Promise<void>) | null,
+  failWithDeadlineAbort: false,
 }));
 
 vi.mock("@/utils/oauth-sources", async (importOriginal) => {
@@ -57,11 +64,26 @@ vi.mock("@/utils/oauth-sources", async (importOriginal) => {
     ...actual,
     importOAuthAccountCalendars: async ({
       oauthCredentialId,
+      signal,
     }: {
       oauthCredentialId: string;
+      signal: AbortSignal;
     }) => {
       if (importControl.beforeThrow) {
         await importControl.beforeThrow(oauthCredentialId);
+      }
+
+      if (importControl.failWithDeadlineAbort) {
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+
+          signal.addEventListener("abort", () => resolve(), { once: true });
+        });
+
+        throw signal.reason;
       }
 
       throw new LimitError();
@@ -160,6 +182,7 @@ const bindSiblingAccountToCredential = async (
 describe("a failed calendar import removes the credential it just created", () => {
   beforeEach(async () => {
     importControl.beforeThrow = null;
+    importControl.failWithDeadlineAbort = false;
     await client.exec(
       `drop table if exists calendars; drop table if exists calendar_accounts; drop table if exists oauth_credentials; drop table if exists "user";`,
     );
@@ -188,5 +211,15 @@ describe("a failed calendar import removes the credential it just created", () =
     expect(await countCredentials()).toBe(1);
     expect(await countRows("calendar_accounts")).toBe(1);
     expect(await countRows("calendars")).toBe(1);
+  });
+
+  it("keeps the credential when the shared connect deadline aborts the import", async () => {
+    importControl.failWithDeadlineAbort = true;
+
+    const response = await runCallback();
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(location.searchParams.get("source")).toBe("error");
+    expect(await countCredentials()).toBe(1);
   });
 });

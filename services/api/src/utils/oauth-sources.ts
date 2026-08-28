@@ -10,8 +10,11 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import { withReauthenticationDemand } from "@keeper.sh/calendar/reauthentication";
 import {
+  RefreshBudgetExceededError,
   RotatedTokenNotPersistedError,
+  persistAbandonedRotation,
   persistRefreshedCredential,
+  withAbandonableRequest,
 } from "@keeper.sh/calendar/oauth-persistence";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { REAUTHENTICATION_TOKEN_REFRESH, TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
@@ -30,7 +33,11 @@ import {
   insertSourceCalendars,
 } from "./source-calendar-insert";
 
-import { CONNECT_WALL_TIME_CEILING_MS, openConnectDeadline } from "./connect-deadline";
+import {
+  CONNECT_REQUEST_HARD_CAP_MS,
+  CONNECT_WALL_TIME_CEILING_MS,
+  openConnectDeadline,
+} from "./connect-deadline";
 import type { ConnectDeadline } from "./connect-deadline";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { registerAccountPushChannels } from "./push-notifications/register-account-channels";
@@ -530,6 +537,71 @@ type OAuthSourceProvider = Pick<
   "fetchUserInfo" | "refreshAccessToken"
 >;
 
+const adoptRotationThatLandedAfterTheConnectDeadline = async (
+  database: typeof contextDatabase,
+  oauthCredentialId: string,
+  presentedRefreshToken: string,
+  result: { access_token: string; expires_in: number; refresh_token?: string },
+): Promise<void> => {
+  widelog.set("token.connect_refresh_arrived_after_deadline", true);
+
+  try {
+    const outcome = await persistAbandonedRotation(
+      database,
+      oauthCredentialId,
+      presentedRefreshToken,
+      result,
+    );
+
+    if (outcome === "lost") {
+      widelog.set("token.rotation_lost", true);
+      return;
+    }
+
+    if (outcome === "recovered") {
+      widelog.set("token.rotation_lost", false);
+      widelog.set("token.rotation_recovered", true);
+    }
+  } catch (error) {
+    widelog.errorFields(error, {
+      retriable: true,
+      slug: "connect-abandoned-rotation-not-persisted",
+    });
+  }
+};
+
+const refreshWithinTheConnectDeadline = async (
+  provider: OAuthSourceProvider,
+  database: typeof contextDatabase,
+  oauthCredentialId: string,
+  presentedRefreshToken: string,
+  deadline: ConnectDeadline,
+) => {
+  const budgetMs = deadline.remainingMs();
+
+  try {
+    return await withAbandonableRequest(
+      deadline.signal,
+      deadline.requestSignal,
+      (signal) => provider.refreshAccessToken(presentedRefreshToken, { signal }),
+      (result) =>
+        adoptRotationThatLandedAfterTheConnectDeadline(
+          database,
+          oauthCredentialId,
+          presentedRefreshToken,
+          result,
+        ),
+      () => new RefreshBudgetExceededError(budgetMs),
+    );
+  } catch (error) {
+    if (error instanceof RefreshBudgetExceededError || deadline.signal.aborted) {
+      widelog.set("token.rotation_lost", "unknown");
+    }
+
+    throw error;
+  }
+};
+
 const resolveCredentialAccessToken = async (
   provider: OAuthSourceProvider,
   userId: string,
@@ -596,9 +668,13 @@ const resolveCredentialAccessToken = async (
       withReauthenticationDemand(database, { oauthCredentialId, userId }, async () => {
         const presentedRefreshToken = await readStoredRefreshToken() ?? credential.refreshToken;
 
-        const result = await provider.refreshAccessToken(presentedRefreshToken, {
-          signal: deadline.signal,
-        });
+        const result = await refreshWithinTheConnectDeadline(
+          provider,
+          database,
+          oauthCredentialId,
+          presentedRefreshToken,
+          deadline,
+        );
 
         const rotated = typeof result.refresh_token === "string"
           && result.refresh_token !== presentedRefreshToken;
@@ -644,7 +720,7 @@ const resolveProviderAccountId = async (
     throw new Error(`No OAuth provider registered for ${providerId}`);
   }
 
-  const deadline = openConnectDeadline(CONNECT_WALL_TIME_CEILING_MS);
+  const deadline = openConnectDeadline(CONNECT_WALL_TIME_CEILING_MS, CONNECT_REQUEST_HARD_CAP_MS);
 
   try {
     const accessToken = await resolveCredentialAccessToken(

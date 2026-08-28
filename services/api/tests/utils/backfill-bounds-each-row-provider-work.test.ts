@@ -4,6 +4,8 @@ import { runWithCredentialRefreshLock as realRunWithCredentialRefreshLock }
   from "../../../../packages/calendar/src/core/oauth/refresh-coordinator";
 import { resolveProviderAccountIdentity as realResolveProviderAccountIdentity }
   from "../../../../packages/calendar/src/core/oauth/provider-account-identity";
+import { oneRowUpdated } from "../helpers/update-outcome";
+import type { UpdateOutcome } from "../helpers/update-outcome";
 
 interface RecordedUpdate {
   table: string;
@@ -54,8 +56,10 @@ const updateForTable = (table: unknown) => ({
   set: (values: Record<string, unknown>) => {
     recordedUpdates.push({ table: getTableName(table as never), values });
 
-    const chain = Promise.resolve() as Promise<void> & { where: () => Promise<void> };
-    chain.where = () => Promise.resolve();
+    const chain = Promise.resolve() as Promise<void> & {
+      where: () => Promise<UpdateOutcome>;
+    };
+    chain.where = () => Promise.resolve(oneRowUpdated());
 
     return chain;
   },

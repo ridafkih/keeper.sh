@@ -14,26 +14,57 @@ import {
   deleteOAuthSourceCredential,
 } from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
-import { openConnectDeadline } from "@/utils/connect-deadline";
+import {
+  CONNECT_DEADLINE_SETTLE_RESERVE_MS,
+  type ConnectDeadline,
+  openConnectDeadline,
+} from "@/utils/connect-deadline";
 import { SERVER_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
-const CONNECT_BUDGET_SHARE_OF_IDLE_TIMEOUT = 0.6;
-const OAUTH_CALLBACK_CONNECT_BUDGET_MS = Math.floor(
-  SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND * CONNECT_BUDGET_SHARE_OF_IDLE_TIMEOUT,
-);
+const OAUTH_CALLBACK_CONNECT_BUDGET_MS =
+  SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND - CONNECT_DEADLINE_SETTLE_RESERVE_MS;
 
 interface ConnectOAuthAccountOptions {
   accessToken: string;
+  deadline: ConnectDeadline;
   email: string | null;
   expiresAt: Date;
   provider: string;
   providerAccountId: string;
   refreshToken: string;
-  signal: AbortSignal;
   userId: string;
 }
+
+const DEADLINE_ABORT_CAUSE_DEPTH = 8;
+
+const isDeadlineAbort = (deadline: ConnectDeadline, error: unknown): boolean => {
+  if (!deadline.signal.aborted) {
+    return false;
+  }
+
+  const { reason } = deadline.signal;
+  if (error === reason) {
+    return true;
+  }
+
+  let cause: unknown = error;
+  for (let depth = 0; depth < DEADLINE_ABORT_CAUSE_DEPTH; depth += 1) {
+    if (!(cause instanceof Error)) {
+      return false;
+    }
+
+    const { cause: nextCause } = cause;
+    if (nextCause === reason) {
+      return true;
+    }
+
+    cause = nextCause;
+  }
+
+  return false;
+};
 
 const discardCreatedCredential = async (
   userId: string,
@@ -51,12 +82,12 @@ const discardCreatedCredential = async (
 
 const connectOAuthAccount = async ({
   accessToken,
+  deadline,
   email,
   expiresAt,
   provider,
   providerAccountId,
   refreshToken,
-  signal,
   userId,
 }: ConnectOAuthAccountOptions): Promise<string> => {
   let createdCredentialId: string | null = null;
@@ -78,11 +109,13 @@ const connectOAuthAccount = async ({
       oauthCredentialId: credentialId,
       provider,
       providerAccountId,
-      signal,
+      signal: deadline.signal,
       userId,
     });
   } catch (error) {
-    if (createdCredentialId !== null) {
+    if (isDeadlineAbort(deadline, error)) {
+      widelog.set("oauth_callback.credential_kept_on_deadline", true);
+    } else if (createdCredentialId !== null) {
       await discardCreatedCredential(userId, createdCredentialId);
     }
 
@@ -148,12 +181,12 @@ const GET = withWideEvent(async ({ request, params }) => {
 
     const accountId = await connectOAuthAccount({
       accessToken: tokens.access_token,
+      deadline,
       email: userInfo.email,
       expiresAt,
       provider,
       providerAccountId: userInfo.id,
       refreshToken: tokens.refresh_token,
-      signal: deadline.signal,
       userId,
     });
 

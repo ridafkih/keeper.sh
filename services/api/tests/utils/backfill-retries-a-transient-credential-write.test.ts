@@ -1,5 +1,7 @@
 import { getTableName } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { oneRowUpdated } from "../helpers/update-outcome";
+import type { UpdateOutcome } from "../helpers/update-outcome";
 
 interface RecordedUpdate {
   table: string;
@@ -32,11 +34,11 @@ const createSelectBuilder = (): SelectPromise => {
   return chain;
 };
 
-const applyUpdate = (table: string, values: Record<string, unknown>): Promise<void> => {
+const applyUpdate = (table: string, values: Record<string, unknown>): Promise<UpdateOutcome> => {
   recordedUpdates.push({ table, values });
 
   if (table !== "oauth_credentials") {
-    return Promise.resolve();
+    return Promise.resolve(oneRowUpdated());
   }
 
   credentialUpdateAttempts += 1;
@@ -46,7 +48,7 @@ const applyUpdate = (table: string, values: Record<string, unknown>): Promise<vo
     return Promise.reject(failure);
   }
 
-  return Promise.resolve();
+  return Promise.resolve(oneRowUpdated());
 };
 
 const updateForTable = (table: unknown) => ({
