@@ -1,39 +1,41 @@
-import { resolve } from "node:path";
+import { relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const packageRoot = resolve(import.meta.dirname, "../..");
+const testsRoot = resolve(import.meta.dirname, "..");
+const guardFile = resolve(import.meta.filename);
 
-const silentProviderTestFiles = [
-  "tests/core/source/push-registrar-context-request-deadline.test.ts",
-  "tests/providers/google/source/utils/calendar-listing-bounds-each-page-with-a-default-timeout.test.ts",
-  "tests/providers/outlook/source/utils/calendar-listing-bounds-each-page-with-a-default-timeout.test.ts",
-];
-
-const sourceOf = async (relativePath: string) => {
-  const file = Bun.file(resolve(packageRoot, relativePath));
-  if (!(await file.exists())) {
-    throw new Error(`silent-provider test file is missing: ${relativePath}`);
+const collectTestFiles = async () => {
+  const glob = new Bun.Glob("**/*.test.ts");
+  const files: string[] = [];
+  for await (const match of glob.scan({ cwd: testsRoot, absolute: true })) {
+    if (resolve(match) !== guardFile) {
+      files.push(resolve(match));
+    }
   }
-  return await file.text();
+  if (files.length === 0) {
+    throw new Error(`no test files were found under ${testsRoot}`);
+  }
+  return files.toSorted();
 };
 
 describe("silent provider tests drop the loopback server", () => {
-  it.each(silentProviderTestFiles)(
-    "%s drives the silent provider through a fetch double rather than Bun.serve",
-    async (relativePath) => {
-      const source = await sourceOf(relativePath);
+  it("finds test files to range over", async () => {
+    const files = await collectTestFiles();
 
-      expect(source).not.toContain("Bun.serve");
-    },
-  );
+    expect(files.length).toBeGreaterThan(3);
+  });
 
-  it("names every test file that models a silent provider", async () => {
-    const sources = await Promise.all(silentProviderTestFiles.map((relativePath) => sourceOf(relativePath)));
+  it("pairs no Bun.serve handler with a server teardown call anywhere under tests", async () => {
+    const files = await collectTestFiles();
 
-    expect(sources).toHaveLength(3);
-    for (const source of sources) {
-      expect(source).not.toContain("server.stop");
-      expect(source).not.toContain("stalled.stop");
+    const offenders: string[] = [];
+    for (const file of files) {
+      const source = await Bun.file(file).text();
+      if (source.includes("Bun.serve") && source.includes("stop(")) {
+        offenders.push(relative(testsRoot, file));
+      }
     }
+
+    expect(offenders).toEqual([]);
   });
 });

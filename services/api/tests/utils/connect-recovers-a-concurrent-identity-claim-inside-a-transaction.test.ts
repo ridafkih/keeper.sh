@@ -323,6 +323,7 @@ describe("a concurrent identity claim met inside the connect transaction", () =>
       email: "person@example.com",
       id: "source-1",
       name: "Team Calendar",
+      needsReauthentication: false,
       provider: "google",
     });
     expect(calendarSourceInserts).toHaveLength(1);

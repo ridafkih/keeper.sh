@@ -136,6 +136,7 @@ describe("createOAuthSourceWithDependencies", () => {
       email: null,
       id: "source-1",
       name: "Team Calendar",
+      needsReauthentication: false,
       provider: "google",
     });
     expect(createAccountCalls).toEqual([
@@ -183,6 +184,7 @@ describe("createOAuthSourceWithDependencies", () => {
       email: "person@example.com",
       id: "source-1",
       name: "Team Calendar",
+      needsReauthentication: false,
       provider: "google",
     });
     expect(canAddAccountCalls).toHaveLength(0);

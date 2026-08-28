@@ -1,28 +1,20 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { revokeGoogleGrant } from "../../../src/core/oauth/google";
+import { createSilentProviderFetch } from "../../support/silent-provider-fetch";
 
-const slowProvider = Bun.serve({
-  fetch: async () => {
-    await Bun.sleep(1200);
-    return new Response("{}", { status: 200 });
-  },
-  port: 0,
-});
-
-const silentProvider = Bun.serve({
-  fetch: () => new Promise<Response>(() => {}),
-  port: 0,
-});
-
-afterAll(() => {
-  slowProvider.stop(true);
-  silentProvider.stop(true);
-});
+const PROVIDER_RESPONSE_DELAY_MS = 1200;
 
 describe("google grant revocation against a slow provider", () => {
   it("revokes when the provider answers after more than a second", async () => {
     const outcome = await revokeGoogleGrant("refresh-token", {
-      fetchImpl: (_url, init) => fetch(`http://localhost:${slowProvider.port}/revoke`, init),
+      fetchImpl: async (_url, init) => {
+        if (!init.signal) {
+          throw new Error("grant revocation issued a request that carried no abort signal");
+        }
+        await Bun.sleep(PROVIDER_RESPONSE_DELAY_MS);
+        init.signal.throwIfAborted();
+        return new Response("{}", { status: 200 });
+      },
     });
 
     expect(outcome.revoked).toBe(true);
@@ -30,9 +22,11 @@ describe("google grant revocation against a slow provider", () => {
   }, 30_000);
 
   it("still times out when the provider never answers", async () => {
+    const silentProviderFetch = createSilentProviderFetch();
+
     await expect(
       revokeGoogleGrant("refresh-token", {
-        fetchImpl: (_url, init) => fetch(`http://localhost:${silentProvider.port}/revoke`, init),
+        fetchImpl: (url, init) => silentProviderFetch(url, init),
       }),
     ).rejects.toThrow(/timed out after/i);
   }, 60_000);

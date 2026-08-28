@@ -84,6 +84,7 @@ describe("the connect path meeting a concurrent claim on the provider account id
       email: "person@example.com",
       id: "source-1",
       name: "Team Calendar",
+      needsReauthentication: false,
       provider: "google",
     });
     expect(recorder.createAccountCalls).toHaveLength(1);
