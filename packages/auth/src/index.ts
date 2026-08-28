@@ -326,6 +326,7 @@ const createAuth = (config: AuthConfig) => {
     }
 
     widelog.setFields({ "delete_user.teardown_compensated": true });
+    await markTombstoneProvisional(userId);
     await rollbackQuiesce(userId);
   };
 

@@ -247,7 +247,7 @@ const createUserDeletedCheck = (
       return (await redis.exists(unconfirmedKey)) > 0;
     } catch (error) {
       reportProbeError(error);
-      return false;
+      return true;
     }
   };
 

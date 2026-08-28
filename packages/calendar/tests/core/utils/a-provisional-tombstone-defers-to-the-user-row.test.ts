@@ -105,7 +105,7 @@ describe("a provisional tombstone defers to the user row", () => {
     expect(await check()).toBe(true);
   });
 
-  it("holds the tombstone when the companion key read fails", async () => {
+  it("defers to the user row when the companion key read fails", async () => {
     const redis = createFakeRedis(new Set([TOMBSTONE_KEY]), new Set([UNCONFIRMED_KEY]));
     const counters = { userRowProbes: 0 };
 
@@ -116,7 +116,7 @@ describe("a provisional tombstone defers to the user row", () => {
       },
     });
 
-    expect(await check()).toBe(true);
-    expect(counters.userRowProbes).toBe(0);
+    expect(await check()).toBe(false);
+    expect(counters.userRowProbes).toBe(1);
   });
 });
