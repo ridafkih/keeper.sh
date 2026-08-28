@@ -10,6 +10,7 @@ import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import { withReauthenticationDemand } from "@keeper.sh/calendar/reauthentication";
 import {
+  CredentialRowMissingError,
   RefreshBudgetExceededError,
   RotatedTokenNotPersistedError,
   persistAbandonedRotation,
@@ -686,6 +687,15 @@ const resolveCredentialAccessToken = async (
             refreshToken: result.refresh_token ?? presentedRefreshToken,
           });
         } catch (error) {
+          if (!rotated && error instanceof CredentialRowMissingError) {
+            widelog.errorFields(error, {
+              retriable: false,
+              slug: "connect-credential-row-missing",
+            });
+
+            throw error;
+          }
+
           widelog.set("token.rotation_lost", rotated);
           widelog.errorFields(error, {
             retriable: true,
@@ -739,7 +749,10 @@ const resolveProviderAccountId = async (
 
     return { providerAccountId: userInfo.id, reauthenticationRequired: false };
   } catch (error) {
-    if (error instanceof RotatedTokenNotPersistedError) {
+    if (
+      error instanceof RotatedTokenNotPersistedError
+      || error instanceof CredentialRowMissingError
+    ) {
       throw error;
     }
 

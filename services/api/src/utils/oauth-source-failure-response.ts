@@ -2,7 +2,10 @@ import { HTTP_STATUS } from "@keeper.sh/constants";
 import { widelog } from "@/utils/logging";
 import { ErrorResponse } from "@/utils/responses";
 import { labelFailureResponse } from "@/utils/error-labelling";
-import { RotatedTokenNotPersistedError } from "@keeper.sh/calendar/oauth-persistence";
+import {
+  CredentialRowMissingError,
+  RotatedTokenNotPersistedError,
+} from "@keeper.sh/calendar/oauth-persistence";
 import {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
@@ -12,6 +15,9 @@ import {
 
 const ROTATED_TOKEN_LOST_MESSAGE =
   "The calendar connection could not be completed. Please reconnect the account.";
+
+const CREDENTIAL_ROW_MISSING_MESSAGE =
+  "The calendar connection was removed while it was being added. Please reconnect the account.";
 
 const oauthSourceFailureResponse = (error: unknown): Response => {
   if (error instanceof OAuthSourceLimitError) {
@@ -27,6 +33,10 @@ const oauthSourceFailureResponse = (error: unknown): Response => {
   if (error instanceof DuplicateSourceError) {
     widelog.errorFields(error, { slug: "duplicate-source" });
     return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
+  }
+  if (error instanceof CredentialRowMissingError) {
+    widelog.errorFields(error, { retriable: false, slug: "connect-credential-row-missing" });
+    return ErrorResponse.conflict(CREDENTIAL_ROW_MISSING_MESSAGE).toResponse();
   }
   if (error instanceof RotatedTokenNotPersistedError) {
     widelog.errorFields(error, { slug: "rotated-token-not-persisted" });
