@@ -6,6 +6,7 @@ import {
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
   createUserDeletedCheck,
+  PRESENT_ANSWER_FRESHNESS_MS,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -832,6 +833,7 @@ const syncDestinationsForUser = async (
   const syncLock = createSyncLock(redis, "background");
   const deletionProbeFailures: string[] = [];
   const isUserDeleted = createUserDeletedCheck(redis, userId, {
+    freshnessWindowMs: PRESENT_ANSWER_FRESHNESS_MS,
     isUserRowPresent: async () => {
       const rows = await database
         .select({ id: userTable.id })

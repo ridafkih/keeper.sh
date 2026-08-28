@@ -36,6 +36,8 @@ import type { DeleteUserTeardown } from "@keeper.sh/auth";
 import type { database as databaseInstance } from "@/context";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
+const CONFLICTING_PROVIDER_IDENTITY_SLUG = "delete-user-teardown-conflicting-provider-identity";
+const SINGLE_PROVIDER_IDENTITY = 1;
 const STEP_ABORT_SETTLE_MS = 400;
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
@@ -157,6 +159,31 @@ const requireOwnCredentials = (
   }
 
   return credentials;
+};
+
+const deferConflictingProviderIdentity = (
+  credential: DeleteUserOAuthCredential,
+  namedIdentities: string | null,
+): DeleteUserOAuthCredential => {
+  widelog.setFields({
+    "delete_user.conflicting_credential_id": credential.accountId,
+    "delete_user.conflicting_provider_account_ids": namedIdentities,
+    "delete_user.user_id": credential.userId,
+  });
+  widelog.errorFields(
+    new Error(
+      `Oauth credential ${credential.accountId} for user ${credential.userId} is linked to `
+        + `calendar accounts naming more than one ${credential.provider} account `
+        + `(${namedIdentities ?? "none"}), so its teardown residue carries no provider account id`,
+    ),
+    {
+      prefix: "delete_user_teardown.oauth_grants",
+      retriable: false,
+      slug: CONFLICTING_PROVIDER_IDENTITY_SLUG,
+    },
+  );
+
+  return { ...credential, providerAccountId: null };
 };
 
 const recordOAuthGrantResidue = async (
@@ -363,29 +390,41 @@ const deregisterLivePushChannels = async (
   }
 };
 
+const clearListedPushChannelResidue = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  stoppedChannelIds: string[],
+): Promise<number> => {
+  const stopped = new Set(stoppedChannelIds);
+  const listed = await residue.list();
+  const doomed = listed.filter(
+    (row) =>
+      row.userId === userId
+      && row.kind === PUSH_CHANNEL_RESIDUE_KIND
+      && typeof row.providerChannelId === "string"
+      && stopped.has(row.providerChannelId),
+  );
+
+  for (const row of doomed) {
+    await residue.clear(row.id);
+  }
+
+  return doomed.length;
+};
+
 const clearStoppedPushChannelResidue = async (
   residue: TeardownResidueStore,
   userId: string,
   stoppedChannelIds: string[],
-  abandonedChannelIds: string[],
 ): Promise<number> => {
   if (stoppedChannelIds.length === 0) {
     return 0;
   }
 
-  if (abandonedChannelIds.length === 0) {
-    return await residue.deleteForUser(userId, PUSH_CHANNEL_RESIDUE_KIND);
-  }
-
   const deleteResidue = residue.delete;
 
   if (typeof deleteResidue !== "function") {
-    throw new TypeError(
-      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} cannot clear the residue of the `
-        + `${stoppedChannelIds.length} push channel(s) confirmed stopped while `
-        + `${abandonedChannelIds.length} were abandoned: the residue store exposes no `
-        + `per-channel delete`,
-    );
+    return await clearListedPushChannelResidue(residue, userId, stoppedChannelIds);
   }
 
   const cleared: number[] = [];
@@ -465,7 +504,6 @@ const buildDeleteUserSyncSteps = (
         dependencies.residue,
         userId,
         stoppedChannelIds,
-        outcome.abandonedChannelIds,
       );
 
       widelog.setFields({ "delete_user.push_channels_residue_cleared": cleared });
@@ -959,13 +997,17 @@ const createApiDeleteUserSyncTeardown = (
       return rows.map((row) => row.id);
     },
     listPushChannels: listUserTeardownPushChannels,
-    listOAuthCredentials: (userId) =>
-      context.database
+    listOAuthCredentials: async (userId) => {
+      const rows = await context.database
         .select({
           accessToken: oauthCredentialsTable.accessToken,
           accountId: oauthCredentialsTable.id,
           email: oauthCredentialsTable.email,
           expiresAt: oauthCredentialsTable.expiresAt,
+          identityCount: sql<number>`count(distinct ${calendarRowProviderIdentity()})`,
+          namedIdentities: sql<
+            string | null
+          >`string_agg(distinct ${calendarRowProviderIdentity()}, ', ')`,
           provider: oauthCredentialsTable.provider,
           providerAccountId: sql<string | null>`max(${calendarRowProviderIdentity()})`,
           refreshToken: oauthCredentialsTable.refreshToken,
@@ -980,7 +1022,16 @@ const createApiDeleteUserSyncTeardown = (
           ),
         )
         .where(eq(oauthCredentialsTable.userId, userId))
-        .groupBy(oauthCredentialsTable.id),
+        .groupBy(oauthCredentialsTable.id);
+
+      return rows.map(({ identityCount, namedIdentities, ...credential }) => {
+        if (Number(identityCount) > SINGLE_PROVIDER_IDENTITY) {
+          return deferConflictingProviderIdentity(credential, namedIdentities);
+        }
+
+        return credential;
+      });
+    },
     redis: context.redis,
     residue: context.residue,
   });

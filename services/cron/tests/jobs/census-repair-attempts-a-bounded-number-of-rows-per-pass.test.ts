@@ -110,8 +110,10 @@ create table calendar_accounts (
 create unique index "calendar_accounts_provider_account_idx" on calendar_accounts ("userId","provider","accountId");
 `;
 
-const liveCustomerIndexes = () =>
-  Array.from({ length: LIVE_CUSTOMER_COUNT }, (_unused, index) => index);
+const STUCK_ROW_COUNT = CENSUS_REPAIR_BATCH_LIMIT + 2;
+
+const liveCustomerIndexes = (count: number = LIVE_CUSTOMER_COUNT) =>
+  Array.from({ length: count }, (_unused, index) => index);
 
 const paddedIndex = (index: number) => String(index).padStart(2, "0");
 
@@ -141,8 +143,10 @@ const deletedCustomerResidueRecord = (): TeardownResidueRecord => ({
   userId: DELETED_USER_ID,
 });
 
-const insertUnrelatedLiveCustomers = async (): Promise<void> => {
-  for (const index of liveCustomerIndexes()) {
+const insertUnrelatedLiveCustomers = async (
+  count: number = LIVE_CUSTOMER_COUNT,
+): Promise<void> => {
+  for (const index of liveCustomerIndexes(count)) {
     const userId = `live-customer-${paddedIndex(index)}`;
 
     await client.query(
@@ -203,6 +207,25 @@ const stubUserInfoCountingEveryRoundTrip = (): void => {
   });
 };
 
+const stubUserInfoRefusingEveryRoundTrip = (): void => {
+  vi.stubGlobal("fetch", (input: Request | string | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+
+    if (url !== GOOGLE_USERINFO_URL) {
+      throw new Error(`The test dialed an unexpected url: ${url}`);
+    }
+
+    recorded.userInfoTokens.push(bearerTokenOf(init));
+
+    return Promise.resolve(
+      new Response(JSON.stringify({ error: "invalid_credentials" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 401,
+      }),
+    );
+  });
+};
+
 const countRepairedCalendarRows = async (): Promise<number> => {
   const { rows } = await client.query<{ repaired: number }>(
     `select count(*)::int as repaired from calendar_accounts where "accountId" like 'google-sub-live-%'`,
@@ -254,5 +277,57 @@ describe("one census repair pass touches a bounded number of blocking rows", () 
     expect(recorded.userInfoTokens).toHaveLength(LIVE_CUSTOMER_COUNT);
     expect(await countRepairedCalendarRows()).toBe(LIVE_CUSTOMER_COUNT);
     expect(recorded.errorSlugs).not.toContain(CENSUS_REPAIR_FAILED_SLUG);
+  });
+});
+
+describe("consecutive census repair passes advance past rows that keep failing", () => {
+  beforeEach(async () => {
+    recorded.errorSlugs.length = 0;
+    recorded.userInfoTokens.length = 0;
+    await client.exec(
+      `drop table if exists calendar_accounts, "account", oauth_credentials, "user" cascade;`,
+    );
+    await client.exec(DDL);
+    await insertUnrelatedLiveCustomers(STUCK_ROW_COUNT);
+    stubUserInfoRefusingEveryRoundTrip();
+  });
+
+  it("dials rows the previous pass never reached when every repair keeps failing", async () => {
+    const stalled = await countSurvivingAccountLinks(
+      database,
+      deletedCustomerResidueRecord(),
+    );
+
+    expect(stalled.blockingCredentialIds).toHaveLength(STUCK_ROW_COUNT);
+
+    const firstPass = await repairCensusBlockingCredentials(
+      database,
+      stalled.blockingCredentialIds,
+    );
+
+    expect(firstPass.attempted).toBeLessThanOrEqual(CENSUS_REPAIR_BATCH_LIMIT);
+    expect(firstPass.repaired).toBe(0);
+    expect(recorded.errorSlugs).toContain(CENSUS_REPAIR_FAILED_SLUG);
+
+    const firstPassTokens = [...recorded.userInfoTokens];
+    recorded.userInfoTokens.length = 0;
+
+    const secondPass = await repairCensusBlockingCredentials(
+      database,
+      stalled.blockingCredentialIds,
+    );
+
+    expect(secondPass.attempted).toBeLessThanOrEqual(CENSUS_REPAIR_BATCH_LIMIT);
+    expect(secondPass.repaired).toBe(0);
+
+    const secondPassTokens = [...recorded.userInfoTokens];
+    const untouchedByTheFirstPass = liveCustomerIndexes(STUCK_ROW_COUNT)
+      .map((index) => accessTokenFor(index))
+      .filter((token) => !firstPassTokens.includes(token));
+
+    expect(untouchedByTheFirstPass.length).toBeGreaterThan(0);
+    expect(
+      untouchedByTheFirstPass.filter((token) => !secondPassTokens.includes(token)),
+    ).toEqual([]);
   });
 });

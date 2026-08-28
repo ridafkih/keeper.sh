@@ -3,6 +3,7 @@ const TOMBSTONE_WRITE_ATTEMPTS = 3;
 const TOMBSTONE_RETRY_DELAY_MS = 25;
 const TOMBSTONE_ERASE_CONFIRMATIONS = 3;
 const TOMBSTONE_ERASE_CONFIRMATION_DELAY_MS = 25;
+const PRESENT_ANSWER_FRESHNESS_MS = 30_000;
 
 const deletedUserTombstoneKey = (userId: string): string => `user:${userId}:deleted`;
 
@@ -135,8 +136,12 @@ const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise
 
 type UserRowAnswer = "absent" | "present" | "unobserved";
 
+const readClock = (probe: UserDeletedFallback): number => (probe.now ?? Date.now)();
+
 interface UserDeletedFallback {
   isUserRowPresent: () => Promise<boolean>;
+  freshnessWindowMs?: number;
+  now?: () => number;
   onProbeError?: (error: unknown) => void;
 }
 
@@ -147,7 +152,18 @@ const createUserDeletedCheck = (
 ): (() => Promise<boolean>) => {
   const key = deletedUserTombstoneKey(userId);
   let latestUserRowAnswer: UserRowAnswer = "unobserved";
+  let presentAnswerObservedAtMs = 0;
   let userRowProbeInFlight: Promise<boolean> | null = null;
+
+  const presentAnswerIsFresh = (probe: UserDeletedFallback): boolean => {
+    if (latestUserRowAnswer !== "present") {
+      return false;
+    }
+
+    const windowMs = probe.freshnessWindowMs ?? 0;
+
+    return windowMs > 0 && readClock(probe) - presentAnswerObservedAtMs <= windowMs;
+  };
 
   const reportProbeError = (error: unknown): void => {
     fallback?.onProbeError?.(error);
@@ -159,6 +175,7 @@ const createUserDeletedCheck = (
 
       if (present) {
         latestUserRowAnswer = "present";
+        presentAnswerObservedAtMs = readClock(probe);
         return false;
       }
 
@@ -181,6 +198,10 @@ const createUserDeletedCheck = (
   const isUserRowAbsent = async (probe: UserDeletedFallback): Promise<boolean> => {
     if (latestUserRowAnswer === "absent") {
       return true;
+    }
+
+    if (presentAnswerIsFresh(probe)) {
+      return false;
     }
 
     return await (userRowProbeInFlight ?? startUserRowProbe(probe));
@@ -212,6 +233,7 @@ const createUserDeletedCheck = (
 
 export {
   clearUserDeleted,
+  PRESENT_ANSWER_FRESHNESS_MS,
   createUserDeletedCheck,
   deletedUserTombstoneKey,
   markUserDeleted,

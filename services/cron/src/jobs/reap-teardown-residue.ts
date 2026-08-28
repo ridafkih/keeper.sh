@@ -1,5 +1,5 @@
 import type { CronOptions } from "cronbake";
-import { and, count, eq, inArray, isNull, lt, notExists, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, lt, notExists, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import {
@@ -51,6 +51,7 @@ const NO_BLOCKING_CREDENTIALS = 0;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const CENSUS_REPAIR_BATCH_LIMIT = 10;
 const NO_REMAINING_BLOCKING_ROWS = 0;
+const NO_BLOCKING_ROWS_AFTER_CURSOR = 0;
 const NO_ORPHANED_CREDENTIALS = 0;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -461,8 +462,14 @@ interface CensusBlockingCalendarRow {
   refreshToken: string;
 }
 
+interface CensusRepairCursor {
+  read: () => string | null;
+  write: (afterAccountRowId: string | null) => void;
+}
+
 interface CensusRepairBudget {
   budgetMs: number;
+  cursor: CensusRepairCursor;
   now: () => Date;
 }
 
@@ -486,10 +493,22 @@ const resolveUserInfoFetch = (
   return null;
 };
 
-const censusBlockingRowsWhere = (credentialIds: string[]): SQL | undefined =>
+const censusCursorFilters = (afterAccountRowId: string | null): SQL[] => {
+  if (afterAccountRowId === null) {
+    return [];
+  }
+
+  return [gt(calendarAccountsTable.id, afterAccountRowId)];
+};
+
+const censusBlockingRowsWhere = (
+  credentialIds: string[],
+  afterAccountRowId: string | null = null,
+): SQL | undefined =>
   and(
     inArray(oauthCredentialsTable.id, credentialIds),
     isNull(calendarRowProviderIdentity()),
+    ...censusCursorFilters(afterAccountRowId),
   );
 
 const countCensusBlockingCalendarRows = async (
@@ -517,6 +536,7 @@ const countCensusBlockingCalendarRows = async (
 const listCensusBlockingCalendarRows = (
   database: PgDatabase<PgQueryResultHKT>,
   credentialIds: string[],
+  afterAccountRowId: string | null = null,
 ): Promise<CensusBlockingCalendarRow[]> =>
   database
     .select({
@@ -532,7 +552,8 @@ const listCensusBlockingCalendarRows = (
       oauthCredentialsTable,
       eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
     )
-    .where(censusBlockingRowsWhere(credentialIds))
+    .where(censusBlockingRowsWhere(credentialIds, afterAccountRowId))
+    .orderBy(calendarAccountsTable.id)
     .limit(CENSUS_REPAIR_BATCH_LIMIT);
 
 const resolveBlockingRowAccessToken = async (
@@ -608,11 +629,66 @@ const repairCensusBlockingRow = async (
   });
 };
 
+const createCensusRepairCursor = (): CensusRepairCursor => {
+  let afterAccountRowId: string | null = null;
+
+  return {
+    read: () => afterAccountRowId,
+    write: (next) => {
+      afterAccountRowId = next;
+    },
+  };
+};
+
+const censusRepairCursor = createCensusRepairCursor();
+
+const listCensusBlockingCalendarRowsFromCursor = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  credentialIds: string[],
+  cursor: CensusRepairCursor,
+): Promise<CensusBlockingCalendarRow[]> => {
+  const afterAccountRowId = cursor.read();
+  const rows = await listCensusBlockingCalendarRows(
+    database,
+    credentialIds,
+    afterAccountRowId,
+  );
+
+  if (rows.length > NO_BLOCKING_ROWS_AFTER_CURSOR || afterAccountRowId === null) {
+    return rows;
+  }
+
+  cursor.write(null);
+
+  return listCensusBlockingCalendarRows(database, credentialIds);
+};
+
+const advanceCensusRepairCursor = (
+  cursor: CensusRepairCursor,
+  rows: CensusBlockingCalendarRow[],
+  attempted: number,
+): void => {
+  const lastAttempted = rows[attempted - 1];
+
+  if (!lastAttempted) {
+    return;
+  }
+
+  if (attempted === rows.length && rows.length < CENSUS_REPAIR_BATCH_LIMIT) {
+    cursor.write(null);
+
+    return;
+  }
+
+  cursor.write(lastAttempted.accountRowId);
+};
+
 const repairCensusBlockingCredentials = async (
   database: PgDatabase<PgQueryResultHKT>,
   credentialIds: string[],
   {
     budgetMs = CENSUS_REPAIR_BUDGET_MS,
+    cursor = censusRepairCursor,
     now = () => new Date(),
   }: Partial<CensusRepairBudget> = {},
 ): Promise<CensusRepairTally> => {
@@ -621,7 +697,11 @@ const repairCensusBlockingCredentials = async (
   }
 
   const blocking = await countCensusBlockingCalendarRows(database, credentialIds);
-  const rows = await listCensusBlockingCalendarRows(database, credentialIds);
+  const rows = await listCensusBlockingCalendarRowsFromCursor(
+    database,
+    credentialIds,
+    cursor,
+  );
   const startedAt = now().getTime();
   const results: boolean[] = [];
 
@@ -641,6 +721,8 @@ const repairCensusBlockingCredentials = async (
       results.push(false);
     }
   }
+
+  advanceCensusRepairCursor(cursor, rows, results.length);
 
   return {
     attempted: results.length,

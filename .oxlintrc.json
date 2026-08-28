@@ -72,6 +72,7 @@
         "no-empty-function": "off",
         "no-ternary": "off",
         "prefer-response-static-json": "off",
+        "prefer-set-has": "off",
         "no-undefined": "off",
         "no-unmodified-loop-condition": "off",
         "no-useless-undefined": "off"

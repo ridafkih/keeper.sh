@@ -298,6 +298,18 @@ const retirementReason = (
   return null;
 };
 
+const unresolvedRetirementReason = (
+  record: TeardownResidueRecord,
+  blockingCredentialIds: readonly string[],
+  now: Date,
+): ResidueRetirementReason | null => {
+  if (blockingCredentialIds.length > 0) {
+    return null;
+  }
+
+  return retirementReason(record, now);
+};
+
 const outlivesItsProviderChannel = (
   record: TeardownResidueRecord,
   now: Date,
@@ -552,7 +564,11 @@ async (): Promise<TeardownResidueReaperOutcome> => {
           blockingCredentialIds.add(credentialId);
         }
 
-        const unresolvedRetirement = retirementReason(attempted, now);
+        const unresolvedRetirement = unresolvedRetirementReason(
+          attempted,
+          repairOutcome.blockingCredentialIds,
+          now,
+        );
 
         if (unresolvedRetirement) {
           await retireGrantUnrevoked(
