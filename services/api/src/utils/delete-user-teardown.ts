@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { clearUserDeleted, markUserDeleted } from "@keeper.sh/calendar";
+import { clearUserDeleted, markUserDeleted, markUserDeletionUnconfirmed } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
 import {
   calendarAccountsTable,
@@ -970,6 +970,16 @@ const createDeleteUserSyncTeardownRollback =
     );
   };
 
+const createDeleteUserTombstoneProvisionalMarker =
+  (dependencies: Pick<DeleteUserSyncTeardownDependencies, "redis">): DeleteUserTeardown =>
+  async (userId: string) => {
+    await markUserDeletionUnconfirmed(dependencies.redis, userId, {
+      signal: AbortSignal.timeout(TOMBSTONE_TIMEOUT_MS),
+    });
+
+    widelog.setFields({ "delete_user.tombstone_marked_provisional": true });
+  };
+
 const TEARDOWN_QUEUE_CONNECTION_OPTIONS = {
   commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
   maxRetriesPerRequest: QUEUE_MAX_RETRIES_PER_REQUEST,
@@ -1040,6 +1050,7 @@ export {
   createApiDeleteUserSyncTeardown,
   createDeleteUserSyncTeardown,
   createDeleteUserSyncTeardownRollback,
+  createDeleteUserTombstoneProvisionalMarker,
   OAUTH_GRANTS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
   STEP_ABORT_SETTLE_MS,

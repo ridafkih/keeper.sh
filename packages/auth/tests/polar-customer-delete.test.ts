@@ -70,7 +70,7 @@ describe("deletePolarCustomerByExternalId", () => {
 
 const stubDatabase = {} as BunSQLDatabase;
 
-const BLACK_HOLE_OBSERVATION_MS = 8000;
+const BLACK_HOLE_OBSERVATION_MS = 12_000;
 const SETTLEMENT_TEST_TIMEOUT_MS = 30_000;
 
 const buildPolarAuth = () =>
@@ -215,7 +215,7 @@ describe("Polar client deadlines", () => {
       );
 
       expect(outcome.state).toBe("rejected");
-      expect(outcome.elapsedMs).toBeLessThan(BLACK_HOLE_OBSERVATION_MS);
+      expect(outcome.elapsedMs).toBeLessThan(POLAR_CUSTOMER_DELETE_TIMEOUT_MS * 1.5);
     },
     SETTLEMENT_TEST_TIMEOUT_MS,
   );

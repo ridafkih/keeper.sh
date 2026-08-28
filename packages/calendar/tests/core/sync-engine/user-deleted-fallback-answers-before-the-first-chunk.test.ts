@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createUserDeletedCheck } from "../../../src/core/utils/deleted-user-tombstone";
+import {
+  createUserDeletedCheck,
+  deletedUserTombstoneKey,
+} from "../../../src/core/utils/deleted-user-tombstone";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type { SyncCalendarOptions } from "../../../src/core/sync-engine/index";
 import type {
@@ -98,9 +101,10 @@ const makeScenario = (options: ScenarioOptions): Scenario => {
   };
 
   const redis = {
-    exists: (_key: string): Promise<number> => {
+    exists: async (key: string): Promise<number> => {
       counters.exists += 1;
-      return options.existsResult();
+      const result = await options.existsResult();
+      return key === deletedUserTombstoneKey(USER_ID) ? result : 0;
     },
   };
 

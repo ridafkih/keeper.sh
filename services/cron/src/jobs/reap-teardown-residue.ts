@@ -47,9 +47,11 @@ const GOOGLE_INVALID_TOKEN_ERROR = "invalid_token";
 const ORPHAN_CREDENTIAL_SWEEP_PROVIDERS = ["google", "outlook"];
 const ORPHAN_CREDENTIAL_SAFETY_AGE_MS = 60 * 60 * 1000;
 const CENSUS_REPAIR_FAILED_SLUG = "teardown-residue-census-repair-failed";
+const ORPHAN_SWEEP_FAILED_SLUG = "teardown-residue-orphan-sweep-failed";
 const NO_BLOCKING_CREDENTIALS = 0;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const CENSUS_REPAIR_BATCH_LIMIT = 10;
+const ORPHAN_CREDENTIAL_SWEEP_BATCH_LIMIT = 100;
 const NO_REMAINING_BLOCKING_ROWS = 0;
 const NO_BLOCKING_ROWS_AFTER_CURSOR = 0;
 const NO_ORPHANED_CREDENTIALS = 0;
@@ -149,6 +151,7 @@ const resolveResidueAccessToken = async (
 
 const createResidueRegistrarContext = async (
   record: TeardownResidueRecord,
+  signal: AbortSignal,
 ): Promise<RegistrarContext> => {
   const { webhookConfig } = await import("@/context");
 
@@ -167,13 +170,13 @@ const createResidueRegistrarContext = async (
   const now = new Date();
 
   return {
-    accessToken: await resolveResidueAccessToken(record, record.provider),
+    accessToken: await resolveResidueAccessToken(record, record.provider, signal),
     channelId: record.providerChannelId ?? null,
     fetchImpl: globalThis.fetch,
     notificationUrl: resolveNotificationUrl(record.provider, webhookConfig),
     now,
     requestedExpiresAt: now,
-    signal: AbortSignal.timeout(RESIDUE_STOP_TIMEOUT_MS),
+    signal: AbortSignal.any([signal, AbortSignal.timeout(RESIDUE_STOP_TIMEOUT_MS)]),
   };
 };
 
@@ -436,6 +439,7 @@ const sweepOrphanedOAuthCredentials = async ({
           hasNoCalendarAccount(transaction),
         ),
       )
+      .limit(ORPHAN_CREDENTIAL_SWEEP_BATCH_LIMIT)
       .for("update");
 
     if (claimed.length === NO_ORPHANED_CREDENTIALS) {
@@ -772,7 +776,7 @@ const createDefaultReaper = async () => {
 
   return createTeardownResidueReaper({
     countSurvivingAccountLinks: (record) => countSurvivingAccountLinks(database, record),
-    createRegistrarContext: createResidueRegistrarContext,
+    createRegistrarContext: (record, signal) => createResidueRegistrarContext(record, signal),
     deletePolarCustomer,
     now: () => new Date(),
     observe: (fields) => {
@@ -800,12 +804,24 @@ const createDefaultReaper = async () => {
 export default withCronWideEvent({
   async callback() {
     const { database } = await import("@/context");
-    const sweptOrphanedCredentials = await sweepOrphanedOAuthCredentials({
-      database,
-      minimumAgeMs: ORPHAN_CREDENTIAL_SAFETY_AGE_MS,
-      now: () => new Date(),
-    });
-    widelog.setFields({ sweptOrphanedCredentials });
+
+    try {
+      const sweptOrphanedCredentials = await sweepOrphanedOAuthCredentials({
+        database,
+        minimumAgeMs: ORPHAN_CREDENTIAL_SAFETY_AGE_MS,
+        now: () => new Date(),
+      });
+      widelog.setFields({
+        "teardown_residue.orphan_sweep_failed": false,
+        sweptOrphanedCredentials,
+      });
+    } catch (error) {
+      widelog.errorFields(error, {
+        retriable: true,
+        slug: ORPHAN_SWEEP_FAILED_SLUG,
+      });
+      widelog.setFields({ "teardown_residue.orphan_sweep_failed": true });
+    }
     const reap = await createDefaultReaper();
     const outcome = await reap();
     const censusRepair = await repairCensusBlockingCredentials(
@@ -825,7 +841,9 @@ export default withCronWideEvent({
 
 export {
   CENSUS_REPAIR_BATCH_LIMIT,
+  ORPHAN_CREDENTIAL_SWEEP_BATCH_LIMIT,
   countSurvivingAccountLinks,
+  createResidueRegistrarContext,
   repairCensusBlockingCredentials,
   resolveResidueProviderAccountId,
   revokeOAuthGrant,

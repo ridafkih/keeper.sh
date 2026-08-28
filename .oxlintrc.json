@@ -68,6 +68,7 @@
       "files": ["**/*.test.ts"],
       "rules": {
         "array-type": "off",
+        "import/no-namespace": "off",
         "no-array-reduce": "off",
         "no-empty-function": "off",
         "no-ternary": "off",

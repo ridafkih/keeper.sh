@@ -23,6 +23,7 @@ const remediationScanRoots = () => [
 ];
 
 const remediationTestFiles = () => [
+  "packages/auth/tests/an-unresolvable-probe-marks-the-tombstone-provisional.test.ts",
   "packages/auth/tests/delete-user-teardown-ordering.test.ts",
   "packages/auth/tests/delete-user-teardown.test.ts",
   "packages/auth/tests/failed-delete-user-does-not-strand-the-account.test.ts",
@@ -43,6 +44,7 @@ const remediationTestFiles = () => [
   "packages/calendar/tests/core/deletion/grant-revocation-waits-out-the-in-flight-push-residue-window.test.ts",
   "packages/calendar/tests/core/deletion/no-residue-is-retired-before-its-expiry.test.ts",
   "packages/calendar/tests/core/deletion/one-stalled-residue-repair-cannot-freeze-the-whole-reaper.test.ts",
+  "packages/calendar/tests/core/deletion/push-repair-signal-reaches-registrar-context.test.ts",
   "packages/calendar/tests/core/deletion/reaper-refuses-oauth-residue-without-account-email.test.ts",
   "packages/calendar/tests/core/deletion/reaper-refuses-to-revoke-a-google-account-a-surviving-user-still-holds.test.ts",
   "packages/calendar/tests/core/deletion/reaper-revokes-oauth-grant-residue.test.ts",
@@ -58,6 +60,7 @@ const remediationTestFiles = () => [
   "packages/calendar/tests/core/sync-engine/user-deleted-check-reprobes-user-row.test.ts",
   "packages/calendar/tests/core/sync-engine/user-deleted-fallback-answers-before-the-first-chunk.test.ts",
   "packages/calendar/tests/core/utils/a-failed-tombstone-read-reprobes-the-user-row.test.ts",
+  "packages/calendar/tests/core/utils/a-provisional-tombstone-defers-to-the-user-row.test.ts",
   "packages/calendar/tests/core/utils/deleted-user-tombstone-present-answer-freshness.test.ts",
   "packages/queue/tests/remove-user-sync-jobs.test.ts",
   "packages/sync/tests/aborted-run-does-not-clear-backoff.test.ts",
@@ -102,6 +105,7 @@ const remediationTestFiles = () => [
   "services/api/tests/utils/teardown-blocked-error-survives-the-step-deadline.test.ts",
   "services/api/tests/utils/teardown-rollback-clears-push-channel-residue.test.ts",
   "services/api/tests/utils/teardown-rollback-fails-loudly-when-its-residue-store-cannot-delete.test.ts",
+  "services/cron/tests/jobs/a-failed-orphan-sweep-still-runs-the-reaper.test.ts",
   "services/cron/tests/jobs/a-google-credential-linked-to-no-calendar-account-does-not-block-every-revocation.test.ts",
   "services/cron/tests/jobs/an-already-revoked-grant-stops-being-retried-for-eight-days.test.ts",
   "services/cron/tests/jobs/census-defers-when-only-an-email-distinguishes-a-credential-from-the-residue-account.test.ts",
@@ -111,6 +115,7 @@ const remediationTestFiles = () => [
   "services/cron/tests/jobs/census-repair-yields-an-identity-another-row-already-holds.test.ts",
   "services/cron/tests/jobs/census-stall-reports-the-credentials-that-block-every-revocation.test.ts",
   "services/cron/tests/jobs/cron-reaper-derives-a-legacy-grant-identity-from-its-stored-credential.test.ts",
+  "services/cron/tests/jobs/orphan-credential-sweep-claims-a-bounded-batch.test.ts",
   "services/cron/tests/jobs/reaper-cohort-guard-is-case-insensitive-on-account-email.test.ts",
   "services/cron/tests/jobs/reaper-counts-a-co-holder-by-its-calendar-account-email.test.ts",
   "services/cron/tests/jobs/reaper-counts-calendar-account-holders-as-co-holders.test.ts",
@@ -122,6 +127,7 @@ const remediationTestFiles = () => [
   "services/cron/tests/jobs/reaper-treats-a-null-account-id-calendar-row-as-unresolved-identity.test.ts",
   "services/cron/tests/jobs/reaper-treats-a-stale-email-credential-with-a-null-account-id-as-unresolved.test.ts",
   "services/cron/tests/jobs/residue-identity-resolution-carries-the-repair-deadline-signal.test.ts",
+  "services/cron/tests/jobs/residue-token-refresh-honours-the-repair-deadline.test.ts",
   "services/cron/tests/jobs/the-orphan-credential-sweep-runs-before-the-reaper-on-the-same-tick.test.ts",
   "services/cron/tests/jobs/unknown-identity-credential-row-defers-instead-of-blocking-every-revocation.test.ts",
 ];

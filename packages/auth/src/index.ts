@@ -22,6 +22,7 @@ import {
   deleteUserTeardownUnavailable,
   SYNC_TEARDOWN_TIMEOUT_MS,
   TEARDOWN_BUDGET_MS,
+  TEARDOWN_FAILED_SLUG,
 } from "./delete-user-teardown";
 import { createDeleteUserCompensationScope } from "./delete-user-compensation";
 import { writeAuthStderr } from "./runtime-environment";
@@ -89,6 +90,7 @@ interface AuthConfig {
   deleteUserResidueRecorder: DeleteUserResidueRecorder;
   deleteUserTeardown: DeleteUserTeardown;
   deleteUserTeardownRollback: DeleteUserTeardown;
+  markDeleteUserTombstoneProvisional?: DeleteUserTeardown;
 }
 
 interface KeeperMcpAuthSession {
@@ -130,7 +132,6 @@ const hasOAuthProviderApi = (
   return true;
 };
 
-const POLAR_REQUEST_TIMEOUT_MS = 10_000;
 const POLAR_CUSTOMER_RESIDUE_KIND = "polar_customer";
 
 const mcpJwtClaimsSchema = type({
@@ -172,6 +173,7 @@ const createAuth = (config: AuthConfig) => {
     deleteUserResidueRecorder,
     deleteUserTeardown,
     deleteUserTeardownRollback,
+    markDeleteUserTombstoneProvisional,
   } = config;
 
   if (typeof deleteUserTeardown !== "function") {
@@ -228,7 +230,6 @@ const createAuth = (config: AuthConfig) => {
       return new Polar({
         accessToken: polarAccessToken,
         server: polarMode,
-        timeoutMs: POLAR_REQUEST_TIMEOUT_MS,
       });
     }
     return null;
@@ -284,12 +285,34 @@ const createAuth = (config: AuthConfig) => {
     await destroyExternalState(user.id);
   };
 
+  const markTombstoneProvisional = async (userId: string): Promise<void> => {
+    if (!markDeleteUserTombstoneProvisional) {
+      widelog.setFields({ "delete_user.tombstone_provisional_marker_unwired": true });
+      return;
+    }
+
+    try {
+      await markDeleteUserTombstoneProvisional(userId);
+      widelog.setFields({ "delete_user.tombstone_marked_provisional": true });
+    } catch (error) {
+      const failure = {
+        "delete_user.user_id": userId,
+        prefix: "delete_user_teardown.tombstone_provisional",
+        retriable: false,
+        slug: TEARDOWN_FAILED_SLUG,
+      };
+
+      widelog.errorFields(error, failure);
+    }
+  };
+
   const compensateDeleteUser = async (
     userId: string,
     survival: UnresolvedUserRowSurvival,
   ): Promise<void> => {
     if (survival === "unresolvable") {
       widelog.setFields({ "delete_user.teardown_rollback_withheld": true });
+      await markTombstoneProvisional(userId);
 
       if (polarClient) {
         await recordDeleteUserResidue(

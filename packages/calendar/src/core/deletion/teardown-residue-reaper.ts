@@ -48,7 +48,10 @@ interface TeardownResidueReaperDependencies {
   countSurvivingAccountLinks: (
     record: TeardownResidueRecord,
   ) => Promise<SurvivingAccountLinkCensus>;
-  createRegistrarContext: (record: TeardownResidueRecord) => Promise<RegistrarContext>;
+  createRegistrarContext: (
+    record: TeardownResidueRecord,
+    signal: AbortSignal,
+  ) => Promise<RegistrarContext>;
   deletePolarCustomer: (externalId: string) => Promise<void>;
   now: () => Date;
   observe: (fields: Record<string, unknown>) => void;
@@ -108,6 +111,7 @@ const repairPushChannel = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
+  signal: AbortSignal,
 ): Promise<ResidueRepairOutcome> => {
   const { provider, providerChannelId } = record;
 
@@ -125,7 +129,13 @@ const repairPushChannel = async (
     );
   }
 
-  const context = await dependencies.createRegistrarContext(record);
+  const context = await dependencies.createRegistrarContext(record, signal);
+
+  if (signal.aborted) {
+    throw new Error(
+      `Repair of push channel residue ${record.id} for user ${record.userId} was abandoned on its deadline, so ${provider} channel ${providerChannelId} must not be deregistered by this continuation`,
+    );
+  }
 
   await registrar.deregister(
     stopTargetFromResidue(record, providerChannelId, provider, now),
@@ -237,7 +247,7 @@ const repairResidue = (
   signal: AbortSignal,
 ): Promise<ResidueRepairOutcome> => {
   if (record.kind === PUSH_CHANNEL_RESIDUE_KIND) {
-    return repairPushChannel(record, dependencies, now);
+    return repairPushChannel(record, dependencies, now, signal);
   }
 
   if (record.kind === OAUTH_GRANT_RESIDUE_KIND) {

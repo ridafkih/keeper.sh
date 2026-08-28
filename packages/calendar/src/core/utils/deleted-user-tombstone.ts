@@ -7,6 +7,9 @@ const PRESENT_ANSWER_FRESHNESS_MS = 30_000;
 
 const deletedUserTombstoneKey = (userId: string): string => `user:${userId}:deleted`;
 
+const unconfirmedDeletionMarkerKey = (userId: string): string =>
+  `${deletedUserTombstoneKey(userId)}:unconfirmed`;
+
 interface RedisTombstoneClient {
   del(key: string): Promise<number>;
   exists(key: string): Promise<number>;
@@ -61,16 +64,17 @@ const writeTombstoneOnce = async (redis: TombstoneWriter, key: string): Promise<
   }
 };
 
-const markUserDeleted = async (
+const establishTombstone = async (
   redis: TombstoneWriter,
+  key: string,
   userId: string,
-  options: TombstoneOptions = {},
+  subject: string,
+  options: TombstoneOptions,
 ): Promise<void> => {
-  const key = deletedUserTombstoneKey(userId);
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= TOMBSTONE_WRITE_ATTEMPTS; attempt += 1) {
-    throwIfAborted(options.signal, "deletion tombstone write", userId, failures);
+    throwIfAborted(options.signal, `${subject} write`, userId, failures);
 
     try {
       await writeTombstoneOnce(redis, key);
@@ -80,15 +84,33 @@ const markUserDeleted = async (
     }
 
     if (attempt < TOMBSTONE_WRITE_ATTEMPTS) {
-      throwIfAborted(options.signal, "deletion tombstone write", userId, failures);
+      throwIfAborted(options.signal, `${subject} write`, userId, failures);
       await delay(TOMBSTONE_RETRY_DELAY_MS * attempt);
     }
   }
 
-  throw new Error(
-    `Failed to establish the deletion tombstone for user ${userId} — ${failures.join("; ")}`,
-  );
+  throw new Error(`Failed to establish the ${subject} for user ${userId} — ${failures.join("; ")}`);
 };
+
+const markUserDeleted = (
+  redis: TombstoneWriter,
+  userId: string,
+  options: TombstoneOptions = {},
+): Promise<void> =>
+  establishTombstone(redis, deletedUserTombstoneKey(userId), userId, "deletion tombstone", options);
+
+const markUserDeletionUnconfirmed = (
+  redis: TombstoneWriter,
+  userId: string,
+  options: TombstoneOptions = {},
+): Promise<void> =>
+  establishTombstone(
+    redis,
+    unconfirmedDeletionMarkerKey(userId),
+    userId,
+    "unconfirmed deletion marker",
+    options,
+  );
 
 const eraseTombstoneOnce = async (redis: TombstoneEraser, key: string): Promise<void> => {
   await redis.del(key);
@@ -113,12 +135,14 @@ const eraseTombstoneUntilSettled = async (redis: TombstoneEraser, key: string): 
 };
 
 const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise<void> => {
-  const key = deletedUserTombstoneKey(userId);
+  const keys = [deletedUserTombstoneKey(userId), unconfirmedDeletionMarkerKey(userId)];
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= TOMBSTONE_WRITE_ATTEMPTS; attempt += 1) {
     try {
-      await eraseTombstoneUntilSettled(redis, key);
+      for (const key of keys) {
+        await eraseTombstoneUntilSettled(redis, key);
+      }
       return;
     } catch (error) {
       failures.push(`attempt ${attempt}: ${describeFailure(error)}`);
@@ -151,6 +175,7 @@ const createUserDeletedCheck = (
   fallback?: UserDeletedFallback,
 ): (() => Promise<boolean>) => {
   const key = deletedUserTombstoneKey(userId);
+  const unconfirmedKey = unconfirmedDeletionMarkerKey(userId);
   let latestUserRowAnswer: UserRowAnswer = "unobserved";
   let presentAnswerObservedAtMs = 0;
   let userRowProbeInFlight: Promise<boolean> | null = null;
@@ -217,11 +242,30 @@ const createUserDeletedCheck = (
     }
   };
 
+  const isProvisional = async (): Promise<boolean> => {
+    try {
+      return (await redis.exists(unconfirmedKey)) > 0;
+    } catch (error) {
+      reportProbeError(error);
+      return false;
+    }
+  };
+
   return async () => {
     const tombstoned = await isTombstonePresent();
 
     if (tombstoned) {
-      return true;
+      if (!fallback) {
+        return true;
+      }
+
+      if (!(await isProvisional())) {
+        return true;
+      }
+
+      const absent = await isUserRowAbsent(fallback);
+
+      return absent || latestUserRowAnswer !== "present";
     }
 
     if (!fallback) {
@@ -238,6 +282,8 @@ export {
   createUserDeletedCheck,
   deletedUserTombstoneKey,
   markUserDeleted,
+  markUserDeletionUnconfirmed,
+  unconfirmedDeletionMarkerKey,
   DELETED_USER_TOMBSTONE_TTL_SECONDS,
 };
 export type {
