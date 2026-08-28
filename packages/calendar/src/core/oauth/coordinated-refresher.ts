@@ -15,6 +15,7 @@ const MS_PER_SECOND = 1000;
 const PERSIST_ATTEMPTS = 3;
 const PERSIST_BACKOFF_MS = 50;
 const REFRESH_WALL_BUDGET_MS = 20_000;
+const REFRESH_REQUEST_HARD_CAP_MS = 45_000;
 
 class RefreshBudgetExceededError extends Error {
   constructor(budgetMs: number) {
@@ -25,13 +26,20 @@ class RefreshBudgetExceededError extends Error {
 
 const withRefreshDeadline = <Result>(
   budgetMs: number,
+  hardCapMs: number,
   run: (signal: AbortSignal) => Promise<Result>,
   onAbandonedResult: (result: Result) => Promise<void>,
 ): Promise<Result> => {
-  const signal = AbortSignal.timeout(budgetMs);
+  if (hardCapMs <= budgetMs) {
+    throw new Error(
+      `refresh hard cap ${hardCapMs}ms must be strictly longer than the ${budgetMs}ms wall budget`,
+    );
+  }
+  const budgetSignal = AbortSignal.timeout(budgetMs);
+  const requestSignal = AbortSignal.timeout(hardCapMs);
   const abandonment = { abandoned: false };
   const expiry = new Promise<never>((_resolve, reject) => {
-    signal.addEventListener(
+    budgetSignal.addEventListener(
       "abort",
       () => {
         abandonment.abandoned = true;
@@ -41,7 +49,7 @@ const withRefreshDeadline = <Result>(
     );
   });
 
-  const attempt = run(signal);
+  const attempt = run(requestSignal);
   const observed = (async () => {
     try {
       const result = await attempt;
@@ -173,6 +181,7 @@ interface CoordinatedRefresherOptions {
     refresh_token?: string;
   }>;
   refreshBudgetMs?: number;
+  refreshHardCapMs?: number;
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
@@ -184,6 +193,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     refreshLockStore,
     rawRefresh,
     refreshBudgetMs = REFRESH_WALL_BUDGET_MS,
+    refreshHardCapMs = REFRESH_REQUEST_HARD_CAP_MS,
   } = options;
 
   /*
@@ -223,6 +233,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
         withReauthenticationDemand(database, { calendarAccountId }, async () => {
           const result = await withRefreshDeadline(
             refreshBudgetMs,
+            refreshHardCapMs,
             (signal) => rawRefresh(refreshToken, { signal }),
             (abandoned) =>
               persistAbandonedRotation(database, oauthCredentialId, refreshToken, abandoned),
@@ -239,6 +250,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
 };
 
 export {
+  REFRESH_REQUEST_HARD_CAP_MS,
   REFRESH_WALL_BUDGET_MS,
   RefreshBudgetExceededError,
   RotatedTokenNotPersistedError,
