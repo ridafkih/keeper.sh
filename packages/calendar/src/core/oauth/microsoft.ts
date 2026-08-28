@@ -1,6 +1,7 @@
 import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
+import { UserInfoCredentialRejectedError } from "./user-info-credential-rejected";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
@@ -181,6 +182,10 @@ const fetchUserInfo = async (
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UserInfoCredentialRejectedError(response.status);
+    }
+
     throw new Error(`Failed to fetch user info: ${response.status}`);
   }
 

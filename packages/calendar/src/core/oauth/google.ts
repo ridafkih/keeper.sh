@@ -1,6 +1,7 @@
 import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
 import { generateState } from "./state";
+import { UserInfoCredentialRejectedError } from "./user-info-credential-rejected";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -358,6 +359,10 @@ const fetchUserInfo = async (
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UserInfoCredentialRejectedError(response.status);
+    }
+
     throw new Error(`Failed to fetch user info: ${response.status}`);
   }
 

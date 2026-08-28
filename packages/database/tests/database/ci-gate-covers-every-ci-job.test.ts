@@ -6,6 +6,7 @@ const repositoryRoot = resolve(import.meta.dirname, "../../../..");
 
 const workflowPath = resolve(repositoryRoot, ".github/workflows/checks.yml");
 const turboConfigPath = resolve(repositoryRoot, "turbo.json");
+const rootPackageJsonPath = resolve(repositoryRoot, "package.json");
 
 const bunRunPattern = /bun\s+run\s+(?<rest>[^\n]+)/g;
 
@@ -42,11 +43,40 @@ const turboTasks = () => {
   return Object.keys(parsed.tasks).toSorted();
 };
 
-describe("the local turbo gate reaches every CI job", () => {
+const gateTasks = () => {
+  const parsed = JSON.parse(readFileSync(rootPackageJsonPath, "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  const gate = parsed.scripts?.gate;
+  if (gate === undefined) {
+    throw new Error(
+      `${rootPackageJsonPath} declares no "gate" script, so no single command runs ${workflowScripts().join(", ")}`,
+    );
+  }
+  const words = gate.trim().split(/\s+/);
+  const runIndex = words.indexOf("run");
+  if (runIndex === -1) {
+    throw new Error(`The "gate" script does not invoke turbo run: ${gate}`);
+  }
+  const tasks = words.slice(runIndex + 1).filter((word) => !word.startsWith("-"));
+  if (tasks.length === 0) {
+    throw new Error(`The "gate" script passes no turbo tasks: ${gate}`);
+  }
+  return new Set(tasks);
+};
+
+describe("one named gate command runs every CI script", () => {
   it("declares a turbo task for every script the checks workflow runs", () => {
     const declared = new Set(turboTasks());
     const unreachable = workflowScripts().filter((script) => !declared.has(script));
 
     expect(unreachable).toEqual([]);
+  });
+
+  it("runs every script the checks workflow runs from the root gate script", () => {
+    const tasks = gateTasks();
+    const unrun = workflowScripts().filter((script) => !tasks.has(script));
+
+    expect(unrun).toEqual([]);
   });
 });

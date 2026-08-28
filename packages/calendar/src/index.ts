@@ -60,6 +60,7 @@ export {
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";
+export { UserInfoCredentialRejectedError } from "./core/oauth/user-info-credential-rejected";
 export {
   OAUTH_SYNC_WINDOW_VERSION,
   getDeterministicRefreshOffset,

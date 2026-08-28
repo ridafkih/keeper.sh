@@ -591,7 +591,7 @@ const refreshWithinTheConnectDeadline = async (
           presentedRefreshToken,
           result,
         ),
-      () => new RefreshBudgetExceededError(budgetMs),
+      (inFlightAttempt) => new RefreshBudgetExceededError(budgetMs, inFlightAttempt),
     );
   } catch (error) {
     if (error instanceof RefreshBudgetExceededError || deadline.signal.aborted) {

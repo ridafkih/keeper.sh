@@ -2,6 +2,7 @@ import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordi
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 import { withReauthenticationDemand } from "../reauthentication/reauthentication-demand";
 import { RotatedTokenNotPersistedError } from "./rotated-token-not-persisted";
+import { RefreshBudgetExceededError } from "./refresh-budget-exceeded";
 import { CredentialRowMissingError } from "./credential-row-missing";
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
@@ -18,35 +19,14 @@ const PERSIST_BACKOFF_MS = 50;
 const REFRESH_WALL_BUDGET_MS = 20_000;
 const REFRESH_REQUEST_HARD_CAP_MS = 45_000;
 
-class RefreshBudgetExceededError extends Error {
-  constructor(budgetMs: number) {
-    super(`token refresh exceeded its ${budgetMs}ms wall-time budget`);
-    this.name = "RefreshBudgetExceededError";
-  }
-}
-
 const withAbandonableRequest = <Result>(
   budgetSignal: AbortSignal,
   requestSignal: AbortSignal,
   run: (signal: AbortSignal) => Promise<Result>,
   onAbandonedResult: (result: Result) => Promise<void>,
-  whenBudgetExceeded: () => Error,
+  whenBudgetExceeded: (inFlightAttempt: Promise<Result>) => Error,
 ): Promise<Result> => {
   const abandonment = { abandoned: false };
-  const expiry = new Promise<never>((_resolve, reject) => {
-    const abandon = () => {
-      abandonment.abandoned = true;
-      reject(whenBudgetExceeded());
-    };
-
-    if (budgetSignal.aborted) {
-      abandon();
-      return;
-    }
-
-    budgetSignal.addEventListener("abort", abandon, { once: true });
-  });
-
   const attempt = run(requestSignal);
   const observed = (async () => {
     try {
@@ -62,6 +42,20 @@ const withAbandonableRequest = <Result>(
       throw error;
     }
   })();
+
+  const expiry = new Promise<never>((_resolve, reject) => {
+    const abandon = () => {
+      abandonment.abandoned = true;
+      reject(whenBudgetExceeded(observed));
+    };
+
+    if (budgetSignal.aborted) {
+      abandon();
+      return;
+    }
+
+    budgetSignal.addEventListener("abort", abandon, { once: true });
+  });
 
   return Promise.race([observed, expiry]);
 };
@@ -83,7 +77,7 @@ const withRefreshDeadline = <Result>(
     AbortSignal.timeout(hardCapMs),
     run,
     onAbandonedResult,
-    () => new RefreshBudgetExceededError(budgetMs),
+    (inFlightAttempt) => new RefreshBudgetExceededError(budgetMs, inFlightAttempt),
   );
 };
 
