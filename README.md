@@ -180,6 +180,12 @@ There are seven images currently available: two designed for convenience, and fi
 | GOOGLE_CLIENT_SECRET           | `api`, `cron`, `worker` | Optional. Required for Google Calendar integration.                                                                                                                 |
 | MICROSOFT_CLIENT_ID            | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
+| OIDC_ISSUER_URL                | `api`         | Optional. Base URL of an OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, ...). Enables SSO via Better Auth's generic OAuth provider. Must be a reachable HTTPS URL. Requires `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`.<br><br>e.g. `https://id.example.com`                                                                              |
+| OIDC_CLIENT_ID                 | `api`         | Optional. OAuth client ID registered with the OIDC issuer.                                                                                                           |
+| OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
+| OIDC_PROVIDER_NAME             | `api`         | Optional. Display name shown on the SSO login button. Defaults to `SSO`.<br><br>e.g. `Pocket ID`                                                                      |
+| OIDC_SCOPES                    | `api`         | Optional. Comma-separated scopes to request from the OIDC issuer. Defaults to `openid,profile,email`.<br><br>e.g. `openid,profile,email,groups`                                                                                    |
+| DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to hide the email/password and username forms entirely and force sign-in through the OIDC provider. Only takes effect when `OIDC_ISSUER_URL` (plus client id and secret) are configured. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
@@ -251,6 +257,44 @@ Once this is configured, set the client ID and client secret as the `GOOGLE_CLIE
 > Once again, this is optional. If you do not configure this, you will not be able to configure Microsoft Outlook as a destination.
 
 The clearest non-legacy walkthrough for configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
+
+### OIDC / SSO
+
+Self-hosters can delegate authentication to any OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, Zitadel, ...) instead of using the built-in email/password or username login. This is opt-in and additive — existing deployments are unaffected until you set the variables.
+
+Register a client with your IdP using the callback URL:
+
+```
+https://<your-keeper-origin>/api/auth/oauth2/callback/oidc
+```
+
+Then set the environment variables:
+
+```
+OIDC_ISSUER_URL=https://id.example.com
+OIDC_CLIENT_ID=<client-id>
+OIDC_CLIENT_SECRET=<client-secret>
+```
+
+The client may optionally be named for the login button:
+
+```
+OIDC_PROVIDER_NAME=Pocket ID
+```
+
+To request additional scopes (for example, if your IdP needs `groups`):
+
+```
+OIDC_SCOPES=openid,profile,email,groups
+```
+
+To make SSO the only way in, hiding the built-in credential forms entirely:
+
+```
+DISABLE_LOCAL_AUTH=true
+```
+
+`DISABLE_LOCAL_AUTH` only takes effect when a fully configured OIDC client is present, so you can't lock yourself out by setting it alone.
 
 ## Standalone Container
 
