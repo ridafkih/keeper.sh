@@ -231,6 +231,12 @@ const mergeOntoIdentityHolder = async (
     targetUsability,
   );
 
+  await transaction
+    .select({ id: oauthCredentialsTable.id })
+    .from(oauthCredentialsTable)
+    .where(eq(oauthCredentialsTable.id, loser.credentialId))
+    .for("update");
+
   await transaction.execute(
     sql`update ${calendarAccountsTable} set ${sql.identifier(calendarAccountsTable.oauthCredentialId.name)} = ${survivor.credentialId} where ${calendarAccountsTable.oauthCredentialId} = ${loser.credentialId} and ${calendarAccountsTable.provider} = ${target.provider} and ${calendarAccountsTable.userId} = ${target.userId}`,
   );

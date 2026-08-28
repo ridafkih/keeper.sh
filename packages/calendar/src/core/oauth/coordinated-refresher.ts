@@ -88,8 +88,18 @@ interface RefreshedCredential {
 }
 
 const affectedRowCount = (outcome: unknown): number => {
-  const candidate = outcome as { count?: unknown; rowCount?: unknown; rowsAffected?: unknown };
-  for (const value of [candidate?.rowCount, candidate?.rowsAffected, candidate?.count]) {
+  const candidate = outcome as {
+    affectedRows?: unknown;
+    count?: unknown;
+    rowCount?: unknown;
+    rowsAffected?: unknown;
+  };
+  for (const value of [
+    candidate?.rowCount,
+    candidate?.rowsAffected,
+    candidate?.affectedRows,
+    candidate?.count,
+  ]) {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value;
     }
@@ -300,6 +310,7 @@ export {
   RefreshBudgetExceededError,
   RotatedTokenNotPersistedError,
   adoptAbandonedRotation,
+  affectedRowCount,
   createCoordinatedRefresher,
   persistAbandonedRotation,
   persistRefreshedCredential,

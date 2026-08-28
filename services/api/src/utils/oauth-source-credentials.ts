@@ -1,3 +1,4 @@
+import { affectedRowCount } from "@keeper.sh/calendar/oauth-persistence";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq, notExists } from "drizzle-orm";
 import { database } from "@/context";
@@ -34,7 +35,7 @@ const createOAuthSourceCredential = async (
     .limit(FIRST_RESULT_LIMIT);
 
   if (existing) {
-    await database
+    const outcome = await database
       .update(oauthCredentialsTable)
       .set({
         accessToken: data.accessToken,
@@ -45,7 +46,9 @@ const createOAuthSourceCredential = async (
       })
       .where(eq(oauthCredentialsTable.id, existing.id));
 
-    return existing.id;
+    if (affectedRowCount(outcome) > 0) {
+      return existing.id;
+    }
   }
 
   const [credential] = await database

@@ -57,6 +57,7 @@ const createDependencies = (
     }
     return Promise.resolve(reReadResult);
   },
+  flagAccountNeedsReauthentication: () => Promise.resolve(),
   hasExistingCalendar: () => Promise.resolve(false),
   triggerSync: () => null,
 });

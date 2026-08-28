@@ -19,6 +19,19 @@ const ROTATED_TOKEN_LOST_MESSAGE =
 const CREDENTIAL_ROW_MISSING_MESSAGE =
   "The calendar connection was removed while it was being added. Please reconnect the account.";
 
+const credentialRowMissingWithin = (error: unknown): CredentialRowMissingError | null => {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !seen.has(current)) {
+    if (current instanceof CredentialRowMissingError) {
+      return current;
+    }
+    seen.add(current);
+    current = current.cause;
+  }
+  return null;
+};
+
 const oauthSourceFailureResponse = (error: unknown): Response => {
   if (error instanceof OAuthSourceLimitError) {
     widelog.errorFields(error, { slug: "account-limit-reached" });
@@ -34,8 +47,12 @@ const oauthSourceFailureResponse = (error: unknown): Response => {
     widelog.errorFields(error, { slug: "duplicate-source" });
     return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
   }
-  if (error instanceof CredentialRowMissingError) {
-    widelog.errorFields(error, { retriable: false, slug: "connect-credential-row-missing" });
+  const credentialRowMissing = credentialRowMissingWithin(error);
+  if (credentialRowMissing) {
+    widelog.errorFields(credentialRowMissing, {
+      retriable: false,
+      slug: "connect-credential-row-missing",
+    });
     return ErrorResponse.conflict(CREDENTIAL_ROW_MISSING_MESSAGE).toResponse();
   }
   if (error instanceof RotatedTokenNotPersistedError) {

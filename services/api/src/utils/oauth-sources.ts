@@ -273,6 +273,9 @@ interface CreateOAuthSourceDependencies {
   ) => Promise<void>;
   canAddAccount: (userId: string, currentCount: number) => Promise<boolean>;
   countUserAccounts: (userId: string) => Promise<number>;
+  flagAccountNeedsReauthentication: (
+    options: { accountRowId: string; userId: string },
+  ) => Promise<void>;
   createSource: (payload: {
     accountId: string;
     externalCalendarId: string;
@@ -399,6 +402,24 @@ const adoptProviderAccountIdWithDatabase = async <TQueryResult extends PgQueryRe
     .set({ accountId: options.providerAccountId })
     .where(
       adoptsUnclaimedProviderAccountIdentity(options.accountRowId, options.providerAccountId),
+    );
+};
+
+const flagAccountNeedsReauthenticationWithDatabase = async <TQueryResult extends PgQueryResultHKT>(
+  databaseClient: Pick<PgDatabase<TQueryResult>, "update">,
+  options: { accountRowId: string; userId: string },
+): Promise<void> => {
+  await databaseClient
+    .update(calendarAccountsTable)
+    .set({
+      needsReauthentication: true,
+      reauthenticationSource: reauthenticationSourceFor(true),
+    })
+    .where(
+      and(
+        eq(calendarAccountsTable.id, options.accountRowId),
+        eq(calendarAccountsTable.userId, options.userId),
+      ),
     );
 };
 
@@ -796,6 +817,10 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
     return premiumService.canAddAccount(userId, currentCount);
   },
   countUserAccounts,
+  flagAccountNeedsReauthentication: async (options) => {
+    const { database } = await import("@/context");
+    await flagAccountNeedsReauthenticationWithDatabase(database, options);
+  },
   createCalendarAccount: async ({
     displayName,
     email,
@@ -933,6 +958,10 @@ const createOAuthSourceWithDependencies = async (
 
   if (accountId) {
     await dependencies.adoptProviderAccountId({ accountRowId: accountId, providerAccountId });
+
+    if (reauthenticationRequired) {
+      await dependencies.flagAccountNeedsReauthentication({ accountRowId: accountId, userId });
+    }
   }
 
   if (!accountId) {
@@ -1028,6 +1057,8 @@ const createOAuthSource = async (
       ...dependencies,
       adoptProviderAccountId: (accountOptions) =>
         adoptProviderAccountIdWithDatabase(tx, accountOptions),
+      flagAccountNeedsReauthentication: (accountOptions) =>
+        flagAccountNeedsReauthenticationWithDatabase(tx, accountOptions),
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
       createCalendarAccount: (payload) =>

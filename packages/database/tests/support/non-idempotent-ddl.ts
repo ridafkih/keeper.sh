@@ -21,6 +21,26 @@ const NON_IDEMPOTENT_STATEMENT_PATTERNS = [
     pattern: /\balter\s+table\b[\s\S]*?\badd\s+constraint\b/i,
     remedy: "outside a DO $$ ... IF NOT EXISTS block (Postgres has no ADD CONSTRAINT IF NOT EXISTS)",
   },
+  {
+    kind: "DROP COLUMN",
+    pattern: /\bdrop\s+column\s+(?!if\s+exists\b)/i,
+    remedy: "without IF EXISTS",
+  },
+  {
+    kind: "DROP INDEX",
+    pattern: /\bdrop\s+index\s+(?:concurrently\s+)?(?!if\s+exists\b)/i,
+    remedy: "without IF EXISTS",
+  },
+  {
+    kind: "DROP TABLE",
+    pattern: /\bdrop\s+table\s+(?!if\s+exists\b)/i,
+    remedy: "without IF EXISTS",
+  },
+  {
+    kind: "DROP CONSTRAINT",
+    pattern: /\bdrop\s+constraint\s+(?!if\s+exists\b)/i,
+    remedy: "without IF EXISTS",
+  },
 ];
 
 const summarise = (statement: string) => statement.split("\n")[0]?.trim() ?? statement;

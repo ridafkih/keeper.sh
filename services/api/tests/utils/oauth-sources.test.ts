@@ -110,6 +110,7 @@ describe("createOAuthSourceWithDependencies", () => {
       },
       {
         adoptProviderAccountId: () => Promise.resolve(),
+        flagAccountNeedsReauthentication: () => Promise.resolve(),
         canAddAccount: (userId, currentCount) => {
           canAddAccountCalls.push([userId, currentCount]);
           return Promise.resolve(true);
@@ -158,6 +159,7 @@ describe("createOAuthSourceWithDependencies", () => {
       },
       {
         adoptProviderAccountId: () => Promise.resolve(),
+        flagAccountNeedsReauthentication: () => Promise.resolve(),
         canAddAccount: (userId, currentCount) => {
           canAddAccountCalls.push([userId, currentCount]);
           return Promise.resolve(false);
@@ -214,6 +216,7 @@ describe("createOAuthSourceWithDependencies", () => {
         },
         {
           adoptProviderAccountId: () => Promise.resolve(),
+        flagAccountNeedsReauthentication: () => Promise.resolve(),
           canAddAccount: (userId, currentCount) => {
             canAddAccountCalls.push([userId, currentCount]);
             return Promise.resolve(canAddAccountResult);

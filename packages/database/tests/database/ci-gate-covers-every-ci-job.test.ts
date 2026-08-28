@@ -8,16 +8,18 @@ const workflowPath = resolve(repositoryRoot, ".github/workflows/checks.yml");
 const turboConfigPath = resolve(repositoryRoot, "turbo.json");
 const rootPackageJsonPath = resolve(repositoryRoot, "package.json");
 
-const bunRunPattern = /bun\s+run\s+(?<rest>[^\n]+)/g;
+const bunRunPattern = /\bbunx?(?:\s+x)?\s+(?:turbo\s+)?run\s+(?<rest>[^\n]+)/g;
+
+const matrixExpressionPattern = /\$\{\{.*?\}\}/g;
 
 const scriptOf = (invocation: string) => {
-  const words = invocation.trim().split(/\s+/);
+  const words = invocation.replace(matrixExpressionPattern, " ").trim().split(/\s+/);
   const scriptIndex = words.findIndex(
     (word, index) => index > 0 && words[index - 1] !== "--filter" && !word.startsWith("-"),
   );
   const script = words[0] === "--filter" ? words[scriptIndex] : words[0];
   if (script === undefined || script.length === 0) {
-    throw new Error(`Could not read a script name out of "bun run ${invocation}"`);
+    throw new Error(`Could not read a script name out of "${invocation}"`);
   }
   return script;
 };
@@ -78,5 +80,9 @@ describe("one named gate command runs every CI script", () => {
     const unrun = workflowScripts().filter((script) => !tasks.has(script));
 
     expect(unrun).toEqual([]);
+  });
+
+  it("harvests the test task the sharded workflow job runs", () => {
+    expect(workflowScripts()).toContain("test");
   });
 });
