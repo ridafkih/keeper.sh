@@ -212,6 +212,7 @@ const createUserDeletedCheck = (
       return (await redis.exists(key)) > 0;
     } catch (error) {
       reportProbeError(error);
+      presentAnswerObservedAtMs = 0;
       return false;
     }
   };

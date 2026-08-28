@@ -4,7 +4,9 @@ import {
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
@@ -12,7 +14,7 @@ import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/go
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import type { database as contextDatabase, oauthProviders as contextOAuthProviders } from "@/context";
 import {
-  adoptsProviderAccountIdentity,
+  adoptsUnclaimedProviderAccountIdentity,
   calendarRowCarriesAProviderIdentity,
 } from "@keeper.sh/database/provider-account-identity";
 import { spawnBackgroundJob } from "./background-task";
@@ -33,6 +35,7 @@ const CONNECT_DEADLINE_SETTLE_RESERVE_MS = 500;
 const MS_PER_SECOND = 1000;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
+const UNIQUE_VIOLATION_SQLSTATE = "23505";
 type OAuthSourceDatabase = Pick<typeof contextDatabase, "insert" | "select" | "selectDistinct" | "update">;
 
 class OAuthSourceLimitError extends Error {
@@ -350,8 +353,8 @@ const findOAuthAccountId = async (
   return findOAuthAccountIdWithDatabase(database, options);
 };
 
-const adoptProviderAccountIdWithDatabase = async (
-  databaseClient: OAuthSourceDatabase,
+const adoptProviderAccountIdWithDatabase = async <TQueryResult extends PgQueryResultHKT>(
+  databaseClient: Pick<PgDatabase<TQueryResult>, "update">,
   options: { accountRowId: string; providerAccountId: string | null },
 ): Promise<void> => {
   if (!options.providerAccountId) {
@@ -361,7 +364,9 @@ const adoptProviderAccountIdWithDatabase = async (
   await databaseClient
     .update(calendarAccountsTable)
     .set({ accountId: options.providerAccountId })
-    .where(adoptsProviderAccountIdentity(options.accountRowId));
+    .where(
+      adoptsUnclaimedProviderAccountIdentity(options.accountRowId, options.providerAccountId),
+    );
 };
 
 const findStoredProviderAccountIdWithDatabase = async (
@@ -687,6 +692,48 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   },
 });
 
+const isUniqueViolation = (error: unknown): boolean =>
+  getDatabaseErrorDetails(error)?.sqlState === UNIQUE_VIOLATION_SQLSTATE;
+
+const createCalendarAccountSurvivingConcurrentClaim = async (
+  dependencies: CreateOAuthSourceDependencies,
+  account: {
+    displayName: string | null;
+    email: string | null;
+    oauthCredentialId: string;
+    provider: string;
+    providerAccountId: string | null;
+    userId: string;
+  },
+): Promise<string | null> => {
+  try {
+    return await dependencies.createCalendarAccount(account);
+  } catch (error) {
+    if (!isUniqueViolation(error)) {
+      throw error;
+    }
+
+    const claimingAccountId = await dependencies.findExistingAccountId({
+      oauthCredentialId: account.oauthCredentialId,
+      provider: account.provider,
+      providerAccountId: account.providerAccountId,
+      userId: account.userId,
+    });
+
+    if (!claimingAccountId) {
+      throw error;
+    }
+
+    widelog.set("oauth_source.account_insert_recovery", "concurrent_identity_claim");
+    widelog.errorFields(error, {
+      retriable: false,
+      slug: "calendar-account-identity-claimed-concurrently",
+    });
+
+    return claimingAccountId;
+  }
+};
+
 const createOAuthSourceWithDependencies = async (
   options: CreateOAuthSourceOptions,
   dependencies: CreateOAuthSourceDependencies,
@@ -738,7 +785,7 @@ const createOAuthSourceWithDependencies = async (
       throw new OAuthSourceLimitError();
     }
 
-    const createdAccountId = await dependencies.createCalendarAccount({
+    const createdAccountId = await createCalendarAccountSurvivingConcurrentClaim(dependencies, {
       displayName: credential.email,
       email: credential.email,
       oauthCredentialId,
@@ -1166,6 +1213,7 @@ export {
   createOAuthSource,
   createOAuthSourceWithDependencies,
   createOAuthAccountIdWithDatabase,
+  adoptProviderAccountIdWithDatabase,
   findOAuthAccountIdWithDatabase,
   importOAuthAccountCalendars,
   importOAuthAccountCalendarsWithDependencies,

@@ -72,6 +72,11 @@ const resolveNotificationUrl = (provider: string, config: WebhookConfig): string
   throw new Error(`No push notification url is defined for provider ${provider}`);
 };
 
+type ResidueTokenRefresher = (
+  refreshToken: string,
+  signal?: AbortSignal,
+) => ReturnType<TokenRefresher>;
+
 const resolveTokenRefresher = (
   provider: string,
   clientCredentials: {
@@ -80,7 +85,7 @@ const resolveTokenRefresher = (
     microsoftClientId?: string;
     microsoftClientSecret?: string;
   },
-): TokenRefresher | null => {
+): ResidueTokenRefresher | null => {
   if (
     provider === "google"
     && clientCredentials.googleClientId
@@ -109,6 +114,7 @@ const resolveTokenRefresher = (
 const resolveResidueAccessToken = async (
   record: TeardownResidueRecord,
   provider: string,
+  signal?: AbortSignal,
 ): Promise<string> => {
   const { default: environment } = await import("@/env");
   const { credential } = record;
@@ -136,7 +142,7 @@ const resolveResidueAccessToken = async (
     refreshToken: credential.refreshToken,
   };
 
-  await ensureValidToken(tokenState, refresher);
+  await ensureValidToken(tokenState, (refreshToken) => refresher(refreshToken, signal));
 
   return tokenState.accessToken;
 };
@@ -481,7 +487,7 @@ interface CensusRepairTally {
 
 const resolveUserInfoFetch = (
   provider: string,
-): ((accessToken: string) => Promise<ProviderUserInfo>) | null => {
+): ((accessToken: string, signal?: AbortSignal) => Promise<ProviderUserInfo>) | null => {
   if (provider === "google") {
     return fetchGoogleUserInfo;
   }
@@ -491,6 +497,29 @@ const resolveUserInfoFetch = (
   }
 
   return null;
+};
+
+const resolveResidueProviderAccountId = (
+  record: TeardownResidueRecord,
+  signal: AbortSignal,
+): Promise<string | null> => {
+  const { provider } = record;
+
+  if (!provider) {
+    return Promise.resolve(null);
+  }
+
+  const fetchUserInfo = resolveUserInfoFetch(provider);
+
+  if (!fetchUserInfo) {
+    return Promise.resolve(null);
+  }
+
+  return resolveProviderAccountIdentity({
+    fetchUserInfo: (accessToken) => fetchUserInfo(accessToken, signal),
+    resolveAccessToken: () => resolveResidueAccessToken(record, provider, signal),
+    subject: `teardown residue ${record.id}`,
+  });
 };
 
 const censusCursorFilters = (afterAccountRowId: string | null): SQL[] => {
@@ -759,25 +788,7 @@ const createDefaultReaper = async () => {
       now: () => new Date(),
     }),
     resolveRegistrar: resolvePushRegistrar,
-    resolveResidueProviderAccountId: (record) => {
-      const { provider } = record;
-
-      if (!provider) {
-        return Promise.resolve(null);
-      }
-
-      const fetchUserInfo = resolveUserInfoFetch(provider);
-
-      if (!fetchUserInfo) {
-        return Promise.resolve(null);
-      }
-
-      return resolveProviderAccountIdentity({
-        fetchUserInfo,
-        resolveAccessToken: () => resolveResidueAccessToken(record, provider),
-        subject: `teardown residue ${record.id}`,
-      });
-    },
+    resolveResidueProviderAccountId,
     revokeOAuthGrant,
     waitForRepairDeadline: (deadlineMs) =>
       new Promise((resolve) => {
@@ -816,6 +827,7 @@ export {
   CENSUS_REPAIR_BATCH_LIMIT,
   countSurvivingAccountLinks,
   repairCensusBlockingCredentials,
+  resolveResidueProviderAccountId,
   revokeOAuthGrant,
   sweepOrphanedOAuthCredentials,
 };

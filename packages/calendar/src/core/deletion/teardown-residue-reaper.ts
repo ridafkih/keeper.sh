@@ -58,6 +58,7 @@ interface TeardownResidueReaperDependencies {
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
   resolveResidueProviderAccountId?: (
     record: TeardownResidueRecord,
+    signal: AbortSignal,
   ) => Promise<string | null>;
   revokeOAuthGrant: (record: TeardownResidueRecord, token: string) => Promise<void>;
   waitForRepairDeadline: (deadlineMs: number) => Promise<void>;
@@ -149,13 +150,14 @@ const revocationTokenFromResidue = (record: TeardownResidueRecord): string => {
 const resolveGrantProviderAccountId = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
+  signal: AbortSignal,
 ): Promise<string | null> => {
   if (record.providerAccountId) {
     return record.providerAccountId;
   }
 
   try {
-    return (await dependencies.resolveResidueProviderAccountId?.(record)) ?? null;
+    return (await dependencies.resolveResidueProviderAccountId?.(record, signal)) ?? null;
   } catch (error) {
     dependencies.recordError(error, RESIDUE_IDENTITY_UNRESOLVED_SLUG);
 
@@ -163,9 +165,19 @@ const resolveGrantProviderAccountId = async (
   }
 };
 
+class AbandonedRepairError extends Error {
+  override readonly name = "AbandonedRepairError";
+}
+
+const abandonedRepairError = (record: TeardownResidueRecord): AbandonedRepairError =>
+  new AbandonedRepairError(
+    `Repair of teardown residue ${record.id} (${record.kind}) for user ${record.userId} was abandoned on its deadline, so the ${record.provider} grant held for ${record.accountEmail ?? "an unknown account"} must not be revoked by this continuation`,
+  );
+
 const repairOAuthGrant = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
+  signal: AbortSignal,
 ): Promise<ResidueRepairOutcome> => {
   if (!record.accountEmail) {
     throw new Error(
@@ -173,7 +185,7 @@ const repairOAuthGrant = async (
     );
   }
 
-  const resolved = await resolveGrantProviderAccountId(record, dependencies);
+  const resolved = await resolveGrantProviderAccountId(record, dependencies, signal);
 
   if (!resolved) {
     return { blockingCredentialIds: [], status: "revocation_unresolved" };
@@ -192,6 +204,10 @@ const repairOAuthGrant = async (
 
   if (census.coHolders > NO_SURVIVING_ACCOUNT_LINKS) {
     return { status: "revocation_skipped" };
+  }
+
+  if (signal.aborted) {
+    throw abandonedRepairError(identified);
   }
 
   await dependencies.revokeOAuthGrant(identified, revocationTokenFromResidue(identified));
@@ -218,13 +234,14 @@ const repairResidue = (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
+  signal: AbortSignal,
 ): Promise<ResidueRepairOutcome> => {
   if (record.kind === PUSH_CHANNEL_RESIDUE_KIND) {
     return repairPushChannel(record, dependencies, now);
   }
 
   if (record.kind === OAUTH_GRANT_RESIDUE_KIND) {
-    return repairOAuthGrant(record, dependencies);
+    return repairOAuthGrant(record, dependencies, signal);
   }
 
   if (record.kind === POLAR_CUSTOMER_RESIDUE_KIND) {
@@ -246,12 +263,17 @@ const nextEventLoopTurn = (): Promise<void> =>
 const abandonRepairOnDeadline = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
+  abandonment: AbortController,
 ): Promise<ResidueRepairOutcome> => {
   await dependencies.waitForRepairDeadline(dependencies.repairDeadlineMs);
 
-  throw new Error(
+  const abandoned = new Error(
     `Repair of teardown residue ${record.id} (${record.kind}) for user ${record.userId} outran its ${dependencies.repairDeadlineMs}ms deadline and was abandoned`,
   );
+
+  abandonment.abort(abandoned);
+
+  throw abandoned;
 };
 
 const repairResidueWithinDeadline = async (
@@ -259,7 +281,8 @@ const repairResidueWithinDeadline = async (
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
 ): Promise<ResidueRepairOutcome> => {
-  const repair = repairResidue(record, dependencies, now);
+  const abandonment = new AbortController();
+  const repair = repairResidue(record, dependencies, now, abandonment.signal);
   const settledUnaided = repair.then(
     () => REPAIR_SETTLED_UNAIDED,
     () => REPAIR_SETTLED_UNAIDED,
@@ -271,7 +294,10 @@ const repairResidueWithinDeadline = async (
     return repair;
   }
 
-  return Promise.race([repair, abandonRepairOnDeadline(record, dependencies)]);
+  return Promise.race([
+    repair,
+    abandonRepairOnDeadline(record, dependencies, abandonment),
+  ]);
 };
 
 const isPastExpiry = (record: TeardownResidueRecord, now: Date): boolean =>
