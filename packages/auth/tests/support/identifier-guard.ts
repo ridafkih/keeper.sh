@@ -68,6 +68,7 @@ const remediationTestFiles = () => [
   "packages/queue/tests/remove-user-sync-jobs.test.ts",
   "packages/sync/tests/aborted-run-does-not-clear-backoff.test.ts",
   "packages/sync/tests/aborted-run-verdict.test.ts",
+  "services/api/tests/routes/api/sources/rotated-token-loss-is-not-answered-as-invalid-request-body.test.ts",
   "services/api/tests/utils/a-grant-retired-after-a-failed-revocation-is-reported-unrevoked.test.ts",
   "services/api/tests/utils/conflicting-provider-identities-defer-instead-of-picking-the-larger-one.test.ts",
   "services/api/tests/utils/connect-adopt-declines-a-sibling-claimed-identity.test.ts",

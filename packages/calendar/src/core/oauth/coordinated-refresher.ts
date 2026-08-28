@@ -7,7 +7,7 @@ import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { classifyDatabaseError } from "@keeper.sh/database";
 import { widelog } from "widelogger";
 import { abortableSleep } from "../utils/backoff";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
 const MS_PER_SECOND = 1000;
@@ -26,17 +26,38 @@ class RefreshBudgetExceededError extends Error {
 const withRefreshDeadline = <Result>(
   budgetMs: number,
   run: (signal: AbortSignal) => Promise<Result>,
+  onAbandonedResult: (result: Result) => Promise<void>,
 ): Promise<Result> => {
   const signal = AbortSignal.timeout(budgetMs);
+  const abandonment = { abandoned: false };
   const expiry = new Promise<never>((_resolve, reject) => {
     signal.addEventListener(
       "abort",
-      () => reject(new RefreshBudgetExceededError(budgetMs)),
+      () => {
+        abandonment.abandoned = true;
+        reject(new RefreshBudgetExceededError(budgetMs));
+      },
       { once: true },
     );
   });
 
-  return Promise.race([run(signal), expiry]);
+  const attempt = run(signal);
+  const observed = (async () => {
+    try {
+      const result = await attempt;
+      if (abandonment.abandoned) {
+        await onAbandonedResult(result);
+      }
+      return result;
+    } catch (error) {
+      if (abandonment.abandoned) {
+        widelog.error("token.abandoned_refresh", error);
+      }
+      throw error;
+    }
+  })();
+
+  return Promise.race([observed, expiry]);
 };
 
 interface RefreshedCredential {
@@ -91,6 +112,50 @@ const persistRotatedCredential = async (
     }
     throw error;
   }
+};
+
+const affectedRowCount = (outcome: unknown): number => {
+  const candidate = outcome as { count?: unknown; rowCount?: unknown; rowsAffected?: unknown };
+  for (const value of [candidate?.rowCount, candidate?.rowsAffected, candidate?.count]) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  throw new Error("credential update returned no affected row count");
+};
+
+const persistAbandonedRotation = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  oauthCredentialId: string,
+  presentedRefreshToken: string,
+  result: { access_token: string; expires_in: number; refresh_token?: string },
+): Promise<void> => {
+  if (
+    typeof result.refresh_token !== "string"
+    || result.refresh_token === presentedRefreshToken
+  ) {
+    return;
+  }
+
+  const outcome = await database
+    .update(oauthCredentialsTable)
+    .set({
+      accessToken: result.access_token,
+      expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
+      refreshToken: result.refresh_token,
+    })
+    .where(
+      and(
+        eq(oauthCredentialsTable.id, oauthCredentialId),
+        eq(oauthCredentialsTable.refreshToken, presentedRefreshToken),
+      ),
+    );
+
+  if (affectedRowCount(outcome) === 0) {
+    widelog.set("token.rotation_lost", true);
+    return;
+  }
+  widelog.set("token.rotation_recovered", true);
 };
 
 interface CoordinatedRefresherOptions {
@@ -159,6 +224,8 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
           const result = await withRefreshDeadline(
             refreshBudgetMs,
             (signal) => rawRefresh(refreshToken, { signal }),
+            (abandoned) =>
+              persistAbandonedRotation(database, oauthCredentialId, refreshToken, abandoned),
           );
 
           await persistRotatedCredential(database, oauthCredentialId, refreshToken, result);
@@ -176,6 +243,7 @@ export {
   RefreshBudgetExceededError,
   RotatedTokenNotPersistedError,
   createCoordinatedRefresher,
+  persistAbandonedRotation,
   persistRefreshedCredential,
   persistRotatedCredential,
 };
