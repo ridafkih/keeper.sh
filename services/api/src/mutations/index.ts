@@ -38,7 +38,7 @@ import {
 } from "./providers/caldav";
 
 interface OAuthTokenRefresher {
-  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string) => Promise<{ access_token: string; expires_in: number }> } | undefined;
+  getProvider: (providerId: string) => { refreshAccessToken: (refreshToken: string, options?: { signal?: AbortSignal }) => Promise<{ access_token: string; expires_in: number }> } | undefined;
 }
 
 interface MutationDependencies {
@@ -50,6 +50,7 @@ interface MutationDependencies {
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
 const MUTATION_REFRESH_ACQUIRE_BUDGET_MS = 5000;
+const MUTATION_REFRESH_WALL_BUDGET_MS = 15_000;
 
 const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
@@ -78,7 +79,9 @@ const ensureValidAccessToken = async (
     oauthCredentialId: oauth.credentialId,
     calendarAccountId: accountId,
     refreshLockStore: deps.refreshLockStore ?? null,
-    rawRefresh: (refreshToken) => oauthProvider.refreshAccessToken(refreshToken),
+    rawRefresh: (refreshToken, refreshOptions) =>
+      oauthProvider.refreshAccessToken(refreshToken, refreshOptions),
+    refreshBudgetMs: MUTATION_REFRESH_WALL_BUDGET_MS,
   });
 
   const result = await refresher(oauth.refreshToken);
@@ -627,5 +630,5 @@ const getPendingInvitesMutation = async (
   return invites;
 };
 
-export { MUTATION_REFRESH_ACQUIRE_BUDGET_MS, completeUpdateRange, createEventMutation, updateEventMutation, deleteEventMutation, rsvpEventMutation, getPendingInvitesMutation };
+export { MUTATION_REFRESH_ACQUIRE_BUDGET_MS, MUTATION_REFRESH_WALL_BUDGET_MS, completeUpdateRange, createEventMutation, updateEventMutation, deleteEventMutation, rsvpEventMutation, getPendingInvitesMutation };
 export type { MutationDependencies, OAuthTokenRefresher };

@@ -1,4 +1,5 @@
 import { REAUTHENTICATION_TOKEN_REFRESH } from "@keeper.sh/constants";
+import { widelog } from "widelogger";
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -78,7 +79,12 @@ const withReauthenticationDemand = async <TResult>(
     return await run();
   } catch (error) {
     if (isOAuthReauthRequiredError(error)) {
-      await raiseReauthenticationDemand(database, target);
+      try {
+        await raiseReauthenticationDemand(database, target);
+      } catch (demandError) {
+        widelog.set("reauth.demand_write_failed", true);
+        widelog.errorFields(demandError, { slug: "reauthentication-demand-not-persisted" });
+      }
     }
     throw error;
   }

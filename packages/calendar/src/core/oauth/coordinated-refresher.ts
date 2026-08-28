@@ -1,6 +1,7 @@
 import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 import { withReauthenticationDemand } from "../reauthentication/reauthentication-demand";
+import { RotatedTokenNotPersistedError } from "./rotated-token-not-persisted";
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { classifyDatabaseError } from "@keeper.sh/database";
@@ -13,6 +14,30 @@ const MS_PER_SECOND = 1000;
 
 const PERSIST_ATTEMPTS = 3;
 const PERSIST_BACKOFF_MS = 50;
+const REFRESH_WALL_BUDGET_MS = 20_000;
+
+class RefreshBudgetExceededError extends Error {
+  constructor(budgetMs: number) {
+    super(`token refresh exceeded its ${budgetMs}ms wall-time budget`);
+    this.name = "RefreshBudgetExceededError";
+  }
+}
+
+const withRefreshDeadline = <Result>(
+  budgetMs: number,
+  run: (signal: AbortSignal) => Promise<Result>,
+): Promise<Result> => {
+  const signal = AbortSignal.timeout(budgetMs);
+  const expiry = new Promise<never>((_resolve, reject) => {
+    signal.addEventListener(
+      "abort",
+      () => reject(new RefreshBudgetExceededError(budgetMs)),
+      { once: true },
+    );
+  });
+
+  return Promise.race([run(signal), expiry]);
+};
 
 interface RefreshedCredential {
   accessToken: string;
@@ -61,6 +86,9 @@ const persistRotatedCredential = async (
     });
   } catch (error) {
     widelog.set("token.rotation_lost", rotated);
+    if (rotated) {
+      throw new RotatedTokenNotPersistedError(error);
+    }
     throw error;
   }
 };
@@ -71,11 +99,15 @@ interface CoordinatedRefresherOptions {
   oauthCredentialId: string;
   calendarAccountId: string;
   refreshLockStore: RefreshLockStore | null;
-  rawRefresh: (refreshToken: string) => Promise<{
+  rawRefresh: (
+    refreshToken: string,
+    options?: { signal?: AbortSignal },
+  ) => Promise<{
     access_token: string;
     expires_in: number;
     refresh_token?: string;
   }>;
+  refreshBudgetMs?: number;
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
@@ -86,6 +118,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     calendarAccountId,
     refreshLockStore,
     rawRefresh,
+    refreshBudgetMs = REFRESH_WALL_BUDGET_MS,
   } = options;
 
   /*
@@ -123,7 +156,10 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
       oauthCredentialId,
       () =>
         withReauthenticationDemand(database, { calendarAccountId }, async () => {
-          const result = await rawRefresh(refreshToken);
+          const result = await withRefreshDeadline(
+            refreshBudgetMs,
+            (signal) => rawRefresh(refreshToken, { signal }),
+          );
 
           await persistRotatedCredential(database, oauthCredentialId, refreshToken, result);
 
@@ -135,5 +171,12 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     );
 };
 
-export { createCoordinatedRefresher, persistRefreshedCredential, persistRotatedCredential };
+export {
+  REFRESH_WALL_BUDGET_MS,
+  RefreshBudgetExceededError,
+  RotatedTokenNotPersistedError,
+  createCoordinatedRefresher,
+  persistRefreshedCredential,
+  persistRotatedCredential,
+};
 export type { CoordinatedRefresherOptions, RefreshedCredential };

@@ -9,7 +9,10 @@ import { and, count, eq, inArray, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
 import { withReauthenticationDemand } from "@keeper.sh/calendar/reauthentication";
-import { persistRefreshedCredential } from "@keeper.sh/calendar/oauth-persistence";
+import {
+  RotatedTokenNotPersistedError,
+  persistRefreshedCredential,
+} from "@keeper.sh/calendar/oauth-persistence";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { REAUTHENTICATION_TOKEN_REFRESH, TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { isOAuthReauthRequiredError } from "@keeper.sh/calendar/oauth-error-classification";
@@ -62,12 +65,6 @@ class DestinationProviderMismatchError extends Error {
 class DuplicateSourceError extends Error {
   constructor() {
     super("This calendar is already added as a source");
-  }
-}
-
-class RotatedTokenNotPersistedError extends Error {
-  constructor(cause: unknown) {
-    super("Refreshed OAuth credential could not be persisted", { cause });
   }
 }
 

@@ -54,6 +54,9 @@ export type {
   ReauthenticationDemandTarget,
 } from "./core/reauthentication/reauthentication-demand";
 export {
+  REFRESH_WALL_BUDGET_MS,
+  RefreshBudgetExceededError,
+  RotatedTokenNotPersistedError,
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";

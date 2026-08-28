@@ -672,7 +672,8 @@ const deregisterPushChannelsWithin = async (
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,
-          rawRefresh,
+          rawRefresh: (refreshToken, refreshOptions) =>
+            rawRefresh(refreshToken, refreshOptions?.signal),
           refreshLockStore,
         }));
       }

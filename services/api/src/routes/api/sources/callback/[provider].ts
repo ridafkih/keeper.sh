@@ -40,7 +40,10 @@ const discardCreatedCredential = async (
   credentialId: string,
 ): Promise<void> => {
   try {
-    await deleteOAuthSourceCredential(userId, credentialId);
+    const deleted = await deleteOAuthSourceCredential(userId, credentialId);
+    if (!deleted) {
+      widelog.set("oauth_callback.credential_discard_skipped", true);
+    }
   } catch (error) {
     widelog.errorFields(error, { slug: "oauth-callback-credential-discard-failed" });
   }

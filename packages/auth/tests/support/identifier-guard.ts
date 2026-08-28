@@ -54,6 +54,7 @@ const remediationTestFiles = () => [
   "packages/calendar/tests/core/deletion/unresolved-grant-identity-keeps-its-residue.test.ts",
   "packages/calendar/tests/core/deletion/unstoppable-push-residue-retires-on-the-first-reaper-pass.test.ts",
   "packages/calendar/tests/core/oauth/grant-revocation-outlasts-a-slow-provider.test.ts",
+  "packages/calendar/tests/core/reauthentication/a-failed-reauthentication-demand-write-keeps-the-invalid-grant-error.test.ts",
   "packages/calendar/tests/core/source/unstoppable-channel-does-not-poison-the-cron-deregister-path.test.ts",
   "packages/calendar/tests/core/sync-engine/aborted-run-is-alertable.test.ts",
   "packages/calendar/tests/core/sync-engine/aborted-run-is-visible-to-the-caller.test.ts",

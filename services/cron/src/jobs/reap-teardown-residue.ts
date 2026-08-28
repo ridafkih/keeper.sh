@@ -626,7 +626,7 @@ const resolveBlockingRowAccessToken = async (
       calendarAccountId: row.accountRowId,
       database,
       oauthCredentialId: row.credentialId,
-      rawRefresh: refresher,
+      rawRefresh: (refreshToken, refreshOptions) => refresher(refreshToken, refreshOptions?.signal),
       refreshLockStore,
     }),
   );
