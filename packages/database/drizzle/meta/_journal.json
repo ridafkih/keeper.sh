@@ -673,6 +673,13 @@
       "when": 1787779286615,
       "tag": "0095_smooth_the_spike",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1787893601762,
+      "tag": "0096_flaky_whirlwind",
+      "breakpoints": true
     }
   ]
 }

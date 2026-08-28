@@ -14,9 +14,15 @@ import {
   deleteOAuthSourceCredential,
 } from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
+import { openConnectDeadline } from "@/utils/connect-deadline";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
+const CONNECT_BUDGET_SHARE_OF_IDLE_TIMEOUT = 0.6;
+const OAUTH_CALLBACK_CONNECT_BUDGET_MS = Math.floor(
+  SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND * CONNECT_BUDGET_SHARE_OF_IDLE_TIMEOUT,
+);
 
 interface ConnectOAuthAccountOptions {
   accessToken: string;
@@ -25,6 +31,7 @@ interface ConnectOAuthAccountOptions {
   provider: string;
   providerAccountId: string;
   refreshToken: string;
+  signal: AbortSignal;
   userId: string;
 }
 
@@ -46,6 +53,7 @@ const connectOAuthAccount = async ({
   provider,
   providerAccountId,
   refreshToken,
+  signal,
   userId,
 }: ConnectOAuthAccountOptions): Promise<string> => {
   let createdCredentialId: string | null = null;
@@ -67,6 +75,7 @@ const connectOAuthAccount = async ({
       oauthCredentialId: credentialId,
       provider,
       providerAccountId,
+      signal,
       userId,
     });
   } catch (error) {
@@ -111,6 +120,8 @@ const GET = withWideEvent(async ({ request, params }) => {
       throw new OAuthError("Missing code or state", errorUrl);
     }
 
+    const deadline = openConnectDeadline(OAUTH_CALLBACK_CONNECT_BUDGET_MS);
+
     const validatedState = await validateState(state);
     if (!validatedState) {
       throw new OAuthError("Invalid or expired state", errorUrl);
@@ -119,13 +130,17 @@ const GET = withWideEvent(async ({ request, params }) => {
     const { userId } = validatedState;
 
     const callbackUrl = new URL(`/api/sources/callback/${provider}`, baseUrl);
-    const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
+    const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString(), {
+      signal: deadline.signal,
+    });
 
     if (!tokens.refresh_token) {
       throw new OAuthError("No refresh token", errorUrl);
     }
 
-    const userInfo = await fetchUserInfo(provider, tokens.access_token);
+    const userInfo = await fetchUserInfo(provider, tokens.access_token, {
+      signal: deadline.signal,
+    });
     const expiresAt = new Date(Date.now() + tokens.expires_in * MS_PER_SECOND);
 
     const accountId = await connectOAuthAccount({
@@ -135,6 +150,7 @@ const GET = withWideEvent(async ({ request, params }) => {
       provider,
       providerAccountId: userInfo.id,
       refreshToken: tokens.refresh_token,
+      signal: deadline.signal,
       userId,
     });
 
@@ -151,4 +167,4 @@ const GET = withWideEvent(async ({ request, params }) => {
   }
 });
 
-export { GET };
+export { GET, OAUTH_CALLBACK_CONNECT_BUDGET_MS };

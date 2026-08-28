@@ -63,7 +63,11 @@ interface TeardownResidueReaperDependencies {
     record: TeardownResidueRecord,
     signal: AbortSignal,
   ) => Promise<string | null>;
-  revokeOAuthGrant: (record: TeardownResidueRecord, token: string) => Promise<void>;
+  revokeOAuthGrant: (
+    record: TeardownResidueRecord,
+    token: string,
+    signal: AbortSignal,
+  ) => Promise<void>;
   waitForRepairDeadline: (deadlineMs: number) => Promise<void>;
 }
 
@@ -220,7 +224,11 @@ const repairOAuthGrant = async (
     throw abandonedRepairError(identified);
   }
 
-  await dependencies.revokeOAuthGrant(identified, revocationTokenFromResidue(identified));
+  await dependencies.revokeOAuthGrant(
+    identified,
+    revocationTokenFromResidue(identified),
+    signal,
+  );
 
   return { status: "repaired" };
 };

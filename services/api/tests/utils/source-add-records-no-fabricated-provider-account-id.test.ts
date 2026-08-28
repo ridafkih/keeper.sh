@@ -106,6 +106,7 @@ const createTxInstance = (): object => ({
   selectDistinct: () => ({
     from: () => ({}),
   }),
+  transaction: (callback: (savepoint: object) => Promise<unknown>) => callback(createTxInstance()),
 });
 
 beforeAll(async () => {

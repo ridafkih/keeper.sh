@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { AbandonedPushChannelResidue } from "@/utils/push-notifications/deregister-account-channels";
 
 const DELETED_USER = "A";
-const PUSH_DEADLINE_MS = 3000;
 
 interface LoggedError {
   error: unknown;
@@ -58,7 +57,9 @@ const loadTeardown = async () => {
     },
   }));
 
-  const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
+  const { createDeleteUserSyncTeardown, PUSH_CHANNELS_TIMEOUT_MS } = await import(
+    "@/utils/delete-user-teardown"
+  );
   const { AbandonedPushChannelError } = await import(
     "@/utils/push-notifications/deregister-account-channels"
   );
@@ -75,7 +76,7 @@ const loadTeardown = async () => {
       "1 push channel(s) for userId A were left running at their provider",
     );
 
-  return { abandonment, createDeleteUserSyncTeardown, loggedErrors };
+  return { abandonment, createDeleteUserSyncTeardown, loggedErrors, PUSH_CHANNELS_TIMEOUT_MS };
 };
 
 const makeDependencies = (
@@ -127,7 +128,8 @@ describe("a push_channels step that abandons channels only after its deadline ab
   });
 
   it("records the same push_channel residue when the abandonment only surfaces after the abort", async () => {
-    const { abandonment, createDeleteUserSyncTeardown, loggedErrors } = await loadTeardown();
+    const { abandonment, createDeleteUserSyncTeardown, loggedErrors, PUSH_CHANNELS_TIMEOUT_MS } =
+      await loadTeardown();
     const drafts: ResidueDraft[] = [];
 
     await createDeleteUserSyncTeardown(
@@ -157,7 +159,9 @@ describe("a push_channels step that abandons channels only after its deadline ab
 
     expect(
       messages.some((message) =>
-        message.includes(`Teardown step push_channels exceeded its ${PUSH_DEADLINE_MS}ms deadline`),
+        message.includes(
+          `Teardown step push_channels exceeded its ${PUSH_CHANNELS_TIMEOUT_MS}ms deadline`,
+        ),
       ),
     ).toBe(true);
   });

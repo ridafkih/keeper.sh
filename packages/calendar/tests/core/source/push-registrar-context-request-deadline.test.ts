@@ -3,14 +3,13 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { createRegistrarContextFactory } from "../../../src/core/source/push-registrar-context";
 import { registerGoogleWatchChannel } from "../../../src/providers/google/push/watch-channel";
 import type { RegistrarContextRequest } from "../../../src/core/source/manage-push-channels";
+import { createSilentProviderFetch } from "../../support/silent-provider-fetch";
 
 const ACCOUNT_ID = "c1c1c1c1-0000-4000-8000-000000000001";
 const CALENDAR_ID = "c1c1c1c1-0000-4000-8000-000000000002";
 const USER_ID = "c1c1c1c1-0000-4000-8000-000000000003";
 const CREDENTIAL_ID = "c1c1c1c1-0000-4000-8000-000000000004";
-const REQUEST_BUDGET_MS = 1000;
-const ABORT_OBSERVATION_CEILING_MS = 4000;
-const STALL_OBSERVATION_CEILING_MS = 4000;
+const REQUEST_BUDGET_MS = 50;
 const AN_HOUR_MS = 3_600_000;
 
 const credentialDatabase = (): BunSQLDatabase => {
@@ -60,25 +59,16 @@ const googleCalendarRequest = (): RegistrarContextRequest => ({
   },
 });
 
-const abortReasonWithin = (signal: AbortSignal, ceilingMs: number): Promise<unknown> => {
-  const ceilingReached = Promise.withResolvers<unknown>();
-
-  const ceiling = setTimeout(() => {
-    ceilingReached.resolve(
-      new Error(`registrar context signal never aborted within ${ceilingMs}ms`),
-    );
-  }, ceilingMs);
-
-  const aborted = new Promise<unknown>((resolve) => {
+const abortReasonOf = (signal: AbortSignal): Promise<unknown> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(signal.reason);
+      return;
+    }
     signal.addEventListener("abort", () => {
       resolve(signal.reason);
     }, { once: true });
   });
-
-  return Promise.race([aborted, ceilingReached.promise]).finally(() => {
-    clearTimeout(ceiling);
-  });
-};
 
 describe("push channel registration context carries a request deadline", () => {
   it("hands every registrar context a signal that aborts on its configured budget", async () => {
@@ -87,42 +77,28 @@ describe("push channel registration context carries a request deadline", () => {
     expect(context.signal).toBeInstanceOf(AbortSignal);
     expect(context.signal?.aborted).toBe(false);
 
-    const reason = await abortReasonWithin(
-      context.signal as AbortSignal,
-      ABORT_OBSERVATION_CEILING_MS,
-    );
+    const reason = await abortReasonOf(context.signal as AbortSignal);
 
     expect((reason as { name?: string }).name).toBe("TimeoutError");
   });
 
   it("rejects a google watch registration the provider never answers", async () => {
-    const stalled = Bun.serve({ fetch: () => new Promise<Response>(() => {}), port: 0 });
+    const context = await factoryUnderTest()(googleCalendarRequest());
+    const handedSignals: Array<AbortSignal | null | undefined> = [];
+    const silentProvider = createSilentProviderFetch({
+      onRequest: (init) => {
+        handedSignals.push(init.signal);
+      },
+    });
 
-    try {
-      const context = await factoryUnderTest()(googleCalendarRequest());
-      const forwarding = ((_input: unknown, init?: RequestInit) =>
-        fetch(stalled.url, init)) as unknown as typeof fetch;
+    const failure = await registerGoogleWatchChannel(
+      googleCalendarRequest().scope,
+      "secret-under-test",
+      { ...context, fetchImpl: silentProvider },
+    ).then(() => null, (error: unknown) => error);
 
-      const outcome = await Promise.race([
-        registerGoogleWatchChannel(
-          googleCalendarRequest().scope,
-          "secret-under-test",
-          { ...context, fetchImpl: forwarding },
-        ).then(
-          () => "resolved",
-          (error: unknown) => error,
-        ),
-        new Promise((resolve) => {
-          setTimeout(() => {
-            resolve("still pending");
-          }, STALL_OBSERVATION_CEILING_MS);
-        }),
-      ]);
-
-      expect(outcome).toBeInstanceOf(Error);
-      expect((outcome as { name?: string }).name).toBe("TimeoutError");
-    } finally {
-      await stalled.stop(true);
-    }
+    expect(handedSignals).toEqual([context.signal]);
+    expect(failure).toBe(context.signal?.reason);
+    expect((failure as { name?: string }).name).toBe("TimeoutError");
   });
 });

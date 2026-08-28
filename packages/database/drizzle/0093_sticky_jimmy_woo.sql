@@ -1,4 +1,4 @@
-CREATE TABLE "deletion_residue" (
+CREATE TABLE IF NOT EXISTS "deletion_residue" (
 	"attempts" integer DEFAULT 0 NOT NULL,
 	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
 	"credentialExpiresAt" timestamp with time zone,
@@ -16,5 +16,5 @@ CREATE TABLE "deletion_residue" (
 	"userId" text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX "deletion_residue_due_idx" ON "deletion_residue" USING btree ("nextAttemptAt");--> statement-breakpoint
-CREATE INDEX "deletion_residue_user_idx" ON "deletion_residue" USING btree ("userId");
+CREATE INDEX IF NOT EXISTS "deletion_residue_due_idx" ON "deletion_residue" USING btree ("nextAttemptAt");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "deletion_residue_user_idx" ON "deletion_residue" USING btree ("userId");

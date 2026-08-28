@@ -43,7 +43,11 @@ interface AuthorizationUrlOptions {
 
 interface MicrosoftOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<MicrosoftTokenResponse>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    signal?: AbortSignal,
+  ) => Promise<MicrosoftTokenResponse>;
   refreshAccessToken: (
     refreshToken: string,
     signal?: AbortSignal,
@@ -119,6 +123,7 @@ const createMicrosoftOAuthService = (
   const exchangeCodeForTokens = async (
     code: string,
     callbackUrl: string,
+    signal?: AbortSignal,
   ): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
       body: new URLSearchParams({
@@ -130,7 +135,7 @@ const createMicrosoftOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
     }).catch((error: unknown) => {
       if (isRequestTimeoutError(error)) {
         throw new Error(

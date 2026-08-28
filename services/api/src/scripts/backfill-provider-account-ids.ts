@@ -3,6 +3,8 @@ import {
   resolveProviderAccountIdentity,
   runWithCredentialRefreshLock,
 } from "@keeper.sh/calendar";
+import { persistRotatedCredential } from "@keeper.sh/calendar/oauth-persistence";
+import { withReauthenticationDemand } from "@keeper.sh/calendar/reauthentication";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { reconcileProviderAccountIdentity } from "@keeper.sh/database/provider-account-identity";
@@ -130,22 +132,16 @@ const resolveAccessToken = async (
 
   const refreshed = await runWithCredentialRefreshLock(
     row.oauthCredentialId,
-    async () => {
-      const result = await provider.refreshAccessToken(row.refreshToken, {
-        signal: deadline.signal,
-      });
+    () =>
+      withReauthenticationDemand(database, { calendarAccountId: row.accountRowId }, async () => {
+        const result = await provider.refreshAccessToken(row.refreshToken, {
+          signal: deadline.signal,
+        });
 
-      await database
-        .update(oauthCredentialsTable)
-        .set({
-          accessToken: result.access_token,
-          expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
-          refreshToken: result.refresh_token ?? row.refreshToken,
-        })
-        .where(eq(oauthCredentialsTable.id, row.oauthCredentialId));
+        await persistRotatedCredential(database, row.oauthCredentialId, row.refreshToken, result);
 
-      return result;
-    },
+        return result;
+      }),
     lockStore,
     () => readFreshCredential(row.oauthCredentialId),
     Math.min(CONNECT_REFRESH_ACQUIRE_BUDGET_MS, deadline.remainingMs()),

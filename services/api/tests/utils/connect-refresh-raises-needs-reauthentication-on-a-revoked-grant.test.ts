@@ -1,57 +1,27 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTableName } from "drizzle-orm";
-import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
-import { runWithCredentialRefreshLock as realRunWithCredentialRefreshLock }
-  from "../../../../packages/calendar/src/core/oauth/refresh-coordinator";
+import { createGoogleTokenRefresher } from "../../../../packages/calendar/src/core/oauth/google";
 import type { createOAuthSource as createOAuthSourceFn } from "../../src/utils/oauth-sources";
 
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
-let connectRefreshAcquireBudgetMs = Number.NaN;
-let connectWallTimeCeilingMs = Number.NaN;
 
-interface RecordedInsert {
+interface RecordedWrite {
   table: string;
   values: Record<string, unknown>;
 }
 
-let recordedInserts: RecordedInsert[] = [];
-let recordedWideFields: Record<string, unknown> = {};
-let refreshedWithTokens: string[] = [];
-let lockAcquireAttempts: string[] = [];
+let recordedUpdates: RecordedWrite[] = [];
+let recordedInserts: RecordedWrite[] = [];
+let telemetryFields: [string, unknown][] = [];
+let refreshRejections: string[] = [];
+let selectResults: unknown[][] = [];
 let txInstance: object = {};
 
-const CONNECT_ACCESS_TOKEN = "connect-snapshot-access-token";
-const CONNECT_REFRESH_TOKEN = "connect-snapshot-refresh-token";
-const NOTHING_ADOPTABLE_REMAINING_MS = Math.floor(TOKEN_REFRESH_BUFFER_MS / 2);
-const CASE_TIMEOUT_MS = 60_000;
-const MS_PER_SECOND = 1000;
-
-const storedCredentialRow = () => ({
-  accessToken: CONNECT_ACCESS_TOKEN,
-  email: "person@example.com",
-  expiresAt: new Date(Date.now() - MS_PER_SECOND),
-  refreshToken: CONNECT_REFRESH_TOKEN,
+const refreshRevokedGrant = createGoogleTokenRefresher({
+  clientId: "client-id",
+  clientSecret: "client-secret",
 });
-
-const staleCredentialRow = () => ({
-  accessToken: CONNECT_ACCESS_TOKEN,
-  expiresAt: new Date(Date.now() + NOTHING_ADOPTABLE_REMAINING_MS),
-});
-
-const rowsForSelectedFields = (fields: unknown): unknown[] => {
-  const keys = Object.keys((fields ?? {}) as Record<string, unknown>);
-
-  if (keys.includes("refreshToken")) {
-    return [storedCredentialRow()];
-  }
-
-  if (keys.includes("accessToken")) {
-    return [staleCredentialRow()];
-  }
-
-  return [];
-};
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -70,8 +40,6 @@ const createSelectBuilder = (result: unknown[]): SelectPromise => {
   chain.limit = () => Promise.resolve(result);
   return chain;
 };
-
-const selectByFields = (fields: unknown) => createSelectBuilder(rowsForSelectedFields(fields));
 
 const createInsertBuilder = (table: unknown, result: unknown) => ({
   values: (values: Record<string, unknown>) => {
@@ -124,8 +92,10 @@ const insertForTable = (table: unknown) => {
   return createInsertBuilder(table, [{ id: "source-1", name: "Team Calendar" }]);
 };
 
-const updateForTable = () => ({
-  set: () => {
+const updateForTable = (table: unknown) => ({
+  set: (values: Record<string, unknown>) => {
+    recordedUpdates.push({ table: getTableName(table as never), values });
+
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
     };
@@ -138,34 +108,45 @@ const updateForTable = () => ({
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
   insert: insertForTable,
-  select: selectByFields,
+  update: updateForTable,
+  select: () => createSelectBuilder(selectResults.shift() ?? []),
   selectDistinct: () => ({
     from: () => ({}),
   }),
   transaction: (callback: (savepoint: object) => Promise<unknown>) => callback(createTxInstance()),
-  update: updateForTable,
 });
+
+vi.mock("widelogger", () => ({
+  widelog: {
+    error: () => null,
+    errorFields: () => null,
+    flush: () => null,
+    set: (key: string, value: unknown) => {
+      telemetryFields.push([key, value]);
+    },
+    setFields: (fields: Record<string, unknown>) => {
+      for (const entry of Object.entries(fields)) {
+        telemetryFields.push(entry);
+      }
+    },
+    time: { measure: (_key: string, callback: () => unknown) => callback() },
+  },
+  widelogger: () => ({
+    context: (callback: () => unknown) => callback(),
+    destroy: () => null,
+  }),
+}));
 
 vi.mock("../../src/env", () => ({
   default: {},
   schema: {},
 }));
 
-vi.mock("@/utils/logging", () => ({
-  widelog: {
-    error: () => null,
-    errorFields: () => null,
-    set: (key: string, value: unknown) => {
-      recordedWideFields[key] = value;
-    },
-  },
-}));
-
 vi.mock("../../src/context", () => ({
   baseUrl: "https://keeper.test",
   database: {
     insert: insertForTable,
-    select: selectByFields,
+    select: () => createSelectBuilder(selectResults.shift() ?? []),
     selectDistinct: () => ({
       from: () => ({}),
     }),
@@ -177,17 +158,14 @@ vi.mock("../../src/context", () => ({
     getProvider: () => ({
       exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
       fetchUserInfo: () =>
-        Promise.reject(new Error("no access token should reach the provider")),
+        Promise.reject(new Error("userinfo must not be reached on a revoked grant")),
       getAuthorizationUrl: () => Promise.reject(new Error("not used")),
       hasRequiredScopes: () => true,
-      refreshAccessToken: (refreshToken: string) => {
-        refreshedWithTokens.push(refreshToken);
-        return Promise.resolve({
-          access_token: "connect-path-rotated-access-token",
-          expires_in: 3600,
-          refresh_token: "connect-path-rotated-refresh-token",
-        });
-      },
+      refreshAccessToken: (refreshToken: string) =>
+        refreshRevokedGrant(refreshToken).catch((error: unknown) => {
+          refreshRejections.push(error instanceof Error ? error.message : String(error));
+          throw error;
+        }),
     }),
     hasRequiredScopes: () => true,
     isOAuthProvider: () => true,
@@ -201,10 +179,7 @@ vi.mock("../../src/context", () => ({
   },
   refreshLockStore: {
     release: () => Promise.resolve(),
-    tryAcquire: (key: string) => {
-      lockAcquireAttempts.push(key);
-      return Promise.resolve(false);
-    },
+    tryAcquire: () => Promise.resolve(true),
   },
 }));
 
@@ -222,6 +197,7 @@ vi.mock("../../src/utils/push-notifications/register-account-channels", () => ({
 
 vi.mock("@keeper.sh/database", () => ({
   encryptPassword: () => "encrypted-password",
+  getDatabaseErrorDetails: () => null,
 }));
 
 vi.mock("@keeper.sh/calendar/google", () => ({
@@ -246,69 +222,91 @@ vi.mock("@keeper.sh/calendar", () => ({
   isCalDAVProvider: () => false,
   isOAuthProvider: () => true,
   isProviderId: () => true,
-  runWithCredentialRefreshLock: realRunWithCredentialRefreshLock,
+  runWithCredentialRefreshLock: (
+    _oauthCredentialId: string,
+    runRefresh: () => Promise<unknown>,
+  ) => runRefresh(),
 }));
 
 beforeAll(async () => {
-  const {
-    CONNECT_REFRESH_ACQUIRE_BUDGET_MS: budgetMs,
-    CONNECT_WALL_TIME_CEILING_MS: ceilingMs,
-    createOAuthSource: createOAuthSourceImplementation,
-  } = await import("../../src/utils/oauth-sources");
-
-  createOAuthSource = createOAuthSourceImplementation;
-  connectRefreshAcquireBudgetMs = budgetMs;
-  connectWallTimeCeilingMs = ceilingMs;
+  ({ createOAuthSource } = await import("../../src/utils/oauth-sources"));
 });
 
 afterAll(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+const revokedCredentialRow = () => ({
+  accessToken: "stale-access-token",
+  email: "person@example.com",
+  expiresAt: new Date(Date.now() + 30_000),
+  needsReauthentication: false,
+  provider: "google",
+  refreshToken: "revoked-refresh-token",
 });
 
 beforeEach(() => {
+  recordedUpdates = [];
   recordedInserts = [];
-  recordedWideFields = {};
-  refreshedWithTokens = [];
-  lockAcquireAttempts = [];
+  telemetryFields = [];
+  refreshRejections = [];
+  selectResults = [[revokedCredentialRow()], [], [], []];
   txInstance = createTxInstance();
+
+  vi.stubGlobal("fetch", () =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          error: "invalid_grant",
+          error_description: "Token has been expired or revoked.",
+        }),
+        { status: 400 },
+      ),
+    ));
 });
 
 const connect = () =>
   createOAuthSource({
     externalCalendarId: "primary",
     name: "Work",
-    oauthCredentialId: `credential-${crypto.randomUUID()}`,
-    provider: "outlook",
+    oauthCredentialId: "credential-1",
+    provider: "google",
     userId: "user-1",
   });
 
-describe("Connect path refresh gives up inside the request budget", () => {
-  it("creates the source without a fabricated account id while the lock stays held", async () => {
-    const startedAt = Date.now();
-
+describe("Connect refresh raises needs reauthentication on a revoked grant", () => {
+  it("flags the credential's calendar accounts when the connect time refresh is rejected", async () => {
     const source = await connect();
 
-    expect(Date.now() - startedAt).toBeLessThan(connectWallTimeCeilingMs);
-    expect(source).toBeTruthy();
-    expect(lockAcquireAttempts.length).toBeGreaterThan(0);
-    expect(refreshedWithTokens).toEqual([]);
-    expect(recordedWideFields["oauth_source.provider_account_id_resolution"])
-      .toBe("provider_failure");
+    expect(refreshRejections).toHaveLength(1);
+    expect(refreshRejections[0]).toContain("invalid_grant");
+
+    expect(source.id).toBe("source-1");
 
     const accountInserts = recordedInserts.filter(
-      (insert) => insert.table === "calendar_accounts",
+      (write) => write.table === "calendar_accounts",
     );
 
     expect(accountInserts).toHaveLength(1);
-    expect(accountInserts[0]?.values.accountId ?? null).toBeNull();
-  }, CASE_TIMEOUT_MS);
+    expect(accountInserts[0]?.values.accountId).toBeNull();
 
-  it("keeps the connect budget below the server idle timeout", async () => {
-    const constants = await import("@keeper.sh/constants");
+    const accountUpdates = recordedUpdates.filter(
+      (write) => write.table === "calendar_accounts",
+    );
 
-    expect(Number.isNaN(connectRefreshAcquireBudgetMs)).toBe(false);
-    expect(typeof constants.SERVER_IDLE_TIMEOUT_SECONDS).toBe("number");
-    expect(connectRefreshAcquireBudgetMs)
-      .toBeLessThan(constants.SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND);
+    expect(accountUpdates.map((write) => write.values)).toContainEqual(
+      expect.objectContaining({
+        needsReauthentication: true,
+        reauthenticationSource: "token-refresh",
+      }),
+    );
+  });
+
+  it("records the reauthentication demand telemetry for the rejected refresh", async () => {
+    await connect();
+
+    expect(telemetryFields).toContainEqual(["reauth.action", "raise"]);
+    expect(telemetryFields).toContainEqual(["reauth.provenance", "token-refresh"]);
   });
 });

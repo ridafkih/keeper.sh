@@ -1,1 +1,1 @@
-ALTER TABLE "deletion_residue" ADD COLUMN "accountEmail" text;
+ALTER TABLE "deletion_residue" ADD COLUMN IF NOT EXISTS "accountEmail" text;

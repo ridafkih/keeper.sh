@@ -217,7 +217,7 @@ const grantIsAlreadyNotInForce = (body: string): boolean => {
 const revokeOAuthGrant = async (
   record: TeardownResidueRecord,
   token: string,
-  options?: { fetchImpl: GoogleRevocationFetch },
+  options?: { fetchImpl?: GoogleRevocationFetch; signal?: AbortSignal },
 ): Promise<void> => {
   if (record.provider !== "google") {
     throw new Error(
@@ -227,6 +227,7 @@ const revokeOAuthGrant = async (
 
   const outcome = await revokeGoogleGrant(token, {
     fetchImpl: options?.fetchImpl ?? globalThis.fetch,
+    signal: options?.signal,
   });
 
   if (outcome.revoked || grantIsAlreadyNotInForce(outcome.body)) {
@@ -793,7 +794,7 @@ const createDefaultReaper = async () => {
     }),
     resolveRegistrar: resolvePushRegistrar,
     resolveResidueProviderAccountId,
-    revokeOAuthGrant,
+    revokeOAuthGrant: (record, token, signal) => revokeOAuthGrant(record, token, { signal }),
     waitForRepairDeadline: (deadlineMs) =>
       new Promise((resolve) => {
         setTimeout(resolve, deadlineMs);

@@ -1,16 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listUserCalendars } from "../../../../../src/providers/google/source/utils/list-calendars";
+import { RequestTimeoutError } from "../../../../../src/core/utils/fetch-with-timeout";
+import { createSilentProviderFetch } from "../../../../support/silent-provider-fetch";
 
-const ASSERTION_WINDOW_MS = 2000;
 const INJECTED_TIMEOUT_MS = 250;
-
-const settlementOf = async (listing: Promise<unknown>) => {
-  const outcome = await Promise.race([
-    listing.then(() => "resolved" as const, () => "rejected" as const),
-    Bun.sleep(ASSERTION_WINDOW_MS).then(() => "still pending" as const),
-  ]);
-  return outcome;
-};
 
 describe("google calendar listing bounds each page with a default timeout", () => {
   afterEach(() => {
@@ -31,35 +24,28 @@ describe("google calendar listing bounds each page with a default timeout", () =
   });
 
   it("rejects instead of hanging when the provider accepts the page request and goes silent", async () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
-    const server = Bun.serve({ fetch: () => new Promise<Response>(() => {}), port: 0 });
-    vi.stubGlobal("fetch", (_input: string, init?: RequestInit) =>
-      realFetch(server.url, init));
+    vi.stubGlobal("fetch", createSilentProviderFetch());
 
-    try {
-      const listing = listUserCalendars("access-token", { requestTimeoutMs: INJECTED_TIMEOUT_MS });
+    const listing = listUserCalendars("access-token", { requestTimeoutMs: INJECTED_TIMEOUT_MS });
 
-      expect(await settlementOf(listing)).toBe("rejected");
-    } finally {
-      await server.stop(true);
-    }
+    await expect(listing).rejects.toBeInstanceOf(RequestTimeoutError);
+    await expect(listing).rejects.toThrow(`Request timeout after ${INJECTED_TIMEOUT_MS}ms`);
   });
 
   it("still aborts on a caller-supplied signal that fires before the default timeout", async () => {
-    const realFetch = globalThis.fetch.bind(globalThis);
-    const server = Bun.serve({ fetch: () => new Promise<Response>(() => {}), port: 0 });
-    vi.stubGlobal("fetch", (_input: string, init?: RequestInit) =>
-      realFetch(server.url, init));
+    const caller = new AbortController();
+    const callerReason = new Error("caller abandoned the google calendar listing");
+    vi.stubGlobal("fetch", createSilentProviderFetch({
+      onRequest: () => {
+        caller.abort(callerReason);
+      },
+    }));
 
-    try {
-      const listing = listUserCalendars("access-token", {
-        requestTimeoutMs: 60_000,
-        signal: AbortSignal.timeout(INJECTED_TIMEOUT_MS),
-      });
+    const listing = listUserCalendars("access-token", {
+      requestTimeoutMs: 60_000,
+      signal: caller.signal,
+    });
 
-      expect(await settlementOf(listing)).toBe("rejected");
-    } finally {
-      await server.stop(true);
-    }
+    await expect(listing).rejects.toBe(callerReason);
   });
 });

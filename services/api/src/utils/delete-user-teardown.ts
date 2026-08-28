@@ -46,9 +46,10 @@ const RESIDUE_DISCARD_STEP_TIMEOUT_MS = LATE_RESIDUE_SETTLE_TIMEOUT_MS + RESIDUE
 const TOMBSTONE_ROLLBACK_STEP = "tombstone_rollback";
 const RESIDUE_DISCARD_ROLLBACK_STEP = "residue_discard_rollback";
 const SYNC_JOBS_TIMEOUT_MS = 1000;
-const PUSH_CHANNELS_TIMEOUT_MS = 3000;
+const PUSH_CHANNELS_TIMEOUT_MS = 2000;
 const OAUTH_GRANTS_TIMEOUT_MS = 1000;
 const RESIDUE_WRITE_RESERVE_MS = 800;
+const TEARDOWN_HEADROOM_MS = 1000;
 const REVOCABLE_OAUTH_PROVIDER = "google";
 const PUSH_CHANNELS_STEP = "push_channels";
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
@@ -63,10 +64,11 @@ const TEARDOWN_STEPS_BUDGET_MS = [
 
 const TEARDOWN_BUDGET_MS = TEARDOWN_STEPS_BUDGET_MS + RESIDUE_WRITE_RESERVE_MS;
 
-if (TEARDOWN_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
+if (TEARDOWN_BUDGET_MS + TEARDOWN_HEADROOM_MS > SYNC_TEARDOWN_TIMEOUT_MS) {
   throw new Error(
     `Delete user teardown budget of ${TEARDOWN_STEPS_BUDGET_MS}ms of steps plus ` +
-      `${RESIDUE_WRITE_RESERVE_MS}ms reserved for residue writes does not fit inside the ` +
+      `${RESIDUE_WRITE_RESERVE_MS}ms reserved for residue writes does not leave the ` +
+      `${TEARDOWN_HEADROOM_MS}ms of scheduling headroom required inside the ` +
       `${SYNC_TEARDOWN_TIMEOUT_MS}ms auth deadline supervising it`,
   );
 }

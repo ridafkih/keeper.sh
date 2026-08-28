@@ -2,6 +2,7 @@ import type {
   AuthorizationUrlOptions,
   OAuthTokens,
   NormalizedUserInfo as OAuthUserInfo,
+  ProviderRequestOptions,
   ValidatedState,
 } from "@keeper.sh/calendar";
 import { oauthProviders } from "@/context";
@@ -26,10 +27,16 @@ const exchangeCodeForTokens = (
   provider: string,
   code: string,
   callbackUrl: string,
-): Promise<OAuthTokens> => getOAuthProviderOrThrow(provider).exchangeCodeForTokens(code, callbackUrl);
+  options?: ProviderRequestOptions,
+): Promise<OAuthTokens> =>
+  getOAuthProviderOrThrow(provider).exchangeCodeForTokens(code, callbackUrl, options);
 
-const fetchUserInfo = (provider: string, accessToken: string): Promise<OAuthUserInfo> =>
-  getOAuthProviderOrThrow(provider).fetchUserInfo(accessToken);
+const fetchUserInfo = (
+  provider: string,
+  accessToken: string,
+  options?: ProviderRequestOptions,
+): Promise<OAuthUserInfo> =>
+  getOAuthProviderOrThrow(provider).fetchUserInfo(accessToken, options);
 
 const validateState = (state: string): Promise<ValidatedState | null> => oauthProviders.validateState(state);
 

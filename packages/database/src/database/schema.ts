@@ -96,6 +96,7 @@ const calendarAccountsTable = pgTable(
     index("calendar_accounts_user_idx").on(table.userId),
     index("calendar_accounts_provider_idx").on(table.provider),
     index("calendar_accounts_needs_reauth_idx").on(table.needsReauthentication),
+    index("calendar_accounts_oauth_credential_idx").on(table.oauthCredentialId),
     uniqueIndex("calendar_accounts_provider_account_idx").on(
       table.userId,
       table.provider,

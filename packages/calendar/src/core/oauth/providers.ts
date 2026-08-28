@@ -37,7 +37,11 @@ interface OAuthTokens {
 
 interface OAuthProvider {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<OAuthTokens>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<OAuthTokens>;
   fetchUserInfo: (
     accessToken: string,
     options?: ProviderRequestOptions,
@@ -70,7 +74,8 @@ const createOAuthProviders = (
   if (config.google) {
     const googleService = createGoogleOAuthService(config.google, stateStore);
     providers.google = {
-      exchangeCodeForTokens: googleService.exchangeCodeForTokens,
+      exchangeCodeForTokens: (code, callbackUrl, options) =>
+        googleService.exchangeCodeForTokens(code, callbackUrl, options?.signal),
       fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
         const info = await fetchGoogleUserInfo(accessToken, options?.signal);
 
@@ -92,7 +97,8 @@ const createOAuthProviders = (
   if (config.microsoft) {
     const microsoftService = createMicrosoftOAuthService(config.microsoft, stateStore);
     providers.outlook = {
-      exchangeCodeForTokens: microsoftService.exchangeCodeForTokens,
+      exchangeCodeForTokens: (code, callbackUrl, options) =>
+        microsoftService.exchangeCodeForTokens(code, callbackUrl, options?.signal),
       fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
         const info = await fetchMicrosoftUserInfo(accessToken, options?.signal);
         return { email: info.mail ?? info.userPrincipalName ?? "", id: info.id };

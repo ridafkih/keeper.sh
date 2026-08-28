@@ -4,7 +4,7 @@ import type { TeardownPushChannel } from "@/utils/push-notifications/deregister-
 const DELETED_USER = "A";
 const BLOCKING_ERROR_NAME = "TeardownBlockedError";
 const INSIDE_THE_DEADLINE_MS = 10;
-const PAST_THE_DEADLINE_MS = 3100;
+const JUST_PAST_THE_DEADLINE_MS = 100;
 
 vi.mock("@/context", () => ({
   database: {
@@ -96,9 +96,11 @@ describe("a push channel capture failure that lands past the step deadline", () 
   });
 
   it("blocks the delete when the channel read fails just past the deadline", async () => {
-    const { createDeleteUserSyncTeardown } = await loadTeardown();
+    const { createDeleteUserSyncTeardown, PUSH_CHANNELS_TIMEOUT_MS } = await loadTeardown();
     const teardown = createDeleteUserSyncTeardown(
-      makeDependencies(rejectAfter(PAST_THE_DEADLINE_MS)) as never,
+      makeDependencies(
+        rejectAfter(PUSH_CHANNELS_TIMEOUT_MS + JUST_PAST_THE_DEADLINE_MS),
+      ) as never,
     );
 
     const rejection = await rejectionOf(teardown(DELETED_USER));

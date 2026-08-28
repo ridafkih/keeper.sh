@@ -7,14 +7,17 @@ let createOAuthSource: typeof createOAuthSourceFn = () =>
 
 let calendarAccountInserts: Record<string, unknown>[] = [];
 let calendarSourceInserts: Record<string, unknown>[] = [];
+let refreshCalls: string[] = [];
+let widelogFields: Array<[string, unknown]> = [];
+let credentialUpdateFailures: unknown[] = [];
+let userInfoFails = false;
 let selectResults: unknown[][] = [];
 let txInstance: object = {};
-let transactionOpen = false;
-let transactionOpenDuringUserInfo: boolean | null = null;
-let userInfoEntered: () => void = () => {};
-let userInfoEnteredPromise: Promise<void> = Promise.resolve();
-let releaseUserInfo: () => void = () => {};
-let userInfoGate: Promise<void> = Promise.resolve();
+
+const connectionTerminatedError = () =>
+  Object.assign(new Error("connection terminated unexpectedly"), {
+    code: "ERR_POSTGRES_EXPECTED_REQUEST",
+  });
 
 type SelectPromise = Promise<unknown[]> & {
   from: () => SelectPromise;
@@ -89,12 +92,17 @@ const insertForTable = (table: unknown) => {
   });
 };
 
-const createUpdateBuilder = () => ({
+const updateForTable = (table: unknown) => ({
   set: () => {
+    const tableName = getTableName(table as never);
+    const failure = tableName === "oauth_credentials"
+      ? credentialUpdateFailures.shift() ?? null
+      : null;
+
     const chain = Promise.resolve() as Promise<void> & {
       where: () => Promise<void>;
     };
-    chain.where = () => Promise.resolve();
+    chain.where = () => (failure === null ? Promise.resolve() : Promise.reject(failure));
 
     return chain;
   },
@@ -103,7 +111,7 @@ const createUpdateBuilder = () => ({
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
   insert: insertForTable,
-  update: createUpdateBuilder,
+  update: updateForTable,
   select: () => createSelectBuilder(selectResults.shift() ?? []),
   selectDistinct: () => ({
     from: () => ({}),
@@ -117,6 +125,18 @@ beforeAll(async () => {
     schema: {},
   }));
 
+  vi.mock("../../src/utils/logging", () => ({
+    context: () => {},
+    destroy: () => {},
+    widelog: {
+      error: () => {},
+      errorFields: () => {},
+      set: (field: string, value: unknown) => {
+        widelogFields.push([field, value]);
+      },
+    },
+  }));
+
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
     database: {
@@ -125,29 +145,27 @@ beforeAll(async () => {
       selectDistinct: () => ({
         from: () => ({}),
       }),
-      transaction: async (callback: (tx: object) => Promise<unknown>) => {
-        transactionOpen = true;
-        try {
-          return await callback(txInstance);
-        } finally {
-          transactionOpen = false;
-        }
-      },
-      update: createUpdateBuilder,
+      transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
+      update: updateForTable,
     },
     encryptionKey: "encryption-key",
     oauthProviders: {
       getProvider: () => ({
         exchangeCodeForTokens: () => Promise.reject(new Error("not used")),
-        fetchUserInfo: async () => {
-          transactionOpenDuringUserInfo = transactionOpen;
-          userInfoEntered();
-          await userInfoGate;
-          return { email: "person@example.com", id: "google-sub-x" };
-        },
+        fetchUserInfo: () =>
+          userInfoFails
+            ? Promise.reject(new Error("userinfo 503: backend error"))
+            : Promise.resolve({ email: "person@example.com", id: "outlook-sub-x" }),
         getAuthorizationUrl: () => Promise.reject(new Error("not used")),
         hasRequiredScopes: () => true,
-        refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
+        refreshAccessToken: (refreshToken: string) => {
+          refreshCalls.push(refreshToken);
+          return Promise.resolve({
+            access_token: "fresh-access-token",
+            expires_in: 3600,
+            refresh_token: "rotated-refresh-token",
+          });
+        },
       }),
       hasRequiredScopes: () => true,
       isOAuthProvider: () => true,
@@ -173,9 +191,14 @@ beforeAll(async () => {
     registerAccountPushChannels: () => Promise.resolve(),
   }));
 
-  vi.mock("@keeper.sh/database", () => ({
-    encryptPassword: () => "encrypted-password",
-  }));
+  vi.mock("@keeper.sh/database", async () => {
+    const actual = await vi.importActual<Record<string, unknown>>("@keeper.sh/database");
+
+    return {
+      ...actual,
+      encryptPassword: () => "encrypted-password",
+    };
+  });
 
   vi.mock("@keeper.sh/calendar/google", () => ({
     createGoogleCalendarProvider: () => ({ id: "google" }),
@@ -199,6 +222,10 @@ beforeAll(async () => {
     isCalDAVProvider: () => false,
     isOAuthProvider: () => true,
     isProviderId: () => true,
+    runWithCredentialRefreshLock: (
+      _oauthCredentialId: string,
+      runRefresh: () => Promise<unknown>,
+    ) => runRefresh(),
   }));
 
   ({ createOAuthSource } = await import("../../src/utils/oauth-sources"));
@@ -211,70 +238,70 @@ afterAll(() => {
 beforeEach(() => {
   calendarAccountInserts = [];
   calendarSourceInserts = [];
+  refreshCalls = [];
+  widelogFields = [];
+  credentialUpdateFailures = [];
+  userInfoFails = false;
   selectResults = [];
-  transactionOpen = false;
-  transactionOpenDuringUserInfo = null;
   txInstance = createTxInstance();
-  userInfoEnteredPromise = new Promise<void>((resolve) => {
-    userInfoEntered = resolve;
-  });
-  userInfoGate = new Promise<void>((resolve) => {
-    releaseUserInfo = resolve;
-  });
 });
 
-const CREDENTIAL_ROW = {
+const nearlyExpiredCredentialRow = () => ({
+  accessToken: "stale-access-token",
+  email: "person@example.com",
+  expiresAt: new Date(Date.now() + 30_000),
+  needsReauthentication: false,
+  provider: "outlook",
+  refreshToken: "stored-refresh-token",
+});
+
+const liveCredentialRow = () => ({
   accessToken: "access-token-1",
   email: "person@example.com",
   expiresAt: new Date(Date.now() + 3_600_000),
   needsReauthentication: false,
-  provider: "google",
-  refreshToken: "refresh-token-1",
-};
+  provider: "outlook",
+  refreshToken: "stored-refresh-token",
+});
 
-describe("The connect time userinfo call runs outside the database transaction", () => {
-  it("holds no open transaction while the provider userinfo call is pending", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
-
-    const pending = createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
-
-    await userInfoEnteredPromise;
-
-    expect(transactionOpenDuringUserInfo).toBe(false);
-
-    releaseUserInfo();
-    await pending;
+const connect = () =>
+  createOAuthSource({
+    externalCalendarId: "primary",
+    name: "Work",
+    oauthCredentialId: "credential-1",
+    provider: "outlook",
+    userId: "user-1",
   });
 
-  it("writes the same rows once the provider answers", async () => {
-    selectResults = [[CREDENTIAL_ROW], [], [], []];
+const resolutionFields = () =>
+  widelogFields.filter(([field]) => field === "oauth_source.provider_account_id_resolution");
 
-    const pending = createOAuthSource({
-      externalCalendarId: "primary",
-      name: "Work",
-      oauthCredentialId: "credential-1",
-      provider: "google",
-      userId: "user-1",
-    });
+describe("A lost token rotation is not reported to the customer as success", () => {
+  it("fails the connect when the provider rotated the refresh token and the persist was lost", async () => {
+    selectResults = [[nearlyExpiredCredentialRow()], [], [], []];
+    credentialUpdateFailures = [
+      connectionTerminatedError(),
+      connectionTerminatedError(),
+      connectionTerminatedError(),
+    ];
 
-    await userInfoEnteredPromise;
-    releaseUserInfo();
-    await pending;
+    const outcome = await connect().catch((error: unknown) => error);
 
+    expect(refreshCalls).toEqual(["stored-refresh-token"]);
+    expect(outcome).toBeInstanceOf(Error);
+    expect(calendarSourceInserts).toHaveLength(0);
+    expect(resolutionFields().map(([, value]) => value)).not.toContain("provider_failure");
+  });
+
+  it("still connects with a null provider account id when the provider call itself fails", async () => {
+    selectResults = [[liveCredentialRow()], [], [], []];
+    userInfoFails = true;
+
+    const source = await connect();
+
+    expect(source?.id).toBe("source-1");
     expect(calendarAccountInserts).toHaveLength(1);
-    expect(calendarAccountInserts[0]?.accountId).toBe("google-sub-x");
-    expect(calendarAccountInserts[0]?.email).toBe("person@example.com");
-    expect(calendarAccountInserts[0]?.provider).toBe("google");
-    expect(calendarAccountInserts[0]?.oauthCredentialId).toBe("credential-1");
-    expect(calendarSourceInserts).toHaveLength(1);
-    expect(calendarSourceInserts[0]?.accountId).toBe("account-1");
-    expect(calendarSourceInserts[0]?.externalCalendarId).toBe("primary");
-    expect(calendarSourceInserts[0]?.calendarType).toBe("oauth");
+    expect(calendarAccountInserts[0]?.accountId).toBeNull();
+    expect(resolutionFields().map(([, value]) => value)).toContain("provider_failure");
   });
 });

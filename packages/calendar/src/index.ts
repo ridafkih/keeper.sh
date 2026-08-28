@@ -7,6 +7,7 @@ export {
   type OAuthProvider,
   type OAuthProvidersConfig,
   type OAuthProviders,
+  type ProviderRequestOptions,
   type OAuthStateStore,
 } from "./core/oauth/providers";
 export {
@@ -47,6 +48,11 @@ export {
   type ReauthenticationDemandFields,
   type ReauthenticationDemandFieldsParams,
 } from "./core/reauthentication/demand-telemetry";
+export { withReauthenticationDemand } from "./core/reauthentication/reauthentication-demand";
+export type {
+  ReauthenticationDemandDatabase,
+  ReauthenticationDemandTarget,
+} from "./core/reauthentication/reauthentication-demand";
 export {
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,

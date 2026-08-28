@@ -8,6 +8,8 @@ import { getDatabaseErrorDetails } from "@keeper.sh/database";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { runWithCredentialRefreshLock } from "@keeper.sh/calendar";
+import { withReauthenticationDemand } from "@keeper.sh/calendar/reauthentication";
+import { persistRefreshedCredential } from "@keeper.sh/calendar/oauth-persistence";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
@@ -24,14 +26,14 @@ import {
   insertSourceCalendars,
 } from "./source-calendar-insert";
 
+import { CONNECT_WALL_TIME_CEILING_MS, openConnectDeadline } from "./connect-deadline";
+import type { ConnectDeadline } from "./connect-deadline";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { registerAccountPushChannels } from "./push-notifications/register-account-channels";
 
 const FIRST_RESULT_LIMIT = 1;
 const TOKEN_EXPIRY_SKEW_MS = 60_000;
 const CONNECT_REFRESH_ACQUIRE_BUDGET_MS = 5000;
-const CONNECT_WALL_TIME_CEILING_MS = 10_000;
-const CONNECT_DEADLINE_SETTLE_RESERVE_MS = 500;
 const MS_PER_SECOND = 1000;
 const OAUTH_CALENDAR_TYPE = "oauth";
 const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
@@ -59,6 +61,12 @@ class DestinationProviderMismatchError extends Error {
 class DuplicateSourceError extends Error {
   constructor() {
     super("This calendar is already added as a source");
+  }
+}
+
+class RotatedTokenNotPersistedError extends Error {
+  constructor(cause: unknown) {
+    super("Refreshed OAuth credential could not be persisted", { cause });
   }
 }
 
@@ -505,23 +513,9 @@ type OAuthSourceProvider = Pick<
   "fetchUserInfo" | "refreshAccessToken"
 >;
 
-interface ConnectDeadline {
-  remainingMs: () => number;
-  signal: AbortSignal;
-}
-
-const openConnectDeadline = (): ConnectDeadline => {
-  const providerIoBudgetMs = CONNECT_WALL_TIME_CEILING_MS - CONNECT_DEADLINE_SETTLE_RESERVE_MS;
-  const expiresAt = Date.now() + providerIoBudgetMs;
-
-  return {
-    remainingMs: () => Math.max(0, expiresAt - Date.now()),
-    signal: AbortSignal.timeout(providerIoBudgetMs),
-  };
-};
-
 const resolveCredentialAccessToken = async (
   provider: OAuthSourceProvider,
+  userId: string,
   oauthCredentialId: string,
   credential: OAuthSourceCredential,
   deadline: ConnectDeadline,
@@ -571,22 +565,35 @@ const resolveCredentialAccessToken = async (
 
   const refreshed = await runWithCredentialRefreshLock(
     oauthCredentialId,
-    async () => {
-      const result = await provider.refreshAccessToken(credential.refreshToken, {
-        signal: deadline.signal,
-      });
+    () =>
+      withReauthenticationDemand(database, { oauthCredentialId, userId }, async () => {
+        const result = await provider.refreshAccessToken(credential.refreshToken, {
+          signal: deadline.signal,
+        });
 
-      await database
-        .update(oauthCredentialsTable)
-        .set({
-          accessToken: result.access_token,
-          expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
-          refreshToken: result.refresh_token ?? credential.refreshToken,
-        })
-        .where(eq(oauthCredentialsTable.id, oauthCredentialId));
+        const rotated = typeof result.refresh_token === "string"
+          && result.refresh_token !== credential.refreshToken;
 
-      return result;
-    },
+        try {
+          await persistRefreshedCredential(database, oauthCredentialId, {
+            accessToken: result.access_token,
+            expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
+            refreshToken: result.refresh_token ?? credential.refreshToken,
+          });
+        } catch (error) {
+          widelog.set("token.rotation_lost", rotated);
+          widelog.errorFields(error, {
+            retriable: true,
+            slug: "connect-refreshed-credential-not-persisted",
+          });
+
+          if (rotated) {
+            throw new RotatedTokenNotPersistedError(error);
+          }
+        }
+
+        return result;
+      }),
     lockStore,
     readFreshCredential,
     Math.min(CONNECT_REFRESH_ACQUIRE_BUDGET_MS, deadline.remainingMs()),
@@ -597,6 +604,7 @@ const resolveCredentialAccessToken = async (
 
 const resolveProviderAccountId = async (
   providerId: string,
+  userId: string,
   oauthCredentialId: string,
   credential: OAuthSourceCredential,
 ): Promise<string | null> => {
@@ -607,11 +615,12 @@ const resolveProviderAccountId = async (
     throw new Error(`No OAuth provider registered for ${providerId}`);
   }
 
-  const deadline = openConnectDeadline();
+  const deadline = openConnectDeadline(CONNECT_WALL_TIME_CEILING_MS);
 
   try {
     const accessToken = await resolveCredentialAccessToken(
       provider,
+      userId,
       oauthCredentialId,
       credential,
       deadline,
@@ -625,6 +634,10 @@ const resolveProviderAccountId = async (
 
     return userInfo.id;
   } catch (error) {
+    if (error instanceof RotatedTokenNotPersistedError) {
+      throw error;
+    }
+
     widelog.set("oauth_source.provider_account_id_resolution", "provider_failure");
     widelog.errorFields(error, {
       retriable: true,
@@ -851,7 +864,12 @@ const createOAuthSource = async (
   }
 
   const providerAccountId = snapshot.storedProviderAccountId
-    ?? await resolveProviderAccountId(options.provider, options.oauthCredentialId, credential);
+    ?? await resolveProviderAccountId(
+      options.provider,
+      options.userId,
+      options.oauthCredentialId,
+      credential,
+    );
 
   return database.transaction(async (tx) => {
     await tx.execute(
@@ -866,22 +884,23 @@ const createOAuthSource = async (
         adoptProviderAccountIdWithDatabase(tx, accountOptions),
       createSource: (payload) => createOAuthSourceRecordWithDatabase(tx, payload),
       countUserAccounts: (userId) => countUserAccountsWithDatabase(tx, userId),
-      createCalendarAccount: async (payload) => {
-        const [insertedAccount] = await tx
-          .insert(calendarAccountsTable)
-          .values({
-            accountId: payload.providerAccountId,
-            authType: "oauth",
-            displayName: payload.email ?? payload.displayName,
-            email: payload.email ?? payload.displayName,
-            id: crypto.randomUUID(),
-            oauthCredentialId: payload.oauthCredentialId,
-            provider: payload.provider,
-            userId: payload.userId,
-          })
-          .returning({ id: calendarAccountsTable.id });
-        return insertedAccount?.id ?? null;
-      },
+      createCalendarAccount: (payload) =>
+        tx.transaction(async (savepoint) => {
+          const [insertedAccount] = await savepoint
+            .insert(calendarAccountsTable)
+            .values({
+              accountId: payload.providerAccountId,
+              authType: "oauth",
+              displayName: payload.email ?? payload.displayName,
+              email: payload.email ?? payload.displayName,
+              id: crypto.randomUUID(),
+              oauthCredentialId: payload.oauthCredentialId,
+              provider: payload.provider,
+              userId: payload.userId,
+            })
+            .returning({ id: calendarAccountsTable.id });
+          return insertedAccount?.id ?? null;
+        }),
       findCredentialEmail: () =>
         Promise.resolve({ email: credential.email, exists: true }),
       findExistingAccountId: (accountOptions) => findOAuthAccountIdWithDatabase(tx, accountOptions),
@@ -913,7 +932,12 @@ interface ImportOAuthAccountDependencies {
     accountId: string,
     calendars: ExternalCalendar[],
   ) => Promise<void>;
-  listCalendars: (provider: string, accessToken: string, ownerEmail: string | null) => Promise<ExternalCalendar[]>;
+  listCalendars: (
+    provider: string,
+    accessToken: string,
+    ownerEmail: string | null,
+    signal?: AbortSignal,
+  ) => Promise<ExternalCalendar[]>;
   triggerSync: (userId: string, provider: string, accountId: string) => void;
 }
 
@@ -989,14 +1013,14 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       })),
     );
   },
-  listCalendars: async (provider, accessToken, ownerEmail) => {
+  listCalendars: async (provider, accessToken, ownerEmail, signal) => {
     try {
       if (provider === "google") {
-        const calendars = await listGoogleCalendars(accessToken);
+        const calendars = await listGoogleCalendars(accessToken, { signal });
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
       }
       if (provider === "outlook") {
-        const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
+        const calendars = await listOutlookCalendars(accessToken, { ownerEmail, signal });
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
       }
       throw new Error(`No calendar listing support for provider: ${provider}`);
@@ -1055,7 +1079,12 @@ const importOAuthAccountCalendarsWithDependencies = async (
     });
   }
 
-  const externalCalendars = await dependencies.listCalendars(provider, accessToken, email);
+  const externalCalendars = await dependencies.listCalendars(
+    provider,
+    accessToken,
+    email,
+    options.signal,
+  );
   const newCalendars = await dependencies.getUnimportedExternalCalendars(
     userId,
     accountId,
@@ -1084,6 +1113,7 @@ interface ImportOAuthAccountOptions {
   accessToken: string;
   email: string | null;
   providerAccountId: string | null;
+  signal?: AbortSignal;
 }
 
 const createOAuthAccountIdWithDatabase = async (
@@ -1173,7 +1203,12 @@ const importOAuthAccountCalendars = async (
   const dependencies = createDefaultImportOAuthAccountDependencies();
 
   const plan = await premiumService.getUserPlan(options.userId);
-  const externalCalendars = await dependencies.listCalendars(options.provider, options.accessToken, options.email);
+  const externalCalendars = await dependencies.listCalendars(
+    options.provider,
+    options.accessToken,
+    options.email,
+    options.signal,
+  );
 
   return database.transaction(async (tx) => {
     await tx.execute(
@@ -1205,6 +1240,7 @@ export {
   DestinationNotFoundError,
   DestinationProviderMismatchError,
   DuplicateSourceError,
+  RotatedTokenNotPersistedError,
   SourceCredentialNotFoundError,
   SourceCredentialProviderMismatchError,
   getUserOAuthSources,

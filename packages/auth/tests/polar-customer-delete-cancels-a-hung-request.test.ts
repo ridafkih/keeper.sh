@@ -1,28 +1,34 @@
 import { Polar } from "@polar-sh/sdk";
-import { afterEach, describe, expect, it } from "vitest";
+import { HTTPClient } from "@polar-sh/sdk/lib/http.js";
+import { describe, expect, it } from "vitest";
 import {
   deletePolarCustomerByExternalId,
   POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
 } from "../src/polar-customer-delete";
+import { createSilentProviderFetch } from "./support/silent-provider-fetch";
 
 const ABORT_OBSERVATION_MS = 4000;
 const ABORT_POLL_INTERVAL_MS = 25;
 const HUNG_REQUEST_TEST_TIMEOUT_MS = 30_000;
+const SILENT_POLAR_ORIGIN = "https://polar.invalid";
 
-const startHangingPolarServer = (aborts: string[]) =>
-  Bun.serve({
-    idleTimeout: 0,
-    port: 0,
-    fetch: (request) => {
-      request.signal.addEventListener(
-        "abort",
-        () => {
-          aborts.push(new URL(request.url).pathname);
+const silentPolarClient = (aborts: string[]) =>
+  new Polar({
+    accessToken: "polar-test-token",
+    serverURL: SILENT_POLAR_ORIGIN,
+    httpClient: new HTTPClient({
+      fetcher: createSilentProviderFetch({
+        onRequest: (request) => {
+          request.signal.addEventListener(
+            "abort",
+            () => {
+              aborts.push(new URL(request.url).pathname);
+            },
+            { once: true },
+          );
         },
-        { once: true },
-      );
-      return new Promise<Response>(() => {});
-    },
+      }),
+    }),
   });
 
 const waitForAbort = async (aborts: string[], waitMs: number) => {
@@ -34,26 +40,11 @@ const waitForAbort = async (aborts: string[], waitMs: number) => {
 };
 
 describe("deletePolarCustomerByExternalId against a hung Polar", () => {
-  const servers: ReturnType<typeof startHangingPolarServer>[] = [];
-
-  afterEach(async () => {
-    for (const server of servers) {
-      await server.stop(true);
-    }
-    servers.length = 0;
-  });
-
   it(
     "aborts the outbound request when the deletion deadline is reached",
     async () => {
       const aborts: string[] = [];
-      const server = startHangingPolarServer(aborts);
-      servers.push(server);
-
-      const polarClient = new Polar({
-        accessToken: "polar-test-token",
-        serverURL: server.url.origin,
-      });
+      const polarClient = silentPolarClient(aborts);
 
       const started = Date.now();
 
@@ -65,7 +56,9 @@ describe("deletePolarCustomerByExternalId against a hung Polar", () => {
         POLAR_CUSTOMER_DELETE_TIMEOUT_MS + ABORT_OBSERVATION_MS,
       );
 
-      expect(await waitForAbort(aborts, ABORT_OBSERVATION_MS)).toHaveLength(1);
+      expect(await waitForAbort(aborts, ABORT_OBSERVATION_MS)).toEqual([
+        "/v1/customers/external/user-1",
+      ]);
     },
     HUNG_REQUEST_TEST_TIMEOUT_MS,
   );

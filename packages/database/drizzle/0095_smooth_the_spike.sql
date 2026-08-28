@@ -1,1 +1,1 @@
-ALTER TABLE "deletion_residue" ADD COLUMN "providerAccountId" text;
+ALTER TABLE "deletion_residue" ADD COLUMN IF NOT EXISTS "providerAccountId" text;

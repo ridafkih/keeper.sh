@@ -12,7 +12,7 @@ const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const REQUEST_TIMEOUT_MS = 15_000;
-const GOOGLE_REVOKE_TIMEOUT_MS = 1000;
+const GOOGLE_REVOKE_TIMEOUT_MS = 5000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
 const signalWithExpiry = (
@@ -46,7 +46,11 @@ interface AuthorizationUrlOptions {
 
 interface GoogleOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    signal?: AbortSignal,
+  ) => Promise<GoogleTokenResponse>;
   refreshAccessToken: (
     refreshToken: string,
     signal?: AbortSignal,
@@ -252,6 +256,7 @@ const createGoogleOAuthService = (
   const exchangeCodeForTokens = async (
     code: string,
     callbackUrl: string,
+    signal?: AbortSignal,
   ): Promise<GoogleTokenResponse> => {
     const response = await fetch(GOOGLE_TOKEN_URL, {
       body: new URLSearchParams({
@@ -263,7 +268,7 @@ const createGoogleOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
     }).catch((error: unknown) => {
       if (isRequestTimeoutError(error)) {
         throw new Error(

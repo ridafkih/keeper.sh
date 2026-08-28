@@ -1,15 +1,8 @@
 import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
-import { isOAuthReauthRequiredError } from "./error-classification";
-import {
-  readPriorReauthenticationState,
-  recordReauthenticationDemand,
-} from "../reauthentication/demand-telemetry";
-import {
-  calendarAccountsTable,
-  oauthCredentialsTable,
-} from "@keeper.sh/database/schema";
-import { REAUTHENTICATION_TOKEN_REFRESH, TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
+import { withReauthenticationDemand } from "../reauthentication/reauthentication-demand";
+import { oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { classifyDatabaseError } from "@keeper.sh/database";
 import { widelog } from "widelogger";
 import { abortableSleep } from "../utils/backoff";
@@ -48,6 +41,27 @@ const persistRefreshedCredential = async (
       }
       await abortableSleep(PERSIST_BACKOFF_MS * attempt);
     }
+  }
+};
+
+const persistRotatedCredential = async (
+  database: PgDatabase<PgQueryResultHKT>,
+  oauthCredentialId: string,
+  previousRefreshToken: string,
+  result: { access_token: string; expires_in: number; refresh_token?: string },
+): Promise<void> => {
+  const rotated = typeof result.refresh_token === "string"
+    && result.refresh_token !== previousRefreshToken;
+
+  try {
+    await persistRefreshedCredential(database, oauthCredentialId, {
+      accessToken: result.access_token,
+      expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND),
+      refreshToken: result.refresh_token ?? previousRefreshToken,
+    });
+  } catch (error) {
+    widelog.set("token.rotation_lost", rotated);
+    throw error;
   }
 };
 
@@ -107,53 +121,19 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
   return (refreshToken: string) =>
     runWithCredentialRefreshLock(
       oauthCredentialId,
-      async () => {
-        try {
+      () =>
+        withReauthenticationDemand(database, { calendarAccountId }, async () => {
           const result = await rawRefresh(refreshToken);
 
-          const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
-          const rotated = typeof result.refresh_token === "string"
-            && result.refresh_token !== refreshToken;
-
-          try {
-            await persistRefreshedCredential(database, oauthCredentialId, {
-              accessToken: result.access_token,
-              expiresAt: newExpiresAt,
-              refreshToken: result.refresh_token ?? refreshToken,
-            });
-          } catch (error) {
-            widelog.set("token.rotation_lost", rotated);
-            throw error;
-          }
+          await persistRotatedCredential(database, oauthCredentialId, refreshToken, result);
 
           return result;
-        } catch (error) {
-          if (isOAuthReauthRequiredError(error)) {
-            const prior = await readPriorReauthenticationState(database, calendarAccountId);
-            await database
-              .update(calendarAccountsTable)
-              .set({
-                needsReauthentication: true,
-                reauthenticationSource: REAUTHENTICATION_TOKEN_REFRESH,
-              })
-              .where(eq(calendarAccountsTable.id, calendarAccountId));
-            recordReauthenticationDemand({
-              accountId: calendarAccountId,
-              action: "raise",
-              previous: prior?.needsReauthentication ?? null,
-              provenance: REAUTHENTICATION_TOKEN_REFRESH,
-              recordedProvenance: prior?.reauthenticationSource,
-              signal: "oauth-refresh-rejected",
-            });
-          }
-          throw error;
-        }
-      },
+        }),
       refreshLockStore,
       readFreshCredential,
       acquireBudgetMs,
     );
 };
 
-export { createCoordinatedRefresher };
-export type { CoordinatedRefresherOptions };
+export { createCoordinatedRefresher, persistRefreshedCredential, persistRotatedCredential };
+export type { CoordinatedRefresherOptions, RefreshedCredential };
