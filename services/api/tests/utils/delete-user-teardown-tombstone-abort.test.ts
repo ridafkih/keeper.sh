@@ -53,7 +53,7 @@ describe("delete user teardown tombstone abort", () => {
 
     const teardown = createDeleteUserSyncTeardown({
       createQueue: createUnusedQueue,
-      deregisterPushChannels: () => Promise.resolve(0),
+      deregisterPushChannels: () => Promise.resolve({ stoppedProviderChannelIds: [] }),
       listCalendarIds: () => Promise.resolve([]),
       listOAuthGrantProviders: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),

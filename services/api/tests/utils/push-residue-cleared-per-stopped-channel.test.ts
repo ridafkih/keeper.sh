@@ -165,7 +165,7 @@ const stubFetch = ((input: string | URL | Request, init?: RequestInit) => {
 const deregisterUserChannels = async (
   channels: StoredPushChannel[],
   signal: AbortSignal | null,
-): Promise<number> => {
+): Promise<{ stoppedProviderChannelIds: string[] }> => {
   const outcome = await runDeregisterPushChannelsOutcome(
     DELETED_USER,
     {
@@ -198,7 +198,7 @@ const deregisterUserChannels = async (
     );
   }
 
-  return outcome.deregisteredCount;
+  return { stoppedProviderChannelIds: outcome.stoppedProviderChannelIds };
 };
 
 const describeErrorChain = (error: unknown): string[] => {

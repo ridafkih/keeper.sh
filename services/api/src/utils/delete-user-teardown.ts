@@ -43,12 +43,15 @@ const SYNC_JOBS_TIMEOUT_MS = 1000;
 const RESIDUE_WRITE_RESERVE_MS = 800;
 const TEARDOWN_HEADROOM_MS = 1000;
 const PUSH_CHANNELS_STEP = "push_channels";
+const GRANT_CENSUS_STEP = "oauth_grant_census";
+const GRANT_CENSUS_TIMEOUT_MS = 500;
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
 const TEARDOWN_STEPS_BUDGET_MS = [
   TOMBSTONE_TIMEOUT_MS,
   SYNC_JOBS_TIMEOUT_MS,
+  GRANT_CENSUS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
 ].reduce((total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS, 0);
 
@@ -86,9 +89,16 @@ interface DeleteUserSyncQueue {
   remove: (jobId: string) => Promise<number>;
 }
 
+interface UserPushChannelDeregistration {
+  stoppedProviderChannelIds: string[];
+}
+
 interface DeleteUserSyncTeardownDependencies {
   createQueue: () => DeleteUserSyncQueue;
-  deregisterPushChannels: (userId: string, signal: AbortSignal) => Promise<number>;
+  deregisterPushChannels: (
+    userId: string,
+    signal: AbortSignal,
+  ) => Promise<UserPushChannelDeregistration>;
   listCalendarIds: (userId: string) => Promise<string[]>;
   listOAuthGrantProviders: (userId: string) => Promise<{ provider: string }[]>;
   listPushChannels: (userId: string) => Promise<TeardownPushChannel[]>;
@@ -253,9 +263,38 @@ const censusedOAuthGrantProviders = async (
   try {
     return await retainedOAuthGrantProviders(dependencies, userId);
   } catch (error) {
-    reportStepFailure(error, PUSH_CHANNELS_STEP, userId, TEARDOWN_FAILED_SLUG);
+    reportStepFailure(error, GRANT_CENSUS_STEP, userId, TEARDOWN_FAILED_SLUG);
 
     return RETAINED_GRANTS_UNAVAILABLE;
+  }
+};
+
+const censusUnlessAborted = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+  signal: AbortSignal,
+): Promise<string[] | typeof RETAINED_GRANTS_UNAVAILABLE> => {
+  if (signal.aborted) {
+    return RETAINED_GRANTS_UNAVAILABLE;
+  }
+
+  const listenerScope = new AbortController();
+
+  try {
+    return await Promise.race([
+      censusedOAuthGrantProviders(dependencies, userId),
+      new Promise<typeof RETAINED_GRANTS_UNAVAILABLE>((resolve) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            resolve(RETAINED_GRANTS_UNAVAILABLE);
+          },
+          { once: true, signal: listenerScope.signal },
+        );
+      }),
+    ]);
+  } finally {
+    listenerScope.abort();
   }
 };
 
@@ -414,8 +453,8 @@ const capturePushChannelResidue = async (
 
 interface PushChannelDeregistration {
   abandonedChannelIds: string[];
-  deregistered: number | null;
   failure: { error: unknown } | null;
+  stoppedProviderChannelIds: string[] | null;
 }
 
 const attributedAbandonments = (
@@ -444,10 +483,15 @@ const deregisterLivePushChannels = async (
   signal: AbortSignal,
 ): Promise<PushChannelDeregistration> => {
   try {
+    const { stoppedProviderChannelIds } = await dependencies.deregisterPushChannels(
+      userId,
+      signal,
+    );
+
     return {
       abandonedChannelIds: [],
-      deregistered: await dependencies.deregisterPushChannels(userId, signal),
       failure: null,
+      stoppedProviderChannelIds,
     };
   } catch (error) {
     const abandoned = attributedAbandonments(error);
@@ -458,8 +502,8 @@ const deregisterLivePushChannels = async (
 
     return {
       abandonedChannelIds: abandoned.map((residue) => residue.providerChannelId),
-      deregistered: null,
       failure: { error },
+      stoppedProviderChannelIds: null,
     };
   }
 };
@@ -555,6 +599,19 @@ const buildDeleteUserSyncSteps = (
     timeoutMs: SYNC_JOBS_TIMEOUT_MS,
   },
   {
+    name: GRANT_CENSUS_STEP,
+    run: async (userId, signal) => {
+      widelog.setFields({
+        "delete_user.oauth_grants_retained": await censusUnlessAborted(
+          dependencies,
+          userId,
+          signal,
+        ),
+      });
+    },
+    timeoutMs: GRANT_CENSUS_TIMEOUT_MS,
+  },
+  {
     name: PUSH_CHANNELS_STEP,
     run: async (userId, signal) => {
       const capture = await capturePushChannelResidue(dependencies, userId, signal);
@@ -567,14 +624,20 @@ const buildDeleteUserSyncSteps = (
 
       const outcome = await deregisterLivePushChannels(dependencies, userId, signal);
       const abandoned = new Set(outcome.abandonedChannelIds);
-      const stoppedChannelIds = capture.capturedChannelIds.filter(
-        (providerChannelId) => !abandoned.has(providerChannelId),
+      const stoppedChannelIds = outcome.stoppedProviderChannelIds
+        ?? capture.capturedChannelIds.filter(
+          (providerChannelId) => !abandoned.has(providerChannelId),
+        );
+      const stopped = new Set(stoppedChannelIds);
+      const unaccounted = capture.capturedChannelIds.filter(
+        (providerChannelId) =>
+          !abandoned.has(providerChannelId) && !stopped.has(providerChannelId),
       );
 
       widelog.setFields({
         "delete_user.push_channels_abandoned": outcome.abandonedChannelIds.length,
-        "delete_user.push_channels_deregistered": outcome.deregistered
-          ?? stoppedChannelIds.length,
+        "delete_user.push_channels_deregistered": stoppedChannelIds.length,
+        "delete_user.push_channels_unaccounted": unaccounted.length,
       });
 
       const cleared = await clearStoppedPushChannelResidue(
@@ -584,13 +647,6 @@ const buildDeleteUserSyncSteps = (
       );
 
       widelog.setFields({ "delete_user.push_channels_residue_cleared": cleared });
-
-      widelog.setFields({
-        "delete_user.oauth_grants_retained": await censusedOAuthGrantProviders(
-          dependencies,
-          userId,
-        ),
-      });
 
       if (outcome.failure !== null) {
         throw outcome.failure.error;

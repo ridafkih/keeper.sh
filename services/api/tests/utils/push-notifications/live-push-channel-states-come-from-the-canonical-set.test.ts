@@ -266,7 +266,7 @@ describe("the deleted-user push channel sweep reads its states from the canonica
     const harness = await createHarness(canonical);
 
     await expect(harness.deregisterUserPushChannels(DELETED_USER_ID)).resolves
-      .toBe(sweptStates.length);
+      .toHaveProperty("deregisteredCount", sweptStates.length);
 
     expect(harness.dialed.toSorted()).toEqual(
       sweptStates

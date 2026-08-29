@@ -328,7 +328,8 @@ describe("push channel teardown SQL scoping for a deleted user", () => {
   it("stops the user's failed channels alongside the live ones without touching another user", async () => {
     const { deregistration, fetchStub, queries } = await installScopingHarness();
 
-    await expect(deregistration.deregisterUserPushChannels("user-a")).resolves.toBe(3);
+    await expect(deregistration.deregisterUserPushChannels("user-a"))
+      .resolves.toHaveProperty("deregisteredCount", 3);
 
     const [query] = channelQueries(queries);
     expect(query).toBeDefined();

@@ -136,7 +136,7 @@ describe("push channel teardown under a contended refresh lock", () => {
     const settlement = await deregistration
       .deregisterUserPushChannels("user-a", AbortSignal.timeout(PUSH_CHANNELS_TIMEOUT_MS))
       .then(
-        (deregistered: number) => ({ deregistered }),
+        ({ deregisteredCount: deregistered }) => ({ deregistered }),
         (error: unknown) => ({ error }),
       );
     const elapsedMs = Date.now() - startedAt;

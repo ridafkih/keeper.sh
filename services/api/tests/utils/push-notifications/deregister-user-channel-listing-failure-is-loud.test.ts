@@ -75,7 +75,11 @@ describe("a delete-user push channel listing that fails is loud", () => {
       null,
       DISCONNECT_CONCURRENCY,
       false,
-    )).resolves.toEqual({ abandonments: [], deregisteredCount: 0 });
+    )).resolves.toEqual({
+      abandonments: [],
+      deregisteredCount: 0,
+      stoppedProviderChannelIds: [],
+    });
 
     expect(recorded.map((entry) => entry.slug)).toContain(DEREGISTRATION_FAILED_SLUG);
   });

@@ -176,7 +176,7 @@ describe("push channel teardown holding an uncontended refresh lock", () => {
           AbortSignal.timeout(PUSH_CHANNELS_TIMEOUT_MS),
         )
         .then(
-          (deregistered: number) => ({ deregistered }),
+          ({ deregisteredCount: deregistered }) => ({ deregistered }),
           (error: unknown) => ({ error }),
         ),
       new Promise((resolve) => {

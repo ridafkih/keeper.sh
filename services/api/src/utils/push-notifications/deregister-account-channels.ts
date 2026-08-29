@@ -82,6 +82,7 @@ interface DeregisterPushChannelsDependencies {
 interface DeregisterPushChannelsOutcome {
   abandonments: Error[];
   deregisteredCount: number;
+  stoppedProviderChannelIds: string[];
 }
 
 interface AbandonedPushChannel {
@@ -346,7 +347,7 @@ const runDeregisterPushChannelsOutcome = async (
       throw error;
     }
 
-    return { abandonments: [], deregisteredCount: 0 };
+    return { abandonments: [], deregisteredCount: 0, stoppedProviderChannelIds: [] };
   }
 
   let channels: StoredPushChannel[] = [];
@@ -357,7 +358,7 @@ const runDeregisterPushChannelsOutcome = async (
     if (requireChannelListing) {
       throw error;
     }
-    return { abandonments: [], deregisteredCount: 0 };
+    return { abandonments: [], deregisteredCount: 0, stoppedProviderChannelIds: [] };
   }
 
   const dialable = channels.filter((channel) => carriesProviderIdentifier(channel));
@@ -406,6 +407,10 @@ const runDeregisterPushChannelsOutcome = async (
 
   await Promise.all(workers);
 
+  const stopped = new Set(stoppedChannelIds);
+  const stoppedProviderChannelIds = dialable
+    .filter((channel) => stopped.has(channel.id))
+    .map((channel) => String(channel.providerChannelId));
   const abandoned = describeAbandoned(dialable, stoppedChannelIds).map((channel) => ({
     channel,
     reason: resolveAbandonmentReason(channel.id, failureReasons, signal),
@@ -452,7 +457,11 @@ const runDeregisterPushChannelsOutcome = async (
     "push_channel.disconnect_restated_count": restated,
   });
 
-  return { abandonments, deregisteredCount: stoppedChannelIds.length };
+  return {
+    abandonments,
+    deregisteredCount: stoppedChannelIds.length,
+    stoppedProviderChannelIds,
+  };
 };
 
 const runDeregisterPushChannels = async (
@@ -610,6 +619,11 @@ const listUserTeardownPushChannels = async (
   }));
 };
 
+interface ScopedPushChannelDeregistration {
+  deregisteredCount: number;
+  stoppedProviderChannelIds: string[];
+}
+
 const deregisterPushChannelsWithin = async (
   scopeId: string,
   scopeColumn: PushChannelScopeColumn,
@@ -617,7 +631,8 @@ const deregisterPushChannelsWithin = async (
   signal: AbortSignal | null,
   requireEveryChannelStopped: boolean,
   concurrency: number,
-): Promise<number> => {
+  acquireBudgetMs?: number,
+): Promise<ScopedPushChannelDeregistration> => {
   const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
   const credentialsByChannel = new Map<string, TeardownResidueCredential>();
 
@@ -671,7 +686,7 @@ const deregisterPushChannelsWithin = async (
       });
       if (rawRefresh) {
         await ensureValidToken(tokenState, createCoordinatedRefresher({
-          acquireBudgetMs: REFRESH_LOCK_ACQUIRE_BUDGET_MS,
+          ...(typeof acquireBudgetMs === "number" && { acquireBudgetMs }),
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,
@@ -743,11 +758,14 @@ const deregisterPushChannelsWithin = async (
     throw describeAbandonedScope(`${scopeColumn} ${scopeId}`, outcome.abandonments);
   }
 
-  return outcome.deregisteredCount;
+  return {
+    deregisteredCount: outcome.deregisteredCount,
+    stoppedProviderChannelIds: outcome.stoppedProviderChannelIds,
+  };
 };
 
-const deregisterAccountPushChannels = async (accountId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(
+const deregisterAccountPushChannels = async (accountId: string): Promise<number> => {
+  const deregistration = await deregisterPushChannelsWithin(
     accountId,
     "accountId",
     [...LIVE_PUSH_CHANNEL_STATES],
@@ -756,8 +774,11 @@ const deregisterAccountPushChannels = async (accountId: string): Promise<number>
     SERIAL_CONCURRENCY,
   );
 
-const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> =>
-  await deregisterPushChannelsWithin(
+  return deregistration.deregisteredCount;
+};
+
+const deregisterCalendarPushChannels = async (calendarId: string): Promise<number> => {
+  const deregistration = await deregisterPushChannelsWithin(
     calendarId,
     "calendarId",
     [...LIVE_PUSH_CHANNEL_STATES],
@@ -766,10 +787,13 @@ const deregisterCalendarPushChannels = async (calendarId: string): Promise<numbe
     SERIAL_CONCURRENCY,
   );
 
+  return deregistration.deregisteredCount;
+};
+
 const deregisterUserPushChannels = async (
   userId: string,
   signal: AbortSignal | null = null,
-): Promise<number> =>
+): Promise<ScopedPushChannelDeregistration> =>
   await deregisterPushChannelsWithin(
     userId,
     "userId",
@@ -777,6 +801,7 @@ const deregisterUserPushChannels = async (
     signal,
     true,
     DISCONNECT_CONCURRENCY,
+    REFRESH_LOCK_ACQUIRE_BUDGET_MS,
   );
 
 const runDeregisterAccountPushChannels = async (
@@ -823,5 +848,6 @@ export type {
   AbandonedPushChannelResidue,
   DeregisterPushChannelsDependencies,
   DeregisterPushChannelsOutcome,
+  ScopedPushChannelDeregistration,
   TeardownPushChannel,
 };
