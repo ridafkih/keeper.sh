@@ -66,6 +66,16 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
       ),
     ));
 
+const readStoredRefreshToken = async (oauthCredentialId: string): Promise<string | null> => {
+  const [stored] = await database
+    .select({ refreshToken: oauthCredentialsTable.refreshToken })
+    .from(oauthCredentialsTable)
+    .where(eq(oauthCredentialsTable.id, oauthCredentialId))
+    .limit(FIRST_RESULT_LIMIT);
+
+  return stored?.refreshToken ?? null;
+};
+
 const readFreshCredential = async (oauthCredentialId: string) => {
   const [stored] = await database
     .select({
@@ -134,11 +144,19 @@ const resolveAccessToken = async (
     row.oauthCredentialId,
     () =>
       withReauthenticationDemand(database, { calendarAccountId: row.accountRowId }, async () => {
-        const result = await provider.refreshAccessToken(row.refreshToken, {
+        const presentedRefreshToken = await readStoredRefreshToken(row.oauthCredentialId)
+          ?? row.refreshToken;
+
+        const result = await provider.refreshAccessToken(presentedRefreshToken, {
           signal: deadline.signal,
         });
 
-        await persistRotatedCredential(database, row.oauthCredentialId, row.refreshToken, result);
+        await persistRotatedCredential(
+          database,
+          row.oauthCredentialId,
+          presentedRefreshToken,
+          result,
+        );
 
         return result;
       }),
