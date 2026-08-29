@@ -1,6 +1,7 @@
 import { type } from "arktype";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { signJWT } from "better-auth/crypto";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt as jwtPlugin } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -30,6 +31,10 @@ import { createDeleteUserCompensationScope } from "./delete-user-compensation";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import {
+  createUnverifiedRegistrationReclaim,
+  readSignUpBody,
+} from "./unverified-registration-reclaim";
+import {
   resolveMcpAuthOptions,
   resolveMcpJwksUrl,
 } from "./mcp-config";
@@ -46,7 +51,7 @@ import {
   verification as verificationTable,
 } from "@keeper.sh/database/auth-schema";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import type { BetterAuthOptions, BetterAuthPlugin, User } from "better-auth";
+import type { BetterAuthOptions, BetterAuthPlugin } from "better-auth";
 import type {
   DeleteUserResidueRecorder,
   DeleteUserTeardown,
@@ -147,16 +152,8 @@ const mcpJwtClaimsSchema = type({
   "+": "delete",
 });
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const extractSignUpEmail = (value: unknown): string | null => {
-  if (!isRecord(value) || typeof value.email !== "string") {
-    return null;
-  }
-
-  return value.email;
-};
+const AUTH_BASE_PATH = "/api/auth";
+const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
 
 const createAuth = (config: AuthConfig) => {
   const {
@@ -383,14 +380,6 @@ const createAuth = (config: AuthConfig) => {
     await destroyExternalState(userId);
   };
 
-  const quiesceThenDeleteUserRow = async (
-    user: Parameters<BeforeDeleteUser>[0],
-    internalAdapter: { deleteUser: (userId: string) => Promise<unknown> },
-  ): Promise<void> => {
-    await beforeDelete(user);
-    await internalAdapter.deleteUser(user.id);
-    await afterDelete(user);
-  };
 
   const deletionQuiesceable =
     deleteUserTeardown !== deleteUserTeardownUnavailable &&
@@ -466,10 +455,43 @@ const createAuth = (config: AuthConfig) => {
     socialProviders.microsoft = {
       clientId: microsoftClientId,
       clientSecret: microsoftClientSecret,
+      mapProfileToUser: (profile) => ({
+        emailVerified: profile.email_verified ?? true,
+      }),
       prompt: "consent",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
   }
+
+  const { applyPendingReclaim, recordPendingReclaim } =
+    createUnverifiedRegistrationReclaim(database);
+
+  const sendVerificationEmail = async ({ user, url }: SendEmailParams) => {
+    if (!resend) {
+      return;
+    }
+    await resend.emails.send({
+      template: {
+        id: "email-verification",
+        variables: { name: user.name, url },
+      },
+      to: user.email,
+    });
+  };
+
+  const sendReclaimVerificationEmail = async (user: EmailUser) => {
+    const token = await signJWT(
+      { email: user.email.toLowerCase() },
+      secret,
+      EMAIL_VERIFICATION_EXPIRES_IN_SECONDS,
+    );
+    const callbackURL = encodeURIComponent("/");
+
+    await sendVerificationEmail({
+      url: `${baseUrl}${AUTH_BASE_PATH}/verify-email?token=${token}&callbackURL=${callbackURL}`,
+      user,
+    });
+  };
 
   const baseAuth = betterAuth({
     account: {
@@ -477,7 +499,7 @@ const createAuth = (config: AuthConfig) => {
         allowDifferentEmails: true,
       },
     },
-    basePath: "/api/auth",
+    basePath: AUTH_BASE_PATH,
     baseURL: baseUrl,
     database: drizzleAdapter(database, {
       provider: "pg",
@@ -496,6 +518,27 @@ const createAuth = (config: AuthConfig) => {
     }),
     emailAndPassword: {
       enabled: commercialMode,
+      onExistingUserSignUp: async ({ user }, request) => {
+        if (user.emailVerified) {
+          return;
+        }
+
+        if (!request) {
+          throw new TypeError(
+            "Sign-up request is unavailable, cannot capture an unverified registration reclaim",
+          );
+        }
+
+        const { name, password } = await readSignUpBody(request);
+
+        const recorded = await recordPendingReclaim({ name, password, user });
+
+        if (!recorded) {
+          return;
+        }
+
+        await sendReclaimVerificationEmail({ email: user.email, name });
+      },
       requireEmailVerification: commercialMode,
       sendResetPassword: async ({ user, url }: SendEmailParams) => {
         if (!resend) {
@@ -511,41 +554,12 @@ const createAuth = (config: AuthConfig) => {
       },
     },
     emailVerification: {
+      afterEmailVerification: applyPendingReclaim,
       autoSignInAfterVerification: true,
-      sendVerificationEmail: async ({ user, url }: SendEmailParams) => {
-        if (!resend) {
-          return;
-        }
-        await resend.emails.send({
-          template: {
-            id: "email-verification",
-            variables: { name: user.name, url },
-          },
-          to: user.email,
-        });
-      },
+      sendVerificationEmail,
     },
     hooks: {
-      before: createAuthMiddleware(async (context) => {
-        if (context.path !== "/sign-up/email") {
-          return;
-        }
-        const email = extractSignUpEmail(context.body);
-        if (!email) {
-          return;
-        }
-        const existingUser = await context.context.adapter.findOne<User>({
-          model: "user",
-          where: [
-            { field: "email", value: email },
-            { field: "emailVerified", value: false },
-          ],
-        });
-        if (!existingUser) {
-          return;
-        }
-        await quiesceThenDeleteUserRow(existingUser, context.context.internalAdapter);
-      }),
+      before: createAuthMiddleware(() => Promise.resolve()),
     },
     onAPIError: {
       onError(error: unknown) {

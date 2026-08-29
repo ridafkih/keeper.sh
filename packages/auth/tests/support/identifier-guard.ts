@@ -31,7 +31,6 @@ const remediationTestFiles = () => [
   "packages/auth/tests/polar-customer-delete-cancels-a-hung-request.test.ts",
   "packages/auth/tests/polar-customer-delete.test.ts",
   "packages/auth/tests/survived-row-marks-the-tombstone-provisional-before-rollback.test.ts",
-  "packages/auth/tests/the-sign-up-reclaim-runs-the-teardown-before-it-deletes-the-row.test.ts",
   "packages/auth/tests/tombstone-survives-an-unresolvable-user-row-probe.test.ts",
   "packages/auth/tests/unresolvable-probe-leaves-repairable-polar-residue.test.ts",
   "packages/calendar/tests/core/deletion/a-failing-purge-does-not-skip-the-whole-reaper-pass.test.ts",

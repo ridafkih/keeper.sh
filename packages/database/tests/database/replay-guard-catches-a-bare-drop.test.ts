@@ -31,7 +31,7 @@ $$;`;
 const DRIZZLE_DIRECTORY = `${import.meta.dirname}/../../drizzle`;
 
 const BRANCH_MIGRATION_TAGS = [
-  "0093_sticky_jimmy_woo",
+  "0094_deletion_residue",
 ];
 
 describe("the replay guard covers bare DROP statements", () => {
