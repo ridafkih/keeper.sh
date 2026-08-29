@@ -32,6 +32,7 @@ import {
 } from "@/utils/teardown-step-budgets";
 import type { database as databaseInstance } from "@/context";
 
+const TEARDOWN_BLOCKED_SLUG = "delete-user-teardown-blocked";
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
@@ -77,6 +78,7 @@ if (ROLLBACK_BUDGET_MS >= SYNC_TEARDOWN_TIMEOUT_MS) {
 }
 
 interface DeleteUserSyncStep {
+  blocksDelete?: true;
   name: string;
   run: (userId: string, signal: AbortSignal) => Promise<void>;
   timeoutMs: number;
@@ -118,17 +120,24 @@ const throwIfAborted = (signal: AbortSignal, stepName: string): void => {
   throw new Error(`Teardown step ${stepName} was aborted: ${String(signal.reason)}`);
 };
 
+interface StepFailureReport {
+  fields?: Record<string, unknown>;
+  retriable?: boolean;
+}
+
 const reportStepFailure = (
   error: unknown,
   stepName: string,
   userId: string,
   slug: string,
+  report: StepFailureReport = {},
 ): void => {
   const failure = {
     "delete_user.user_id": userId,
     prefix: `delete_user_teardown.${stepName}`,
-    retriable: false,
+    retriable: report.retriable === true,
     slug,
+    ...report.fields,
   };
 
   widelog.setFields({ "delete_user.user_id": userId });
@@ -558,6 +567,7 @@ const buildDeleteUserSyncSteps = (
   dependencies: DeleteUserSyncTeardownDependencies,
 ): DeleteUserSyncStep[] => [
   {
+    blocksDelete: true,
     name: "tombstone",
     run: async (userId, signal) => {
       await markUserDeletionUnconfirmed(dependencies.redis, userId, { signal });
@@ -872,6 +882,19 @@ const createDeleteUserSyncTeardown =
       try {
         await runWithDeadline(step.name, step.timeoutMs, (signal) => step.run(userId, signal));
       } catch (error) {
+        if (step.blocksDelete === true) {
+          reportStepFailure(error, step.name, userId, TEARDOWN_BLOCKED_SLUG, {
+            fields: { "delete_user.blocked_step": step.name },
+            retriable: true,
+          });
+
+          throw new TeardownBlockedError(
+            `Teardown step ${step.name} for user ${userId} failed, so the delete is blocked `
+              + `rather than committed without a durable halt signal standing`,
+            { cause: error },
+          );
+        }
+
         reportStepFailure(error, step.name, userId, TEARDOWN_FAILED_SLUG);
 
         if (error instanceof TeardownBlockedError) {

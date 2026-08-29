@@ -69,7 +69,7 @@ describe("delete user teardown tombstone abort", () => {
       },
     });
 
-    await teardown(USER_ID);
+    await expect(teardown(USER_ID)).rejects.toThrow();
 
     await createDeleteUserSyncTeardownRollback({
       redis,

@@ -1,6 +1,6 @@
 import { type } from "arktype";
 import { betterAuth } from "better-auth";
-import { createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { jwt as jwtPlugin } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
@@ -18,9 +18,11 @@ import {
 import {
   createDeleteUserTeardown,
   createSkippedDeleteUserTeardown,
+  isBlockingTeardownFailure,
   recordDeleteUserResidue,
   deleteUserTeardownUnavailable,
   SYNC_TEARDOWN_TIMEOUT_MS,
+  TEARDOWN_BLOCKED_SLUG,
   TEARDOWN_BUDGET_MS,
   TEARDOWN_FAILED_SLUG,
 } from "./delete-user-teardown";
@@ -134,6 +136,10 @@ const hasOAuthProviderApi = (
 };
 
 const POLAR_CUSTOMER_RESIDUE_KIND = "polar_customer";
+
+const TEARDOWN_BLOCKED_CODE = "TEARDOWN_BLOCKED";
+const TEARDOWN_BLOCKED_MESSAGE =
+  "Your account was not deleted. Stopping calendar sync could not be confirmed, so the deletion was refused to keep us from touching your calendars afterwards. Nothing was removed; please try again in a few minutes.";
 
 const mcpJwtClaimsSchema = type({
   scope: "string",
@@ -279,7 +285,25 @@ const createAuth = (config: AuthConfig) => {
 
   const beforeDelete: BeforeDeleteUser = async (user) => {
     startDeleteUserAttempt(user.id);
-    await quiesce(user.id);
+
+    try {
+      await quiesce(user.id);
+    } catch (error) {
+      if (!isBlockingTeardownFailure(error)) {
+        throw error;
+      }
+
+      widelog.errorFields(error, {
+        prefix: "delete_user_teardown.blocked",
+        retriable: true,
+        slug: TEARDOWN_BLOCKED_SLUG,
+      });
+
+      throw new APIError("SERVICE_UNAVAILABLE", {
+        code: TEARDOWN_BLOCKED_CODE,
+        message: TEARDOWN_BLOCKED_MESSAGE,
+      });
+    }
   };
 
   const confirmTombstone = async (userId: string): Promise<void> => {
@@ -357,6 +381,15 @@ const createAuth = (config: AuthConfig) => {
   const finishDeleteUser = async (userId: string): Promise<void> => {
     widelog.setFields({ "delete_user.external_state_destroyed_after_failure": true });
     await destroyExternalState(userId);
+  };
+
+  const quiesceThenDeleteUserRow = async (
+    user: Parameters<BeforeDeleteUser>[0],
+    internalAdapter: { deleteUser: (userId: string) => Promise<unknown> },
+  ): Promise<void> => {
+    await beforeDelete(user);
+    await internalAdapter.deleteUser(user.id);
+    await afterDelete(user);
   };
 
   const deletionQuiesceable =
@@ -511,7 +544,7 @@ const createAuth = (config: AuthConfig) => {
         if (!existingUser) {
           return;
         }
-        await context.context.internalAdapter.deleteUser(existingUser.id);
+        await quiesceThenDeleteUserRow(existingUser, context.context.internalAdapter);
       }),
     },
     onAPIError: {

@@ -14,6 +14,24 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+const makeWorkingTombstoneRedis = () => {
+  const keys = new Set<string>();
+
+  return {
+    del: (key: string) => {
+      keys.delete(key);
+
+      return Promise.resolve(1);
+    },
+    exists: (key: string) => Promise.resolve(keys.has(key) ? 1 : 0),
+    set: (key: string) => {
+      keys.add(key);
+
+      return Promise.resolve("OK");
+    },
+  };
+};
+
 vi.mock("@/context", () => ({
   database: {
     select: () => ({
@@ -23,17 +41,12 @@ vi.mock("@/context", () => ({
     }),
   },
   env: { REDIS_URL: "redis://localhost:6379" },
-  redis: { set: () => Promise.resolve("OK") },
+  redis: makeWorkingTombstoneRedis(),
   refreshLockStore: {
     release: () => Promise.resolve(),
     tryAcquire: () => Promise.resolve(true),
   },
   webhookConfig: null,
-}));
-
-vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  markUserDeleted: () => hangForever(),
 }));
 
 vi.mock("@keeper.sh/queue", async (importOriginal) => ({
@@ -63,7 +76,7 @@ const hangingRun = () => {
       listCalendarIds: () => Promise.resolve(["cal1"]),
       listOAuthGrantProviders: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
-      redis: { set: () => Promise.resolve("OK") },
+      redis: makeWorkingTombstoneRedis(),
     },
     grantedDeadlineMs: (stepName: string): number | null => {
       const reason = signals.get(stepName)?.reason;
@@ -84,7 +97,7 @@ const hangingRun = () => {
 };
 
 describe("delete user teardown budget against the auth deadline", () => {
-  it("finishes inside the auth-side deadline that supervises it when every step hangs", async () => {
+  it("finishes inside the auth-side deadline that supervises it when every step after the tombstone hangs", async () => {
     const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
     const teardown = createDeleteUserSyncTeardown(hangingRun().dependencies as never);
 

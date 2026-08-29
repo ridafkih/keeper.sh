@@ -14,6 +14,24 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+const makeWorkingTombstoneRedis = () => {
+  const keys = new Set<string>();
+
+  return {
+    del: (key: string) => {
+      keys.delete(key);
+
+      return Promise.resolve(1);
+    },
+    exists: (key: string) => Promise.resolve(keys.has(key) ? 1 : 0),
+    set: (key: string) => {
+      keys.add(key);
+
+      return Promise.resolve("OK");
+    },
+  };
+};
+
 interface LoggedError {
   error: unknown;
   fields: Record<string, unknown>;
@@ -226,11 +244,7 @@ const runTeardown = async (channels: StoredPushChannel[]): Promise<TeardownRun> 
     listOAuthGrantProviders: () => Promise.resolve([]),
     markChannelsStopped,
     listPushChannels: () => Promise.resolve([]),
-    redis: {
-      del: () => Promise.resolve(1),
-      exists: () => Promise.resolve(0),
-      set: () => Promise.resolve("OK"),
-    },
+    redis: makeWorkingTombstoneRedis(),
   } as never);
 
   const realFetch = globalThis.fetch;

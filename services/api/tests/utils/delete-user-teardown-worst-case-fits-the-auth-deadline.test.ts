@@ -16,6 +16,24 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+const makeWorkingTombstoneRedis = () => {
+  const keys = new Set<string>();
+
+  return {
+    del: (key: string) => {
+      keys.delete(key);
+
+      return Promise.resolve(1);
+    },
+    exists: (key: string) => Promise.resolve(keys.has(key) ? 1 : 0),
+    set: (key: string) => {
+      keys.add(key);
+
+      return Promise.resolve("OK");
+    },
+  };
+};
+
 vi.mock("@/context", () => ({
   database: {
     select: () => ({
@@ -25,17 +43,12 @@ vi.mock("@/context", () => ({
     }),
   },
   env: { REDIS_URL: "redis://localhost:6379" },
-  redis: { set: () => Promise.resolve("OK") },
+  redis: makeWorkingTombstoneRedis(),
   refreshLockStore: {
     release: () => Promise.resolve(),
     tryAcquire: () => Promise.resolve(true),
   },
   webhookConfig: null,
-}));
-
-vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
-  ...(await importOriginal<Record<string, unknown>>()),
-  markUserDeleted: () => hangForever(),
 }));
 
 vi.mock("@keeper.sh/queue", async (importOriginal) => ({
@@ -47,7 +60,7 @@ vi.mock("@keeper.sh/queue", async (importOriginal) => ({
   removeUserSyncJobs: () => hangForever(),
 }));
 
-const everyStepHangingRun = () => ({
+const everyStepAfterTombstoneHangingRun = () => ({
   createQueue: () => ({
     getJob: () => Promise.resolve(),
     remove: () => Promise.resolve(0),
@@ -57,7 +70,7 @@ const everyStepHangingRun = () => ({
   listCalendarIds: () => Promise.resolve(["cal1"]),
   listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: () => Promise.resolve([]),
-  redis: { set: () => Promise.resolve("OK") },
+  redis: makeWorkingTombstoneRedis(),
   residue: {
     clear: () => Promise.resolve(),
     delete: () => Promise.resolve(0),
@@ -69,10 +82,10 @@ const everyStepHangingRun = () => ({
 
 describe("delete user teardown worst case against the auth deadline", () => {
   it(
-    "finishes with a full second of headroom under the auth deadline when every step hangs",
+    "finishes with a full second of headroom under the auth deadline when every step after the tombstone hangs",
     async () => {
       const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
-      const teardown = createDeleteUserSyncTeardown(everyStepHangingRun() as never);
+      const teardown = createDeleteUserSyncTeardown(everyStepAfterTombstoneHangingRun() as never);
 
       const startedAt = Date.now();
       await teardown("user-a");

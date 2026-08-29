@@ -522,20 +522,20 @@ describe("tombstone durability", () => {
     ).toEqual([]);
   });
 
-  it("still completes deletion and records one tombstone error when redis stays OOM", async () => {
+  it("blocks deletion and records one tombstone error when redis stays OOM", async () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
     const harness = await makeHarness();
     const redis = makeTombstoneRedis(ALWAYS_FAILING);
 
     await expect(
       createDeleteUserSyncTeardown({ ...harness.dependencies, redis } as never)("A"),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(/tombstone/);
 
     const setCalls = redis.calls.filter((call) => call.op === "set");
 
     expect(setCalls.length).toBeGreaterThanOrEqual(2);
-    expect(harness.removedJobIds).toEqual(["sync-A-cal1", "sync-A-cal2"]);
-    expect(harness.stoppedChannelIds.toSorted()).toEqual(["google-A-1", "graph-A-2"]);
+    expect(harness.removedJobIds).toEqual([]);
+    expect(harness.stoppedChannelIds).toEqual([]);
 
     const tombstoneErrors = harness.loggedErrors.filter(
       (entry) => entry.fields.prefix === "delete_user_teardown.tombstone",
@@ -543,6 +543,8 @@ describe("tombstone durability", () => {
 
     expect(tombstoneErrors).toHaveLength(1);
     expect(tombstoneErrors.map((entry) => String(entry.error)).join(" ")).toContain("OOM");
+    expect(tombstoneErrors[0]?.fields.slug).toBe("delete-user-teardown-blocked");
+    expect(tombstoneErrors[0]?.fields.retriable).toBe(true);
   });
 });
 
@@ -569,5 +571,44 @@ describe("delete user teardown interrupted before compensation runs", () => {
     await expect(isUserDeleted()).resolves.toBe(false);
     expect(userRowProbes).toBeGreaterThan(0);
     expect(probeErrors).toEqual([]);
+  });
+});
+
+describe("a blocked tombstone", () => {
+  it("stops the teardown and is reported as a retryable refusal", async () => {
+    const { createDeleteUserSyncTeardown } = await importTeardownModule();
+    const harness = await makeHarness();
+    const redis = makeTombstoneRedis(ALWAYS_FAILING);
+
+    const rejection: unknown = await createDeleteUserSyncTeardown({
+      ...harness.dependencies,
+      redis,
+    } as never)("A").then(
+      () => {
+        throw new Error(
+          "teardown resolved, so the user row is deleted with no durable halt signal standing",
+        );
+      },
+      (error: unknown) => error,
+    );
+
+    expect(rejection).toBeInstanceOf(Error);
+    expect((rejection as Error).name).toBe("TeardownBlockedError");
+    expect((rejection as Error).message).toContain("tombstone");
+
+    expect(harness.removedJobIds).toEqual([]);
+    expect(harness.stoppedChannelIds).toEqual([]);
+    expect(harness.events.some((event) => event.startsWith("job-remove:"))).toBe(false);
+    expect(harness.events).not.toContain("deregister-list:A");
+
+    const tombstoneErrors = harness.loggedErrors.filter(
+      (entry) => entry.fields.prefix === "delete_user_teardown.tombstone",
+    );
+
+    expect(tombstoneErrors).toHaveLength(1);
+    expect(String(tombstoneErrors[0]?.error)).toContain("OOM");
+    expect(tombstoneErrors[0]?.fields.slug).toBe("delete-user-teardown-blocked");
+    expect(tombstoneErrors[0]?.fields.retriable).toBe(true);
+    expect(tombstoneErrors[0]?.fields["delete_user.blocked_step"]).toBe("tombstone");
   });
 });

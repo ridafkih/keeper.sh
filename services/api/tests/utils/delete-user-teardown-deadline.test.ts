@@ -8,6 +8,24 @@ interface LoggedError {
   fields: Record<string, unknown>;
 }
 
+const makeWorkingTombstoneRedis = () => {
+  const keys = new Set<string>();
+
+  return {
+    del: (key: string) => {
+      keys.delete(key);
+
+      return Promise.resolve(1);
+    },
+    exists: (key: string) => Promise.resolve(keys.has(key) ? 1 : 0),
+    set: (key: string) => {
+      keys.add(key);
+
+      return Promise.resolve("OK");
+    },
+  };
+};
+
 vi.mock("@/context", () => ({
   database: {
     select: () => ({
@@ -17,7 +35,7 @@ vi.mock("@/context", () => ({
     }),
   },
   env: { REDIS_URL: "redis://localhost:6379" },
-  redis: { set: () => Promise.resolve("OK") },
+  redis: makeWorkingTombstoneRedis(),
   refreshLockStore: {
     release: () => Promise.resolve(),
     tryAcquire: () => Promise.resolve(true),
@@ -88,7 +106,7 @@ const makeDependencies = (remove: (jobId: string) => Promise<number>) => ({
   listCalendarIds: () => Promise.resolve(["cal1", "cal2"]),
   listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: () => Promise.resolve([]),
-  redis: { set: () => Promise.resolve("OK") },
+  redis: makeWorkingTombstoneRedis(),
 });
 
 describe("delete user teardown wall clock bound", () => {

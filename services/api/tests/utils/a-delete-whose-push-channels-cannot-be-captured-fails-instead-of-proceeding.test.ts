@@ -168,7 +168,7 @@ describe("a delete whose push channels cannot be captured", () => {
     });
   });
 
-  it("still resolves when a redis blip fails the tombstone step", async () => {
+  it("blocks the delete when a redis blip fails the tombstone step", async () => {
     const { createDeleteUserSyncTeardown } = await importSyncTeardown();
     const residue = makeResidueHarness(() => Promise.resolve());
 
@@ -179,6 +179,14 @@ describe("a delete whose push channels cannot be captured", () => {
       }) as never,
     );
 
-    await expect(teardown(DELETED_USER)).resolves.toBeUndefined();
+    const rejection: unknown = await teardown(DELETED_USER).then(
+      () => {
+        throw new Error("teardown resolved without a durable halt signal standing");
+      },
+      (error: unknown) => error,
+    );
+
+    expect((rejection as Error).name).toBe(BLOCKING_ERROR_NAME);
+    expect((rejection as Error).message).toContain("tombstone");
   });
 });

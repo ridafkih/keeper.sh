@@ -1,6 +1,7 @@
 import { widelog } from "widelogger";
 
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
+const TEARDOWN_BLOCKED_SLUG = "delete-user-teardown-blocked";
 const RESIDUE_WRITE_FAILED_SLUG = "delete-user-teardown-residue-write-failed";
 const TEARDOWN_BUDGET_MS = 9000;
 const TEARDOWN_BLOCKED_ERROR_NAME = "TeardownBlockedError";
@@ -146,7 +147,9 @@ const deleteUserTeardownUnavailable: DeleteUserTeardown = (userId: string) =>
 
 export {
   createDeleteUserTeardown,
+  isBlockingTeardownFailure,
   recordStepResidue as recordDeleteUserResidue,
+  TEARDOWN_BLOCKED_SLUG,
   TEARDOWN_BLOCKED_ERROR_NAME,
   RESIDUE_WRITE_FAILED_SLUG,
   createSkippedDeleteUserTeardown,

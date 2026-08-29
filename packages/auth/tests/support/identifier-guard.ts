@@ -23,6 +23,7 @@ const remediationScanRoots = () => [
 ];
 
 const remediationTestFiles = () => [
+  "packages/auth/tests/a-blocked-delete-answers-the-caller-with-a-retryable-code-not-a-bare-500.test.ts",
   "packages/auth/tests/an-unresolvable-probe-marks-the-tombstone-provisional.test.ts",
   "packages/auth/tests/delete-user-teardown-ordering.test.ts",
   "packages/auth/tests/delete-user-teardown.test.ts",
@@ -30,6 +31,7 @@ const remediationTestFiles = () => [
   "packages/auth/tests/polar-customer-delete-cancels-a-hung-request.test.ts",
   "packages/auth/tests/polar-customer-delete.test.ts",
   "packages/auth/tests/survived-row-marks-the-tombstone-provisional-before-rollback.test.ts",
+  "packages/auth/tests/the-sign-up-reclaim-runs-the-teardown-before-it-deletes-the-row.test.ts",
   "packages/auth/tests/tombstone-survives-an-unresolvable-user-row-probe.test.ts",
   "packages/auth/tests/unresolvable-probe-leaves-repairable-polar-residue.test.ts",
   "packages/calendar/tests/core/deletion/a-failing-purge-does-not-skip-the-whole-reaper-pass.test.ts",
@@ -59,6 +61,7 @@ const remediationTestFiles = () => [
   "packages/sync/tests/aborted-run-does-not-clear-backoff.test.ts",
   "packages/sync/tests/aborted-run-verdict.test.ts",
   "services/api/tests/utils/a-failed-grant-census-reports-unavailable-instead-of-failing-the-step.test.ts",
+  "services/api/tests/utils/a-tombstone-that-cannot-be-established-blocks-the-delete.test.ts",
   "services/api/tests/utils/capture-phase-residue-writes-are-registered-before-the-rollback-discards.test.ts",
   "services/api/tests/utils/deadline-abort-preserves-abandoned-push-channel-residue.test.ts",
   "services/api/tests/utils/delete-user-names-the-oauth-grants-it-deliberately-retains.test.ts",
