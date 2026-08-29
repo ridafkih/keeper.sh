@@ -281,6 +281,8 @@ const createUserDeletedCheck = (
         return true;
       }
 
+      presentAnswerObservedAtMs = 0;
+
       const absent = await isUserRowAbsent(fallback);
 
       return absent || latestUserRowAnswer !== "present";

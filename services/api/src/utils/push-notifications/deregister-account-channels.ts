@@ -64,7 +64,10 @@ class AbandonedPushChannelError extends Error {
 }
 
 interface DeregisterPushChannelsDependencies {
-  createRegistrarContext: (channel: StoredPushChannel) => Promise<RegistrarContext>;
+  createRegistrarContext: (
+    channel: StoredPushChannel,
+    signal: AbortSignal | null,
+  ) => Promise<RegistrarContext>;
   listLiveChannels: (scopeId: string) => Promise<StoredPushChannel[]>;
   markChannelsStopped?: (channelIds: string[]) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
@@ -108,7 +111,7 @@ const stopChannel = async (
   signal: AbortSignal | null,
 ): Promise<ChannelStopOutcome> => {
   const dialed = await dependencies
-    .createRegistrarContext(channel)
+    .createRegistrarContext(channel, signal)
     .then(
       (registrarContext): ChannelDialOutcome => ({ context: registrarContext }),
       (error: unknown) => ({ reason: error }),
@@ -645,7 +648,7 @@ const deregisterPushChannelsWithin = async (
   };
 
   const outcome = await runDeregisterPushChannelsOutcome(scopeId, {
-    createRegistrarContext: async (channel) => {
+    createRegistrarContext: async (channel, stepSignal) => {
       if (webhookConfig === null) {
         throw new Error(
           "Push channel deregistration requires WEBHOOK_PUBLIC_URL to be configured",
@@ -672,7 +675,7 @@ const deregisterPushChannelsWithin = async (
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,
-          rawRefresh: (refreshToken) => rawRefresh(refreshToken),
+          rawRefresh: (refreshToken) => rawRefresh(refreshToken, stepSignal),
           refreshLockStore,
         }));
       }

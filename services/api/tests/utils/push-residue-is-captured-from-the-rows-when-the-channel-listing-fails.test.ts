@@ -172,6 +172,7 @@ const makeSyncDependencies = (
   deregisterPushChannels,
   fetchImpl: () => Promise.reject(new Error("no grant is revoked by this suite")),
   listCalendarIds: () => Promise.resolve([]),
+  listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: (userId: string) =>
     Promise.resolve(channels.filter((channel) => channel.userId === userId)),
   redis: {

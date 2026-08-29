@@ -90,6 +90,7 @@ const makeDependencies = (
   deregisterPushChannels,
   fetchImpl: () => Promise.reject(new Error("no network call is expected from teardown")),
   listCalendarIds: () => Promise.resolve([]),
+  listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: () => Promise.resolve([]),
   redis: {
     del: () => Promise.resolve(1),

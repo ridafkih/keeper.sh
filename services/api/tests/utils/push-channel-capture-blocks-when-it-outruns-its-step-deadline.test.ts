@@ -85,6 +85,7 @@ const makeDependencies = (overrides: DependencyOverrides) => ({
   }),
   deregisterPushChannels: overrides.deregisterPushChannels ?? (() => Promise.resolve(1)),
   listCalendarIds: () => Promise.resolve([]),
+  listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: overrides.listPushChannels ?? (() => Promise.resolve(liveChannels())),
   redis: {
     del: () => Promise.resolve(1),

@@ -169,6 +169,7 @@ describe("a rolled back delete clears push channel residue, not only oauth grant
         ),
       fetchImpl: () => Promise.reject(new Error("no provider call belongs in this test")),
       listCalendarIds: () => Promise.resolve([]),
+      listOAuthGrantProviders: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: redis.redis,
       residue: residue.store,

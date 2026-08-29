@@ -80,6 +80,7 @@ const makeDependencies = (overrides: DependencyOverrides) => ({
   deregisterPushChannels: overrides.deregisterPushChannels ?? (() => Promise.resolve(1)),
   fetchImpl: () => Promise.reject(new Error("no grant is revoked by this suite")),
   listCalendarIds: () => Promise.resolve([]),
+  listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels:
     overrides.listPushChannels ?? (() => Promise.resolve([liveChannel()])),
   redis: {

@@ -14,7 +14,7 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
 const signalWithExpiry = (
-  signal: AbortSignal | undefined,
+  signal: AbortSignal | null | undefined,
   expiryMs: number,
 ): AbortSignal => {
   const expiry = AbortSignal.timeout(expiryMs);
@@ -129,7 +129,7 @@ const createGoogleTokenRefresher = (
 
   return async (
     refreshToken: string,
-    signal?: AbortSignal,
+    signal?: AbortSignal | null,
   ): Promise<GoogleTokenResponse> => {
     for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
       const response = await fetch(GOOGLE_TOKEN_URL, {

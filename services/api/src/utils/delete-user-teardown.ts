@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { clearUserDeleted, confirmUserDeletion, markUserDeleted, markUserDeletionUnconfirmed } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
-import { calendarsTable } from "@keeper.sh/database/schema";
+import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
 import {
   AbandonedPushChannelError,
@@ -90,6 +90,7 @@ interface DeleteUserSyncTeardownDependencies {
   createQueue: () => DeleteUserSyncQueue;
   deregisterPushChannels: (userId: string, signal: AbortSignal) => Promise<number>;
   listCalendarIds: (userId: string) => Promise<string[]>;
+  listOAuthGrantProviders: (userId: string) => Promise<{ provider: string }[]>;
   listPushChannels: (userId: string) => Promise<TeardownPushChannel[]>;
   redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
   residue: TeardownResidueStore;
@@ -176,6 +177,26 @@ const recordPushChannelResidue = async (
 
     return false;
   }
+};
+
+const retainedOAuthGrantProviders = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+): Promise<string[]> => {
+  const grants = await dependencies.listOAuthGrantProviders(userId);
+  const providers = grants.map((grant) => grant.provider);
+  const invalid = providers.filter(
+    (provider) => typeof provider !== "string" || provider.length === 0,
+  );
+
+  if (invalid.length > 0) {
+    throw new Error(
+      `Refusing to report retained oauth grants for user ${userId}: ${invalid.length} provider `
+        + `account rows carry no provider name`,
+    );
+  }
+
+  return [...new Set(providers)].toSorted();
 };
 
 const dialableTeardownChannels = (
@@ -468,6 +489,10 @@ const buildDeleteUserSyncSteps = (
       const capture = await capturePushChannelResidue(dependencies, userId, signal);
 
       widelog.setFields({
+        "delete_user.oauth_grants_retained": await retainedOAuthGrantProviders(
+          dependencies,
+          userId,
+        ),
         "delete_user.push_channels_captured": capture.capturedChannelIds.length,
       });
 
@@ -966,6 +991,14 @@ const createApiDeleteUserSyncTeardown = (
         .where(eq(calendarsTable.userId, userId));
       return rows.map((row) => row.id);
     },
+    listOAuthGrantProviders: async (userId) =>
+      await context.database
+        .selectDistinct({ provider: calendarAccountsTable.provider })
+        .from(calendarAccountsTable)
+        .where(and(
+          eq(calendarAccountsTable.userId, userId),
+          isNotNull(calendarAccountsTable.oauthCredentialId),
+        )),
     listPushChannels: listUserTeardownPushChannels,
     redis: context.redis,
     residue: context.residue,

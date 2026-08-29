@@ -223,6 +223,7 @@ const runTeardown = async (channels: StoredPushChannel[]): Promise<TeardownRun> 
     }),
     deregisterPushChannels,
     listCalendarIds: () => Promise.resolve([]),
+    listOAuthGrantProviders: () => Promise.resolve([]),
     markChannelsStopped,
     listPushChannels: () => Promise.resolve([]),
     redis: {

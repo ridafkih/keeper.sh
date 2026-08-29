@@ -252,6 +252,7 @@ describe("a push channel the provider refused to stop is a loud failure", () => 
       deregisterPushChannels: async (userId: string, signal: AbortSignal) =>
         await deregisterUserPushChannels(userId, signal),
       listCalendarIds: () => Promise.resolve([]),
+      listOAuthGrantProviders: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: {
         del: () => Promise.resolve(1),

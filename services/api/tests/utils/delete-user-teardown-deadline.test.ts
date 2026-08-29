@@ -86,6 +86,7 @@ const makeDependencies = (remove: (jobId: string) => Promise<number>) => ({
   createQueue: () => ({ remove }),
   deregisterPushChannels: () => Promise.resolve(0),
   listCalendarIds: () => Promise.resolve(["cal1", "cal2"]),
+  listOAuthGrantProviders: () => Promise.resolve([]),
   listPushChannels: () => Promise.resolve([]),
   redis: { set: () => Promise.resolve("OK") },
 });

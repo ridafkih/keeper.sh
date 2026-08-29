@@ -13,7 +13,7 @@ const MICROSOFT_OFFLINE_SCOPE = "offline_access";
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const signalWithExpiry = (
-  signal: AbortSignal | undefined,
+  signal: AbortSignal | null | undefined,
   expiryMs: number,
 ): AbortSignal => {
   const expiry = AbortSignal.timeout(expiryMs);
@@ -54,7 +54,7 @@ const createMicrosoftTokenRefresher = (
 
   return async (
     refreshToken: string,
-    signal?: AbortSignal,
+    signal?: AbortSignal | null,
   ): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
       body: new URLSearchParams({

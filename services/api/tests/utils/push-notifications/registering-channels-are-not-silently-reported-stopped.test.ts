@@ -347,6 +347,7 @@ describe("a registering push channel is never silently reported stopped", () => 
       deregisterPushChannels: async (userId: string, signal: AbortSignal) =>
         await harness.channels.deregisterUserPushChannels(userId, signal),
       listCalendarIds: () => Promise.resolve([]),
+      listOAuthGrantProviders: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: {
         del: () => Promise.resolve(1),
