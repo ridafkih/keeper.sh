@@ -137,6 +137,47 @@ class TeardownBlockedError extends Error {
   }
 }
 
+const LATE_RESIDUE_WRITES: unique symbol = Symbol.for(
+  "keeper.sh/delete-user-teardown/late-residue-writes",
+);
+
+type LateResidueWriteRegistry = Map<string, Promise<void>[]>;
+
+interface LateResidueWriteHolder {
+  [LATE_RESIDUE_WRITES]?: LateResidueWriteRegistry;
+}
+
+const lateResidueWritesOf = (residue: object): LateResidueWriteRegistry => {
+  const holder = residue as LateResidueWriteHolder;
+  const registry: LateResidueWriteRegistry = holder[LATE_RESIDUE_WRITES] ?? new Map();
+
+  holder[LATE_RESIDUE_WRITES] = registry;
+
+  return registry;
+};
+
+const registerLateResidueWrite = (
+  residue: object,
+  userId: string,
+  write: Promise<void>,
+): Promise<void> => {
+  const registry = lateResidueWritesOf(residue);
+  const tracked: Promise<void> = write.finally(() => {
+    const remaining = (registry.get(userId) ?? []).filter((entry) => entry !== tracked);
+
+    if (remaining.length === 0) {
+      registry.delete(userId);
+      return;
+    }
+
+    registry.set(userId, remaining);
+  });
+
+  registry.set(userId, [...(registry.get(userId) ?? []), tracked]);
+
+  return tracked;
+};
+
 const requireOwnPushChannels = (
   channels: TeardownPushChannel[],
   userId: string,
@@ -160,16 +201,20 @@ const recordPushChannelResidue = async (
   providerChannelId: string,
 ): Promise<boolean> => {
   try {
-    await residue.record({
-      kind: PUSH_CHANNEL_RESIDUE_KIND,
-      provider: channel.provider,
-      providerChannelId,
+    await registerLateResidueWrite(
+      residue,
       userId,
-      ...(channel.credential !== null && { credential: channel.credential }),
-      ...(channel.providerResourceId !== null && {
-        providerResourceId: channel.providerResourceId,
+      residue.record({
+        kind: PUSH_CHANNEL_RESIDUE_KIND,
+        provider: channel.provider,
+        providerChannelId,
+        userId,
+        ...(channel.credential !== null && { credential: channel.credential }),
+        ...(channel.providerResourceId !== null && {
+          providerResourceId: channel.providerResourceId,
+        }),
       }),
-    });
+    );
 
     return true;
   } catch (error) {
@@ -197,6 +242,21 @@ const retainedOAuthGrantProviders = async (
   }
 
   return [...new Set(providers)].toSorted();
+};
+
+const RETAINED_GRANTS_UNAVAILABLE = "unavailable";
+
+const censusedOAuthGrantProviders = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+): Promise<string[] | typeof RETAINED_GRANTS_UNAVAILABLE> => {
+  try {
+    return await retainedOAuthGrantProviders(dependencies, userId);
+  } catch (error) {
+    reportStepFailure(error, PUSH_CHANNELS_STEP, userId, TEARDOWN_FAILED_SLUG);
+
+    return RETAINED_GRANTS_UNAVAILABLE;
+  }
 };
 
 const dialableTeardownChannels = (
@@ -302,10 +362,21 @@ const readLivePushChannels = async (
   signal: AbortSignal,
 ): Promise<PushChannelCapture> => {
   try {
+    const listed = await raceStepAbort(
+      dependencies.listPushChannels(userId),
+      signal,
+      () =>
+        new TeardownBlockedError(
+          `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} could not read the live push `
+            + `channels it must capture within its step deadline, so the delete is blocked rather `
+            + `than cascading them away`,
+        ),
+    );
+
     return await captureLivePushChannels(
       dependencies.residue,
       userId,
-      requireOwnPushChannels(await dependencies.listPushChannels(userId), userId),
+      requireOwnPushChannels(listed, userId),
       signal,
     );
   } catch (error) {
@@ -489,10 +560,6 @@ const buildDeleteUserSyncSteps = (
       const capture = await capturePushChannelResidue(dependencies, userId, signal);
 
       widelog.setFields({
-        "delete_user.oauth_grants_retained": await retainedOAuthGrantProviders(
-          dependencies,
-          userId,
-        ),
         "delete_user.push_channels_captured": capture.capturedChannelIds.length,
       });
 
@@ -517,6 +584,13 @@ const buildDeleteUserSyncSteps = (
       );
 
       widelog.setFields({ "delete_user.push_channels_residue_cleared": cleared });
+
+      widelog.setFields({
+        "delete_user.oauth_grants_retained": await censusedOAuthGrantProviders(
+          dependencies,
+          userId,
+        ),
+      });
 
       if (outcome.failure !== null) {
         throw outcome.failure.error;
@@ -656,47 +730,6 @@ const recordChannelsAbandonedAfterTheAbortWindow = async (
   } catch (error) {
     reportStepFailure(error, stepName, userId, RESIDUE_WRITE_FAILED_SLUG);
   }
-};
-
-const LATE_RESIDUE_WRITES: unique symbol = Symbol.for(
-  "keeper.sh/delete-user-teardown/late-residue-writes",
-);
-
-type LateResidueWriteRegistry = Map<string, Promise<void>[]>;
-
-interface LateResidueWriteHolder {
-  [LATE_RESIDUE_WRITES]?: LateResidueWriteRegistry;
-}
-
-const lateResidueWritesOf = (residue: object): LateResidueWriteRegistry => {
-  const holder = residue as LateResidueWriteHolder;
-  const registry: LateResidueWriteRegistry = holder[LATE_RESIDUE_WRITES] ?? new Map();
-
-  holder[LATE_RESIDUE_WRITES] = registry;
-
-  return registry;
-};
-
-const registerLateResidueWrite = (
-  residue: object,
-  userId: string,
-  write: Promise<void>,
-): Promise<void> => {
-  const registry = lateResidueWritesOf(residue);
-  const tracked: Promise<void> = write.finally(() => {
-    const remaining = (registry.get(userId) ?? []).filter((entry) => entry !== tracked);
-
-    if (remaining.length === 0) {
-      registry.delete(userId);
-      return;
-    }
-
-    registry.set(userId, remaining);
-  });
-
-  registry.set(userId, [...(registry.get(userId) ?? []), tracked]);
-
-  return tracked;
 };
 
 const takeLateResidueWrites = (residue: object, userId: string): Promise<void>[] => {
