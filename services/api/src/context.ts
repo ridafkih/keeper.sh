@@ -17,6 +17,7 @@ import { createPushSyncQueue } from "@keeper.sh/queue";
 import {
   createApiDeleteUserSyncTeardown,
   createDeleteUserSyncTeardownRollback,
+  createDeleteUserTombstoneConfirmer,
   createDeleteUserTombstoneProvisionalMarker,
   TEARDOWN_QUEUE_CONNECTION_OPTIONS,
 } from "@/utils/delete-user-teardown";
@@ -109,6 +110,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
     redis,
     residue: teardownResidueStore,
   }),
+  confirmDeleteUserTombstone: createDeleteUserTombstoneConfirmer({ redis }),
   markDeleteUserTombstoneProvisional: createDeleteUserTombstoneProvisionalMarker({ redis }),
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });

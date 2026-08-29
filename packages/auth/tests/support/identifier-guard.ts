@@ -35,10 +35,13 @@ const remediationTestFiles = () => [
   "packages/calendar/tests/core/deletion/a-failing-purge-does-not-skip-the-whole-reaper-pass.test.ts",
   "packages/calendar/tests/core/deletion/a-failing-residue-clear-does-not-exile-the-rest-of-the-batch.test.ts",
   "packages/calendar/tests/core/deletion/a-permanently-failing-residue-repair-retires-at-its-attempt-cap.test.ts",
+  "packages/calendar/tests/core/deletion/an-expired-grant-residue-retires-instead-of-being-rescanned-forever.test.ts",
   "packages/calendar/tests/core/deletion/no-residue-is-retired-before-its-expiry.test.ts",
+  "packages/calendar/tests/core/deletion/oauth-grant-residue-survives-the-reaper-pass-untouched.test.ts",
   "packages/calendar/tests/core/deletion/one-stalled-residue-repair-cannot-freeze-the-whole-reaper.test.ts",
   "packages/calendar/tests/core/deletion/push-repair-signal-reaches-registrar-context.test.ts",
   "packages/calendar/tests/core/deletion/residue-store-refuses-to-start-without-an-encryption-key.test.ts",
+  "packages/calendar/tests/core/deletion/the-skipped-grant-names-the-row-it-left-behind.test.ts",
   "packages/calendar/tests/core/deletion/unstoppable-push-residue-retires-on-the-first-reaper-pass.test.ts",
   "packages/calendar/tests/core/source/unstoppable-channel-does-not-poison-the-cron-deregister-path.test.ts",
   "packages/calendar/tests/core/sync-engine/aborted-run-is-alertable.test.ts",
@@ -85,6 +88,7 @@ const remediationTestFiles = () => [
   "services/api/tests/utils/teardown-blocked-error-survives-the-step-deadline.test.ts",
   "services/api/tests/utils/teardown-rollback-clears-push-channel-residue.test.ts",
   "services/api/tests/utils/teardown-rollback-fails-loudly-when-its-residue-store-cannot-delete.test.ts",
+  "services/api/tests/utils/tombstone-confirmed-after-the-row-delete-commits.test.ts",
   "services/cron/tests/jobs/residue-token-refresh-honours-the-repair-deadline.test.ts",
 ];
 

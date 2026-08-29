@@ -134,8 +134,12 @@ const eraseTombstoneUntilSettled = async (redis: TombstoneEraser, key: string): 
   }
 };
 
-const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise<void> => {
-  const keys = [deletedUserTombstoneKey(userId), unconfirmedDeletionMarkerKey(userId)];
+const eraseTombstoneKeys = async (
+  redis: TombstoneEraser,
+  keys: string[],
+  userId: string,
+  subject: string,
+): Promise<void> => {
   const failures: string[] = [];
 
   for (let attempt = 1; attempt <= TOMBSTONE_WRITE_ATTEMPTS; attempt += 1) {
@@ -153,10 +157,24 @@ const clearUserDeleted = async (redis: TombstoneEraser, userId: string): Promise
     }
   }
 
-  throw new Error(
-    `Failed to clear the deletion tombstone for user ${userId} — ${failures.join("; ")}`,
-  );
+  throw new Error(`Failed to erase the ${subject} for user ${userId} — ${failures.join("; ")}`);
 };
+
+const clearUserDeleted = (redis: TombstoneEraser, userId: string): Promise<void> =>
+  eraseTombstoneKeys(
+    redis,
+    [deletedUserTombstoneKey(userId), unconfirmedDeletionMarkerKey(userId)],
+    userId,
+    "deletion tombstone",
+  );
+
+const confirmUserDeletion = (redis: TombstoneEraser, userId: string): Promise<void> =>
+  eraseTombstoneKeys(
+    redis,
+    [unconfirmedDeletionMarkerKey(userId)],
+    userId,
+    "unconfirmed deletion marker",
+  );
 
 type UserRowAnswer = "absent" | "present" | "unobserved";
 
@@ -278,6 +296,7 @@ const createUserDeletedCheck = (
 
 export {
   clearUserDeleted,
+  confirmUserDeletion,
   PRESENT_ANSWER_FRESHNESS_MS,
   createUserDeletedCheck,
   deletedUserTombstoneKey,

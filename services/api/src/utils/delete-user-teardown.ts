@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { clearUserDeleted, markUserDeleted, markUserDeletionUnconfirmed } from "@keeper.sh/calendar";
+import { clearUserDeleted, confirmUserDeletion, markUserDeleted, markUserDeletionUnconfirmed } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { widelog } from "@/utils/logging";
@@ -423,7 +423,10 @@ const buildDeleteUserSyncSteps = (
 ): DeleteUserSyncStep[] => [
   {
     name: "tombstone",
-    run: (userId, signal) => markUserDeleted(dependencies.redis, userId, { signal }),
+    run: async (userId, signal) => {
+      await markUserDeletionUnconfirmed(dependencies.redis, userId, { signal });
+      await markUserDeleted(dependencies.redis, userId, { signal });
+    },
     timeoutMs: TOMBSTONE_TIMEOUT_MS,
   },
   {
@@ -930,6 +933,14 @@ const createDeleteUserTombstoneProvisionalMarker =
     widelog.setFields({ "delete_user.tombstone_marked_provisional": true });
   };
 
+const createDeleteUserTombstoneConfirmer =
+  (dependencies: Pick<DeleteUserSyncTeardownDependencies, "redis">): DeleteUserTeardown =>
+  async (userId: string) => {
+    await confirmUserDeletion(dependencies.redis, userId);
+
+    widelog.setFields({ "delete_user.tombstone_confirmed": true });
+  };
+
 const TEARDOWN_QUEUE_CONNECTION_OPTIONS = {
   commandTimeout: QUEUE_COMMAND_TIMEOUT_MS,
   maxRetriesPerRequest: QUEUE_MAX_RETRIES_PER_REQUEST,
@@ -964,6 +975,7 @@ export {
   createApiDeleteUserSyncTeardown,
   createDeleteUserSyncTeardown,
   createDeleteUserSyncTeardownRollback,
+  createDeleteUserTombstoneConfirmer,
   createDeleteUserTombstoneProvisionalMarker,
   PUSH_CHANNELS_TIMEOUT_MS,
   STEP_ABORT_SETTLE_MS,

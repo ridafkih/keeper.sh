@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DELETED_USER_TOMBSTONE_TTL_SECONDS,
+  PRESENT_ANSWER_FRESHNESS_MS,
   createUserDeletedCheck,
   deletedUserTombstoneKey,
   resolvePushRegistrar,
+  unconfirmedDeletionMarkerKey,
 } from "@keeper.sh/calendar";
 import type { StoredPushChannel } from "@keeper.sh/calendar";
 import { runDeregisterPushChannels } from "@/utils/push-notifications/deregister-account-channels";
@@ -345,13 +347,15 @@ describe("delete user sync teardown", () => {
     const { createDeleteUserSyncTeardown } = await importTeardownModule();
     const harness = await makeHarness();
     const tombstoneEvent = `tombstone:${deletedUserTombstoneKey("A")}:${DELETED_USER_TOMBSTONE_TTL_SECONDS}`;
+    const markerEvent = `tombstone:${unconfirmedDeletionMarkerKey("A")}:${DELETED_USER_TOMBSTONE_TTL_SECONDS}`;
 
     await createDeleteUserSyncTeardown(harness.dependencies as never)("A");
 
     await expect(createUserDeletedCheck(harness.redis, "A")()).resolves.toBe(true);
     await expect(createUserDeletedCheck(harness.redis, "B")()).resolves.toBe(false);
 
-    expect(harness.events.at(0)).toBe(tombstoneEvent);
+    expect(harness.events.at(0)).toBe(markerEvent);
+    expect(harness.events.at(1)).toBe(tombstoneEvent);
     expect(harness.events.filter((event) => event.startsWith("job-remove:"))).toEqual([
       "job-remove:sync-A-cal1",
       "job-remove:sync-A-cal2",
@@ -493,7 +497,11 @@ describe("tombstone durability", () => {
     const setCalls = redis.calls.filter((call) => call.op === "set");
 
     expect(setCalls.length).toBeGreaterThanOrEqual(2);
-    expect(setCalls.every((call) => call.args[0] === key)).toBe(true);
+    expect(
+      setCalls.every(
+        (call) => call.args[0] === key || call.args[0] === unconfirmedDeletionMarkerKey("A"),
+      ),
+    ).toBe(true);
     expect(setCalls.every((call) => call.args[3] === DELETED_USER_TOMBSTONE_TTL_SECONDS)).toBe(
       true,
     );
@@ -534,5 +542,31 @@ describe("tombstone durability", () => {
 
     expect(tombstoneErrors).toHaveLength(1);
     expect(tombstoneErrors.map((entry) => String(entry.error)).join(" ")).toContain("OOM");
+  });
+});
+
+describe("delete user teardown interrupted before compensation runs", () => {
+  it("keeps a surviving user out of the deleted answer when the process dies before the row delete", async () => {
+    const { createDeleteUserSyncTeardown } = await importTeardownModule();
+    const harness = await makeHarness();
+
+    await createDeleteUserSyncTeardown(harness.dependencies as never)("A");
+
+    const probeErrors: unknown[] = [];
+    let userRowProbes = 0;
+    const isUserDeleted = createUserDeletedCheck(harness.redis, "A", {
+      freshnessWindowMs: PRESENT_ANSWER_FRESHNESS_MS,
+      isUserRowPresent: () => {
+        userRowProbes += 1;
+        return Promise.resolve(true);
+      },
+      onProbeError: (error) => {
+        probeErrors.push(error);
+      },
+    });
+
+    await expect(isUserDeleted()).resolves.toBe(false);
+    expect(userRowProbes).toBeGreaterThan(0);
+    expect(probeErrors).toEqual([]);
   });
 });

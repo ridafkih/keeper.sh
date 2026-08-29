@@ -91,6 +91,7 @@ interface AuthConfig {
   deleteUserTeardown: DeleteUserTeardown;
   deleteUserTeardownRollback: DeleteUserTeardown;
   markDeleteUserTombstoneProvisional?: DeleteUserTeardown;
+  confirmDeleteUserTombstone?: DeleteUserTeardown;
 }
 
 interface KeeperMcpAuthSession {
@@ -174,6 +175,7 @@ const createAuth = (config: AuthConfig) => {
     deleteUserTeardown,
     deleteUserTeardownRollback,
     markDeleteUserTombstoneProvisional,
+    confirmDeleteUserTombstone,
   } = config;
 
   if (typeof deleteUserTeardown !== "function") {
@@ -280,8 +282,30 @@ const createAuth = (config: AuthConfig) => {
     await quiesce(user.id);
   };
 
+  const confirmTombstone = async (userId: string): Promise<void> => {
+    if (!confirmDeleteUserTombstone) {
+      widelog.setFields({ "delete_user.tombstone_confirmer_unwired": true });
+      return;
+    }
+
+    try {
+      await confirmDeleteUserTombstone(userId);
+      widelog.setFields({ "delete_user.tombstone_confirmed": true });
+    } catch (error) {
+      const failure = {
+        "delete_user.user_id": userId,
+        prefix: "delete_user_teardown.tombstone_confirm",
+        retriable: false,
+        slug: TEARDOWN_FAILED_SLUG,
+      };
+
+      widelog.errorFields(error, failure);
+    }
+  };
+
   const afterDelete: AfterDeleteUser = async (user) => {
     finishDeleteUserAttempt();
+    await confirmTombstone(user.id);
     await destroyExternalState(user.id);
   };
 

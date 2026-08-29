@@ -70,6 +70,7 @@
         "array-type": "off",
         "import/no-namespace": "off",
         "no-array-reduce": "off",
+        "no-array-sort": "off",
         "no-empty-function": "off",
         "no-ternary": "off",
         "prefer-response-static-json": "off",

@@ -23,11 +23,8 @@ type ResidueRetirementReason =
   | "expired_after_max_attempts"
   | "outlived_its_provider_channel"
   | "permanent_failure_attempt_cap"
+  | "revocation_deferral_expired"
   | "unstoppable_without_resource_id";
-
-type ResidueRepairOutcome =
-  | { status: "repaired" }
-  | { status: "revocation_skipped" };
 
 interface TeardownResidueReaperDependencies {
   createRegistrarContext: (
@@ -85,7 +82,7 @@ const repairPushChannel = async (
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
   signal: AbortSignal,
-): Promise<ResidueRepairOutcome> => {
+): Promise<void> => {
   const { provider, providerChannelId } = record;
 
   if (!provider || !providerChannelId) {
@@ -114,14 +111,12 @@ const repairPushChannel = async (
     stopTargetFromResidue(record, providerChannelId, provider, now),
     context,
   );
-
-  return { status: "repaired" };
 };
 
 const repairPolarCustomer = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
-): Promise<ResidueRepairOutcome> => {
+): Promise<void> => {
   if (!record.externalId) {
     throw new Error(
       `Polar residue ${record.id} for user ${record.userId} carries no externalId, so the customer cannot be deleted`,
@@ -129,8 +124,6 @@ const repairPolarCustomer = async (
   }
 
   await dependencies.deletePolarCustomer(record.externalId);
-
-  return { status: "repaired" };
 };
 
 const repairResidue = (
@@ -138,13 +131,9 @@ const repairResidue = (
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
   signal: AbortSignal,
-): Promise<ResidueRepairOutcome> => {
+): Promise<void> => {
   if (record.kind === PUSH_CHANNEL_RESIDUE_KIND) {
     return repairPushChannel(record, dependencies, now, signal);
-  }
-
-  if (record.kind === OAUTH_GRANT_RESIDUE_KIND) {
-    return Promise.resolve({ status: "revocation_skipped" });
   }
 
   if (record.kind === POLAR_CUSTOMER_RESIDUE_KIND) {
@@ -167,7 +156,7 @@ const abandonRepairOnDeadline = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
   abandonment: AbortController,
-): Promise<ResidueRepairOutcome> => {
+): Promise<void> => {
   await dependencies.waitForRepairDeadline(dependencies.repairDeadlineMs);
 
   const abandoned = new Error(
@@ -183,7 +172,7 @@ const repairResidueWithinDeadline = async (
   record: TeardownResidueRecord,
   dependencies: TeardownResidueReaperDependencies,
   now: Date,
-): Promise<ResidueRepairOutcome> => {
+): Promise<void> => {
   const abandonment = new AbortController();
   const repair = repairResidue(record, dependencies, now, abandonment.signal);
   const settledUnaided = repair.then(
@@ -317,6 +306,7 @@ async (): Promise<TeardownResidueReaperOutcome> => {
   const retirementReasons: Record<string, ResidueRetirementReason> = {};
   const failedIds: string[] = [];
   const revocationSkippedIds: string[] = [];
+  const revocationSkippedUserIds: string[] = [];
 
   for (const record of records) {
     if (outlivesItsProviderChannel(record, now)) {
@@ -343,6 +333,21 @@ async (): Promise<TeardownResidueReaperOutcome> => {
       continue;
     }
 
+    if (record.kind === OAUTH_GRANT_RESIDUE_KIND) {
+      if (isPastExpiry(record, now)) {
+        await retireResidue(record, dependencies, "revocation_deferral_expired", {
+          expiredIds,
+          failedIds,
+          retirementReasons,
+        });
+        continue;
+      }
+
+      revocationSkippedIds.push(record.id);
+      revocationSkippedUserIds.push(record.userId);
+      continue;
+    }
+
     if (isPastExpiry(record, now)) {
       dependencies.recordError(
         new Error(
@@ -363,21 +368,13 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     }
 
     try {
-      const repairOutcome = await repairResidueWithinDeadline(
-        attempted,
-        dependencies,
-        now,
-      );
+      await repairResidueWithinDeadline(attempted, dependencies, now);
 
       if (!(await clearResidueOrRecordFailure(record, dependencies, failedIds))) {
         continue;
       }
 
       clearedIds.push(record.id);
-
-      if (repairOutcome.status === "revocation_skipped") {
-        revocationSkippedIds.push(record.id);
-      }
     } catch (error) {
       dependencies.recordError(error, RESIDUE_REPAIR_FAILED_SLUG);
 
@@ -406,6 +403,8 @@ async (): Promise<TeardownResidueReaperOutcome> => {
     "teardown_residue.purged_count": purgedIds.length,
     "teardown_residue.retirement_reasons": retirementReasons,
     "teardown_residue.revocation_skipped_count": revocationSkippedIds.length,
+    "teardown_residue.revocation_skipped_ids": revocationSkippedIds,
+    "teardown_residue.revocation_skipped_user_ids": revocationSkippedUserIds,
     "teardown_residue.scanned_count": records.length,
   });
 
