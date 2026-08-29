@@ -191,18 +191,85 @@ const dialableTeardownChannels = (
     return [{ channel, providerChannelId }];
   });
 
+const incompleteCaptureBlocked = (
+  userId: string,
+  captured: number,
+  dialable: number,
+): TeardownBlockedError =>
+  new TeardownBlockedError(
+    `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} captured ${captured} of ${dialable} `
+      + `live push channels, so the delete is blocked rather than cascading the uncaptured `
+      + `channels away`,
+  );
+
+const raceStepAbort = async <Value>(
+  work: Promise<Value>,
+  signal: AbortSignal,
+  blocked: () => TeardownBlockedError,
+): Promise<Value> => {
+  const listenerScope = new AbortController();
+
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => {
+            reject(blocked());
+          },
+          { once: true, signal: listenerScope.signal },
+        );
+      }),
+    ]);
+  } finally {
+    listenerScope.abort();
+  }
+};
+
 const captureLivePushChannels = async (
   residue: TeardownResidueStore,
   userId: string,
   channels: TeardownPushChannel[],
+  signal: AbortSignal,
 ): Promise<PushChannelCapture> => {
   const dialable = dialableTeardownChannels(channels);
-  const capturedChannelIds: string[] = [];
+  const blockedAt = (capturedCount: number): TeardownBlockedError =>
+    incompleteCaptureBlocked(userId, capturedCount, dialable.length);
 
-  for (const { channel, providerChannelId } of dialable) {
-    if (await recordPushChannelResidue(residue, userId, channel, providerChannelId)) {
-      capturedChannelIds.push(providerChannelId);
-    }
+  if (signal.aborted) {
+    throw blockedAt(0);
+  }
+
+  const settledCaptures: string[] = [];
+
+  const outcomes = await raceStepAbort(
+    Promise.all(
+      dialable.map(async ({ channel, providerChannelId }) => {
+        const recorded = await recordPushChannelResidue(
+          residue,
+          userId,
+          channel,
+          providerChannelId,
+        );
+
+        if (recorded) {
+          settledCaptures.push(providerChannelId);
+        }
+
+        return { providerChannelId, recorded };
+      }),
+    ),
+    signal,
+    () => blockedAt(settledCaptures.length),
+  );
+
+  const capturedChannelIds = outcomes
+    .filter(({ recorded }) => recorded)
+    .map(({ providerChannelId }) => providerChannelId);
+
+  if (signal.aborted) {
+    throw blockedAt(capturedChannelIds.length);
   }
 
   return { capturedChannelIds, dialable: dialable.length };
@@ -211,14 +278,20 @@ const captureLivePushChannels = async (
 const readLivePushChannels = async (
   dependencies: DeleteUserSyncTeardownDependencies,
   userId: string,
+  signal: AbortSignal,
 ): Promise<PushChannelCapture> => {
   try {
     return await captureLivePushChannels(
       dependencies.residue,
       userId,
       requireOwnPushChannels(await dependencies.listPushChannels(userId), userId),
+      signal,
     );
   } catch (error) {
+    if (error instanceof TeardownBlockedError) {
+      throw error;
+    }
+
     reportStepFailure(error, PUSH_CHANNELS_STEP, userId, RESIDUE_WRITE_FAILED_SLUG);
 
     throw new TeardownBlockedError(
@@ -232,14 +305,15 @@ const readLivePushChannels = async (
 const capturePushChannelResidue = async (
   dependencies: DeleteUserSyncTeardownDependencies,
   userId: string,
+  signal: AbortSignal,
 ): Promise<PushChannelCapture> => {
-  const capture = await readLivePushChannels(dependencies, userId);
+  const capture = await readLivePushChannels(dependencies, userId, signal);
 
   if (capture.capturedChannelIds.length < capture.dialable) {
-    throw new TeardownBlockedError(
-      `Teardown step ${PUSH_CHANNELS_STEP} for user ${userId} captured `
-        + `${capture.capturedChannelIds.length} of ${capture.dialable} live push channels, so `
-        + `the delete is blocked rather than cascading the uncaptured channels away`,
+    throw incompleteCaptureBlocked(
+      userId,
+      capture.capturedChannelIds.length,
+      capture.dialable,
     );
   }
 
@@ -388,7 +462,7 @@ const buildDeleteUserSyncSteps = (
   {
     name: PUSH_CHANNELS_STEP,
     run: async (userId, signal) => {
-      const capture = await capturePushChannelResidue(dependencies, userId);
+      const capture = await capturePushChannelResidue(dependencies, userId, signal);
 
       widelog.setFields({
         "delete_user.push_channels_captured": capture.capturedChannelIds.length,
@@ -457,7 +531,7 @@ class DeadlineExceededError extends Error {
 
 const deadlineFailure = (deadlineMessage: string, cause: unknown): Error => {
   if (cause instanceof TeardownBlockedError) {
-    return new TeardownBlockedError(deadlineMessage, { cause });
+    return new TeardownBlockedError(`${deadlineMessage}: ${cause.message}`, { cause });
   }
 
   return new Error(deadlineMessage, { cause });

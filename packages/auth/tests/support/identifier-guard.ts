@@ -63,6 +63,7 @@ const remediationTestFiles = () => [
   "services/api/tests/utils/delete-user-teardown.test.ts",
   "services/api/tests/utils/every-residue-write-is-registered-before-it-is-awaited.test.ts",
   "services/api/tests/utils/failed-teardown-steps-leave-durable-repairable-residue.test.ts",
+  "services/api/tests/utils/push-channel-residue-capture-issues-its-records-concurrently.test.ts",
   "services/api/tests/utils/push-channel-residue-survives-work-that-settles-after-the-abort-window.test.ts",
   "services/api/tests/utils/push-notifications/delete-user-channel-listing-retries-a-transient-failure.test.ts",
   "services/api/tests/utils/push-notifications/deregister-user-channels-abandoned-are-loud.test.ts",
