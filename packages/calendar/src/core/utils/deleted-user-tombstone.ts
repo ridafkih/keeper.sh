@@ -226,6 +226,8 @@ const createUserDeletedCheck = (
       return true;
     } catch (error) {
       reportProbeError(error);
+      latestUserRowAnswer = "unobserved";
+      presentAnswerObservedAtMs = 0;
       return false;
     } finally {
       userRowProbeInFlight = null;
