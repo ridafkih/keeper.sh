@@ -1,4 +1,5 @@
 import { pushChannelStateSchema } from "@keeper.sh/data-schemas";
+import type { PushChannelStateValue } from "@keeper.sh/data-schemas";
 import { getDeterministicRefreshOffset } from "../oauth/sync-window";
 import {
   resolvePushProviderProfile,
@@ -14,9 +15,17 @@ const PUSH_NOTIFICATION_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 const STALE_REGISTERING_MS = 10 * 60 * 1000;
 const PULL_CAPABILITY = "pull";
 
-type PushChannelState = "active" | "degraded" | "failed" | "registering" | "removed";
+type PushChannelState = PushChannelStateValue;
 type PushChannelActionType = "deregister" | "register" | "renew";
 type PushClaimKind = "change" | "lifecycle" | "sync";
+
+const PUSH_CHANNEL_STATES: readonly PushChannelState[] = Object.keys({
+  active: true,
+  degraded: true,
+  failed: true,
+  registering: true,
+  removed: true,
+} satisfies Record<PushChannelState, true>) as PushChannelState[];
 
 const LIVE_PUSH_CHANNEL_STATES = new Set<PushChannelState>([
   "active",
@@ -193,24 +202,12 @@ const toPushChannelState = (state: string): PushChannelState =>
 const isPullCalendar = (calendar: EligibleSourceCalendar): boolean =>
   !calendar.disabled && calendar.capabilities.includes(PULL_CAPABILITY);
 
-/*
- * A registration that never got an answer out of the provider leaves a row holding no
- * provider identifiers. There is nothing at the provider to stop, so tearing the account
- * down must not fail on it. A channel that reached "active" or "degraded" without those
- * identifiers is a broken invariant rather than an absent registration, and is reported.
- */
-const neverReachedProvider = (channel: StoredPushChannel): boolean => {
-  switch (channel.state) {
-    case "failed":
-    case "registering":
-    case "removed": {
-      return true;
-    }
-    default: {
-      return false;
-    }
-  }
-};
+const neverReachedProvider = (channel: StoredPushChannel): boolean =>
+  channel.providerChannelId === null
+  && channel.providerResourceId === null
+  && (channel.state === "failed"
+    || channel.state === "registering"
+    || channel.state === "removed");
 
 const resolvePushChannelHealth = (
   channel: StoredPushChannel,
@@ -386,6 +383,24 @@ const isRegistrationRetryDue = (channel: StoredPushChannel, now: Date): boolean 
   }
   return isStaleRegistering(channel, now);
 };
+
+const UNSTOPPABLE_PUSH_CHANNEL_REASON = "unstoppable_without_resource_id";
+
+class UnstoppablePushChannelError extends Error {
+  readonly reason: typeof UNSTOPPABLE_PUSH_CHANNEL_REASON;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "UnstoppablePushChannelError";
+    this.reason = UNSTOPPABLE_PUSH_CHANNEL_REASON;
+  }
+}
+
+const isUnstoppablePushChannelError = (error: unknown): boolean =>
+  typeof error === "object"
+  && error !== null
+  && "reason" in error
+  && (error as { reason: unknown }).reason === UNSTOPPABLE_PUSH_CHANNEL_REASON;
 
 const isPushChannelGoneError = (error: unknown): boolean =>
   typeof error === "object"
@@ -599,7 +614,9 @@ const shouldRetainPushChannelAction = (
 export {
   FULL_POLL_INTERVAL_MS,
   isPushChannelGoneError,
+  isUnstoppablePushChannelError,
   LIVE_PUSH_CHANNEL_STATES,
+  PUSH_CHANNEL_STATES,
   neverReachedProvider,
   planPushChannelActions,
   PUSH_HEALTHY_POLL_FLOOR_MS,
@@ -609,6 +626,8 @@ export {
   shouldRetainPushChannelAction,
   STALE_REGISTERING_MS,
   toPushChannelState,
+  UNSTOPPABLE_PUSH_CHANNEL_REASON,
+  UnstoppablePushChannelError,
 };
 export type {
   AccountCalendarRow,

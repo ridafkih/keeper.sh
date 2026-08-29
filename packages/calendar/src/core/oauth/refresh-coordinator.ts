@@ -36,8 +36,9 @@ const adoptPeerCredential = async (
 const acquireOrAdopt = async (
   tryAcquire: () => Promise<boolean>,
   readFreshCredential: ReadFreshCredential | null,
+  acquireBudgetMs: number,
 ): Promise<CredentialRefreshResult | null> => {
-  const deadlineAt = Date.now() + ACQUIRE_BUDGET_MS;
+  const deadlineAt = Date.now() + acquireBudgetMs;
   for (;;) {
     if (Date.now() >= deadlineAt) {
       throw new Error("Token refresh already in progress on another instance");
@@ -58,6 +59,7 @@ const executeWithDistributedLock = async (
   lockKey: string,
   runRefresh: () => Promise<CredentialRefreshResult>,
   readFreshCredential: ReadFreshCredential | null,
+  acquireBudgetMs: number,
 ): Promise<CredentialRefreshResult> => {
   if (!lockStore) {
     return runRefresh();
@@ -67,7 +69,7 @@ const executeWithDistributedLock = async (
     .tryAcquire(lockKey, REFRESH_LOCK_TTL_SECONDS)
     .catch(() => false);
 
-  const adoptedWhileWaiting = await acquireOrAdopt(tryAcquire, readFreshCredential);
+  const adoptedWhileWaiting = await acquireOrAdopt(tryAcquire, readFreshCredential, acquireBudgetMs);
   if (adoptedWhileWaiting) {
     return adoptedWhileWaiting;
   }
@@ -83,11 +85,27 @@ const executeWithDistributedLock = async (
   }
 };
 
+const joinInFlightRefresh = (
+  inFlight: Promise<CredentialRefreshResult>,
+  acquireBudgetMs: number,
+): Promise<CredentialRefreshResult> => {
+  const budgetExpiry = new Promise<never>((_resolve, reject) => {
+    const budgetTimer = setTimeout(() => {
+      reject(new Error("Token refresh already in progress on another instance"));
+    }, acquireBudgetMs);
+    const stopBudgetTimer = (): void => clearTimeout(budgetTimer);
+    inFlight.finally(stopBudgetTimer).catch(() => null);
+  });
+
+  return Promise.race([inFlight, budgetExpiry]);
+};
+
 const runWithCredentialRefreshLock = (
   oauthCredentialId: string,
   runRefresh: () => Promise<CredentialRefreshResult>,
   lockStore: RefreshLockStore | null = null,
   readFreshCredential: ReadFreshCredential | null = null,
+  acquireBudgetMs: number = ACQUIRE_BUDGET_MS,
 ): Promise<CredentialRefreshResult> => {
   const inFlight = inFlightRefreshByCredentialId.get(oauthCredentialId);
   if (inFlight) {
@@ -97,7 +115,7 @@ const runWithCredentialRefreshLock = (
      * logged from inside it without landing on a foreign wide event.
      */
     widelog.set("token.refresh_coalesced", true);
-    return inFlight;
+    return joinInFlightRefresh(inFlight, acquireBudgetMs);
   }
 
   const lockKey = `${REFRESH_LOCK_PREFIX}${oauthCredentialId}`;
@@ -106,6 +124,7 @@ const runWithCredentialRefreshLock = (
     lockKey,
     runRefresh,
     readFreshCredential,
+    acquireBudgetMs,
   ).finally(() => {
     if (inFlightRefreshByCredentialId.get(oauthCredentialId) === refreshTask) {
       inFlightRefreshByCredentialId.delete(oauthCredentialId);

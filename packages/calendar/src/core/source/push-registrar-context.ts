@@ -13,6 +13,7 @@ import type { RegistrarContextRequest } from "./manage-push-channels";
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
 const SINGLE_REQUEST_SLOT = 1;
 const FIRST_ROW_LIMIT = 1;
+const PUSH_REGISTRATION_TIMEOUT_MS = 15_000;
 
 interface WebhookCallbackUrls {
   googleCallbackUrl: string;
@@ -32,6 +33,7 @@ interface RegistrarContextConfig {
   microsoftClientSecret?: string;
   rateLimiterRedis: Parameters<typeof createRedisRateLimiter>[0];
   refreshLockStore: RefreshLockStore;
+  requestTimeoutMs?: number;
   webhookConfig: WebhookCallbackUrls | null;
 }
 
@@ -126,6 +128,7 @@ const createRegistrarContextFactory = (config: RegistrarContextConfig) =>
     fetchImpl: globalThis.fetch,
     notificationUrl: resolveNotificationUrl(request.provider, config.webhookConfig),
     now: new Date(),
+    signal: AbortSignal.timeout(config.requestTimeoutMs ?? PUSH_REGISTRATION_TIMEOUT_MS),
     ...(request.provider === "google" && {
       rateLimiter: {
         acquire: () => createRedisRateLimiter(

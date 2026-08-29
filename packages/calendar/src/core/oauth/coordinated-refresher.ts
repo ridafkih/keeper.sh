@@ -52,6 +52,7 @@ const persistRefreshedCredential = async (
 };
 
 interface CoordinatedRefresherOptions {
+  acquireBudgetMs?: number;
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
@@ -64,7 +65,14 @@ interface CoordinatedRefresherOptions {
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+  const {
+    acquireBudgetMs,
+    database,
+    oauthCredentialId,
+    calendarAccountId,
+    refreshLockStore,
+    rawRefresh,
+  } = options;
 
   /*
    * A peer that won the lock persists before releasing it, so its result is readable here.
@@ -143,6 +151,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
       },
       refreshLockStore,
       readFreshCredential,
+      acquireBudgetMs,
     );
 };
 

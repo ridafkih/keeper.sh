@@ -182,3 +182,24 @@ describe("getDatabaseErrorDetails alongside classification", () => {
     });
   });
 });
+
+describe("classifyDatabaseError connect refusal across driver versions", () => {
+  const refusal = (code: string): Error =>
+    postgresError("Failed to connect", { code });
+
+  it.each([
+    ["ERR_POSTGRES_CONNECTION_CLOSED", "Bun 1.3.11"],
+    ["ERR_POSTGRES_CONNECTION_REFUSED", "Bun 1.4.0"],
+  ])("classifies %s, the refusal code raised on %s", (code) => {
+    expect(classifyDatabaseError(refusal(code))).toEqual({
+      slug: "db-connection-unavailable",
+      sqlState: null,
+    });
+  });
+
+  it("classifies a refused connect once the query builder has wrapped it", () => {
+    expect(
+      classifyDatabaseError(drizzleWrapped(refusal("ERR_POSTGRES_CONNECTION_REFUSED"))),
+    ).toEqual({ slug: "db-connection-unavailable", sqlState: null });
+  });
+});

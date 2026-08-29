@@ -12,6 +12,7 @@ export default defineConfig({
      */
     hookTimeout: 60_000,
     include: ["./tests/**/*.test.ts"],
+    setupFiles: ["./tests/support/database-suite-guard-setup.ts"],
     testTimeout: 60_000,
   },
 });

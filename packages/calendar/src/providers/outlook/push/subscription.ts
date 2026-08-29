@@ -3,7 +3,10 @@ import {
   clampToProviderLifetime,
   GRAPH_SUBSCRIPTION_MAX_LIFETIME_MS,
 } from "../../../core/source/push-provider-profile";
-import { neverReachedProvider } from "../../../core/source/push-channel";
+import {
+  neverReachedProvider,
+  UnstoppablePushChannelError,
+} from "../../../core/source/push-channel";
 import type {
   ListedPushChannel,
   PushChannelRegistration,
@@ -181,9 +184,8 @@ const deregisterOutlookSubscription = async (
     if (neverReachedProvider(channel)) {
       return;
     }
-    throw new GraphSubscriptionError(
+    throw new UnstoppablePushChannelError(
       "Outlook push deregistration requires the recorded subscription id",
-      0,
     );
   }
 

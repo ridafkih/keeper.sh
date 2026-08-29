@@ -3,6 +3,7 @@ import { buildCalendarBackoffState } from "../utils/calendar-backoff";
 import { hashPushSecret } from "./push-secret";
 import {
   isPushChannelGoneError,
+  isUnstoppablePushChannelError,
   planPushChannelActions,
   resolvePushChannelHealth,
   shouldRetainPushChannelAction,
@@ -30,6 +31,7 @@ const SCOPE_LOCK_TTL_SECONDS = 120;
 const SCOPE_CONCURRENCY = 5;
 const PUSH_ACTIONS_PER_TICK = 100;
 const MAX_DEREGISTER_ATTEMPTS = 3;
+const UNSTOPPABLE_DEREGISTRATION_SLUG = "webhook-deregistration-unstoppable";
 const MS_PER_SECOND = 1000;
 
 interface RegistrarContextRequest {
@@ -433,6 +435,12 @@ const runDeregisterAction = async (
     await dependencies.updateChannel(channel.id, { state: "removed" });
     counters.deregistered += 1;
   } catch (error) {
+    if (isUnstoppablePushChannelError(error)) {
+      dependencies.recordError(error, UNSTOPPABLE_DEREGISTRATION_SLUG);
+      await dependencies.updateChannel(channel.id, { state: "removed" });
+      counters.deregistered += 1;
+      return;
+    }
     dependencies.recordError(error, "webhook-deregistration-failed");
     if (channel.failureCount + 1 >= MAX_DEREGISTER_ATTEMPTS) {
       await dependencies.updateChannel(channel.id, { state: "failed" });

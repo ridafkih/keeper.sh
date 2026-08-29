@@ -1,4 +1,5 @@
 import type { Plan } from "@keeper.sh/data-schemas";
+import { syncJobId } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncTrigger } from "@keeper.sh/queue";
 import type { DestinationCalendarRef } from "./get-sources";
 
@@ -46,10 +47,10 @@ const buildPushDestinationJobs = (
       data.webhookReceivedAt = webhookReceivedAt;
     }
     return {
-      name: `sync-${userId}-${calendarId}`,
+      name: syncJobId(userId, calendarId),
       data,
       opts: {
-        jobId: `sync-${userId}-${calendarId}`,
+        jobId: syncJobId(userId, calendarId),
         priority: jobPriorityByTrigger[trigger],
         removeOnComplete: true,
         removeOnFail: true,

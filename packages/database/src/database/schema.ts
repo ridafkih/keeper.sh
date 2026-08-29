@@ -245,6 +245,31 @@ const calendarPushChannelsTable = pgTable(
   ],
 );
 
+const deletionResidueTable = pgTable(
+  "deletion_residue",
+  {
+    attempts: integer().notNull().default(0),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    credentialExpiresAt: timestamp({ withTimezone: true }),
+    encryptedAccessToken: text(),
+    encryptedRefreshToken: text(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    externalId: text(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    kind: text().notNull(),
+    lastAttemptAt: timestamp({ withTimezone: true }),
+    nextAttemptAt: timestamp({ withTimezone: true }),
+    provider: text(),
+    providerChannelId: text(),
+    providerResourceId: text(),
+    userId: text().notNull(),
+  },
+  (table) => [
+    index("deletion_residue_due_idx").on(table.nextAttemptAt),
+    index("deletion_residue_user_idx").on(table.userId),
+  ],
+);
+
 const calendarSnapshotsTable = pgTable("calendar_snapshots", {
   calendarId: uuid()
     .notNull()
@@ -546,6 +571,7 @@ export {
   calendarRemovalsTable,
   calendarSnapshotsTable,
   calendarsTable,
+  deletionResidueTable,
   eventMappingsTable,
   eventStatesTable,
   feedbackTable,

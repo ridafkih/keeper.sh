@@ -1,4 +1,4 @@
-import { createPushSyncQueue } from "@keeper.sh/queue";
+import { createPushSyncQueue, syncJobId } from "@keeper.sh/queue";
 import type { PushSyncJobPayload } from "@keeper.sh/queue";
 import type { Plan } from "@keeper.sh/data-schemas";
 import { calendarsTable, userSyncRequestsTable } from "@keeper.sh/database/schema";
@@ -44,16 +44,16 @@ const runEnqueuePushSync = async (
     // The durable request row lets the cron drain retry once that sync finishes.
     // Recorded before the add so a crash in between cannot drop the request.
     const existingJobs = await Promise.all(destinationCalendarIds.map(
-      (calendarId) => queue.getJob(`sync-${userId}-${calendarId}`),
+      (calendarId) => queue.getJob(syncJobId(userId, calendarId)),
     ));
     if (existingJobs.some(Boolean)) {
       await dependencies.recordSyncRequest(userId);
     }
     await Promise.all(destinationCalendarIds.map((calendarId) => queue.add(
-      `sync-${userId}-${calendarId}`,
+      syncJobId(userId, calendarId),
       { calendarId, userId, plan, correlationId },
       {
-        jobId: `sync-${userId}-${calendarId}`,
+        jobId: syncJobId(userId, calendarId),
         removeOnComplete: true,
         removeOnFail: true,
       },

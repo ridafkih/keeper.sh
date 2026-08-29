@@ -12,6 +12,19 @@ const MICROSOFT_USER_SCOPE = "User.Read";
 const MICROSOFT_OFFLINE_SCOPE = "offline_access";
 const REQUEST_TIMEOUT_MS = 15_000;
 
+const signalWithExpiry = (
+  signal: AbortSignal | undefined,
+  expiryMs: number,
+): AbortSignal => {
+  const expiry = AbortSignal.timeout(expiryMs);
+
+  if (!signal) {
+    return expiry;
+  }
+
+  return AbortSignal.any([signal, expiry]);
+};
+
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === "AbortError" || error.name === "TimeoutError");
@@ -39,7 +52,10 @@ const createMicrosoftTokenRefresher = (
 ) => {
   const { clientId, clientSecret } = credentials;
 
-  return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
+  return async (
+    refreshToken: string,
+    signal?: AbortSignal,
+  ): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
       body: new URLSearchParams({
         client_id: clientId,
@@ -49,7 +65,7 @@ const createMicrosoftTokenRefresher = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
     }).catch((error) => {
       if (isRequestTimeoutError(error)) {
         throw new Error(`Token refresh timed out after ${REQUEST_TIMEOUT_MS}ms`);

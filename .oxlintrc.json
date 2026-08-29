@@ -63,6 +63,23 @@
     "sort-keys": "off",
     "id-length": ["error", { "exceptions": ["x", "y"] }]
   },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts"],
+      "rules": {
+        "array-type": "off",
+        "import/no-namespace": "off",
+        "no-array-reduce": "off",
+        "no-empty-function": "off",
+        "no-ternary": "off",
+        "prefer-response-static-json": "off",
+        "prefer-set-has": "off",
+        "no-undefined": "off",
+        "no-unmodified-loop-condition": "off",
+        "no-useless-undefined": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/dist/**",

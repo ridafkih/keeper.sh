@@ -1,10 +1,18 @@
-import { writeAuthStderr } from "./runtime-environment";
+interface PolarCustomerDeletionRequestOptions {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}
 
 interface PolarCustomerDeletionClient {
   customers: {
-    deleteExternal: (payload: { externalId: string }) => Promise<unknown>;
+    deleteExternal: (
+      payload: { externalId: string },
+      options?: PolarCustomerDeletionRequestOptions,
+    ) => Promise<unknown>;
   };
 }
+
+const POLAR_CUSTOMER_DELETE_TIMEOUT_MS = 5000;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
@@ -17,36 +25,57 @@ const isResourceNotFoundError = (error: unknown): boolean => {
   return error.error === "ResourceNotFound";
 };
 
-const toErrorMessage = (error: unknown): string => {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (isRecord(error) && typeof error.detail === "string") {
-    return error.detail;
-  }
-
-  return "Unknown error";
-};
-
 const deletePolarCustomerByExternalId = async (
   polarClient: PolarCustomerDeletionClient,
   externalId: string,
 ): Promise<void> => {
+  const NO_FAILURE = Symbol("no-failure");
+  const DEADLINE_REACHED = Symbol("deadline-reached");
+
+  const transport = new AbortController();
+
+  const failure = polarClient.customers
+    .deleteExternal(
+      { externalId },
+      {
+        signal: transport.signal,
+        timeoutMs: POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+      },
+    )
+    .then(
+      (): unknown => NO_FAILURE,
+      (error: unknown) => error,
+    );
+
+  const deadline = Promise.withResolvers<typeof DEADLINE_REACHED>();
+  const deadlineTimer = setTimeout(
+    () => deadline.resolve(DEADLINE_REACHED),
+    POLAR_CUSTOMER_DELETE_TIMEOUT_MS,
+  );
+
   try {
-    await polarClient.customers.deleteExternal({
-      externalId,
-    });
-  } catch (error) {
-    if (isResourceNotFoundError(error)) {
+    const outcome = await Promise.race([failure, deadline.promise]);
+
+    if (outcome === DEADLINE_REACHED) {
+      throw new Error(
+        `Polar customer deletion for ${externalId} exceeded ${POLAR_CUSTOMER_DELETE_TIMEOUT_MS}ms`,
+      );
+    }
+
+    if (outcome === NO_FAILURE || isResourceNotFoundError(outcome)) {
       return;
     }
 
-    writeAuthStderr(
-      `[auth] Failed to delete Polar customer for user ${externalId}: ${toErrorMessage(error)}\n`,
+    throw outcome;
+  } finally {
+    clearTimeout(deadlineTimer);
+    transport.abort(
+      new Error(
+        `Polar customer deletion for ${externalId} was cancelled after ${POLAR_CUSTOMER_DELETE_TIMEOUT_MS}ms`,
+      ),
     );
   }
 };
 
-export { deletePolarCustomerByExternalId };
-export type { PolarCustomerDeletionClient };
+export { deletePolarCustomerByExternalId, POLAR_CUSTOMER_DELETE_TIMEOUT_MS };
+export type { PolarCustomerDeletionClient, PolarCustomerDeletionRequestOptions };

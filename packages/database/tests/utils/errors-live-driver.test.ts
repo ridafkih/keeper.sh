@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sql";
 import { afterAll, describe, expect, it } from "vitest";
 import { classifyDatabaseError } from "../../src/utils/errors";
+import { applicationNameUrl, terminateBackendsRunning } from "./support/backend-termination";
 
 const databaseUrl = process.env.KEEPER_TEST_DATABASE_URL;
 
@@ -40,6 +41,17 @@ const readBackendPidWithRecovery = async (
     }
   }
   return await readBackendPid(database);
+};
+
+const IDLE_IN_TRANSACTION_TIMEOUT_MS = 300;
+
+const armIdleInTransactionTimeout = async (
+  executor: Pick<Database, "execute">,
+  milliseconds: number,
+): Promise<void> => {
+  await executor.execute(
+    sql`select set_config('idle_in_transaction_session_timeout', ${String(milliseconds)}, true)`,
+  );
 };
 
 const terminationFailures: unknown[] = [];
@@ -115,11 +127,9 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
 
     const error = await captureFailure(() =>
       database.transaction(async (transaction) => {
-        await transaction.execute(
-          sql`select set_config('idle_in_transaction_session_timeout', '300', true)`,
-        );
         await transaction.execute(sql`select 1`);
-        await Bun.sleep(1200);
+        await armIdleInTransactionTimeout(transaction, IDLE_IN_TRANSACTION_TIMEOUT_MS);
+        await Bun.sleep(IDLE_IN_TRANSACTION_TIMEOUT_MS * 4);
         await transaction.execute(sql`select 2`);
       }),
     );
@@ -153,7 +163,11 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
   }, 20_000);
 
   it("classifies every in-flight query when the backend dies under concurrency", async () => {
-    const database = trackedDatabase({ max: 4 });
+    const applicationName = `keeper-live-driver-${crypto.randomUUID()}`;
+    const database = trackedDatabase({
+      max: 4,
+      url: applicationNameUrl(databaseUrl ?? "", applicationName),
+    });
     const killer = trackedDatabase();
 
     await database.execute(sql`select 1`);
@@ -166,14 +180,15 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
       }
     });
     await Bun.sleep(250);
-    await killer.execute(
-      sql`select pg_terminate_backend(pid) from pg_stat_activity
-          where query like '%pg_sleep(2)%' and pid <> pg_backend_pid()`,
-    );
+    const terminated = await terminateBackendsRunning(killer.$client, {
+      applicationName,
+      queryFragment: "%pg_sleep(2)%",
+    });
 
     const settled = await Promise.all(inFlight);
     const failures = settled.filter((entry) => entry !== null);
 
+    expect(terminated.length).toBeGreaterThan(0);
     expect(failures.length).toBeGreaterThan(0);
     for (const failure of failures) {
       expect(classifyDatabaseError(failure)?.slug).toBeOneOf(CONNECTION_SLUGS);
