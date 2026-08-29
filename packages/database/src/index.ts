@@ -20,3 +20,7 @@ export {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,
 } from "./database/migration-readiness";
+export {
+  calendarRowCarriesAProviderIdentity,
+  calendarRowProviderIdentity,
+} from "./database/provider-account-identity";

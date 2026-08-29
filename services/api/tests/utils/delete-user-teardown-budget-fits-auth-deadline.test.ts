@@ -74,7 +74,7 @@ const hangingRun = () => {
         return hangForever();
       },
       listCalendarIds: () => Promise.resolve(["cal1"]),
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: makeWorkingTombstoneRedis(),
     },

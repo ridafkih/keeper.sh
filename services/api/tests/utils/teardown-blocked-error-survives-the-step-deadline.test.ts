@@ -56,7 +56,7 @@ const makeDependencies = (
   deregisterPushChannels: () => Promise.resolve(0),
   fetchImpl: () => Promise.reject(new Error("no grant is revoked by this suite")),
   listCalendarIds: () => Promise.resolve([]),
-  listOAuthGrantProviders: () => Promise.resolve([]),
+  listOAuthCredentials: () => Promise.resolve([]),
   listPushChannels,
   redis: {
     del: () => Promise.resolve(1),

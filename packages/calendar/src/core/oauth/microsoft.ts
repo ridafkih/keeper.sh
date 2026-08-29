@@ -1,6 +1,7 @@
 import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
+import { UserInfoCredentialRejectedError } from "./user-info-credential-rejected";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
@@ -43,8 +44,15 @@ interface AuthorizationUrlOptions {
 
 interface MicrosoftOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<MicrosoftTokenResponse>;
-  refreshAccessToken: (refreshToken: string) => Promise<MicrosoftTokenResponse>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    signal?: AbortSignal,
+  ) => Promise<MicrosoftTokenResponse>;
+  refreshAccessToken: (
+    refreshToken: string,
+    signal?: AbortSignal | null,
+  ) => Promise<MicrosoftTokenResponse>;
 }
 
 const createMicrosoftTokenRefresher = (
@@ -116,6 +124,7 @@ const createMicrosoftOAuthService = (
   const exchangeCodeForTokens = async (
     code: string,
     callbackUrl: string,
+    signal?: AbortSignal,
   ): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(MICROSOFT_TOKEN_URL, {
       body: new URLSearchParams({
@@ -127,6 +136,16 @@ const createMicrosoftOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(
+          `Token exchange timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+
+      throw error;
     });
 
     if (!response.ok) {
@@ -147,12 +166,26 @@ const createMicrosoftOAuthService = (
   };
 };
 
-const fetchUserInfo = async (accessToken: string): Promise<MicrosoftUserInfo> => {
+const fetchUserInfo = async (
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<MicrosoftUserInfo> => {
   const response = await fetch(MICROSOFT_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
+  }).catch((error) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(`Failed to fetch user info: timed out after ${REQUEST_TIMEOUT_MS}ms`);
+    }
+
+    throw error;
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UserInfoCredentialRejectedError(response.status);
+    }
+
     throw new Error(`Failed to fetch user info: ${response.status}`);
   }
 

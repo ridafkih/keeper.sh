@@ -5,7 +5,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/database/schema.ts",
-    "./auth-schema": "./src/database/auth-schema.ts"
+    "./auth-schema": "./src/database/auth-schema.ts",
+    "./provider-account-identity": "./src/database/provider-account-identity.ts"
   },
   "scripts": {
     "push": "drizzle-kit push",

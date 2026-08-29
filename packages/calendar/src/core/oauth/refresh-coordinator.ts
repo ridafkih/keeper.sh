@@ -1,3 +1,4 @@
+import { RefreshBudgetExceededError } from "./refresh-budget-exceeded";
 import { widelog } from "widelogger";
 
 interface CredentialRefreshResult {
@@ -74,14 +75,29 @@ const executeWithDistributedLock = async (
     return adoptedWhileWaiting;
   }
 
+  const release = (): Promise<void> => lockStore
+    .release(lockKey)
+    .catch((error: unknown) => {
+      widelog.error("token.refresh_lock_release_failed", error);
+    });
+
+  const releaseOnceSettled = (attempt: Promise<unknown>): Promise<void> => attempt
+    .catch(() => null)
+    .then(release);
+
   try {
     const adopted = await adoptPeerCredential(readFreshCredential);
-    if (adopted) {
-      return adopted;
+    const result = adopted ?? (await runRefresh());
+    await release();
+    return result;
+  } catch (error) {
+    if (error instanceof RefreshBudgetExceededError) {
+      widelog.set("token.refresh_lock_release_deferred", true);
+      releaseOnceSettled(error.inFlightAttempt);
+      throw error;
     }
-    return await runRefresh();
-  } finally {
-    await lockStore.release(lockKey).catch(() => null);
+    await release();
+    throw error;
   }
 };
 

@@ -101,7 +101,7 @@ describe("a failed grant census reports unavailable instead of failing the step"
         return Promise.resolve(1);
       },
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.reject(new Error(CENSUS_FAILURE)),
+      listOAuthCredentials: () => Promise.reject(new Error(CENSUS_FAILURE)),
       listPushChannels: () => Promise.resolve([dialableChannel()]),
       redis: {
         del: (key: string) => Promise.resolve(Number(tombstones.delete(key))),

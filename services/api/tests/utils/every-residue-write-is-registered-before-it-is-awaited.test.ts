@@ -179,7 +179,7 @@ describe("every residue write is registered before it is awaited", () => {
           ),
         fetchImpl: () => Promise.reject(new Error("no provider call belongs in this test")),
         listCalendarIds: () => Promise.resolve([]),
-        listOAuthGrantProviders: () => Promise.resolve([]),
+        listOAuthCredentials: () => Promise.resolve([]),
         redis,
         listPushChannels: () => Promise.resolve([]),
         residue: residue.store,

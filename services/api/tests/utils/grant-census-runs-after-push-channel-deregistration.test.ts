@@ -63,7 +63,7 @@ describe("grant census runs after push channel deregistration", () => {
         return Promise.resolve(1);
       },
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.reject(new Error("connection pool exhausted")),
+      listOAuthCredentials: () => Promise.reject(new Error("connection pool exhausted")),
       listPushChannels: () => Promise.resolve([dialableChannel()]),
       redis: {
         del: (key: string) => Promise.resolve(Number(tombstones.delete(key))),

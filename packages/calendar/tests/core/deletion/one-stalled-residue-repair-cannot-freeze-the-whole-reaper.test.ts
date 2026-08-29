@@ -60,6 +60,7 @@ const stalledRepair = (): Promise<never> => Promise.withResolvers<never>().promi
 
 const createHarness = () => {
   const clearedIds: string[] = [];
+  const revokeCalls: string[] = [];
   const deregistrations: { channelId: string | null; userId: string }[] = [];
   const errors: { error: unknown; slug: string }[] = [];
   const deadlinesRequested: number[] = [];
@@ -91,6 +92,12 @@ const createHarness = () => {
   } as unknown as SourcePushRegistrar;
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () => stalledRepair(),
     now: () => NOW,
@@ -100,6 +107,11 @@ const createHarness = () => {
     },
     repairDeadlineMs: REPAIR_DEADLINE_MS,
     residue: store,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => (provider === "google" ? registrar : null),
     waitForRepairDeadline: (deadlineMs: number) => {
       deadlinesRequested.push(deadlineMs);
@@ -107,7 +119,7 @@ const createHarness = () => {
     },
   } as unknown as Parameters<typeof createTeardownResidueReaper>[0]);
 
-  return { clearedIds, deadlinesRequested, deregistrations, errors, reap };
+  return { clearedIds, deadlinesRequested, deregistrations, errors, reap, revokeCalls };
 };
 
 describe("one stalled residue repair cannot freeze the whole reaper", () => {

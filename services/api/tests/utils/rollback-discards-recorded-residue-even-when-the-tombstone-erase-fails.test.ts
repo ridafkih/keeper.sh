@@ -170,7 +170,7 @@ describe("a rollback whose tombstone erase fails still discards the residue it r
         ),
       fetchImpl: () => Promise.reject(new Error("no provider call belongs in this test")),
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: redis.redis,
       residue: residue.store,

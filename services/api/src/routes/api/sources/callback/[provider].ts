@@ -9,11 +9,119 @@ import {
   fetchUserInfo,
   validateState,
 } from "@/utils/destinations";
-import { createOAuthSourceCredential } from "@/utils/oauth-source-credentials";
+import {
+  createOAuthSourceCredential,
+  deleteOAuthSourceCredential,
+} from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
+import {
+  CONNECT_DEADLINE_SETTLE_RESERVE_MS,
+  type ConnectDeadline,
+  openConnectDeadline,
+} from "@/utils/connect-deadline";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
+const OAUTH_CALLBACK_CONNECT_BUDGET_MS =
+  SERVER_IDLE_TIMEOUT_SECONDS * MS_PER_SECOND - CONNECT_DEADLINE_SETTLE_RESERVE_MS;
+
+interface ConnectOAuthAccountOptions {
+  accessToken: string;
+  deadline: ConnectDeadline;
+  email: string | null;
+  expiresAt: Date;
+  provider: string;
+  providerAccountId: string;
+  refreshToken: string;
+  userId: string;
+}
+
+const DEADLINE_ABORT_CAUSE_DEPTH = 8;
+
+const isDeadlineAbort = (deadline: ConnectDeadline, error: unknown): boolean => {
+  if (!deadline.signal.aborted) {
+    return false;
+  }
+
+  const { reason } = deadline.signal;
+  if (error === reason) {
+    return true;
+  }
+
+  let cause: unknown = error;
+  for (let depth = 0; depth < DEADLINE_ABORT_CAUSE_DEPTH; depth += 1) {
+    if (!(cause instanceof Error)) {
+      return false;
+    }
+
+    const { cause: nextCause } = cause;
+    if (nextCause === reason) {
+      return true;
+    }
+
+    cause = nextCause;
+  }
+
+  return false;
+};
+
+const discardCreatedCredential = async (
+  userId: string,
+  credentialId: string,
+): Promise<void> => {
+  try {
+    const deleted = await deleteOAuthSourceCredential(userId, credentialId);
+    if (!deleted) {
+      widelog.set("oauth_callback.credential_discard_skipped", true);
+    }
+  } catch (error) {
+    widelog.errorFields(error, { slug: "oauth-callback-credential-discard-failed" });
+  }
+};
+
+const connectOAuthAccount = async ({
+  accessToken,
+  deadline,
+  email,
+  expiresAt,
+  provider,
+  providerAccountId,
+  refreshToken,
+  userId,
+}: ConnectOAuthAccountOptions): Promise<string> => {
+  let createdCredentialId: string | null = null;
+
+  const credentialId = await createOAuthSourceCredential(
+    userId,
+    { accessToken, email, expiresAt, provider, refreshToken },
+    {
+      onCredentialCreated: (id: string) => {
+        createdCredentialId = id;
+      },
+    },
+  );
+
+  try {
+    return await importOAuthAccountCalendars({
+      accessToken,
+      email,
+      oauthCredentialId: credentialId,
+      provider,
+      providerAccountId,
+      signal: deadline.signal,
+      userId,
+    });
+  } catch (error) {
+    if (isDeadlineAbort(deadline, error)) {
+      widelog.set("oauth_callback.credential_kept_on_deadline", true);
+    } else if (createdCredentialId !== null) {
+      await discardCreatedCredential(userId, createdCredentialId);
+    }
+
+    throw error;
+  }
+};
 
 const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {
@@ -48,6 +156,8 @@ const GET = withWideEvent(async ({ request, params }) => {
       throw new OAuthError("Missing code or state", errorUrl);
     }
 
+    const deadline = openConnectDeadline(OAUTH_CALLBACK_CONNECT_BUDGET_MS);
+
     const validatedState = await validateState(state);
     if (!validatedState) {
       throw new OAuthError("Invalid or expired state", errorUrl);
@@ -56,29 +166,27 @@ const GET = withWideEvent(async ({ request, params }) => {
     const { userId } = validatedState;
 
     const callbackUrl = new URL(`/api/sources/callback/${provider}`, baseUrl);
-    const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
+    const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString(), {
+      signal: deadline.signal,
+    });
 
     if (!tokens.refresh_token) {
       throw new OAuthError("No refresh token", errorUrl);
     }
 
-    const userInfo = await fetchUserInfo(provider, tokens.access_token);
+    const userInfo = await fetchUserInfo(provider, tokens.access_token, {
+      signal: deadline.signal,
+    });
     const expiresAt = new Date(Date.now() + tokens.expires_in * MS_PER_SECOND);
 
-    const credentialId = await createOAuthSourceCredential(userId, {
+    const accountId = await connectOAuthAccount({
       accessToken: tokens.access_token,
+      deadline,
       email: userInfo.email,
       expiresAt,
       provider,
-      refreshToken: tokens.refresh_token,
-    });
-
-    const accountId = await importOAuthAccountCalendars({
-      accessToken: tokens.access_token,
-      email: userInfo.email,
-      oauthCredentialId: credentialId,
-      provider,
       providerAccountId: userInfo.id,
+      refreshToken: tokens.refresh_token,
       userId,
     });
 
@@ -95,4 +203,4 @@ const GET = withWideEvent(async ({ request, params }) => {
   }
 });
 
-export { GET };
+export { GET, OAUTH_CALLBACK_CONNECT_BUDGET_MS };

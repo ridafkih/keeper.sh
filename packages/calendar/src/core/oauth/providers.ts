@@ -24,18 +24,32 @@ interface NormalizedUserInfo {
   email: string;
 }
 
+interface ProviderRequestOptions {
+  signal?: AbortSignal;
+}
+
 interface OAuthTokens {
   access_token: string;
   refresh_token?: string;
   expires_in: number;
-  scope: string;
+  scope?: string;
 }
 
 interface OAuthProvider {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<OAuthTokens>;
-  fetchUserInfo: (accessToken: string) => Promise<NormalizedUserInfo>;
-  refreshAccessToken: (refreshToken: string) => Promise<OAuthTokens>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<OAuthTokens>;
+  fetchUserInfo: (
+    accessToken: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<NormalizedUserInfo>;
+  refreshAccessToken: (
+    refreshToken: string,
+    options?: ProviderRequestOptions,
+  ) => Promise<OAuthTokens>;
   hasRequiredScopes: (grantedScopes: string) => boolean;
 }
 
@@ -60,28 +74,39 @@ const createOAuthProviders = (
   if (config.google) {
     const googleService = createGoogleOAuthService(config.google, stateStore);
     providers.google = {
-      exchangeCodeForTokens: googleService.exchangeCodeForTokens,
-      fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
-        const info = await fetchGoogleUserInfo(accessToken);
+      exchangeCodeForTokens: (code, callbackUrl, options) =>
+        googleService.exchangeCodeForTokens(code, callbackUrl, options?.signal),
+      fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
+        const info = await fetchGoogleUserInfo(accessToken, options?.signal);
+
+        if (!info.email) {
+          throw new Error(
+            "Google returned no email address for the connected account, so the calendar account cannot be identified",
+          );
+        }
+
         return { email: info.email, id: info.id };
       },
       getAuthorizationUrl: googleService.getAuthorizationUrl,
       hasRequiredScopes: hasRequiredGoogleScopes,
-      refreshAccessToken: googleService.refreshAccessToken,
+      refreshAccessToken: (refreshToken, options) =>
+        googleService.refreshAccessToken(refreshToken, options?.signal),
     };
   }
 
   if (config.microsoft) {
     const microsoftService = createMicrosoftOAuthService(config.microsoft, stateStore);
     providers.outlook = {
-      exchangeCodeForTokens: microsoftService.exchangeCodeForTokens,
-      fetchUserInfo: async (accessToken): Promise<NormalizedUserInfo> => {
-        const info = await fetchMicrosoftUserInfo(accessToken);
+      exchangeCodeForTokens: (code, callbackUrl, options) =>
+        microsoftService.exchangeCodeForTokens(code, callbackUrl, options?.signal),
+      fetchUserInfo: async (accessToken, options): Promise<NormalizedUserInfo> => {
+        const info = await fetchMicrosoftUserInfo(accessToken, options?.signal);
         return { email: info.mail ?? info.userPrincipalName ?? "", id: info.id };
       },
       getAuthorizationUrl: microsoftService.getAuthorizationUrl,
       hasRequiredScopes: hasRequiredMicrosoftScopes,
-      refreshAccessToken: microsoftService.refreshAccessToken,
+      refreshAccessToken: (refreshToken, options) =>
+        microsoftService.refreshAccessToken(refreshToken, options?.signal),
     };
   }
 
@@ -111,6 +136,7 @@ export type {
   OAuthTokens,
   OAuthProvider,
   OAuthProvidersConfig,
+  ProviderRequestOptions,
   OAuthProviders,
   OAuthStateStore,
 };

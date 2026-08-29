@@ -84,10 +84,21 @@ const runTeardown = async (
     }),
     deregisterPushChannels,
     listCalendarIds: () => Promise.resolve([]),
-    listOAuthGrantProviders: () => {
+    listOAuthCredentials: () => {
       censusCalls += 1;
 
-      return Promise.resolve([{ provider: "google" }]);
+      return Promise.resolve([
+        {
+          accessToken: "access-token",
+          accountId: "credential-1",
+          email: "owner@example.test",
+          expiresAt: null,
+          provider: "google",
+          providerAccountId: "google-account-1",
+          refreshToken: "refresh-token",
+          userId: DELETED_USER,
+        },
+      ]);
     },
     listPushChannels: () => Promise.resolve([dialableChannel()]),
     redis: {

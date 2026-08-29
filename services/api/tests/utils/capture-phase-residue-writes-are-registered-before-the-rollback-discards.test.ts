@@ -152,7 +152,7 @@ describe("capture-phase residue writes are registered before the rollback discar
             new Error("deregistration must never be reached once the capture is blocked"),
           ),
         listCalendarIds: () => Promise.resolve([]),
-        listOAuthGrantProviders: () => Promise.resolve([]),
+        listOAuthCredentials: () => Promise.resolve([]),
         listPushChannels: () =>
           Promise.resolve([
             {

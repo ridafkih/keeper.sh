@@ -1,8 +1,10 @@
 import type { OutlookCalendarListEntry, OutlookCalendarListResponse } from "../types";
 import { MICROSOFT_GRAPH_API } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
+import { fetchWithTimeout } from "../../../../core/utils/fetch-with-timeout";
 
 const INVALID_RESPONSE_STATUS = 502;
+const CALENDAR_LIST_TIMEOUT_MS = 15_000;
 
 class CalendarListError extends Error {
   public readonly status: number;
@@ -97,6 +99,7 @@ const parseCalendarListResponse = (value: unknown): OutlookCalendarListResponse 
 const fetchCalendarPage = async (
   accessToken: string,
   signal: AbortSignal | undefined,
+  requestTimeoutMs: number,
   nextLink?: string,
 ): Promise<OutlookCalendarListResponse> => {
   let url = new URL(`${MICROSOFT_GRAPH_API}/me/calendars`);
@@ -106,12 +109,16 @@ const fetchCalendarPage = async (
     url.searchParams.set("$select", "id,name,color,isDefaultCalendar,canEdit,owner");
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchWithTimeout(
+    url.toString(),
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
+    requestTimeoutMs,
     signal,
-  });
+  );
 
   if (!response.ok) {
     const authRequired = isSimpleAuthError(response.status);
@@ -148,6 +155,7 @@ const belongsToOwner = (calendar: OutlookCalendarListEntry, ownerEmail: string):
 interface ListUserCalendarsOptions {
   signal?: AbortSignal;
   ownerEmail?: string | null;
+  requestTimeoutMs?: number;
 }
 
 const listUserCalendars = async (
@@ -155,13 +163,19 @@ const listUserCalendars = async (
   options?: ListUserCalendarsOptions,
 ): Promise<OutlookCalendarListEntry[]> => {
   const { signal, ownerEmail } = options ?? {};
+  const requestTimeoutMs = options?.requestTimeoutMs ?? CALENDAR_LIST_TIMEOUT_MS;
   const calendars: OutlookCalendarListEntry[] = [];
-  let response = await fetchCalendarPage(accessToken, signal);
+  let response = await fetchCalendarPage(accessToken, signal, requestTimeoutMs);
   calendars.push(...response.value);
 
   while (response["@odata.nextLink"]) {
     signal?.throwIfAborted();
-    response = await fetchCalendarPage(accessToken, signal, response["@odata.nextLink"]);
+    response = await fetchCalendarPage(
+      accessToken,
+      signal,
+      requestTimeoutMs,
+      response["@odata.nextLink"],
+    );
     calendars.push(...response.value);
   }
 
@@ -173,3 +187,4 @@ const listUserCalendars = async (
 };
 
 export { listUserCalendars, CalendarListError };
+export type { ListUserCalendarsOptions };

@@ -105,6 +105,7 @@ const settleWithin = (
   ]);
 
 const pushChannelResidueExpiringAt = (expiresAt: Date): TeardownResidueRecord => ({
+  accountEmail: "deleted@workspace.example",
   credential: {
     accessToken: "residue-access-token",
     expiresAt,

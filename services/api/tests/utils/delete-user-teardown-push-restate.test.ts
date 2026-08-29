@@ -228,7 +228,7 @@ const makeHarness = (): Harness => {
       deregisterPushChannels: (userId: string) =>
         runDeregisterPushChannels(userId, deregisterDependencies as never),
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       markChannelStopped: channelStore.markChannelStopped,
       markChannelsStopped: channelStore.markChannelsStopped,

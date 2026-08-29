@@ -201,7 +201,7 @@ const runTeardown = async (residue: ResidueHarness["store"]): Promise<void> => {
     deregisterPushChannels: (_userId: string, signal: AbortSignal) =>
       deregisterUserChannels(channels, signal),
     listCalendarIds: () => Promise.resolve([]),
-    listOAuthGrantProviders: () => Promise.resolve([]),
+    listOAuthCredentials: () => Promise.resolve([]),
     listPushChannels: () =>
       Promise.resolve(channels.map((channel) => teardownChannelOf(channel))),
     redis: {

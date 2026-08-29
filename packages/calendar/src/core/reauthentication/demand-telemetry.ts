@@ -1,7 +1,8 @@
 import { widelog } from "widelogger";
 import { calendarAccountsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
-import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { SQL } from "drizzle-orm";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import { getErrorMessage } from "../utils/error";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -9,7 +10,7 @@ const FIRST_RESULT_LIMIT = 1;
 type ReauthenticationDemandAction = "raise" | "clear";
 
 interface ReauthenticationDemandFieldsParams {
-  accountId: string;
+  accountId: string | null;
   action: ReauthenticationDemandAction;
   provenance: string;
   previous: boolean | null;
@@ -39,6 +40,13 @@ const buildSignalFields = (signal?: string): ReauthenticationDemandFields => {
   return { "reauth.signal": signal };
 };
 
+const buildAccountFields = (accountId: string | null): ReauthenticationDemandFields => {
+  if (!accountId) {
+    return {};
+  }
+  return { "provider.account_id": accountId };
+};
+
 const buildRecordedProvenanceFields = (
   recordedProvenance?: string | null,
 ): ReauthenticationDemandFields => {
@@ -60,7 +68,7 @@ const resolveReauthenticationDemandAction = (
 const buildReauthenticationDemandFields = (
   params: ReauthenticationDemandFieldsParams,
 ): ReauthenticationDemandFields => ({
-  "provider.account_id": params.accountId,
+  ...buildAccountFields(params.accountId),
   "reauth.action": params.action,
   "reauth.provenance": params.provenance,
   ...buildPreviousFields(params.action, params.previous),
@@ -77,22 +85,24 @@ const recordReauthenticationDemand = (
 };
 
 interface PriorReauthenticationState {
+  id: string;
   needsReauthentication: boolean;
   reauthenticationSource: string | null;
 }
 
-const readPriorReauthenticationState = async (
-  database: Pick<BunSQLDatabase, "select">,
-  accountId: string,
+const readPriorReauthenticationStateWhere = async (
+  database: Pick<PgDatabase<PgQueryResultHKT>, "select">,
+  filter: SQL,
 ): Promise<PriorReauthenticationState | null> => {
   try {
     const [account] = await database
       .select({
+        id: calendarAccountsTable.id,
         needsReauthentication: calendarAccountsTable.needsReauthentication,
         reauthenticationSource: calendarAccountsTable.reauthenticationSource,
       })
       .from(calendarAccountsTable)
-      .where(eq(calendarAccountsTable.id, accountId))
+      .where(filter)
       .limit(FIRST_RESULT_LIMIT);
     return account ?? null;
   } catch (error) {
@@ -102,9 +112,16 @@ const readPriorReauthenticationState = async (
   }
 };
 
+const readPriorReauthenticationState = (
+  database: Pick<PgDatabase<PgQueryResultHKT>, "select">,
+  accountId: string,
+): Promise<PriorReauthenticationState | null> =>
+  readPriorReauthenticationStateWhere(database, eq(calendarAccountsTable.id, accountId));
+
 export {
   buildReauthenticationDemandFields,
   readPriorReauthenticationState,
+  readPriorReauthenticationStateWhere,
   recordReauthenticationDemand,
   resolveReauthenticationDemandAction,
 };

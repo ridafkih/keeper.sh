@@ -81,9 +81,16 @@ const createRegistrar = (): SourcePushRegistrar =>
 const createReaper = (seed: TeardownResidueRecord[]) => {
   const { rows, store } = createStore(seed);
   const errors: { error: unknown; slug: string }[] = [];
+  const revokeCalls: string[] = [];
   const registrar = createRegistrar();
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
@@ -94,11 +101,16 @@ const createReaper = (seed: TeardownResidueRecord[]) => {
     },
     repairDeadlineMs: REPAIR_DEADLINE_MS,
     residue: store,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => (provider === "google" ? registrar : null),
     waitForRepairDeadline: () => new Promise<void>(() => {}),
   });
 
-  return { errors, reap, rows };
+  return { errors, reap, revokeCalls, rows };
 };
 
 describe("a permanently failing residue repair retires at its attempt cap", () => {

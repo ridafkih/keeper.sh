@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
-import { createCoordinatedRefresher } from "../../../src/core/oauth/coordinated-refresher";
+import * as coordinatedRefresher from "../../../src/core/oauth/coordinated-refresher";
+import {
+  createCoordinatedRefresher,
+  persistRotatedCredential,
+} from "../../../src/core/oauth/coordinated-refresher";
 
 interface EmittedEvent {
   outcome?: string;
@@ -60,7 +64,7 @@ const createDatabase = (
             return Promise.reject(failureOf());
           }
           persistence.stored.push(values);
-          return Promise.resolve([]);
+          return Promise.resolve(Object.assign([], { count: 1 }));
         },
       }),
     }),
@@ -139,5 +143,65 @@ describe("persisting a refreshed credential", () => {
     await refresh(database, null);
 
     expect(eventWithToken()?.rotation_lost).toBe(false);
+  });
+});
+
+const persistRotation = async (
+  database: BunSQLDatabase,
+  presentedRefreshToken: string,
+  rotatedToken: string | null,
+): Promise<unknown> => {
+  const failures: unknown[] = [];
+  await context(async () => {
+    try {
+      await persistRotatedCredential(
+        database,
+        "credential-under-test",
+        presentedRefreshToken,
+        grantOf(rotatedToken),
+      );
+    } catch (error) {
+      failures.push(error);
+    } finally {
+      widelog.flush();
+    }
+  });
+  return failures[0];
+};
+
+describe("the shared refresher raises a typed lost-rotation failure", () => {
+  it("wraps an unpersisted rotation in a typed error carrying the persist failure", async () => {
+    const { RotatedTokenNotPersistedError } = coordinatedRefresher as {
+      RotatedTokenNotPersistedError?: new (cause: unknown) => Error;
+    };
+    expect(typeof RotatedTokenNotPersistedError).toBe("function");
+
+    const { database } = createDatabase(1, constraintViolation);
+    const persistFailure = await persistRotation(
+      database,
+      "stored-refresh-token",
+      "rotated-refresh-token",
+    );
+
+    expect(persistFailure).toBeInstanceOf(RotatedTokenNotPersistedError);
+    expect((persistFailure as Error).cause).toBeInstanceOf(Error);
+    expect(String((persistFailure as Error).cause)).toContain("duplicate key");
+  });
+
+  it("lets the raw persist error escape when the provider did not rotate the token", async () => {
+    const { database } = createDatabase(1, constraintViolation);
+    const persistFailure = await persistRotation(
+      database,
+      "stored-refresh-token",
+      "stored-refresh-token",
+    );
+
+    expect(String(persistFailure)).toContain("duplicate key");
+    const typed = (coordinatedRefresher as {
+      RotatedTokenNotPersistedError?: new (cause: unknown) => Error;
+    }).RotatedTokenNotPersistedError;
+    if (typeof typed === "function") {
+      expect(persistFailure).not.toBeInstanceOf(typed);
+    }
   });
 });

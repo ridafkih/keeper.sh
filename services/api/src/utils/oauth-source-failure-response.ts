@@ -1,0 +1,71 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { widelog } from "@/utils/logging";
+import { ErrorResponse } from "@/utils/responses";
+import { labelFailureResponse } from "@/utils/error-labelling";
+import {
+  CredentialRowMissingError,
+  RotatedTokenNotPersistedError,
+} from "@keeper.sh/calendar/oauth-persistence";
+import {
+  DestinationNotFoundError,
+  DestinationProviderMismatchError,
+  DuplicateSourceError,
+  OAuthSourceLimitError,
+} from "@/utils/oauth-sources";
+
+const ROTATED_TOKEN_LOST_MESSAGE =
+  "The calendar connection could not be completed. Please reconnect the account.";
+
+const CREDENTIAL_ROW_MISSING_MESSAGE =
+  "The calendar connection was removed while it was being added. Please reconnect the account.";
+
+const credentialRowMissingWithin = (error: unknown): CredentialRowMissingError | null => {
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !seen.has(current)) {
+    if (current instanceof CredentialRowMissingError) {
+      return current;
+    }
+    seen.add(current);
+    current = current.cause;
+  }
+  return null;
+};
+
+const oauthSourceFailureResponse = (error: unknown): Response => {
+  if (error instanceof OAuthSourceLimitError) {
+    widelog.errorFields(error, { slug: "account-limit-reached" });
+    return ErrorResponse.paymentRequired(error.message).toResponse();
+  }
+  if (error instanceof DestinationNotFoundError) {
+    return ErrorResponse.notFound(error.message).toResponse();
+  }
+  if (error instanceof DestinationProviderMismatchError) {
+    return ErrorResponse.badRequest(error.message).toResponse();
+  }
+  if (error instanceof DuplicateSourceError) {
+    widelog.errorFields(error, { slug: "duplicate-source" });
+    return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
+  }
+  const credentialRowMissing = credentialRowMissingWithin(error);
+  if (credentialRowMissing) {
+    widelog.errorFields(credentialRowMissing, {
+      retriable: false,
+      slug: "connect-credential-row-missing",
+    });
+    return ErrorResponse.conflict(CREDENTIAL_ROW_MISSING_MESSAGE).toResponse();
+  }
+  if (error instanceof RotatedTokenNotPersistedError) {
+    widelog.errorFields(error, { slug: "rotated-token-not-persisted" });
+    return ErrorResponse.internal(ROTATED_TOKEN_LOST_MESSAGE).toResponse();
+  }
+
+  const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
+  if (databaseResponse) {
+    return databaseResponse;
+  }
+
+  return ErrorResponse.badRequest("Invalid request body").toResponse();
+};
+
+export { oauthSourceFailureResponse };

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { OAUTH_GRANT_RESIDUE_KIND } from "@keeper.sh/calendar";
 import type {
   TeardownResidueDraft,
   TeardownResidueRecord,
 } from "@keeper.sh/calendar";
+import type { DeleteUserOAuthCredential } from "@/utils/delete-user-teardown";
 
 const loggedFields: Record<string, unknown>[] = [];
 
@@ -23,6 +25,7 @@ vi.mock("@/utils/logging", () => ({
 
 const DELETED_USER = "user-A";
 const RETAINED_GRANTS_FIELD = "delete_user.oauth_grants_retained";
+const RECORDED_GRANTS_FIELD = "delete_user.oauth_grants_recorded";
 
 const createResidueStore = (): {
   delete: (userId: string, kind: string, providerChannelId: string) => Promise<number>;
@@ -44,7 +47,22 @@ const createResidueStore = (): {
   };
 };
 
-const runTeardown = async (grants: { provider: string }[]): Promise<void> => {
+const credentialFor = (provider: string, index: number): DeleteUserOAuthCredential => ({
+  accessToken: `access-${index}`,
+  accountId: `credential-${index}`,
+  email: `owner-${index}@example.test`,
+  expiresAt: null,
+  provider,
+  providerAccountId: `${provider}-account-${index}`,
+  refreshToken: `refresh-${index}`,
+  userId: DELETED_USER,
+});
+
+const runTeardown = async (
+  providers: string[],
+): Promise<TeardownResidueRecord[]> => {
+  const grants = providers.map((provider, index) => credentialFor(provider, index));
+  const residue = createResidueStore();
   const { createDeleteUserSyncTeardown } = await import("@/utils/delete-user-teardown");
   const tombstones = new Map<string, string>();
 
@@ -55,7 +73,7 @@ const runTeardown = async (grants: { provider: string }[]): Promise<void> => {
     }),
     deregisterPushChannels: () => Promise.resolve(0),
     listCalendarIds: () => Promise.resolve([]),
-    listOAuthGrantProviders: () => Promise.resolve(grants),
+    listOAuthCredentials: () => Promise.resolve(grants),
     listPushChannels: () => Promise.resolve([]),
     redis: {
       del: (key: string) => Promise.resolve(Number(tombstones.delete(key))),
@@ -66,8 +84,10 @@ const runTeardown = async (grants: { provider: string }[]): Promise<void> => {
         return Promise.resolve("OK");
       },
     },
-    residue: createResidueStore(),
+    residue,
   } as never)(DELETED_USER);
+
+  return await residue.list();
 };
 
 const retainedGrantFields = (): unknown[] =>
@@ -75,24 +95,59 @@ const retainedGrantFields = (): unknown[] =>
     .filter((fields) => RETAINED_GRANTS_FIELD in fields)
     .map((fields) => fields[RETAINED_GRANTS_FIELD]);
 
-describe("delete user names the oauth grants it deliberately retains", () => {
+const recordedGrantCounts = (): unknown[] =>
+  loggedFields
+    .filter((fields) => RECORDED_GRANTS_FIELD in fields)
+    .map((fields) => fields[RECORDED_GRANTS_FIELD]);
+
+describe("delete user records the oauth grants it deliberately retains", () => {
   it("names the sorted distinct providers whose grant survives the delete", async () => {
     loggedFields.length = 0;
 
-    await runTeardown([
-      { provider: "google" },
-      { provider: "microsoft" },
-      { provider: "google" },
-    ]);
+    await runTeardown(["google", "microsoft", "google"]);
 
     expect(retainedGrantFields()).toEqual([["google", "microsoft"]]);
+  });
+
+  it("leaves revocable grant residue naming the credential the reaper must revoke", async () => {
+    loggedFields.length = 0;
+
+    const residue = await runTeardown(["google", "microsoft", "google"]);
+
+    expect(
+      residue.map((row) => ({
+        accountEmail: row.accountEmail,
+        externalId: row.externalId,
+        kind: row.kind,
+        provider: row.provider,
+        providerAccountId: row.providerAccountId,
+      })),
+    ).toEqual([
+      {
+        accountEmail: "owner-0@example.test",
+        externalId: "credential-0",
+        kind: OAUTH_GRANT_RESIDUE_KIND,
+        provider: "google",
+        providerAccountId: "google-account-0",
+      },
+      {
+        accountEmail: "owner-2@example.test",
+        externalId: "credential-2",
+        kind: OAUTH_GRANT_RESIDUE_KIND,
+        provider: "google",
+        providerAccountId: "google-account-2",
+      },
+    ]);
+    expect(recordedGrantCounts()).toEqual([2]);
   });
 
   it("states an empty retained grant list for a user with no provider account", async () => {
     loggedFields.length = 0;
 
-    await runTeardown([]);
+    const residue = await runTeardown([]);
 
     expect(retainedGrantFields()).toEqual([[]]);
+    expect(residue).toEqual([]);
+    expect(recordedGrantCounts()).toEqual([0]);
   });
 });

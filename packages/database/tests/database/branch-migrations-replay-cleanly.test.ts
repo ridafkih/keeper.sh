@@ -26,7 +26,9 @@ describe("branch migrations replay cleanly on an already-migrated database", () 
       .filter((entry) => entry.when >= FIRST_BRANCH_MIGRATION_TIMESTAMP)
       .toSorted((first, second) => first.idx - second.idx);
 
-    expect(branchEntries.map((entry) => entry.tag)).toContain("0094_deletion_residue");
+    const branchTags = branchEntries.map((entry) => entry.tag);
+    expect(branchTags).toContain("0094_deletion_residue");
+    expect(branchTags).toContain("0095_connect_identity");
 
     const offenders: string[] = [];
     for (const entry of branchEntries) {

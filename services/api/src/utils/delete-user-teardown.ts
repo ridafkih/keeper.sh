@@ -1,7 +1,12 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { clearUserDeleted, confirmUserDeletion, markUserDeleted, markUserDeletionUnconfirmed } from "@keeper.sh/calendar";
 import { removeUserSyncJobs } from "@keeper.sh/queue";
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  oauthCredentialsTable,
+} from "@keeper.sh/database/schema";
+import { calendarRowProviderIdentity } from "@keeper.sh/database/provider-account-identity";
 import { widelog } from "@/utils/logging";
 import {
   AbandonedPushChannelError,
@@ -14,6 +19,7 @@ import {
   TEARDOWN_BLOCKED_ERROR_NAME,
 } from "@keeper.sh/auth";
 import {
+  OAUTH_GRANT_RESIDUE_KIND,
   PUSH_CHANNEL_RESIDUE_KIND,
   TEARDOWN_RESIDUE_KINDS,
 } from "@keeper.sh/calendar";
@@ -34,6 +40,9 @@ import type { database as databaseInstance } from "@/context";
 
 const TEARDOWN_BLOCKED_SLUG = "delete-user-teardown-blocked";
 const TEARDOWN_FAILED_SLUG = "delete-user-teardown-failed";
+const CONFLICTING_PROVIDER_IDENTITY_SLUG = "delete-user-teardown-conflicting-provider-identity";
+const SINGLE_PROVIDER_IDENTITY = 1;
+const REVOCABLE_OAUTH_PROVIDER = "google";
 const TOMBSTONE_TIMEOUT_MS = 500;
 const RESIDUE_DISCARD_TIMEOUT_MS = 500;
 const LATE_RESIDUE_SETTLE_TIMEOUT_MS = 5000;
@@ -44,15 +53,15 @@ const SYNC_JOBS_TIMEOUT_MS = 1000;
 const RESIDUE_WRITE_RESERVE_MS = 800;
 const TEARDOWN_HEADROOM_MS = 1000;
 const PUSH_CHANNELS_STEP = "push_channels";
-const GRANT_CENSUS_STEP = "oauth_grant_census";
-const GRANT_CENSUS_TIMEOUT_MS = 500;
+const OAUTH_GRANTS_STEP = "oauth_grants";
+const OAUTH_GRANTS_TIMEOUT_MS = 500;
 const QUEUE_COMMAND_TIMEOUT_MS = 1000;
 const QUEUE_MAX_RETRIES_PER_REQUEST = 3;
 
 const TEARDOWN_STEPS_BUDGET_MS = [
   TOMBSTONE_TIMEOUT_MS,
   SYNC_JOBS_TIMEOUT_MS,
-  GRANT_CENSUS_TIMEOUT_MS,
+  OAUTH_GRANTS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
 ].reduce((total, timeoutMs) => total + timeoutMs + STEP_ABORT_SETTLE_MS, 0);
 
@@ -95,6 +104,17 @@ interface UserPushChannelDeregistration {
   stoppedProviderChannelIds: string[];
 }
 
+interface DeleteUserOAuthCredential {
+  accessToken: string;
+  accountId: string;
+  email: string | null;
+  expiresAt: Date | null;
+  provider: string;
+  providerAccountId?: string | null;
+  refreshToken: string | null;
+  userId: string;
+}
+
 interface DeleteUserSyncTeardownDependencies {
   createQueue: () => DeleteUserSyncQueue;
   deregisterPushChannels: (
@@ -102,7 +122,7 @@ interface DeleteUserSyncTeardownDependencies {
     signal: AbortSignal,
   ) => Promise<UserPushChannelDeregistration>;
   listCalendarIds: (userId: string) => Promise<string[]>;
-  listOAuthGrantProviders: (userId: string) => Promise<{ provider: string }[]>;
+  listOAuthCredentials: (userId: string) => Promise<DeleteUserOAuthCredential[]>;
   listPushChannels: (userId: string) => Promise<TeardownPushChannel[]>;
   redis: Pick<RedisTombstoneClient, "del" | "exists" | "set">;
   residue: TeardownResidueStore;
@@ -243,60 +263,177 @@ const recordPushChannelResidue = async (
   }
 };
 
-const retainedOAuthGrantProviders = async (
-  dependencies: DeleteUserSyncTeardownDependencies,
+const deferConflictingProviderIdentity = (
+  credential: DeleteUserOAuthCredential,
+  namedIdentities: string | null,
+): DeleteUserOAuthCredential => {
+  widelog.setFields({
+    "delete_user.conflicting_credential_id": credential.accountId,
+    "delete_user.conflicting_provider_account_ids": namedIdentities,
+    "delete_user.user_id": credential.userId,
+  });
+  widelog.errorFields(
+    new Error(
+      `Oauth credential ${credential.accountId} for user ${credential.userId} is linked to `
+        + `calendar accounts naming more than one ${credential.provider} account `
+        + `(${namedIdentities ?? "none"}), so its teardown residue carries no provider account id`,
+    ),
+    {
+      prefix: `delete_user_teardown.${OAUTH_GRANTS_STEP}`,
+      retriable: false,
+      slug: CONFLICTING_PROVIDER_IDENTITY_SLUG,
+    },
+  );
+
+  return { ...credential, providerAccountId: null };
+};
+
+const requireOwnCredentials = (
+  credentials: DeleteUserOAuthCredential[],
   userId: string,
-): Promise<string[]> => {
-  const grants = await dependencies.listOAuthGrantProviders(userId);
-  const providers = grants.map((grant) => grant.provider);
-  const invalid = providers.filter(
-    (provider) => typeof provider !== "string" || provider.length === 0,
+): DeleteUserOAuthCredential[] => {
+  const foreign = credentials.filter((credential) => credential.userId !== userId);
+
+  if (foreign.length > 0) {
+    throw new Error(
+      `Refusing to record oauth grant residue for user ${userId}: ${foreign.length} credential `
+        + `rows carry another user id`,
+    );
+  }
+
+  const invalid = credentials.filter(
+    (credential) => typeof credential.provider !== "string" || credential.provider.length === 0,
   );
 
   if (invalid.length > 0) {
     throw new Error(
-      `Refusing to report retained oauth grants for user ${userId}: ${invalid.length} provider `
-        + `account rows carry no provider name`,
+      `Refusing to record oauth grant residue for user ${userId}: ${invalid.length} credential `
+        + `rows carry no provider name`,
     );
   }
 
-  return [...new Set(providers)].toSorted();
+  return credentials;
+};
+
+const retainedGrantProviders = (credentials: DeleteUserOAuthCredential[]): string[] =>
+  [...new Set(credentials.map((credential) => credential.provider))].toSorted();
+
+const recordOAuthGrantResidue = async (
+  residue: TeardownResidueStore,
+  userId: string,
+  credential: DeleteUserOAuthCredential,
+): Promise<boolean> => {
+  try {
+    await residue.record({
+      credential: {
+        accessToken: credential.accessToken,
+        expiresAt: credential.expiresAt,
+        refreshToken: credential.refreshToken,
+      },
+      externalId: credential.accountId,
+      kind: OAUTH_GRANT_RESIDUE_KIND,
+      provider: credential.provider,
+      userId,
+      ...(credential.email !== null && { accountEmail: credential.email }),
+      ...(typeof credential.providerAccountId === "string" && {
+        providerAccountId: credential.providerAccountId,
+      }),
+    });
+
+    return true;
+  } catch (error) {
+    reportStepFailure(error, OAUTH_GRANTS_STEP, userId, RESIDUE_WRITE_FAILED_SLUG);
+
+    return false;
+  }
 };
 
 const RETAINED_GRANTS_UNAVAILABLE = "unavailable";
 
-const censusedOAuthGrantProviders = async (
+interface NotRevocableGrant {
+  accountId: string;
+  provider: string;
+}
+
+interface OAuthGrantCensus {
+  notRevocable: NotRevocableGrant[];
+  recorded: number;
+  retained: string[] | typeof RETAINED_GRANTS_UNAVAILABLE;
+}
+
+const UNAVAILABLE_CENSUS: OAuthGrantCensus = {
+  notRevocable: [],
+  recorded: 0,
+  retained: RETAINED_GRANTS_UNAVAILABLE,
+};
+
+const listOwnOAuthCredentials = async (
   dependencies: DeleteUserSyncTeardownDependencies,
   userId: string,
-): Promise<string[] | typeof RETAINED_GRANTS_UNAVAILABLE> => {
+): Promise<DeleteUserOAuthCredential[] | null> => {
   try {
-    return await retainedOAuthGrantProviders(dependencies, userId);
+    return requireOwnCredentials(await dependencies.listOAuthCredentials(userId), userId);
   } catch (error) {
-    reportStepFailure(error, GRANT_CENSUS_STEP, userId, TEARDOWN_FAILED_SLUG);
+    reportStepFailure(error, OAUTH_GRANTS_STEP, userId, TEARDOWN_FAILED_SLUG);
 
-    return RETAINED_GRANTS_UNAVAILABLE;
+    return null;
   }
+};
+
+const recordRetainedOAuthGrants = async (
+  dependencies: DeleteUserSyncTeardownDependencies,
+  userId: string,
+  signal: AbortSignal,
+): Promise<OAuthGrantCensus> => {
+  const credentials = await listOwnOAuthCredentials(dependencies, userId);
+
+  if (credentials === null) {
+    return UNAVAILABLE_CENSUS;
+  }
+
+  let recorded = 0;
+
+  for (const credential of credentials) {
+    if (credential.provider !== REVOCABLE_OAUTH_PROVIDER || signal.aborted) {
+      continue;
+    }
+
+    if (await recordOAuthGrantResidue(dependencies.residue, userId, credential)) {
+      recorded += 1;
+    }
+  }
+
+  return {
+    notRevocable: credentials
+      .filter((credential) => credential.provider !== REVOCABLE_OAUTH_PROVIDER)
+      .map((credential) => ({
+        accountId: credential.accountId,
+        provider: credential.provider,
+      })),
+    recorded,
+    retained: retainedGrantProviders(credentials),
+  };
 };
 
 const censusUnlessAborted = async (
   dependencies: DeleteUserSyncTeardownDependencies,
   userId: string,
   signal: AbortSignal,
-): Promise<string[] | typeof RETAINED_GRANTS_UNAVAILABLE> => {
+): Promise<OAuthGrantCensus> => {
   if (signal.aborted) {
-    return RETAINED_GRANTS_UNAVAILABLE;
+    return UNAVAILABLE_CENSUS;
   }
 
   const listenerScope = new AbortController();
 
   try {
     return await Promise.race([
-      censusedOAuthGrantProviders(dependencies, userId),
-      new Promise<typeof RETAINED_GRANTS_UNAVAILABLE>((resolve) => {
+      recordRetainedOAuthGrants(dependencies, userId, signal),
+      new Promise<OAuthGrantCensus>((resolve) => {
         signal.addEventListener(
           "abort",
           () => {
-            resolve(RETAINED_GRANTS_UNAVAILABLE);
+            resolve(UNAVAILABLE_CENSUS);
           },
           { once: true, signal: listenerScope.signal },
         );
@@ -609,19 +746,6 @@ const buildDeleteUserSyncSteps = (
     timeoutMs: SYNC_JOBS_TIMEOUT_MS,
   },
   {
-    name: GRANT_CENSUS_STEP,
-    run: async (userId, signal) => {
-      widelog.setFields({
-        "delete_user.oauth_grants_retained": await censusUnlessAborted(
-          dependencies,
-          userId,
-          signal,
-        ),
-      });
-    },
-    timeoutMs: GRANT_CENSUS_TIMEOUT_MS,
-  },
-  {
     name: PUSH_CHANNELS_STEP,
     run: async (userId, signal) => {
       const capture = await capturePushChannelResidue(dependencies, userId, signal);
@@ -663,6 +787,19 @@ const buildDeleteUserSyncSteps = (
       }
     },
     timeoutMs: PUSH_CHANNELS_TIMEOUT_MS,
+  },
+  {
+    name: OAUTH_GRANTS_STEP,
+    run: async (userId, signal) => {
+      const census = await censusUnlessAborted(dependencies, userId, signal);
+
+      widelog.setFields({
+        "delete_user.oauth_grants_not_revocable": census.notRevocable,
+        "delete_user.oauth_grants_recorded": census.recorded,
+        "delete_user.oauth_grants_retained": census.retained,
+      });
+    },
+    timeoutMs: OAUTH_GRANTS_TIMEOUT_MS,
   },
 ];
 
@@ -1103,14 +1240,41 @@ const createApiDeleteUserSyncTeardown = (
         .where(eq(calendarsTable.userId, userId));
       return rows.map((row) => row.id);
     },
-    listOAuthGrantProviders: async (userId) =>
-      await context.database
-        .selectDistinct({ provider: calendarAccountsTable.provider })
-        .from(calendarAccountsTable)
-        .where(and(
-          eq(calendarAccountsTable.userId, userId),
-          isNotNull(calendarAccountsTable.oauthCredentialId),
-        )),
+    listOAuthCredentials: async (userId) => {
+      const rows = await context.database
+        .select({
+          accessToken: oauthCredentialsTable.accessToken,
+          accountId: oauthCredentialsTable.id,
+          email: oauthCredentialsTable.email,
+          expiresAt: oauthCredentialsTable.expiresAt,
+          identityCount: sql<number>`count(distinct ${calendarRowProviderIdentity()})`,
+          namedIdentities: sql<
+            string | null
+          >`string_agg(distinct ${calendarRowProviderIdentity()}, ', ')`,
+          provider: oauthCredentialsTable.provider,
+          providerAccountId: sql<string | null>`max(${calendarRowProviderIdentity()})`,
+          refreshToken: oauthCredentialsTable.refreshToken,
+          userId: oauthCredentialsTable.userId,
+        })
+        .from(oauthCredentialsTable)
+        .leftJoin(
+          calendarAccountsTable,
+          and(
+            eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id),
+            eq(calendarAccountsTable.provider, oauthCredentialsTable.provider),
+          ),
+        )
+        .where(eq(oauthCredentialsTable.userId, userId))
+        .groupBy(oauthCredentialsTable.id);
+
+      return rows.map(({ identityCount, namedIdentities, ...credential }) => {
+        if (Number(identityCount) > SINGLE_PROVIDER_IDENTITY) {
+          return deferConflictingProviderIdentity(credential, namedIdentities);
+        }
+
+        return credential;
+      });
+    },
     listPushChannels: listUserTeardownPushChannels,
     redis: context.redis,
     residue: context.residue,
@@ -1122,6 +1286,7 @@ export {
   createDeleteUserSyncTeardownRollback,
   createDeleteUserTombstoneConfirmer,
   createDeleteUserTombstoneProvisionalMarker,
+  OAUTH_GRANTS_TIMEOUT_MS,
   PUSH_CHANNELS_TIMEOUT_MS,
   STEP_ABORT_SETTLE_MS,
   TEARDOWN_BUDGET_MS,
@@ -1130,6 +1295,7 @@ export {
   TeardownBlockedError,
 };
 export type {
+  DeleteUserOAuthCredential,
   DeleteUserSyncQueue,
   DeleteUserSyncTeardownRollbackDependencies,
   DeleteUserSyncTeardownContext,

@@ -66,6 +66,8 @@ const createHarness = (reapAt: Date) => {
   const errors: { error: unknown; slug: string }[] = [];
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.reject(new Error("a purge must never probe provider account links")),
     createRegistrarContext: () =>
       Promise.reject(new Error("a purge must never build a registrar context")),
     deletePolarCustomer: () =>
@@ -82,6 +84,8 @@ const createHarness = (reapAt: Date) => {
     resolveRegistrar: () => {
       throw new Error("a purge must never resolve a push registrar");
     },
+    revokeOAuthGrant: () =>
+      Promise.reject(new Error("a purge must never revoke a live customer's grant")),
     waitForRepairDeadline: () =>
       Promise.reject(new Error("a purge must never wait on a repair deadline")),
   });
@@ -93,6 +97,7 @@ const recordOrphanedGrantResidue = async (
   recorder: ReturnType<typeof createTeardownResidueStore>,
 ): Promise<void> => {
   await recorder.record({
+    accountEmail: "paying-customer@example.com",
     credential: {
       accessToken: "live-access-token",
       expiresAt: new Date("2026-08-25T07:00:00.000Z"),
@@ -100,6 +105,7 @@ const recordOrphanedGrantResidue = async (
     },
     kind: OAUTH_GRANT_RESIDUE_KIND,
     provider: "google",
+    providerAccountId: "1099876543210",
     userId: "survivor",
   });
 };

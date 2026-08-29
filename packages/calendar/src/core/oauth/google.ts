@@ -1,16 +1,19 @@
 import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
 import { generateState } from "./state";
+import { UserInfoCredentialRejectedError } from "./user-info-credential-rejected";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo";
+const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 
 const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
 const GOOGLE_CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
 const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const REQUEST_TIMEOUT_MS = 15_000;
+const GOOGLE_REVOKE_TIMEOUT_MS = 5000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
 const signalWithExpiry = (
@@ -44,8 +47,15 @@ interface AuthorizationUrlOptions {
 
 interface GoogleOAuthService {
   getAuthorizationUrl: (userId: string, options: AuthorizationUrlOptions) => Promise<string>;
-  exchangeCodeForTokens: (code: string, callbackUrl: string) => Promise<GoogleTokenResponse>;
-  refreshAccessToken: (refreshToken: string) => Promise<GoogleTokenResponse>;
+  exchangeCodeForTokens: (
+    code: string,
+    callbackUrl: string,
+    signal?: AbortSignal,
+  ) => Promise<GoogleTokenResponse>;
+  refreshAccessToken: (
+    refreshToken: string,
+    signal?: AbortSignal | null,
+  ) => Promise<GoogleTokenResponse>;
 }
 
 interface GoogleTokenErrorPayload {
@@ -247,6 +257,7 @@ const createGoogleOAuthService = (
   const exchangeCodeForTokens = async (
     code: string,
     callbackUrl: string,
+    signal?: AbortSignal,
   ): Promise<GoogleTokenResponse> => {
     const response = await fetch(GOOGLE_TOKEN_URL, {
       body: new URLSearchParams({
@@ -258,6 +269,16 @@ const createGoogleOAuthService = (
       }),
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       method: "POST",
+      signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      if (isRequestTimeoutError(error)) {
+        throw new Error(
+          `Token exchange timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          { cause: error },
+        );
+      }
+
+      throw error;
     });
 
     if (!response.ok) {
@@ -278,12 +299,70 @@ const createGoogleOAuthService = (
   };
 };
 
-const fetchUserInfo = async (accessToken: string): Promise<GoogleUserInfo> => {
+type GoogleRevocationFetch = (input: string, init: RequestInit) => Promise<Response>;
+
+interface GoogleGrantRevocationOptions {
+  fetchImpl: GoogleRevocationFetch;
+  signal?: AbortSignal;
+}
+
+interface GoogleGrantRevocationOutcome {
+  body: string;
+  revoked: boolean;
+  status: number;
+}
+
+
+const revokeGoogleGrant = async (
+  token: string,
+  options: GoogleGrantRevocationOptions,
+): Promise<GoogleGrantRevocationOutcome> => {
+  const response = await options.fetchImpl(GOOGLE_REVOKE_URL, {
+    body: new URLSearchParams({ token }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    method: "POST",
+    signal: signalWithExpiry(options.signal, GOOGLE_REVOKE_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(
+        `Google grant revocation timed out after ${GOOGLE_REVOKE_TIMEOUT_MS}ms`,
+        { cause: error },
+      );
+    }
+
+    throw error;
+  });
+
+  return {
+    body: await response.text(),
+    revoked: response.ok,
+    status: response.status,
+  };
+};
+
+const fetchUserInfo = async (
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<GoogleUserInfo> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
+    signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
+  }).catch((error: unknown) => {
+    if (isRequestTimeoutError(error)) {
+      throw new Error(
+        `Failed to fetch user info: timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        { cause: error },
+      );
+    }
+
+    throw error;
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new UserInfoCredentialRejectedError(response.status);
+    }
+
     throw new Error(`Failed to fetch user info: ${response.status}`);
   }
 
@@ -302,6 +381,9 @@ const hasRequiredScopes = (grantedScopes: string): boolean => {
 
 export {
   createGoogleTokenRefresher,
+  GOOGLE_REVOKE_TIMEOUT_MS,
+  GOOGLE_REVOKE_URL,
+  revokeGoogleGrant,
   GOOGLE_CALENDAR_SCOPE,
   GOOGLE_CALENDAR_LIST_SCOPE,
   GOOGLE_EMAIL_SCOPE,
@@ -317,4 +399,7 @@ export type {
   GoogleOAuthService,
   GoogleTokenResponse,
   GoogleUserInfo,
+  GoogleGrantRevocationOptions,
+  GoogleGrantRevocationOutcome,
+  GoogleRevocationFetch,
 };

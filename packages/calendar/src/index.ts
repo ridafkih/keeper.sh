@@ -7,6 +7,7 @@ export {
   type OAuthProvider,
   type OAuthProvidersConfig,
   type OAuthProviders,
+  type ProviderRequestOptions,
   type OAuthStateStore,
 } from "./core/oauth/providers";
 export {
@@ -47,10 +48,19 @@ export {
   type ReauthenticationDemandFields,
   type ReauthenticationDemandFieldsParams,
 } from "./core/reauthentication/demand-telemetry";
+export { withReauthenticationDemand } from "./core/reauthentication/reauthentication-demand";
+export type {
+  ReauthenticationDemandDatabase,
+  ReauthenticationDemandTarget,
+} from "./core/reauthentication/reauthentication-demand";
 export {
+  REFRESH_WALL_BUDGET_MS,
+  RefreshBudgetExceededError,
+  RotatedTokenNotPersistedError,
   createCoordinatedRefresher,
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";
+export { UserInfoCredentialRejectedError } from "./core/oauth/user-info-credential-rejected";
 export {
   OAUTH_SYNC_WINDOW_VERSION,
   getDeterministicRefreshOffset,
@@ -306,12 +316,25 @@ export {
 export {
   createGoogleOAuthService,
   createGoogleTokenRefresher,
+  GOOGLE_REVOKE_TIMEOUT_MS,
+  GOOGLE_REVOKE_URL,
+  fetchUserInfo as fetchGoogleUserInfo,
+  revokeGoogleGrant,
+  type GoogleGrantRevocationOptions,
+  type GoogleGrantRevocationOutcome,
   type GoogleOAuthCredentials,
   type GoogleOAuthService,
+  type GoogleRevocationFetch,
 } from "./core/oauth/google";
+export {
+  resolveProviderAccountIdentity,
+  type ProviderAccountIdentityRequest,
+  type ProviderUserInfo,
+} from "./core/oauth/provider-account-identity";
 export {
   createMicrosoftOAuthService,
   createMicrosoftTokenRefresher,
+  fetchUserInfo as fetchMicrosoftUserInfo,
   type MicrosoftOAuthCredentials,
   type MicrosoftOAuthService,
 } from "./core/oauth/microsoft";
@@ -428,10 +451,14 @@ export type {
 } from "./core/deletion/teardown-residue";
 export {
   createTeardownResidueReaper,
+  RESIDUE_CENSUS_STALLED_SLUG,
+  RESIDUE_GRANT_RETIRED_UNREVOKED_SLUG,
+  RESIDUE_IDENTITY_UNRESOLVED_SLUG,
   RESIDUE_REPAIR_FAILED_SLUG,
   RESIDUE_STALE_SLUG,
 } from "./core/deletion/teardown-residue-reaper";
 export type {
+  SurvivingAccountLinkCensus,
   TeardownResidueReaperDependencies,
   TeardownResidueReaperOutcome,
 } from "./core/deletion/teardown-residue-reaper";

@@ -28,6 +28,7 @@ const pushResidue = (): TeardownResidueRecord => ({
 
 const createHarness = () => {
   const clearedIds: string[] = [];
+  const revokeCalls: string[] = [];
   const dialedUrls: string[] = [];
   const errors: { error: unknown; slug: string }[] = [];
   const observed: Record<string, unknown>[] = [];
@@ -59,6 +60,12 @@ const createHarness = () => {
   };
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () => Promise.reject(new Error("polar is not part of this test")),
     now: () => NOW,
@@ -70,11 +77,16 @@ const createHarness = () => {
     },
     repairDeadlineMs: 30_000,
     residue: store,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => resolvePushRegistrar(provider),
     waitForRepairDeadline: () => new Promise<void>(() => {}),
   });
 
-  return { clearedIds, dialedUrls, errors, observed, reap };
+  return { clearedIds, dialedUrls, errors, observed, reap, revokeCalls };
 };
 
 describe("unstoppable push residue retires on the first reaper pass", () => {

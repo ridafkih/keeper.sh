@@ -10,6 +10,9 @@
     "./fastmail": "./src/providers/fastmail/index.ts",
     "./icloud": "./src/providers/icloud/index.ts",
     "./ics": "./src/ics/index.ts",
+    "./reauthentication": "./src/core/reauthentication/reauthentication-demand.ts",
+    "./oauth-error-classification": "./src/core/oauth/error-classification.ts",
+    "./oauth-persistence": "./src/core/oauth/coordinated-refresher.ts",
     "./safe-fetch": "./src/utils/safe-fetch.ts",
     "./digest-fetch": "./src/providers/caldav/shared/digest-fetch.ts"
   },

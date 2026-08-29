@@ -8,6 +8,7 @@ import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
 import { closeDatabase } from "@keeper.sh/database";
+import { SERVER_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
@@ -27,6 +28,7 @@ await entry({
     const server = Bun.serve<BroadcastData>({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
+      idleTimeout: SERVER_IDLE_TIMEOUT_SECONDS,
       port: env.API_PORT,
       websocket: websocketHandler,
       fetch: withCors(async (request) => {
