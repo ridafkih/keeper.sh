@@ -232,6 +232,9 @@ const createAuth = (config: AuthConfig) => {
     socialProviders.microsoft = {
       clientId: microsoftClientId,
       clientSecret: microsoftClientSecret,
+      mapProfileToUser: (profile) => ({
+        emailVerified: profile.email_verified ?? true,
+      }),
       prompt: "consent",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
