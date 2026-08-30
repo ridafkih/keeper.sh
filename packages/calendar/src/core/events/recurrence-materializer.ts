@@ -370,6 +370,24 @@ const resolveExpansionTimeZone = (master: SyncableEvent): string | undefined => 
   return timeZone;
 };
 
+/*
+ * The expansion opens this far before the window so an occurrence already running at its
+ * start is still reached. A rule-level DURATION is nominal, so a whole day covers the
+ * longest wall-clock span it can name.
+ */
+const getRecurrenceWindowLookbackMilliseconds = (
+  master: Pick<SyncableEvent, "endTime" | "recurrenceDuration" | "startTime">,
+): number => {
+  if (master.recurrenceDuration) {
+    return Math.max(
+      getIcsDurationNominalMilliseconds(master.recurrenceDuration) + MS_PER_DAY,
+      0,
+    );
+  }
+
+  return Math.max(master.endTime.getTime() - master.startTime.getTime(), 0);
+};
+
 const materializeMaster = (
   master: SyncableEvent,
   overriddenSlots: Set<number>,
@@ -382,13 +400,8 @@ const materializeMaster = (
   const timeZone = resolveExpansionTimeZone(master);
   const recurrenceStart = toRecurrenceWallTime(master.startTime, timeZone);
   const recurrenceEnd = toRecurrenceWallTime(window.end, timeZone);
-  let durationForWindowLookback = master.endTime.getTime() - master.startTime.getTime();
-  if (master.recurrenceDuration) {
-    durationForWindowLookback = getIcsDurationNominalMilliseconds(master.recurrenceDuration)
-      + MS_PER_DAY;
-  }
   const recurrenceWindowStart = toRecurrenceWallTime(
-    new Date(window.start.getTime() - Math.max(durationForWindowLookback, 0)),
+    new Date(window.start.getTime() - getRecurrenceWindowLookbackMilliseconds(master)),
     timeZone,
   );
   if (isSeriesExhaustedBeforeWindow(master.recurrenceRule, recurrenceWindowStart, timeZone)) {
@@ -572,6 +585,7 @@ const findSourceEventsExceedingRecurrenceBudget = (
 
 export {
   findSourceEventsExceedingRecurrenceBudget,
+  getRecurrenceWindowLookbackMilliseconds,
   materializeRecurrenceEvents,
   RecurrenceMaterializationLimitError,
 };
