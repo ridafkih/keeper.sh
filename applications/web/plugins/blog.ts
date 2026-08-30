@@ -15,6 +15,8 @@ const blogPostMetadataSchema = type({
   blurb: "string >= 1",
   createdAt: "string.date.iso",
   description: "string >= 1",
+  "homepage?": "boolean",
+  "homepagePin?": "boolean",
   "image?": OPEN_GRAPH_IMAGE_PATH,
   "replaces?": "string[]",
   "slug?": /^[a-z0-9]+(?:-[a-z0-9]+)*$/,

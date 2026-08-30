@@ -5,6 +5,8 @@ export interface BlogPostMetadata {
   blurb: string;
   createdAt: string;
   description: string;
+  homepage?: boolean;
+  homepagePin?: boolean;
   image?: string;
   slug?: string;
   tags: string[];
