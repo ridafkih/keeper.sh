@@ -4,11 +4,15 @@ import {
   blogPostingSchema,
   canonicalUrl,
   collectionPageSchema,
+  faqPageSchema,
+  faqSchema,
   jsonLdScript,
+  offerCatalogSchema,
   organizationSchema,
   personSchema,
   seoHead,
   seoMeta,
+  softwareApplicationSchema,
   webPageSchema,
 } from "@/lib/seo";
 
@@ -275,5 +279,73 @@ describe("collectionPageSchema", () => {
     expect(schema.mainEntity.itemListElement[0].url).toBe(
       "https://www.keeper.sh/compare/onecal-alternative",
     );
+  });
+});
+
+const FAQ_ITEM = [{ question: "What is this?", answer: "A calendar syncing tool." }];
+
+describe("faqSchema", () => {
+  it("builds a fragment identifier without a double slash", () => {
+    expect(faqSchema("/", FAQ_ITEM)["@id"]).toBe("https://www.keeper.sh/#faq");
+    expect(faqSchema("", FAQ_ITEM)["@id"]).toBe("https://www.keeper.sh/#faq");
+  });
+
+  it("keeps the published identifier for nested pages", () => {
+    expect(faqSchema("/pricing", FAQ_ITEM)["@id"]).toBe("https://www.keeper.sh/pricing/#faq");
+  });
+});
+
+describe("faqPageSchema", () => {
+  it("builds a fragment identifier without a double slash", () => {
+    expect(faqPageSchema("/", FAQ_ITEM)["@id"]).toBe("https://www.keeper.sh/#faqpage");
+    expect(faqPageSchema("", FAQ_ITEM)["@id"]).toBe("https://www.keeper.sh/#faqpage");
+  });
+});
+
+describe("offerCatalogSchema", () => {
+  it("builds a fragment identifier without a double slash", () => {
+    expect(offerCatalogSchema("/", [])["@id"]).toBe("https://www.keeper.sh/#offercatalog");
+    expect(offerCatalogSchema("", [])["@id"]).toBe("https://www.keeper.sh/#offercatalog");
+  });
+});
+
+describe("softwareApplicationSchema", () => {
+  it("offers Free, monthly Pro, and yearly Pro at 45 USD", () => {
+    const { offers } = softwareApplicationSchema();
+
+    expect(offers).toEqual([
+      expect.objectContaining({
+        "@type": "Offer",
+        name: "Free",
+        price: "0",
+        priceCurrency: "USD",
+      }),
+      expect.objectContaining({
+        "@type": "Offer",
+        name: "Pro",
+        price: "5.00",
+        priceCurrency: "USD",
+        priceSpecification: expect.objectContaining({
+          billingDuration: "P1M",
+          price: "5.00",
+          priceCurrency: "USD",
+        }),
+      }),
+      expect.objectContaining({
+        "@type": "Offer",
+        name: "Pro",
+        price: "45.00",
+        priceCurrency: "USD",
+        priceSpecification: expect.objectContaining({
+          billingDuration: "P1Y",
+          price: "45.00",
+          priceCurrency: "USD",
+        }),
+      }),
+    ]);
+  });
+
+  it("does not invent an aggregate rating", () => {
+    expect(softwareApplicationSchema()).not.toHaveProperty("aggregateRating");
   });
 });

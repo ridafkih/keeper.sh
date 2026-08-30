@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { staticAssetSitemapPaths } from "../../src/lib/static-asset-sitemap-paths";
 import { staticPageMetadata } from "../../src/lib/page-metadata";
 import { staticPagePaths } from "../../src/lib/static-page-paths";
 
@@ -11,5 +12,12 @@ describe("staticPagePaths", () => {
 
   it("lists each path once", () => {
     expect(new Set(staticPagePaths).size).toBe(staticPagePaths.length);
+  });
+});
+
+describe("staticAssetSitemapPaths", () => {
+  it("publishes llms.txt in the sitemap without putting it on the HTML cache list", () => {
+    expect([...staticAssetSitemapPaths]).toEqual(["/llms.txt"]);
+    expect(staticPagePaths).not.toContain("/llms.txt");
   });
 });
