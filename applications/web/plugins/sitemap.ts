@@ -25,6 +25,9 @@ interface SitemapEntry {
   lastmod?: string;
 }
 
+/** Public static files that are not HTML marketing pages. Kept out of staticPageMetadata so they skip the HTML cache. */
+export const staticAssetSitemapPaths = ["/llms.txt"] as const;
+
 function readStaticEntries(): SitemapEntry[] {
   return staticPageMetadata.map(({ path, updatedAt }) => {
     if (!ISO_DATE_PATTERN.test(updatedAt)) {
@@ -192,6 +195,7 @@ export function sitemapPlugin(): Plugin {
         recipesIndexEntry,
         ...recipesEntries,
         ...buildChangelogEntries(changelogDir),
+        ...staticAssetSitemapPaths.map((path) => ({ path })),
       ];
 
       this.emitFile({
