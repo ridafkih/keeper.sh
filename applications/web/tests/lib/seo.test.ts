@@ -4,11 +4,15 @@ import {
   blogPostingSchema,
   canonicalUrl,
   collectionPageSchema,
+  faqPageSchema,
+  faqSchema,
   jsonLdScript,
+  offerCatalogSchema,
   organizationSchema,
   personSchema,
   seoHead,
   seoMeta,
+  softwareApplicationSchema,
   webPageSchema,
 } from "@/lib/seo";
 
@@ -275,5 +279,87 @@ describe("collectionPageSchema", () => {
     expect(schema.mainEntity.itemListElement[0].url).toBe(
       "https://www.keeper.sh/compare/onecal-alternative",
     );
+  });
+});
+
+describe("faqSchema", () => {
+  const items = [{ question: "Can I cancel?", answer: "Yes." }];
+
+  it("builds a homepage fragment identifier without a double slash", () => {
+    expect(faqSchema("/", items)["@id"]).toBe("https://www.keeper.sh/#faq");
+    expect(faqSchema("", items)["@id"]).toBe("https://www.keeper.sh/#faq");
+  });
+
+  it("keeps the published identifier for nested pages", () => {
+    expect(faqSchema("/pricing", items)["@id"]).toBe("https://www.keeper.sh/pricing/#faq");
+  });
+});
+
+describe("faqPageSchema", () => {
+  const questions = [{ question: "Can I cancel?", answer: "Yes." }];
+
+  it("builds a homepage fragment identifier without a double slash", () => {
+    expect(faqPageSchema("/", questions)["@id"]).toBe("https://www.keeper.sh/#faqpage");
+  });
+
+  it("keeps the published identifier for nested pages", () => {
+    expect(faqPageSchema("/blog/why-keeper", questions)["@id"]).toBe(
+      "https://www.keeper.sh/blog/why-keeper/#faqpage",
+    );
+  });
+});
+
+describe("offerCatalogSchema", () => {
+  it("builds a homepage fragment identifier without a double slash", () => {
+    expect(offerCatalogSchema("/", [])["@id"]).toBe("https://www.keeper.sh/#offercatalog");
+  });
+});
+
+describe("softwareApplicationSchema", () => {
+  it("offers Free, monthly Pro, and annual Pro at $45", () => {
+    const { offers } = softwareApplicationSchema();
+
+    expect(offers).toEqual([
+      {
+        "@type": "Offer",
+        name: "Free",
+        price: "0",
+        priceCurrency: "USD",
+        description:
+          "For keeping two calendar accounts from double-booking each other.",
+      },
+      {
+        "@type": "Offer",
+        name: "Pro",
+        price: "5.00",
+        priceCurrency: "USD",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: "5.00",
+          priceCurrency: "USD",
+          billingDuration: "P1M",
+        },
+        description:
+          "For more than two calendar accounts, or when you need updates within the minute.",
+      },
+      {
+        "@type": "Offer",
+        name: "Pro",
+        price: "45.00",
+        priceCurrency: "USD",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: "45.00",
+          priceCurrency: "USD",
+          billingDuration: "P1Y",
+        },
+        description:
+          "For more than two calendar accounts, or when you need updates within the minute.",
+      },
+    ]);
+  });
+
+  it("does not invent an aggregate rating", () => {
+    expect(softwareApplicationSchema()).not.toHaveProperty("aggregateRating");
   });
 });

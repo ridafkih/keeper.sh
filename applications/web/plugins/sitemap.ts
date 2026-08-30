@@ -4,6 +4,7 @@ import type { Plugin } from "vite";
 import { CONTENT_DIRECTORIES } from "../src/lib/content-paths";
 import { XMLBuilder } from "fast-xml-parser";
 import { parse as parseYaml } from "yaml";
+import { extraSitemapPaths } from "../src/lib/extra-sitemap-paths";
 import { staticPageMetadata } from "../src/lib/page-metadata";
 import {
   assertIndexableRoutesCovered,
@@ -23,6 +24,16 @@ const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 interface SitemapEntry {
   path: string;
   lastmod?: string;
+}
+
+function extraStaticSitemapEntries(root: string): SitemapEntry[] {
+  return extraSitemapPaths.map((path) => {
+    const filePath = join(root, "public", path);
+    if (!existsSync(filePath)) {
+      throw new Error(`Sitemap static file "${path}" is missing from public/.`);
+    }
+    return { path };
+  });
 }
 
 function readStaticEntries(): SitemapEntry[] {
@@ -127,6 +138,7 @@ function buildSitemapXml(entries: SitemapEntry[]): string {
 }
 
 export function sitemapPlugin(): Plugin {
+  let projectRoot: string;
   let blogDir: string;
   let compareDir: string;
   let changelogDir: string;
@@ -140,6 +152,7 @@ export function sitemapPlugin(): Plugin {
     apply: "build",
 
     configResolved(config) {
+      projectRoot = config.root;
       blogDir = resolve(config.root, CONTENT_DIRECTORIES.blog);
       compareDir = resolve(config.root, CONTENT_DIRECTORIES.compare);
       changelogDir = resolve(config.root, CONTENT_DIRECTORIES.changelog);
@@ -192,6 +205,7 @@ export function sitemapPlugin(): Plugin {
         recipesIndexEntry,
         ...recipesEntries,
         ...buildChangelogEntries(changelogDir),
+        ...extraStaticSitemapEntries(projectRoot),
       ];
 
       this.emitFile({

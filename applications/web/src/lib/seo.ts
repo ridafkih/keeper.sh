@@ -162,7 +162,7 @@ export function faqPageSchema(
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "@id": `${canonicalUrl(path)}/#faqpage`,
+    "@id": entityId(path, "faqpage"),
     mainEntity: questions.map((entry) => ({
       "@type": "Question",
       name: entry.question,
@@ -206,6 +206,20 @@ export function softwareApplicationSchema() {
         description:
           "For more than two calendar accounts, or when you need updates within the minute.",
       },
+      {
+        "@type": "Offer",
+        name: "Pro",
+        price: "45.00",
+        priceCurrency: "USD",
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: "45.00",
+          priceCurrency: "USD",
+          billingDuration: "P1Y",
+        },
+        description:
+          "For more than two calendar accounts, or when you need updates within the minute.",
+      },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
   };
@@ -218,7 +232,7 @@ export function offerCatalogSchema(
   return {
     "@context": "https://schema.org",
     "@type": "OfferCatalog",
-    "@id": `${canonicalUrl(path)}/#offercatalog`,
+    "@id": entityId(path, "offercatalog"),
     name: `${SITE_NAME} Plans`,
     url: canonicalUrl(path),
     itemListElement: offers.map((offer) => ({
@@ -245,7 +259,7 @@ export function faqSchema(
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
-    "@id": `${canonicalUrl(path)}/#faq`,
+    "@id": entityId(path, "faq"),
     isPartOf: { "@id": `${SITE_URL}/#website` },
     mainEntity: items.map((item) => {
       const question = item.question.trim();
