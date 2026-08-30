@@ -1,31 +1,12 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Plugin } from "vite";
-import { type } from "arktype";
 import { parse as parseYaml } from "yaml";
+import { parseMetadata, type BlogPostMetadata } from "../src/lib/blog-post-metadata";
 import { buildMovedPaths, CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
-const OPEN_GRAPH_IMAGE_PATH =
-  /^\/open-graph\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/;
-
-const blogPostMetadataSchema = type({
-  "+": "reject",
-  blurb: "string >= 1",
-  createdAt: "string.date.iso",
-  description: "string >= 1",
-  "homepage?": "boolean",
-  "homepagePin?": "boolean",
-  "image?": OPEN_GRAPH_IMAGE_PATH,
-  "replaces?": "string[]",
-  "slug?": /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-  tags: "string[]",
-  title: "string >= 1",
-  updatedAt: "string.date.iso",
-});
-
-type BlogPostMetadata = typeof blogPostMetadataSchema.infer;
 
 interface BlogPostFaqEntry {
   answer: string;
@@ -60,24 +41,6 @@ function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[
   return entries;
 }
 
-function toIsoDate(value: string): string {
-  return value.slice(0, 10);
-}
-
-function normalizeMetadataInput(value: unknown): unknown {
-  if (typeof value !== "object" || value === null) return value;
-  const normalized: Record<string, unknown> = { ...value };
-
-  if (normalized.createdAt instanceof Date) {
-    normalized.createdAt = normalized.createdAt.toISOString();
-  }
-  if (normalized.updatedAt instanceof Date) {
-    normalized.updatedAt = normalized.updatedAt.toISOString();
-  }
-
-  return normalized;
-}
-
 function splitFrontmatter(
   raw: string,
   filePath: string,
@@ -103,27 +66,6 @@ function splitFrontmatter(
   return {
     content: raw.slice(match[0].length).trimStart(),
     data: parsed ?? {},
-  };
-}
-
-function parseMetadata(value: unknown, filePath: string): BlogPostMetadata {
-  const result = blogPostMetadataSchema(normalizeMetadataInput(value));
-  if (result instanceof type.errors) {
-    throw new Error(
-      `Blog metadata is invalid for "${filePath}": ${result}`,
-    );
-  }
-
-  if (result.tags.length === 0) {
-    throw new Error(
-      `Blog metadata tags must contain at least one tag in "${filePath}".`,
-    );
-  }
-
-  return {
-    ...result,
-    createdAt: toIsoDate(result.createdAt),
-    updatedAt: toIsoDate(result.updatedAt),
   };
 }
 

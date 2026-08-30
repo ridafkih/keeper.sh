@@ -81,15 +81,16 @@ describe("selectLatestArticles", () => {
 function summary(
   path: string,
   createdAt: string,
-  fields: Pick<ArticleSummary, "homepage" | "homepagePin" | "tags"> = {},
+  fields: Partial<Pick<ArticleSummary, "homepage" | "homepagePin" | "tags">> = {},
 ): ArticleSummary {
   return {
     blurb: path,
     createdAt,
+    homepage: fields.homepage,
+    homepagePin: fields.homepagePin,
     path,
     tags: fields.tags ?? [],
     title: path,
-    ...fields,
   };
 }
 
