@@ -10,6 +10,7 @@ import {
   parseIndexableRoutePaths,
 } from "../src/lib/indexable-routes";
 import { processChangelogDirectory } from "../src/lib/changelog-content";
+import { staticAssetSitemapPaths } from "../src/lib/static-asset-sitemap-paths";
 
 const SITE_URL = "https://www.keeper.sh";
 const BLOG_BASE_PATH = "/blog";
@@ -192,6 +193,7 @@ export function sitemapPlugin(): Plugin {
         recipesIndexEntry,
         ...recipesEntries,
         ...buildChangelogEntries(changelogDir),
+        ...staticAssetSitemapPaths.map((path) => ({ path })),
       ];
 
       this.emitFile({
