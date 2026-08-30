@@ -1,6 +1,6 @@
 import { blogPosts, type BlogPost } from "./blog-posts";
 import { comparePages } from "./compare-pages";
-import { selectLatestArticles, type ArticleSummary } from "./related-articles";
+import { selectHomepageLatestArticles, type ArticleSummary } from "./related-articles";
 
 const LATEST_ARTICLE_COUNT = 6;
 
@@ -23,9 +23,7 @@ export const articleLibrary: ArticleSummary[] = [
   ...comparePages.map((comparePage) => toArticleSummary(comparePage, "/compare")),
 ];
 
-const COMPARE_PATH_PREFIX = "/compare/";
-
-export const latestArticles: ArticleSummary[] = selectLatestArticles(
-  articleLibrary.filter((article) => !article.path.startsWith(COMPARE_PATH_PREFIX)),
+export const latestArticles: ArticleSummary[] = selectHomepageLatestArticles(
+  articleLibrary,
   LATEST_ARTICLE_COUNT,
 );
