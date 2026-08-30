@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { staticAssetSitemapPaths } from "../../plugins/sitemap";
+import { staticAssetSitemapPaths } from "../../src/lib/static-asset-sitemap-paths";
 import { staticPageMetadata } from "../../src/lib/page-metadata";
 import { staticPagePaths } from "../../src/lib/static-page-paths";
 

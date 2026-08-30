@@ -10,6 +10,7 @@ import {
   parseIndexableRoutePaths,
 } from "../src/lib/indexable-routes";
 import { processChangelogDirectory } from "../src/lib/changelog-content";
+import { staticAssetSitemapPaths } from "../src/lib/static-asset-sitemap-paths";
 
 const SITE_URL = "https://www.keeper.sh";
 const BLOG_BASE_PATH = "/blog";
@@ -24,9 +25,6 @@ interface SitemapEntry {
   path: string;
   lastmod?: string;
 }
-
-/** Public static files that are not HTML marketing pages. Kept out of staticPageMetadata so they skip the HTML cache. */
-export const staticAssetSitemapPaths = ["/llms.txt"] as const;
 
 function readStaticEntries(): SitemapEntry[] {
   return staticPageMetadata.map(({ path, updatedAt }) => {
