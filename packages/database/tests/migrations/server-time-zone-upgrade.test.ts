@@ -6,6 +6,11 @@ import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
+import {
+  appRewrittenColumns,
+  SERVER_CLOCK_REPAIR_PLAN_QUERY,
+} from "../../src/database/server-clock-timestamps";
+import { SCHEMA_TABLES } from "../../src/database/schema-tables";
 
 const ADMIN_DATABASE_URL = Bun.env.MIGRATION_TEST_DATABASE_URL;
 
@@ -16,19 +21,10 @@ if (!ADMIN_DATABASE_URL) {
 const PACKAGE_ROOT = `${import.meta.dirname}/../..`;
 const DRIZZLE_DIRECTORY = `${PACKAGE_ROOT}/drizzle`;
 
-/*
- * 0087 is the migration that retypes the timestamp columns, so 0086 is the last schema a
- * database can sit at while still holding naked `timestamp` values.
- */
 const SCHEMA_BEFORE_TIMESTAMPTZ = 86;
 
 const NON_UTC_ZONE = "Europe/Berlin";
 
-/*
- * One instant, written three ways. In January Berlin runs an hour ahead of UTC, so a
- * server in that zone stored 10:30 for the same moment a UTC server stored 09:30. The
- * application never varied: it sends Date.toISOString(), which always lands as 09:30.
- */
 const TRUE_INSTANT = "2026-01-15T09:30:00.000Z";
 const SERVER_CLOCK_IN_BERLIN = "2026-01-15 10:30:00";
 const SERVER_CLOCK_IN_UTC = "2026-01-15 09:30:00";
@@ -120,10 +116,6 @@ const withConnection = async <Result>(
   }
 };
 
-/*
- * Written as a server on `serverClock` would have written it: values that came from
- * DEFAULT now() carry that server's wall clock, values the application sent carry UTC.
- */
 const seedPreTimestamptzRows = (serverClock: string) =>
   (client: Client): Promise<unknown> =>
     client.query(`
@@ -199,6 +191,55 @@ const columnTypes = async (client: Client): Promise<string[]> => {
   `);
   return state.rows.map(({ data_type }) => data_type);
 };
+
+const repairPlan = async (client: Client): Promise<string[]> => {
+  const plan = await client.query<{ statement: string }>(
+    SERVER_CLOCK_REPAIR_PLAN_QUERY,
+    [appRewrittenColumns(SCHEMA_TABLES), NON_UTC_ZONE],
+  );
+  return plan.rows.map(({ statement }) => statement);
+};
+
+const statementFor = (plan: string[], table: string, column: string): number =>
+  plan.findIndex((statement) => statement.startsWith(`UPDATE ${table} SET ${column} `));
+
+describe("the plan that moves server-clock timestamps to UTC", () => {
+  const planForPreTimestamptzSchema = async (): Promise<string[]> => {
+    const databaseUrl = await createDatabase(NON_UTC_ZONE);
+    await applyReleasedSchemaState(databaseUrl, SCHEMA_BEFORE_TIMESTAMPTZ);
+    return withConnection(databaseUrl, repairPlan);
+  };
+
+  it("moves every row of a column the application never writes", async () => {
+    const plan = await planForPreTimestamptzSchema();
+
+    expect(plan[statementFor(plan, '"user"', '"createdAt"')]).toBe(
+      'UPDATE "user" SET "createdAt" = ("createdAt" AT TIME ZONE \'Europe/Berlin\')'
+      + ' AT TIME ZONE \'UTC\' WHERE "createdAt" IS NOT NULL',
+    );
+  });
+
+  it("moves only the untouched rows of a column the application rewrites", async () => {
+    const plan = await planForPreTimestamptzSchema();
+
+    expect(plan[statementFor(plan, "caldav_credentials", '"updatedAt"')])
+      .toContain('AND "updatedAt" = "createdAt"');
+  });
+
+  it("repairs a rewritten column before the column it reads", async () => {
+    const plan = await planForPreTimestamptzSchema();
+
+    expect(statementFor(plan, "caldav_credentials", '"updatedAt"'))
+      .toBeLessThan(statementFor(plan, "caldav_credentials", '"createdAt"'));
+  });
+
+  it("leaves a rewritten column alone when nothing can date its rows", async () => {
+    const plan = await planForPreTimestamptzSchema();
+
+    expect(plan.filter((statement) => statement.includes("user_subscriptions")))
+      .toEqual([]);
+  });
+});
 
 describe("upgrading a database that still stores naked timestamps", () => {
   it("preserves every instant on a UTC server", async () => {

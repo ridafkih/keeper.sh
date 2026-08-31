@@ -26,10 +26,8 @@ import {
 } from "../src/database/concurrent-index";
 import { isUtcTimeZoneName } from "../src/database/migration-timezone";
 import {
-  buildServerClockRepairPlan,
-  describeColumnOrigins,
-  SERVER_CLOCK_CANDIDATE_QUERY,
-  type ServerClockCandidate,
+  appRewrittenColumns,
+  SERVER_CLOCK_REPAIR_PLAN_QUERY,
 } from "../src/database/server-clock-timestamps";
 import { SCHEMA_TABLES } from "../src/database/schema-tables";
 
@@ -401,13 +399,6 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
   return state.rows[0]?.ready === true;
 };
 
-/*
- * Timestamps still typed `timestamp` hold a mix of UTC (written by the application) and
- * server wall clock (written by DEFAULT now()). The conversion to timestamptz reads them
- * all as UTC, so on a server that was never UTC the defaulted values have to be moved to
- * UTC first. On a UTC server there is nothing to move, and on a database whose columns
- * are already timestamptz there is nothing left to find.
- */
 const readServerTimeZone = async (): Promise<string> => {
   const state = await connection.query<{ TimeZone: string }>("SHOW TimeZone");
   const zone = state.rows[0]?.TimeZone;
@@ -421,20 +412,11 @@ const normalizeServerClockTimestamps = async (zone: string): Promise<void> => {
   if (isUtcTimeZoneName(zone)) {
     return;
   }
-  const discovered = await connection.query<{
-    table_name: string;
-    column_name: string;
-  }>(SERVER_CLOCK_CANDIDATE_QUERY);
-  const candidates: ServerClockCandidate[] = discovered.rows.map((row) => ({
-    column: row.column_name,
-    table: row.table_name,
-  }));
-  if (candidates.length === 0) {
-    return;
-  }
-  const origins = describeColumnOrigins(SCHEMA_TABLES);
-  const plan = buildServerClockRepairPlan({ candidates, origins, zone });
-  for (const statement of plan) {
+  const plan = await connection.query<{ statement: string }>(
+    SERVER_CLOCK_REPAIR_PLAN_QUERY,
+    [appRewrittenColumns(SCHEMA_TABLES), zone],
+  );
+  for (const { statement } of plan.rows) {
     await connection.query(statement);
   }
 };
