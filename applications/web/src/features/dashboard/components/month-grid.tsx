@@ -14,8 +14,6 @@ import type { DayEvents } from "./event-layout";
 const COLUMNS = 7;
 const ROWS = 6;
 
-const EDGE_FADE_SIZE = 24;
-
 // Cell rules on their own layer behind the cells, so they can fade at the edges without touching the day numbers.
 const CELL_RULES: CSSProperties = {
   backgroundImage: [
@@ -24,19 +22,6 @@ const CELL_RULES: CSSProperties = {
   ].join(", "),
   backgroundSize: `calc(100% / ${COLUMNS}) 100%, 100% calc(100% / ${ROWS})`,
   backgroundRepeat: "repeat-x, repeat-y",
-};
-
-// Vertical fades at the bottom only; a top fade would wash out the band the header dissolves into.
-const EDGE_FADE = [
-  `linear-gradient(to bottom, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
-  `linear-gradient(to right, transparent, black ${EDGE_FADE_SIZE}px, black calc(100% - ${EDGE_FADE_SIZE}px), transparent)`,
-].join(", ");
-const RULE_LAYER_STYLE: CSSProperties = {
-  ...CELL_RULES,
-  maskImage: EDGE_FADE,
-  WebkitMaskImage: EDGE_FADE,
-  maskComposite: "intersect",
-  WebkitMaskComposite: "source-in",
 };
 
 interface MonthGridProps {
@@ -84,7 +69,12 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
       }
     >
       <div className="relative min-h-0 flex-1">
-        <div aria-hidden className="pointer-events-none absolute inset-0" style={RULE_LAYER_STYLE} />
+        {/* Vertical fade at the bottom only; a top fade would wash out the band the header dissolves into. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 mask-b-from-[calc(100%-24px)] mask-x-from-[calc(100%-24px)]"
+          style={CELL_RULES}
+        />
         <div className="relative grid h-full grid-cols-7 grid-rows-6">
           {days.map((day, index) => {
             const inMonth = isSameMonth(day, anchor);
