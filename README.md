@@ -158,6 +158,8 @@ There are seven images currently available: two designed for convenience, and fi
 | ------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | DATABASE_URL                   | `api`, `cron`, `worker`, `mcp` | PostgreSQL connection URL.<br><br>e.g. `postgres://user:pass@postgres:5432/keeper`                                                                                  |
 | REDIS_URL                      | `api`, `cron`, `worker` | Redis connection URL. Must be the same Redis instance across all services.<br><br>e.g. `redis://redis:6379`                                                        |
+| DATABASE_POOL_MAX              | `api`, `cron`, `worker`, `mcp` | Optional. Maximum Postgres connections the service's pool opens. Defaults to `10` per service, and the `keeper-standalone` and `keeper-services` images ship a smaller per-service value sized to the Postgres they run against. Every co-located service adds its own pool, so the sum of these plus `CRON_FLUSH_POOL_MAX` must stay under your Postgres `max_connections` with room left to connect for yourself.<br><br>e.g. `15` |
+| CRON_FLUSH_POOL_MAX            | `cron`        | Optional. Size of the second pool cron holds for ingest writes, separate from and additional to `DATABASE_POOL_MAX`. Defaults to `16`; the bundled images ship `8`.<br><br>e.g. `16` |
 | WORKER_JOB_QUEUE_ENABLED       | `cron`        | Required. Set to `true` to enqueue sync jobs to the worker queue, or `false` to disable. If unset, the cron service will exit with a migration notice.              |
 | WORKER_CONCURRENCY             | `worker`      | Optional. Number of sync jobs the worker processes concurrently. Defaults to `25`.                                                                                  |
 | BETTER_AUTH_URL                | `api`, `mcp`  | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
@@ -365,6 +367,7 @@ Once you've populated your environment variables, you can choose to run `redis` 
 services:
   postgres:
     image: postgres:17
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: keeper
       POSTGRES_PASSWORD: keeper
@@ -448,6 +451,7 @@ EOF
 services:
   postgres:
     image: postgres:17
+    command: ["postgres", "-c", "max_connections=200"]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

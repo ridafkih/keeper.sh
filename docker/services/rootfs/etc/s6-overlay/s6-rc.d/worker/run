@@ -1,5 +1,7 @@
 #!/bin/bash
 exec 2>&1
 
+export DATABASE_POOL_MAX="${DATABASE_POOL_MAX:-8}"
+
 cd /app
 exec /root/.bun/bin/bun run services/worker/dist/index.js

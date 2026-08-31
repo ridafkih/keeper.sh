@@ -10,4 +10,4 @@ if [ ! -f "$PGDATA/PG_VERSION" ]; then
     su postgres -c "/usr/lib/postgresql/17/bin/initdb -D $PGDATA"
 fi
 
-exec su postgres -c "/usr/lib/postgresql/17/bin/postgres -D $PGDATA -c listen_addresses=localhost"
+exec su postgres -c "/usr/lib/postgresql/17/bin/postgres -D $PGDATA -c listen_addresses=127.0.0.1 -c max_connections=200"

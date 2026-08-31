@@ -8,13 +8,17 @@ done
 KEEPER_DB_PASSWORD="${POSTGRES_PASSWORD:-keeper}"
 
 if ! su postgres -c "/usr/lib/postgresql/17/bin/psql -tAc \"SELECT 1 FROM pg_database WHERE datname='keeper'\"" | grep -q 1; then
-    su postgres -c "/usr/lib/postgresql/17/bin/createuser -s keeper" || true
+    su postgres -c "/usr/lib/postgresql/17/bin/createuser --no-superuser --no-createdb --no-createrole keeper" || true
     su postgres -c "/usr/lib/postgresql/17/bin/createdb -O keeper keeper"
     su postgres -c "/usr/lib/postgresql/17/bin/psql -c \"ALTER USER keeper WITH PASSWORD '${KEEPER_DB_PASSWORD}'\""
 fi
 
+if su postgres -c "/usr/lib/postgresql/17/bin/psql -tAc \"SELECT 1 FROM pg_roles WHERE rolname='keeper' AND rolsuper\"" | grep -q 1; then
+    su postgres -c "/usr/lib/postgresql/17/bin/psql -c \"ALTER ROLE keeper NOSUPERUSER\""
+fi
+
 if [ -n "${POSTGRES_PASSWORD}" ]; then
-    export DATABASE_URL="postgresql://keeper:${KEEPER_DB_PASSWORD}@localhost:5432/keeper"
+    export DATABASE_URL="postgresql://keeper:${KEEPER_DB_PASSWORD}@127.0.0.1:5432/keeper"
 fi
 
 /root/.bun/bin/bun /app/packages/database/scripts/migrate.ts

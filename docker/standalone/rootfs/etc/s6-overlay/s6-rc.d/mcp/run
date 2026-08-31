@@ -3,5 +3,7 @@ exec 2>&1
 
 export MCP_PUBLIC_URL="${MCP_PUBLIC_URL:-${BETTER_AUTH_URL%/}/mcp}"
 
+export DATABASE_POOL_MAX="${DATABASE_POOL_MAX:-3}"
+
 cd /app
 exec /root/.bun/bin/bun run services/mcp/dist/index.js

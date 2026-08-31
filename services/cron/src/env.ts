@@ -5,6 +5,7 @@ const schema = {
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
   CALENDAR_REDISCOVERY_ENABLED: "boolean?",
   COMMERCIAL_MODE: "boolean?",
+  CRON_FLUSH_POOL_MAX: "number?",
   DATABASE_POOL_MAX: "number?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",

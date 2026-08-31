@@ -12,6 +12,7 @@ await build({
   entrypoints,
   outdir: "./dist",
   root: "src",
+  splitting: true,
   target: "bun",
   external: ["msgpackr-extract", "pino-opentelemetry-transport"],
 });
