@@ -22,6 +22,7 @@
     "better-call": "^2.0.2",
     "drizzle-orm": "0.45.2",
     "resend": "^6.6.0",
+    "widelogger": "^0.7.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

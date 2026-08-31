@@ -5,6 +5,8 @@ import {
   createDatabaseFlush,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
+  createUserDeletedCheck,
+  PRESENT_ANSWER_FRESHNESS_MS,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -35,6 +37,7 @@ import {
   calendarsTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
 import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
@@ -137,6 +140,8 @@ interface SyncConfig {
 }
 
 interface SyncDestinationsResult {
+  aborted: boolean;
+  abortedCount: number;
   added: number;
   addFailed: number;
   removed: number;
@@ -146,6 +151,8 @@ interface SyncDestinationsResult {
 }
 
 const EMPTY_RESULT: SyncDestinationsResult = {
+  aborted: false,
+  abortedCount: 0,
   added: 0,
   addFailed: 0,
   removed: 0,
@@ -784,6 +791,13 @@ const countMappedSources = async (
   return mappings.length;
 };
 
+const buildDeletionProbeFields = (failures: string[]): Record<string, unknown> => {
+  if (failures.length === 0) {
+    return {};
+  }
+  return { "user_deleted_check.probe_errors": [...failures] };
+};
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
@@ -817,7 +831,23 @@ const syncDestinationsForUser = async (
   }
 
   const syncLock = createSyncLock(redis, "background");
+  const deletionProbeFailures: string[] = [];
+  const isUserDeleted = createUserDeletedCheck(redis, userId, {
+    freshnessWindowMs: PRESENT_ANSWER_FRESHNESS_MS,
+    isUserRowPresent: async () => {
+      const rows = await database
+        .select({ id: userTable.id })
+        .from(userTable)
+        .where(eq(userTable.id, userId))
+        .limit(1);
+      return rows.length > 0;
+    },
+    onProbeError: (error) => {
+      deletionProbeFailures.push(getErrorMessage(error));
+    },
+  });
 
+  let abortedCount = 0;
   let added = 0;
   let addFailed = 0;
   let removed = 0;
@@ -1036,6 +1066,7 @@ const syncDestinationsForUser = async (
           provider: providerRef,
           readState: () => Promise.resolve(reconciliationState),
           isCurrent: isAttemptCurrent,
+          isUserDeleted,
           flush: createDatabaseFlush(database),
           onProgress: callbacks?.onProgress,
           onSyncEvent: (event) => {
@@ -1050,6 +1081,7 @@ const syncDestinationsForUser = async (
                 readPoolWindow,
                 sourceAuthorityDurationMs,
               }),
+              ...buildDeletionProbeFields(deletionProbeFailures),
               "provider.name": destination.provider,
               "provider.account_id": destination.accountId,
               "provider.calendar_id": destination.calendarId,
@@ -1090,10 +1122,18 @@ const syncDestinationsForUser = async (
           database,
           destination,
           handle,
-          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+          verdict: resolveDestinationAttemptVerdict(
+            result,
+            calendarAttempt.superseded,
+            result.aborted,
+          ),
         });
         if (!stillOwned) {
           return;
+        }
+
+        if (result.aborted) {
+          abortedCount += 1;
         }
 
         added += result.added;
@@ -1130,7 +1170,16 @@ const syncDestinationsForUser = async (
     await runDestinationAttempt(destinationCandidate);
   }
 
-  return { added, addFailed, removed, removeFailed, errors, syncEvents };
+  return {
+    aborted: abortedCount > 0,
+    abortedCount,
+    added,
+    addFailed,
+    removed,
+    removeFailed,
+    errors,
+    syncEvents,
+  };
 };
 
 export {

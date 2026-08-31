@@ -94,11 +94,14 @@ const shutdownRefreshLockRedis = (): void => {
   refreshLockRedis.disconnect();
 };
 
+const POLAR_REQUEST_TIMEOUT_MS = 10_000;
+
 const createPolarClient = (): Polar | null => {
   if (env.POLAR_ACCESS_TOKEN && env.POLAR_MODE) {
     return new Polar({
       accessToken: env.POLAR_ACCESS_TOKEN,
       server: env.POLAR_MODE,
+      timeoutMs: POLAR_REQUEST_TIMEOUT_MS,
     });
   }
   return null;

@@ -1,0 +1,236 @@
+import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { decryptPassword, encryptPassword } from "@keeper.sh/database";
+import { user } from "@keeper.sh/database/auth-schema";
+import { deletionResidueTable } from "@keeper.sh/database/schema";
+import { residueLifetimeMs } from "./teardown-residue";
+import type {
+  TeardownResidueCredential,
+  TeardownResidueDraft,
+  TeardownResidueRecord,
+  TeardownResidueStore,
+} from "./teardown-residue";
+import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
+
+const RETRY_BASE_SECONDS = 300;
+const RETRY_CAP_SECONDS = 3600;
+const RETRY_BACKOFF_EXPONENT_CAP = 6;
+const DEFAULT_RESIDUE_BATCH_LIMIT = 100;
+
+type DeletionResidueRow = typeof deletionResidueTable.$inferSelect;
+
+interface TeardownResidueStoreConfig {
+  batchLimit?: number;
+  database: PgDatabase<PgQueryResultHKT>;
+  encryptionKey: string | null;
+  now: () => Date;
+}
+
+const requireEncryptionKey = (encryptionKey: string | null): string => {
+  if (encryptionKey === null) {
+    throw new Error(
+      "Teardown residue holds provider credentials and cannot be read or written without ENCRYPTION_KEY",
+    );
+  }
+
+  return encryptionKey;
+};
+
+const encryptOptional = (value: string | null, encryptionKey: string): string | null => {
+  if (value === null) {
+    return null;
+  }
+
+  return encryptPassword(value, encryptionKey);
+};
+
+const decryptOptional = (value: string | null, encryptionKey: string): string | null => {
+  if (value === null) {
+    return null;
+  }
+
+  return decryptPassword(value, encryptionKey);
+};
+
+const decryptCredential = (
+  row: DeletionResidueRow,
+  encryptionKey: string,
+): TeardownResidueCredential | null => {
+  if (row.encryptedAccessToken === null) {
+    return null;
+  }
+
+  return {
+    accessToken: decryptPassword(row.encryptedAccessToken, encryptionKey),
+    expiresAt: row.credentialExpiresAt,
+    refreshToken: decryptOptional(row.encryptedRefreshToken, encryptionKey),
+  };
+};
+
+const toResidueRecord = (
+  row: DeletionResidueRow,
+  encryptionKey: string,
+): TeardownResidueRecord => {
+  const credential = decryptCredential(row, encryptionKey);
+
+  return {
+    attempts: row.attempts,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    id: row.id,
+    kind: row.kind,
+    userId: row.userId,
+    ...(credential !== null && { credential }),
+    ...(row.externalId !== null && { externalId: row.externalId }),
+    ...(row.provider !== null && { provider: row.provider }),
+    ...(row.providerChannelId !== null && { providerChannelId: row.providerChannelId }),
+    ...(row.providerResourceId !== null && {
+      providerResourceId: row.providerResourceId,
+    }),
+  };
+};
+
+const encryptCredential = (
+  credential: TeardownResidueCredential | undefined,
+  encryptionKey: string,
+) => {
+  if (!credential) {
+    return {};
+  }
+
+  return {
+    credentialExpiresAt: credential.expiresAt,
+    encryptedAccessToken: encryptPassword(credential.accessToken, encryptionKey),
+    encryptedRefreshToken: encryptOptional(credential.refreshToken, encryptionKey),
+  };
+};
+
+const userRowExists = () =>
+  sql`exists (select 1 from ${user} where ${user.id} = ${deletionResidueTable.userId})`;
+
+const nextAttemptExpression = (claimedAt: Date) =>
+  sql`${claimedAt.toISOString()}::timestamptz + least(
+    ${sql.raw(String(RETRY_CAP_SECONDS))},
+    ${sql.raw(String(RETRY_BASE_SECONDS))} * power(
+      2,
+      least(${deletionResidueTable.attempts}, ${sql.raw(String(RETRY_BACKOFF_EXPONENT_CAP))})
+    )
+  ) * interval '1 second'`;
+
+const dueBatch = (claimedAt: Date, batchLimit: number) =>
+  sql`${deletionResidueTable.id} in (
+    select "due"."id"
+    from ${deletionResidueTable} as "due"
+    where (
+      "due"."nextAttemptAt" is null
+      or "due"."nextAttemptAt" <= ${claimedAt.toISOString()}::timestamptz
+    )
+    and not exists (select 1 from ${user} where ${user.id} = "due"."userId")
+    order by "due"."nextAttemptAt" nulls first
+    limit ${batchLimit}
+    for update skip locked
+  )`;
+
+const createTeardownResidueStore = (
+  config: TeardownResidueStoreConfig,
+): TeardownResidueStore => {
+  const encryptionKey = requireEncryptionKey(config.encryptionKey);
+
+  return {
+    clear: async (residueId) => {
+      await config.database
+        .delete(deletionResidueTable)
+        .where(eq(deletionResidueTable.id, residueId));
+    },
+    delete: async (userId, kind, providerChannelId) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.kind, kind),
+          eq(deletionResidueTable.providerChannelId, providerChannelId),
+          userRowExists(),
+        ))
+        .returning({ id: deletionResidueTable.id });
+
+      return rows.length;
+    },
+    deleteForUser: async (userId, kind) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.kind, kind),
+          userRowExists(),
+        ))
+        .returning({ id: deletionResidueTable.id });
+
+      return rows.length;
+    },
+    list: async () => {
+      const claimedAt = config.now();
+      const rows = await config.database
+        .update(deletionResidueTable)
+        .set({
+          lastAttemptAt: claimedAt,
+          nextAttemptAt: nextAttemptExpression(claimedAt),
+        })
+        .where(and(
+          or(
+            isNull(deletionResidueTable.nextAttemptAt),
+            lte(deletionResidueTable.nextAttemptAt, claimedAt),
+          ),
+          sql`not ${userRowExists()}`,
+          dueBatch(claimedAt, config.batchLimit ?? DEFAULT_RESIDUE_BATCH_LIMIT),
+        ))
+        .returning();
+
+      return rows.map((row) => toResidueRecord(row, encryptionKey));
+    },
+    purgeOrphaned: async (now: Date) => {
+      const rows = await config.database
+        .delete(deletionResidueTable)
+        .where(and(lte(deletionResidueTable.expiresAt, now), userRowExists()))
+        .returning({ id: deletionResidueTable.id });
+
+      return rows.map((row) => row.id);
+    },
+    record: async (draft: TeardownResidueDraft) => {
+      const recordedAt = config.now();
+
+      await config.database.insert(deletionResidueTable).values({
+        createdAt: recordedAt,
+        expiresAt: new Date(recordedAt.getTime() + residueLifetimeMs(draft.kind)),
+        kind: draft.kind,
+        userId: draft.userId,
+        ...encryptCredential(draft.credential, encryptionKey),
+        ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
+        ...(typeof draft.provider === "string" && { provider: draft.provider }),
+        ...(typeof draft.providerChannelId === "string" && {
+          providerChannelId: draft.providerChannelId,
+        }),
+        ...(typeof draft.providerResourceId === "string" && {
+          providerResourceId: draft.providerResourceId,
+        }),
+      });
+    },
+    spendRepairAttempt: async (residueId: string) => {
+      const rows = await config.database
+        .update(deletionResidueTable)
+        .set({ attempts: sql`${deletionResidueTable.attempts} + 1` })
+        .where(eq(deletionResidueTable.id, residueId))
+        .returning({ attempts: deletionResidueTable.attempts });
+      const [row] = rows;
+
+      if (!row) {
+        throw new Error(
+          `Teardown residue ${residueId} vanished before its repair attempt could be counted`,
+        );
+      }
+
+      return row.attempts;
+    },
+  };
+};
+
+export { createTeardownResidueStore };
+export type { TeardownResidueStoreConfig };

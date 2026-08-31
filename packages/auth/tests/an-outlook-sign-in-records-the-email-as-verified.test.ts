@@ -32,6 +32,9 @@ const createHostedAuth = async () => {
 
   const database = drizzle(client);
   const { auth } = createAuth({
+    deleteUserResidueRecorder: async () => {},
+    deleteUserTeardown: async () => {},
+    deleteUserTeardownRollback: async () => {},
     baseUrl: BASE_URL,
     commercialMode: true,
     database: database as unknown as BunSQLDatabase,

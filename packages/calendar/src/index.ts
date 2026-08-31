@@ -59,6 +59,7 @@ export {
 export {
   FULL_POLL_INTERVAL_MS,
   LIVE_PUSH_CHANNEL_STATES,
+  PUSH_CHANNEL_STATES,
   PUSH_HEALTHY_POLL_FLOOR_MS,
   STALE_REGISTERING_MS,
   isPushChannelGoneError,
@@ -152,6 +153,7 @@ export {
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { DELETED_USER_TOMBSTONE_TTL_SECONDS, PRESENT_ANSWER_FRESHNESS_MS, clearUserDeleted, confirmUserDeletion, createUserDeletedCheck, deletedUserTombstoneKey, markUserDeleted, markUserDeletionUnconfirmed, unconfirmedDeletionMarkerKey, type RedisTombstoneClient, type TombstoneEraser, type TombstoneOptions, type TombstoneWriter, type UserDeletedFallback } from "./core/utils/deleted-user-tombstone";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
@@ -408,3 +410,30 @@ export { createManagePushChannelsDependencies } from "./core/source/manage-push-
 export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
 export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
+export {
+  OAUTH_GRANT_RESIDUE_KIND,
+  OAUTH_GRANT_RESIDUE_LIFETIME_MS,
+  POLAR_CUSTOMER_RESIDUE_KIND,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  RESIDUE_LIFETIME_MS,
+  residueLifetimeMs,
+  TEARDOWN_RESIDUE_KINDS,
+} from "./core/deletion/teardown-residue";
+export type {
+  TeardownResidueCredential,
+  TeardownResidueDraft,
+  TeardownResidueRecord,
+  TeardownResidueRecorder,
+  TeardownResidueStore,
+} from "./core/deletion/teardown-residue";
+export {
+  createTeardownResidueReaper,
+  RESIDUE_REPAIR_FAILED_SLUG,
+  RESIDUE_STALE_SLUG,
+} from "./core/deletion/teardown-residue-reaper";
+export type {
+  TeardownResidueReaperDependencies,
+  TeardownResidueReaperOutcome,
+} from "./core/deletion/teardown-residue-reaper";
+export { createTeardownResidueStore } from "./core/deletion/teardown-residue-store";
+export type { TeardownResidueStoreConfig } from "./core/deletion/teardown-residue-store";

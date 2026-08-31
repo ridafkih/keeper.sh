@@ -13,6 +13,15 @@ import {
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
 import { widelog } from "@/utils/logging";
+import { createPushSyncQueue } from "@keeper.sh/queue";
+import {
+  createApiDeleteUserSyncTeardown,
+  createDeleteUserSyncTeardownRollback,
+  createDeleteUserTombstoneConfirmer,
+  createDeleteUserTombstoneProvisionalMarker,
+  TEARDOWN_QUEUE_CONNECTION_OPTIONS,
+} from "@/utils/delete-user-teardown";
+import { createApiTeardownResidueStore } from "@/utils/teardown-residue-reaper";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
@@ -63,6 +72,16 @@ const parseTrustedOrigins = (origins?: string): string[] => {
 
 const trustedOrigins = parseTrustedOrigins(env.TRUSTED_ORIGINS);
 
+const deleteUserSyncQueue = createPushSyncQueue({
+  url: env.REDIS_URL,
+  ...TEARDOWN_QUEUE_CONNECTION_OPTIONS,
+});
+
+const teardownResidueStore = createApiTeardownResidueStore({
+  database,
+  encryptionKey: env.ENCRYPTION_KEY,
+});
+
 const { auth, capabilities: authCapabilities } = createAuth({
   database,
   secret: env.BETTER_AUTH_SECRET,
@@ -80,6 +99,19 @@ const { auth, capabilities: authCapabilities } = createAuth({
   passkeyOrigin: env.PASSKEY_ORIGIN,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
+  deleteUserResidueRecorder: teardownResidueStore.record,
+  deleteUserTeardown: createApiDeleteUserSyncTeardown({
+    database,
+    queue: deleteUserSyncQueue,
+    redis,
+    residue: teardownResidueStore,
+  }),
+  deleteUserTeardownRollback: createDeleteUserSyncTeardownRollback({
+    redis,
+    residue: teardownResidueStore,
+  }),
+  confirmDeleteUserTombstone: createDeleteUserTombstoneConfirmer({ redis }),
+  markDeleteUserTombstoneProvisional: createDeleteUserTombstoneProvisionalMarker({ redis }),
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 

@@ -68,7 +68,11 @@ type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
 const resolveDestinationAttemptVerdict = (
   result: DestinationOperationCounts,
   superseded: boolean,
+  aborted = false,
 ): DestinationAttemptVerdict => {
+  if (aborted) {
+    return "inconclusive";
+  }
   if (superseded && !hasAttemptedOperations(result)) {
     return "inconclusive";
   }

@@ -29,6 +29,9 @@ const EXISTING_SOURCES: readonly OwnedRow[] = Object.freeze([
 
 const buildAuth = () =>
   createAuth({
+    deleteUserResidueRecorder: async () => {},
+    deleteUserTeardown: async () => {},
+    deleteUserTeardownRollback: async () => {},
     baseUrl: "http://localhost:3000",
     commercialMode: true,
     database: {} as BunSQLDatabase,

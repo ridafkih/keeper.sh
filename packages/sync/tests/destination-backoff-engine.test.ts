@@ -172,7 +172,7 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
 const config = (database: unknown, overrides: Record<string, unknown> = {}) => ({
   destinationCalendarId: CALENDAR_ID,
   database: database as never,
-  redis: {} as never,
+  redis: { exists: () => Promise.resolve(0) } as never,
   oauthConfig: {} as never,
   plan: "pro" as never,
   ...overrides,

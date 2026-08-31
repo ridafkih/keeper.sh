@@ -1,4 +1,9 @@
-import { isKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
+import {
+  createAuth,
+  deleteUserResidueUnavailable,
+  deleteUserTeardownUnavailable,
+  isKeeperMcpEnabledAuth,
+} from "@keeper.sh/auth";
 import { createDatabase } from "@keeper.sh/database";
 import env from "./env";
 import { createKeeperMcpHandler } from "./mcp-handler";
@@ -14,6 +19,9 @@ const { auth: baseAuth } = createAuth({
   commercialMode: env.COMMERCIAL_MODE ?? false,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
+  deleteUserResidueRecorder: deleteUserResidueUnavailable,
+  deleteUserTeardown: deleteUserTeardownUnavailable,
+  deleteUserTeardownRollback: deleteUserTeardownUnavailable,
 });
 
 if (!isKeeperMcpEnabledAuth(baseAuth)) {

@@ -13,6 +13,19 @@ const GOOGLE_EMAIL_SCOPE = "https://www.googleapis.com/auth/userinfo.email";
 const REQUEST_TIMEOUT_MS = 15_000;
 const REFRESH_MAX_ATTEMPTS = 2;
 
+const signalWithExpiry = (
+  signal: AbortSignal | null | undefined,
+  expiryMs: number,
+): AbortSignal => {
+  const expiry = AbortSignal.timeout(expiryMs);
+
+  if (!signal) {
+    return expiry;
+  }
+
+  return AbortSignal.any([signal, expiry]);
+};
+
 const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === "AbortError" || error.name === "TimeoutError");
@@ -114,7 +127,10 @@ const createGoogleTokenRefresher = (
 ) => {
   const { clientId, clientSecret } = credentials;
 
-  return async (refreshToken: string): Promise<GoogleTokenResponse> => {
+  return async (
+    refreshToken: string,
+    signal?: AbortSignal | null,
+  ): Promise<GoogleTokenResponse> => {
     for (let attempt = 1; attempt <= REFRESH_MAX_ATTEMPTS; attempt++) {
       const response = await fetch(GOOGLE_TOKEN_URL, {
         body: new URLSearchParams({
@@ -125,7 +141,7 @@ const createGoogleTokenRefresher = (
         }),
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         method: "POST",
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: signalWithExpiry(signal, REQUEST_TIMEOUT_MS),
       }).catch((error) => {
         if (isRequestTimeoutError(error)) {
           const timeoutError = new GoogleOAuthRefreshError(
