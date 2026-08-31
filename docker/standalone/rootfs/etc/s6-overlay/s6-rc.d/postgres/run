@@ -7,7 +7,7 @@ chown postgres:postgres "$PGDATA"
 chmod 0700 "$PGDATA"
 
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
-    su postgres -c "/usr/lib/postgresql/17/bin/initdb --timezone=UTC -D $PGDATA"
+    su postgres -c "/usr/lib/postgresql/17/bin/initdb -D $PGDATA"
 fi
 
 exec su postgres -c "/usr/lib/postgresql/17/bin/postgres -D $PGDATA -c listen_addresses=localhost"

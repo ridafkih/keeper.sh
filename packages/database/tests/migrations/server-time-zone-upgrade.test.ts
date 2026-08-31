@@ -54,6 +54,20 @@ const createDatabase = async (zone: string | null): Promise<string> => {
   return databaseUrl.toString();
 };
 
+const setDatabaseTimeZone = async (
+  databaseUrl: string,
+  zone: string,
+): Promise<void> => {
+  const name = new URL(databaseUrl).pathname.slice(1);
+  const admin = new Client({ connectionString: ADMIN_DATABASE_URL });
+  await admin.connect();
+  try {
+    await admin.query(`ALTER DATABASE "${name}" SET timezone = '${zone}'`);
+  } finally {
+    await admin.end();
+  }
+};
+
 const applyReleasedSchemaState = async (
   databaseUrl: string,
   throughIndex: number,
@@ -319,4 +333,19 @@ describe("re-running the migration on a database that already converted", () => 
     expect(await withConnection(databaseUrl, readInstants)).toEqual(first);
     expect(first.userCreatedAt).toBe(TRUE_INSTANT);
   });
+
+  it("succeeds when a database converted under UTC later meets a non-UTC server",
+    async () => {
+      const databaseUrl = await createDatabase("UTC");
+      await applyReleasedSchemaState(databaseUrl, SCHEMA_BEFORE_TIMESTAMPTZ);
+      await withConnection(databaseUrl, seedPreTimestamptzRows(SERVER_CLOCK_IN_UTC));
+      await runMigrationRunner(databaseUrl);
+      const first = await withConnection(databaseUrl, readInstants);
+      await setDatabaseTimeZone(databaseUrl, NON_UTC_ZONE);
+
+      await runMigrationRunner(databaseUrl);
+
+      expect(await withConnection(databaseUrl, readInstants)).toEqual(first);
+      expect(first.userCreatedAt).toBe(TRUE_INSTANT);
+    });
 });
