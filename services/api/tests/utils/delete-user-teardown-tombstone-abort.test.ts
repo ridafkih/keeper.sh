@@ -55,7 +55,7 @@ describe("delete user teardown tombstone abort", () => {
       createQueue: createUnusedQueue,
       deregisterPushChannels: () => Promise.resolve({ stoppedProviderChannelIds: [] }),
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis,
       residue: {

@@ -98,6 +98,7 @@ const createTxInstance = (): object => ({
   selectDistinct: () => ({
     from: () => ({}),
   }),
+  transaction: (callback: (savepoint: object) => Promise<unknown>) => callback(createTxInstance()),
 });
 
 beforeAll(async () => {
@@ -121,6 +122,12 @@ beforeAll(async () => {
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
     },
     encryptionKey: "encryption-key",
+    oauthProviders: {
+      getProvider: () => ({
+        fetchUserInfo: () => Promise.resolve({ email: "person@example.com", id: "google-sub-1" }),
+        refreshAccessToken: () => Promise.reject(new Error("token refresh should not be needed")),
+      }),
+    },
     premiumService: {
       canAddAccount: () => Promise.resolve(canAddAccountResult),
       getUserPlan: () => Promise.resolve("free"),
@@ -227,7 +234,12 @@ beforeEach(() => {
 describe("Account locks", () => {
   it("creates OAuth sources without escaping the locked transaction", async () => {
     selectResults = [
-      [{ email: "person@example.com" }],
+      [{
+        accessToken: "access-token-1",
+        email: "person@example.com",
+        expiresAt: new Date(Date.now() + 3_600_000),
+        refreshToken: "refresh-token-1",
+      }],
       [],
       [],
       [],
@@ -248,6 +260,7 @@ describe("Account locks", () => {
       selectDistinct: () => ({
         from: () => ({}),
       }),
+      transaction: (callback: (savepoint: object) => Promise<unknown>) => callback(txInstance),
     };
 
     const source = await createOAuthSource({
@@ -262,6 +275,7 @@ describe("Account locks", () => {
       email: "person@example.com",
       id: "source-1",
       name: "Team Calendar",
+      needsReauthentication: false,
       provider: "google",
     });
     expect(insertCalls).toHaveLength(2);

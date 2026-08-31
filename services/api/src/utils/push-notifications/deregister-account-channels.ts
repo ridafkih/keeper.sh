@@ -582,6 +582,14 @@ const teardownResidueCredentialOf = (row: {
   };
 };
 
+const boundedByStep = (
+  requestSignal: AbortSignal | undefined,
+  stepSignal: AbortSignal | null,
+): AbortSignal =>
+  AbortSignal.any(
+    [requestSignal, stepSignal].filter((signal) => signal instanceof AbortSignal),
+  );
+
 const listUserTeardownPushChannels = async (
   userId: string,
 ): Promise<TeardownPushChannel[]> => {
@@ -690,7 +698,8 @@ const deregisterPushChannelsWithin = async (
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,
-          rawRefresh: (refreshToken) => rawRefresh(refreshToken, stepSignal),
+          rawRefresh: (refreshToken, refreshOptions) =>
+            rawRefresh(refreshToken, boundedByStep(refreshOptions?.signal, stepSignal)),
           refreshLockStore,
         }));
       }

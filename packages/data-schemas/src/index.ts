@@ -126,13 +126,13 @@ const googleTokenResponseSchema = type({
   access_token: "string",
   expires_in: "number",
   "refresh_token?": "string",
-  scope: "string",
+  "scope?": "string",
   token_type: "string",
 });
 type GoogleTokenResponse = typeof googleTokenResponseSchema.infer;
 
 const googleUserInfoSchema = type({
-  email: "string",
+  "email?": "string",
   "family_name?": "string",
   "given_name?": "string",
   id: "string",

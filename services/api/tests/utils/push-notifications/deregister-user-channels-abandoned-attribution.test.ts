@@ -241,7 +241,7 @@ const runTeardown = async (channels: StoredPushChannel[]): Promise<TeardownRun> 
     }),
     deregisterPushChannels,
     listCalendarIds: () => Promise.resolve([]),
-    listOAuthGrantProviders: () => Promise.resolve([]),
+    listOAuthCredentials: () => Promise.resolve([]),
     markChannelsStopped,
     listPushChannels: () => Promise.resolve([]),
     redis: makeWorkingTombstoneRedis(),

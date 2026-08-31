@@ -1377,7 +1377,8 @@ const ingestOAuthSources = async (
                     oauthCredentialId: currentSource.oauthCredentialId,
                     calendarAccountId: currentSource.accountId,
                     refreshLockStore,
-                    rawRefresh: rawRefresher,
+                    rawRefresh: (refreshToken, refreshOptions) =>
+                      rawRefresher(refreshToken, refreshOptions?.signal),
                   });
                   await measureSegment(
                     "wait.token_refresh_ms",

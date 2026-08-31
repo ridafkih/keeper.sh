@@ -52,6 +52,7 @@ const residueStore = createTeardownResidueStore({
 
 const recordGrantResidue = async (userId: string): Promise<void> => {
   await residueStore.record({
+    accountEmail: `${userId}@example.com`,
     credential: {
       accessToken: `${userId}-token`,
       expiresAt: new Date("2026-08-26T07:00:00.000Z"),

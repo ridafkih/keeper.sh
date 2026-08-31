@@ -57,6 +57,7 @@ const createHarness = () => {
     expiredPushChannelForGoneUserOne(),
     polarCustomerForGoneUserTwo(),
   ];
+  const revokeCalls: string[] = [];
   const clearAttempts: string[] = [];
   const deletedPolarCustomers: string[] = [];
   const observed: Record<string, unknown>[] = [];
@@ -103,6 +104,12 @@ const createHarness = () => {
   } as unknown as SourcePushRegistrar;
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: (externalId: string) => {
       deletedPolarCustomers.push(externalId);
@@ -117,11 +124,16 @@ const createHarness = () => {
     },
     repairDeadlineMs: REPAIR_DEADLINE_MS,
     residue,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => (provider === "google" ? registrar : null),
     waitForRepairDeadline: () => new Promise<void>(() => {}),
   });
 
-  return { clearAttempts, deletedPolarCustomers, deregistered, errors, observed, reap };
+  return { clearAttempts, deletedPolarCustomers, deregistered, errors, observed, reap, revokeCalls };
 };
 
 describe("a failing residue clear does not exile the rest of the batch", () => {

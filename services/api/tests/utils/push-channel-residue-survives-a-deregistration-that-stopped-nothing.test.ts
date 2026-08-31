@@ -106,7 +106,7 @@ const runTeardown = async (
     }),
     deregisterPushChannels: () => Promise.resolve({ stoppedProviderChannelIds }),
     listCalendarIds: () => Promise.resolve([]),
-    listOAuthGrantProviders: () => Promise.resolve([]),
+    listOAuthCredentials: () => Promise.resolve([]),
     listPushChannels: () => Promise.resolve(teardownChannels()),
     redis: {
       del: (key: string) => Promise.resolve(Number(tombstones.delete(key))),

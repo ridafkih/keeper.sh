@@ -45,6 +45,7 @@ const registrarContext = (): RegistrarContext => ({
 
 const createHarness = () => {
   const records = [pushChannelForGoneUser()];
+  const revokeCalls: string[] = [];
   const clearedIds: string[] = [];
   const listCalls: number[] = [];
   const deregistrations: (string | null)[] = [];
@@ -89,6 +90,12 @@ const createHarness = () => {
   } as unknown as SourcePushRegistrar;
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
@@ -101,11 +108,16 @@ const createHarness = () => {
     },
     repairDeadlineMs: REPAIR_DEADLINE_MS,
     residue,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => (provider === "google" ? registrar : null),
     waitForRepairDeadline: () => new Promise<void>(() => {}),
   });
 
-  return { clearedIds, deregistrations, errors, listCalls, observed, reap };
+  return { clearedIds, deregistrations, errors, listCalls, observed, reap, revokeCalls };
 };
 
 describe("a failing purge does not skip the whole reaper pass", () => {

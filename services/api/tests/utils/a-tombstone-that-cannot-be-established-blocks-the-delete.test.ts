@@ -70,7 +70,7 @@ const runTeardownAgainst = async (
 
       return Promise.resolve([]);
     },
-    listOAuthGrantProviders: () => Promise.resolve([]),
+    listOAuthCredentials: () => Promise.resolve([]),
     listPushChannels: () => Promise.resolve([]),
     redis,
     residue: {

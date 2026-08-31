@@ -158,7 +158,8 @@ const discoverOAuthCalendars = async (
       calendarAccountId: account.accountId,
       database,
       oauthCredentialId: account.oauthCredentialId,
-      rawRefresh: rawRefresher,
+      rawRefresh: (refreshToken, refreshOptions) =>
+        rawRefresher(refreshToken, refreshOptions?.signal),
       refreshLockStore,
     }));
   }

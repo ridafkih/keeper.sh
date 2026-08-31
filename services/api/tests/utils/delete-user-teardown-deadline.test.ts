@@ -104,7 +104,7 @@ const makeDependencies = (remove: (jobId: string) => Promise<number>) => ({
   createQueue: () => ({ remove }),
   deregisterPushChannels: () => Promise.resolve(0),
   listCalendarIds: () => Promise.resolve(["cal1", "cal2"]),
-  listOAuthGrantProviders: () => Promise.resolve([]),
+  listOAuthCredentials: () => Promise.resolve([]),
   listPushChannels: () => Promise.resolve([]),
   redis: makeWorkingTombstoneRedis(),
 });

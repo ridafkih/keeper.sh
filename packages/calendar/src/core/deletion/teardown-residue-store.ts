@@ -1,8 +1,12 @@
-import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { decryptPassword, encryptPassword } from "@keeper.sh/database";
 import { user } from "@keeper.sh/database/auth-schema";
 import { deletionResidueTable } from "@keeper.sh/database/schema";
-import { residueLifetimeMs } from "./teardown-residue";
+import {
+  MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
+  PUSH_CHANNEL_RESIDUE_KIND,
+  residueLifetimeMs,
+} from "./teardown-residue";
 import type {
   TeardownResidueCredential,
   TeardownResidueDraft,
@@ -79,9 +83,11 @@ const toResidueRecord = (
     id: row.id,
     kind: row.kind,
     userId: row.userId,
+    ...(row.accountEmail !== null && { accountEmail: row.accountEmail }),
     ...(credential !== null && { credential }),
     ...(row.externalId !== null && { externalId: row.externalId }),
     ...(row.provider !== null && { provider: row.provider }),
+    ...(row.providerAccountId !== null && { providerAccountId: row.providerAccountId }),
     ...(row.providerChannelId !== null && { providerChannelId: row.providerChannelId }),
     ...(row.providerResourceId !== null && {
       providerResourceId: row.providerResourceId,
@@ -166,6 +172,24 @@ const createTeardownResidueStore = (
 
       return rows.length;
     },
+    hasUnreapedPushResidue: async (userId: string, provider: string) => {
+      const rows = await config.database
+        .select({ id: deletionResidueTable.id })
+        .from(deletionResidueTable)
+        .where(and(
+          eq(deletionResidueTable.userId, userId),
+          eq(deletionResidueTable.provider, provider),
+          eq(deletionResidueTable.kind, PUSH_CHANNEL_RESIDUE_KIND),
+          lt(
+            deletionResidueTable.attempts,
+            MAX_PUSH_REPAIR_ATTEMPTS_BLOCKING_REVOCATION,
+          ),
+          sql`not ${userRowExists()}`,
+        ))
+        .limit(1);
+
+      return rows.length > 0;
+    },
     list: async () => {
       const claimedAt = config.now();
       const rows = await config.database
@@ -202,9 +226,13 @@ const createTeardownResidueStore = (
         expiresAt: new Date(recordedAt.getTime() + residueLifetimeMs(draft.kind)),
         kind: draft.kind,
         userId: draft.userId,
+        ...(typeof draft.accountEmail === "string" && { accountEmail: draft.accountEmail }),
         ...encryptCredential(draft.credential, encryptionKey),
         ...(typeof draft.externalId === "string" && { externalId: draft.externalId }),
         ...(typeof draft.provider === "string" && { provider: draft.provider }),
+        ...(typeof draft.providerAccountId === "string" && {
+          providerAccountId: draft.providerAccountId,
+        }),
         ...(typeof draft.providerChannelId === "string" && {
           providerChannelId: draft.providerChannelId,
         }),

@@ -108,7 +108,7 @@ const resolveFreshAccessToken = async (
       calendarAccountId: credentials.calendarAccountId,
       database: config.database,
       oauthCredentialId: credentials.oauthCredentialId,
-      rawRefresh,
+      rawRefresh: (refreshToken, refreshOptions) => rawRefresh(refreshToken, refreshOptions?.signal),
       refreshLockStore: config.refreshLockStore,
     }));
   }

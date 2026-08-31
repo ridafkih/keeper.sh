@@ -5,6 +5,9 @@ import {
 import type { GoogleCalendarListEntry } from "../types";
 import { GOOGLE_CALENDAR_LIST_URL } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
+import { fetchWithTimeout } from "../../../../core/utils/fetch-with-timeout";
+
+const CALENDAR_LIST_TIMEOUT_MS = 15_000;
 
 class CalendarListError extends Error {
   public readonly status: number;
@@ -40,6 +43,7 @@ interface CalendarListPage {
 const fetchCalendarPage = async (
   accessToken: string,
   signal: AbortSignal | undefined,
+  requestTimeoutMs: number,
   pageToken?: string,
 ): Promise<CalendarListPage> => {
   const url = new URL(GOOGLE_CALENDAR_LIST_URL);
@@ -48,12 +52,16 @@ const fetchCalendarPage = async (
     url.searchParams.set("pageToken", pageToken);
   }
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
+  const response = await fetchWithTimeout(
+    url.toString(),
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     },
+    requestTimeoutMs,
     signal,
-  });
+  );
 
   if (!response.ok) {
     const authRequired = isSimpleAuthError(response.status);
@@ -88,6 +96,7 @@ const fetchCalendarPage = async (
 interface ListUserCalendarsOptions {
   onInvalidEntries?: (count: number) => void;
   signal?: AbortSignal;
+  requestTimeoutMs?: number;
 }
 
 const listUserCalendars = async (
@@ -95,16 +104,22 @@ const listUserCalendars = async (
   options?: ListUserCalendarsOptions,
 ): Promise<GoogleCalendarListEntry[]> => {
   const signal = options?.signal;
+  const requestTimeoutMs = options?.requestTimeoutMs ?? CALENDAR_LIST_TIMEOUT_MS;
   const calendars: GoogleCalendarListEntry[] = [];
   let invalidEntryCount = 0;
 
-  let response = await fetchCalendarPage(accessToken, signal);
+  let response = await fetchCalendarPage(accessToken, signal, requestTimeoutMs);
   calendars.push(...response.items);
   invalidEntryCount += response.invalidEntryCount;
 
   while (response.nextPageToken) {
     signal?.throwIfAborted();
-    response = await fetchCalendarPage(accessToken, signal, response.nextPageToken);
+    response = await fetchCalendarPage(
+      accessToken,
+      signal,
+      requestTimeoutMs,
+      response.nextPageToken,
+    );
     calendars.push(...response.items);
     invalidEntryCount += response.invalidEntryCount;
   }

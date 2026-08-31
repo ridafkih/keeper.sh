@@ -177,7 +177,7 @@ describe("a rolled back delete discards push residue that lands after the abort 
           }),
         fetchImpl: () => Promise.reject(new Error("no provider call belongs in this test")),
         listCalendarIds: () => Promise.resolve([]),
-        listOAuthGrantProviders: () => Promise.resolve([]),
+        listOAuthCredentials: () => Promise.resolve([]),
         redis,
         listPushChannels: () => Promise.resolve([]),
         residue: residue.store,

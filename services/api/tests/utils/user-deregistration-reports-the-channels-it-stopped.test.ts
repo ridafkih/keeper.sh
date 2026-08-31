@@ -140,7 +140,7 @@ describe("user deregistration reports the channels it stopped", () => {
       deregisterPushChannels: () =>
         Promise.resolve({ stoppedProviderChannelIds: [STOPPED_PROVIDER_CHANNEL_ID] }),
       listCalendarIds: () => Promise.resolve([]),
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve(teardownChannels()),
       redis: createTombstoneRedis(),
       residue: residue.store,

@@ -1,17 +1,9 @@
 import { createOAuthSourceSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
-import { labelFailureResponse } from "@/utils/error-labelling";
-import {
-  OAuthSourceLimitError,
-  DestinationNotFoundError,
-  DestinationProviderMismatchError,
-  DuplicateSourceError,
-  getUserOAuthSources,
-  createOAuthSource,
-} from "@/utils/oauth-sources";
+import { oauthSourceFailureResponse } from "@/utils/oauth-source-failure-response";
+import { getUserOAuthSources, createOAuthSource } from "@/utils/oauth-sources";
 
 const OUTLOOK_PROVIDER = "outlook";
 
@@ -39,27 +31,7 @@ const POST = withWideEvent(
       });
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
-      if (error instanceof OAuthSourceLimitError) {
-        widelog.errorFields(error, { slug: "account-limit-reached" });
-        return ErrorResponse.paymentRequired(error.message).toResponse();
-      }
-      if (error instanceof DestinationNotFoundError) {
-        return ErrorResponse.notFound(error.message).toResponse();
-      }
-      if (error instanceof DestinationProviderMismatchError) {
-        return ErrorResponse.badRequest(error.message).toResponse();
-      }
-      if (error instanceof DuplicateSourceError) {
-        widelog.errorFields(error, { slug: "duplicate-source" });
-        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
-      }
-
-      const databaseResponse = labelFailureResponse(error, { slug: "invalid-request-body" });
-      if (databaseResponse) {
-        return databaseResponse;
-      }
-
-      return ErrorResponse.badRequest("Invalid request body").toResponse();
+      return oauthSourceFailureResponse(error);
     }
   }),
 );

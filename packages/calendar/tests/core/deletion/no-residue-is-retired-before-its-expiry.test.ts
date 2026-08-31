@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createTeardownResidueReaper } from "../../../src/core/deletion/teardown-residue-reaper";
-import { PUSH_CHANNEL_RESIDUE_KIND } from "../../../src/core/deletion/teardown-residue";
+import {
+  OAUTH_GRANT_RESIDUE_KIND,
+  PUSH_CHANNEL_RESIDUE_KIND,
+} from "../../../src/core/deletion/teardown-residue";
 import type {
   TeardownResidueRecord,
   TeardownResidueStore,
@@ -16,6 +19,23 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const EXPIRES_AT = new Date(NOW.getTime() + SEVEN_DAYS_MS);
 const RECORDED_AT = new Date("2026-08-25T15:45:00.000Z");
 const PERMANENT_FAILURE_ATTEMPT_CAP = 24;
+
+const unresolvedGrantRecord = (): TeardownResidueRecord => ({
+  accountEmail: "owner@example.com",
+  attempts: PERMANENT_FAILURE_ATTEMPT_CAP,
+  createdAt: RECORDED_AT,
+  credential: {
+    accessToken: "access-token-value",
+    expiresAt: null,
+    refreshToken: "refresh-token-value",
+  },
+  expiresAt: EXPIRES_AT,
+  id: "residue-oauth",
+  kind: OAUTH_GRANT_RESIDUE_KIND,
+  provider: "google",
+  providerAccountId: "1099876543210",
+  userId: "user-oauth",
+});
 
 const transientlyFailingPushRecord = (): TeardownResidueRecord => ({
   attempts: PERMANENT_FAILURE_ATTEMPT_CAP,
@@ -66,6 +86,7 @@ const createRegistrar = (): SourcePushRegistrar =>
 const createHarness = (seed: TeardownResidueRecord[]) => {
   const rows = new Map(seed.map((record) => [record.id, record]));
   const clearedIds: string[] = [];
+  const revokeCalls: string[] = [];
   const registrar = createRegistrar();
 
   const store: TeardownResidueStore = {
@@ -90,6 +111,12 @@ const createHarness = (seed: TeardownResidueRecord[]) => {
   };
 
   const reap = createTeardownResidueReaper({
+    countSurvivingAccountLinks: () =>
+      Promise.resolve({
+        blockingCredentialIds: [],
+        coHolders: 0,
+        identityResolved: false,
+      }),
     createRegistrarContext: () => Promise.resolve(registrarContext()),
     deletePolarCustomer: () =>
       Promise.reject(new Error("polar is not part of this test")),
@@ -98,11 +125,16 @@ const createHarness = (seed: TeardownResidueRecord[]) => {
     recordError: () => undefined,
     repairDeadlineMs: 5000,
     residue: store,
+    revokeOAuthGrant: (record: TeardownResidueRecord) => {
+      revokeCalls.push(record.id);
+
+      return Promise.resolve();
+    },
     resolveRegistrar: (provider: string) => (provider === "google" ? registrar : null),
     waitForRepairDeadline: () => new Promise<void>(() => {}),
   });
 
-  return { clearedIds, reap, rows };
+  return { clearedIds, reap, revokeCalls, rows };
 };
 
 describe("no residue is retired before its expiry", () => {
@@ -115,6 +147,17 @@ describe("no residue is retired before its expiry", () => {
     expect(outcome.expiredIds).toEqual([]);
     expect(outcome.failedIds).toContain("residue-push");
     expect([...harness.rows.keys()]).toContain("residue-push");
+  });
+
+  it("keeps an unresolved grant residue at the attempt cap while its expiry is still days away", async () => {
+    const harness = createHarness([unresolvedGrantRecord()]);
+
+    const outcome = await harness.reap();
+
+    expect(harness.clearedIds).toEqual([]);
+    expect(outcome.expiredIds).toEqual([]);
+    expect(harness.revokeCalls).toEqual([]);
+    expect([...harness.rows.keys()]).toContain("residue-oauth");
   });
 
   it("retires neither record on a single pass carrying both", async () => {

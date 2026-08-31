@@ -322,7 +322,7 @@ const makeHarness = async (overrides: HarnessOverrides = {}): Promise<Harness> =
         events.push(`list-calendars:${userId}`);
         return Promise.resolve(calendarIds.get(userId) ?? []);
       },
-      listOAuthGrantProviders: () => Promise.resolve([]),
+      listOAuthCredentials: () => Promise.resolve([]),
       listPushChannels: () => Promise.resolve([]),
       redis: trackingRedis,
       residue: {
