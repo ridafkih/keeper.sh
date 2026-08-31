@@ -25,11 +25,7 @@ import {
   withoutLockTimeout,
 } from "../src/database/concurrent-index";
 import { isUtcTimeZoneName } from "../src/database/migration-timezone";
-import {
-  appRewrittenColumns,
-  SERVER_CLOCK_REPAIR_PLAN_QUERY,
-} from "../src/database/server-clock-timestamps";
-import { SCHEMA_TABLES } from "../src/database/schema-tables";
+import { SERVER_CLOCK_REPAIR_PLAN_QUERY } from "../src/database/server-clock-timestamps";
 
 const connectionString = Bun.env.DATABASE_URL;
 
@@ -414,7 +410,7 @@ const normalizeServerClockTimestamps = async (zone: string): Promise<void> => {
   }
   const plan = await connection.query<{ statement: string }>(
     SERVER_CLOCK_REPAIR_PLAN_QUERY,
-    [appRewrittenColumns(SCHEMA_TABLES), zone],
+    [zone],
   );
   for (const { statement } of plan.rows) {
     await connection.query(statement);

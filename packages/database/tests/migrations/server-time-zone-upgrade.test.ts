@@ -6,11 +6,7 @@ import { describe, expect, it } from "vitest";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
-import {
-  appRewrittenColumns,
-  SERVER_CLOCK_REPAIR_PLAN_QUERY,
-} from "../../src/database/server-clock-timestamps";
-import { SCHEMA_TABLES } from "../../src/database/schema-tables";
+import { SERVER_CLOCK_REPAIR_PLAN_QUERY } from "../../src/database/server-clock-timestamps";
 
 const ADMIN_DATABASE_URL = Bun.env.MIGRATION_TEST_DATABASE_URL;
 
@@ -120,8 +116,11 @@ const seedPreTimestamptzRows = (serverClock: string) =>
   (client: Client): Promise<unknown> =>
     client.query(`
       INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-      VALUES ('seed-user', 'Seed', 'seed@example.com', false,
-        '${serverClock}', '${serverClock}');
+      VALUES
+        ('seed-user', 'Seed', 'seed@example.com', false,
+          '${serverClock}', '${serverClock}'),
+        ('seed-user-updated', 'Seed', 'updated@example.com', false,
+          '${serverClock}', '${APPLICATION_UPDATE}');
 
       INSERT INTO "session"
         (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
@@ -140,6 +139,7 @@ const seedPreTimestamptzRows = (serverClock: string) =>
 interface StoredInstants {
   userCreatedAt: string;
   userUpdatedAt: string;
+  updatedUserUpdatedAt: string;
   sessionExpiresAt: string;
   untouchedCreatedAt: string;
   untouchedUpdatedAt: string;
@@ -149,6 +149,7 @@ interface StoredInstants {
 interface StoredRow {
   user_created_at: Date;
   user_updated_at: Date;
+  updated_user_updated_at: Date;
   session_expires_at: Date;
   untouched_created_at: Date;
   untouched_updated_at: Date;
@@ -160,6 +161,8 @@ const readInstants = async (client: Client): Promise<StoredInstants> => {
     SELECT
       (SELECT "createdAt" FROM "user" WHERE id = 'seed-user') AS user_created_at,
       (SELECT "updatedAt" FROM "user" WHERE id = 'seed-user') AS user_updated_at,
+      (SELECT "updatedAt" FROM "user" WHERE id = 'seed-user-updated')
+        AS updated_user_updated_at,
       (SELECT "expiresAt" FROM "session" WHERE id = 'seed-session') AS session_expires_at,
       (SELECT "createdAt" FROM "caldav_credentials"
         WHERE id = '11111111-1111-1111-1111-111111111111') AS untouched_created_at,
@@ -177,6 +180,7 @@ const readInstants = async (client: Client): Promise<StoredInstants> => {
     untouchedCreatedAt: row.untouched_created_at.toISOString(),
     untouchedUpdatedAt: row.untouched_updated_at.toISOString(),
     updatedRowUpdatedAt: row.updated_row_updated_at.toISOString(),
+    updatedUserUpdatedAt: row.updated_user_updated_at.toISOString(),
     userCreatedAt: row.user_created_at.toISOString(),
     userUpdatedAt: row.user_updated_at.toISOString(),
   };
@@ -195,7 +199,7 @@ const columnTypes = async (client: Client): Promise<string[]> => {
 const repairPlan = async (client: Client): Promise<string[]> => {
   const plan = await client.query<{ statement: string }>(
     SERVER_CLOCK_REPAIR_PLAN_QUERY,
-    [appRewrittenColumns(SCHEMA_TABLES), NON_UTC_ZONE],
+    [NON_UTC_ZONE],
   );
   return plan.rows.map(({ statement }) => statement);
 };
@@ -256,6 +260,7 @@ describe("upgrading a database that still stores naked timestamps", () => {
     expect(stored.untouchedCreatedAt).toBe(TRUE_INSTANT);
     expect(stored.untouchedUpdatedAt).toBe(TRUE_INSTANT);
     expect(stored.updatedRowUpdatedAt).toBe(APPLICATION_UPDATE_INSTANT);
+    expect(stored.updatedUserUpdatedAt).toBe(APPLICATION_UPDATE_INSTANT);
     expect(await withConnection(databaseUrl, columnTypes))
       .toEqual(["timestamp with time zone"]);
   });
@@ -274,6 +279,7 @@ describe("upgrading a database that still stores naked timestamps", () => {
     expect(stored.untouchedCreatedAt).toBe(TRUE_INSTANT);
     expect(stored.untouchedUpdatedAt).toBe(TRUE_INSTANT);
     expect(stored.updatedRowUpdatedAt).toBe(APPLICATION_UPDATE_INSTANT);
+    expect(stored.updatedUserUpdatedAt).toBe(APPLICATION_UPDATE_INSTANT);
     expect(await withConnection(databaseUrl, columnTypes))
       .toEqual(["timestamp with time zone"]);
   });
