@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
-import {
-  describeNonUtcTimeZone,
-  isUtcTimeZoneName,
-} from "../../src/database/migration-timezone";
+import { isUtcTimeZoneName } from "../../src/database/migration-timezone";
 
 const migrationSql = (name: string): string =>
   readFileSync(new URL(`../../drizzle/${name}`, import.meta.url), "utf8");
@@ -27,13 +24,6 @@ describe("the server time zone a timestamptz migration requires", () => {
     for (const zone of absent) {
       expect(isUtcTimeZoneName(zone)).toBe(false);
     }
-  });
-
-  it("names the zone it found and what to do about it", () => {
-    const message = describeNonUtcTimeZone("America/Chicago");
-
-    expect(message).toContain("America/Chicago");
-    expect(message).toContain("timezone = 'UTC'");
   });
 });
 

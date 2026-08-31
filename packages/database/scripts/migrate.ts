@@ -24,10 +24,14 @@ import {
   BLOCKING_LOCK_TIMEOUT,
   withoutLockTimeout,
 } from "../src/database/concurrent-index";
+import { isUtcTimeZoneName } from "../src/database/migration-timezone";
 import {
-  describeNonUtcTimeZone,
-  isUtcTimeZoneName,
-} from "../src/database/migration-timezone";
+  buildServerClockRepairPlan,
+  describeColumnOrigins,
+  SERVER_CLOCK_CANDIDATE_QUERY,
+  type ServerClockCandidate,
+} from "../src/database/server-clock-timestamps";
+import { SCHEMA_TABLES } from "../src/database/schema-tables";
 
 const connectionString = Bun.env.DATABASE_URL;
 
@@ -397,20 +401,49 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
   return state.rows[0]?.ready === true;
 };
 
-const assertUtcServerTimeZone = async (): Promise<void> => {
+/*
+ * Timestamps still typed `timestamp` hold a mix of UTC (written by the application) and
+ * server wall clock (written by DEFAULT now()). The conversion to timestamptz reads them
+ * all as UTC, so on a server that was never UTC the defaulted values have to be moved to
+ * UTC first. On a UTC server there is nothing to move, and on a database whose columns
+ * are already timestamptz there is nothing left to find.
+ */
+const readServerTimeZone = async (): Promise<string> => {
   const state = await connection.query<{ TimeZone: string }>("SHOW TimeZone");
-  const [row] = state.rows;
-  if (isUtcTimeZoneName(row?.TimeZone)) {
+  const zone = state.rows[0]?.TimeZone;
+  if (!zone) {
+    throw new Error("The database did not report a server time zone");
+  }
+  return zone;
+};
+
+const normalizeServerClockTimestamps = async (zone: string): Promise<void> => {
+  if (isUtcTimeZoneName(zone)) {
     return;
   }
-  throw new Error(describeNonUtcTimeZone(row?.TimeZone));
+  const discovered = await connection.query<{
+    table_name: string;
+    column_name: string;
+  }>(SERVER_CLOCK_CANDIDATE_QUERY);
+  const candidates: ServerClockCandidate[] = discovered.rows.map((row) => ({
+    column: row.column_name,
+    table: row.table_name,
+  }));
+  if (candidates.length === 0) {
+    return;
+  }
+  const origins = describeColumnOrigins(SCHEMA_TABLES);
+  const plan = buildServerClockRepairPlan({ candidates, origins, zone });
+  for (const statement of plan) {
+    await connection.query(statement);
+  }
 };
 
 try {
   await connection.query(`
     SELECT pg_advisory_lock(hashtext('keeper.sh:database-migration'))
   `);
-  await assertUtcServerTimeZone();
+  const serverTimeZone = await readServerTimeZone();
   /*
    * With the session in UTC a timestamp -> timestamptz change is binary-identical, so
    * Postgres records it as metadata and skips the table rewrite. The same ALTER under any
@@ -419,6 +452,7 @@ try {
   await connection.query(`SET TimeZone = 'UTC'`);
   await connection.query(`SET lock_timeout = '${BLOCKING_LOCK_TIMEOUT}'`);
   await connection.query(`SET statement_timeout = '30min'`);
+  await normalizeServerClockTimestamps(serverTimeZone);
   await installPreMigrationTombstoneProtection();
   await consolidateLegacyRecurringEventStates();
 
