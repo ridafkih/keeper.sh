@@ -74,6 +74,8 @@ html {
   );
   --ui-background-elevated: var(--color-white);
   --ui-border-elevated: var(--color-neutral-300);
+  /* Faded so the calendar's hour lines read as a quieter layer under its column rules. */
+  --ui-border-hour: color-mix(in oklab, var(--ui-border-elevated) 45%, transparent);
   --ui-background-inverse-hover: var(--color-neutral-800);
   --ui-background-hover: color-mix(
     in srgb,
@@ -123,6 +125,7 @@ html {
   --color-foreground-inverse-muted: var(--ui-foreground-inverse-muted);
   --color-background-elevated: var(--ui-background-elevated);
   --color-border-elevated: var(--ui-border-elevated);
+  --color-border-hour: var(--ui-border-hour);
   --color-background-inverse-hover: var(--ui-background-inverse-hover);
   --color-background-hover: var(--ui-background-hover);
   --color-destructive: var(--ui-destructive);

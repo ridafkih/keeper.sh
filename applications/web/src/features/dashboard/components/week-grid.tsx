@@ -25,9 +25,6 @@ const BUFFER_WEEKS = 26;
 
 const MS_PER_DAY = 86_400_000;
 
-// Faded so the hour lines read as a quieter layer under the column rules.
-const HOUR_RULE_COLOR = "color-mix(in oklab, var(--color-border-elevated) 45%, transparent)";
-
 // Painted on the viewport boxes, not the cells, so the rules span overscroll; `--strip-scroll` keeps them following the grid.
 const COLUMN_RULES: CSSProperties = {
   backgroundImage: "linear-gradient(to right, var(--color-border-elevated) 0 1px, transparent 1px)",
@@ -251,12 +248,11 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{
           ...COLUMN_RULES,
           backgroundSize: `calc((100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS}) 100%`,
           backgroundPositionX: `calc(${GUTTER_WIDTH}px - var(--strip-scroll, 0px))`,
-          scrollSnapType: "x mandatory",
           scrollPaddingLeft: GUTTER_WIDTH,
           maskImage: GRID_EDGE_FADE,
           WebkitMaskImage: GRID_EDGE_FADE,
@@ -287,20 +283,12 @@ export function WeekGrid({ anchor, onCenterDayChange, toolbar }: WeekGridProps) 
           {stripDays.map((day) => {
             const isToday = isSameDay(day, today);
             return (
-              <div
-                key={day.getTime()}
-                className="relative"
-                style={{ scrollSnapAlign: "start" }}
-              >
+              <div key={day.getTime()} className="relative snap-start">
                 {/* Hour rules, per cell — one strip-wide background layer is too large for some engines to paint. */}
                 <div
                   aria-hidden
-                  className="pointer-events-none absolute inset-x-0 bottom-0"
-                  style={{
-                    top: HOUR_HEIGHT,
-                    backgroundImage: `linear-gradient(to bottom, ${HOUR_RULE_COLOR} 0 1px, transparent 1px)`,
-                    backgroundSize: `100% ${HOUR_HEIGHT}px`,
-                  }}
+                  className="pointer-events-none absolute inset-x-0 bottom-0 bg-[linear-gradient(to_bottom,var(--color-border-hour)_0_1px,transparent_1px)]"
+                  style={{ top: HOUR_HEIGHT, backgroundSize: `100% ${HOUR_HEIGHT}px` }}
                 />
                 {/* Event blocks will render here in a later stage. */}
                 {isToday && nowFraction != null && (
