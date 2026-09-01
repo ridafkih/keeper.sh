@@ -3,6 +3,7 @@ import {
   overlapsRepresentableTimeWindow,
   parseStoredRecurrenceForMaterialization,
   REPRESENTABLE_RANGE_SLACK_MS,
+  resolveIsAllDayEvent,
   resolveRepresentableTimeRange,
 } from "@keeper.sh/calendar";
 import type { MaterializedSyncableEvent, SyncableEvent } from "@keeper.sh/calendar";
@@ -58,6 +59,7 @@ interface KeeperEventProjection {
   endTime: Date;
   eventStateId: string | null;
   id: string;
+  isAllDay: boolean;
   location: string | null;
   startTime: Date;
   title: string | null;
@@ -169,25 +171,31 @@ const toSyncedProjection = (
     description: occurrence.description ?? null,
     eventStateId,
     id,
+    isAllDay: resolveIsAllDayEvent(occurrence),
     location: occurrence.location ?? null,
     title: occurrence.summary || null,
     ...resolveRepresentableTimeRange(occurrence),
   };
 };
 
-const toUserProjection = (row: UserEventRow): KeeperEventProjection => ({
-  calendarId: row.calendarId,
-  description: row.description,
-  eventStateId: null,
-  id: row.id,
-  location: row.location,
-  title: row.title,
-  ...resolveRepresentableTimeRange({
+const toUserProjection = (row: UserEventRow): KeeperEventProjection => {
+  const timeRange = {
     endTime: row.endTime,
     startTime: row.startTime,
     ...(row.isAllDay !== null && { isAllDay: row.isAllDay }),
-  }),
-});
+  };
+
+  return {
+    calendarId: row.calendarId,
+    description: row.description,
+    eventStateId: null,
+    id: row.id,
+    isAllDay: resolveIsAllDayEvent(timeRange),
+    location: row.location,
+    title: row.title,
+    ...resolveRepresentableTimeRange(timeRange),
+  };
+};
 
 const isIncludedByFilters = (
   occurrence: MaterializedSyncableEvent,
@@ -259,6 +267,7 @@ const toKeeperEvent = (
   endTime: event.endTime.toISOString(),
   eventStateId: event.eventStateId,
   id: event.id,
+  isAllDay: event.isAllDay,
   location: event.location,
   startTime: event.startTime.toISOString(),
   title: event.title,

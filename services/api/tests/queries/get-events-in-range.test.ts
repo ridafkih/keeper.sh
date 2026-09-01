@@ -156,6 +156,13 @@ describe("flattenSyncedEvents", () => {
     expect(flatten({ availability: ["free"] }).map((event) => event.title)).toEqual(["Override"]);
   });
 
+  it("projects whether each event is all-day", () => {
+    expect(flatten().map((event) => ({ isAllDay: event.isAllDay, title: event.title }))).toEqual([
+      { isAllDay: false, title: "Master" },
+      { isAllDay: true, title: "Override" },
+    ]);
+  });
+
   it("reconciles detached overrides before applying all-day filters", () => {
     expect(flatten({ isAllDay: false }).map((event) => event.title)).toEqual(["Master"]);
     expect(flatten({ isAllDay: true }).map((event) => event.title)).toEqual(["Override"]);

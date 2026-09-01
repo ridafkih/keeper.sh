@@ -37,13 +37,23 @@ const resolvePeriod = (hours: number): string => {
   return "AM";
 };
 
-export const formatTime = (date: Date): string => {
+const formatClock = (date: Date): string => {
   const hours = date.getHours();
   const minutes = date.getMinutes();
-  const period = resolvePeriod(hours);
   const displayHours = hours % 12 || 12;
 
-  return `${displayHours}:${minutes.toString().padStart(2, "0")} ${period}`;
+  return `${displayHours}:${minutes.toString().padStart(2, "0")}`;
+};
+
+export const formatTime = (date: Date): string =>
+  `${formatClock(date)} ${resolvePeriod(date.getHours())}`;
+
+// The start's period is dropped when both ends share it, e.g. "9:00 – 10:00 AM".
+export const formatTimeRange = (start: Date, end: Date): string => {
+  const samePeriod = resolvePeriod(start.getHours()) === resolvePeriod(end.getHours());
+  const startLabel = samePeriod ? formatClock(start) : formatTime(start);
+
+  return `${startLabel} – ${formatTime(end)}`;
 };
 
 export const formatDate = (date: string | Date): string =>

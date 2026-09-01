@@ -5,9 +5,9 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
-import { formatTime, formatTimeUntil, isEventPast, formatDayHeader } from "@/lib/time";
+import { isEventPast, formatDayHeader } from "@/lib/time";
+import { EventCard } from "@/features/dashboard/components/event-card";
 import { useEvents, type CalendarEvent } from "@/hooks/use-events";
-import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/events/")({
   component: EventsPage,
@@ -21,10 +21,6 @@ interface DayGroup {
 interface DaySectionProps {
   label: string;
   events: CalendarEvent[];
-}
-
-interface EventRowProps {
-  event: CalendarEvent;
 }
 
 interface LoadMoreSentinelProps {
@@ -125,47 +121,11 @@ const DaySection = memo(function DaySection({ label, events }: DaySectionProps) 
   return (
     <div className="flex flex-col px-0.5">
       <DashboardHeading2>{label}</DashboardHeading2>
-      <div className="flex flex-col">
+      <div className="flex flex-col gap-2 pt-1">
         {events.map((event) => (
-          <EventRow key={event.id} event={event} />
+          <EventCard key={event.id} event={event} past={isEventPast(event.endTime)} />
         ))}
       </div>
-    </div>
-  );
-});
-
-function resolveEventRowClassName(past: boolean): string {
-  return cn("flex items-center justify-between gap-2 py-1.5", past && "line-through");
-}
-
-const EventRow = memo(function EventRow({ event }: EventRowProps) {
-  const past = isEventPast(event.endTime);
-  const startTime = formatTime(event.startTime);
-  const endTime = formatTime(event.endTime);
-  const timeUntil = formatTimeUntil(event.startTime);
-
-  return (
-    <div className={resolveEventRowClassName(past)}>
-      <div className="flex items-center gap-1 min-w-0">
-        <Text size="sm" tone="muted" className="truncate">
-          {event.calendarName}
-        </Text>
-        <Text size="sm" tone="muted" className="shrink-0">
-          from
-        </Text>
-        <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
-          {startTime}
-        </Text>
-        <Text size="sm" tone="muted" className="shrink-0">
-          to
-        </Text>
-        <Text size="sm" tone="default" className="font-medium tabular-nums shrink-0">
-          {endTime}
-        </Text>
-      </div>
-      <Text size="sm" tone="muted" className="tabular-nums shrink-0 whitespace-nowrap">
-        {timeUntil}
-      </Text>
     </div>
   );
 });

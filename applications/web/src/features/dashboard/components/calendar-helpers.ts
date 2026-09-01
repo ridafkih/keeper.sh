@@ -26,6 +26,11 @@ export function startOfVisibleWeek(anchor: Date): Date {
   return addDays(anchor, -Math.floor(WEEK_VIEW_DAYS / 2));
 }
 
+export function startOfWeek(date: Date): Date {
+  const offset = (date.getDay() - WEEK_STARTS_ON + 7) % 7;
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() - offset);
+}
+
 export function isSameMonth(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
@@ -77,7 +82,24 @@ export function formatWeekTitle(anchor: Date): string {
   return `${startMonth} ${start.getDate()}, ${start.getFullYear()} – ${endMonth} ${end.getDate()}, ${end.getFullYear()}`;
 }
 
+const FETCH_WEEKS_BEFORE = 1;
+const FETCH_WEEKS = 4;
+
+/** Half-open `[start, end)` quantised to calendar weeks, so a ±7-day page stays inside the previous window while the next loads. */
+export function getWeekFetchRange(anchor: Date): { start: Date; end: Date } {
+  const start = addDays(startOfWeek(startOfVisibleWeek(anchor)), -FETCH_WEEKS_BEFORE * 7);
+  return { start, end: addDays(start, FETCH_WEEKS * 7) };
+}
+
+/** Half-open `[start, end)` covering exactly the 6×7 grid's days. */
+export function getMonthFetchRange(anchor: Date): { start: Date; end: Date } {
+  const days = getMonthGridDays(anchor);
+  return { start: days[0], end: addDays(days[days.length - 1], 1) };
+}
+
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
+
+export const HOUR_HEIGHT = 48;
 
 export function formatHourLabel(hour: number): string {
   return new Date(2023, 0, 1, hour)

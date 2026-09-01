@@ -4,14 +4,18 @@ import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
+import { useEventsInRange } from "@/hooks/use-events";
 import { MonthGrid } from "./month-grid";
 import { WeekGrid } from "./week-grid";
+import { bucketEventsByDay } from "./event-layout";
 import {
   addDays,
   addMonths,
   formatMonthTitle,
   formatWeekTitle,
+  getMonthFetchRange,
   getMonthGridDays,
+  getWeekFetchRange,
 } from "./calendar-helpers";
 
 type CalendarViewMode = "week" | "month";
@@ -26,6 +30,16 @@ export function CalendarView() {
   const [anchor, setAnchor] = useState(() => new Date());
 
   const monthDays = useMemo(() => getMonthGridDays(anchor), [anchor]);
+
+  const fetchRange = view === "month" ? getMonthFetchRange(anchor) : getWeekFetchRange(anchor);
+  const { events } = useEventsInRange(fetchRange.start, fetchRange.end);
+  // Keyed on the window's instants, not `anchor`: the anchor moves on every scroll step, the window doesn't.
+  const fetchStartMs = fetchRange.start.getTime();
+  const fetchEndMs = fetchRange.end.getTime();
+  const eventsByDay = useMemo(
+    () => bucketEventsByDay(events, new Date(fetchStartMs), new Date(fetchEndMs)),
+    [events, fetchStartMs, fetchEndMs],
+  );
 
   const title = view === "month" ? formatMonthTitle(anchor) : formatWeekTitle(anchor);
 
@@ -95,8 +109,13 @@ export function CalendarView() {
   );
 
   return view === "month" ? (
-    <MonthGrid anchor={anchor} days={monthDays} toolbar={toolbar} />
+    <MonthGrid anchor={anchor} days={monthDays} eventsByDay={eventsByDay} toolbar={toolbar} />
   ) : (
-    <WeekGrid anchor={anchor} onCenterDayChange={setAnchor} toolbar={toolbar} />
+    <WeekGrid
+      anchor={anchor}
+      eventsByDay={eventsByDay}
+      onCenterDayChange={setAnchor}
+      toolbar={toolbar}
+    />
   );
 }
