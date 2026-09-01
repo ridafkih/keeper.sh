@@ -1,9 +1,11 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
+import { popoverOverlayAtom } from "@/state/popover-overlay";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
@@ -11,6 +13,8 @@ import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
 import { EventPill, EventPillOverflow } from "./event-card";
+import { EventDetailPopover } from "./event-detail-popover";
+import type { EventDetailSelection } from "./event-detail-popover";
 import {
   EVENT_PILL_GAP_PX,
   EVENT_PILL_HEIGHT_PX,
@@ -219,6 +223,48 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     return () => observer.disconnect();
   }, [scrollToCenter]);
 
+  const [detail, setDetail] = useState<EventDetailSelection | null>(null);
+  const setOverlay = useSetAtom(popoverOverlayAtom);
+
+  const closeDetail = useCallback(() => {
+    setDetail(null);
+    setOverlay(false);
+  }, [setOverlay]);
+
+  useEffect(() => () => setOverlay(false), [setOverlay]);
+
+  // The anchor rect goes stale on resize; the overlay already blocks scrolling while open.
+  useEffect(() => {
+    if (!detail) return;
+    globalThis.addEventListener("resize", closeDetail);
+    return () => globalThis.removeEventListener("resize", closeDetail);
+  }, [detail, closeDetail]);
+
+  const handleEventClick = (clickEvent: ReactMouseEvent) => {
+    const target = (clickEvent.target as Element).closest<HTMLElement>("[data-event-id]");
+    const scroller = scrollerRef.current;
+    if (!target || !scroller) return;
+    let event: CalendarEvent | undefined;
+    for (const day of eventsByDay.values()) {
+      event = day.timed.find((candidate) => candidate.id === target.dataset.eventId);
+      if (event) break;
+    }
+    if (!event) return;
+    const rect = target.getBoundingClientRect();
+    const frameRect = scroller.getBoundingClientRect();
+    setDetail({
+      event,
+      anchor: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      frame: {
+        top: frameRect.top,
+        left: frameRect.left + GUTTER_WIDTH,
+        right: frameRect.right,
+        bottom: frameRect.bottom,
+      },
+    });
+    setOverlay(true);
+  };
+
   const handleScroll = () => {
     const scroller = scrollerRef.current;
     if (scroller) scrollTopRef.current = scroller.scrollTop;
@@ -318,6 +364,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           ))}
         </div>
         <div
+          onClick={handleEventClick}
           className="relative grid shrink-0"
           style={{
             gridTemplateColumns: columnsTemplate,
@@ -339,6 +386,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           })}
         </div>
       </div>
+      <EventDetailPopover selection={detail} onClose={closeDetail} />
     </CalendarFrame>
   );
 }

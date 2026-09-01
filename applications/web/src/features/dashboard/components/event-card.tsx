@@ -5,18 +5,11 @@ import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
+import { EVENT_COLORS } from "./event-card.styles";
+import type { EventColor } from "./event-card.styles";
 import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
-
-const EVENT_COLORS = {
-  blue: cn(
-    "[--event-ink:var(--color-blue-900)] [--event-surface:var(--color-blue-100)] [--event-accent:var(--color-blue-500)]",
-    "dark:[--event-ink:var(--color-blue-100)] dark:[--event-surface:color-mix(in_srgb,var(--color-blue-500)_20%,var(--color-background))] dark:[--event-accent:var(--color-blue-400)]",
-  ),
-};
-
-type EventColor = keyof typeof EVENT_COLORS;
 
 const eventText = tv({
   base: "tracking-tight",
@@ -42,7 +35,7 @@ type EventTextProps = PropsWithChildren<{
   className?: string;
 }>;
 
-function EventText({ as = "p", size, muted, className, children }: EventTextProps) {
+export function EventText({ as = "p", size, muted, className, children }: EventTextProps) {
   const Element = as;
   return <Element className={eventText({ size, muted, className })}>{children}</Element>;
 }
@@ -88,8 +81,17 @@ export const EventCard = memo(function EventCard({
   const classes = cn(eventCard({ layout, past }), EVENT_COLORS[color]);
 
   if (layout === "grid") {
+    // Clicks are delegated via `data-event-id` in WeekGrid, so the memoised tree never sees a handler.
     return (
-      <div className={classes} style={style}>
+      <button
+        type="button"
+        data-event-id={event.id}
+        className={cn(
+          classes,
+          "cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+        style={style}
+      >
         {/* Padding and centring sit on the body: a container's queries never match the container itself. */}
         <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
           <EventText
@@ -115,7 +117,7 @@ export const EventCard = memo(function EventCard({
             </EventText>
           )}
         </div>
-      </div>
+      </button>
     );
   }
 
