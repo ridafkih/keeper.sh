@@ -74,6 +74,7 @@ export interface ApiEvent {
   eventStateId: string | null;
   title: string | null;
   description: string | null;
+  location: string | null;
   startTime: string;
   endTime: string;
   /** Whole-day event: `startTime`/`endTime` are the UTC-midnight day bounds. */
