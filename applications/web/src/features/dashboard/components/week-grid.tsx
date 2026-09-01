@@ -43,13 +43,6 @@ const MS_PER_DAY = 86_400_000;
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
 
-const HEADER_RULE_FADE = "linear-gradient(to top, black 35%, transparent)";
-
-const GRID_EDGE_FADE_SIZE = 24;
-
-// Vertical only: a horizontal fade would dim the gutter labels and the outermost column.
-const GRID_EDGE_FADE = `linear-gradient(to bottom, transparent, black ${GRID_EDGE_FADE_SIZE}px, black calc(100% - ${GRID_EDGE_FADE_SIZE}px), transparent)`;
-
 interface DayHeaderCellProps {
   day: Date;
   isToday: boolean;
@@ -67,10 +60,10 @@ const DayHeaderCell = memo(function DayHeaderCell({
 
   return (
     <div className="relative flex flex-col overflow-hidden">
+      {/* Ramps upward as the header fill evaporates downward, so the rules strengthen across the seam. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated"
-        style={{ maskImage: HEADER_RULE_FADE, WebkitMaskImage: HEADER_RULE_FADE }}
+        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated mask-t-from-35%"
       />
       <div
         className="flex shrink-0 flex-col items-center justify-center gap-1"
@@ -303,15 +296,12 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       columnHeader={dayRow}
       gridMaxHeight={HOUR_HEIGHT * HOURS.length}
     >
+      {/* Bottom only: a horizontal fade would dim the gutter labels and the outermost column, and a top one would wash out the band the header dissolves into. */}
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{
-          scrollPaddingLeft: GUTTER_WIDTH,
-          maskImage: GRID_EDGE_FADE,
-          WebkitMaskImage: GRID_EDGE_FADE,
-        }}
+        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ scrollPaddingLeft: GUTTER_WIDTH }}
       >
         <div
           className="sticky left-0 z-30 shrink-0 bg-background"
