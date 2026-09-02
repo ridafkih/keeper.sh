@@ -1,10 +1,9 @@
 import type { PropsWithChildren } from "react";
 import { createContext, use, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSetAtom } from "jotai";
 import { Heading3 } from "./heading";
 import { Text } from "./text";
-import { popoverOverlayAtom } from "@/state/popover-overlay";
+import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 
 interface ModalContextValue {
   open: boolean;
@@ -42,7 +41,7 @@ export function Modal({ children, open: controlledOpen, onOpenChange }: ModalPro
 export function ModalContent({ children }: PropsWithChildren) {
   const { open, setOpen } = useModal();
   const contentRef = useRef<HTMLDivElement>(null);
-  const setOverlay = useSetAtom(popoverOverlayAtom);
+  const setOverlay = useSetPopoverOverlay();
 
   useEffect(() => {
     if (!open) return;

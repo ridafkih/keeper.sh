@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAtomValue } from "jotai";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import * as m from "motion/react-m";
 import MapPin from "lucide-react/dist/esm/icons/map-pin";
@@ -7,8 +8,9 @@ import { cn } from "@/utils/cn";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { formatDayHeader, formatTimeRange } from "@/lib/time";
-import type { CalendarEvent } from "@/hooks/use-events";
-import { EventText } from "./event-card";
+import { eventDetailAtom } from "@/state/event-detail";
+import type { EventDetailSelection } from "@/state/event-detail";
+import { EventCardGridBody, EventText } from "./event-card";
 import { EVENT_COLORS } from "./event-card.styles";
 
 const PANEL_WIDTH = 320;
@@ -25,53 +27,37 @@ const CONTENT_ANIMATE = { height: "fit-content" as const, filter: "blur(0)", opa
 const CONTENT_EXIT = { height: 0, filter: "blur(4px)", opacity: 0 };
 const DETAIL_MAX_HEIGHT = { maxHeight: "16rem" } as const;
 
-interface AnchorRect {
-  top: number;
-  left: number;
-  width: number;
-  height: number;
-}
-
-interface FrameRect {
-  top: number;
-  left: number;
-  right: number;
-  bottom: number;
-}
-
-export interface EventDetailSelection {
-  event: CalendarEvent;
-  /** Clicked card's rect, viewport coordinates. */
-  anchor: AnchorRect;
-  /** Bounds the panel is nudged to stay within. */
-  frame: FrameRect;
-}
-
 interface EventDetailPopoverProps {
-  selection: EventDetailSelection | null;
   onClose: () => void;
 }
 
-export function EventDetailPopover({ selection, onClose }: EventDetailPopoverProps) {
-  const lastEventIdRef = useRef<string | null>(null);
+export function EventDetailPopover({ onClose }: EventDetailPopoverProps) {
+  const selection = useAtomValue(eventDetailAtom);
+  const lastSelectionRef = useRef<EventDetailSelection | null>(null);
 
   useEffect(() => {
-    if (selection) lastEventIdRef.current = selection.event.id;
+    if (selection) lastSelectionRef.current = selection;
   }, [selection]);
 
   // Portals can't render during SSR; the panel only ever opens from a client click.
   if (typeof document === "undefined") return null;
 
   const restoreFocus = () => {
-    const id = lastEventIdRef.current;
-    if (!id) return;
-    document.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(id)}"]`)?.focus();
+    const last = lastSelectionRef.current;
+    if (!last) return;
+    // A multi-day event renders one card per spanned day; the stored trigger is the one clicked.
+    const target = last.trigger.isConnected
+      ? last.trigger
+      : document.querySelector<HTMLElement>(`[data-event-id="${CSS.escape(last.event.id)}"]`);
+    target?.focus({ preventScroll: true });
   };
 
   return createPortal(
     <LazyMotion features={loadMotionFeatures}>
       <AnimatePresence onExitComplete={restoreFocus}>
-        {selection && <EventDetailPanel selection={selection} onClose={onClose} />}
+        {selection && (
+          <EventDetailPanel key={selection.event.id} selection={selection} onClose={onClose} />
+        )}
       </AnimatePresence>
     </LazyMotion>,
     document.body,
@@ -109,6 +95,11 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
   useEffect(() => {
     const onKeyDown = (keyEvent: KeyboardEvent) => {
       if (keyEvent.key === "Escape") onClose();
+      // No focusable descendants: keep Tab inside the dialog.
+      if (keyEvent.key === "Tab") {
+        keyEvent.preventDefault();
+        panelRef.current?.focus();
+      }
     };
     const onPointerDown = (pointerEvent: PointerEvent) => {
       if (
@@ -127,11 +118,30 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
     };
   }, [onClose]);
 
+  // Any outside scroll or resize stales the captured anchor; close rather than drift.
+  useEffect(() => {
+    const onScroll = (scrollEvent: Event) => {
+      if (
+        scrollEvent.target instanceof Node
+        && panelRef.current?.contains(scrollEvent.target)
+      ) {
+        return;
+      }
+      onClose();
+    };
+    document.addEventListener("scroll", onScroll, true);
+    globalThis.addEventListener("resize", onClose);
+    return () => {
+      document.removeEventListener("scroll", onScroll, true);
+      globalThis.removeEventListener("resize", onClose);
+    };
+  }, [onClose]);
+
   const title = event.title ?? event.calendarName;
 
   return (
     <m.div
-      className="pointer-events-none fixed z-50"
+      className="fixed z-50"
       style={{ top: anchor.top, left: anchor.left }}
       initial={{ x: 0, y: 0 }}
       animate={{ x: nudge.x, y: nudge.y }}
@@ -140,10 +150,11 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
       <m.div
         ref={panelRef}
         role="dialog"
+        aria-modal="true"
         aria-label={title}
         tabIndex={-1}
         className={cn(
-          "pointer-events-auto overflow-hidden rounded-lg bg-(--event-surface) ring-1 ring-background focus-visible:outline-none",
+          "overflow-hidden rounded-lg bg-(--event-surface) ring-1 ring-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           EVENT_COLORS.blue,
         )}
         initial={{ ...SHADOW_HIDDEN, width: anchor.width }}
@@ -156,17 +167,12 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
           animate={GHOST_ANIMATE}
           exit={{ height: anchor.height, filter: "blur(0)", opacity: 1 }}
         >
-          {/* Pixel-matches the card at t=0 so the panel appears to grow out of it. */}
+          {/* The card's own body inside a same-named size container, so the morph starts pixel-identical. */}
           <div
-            className="relative flex flex-col py-1 pr-2 pl-3 before:absolute before:inset-y-1 before:left-1 before:w-0.5 before:rounded-full before:bg-(--event-accent)"
+            className="relative @container-[size]/event-card before:absolute before:inset-y-1 before:left-1 before:w-0.5 before:rounded-full before:bg-(--event-accent)"
             style={{ width: anchor.width, height: anchor.height }}
           >
-            <EventText size="xs" muted className="truncate tabular-nums">
-              {formatTimeRange(event.startTime, event.endTime)}
-            </EventText>
-            <EventText size="sm" className="truncate font-semibold">
-              {title}
-            </EventText>
+            <EventCardGridBody event={event} />
           </div>
         </m.div>
         <m.div

@@ -5,7 +5,8 @@ import { useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
-import { popoverOverlayAtom } from "@/state/popover-overlay";
+import { eventDetailAtom } from "@/state/event-detail";
+import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
@@ -14,7 +15,6 @@ import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
 import { EventPill, EventPillOverflow } from "./event-card";
 import { EventDetailPopover } from "./event-detail-popover";
-import type { EventDetailSelection } from "./event-detail-popover";
 import {
   EVENT_PILL_GAP_PX,
   EVENT_PILL_HEIGHT_PX,
@@ -223,30 +223,43 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     return () => observer.disconnect();
   }, [scrollToCenter]);
 
-  const [detail, setDetail] = useState<EventDetailSelection | null>(null);
-  const setOverlay = useSetAtom(popoverOverlayAtom);
+  // Write-only: subscribing would reconcile all 742 memoised day cells on every open/close.
+  const setDetail = useSetAtom(eventDetailAtom);
+  const setOverlay = useSetPopoverOverlay();
 
   const closeDetail = useCallback(() => {
     setDetail(null);
     setOverlay(false);
-  }, [setOverlay]);
+  }, [setDetail, setOverlay]);
 
-  useEffect(() => () => setOverlay(false), [setOverlay]);
+  useEffect(
+    () => () => {
+      setDetail(null);
+      setOverlay(false);
+    },
+    [setDetail, setOverlay],
+  );
 
-  // The anchor rect goes stale on resize; the overlay already blocks scrolling while open.
+  // A refetch replaces event objects; swap the fresh one into an open panel.
   useEffect(() => {
-    if (!detail) return;
-    globalThis.addEventListener("resize", closeDetail);
-    return () => globalThis.removeEventListener("resize", closeDetail);
-  }, [detail, closeDetail]);
+    setDetail((prev) => {
+      if (!prev) return prev;
+      for (const day of eventsByDay.values()) {
+        const fresh = day.timed.find((candidate) => candidate.id === prev.event.id);
+        if (fresh) return fresh === prev.event ? prev : { ...prev, event: fresh };
+      }
+      return prev;
+    });
+  }, [eventsByDay, setDetail]);
 
   const handleEventClick = (clickEvent: ReactMouseEvent) => {
     const target = (clickEvent.target as Element).closest<HTMLElement>("[data-event-id]");
     const scroller = scrollerRef.current;
     if (!target || !scroller) return;
+    const id = target.dataset.eventId;
     let event: CalendarEvent | undefined;
     for (const day of eventsByDay.values()) {
-      event = day.timed.find((candidate) => candidate.id === target.dataset.eventId);
+      event = day.timed.find((candidate) => candidate.id === id);
       if (event) break;
     }
     if (!event) return;
@@ -254,7 +267,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     const frameRect = scroller.getBoundingClientRect();
     setDetail({
       event,
-      anchor: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+      trigger: target,
+      anchor: rect,
       frame: {
         top: frameRect.top,
         left: frameRect.left + GUTTER_WIDTH,
@@ -386,7 +400,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           })}
         </div>
       </div>
-      <EventDetailPopover selection={detail} onClose={closeDetail} />
+      <EventDetailPopover onClose={closeDetail} />
     </CalendarFrame>
   );
 }
