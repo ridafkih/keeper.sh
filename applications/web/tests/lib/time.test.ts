@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { formatTimeRange } from "../../src/lib/time";
+import { formatClock, formatTimeRange } from "../../src/lib/time";
 
 const at = (hour: number, minute = 0): Date => new Date(2026, 0, 5, hour, minute);
+
+describe("formatClock", () => {
+  it("drops the period and pads minutes", () => {
+    expect(formatClock(at(10, 42))).toBe("10:42");
+    expect(formatClock(at(0, 5))).toBe("12:05");
+    expect(formatClock(at(13))).toBe("1:00");
+  });
+});
 
 describe("formatTimeRange", () => {
   it("drops the start's period when both ends share it", () => {

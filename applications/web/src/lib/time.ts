@@ -37,7 +37,7 @@ const resolvePeriod = (hours: number): string => {
   return "AM";
 };
 
-const formatClock = (date: Date): string => {
+export const formatClock = (date: Date): string => {
   const hours = date.getHours();
   const minutes = date.getMinutes();
   const displayHours = hours % 12 || 12;
