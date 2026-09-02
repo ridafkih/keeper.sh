@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "../../../../src/hooks/use-events";
+import { at } from "../../../helpers/clock";
 import {
   bucketEventsByDay,
   layoutDayEvents,
@@ -18,7 +19,6 @@ import type {
 const MS_PER_DAY = 86_400_000;
 
 const day = new Date(2026, 0, 5);
-const at = (hour: number, minute = 0): Date => new Date(2026, 0, 5, hour, minute);
 
 const timedEvent = (id: string, startTime: Date, endTime: Date): CalendarEvent => ({
   id,

@@ -7,6 +7,7 @@ import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { eventDetailAtom } from "@/state/event-detail";
 import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
+import { useNowMinute } from "@/hooks/use-now-minute";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
@@ -15,12 +16,9 @@ import { CalendarFrame } from "./calendar-frame";
 import { DayColumn } from "./day-column";
 import { EventPill, EventPillOverflow } from "./event-card";
 import { EventDetailPopover } from "./event-detail-popover";
-import {
-  EVENT_PILL_GAP_PX,
-  EVENT_PILL_HEIGHT_PX,
-  resolveVisiblePillCount,
-  timeOfDayFraction,
-} from "./event-layout";
+import { NowIndicator, NowPill } from "./now-indicator";
+import { resolveNowLayout } from "./now-layout";
+import { EVENT_PILL_GAP_PX, EVENT_PILL_HEIGHT_PX, resolveVisiblePillCount } from "./event-layout";
 import type { DayEvents } from "./event-layout";
 import {
   addDays,
@@ -127,14 +125,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   });
   const columnsTemplate = `repeat(${stripDays.length}, minmax(0, 1fr))`;
 
-  // Client-only so SSR and hydration agree; wall-clock placed so the line holds its hour through DST days.
-  const [nowFraction, setNowFraction] = useState<number | null>(null);
-  useEffect(() => {
-    const update = () => setNowFraction(timeOfDayFraction(new Date()));
-    update();
-    const interval = globalThis.setInterval(update, 60_000);
-    return () => globalThis.clearInterval(interval);
-  }, []);
+  const now = useNowMinute();
+  const nowLayout = now && resolveNowLayout(stripDays, now);
 
   const columnWidth = useCallback(() => {
     const el = scrollerRef.current;
@@ -370,12 +362,16 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           {HOURS.slice(1).map((hour) => (
             <span
               key={hour}
-              className="absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted"
+              className={cn(
+                "absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted",
+                hour === nowLayout?.coveredHour && "invisible",
+              )}
               style={{ top: hour * HOUR_HEIGHT }}
             >
               {formatHourLabel(hour)}
             </span>
           ))}
+          {nowLayout && <NowPill layout={nowLayout} />}
         </div>
         <div
           onClick={handleEventClick}
@@ -386,18 +382,15 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             height: HOUR_HEIGHT * HOURS.length,
           }}
         >
-          {stripDays.map((day) => {
-            const isToday = isSameDay(day, today);
-            return (
-              <DayColumn
-                key={day.getTime()}
-                day={day}
-                isToday={isToday}
-                nowFraction={isToday ? nowFraction : null}
-                events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
-              />
-            );
-          })}
+          {stripDays.map((day) => (
+            <DayColumn
+              key={day.getTime()}
+              day={day}
+              now={isSameDay(day, today) ? now : null}
+              events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
+            />
+          ))}
+          {nowLayout && <NowIndicator layout={nowLayout} />}
         </div>
       </div>
       <EventDetailPopover onClose={closeDetail} />

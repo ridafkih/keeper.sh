@@ -11,15 +11,14 @@ const CARD_INSET_LEFT_PX = 2;
 const CARD_INSET_RIGHT_PX = 3;
 const CARD_INSET_PX = CARD_INSET_LEFT_PX + CARD_INSET_RIGHT_PX;
 
-// Elevation is capped below the current-time line (z-20) and sticky gutter (z-30); ties paint in DOM order.
+// Elevation is capped below the current-time line (z-20, now-indicator.tsx) and sticky gutter (z-30); ties paint in DOM order.
 const CARD_BASE_Z_INDEX = 1;
 const MAX_CARD_ELEVATION = 8;
 
 interface DayColumnProps {
   day: Date;
-  isToday: boolean;
-  /** Fraction of the day; null except on today, so only today's column re-renders on the minute tick. */
-  nowFraction: number | null;
+  /** Null except on today, so only today's column re-renders on the minute tick. */
+  now: Date | null;
   events: CalendarEvent[];
 }
 
@@ -44,12 +43,7 @@ function resolveCardStyle(item: PositionedEvent): CSSProperties {
   };
 }
 
-export const DayColumn = memo(function DayColumn({
-  day,
-  isToday,
-  nowFraction,
-  events,
-}: DayColumnProps) {
+export const DayColumn = memo(function DayColumn({ day, now, events }: DayColumnProps) {
   const positioned = layoutDayEvents(events, day);
 
   return (
@@ -65,17 +59,11 @@ export const DayColumn = memo(function DayColumn({
         <EventCard
           key={item.event.id}
           event={item.event}
-          past={isEventPast(item.event.endTime)}
+          past={isEventPast(item.event.endTime, now?.getTime())}
           layout="grid"
           style={resolveCardStyle(item)}
         />
       ))}
-      {isToday && nowFraction != null && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-20 h-0.5 -translate-y-1/2 bg-red-500"
-          style={{ top: `${nowFraction * 100}%` }}
-        />
-      )}
     </div>
   );
 });
