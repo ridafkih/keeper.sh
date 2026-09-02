@@ -9,6 +9,7 @@ export interface CalendarEvent {
   eventStateId: string | null;
   title: string | null;
   description: string | null;
+  location: string | null;
   startTime: Date;
   endTime: Date;
   /** Whole-day event: `startTime`/`endTime` are the UTC-midnight day bounds. */
@@ -37,6 +38,7 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
     eventStateId: event.eventStateId,
     title: event.title ?? null,
     description: event.description ?? null,
+    location: event.location ?? null,
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
     isAllDay: event.isAllDay,

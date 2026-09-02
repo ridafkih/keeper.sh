@@ -1,11 +1,10 @@
 import { use, useCallback, useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
-import { useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import { cn } from "@/utils/cn";
-import { popoverOverlayAtom } from "@/state/popover-overlay";
+import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import {
   InsidePopoverContext,
   ItemDisabledContext,
@@ -46,7 +45,7 @@ export function NavigationMenuPopover({
   const [expanded, setExpanded] = useState(false);
   const [present, setPresent] = useState(false);
   const containerRef = useRef<HTMLLIElement>(null);
-  const setOverlay = useSetAtom(popoverOverlayAtom);
+  const setOverlay = useSetPopoverOverlay();
   const variant = use(MenuVariantContext);
 
   const close = useCallback(() => {

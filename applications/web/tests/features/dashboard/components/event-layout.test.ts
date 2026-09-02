@@ -25,6 +25,7 @@ const timedEvent = (id: string, startTime: Date, endTime: Date): CalendarEvent =
   eventStateId: null,
   title: id,
   description: null,
+  location: null,
   startTime,
   endTime,
   isAllDay: false,

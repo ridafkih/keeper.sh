@@ -5,18 +5,11 @@ import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
+import { EVENT_COLORS } from "./event-card.styles";
+import type { EventColor } from "./event-card.styles";
 import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
-
-const EVENT_COLORS = {
-  blue: cn(
-    "[--event-ink:var(--color-blue-900)] [--event-surface:var(--color-blue-100)] [--event-accent:var(--color-blue-500)]",
-    "dark:[--event-ink:var(--color-blue-100)] dark:[--event-surface:color-mix(in_srgb,var(--color-blue-500)_20%,var(--color-background))] dark:[--event-accent:var(--color-blue-400)]",
-  ),
-};
-
-type EventColor = keyof typeof EVENT_COLORS;
 
 const eventText = tv({
   base: "tracking-tight",
@@ -42,7 +35,7 @@ type EventTextProps = PropsWithChildren<{
   className?: string;
 }>;
 
-function EventText({ as = "p", size, muted, className, children }: EventTextProps) {
+export function EventText({ as = "p", size, muted, className, children }: EventTextProps) {
   const Element = as;
   return <Element className={eventText({ size, muted, className })}>{children}</Element>;
 }
@@ -56,15 +49,49 @@ interface EventCardProps {
   color?: EventColor;
 }
 
+/** Grid card body, shared with the detail popover's ghost so the morph starts pixel-identical. */
+export function EventCardGridBody({ event }: { event: CalendarEvent }) {
+  const title = event.title ?? event.calendarName;
+  // Padding and centring sit on the body: a container's queries never match the container itself.
+  return (
+    <span className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
+      <EventText
+        as="span"
+        size="xs"
+        muted
+        className="truncate tabular-nums event-short:hidden event-narrow:hidden"
+      >
+        {formatTimeRange(event.startTime, event.endTime)}
+      </EventText>
+      <EventText
+        as="span"
+        size="sm"
+        className="truncate font-semibold event-compact:text-xs event-narrow:text-xs"
+      >
+        {title}
+      </EventText>
+      {event.description && (
+        <EventText
+          as="span"
+          size="xs"
+          muted
+          className="hidden event-roomy:line-clamp-1 event-tall:line-clamp-2 event-narrow:hidden"
+        >
+          {event.description}
+        </EventText>
+      )}
+    </span>
+  );
+}
+
 // Grid height bands (48px hour): each floor sits 1px under its content height so rounding never clips glyphs.
 const eventCard = tv({
   base: "overflow-hidden before:absolute before:w-0.5 before:rounded-full before:bg-(--event-accent)",
   variants: {
     layout: {
       list: "relative flex flex-col gap-0.5 rounded-xl py-2.5 pr-3 pl-4 before:inset-y-2 before:left-1.5",
-      // Size containment is grid-only — it would collapse the content-sized list card.
       // The page-colour ring cuts a card out of any card it overlaps.
-      grid: "absolute @container-[size]/event-card min-h-5 rounded-lg ring-1 ring-background before:inset-y-1 before:left-1",
+      grid: "absolute min-h-5 rounded-lg ring-1 ring-background before:inset-y-1 before:left-1",
     },
     // The muted fill stays opaque — card opacity would let a stacked card beneath show through.
     past: {
@@ -88,34 +115,23 @@ export const EventCard = memo(function EventCard({
   const classes = cn(eventCard({ layout, past }), EVENT_COLORS[color]);
 
   if (layout === "grid") {
+    // Clicks are delegated via `data-event-id` in WeekGrid, so the memoised tree never sees a handler.
     return (
-      <div className={classes} style={style}>
-        {/* Padding and centring sit on the body: a container's queries never match the container itself. */}
-        <div className="flex h-full flex-col py-1 pr-2 pl-3 event-compact:justify-center event-compact:py-0 event-narrow:pr-1 event-narrow:pl-2">
-          <EventText
-            size="xs"
-            muted
-            className="truncate tabular-nums event-short:hidden event-narrow:hidden"
-          >
-            {formatTimeRange(event.startTime, event.endTime)}
-          </EventText>
-          <EventText
-            size="sm"
-            className="truncate font-semibold event-compact:text-xs event-narrow:text-xs"
-          >
-            {title}
-          </EventText>
-          {event.description && (
-            <EventText
-              size="xs"
-              muted
-              className="hidden event-roomy:line-clamp-1 event-tall:line-clamp-2 event-narrow:hidden"
-            >
-              {event.description}
-            </EventText>
-          )}
-        </div>
-      </div>
+      <button
+        type="button"
+        data-event-id={event.id}
+        aria-label={`${title}, ${formatTimeRange(event.startTime, event.endTime)}`}
+        className={cn(
+          classes,
+          "cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        )}
+        style={style}
+      >
+        {/* Size containment sits on an inner span: it's spec-ambiguous on form controls (CSSWG #7947), and it would collapse the content-sized list card. */}
+        <span className="block size-full @container-[size]/event-card">
+          <EventCardGridBody event={event} />
+        </span>
+      </button>
     );
   }
 
