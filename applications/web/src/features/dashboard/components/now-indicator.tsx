@@ -40,7 +40,6 @@ export function NowPill({ now, topFraction }: NowPillProps) {
       style={{ top: `${topFraction * 100}%` }}
     >
       {formatClock(now)}
-      <span className="absolute top-1/2 left-full h-0.5 w-1.5 -translate-y-1/2 bg-red-400" />
     </span>
   );
 }
