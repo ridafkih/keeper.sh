@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatClock, formatTimeRange } from "../../src/lib/time";
-
-const at = (hour: number, minute = 0): Date => new Date(2026, 0, 5, hour, minute);
+import { at } from "../helpers/clock";
 
 describe("formatClock", () => {
   it("drops the period and pads minutes", () => {

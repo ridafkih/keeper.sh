@@ -371,7 +371,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
               {formatHourLabel(hour)}
             </span>
           ))}
-          {now && nowLayout && <NowPill now={now} topFraction={nowLayout.topFraction} />}
+          {nowLayout && <NowPill layout={nowLayout} />}
         </div>
         <div
           onClick={handleEventClick}
@@ -386,10 +386,11 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayColumn
               key={day.getTime()}
               day={day}
+              now={isSameDay(day, today) ? now : null}
               events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
             />
           ))}
-          {nowLayout && <NowIndicator layout={nowLayout} columnCount={stripDays.length} />}
+          {nowLayout && <NowIndicator layout={nowLayout} />}
         </div>
       </div>
       <EventDetailPopover onClose={closeDetail} />

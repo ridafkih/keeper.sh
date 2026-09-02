@@ -1,88 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as React from "react";
-import { createRoot } from "react-dom/client";
-import { parseHTML } from "linkedom";
 import { useNowMinute } from "../../src/hooks/use-now-minute";
+import { mountHook } from "../helpers/mount-hook";
 
 const SECOND_MS = 1000;
+const NativeEvent = globalThis.Event;
 
-interface Harness {
-  now: () => Date | null;
-  unmount: () => void;
-}
-
-const INJECTED_GLOBALS = [
-  "window",
-  "document",
-  "navigator",
-  "HTMLElement",
-  "Element",
-  "Node",
-  "Text",
-  "Event",
-  "MutationObserver",
-  "IS_REACT_ACT_ENVIRONMENT",
-] as const;
-
-let restoreDom = (): void => undefined;
-
-const setupDom = () => {
-  const { window } = parseHTML("<html><body><div id='root'></div></body></html>");
-  const previous = Object.fromEntries(
-    INJECTED_GLOBALS.map((key) => [key, (globalThis as Record<string, unknown>)[key]]),
-  );
-  Object.assign(globalThis, {
-    window,
-    document: window.document,
-    navigator: window.navigator,
-    HTMLElement: window.HTMLElement,
-    Element: window.Element,
-    Node: window.Node,
-    Text: window.Text,
-    Event: window.Event,
-    MutationObserver: class {
-      observe() {}
-      disconnect() {}
-    },
-    IS_REACT_ACT_ENVIRONMENT: true,
-  });
-  restoreDom = () => {
-    for (const key of INJECTED_GLOBALS) {
-      if (previous[key] === undefined) {
-        delete (globalThis as Record<string, unknown>)[key];
-        continue;
-      }
-      (globalThis as Record<string, unknown>)[key] = previous[key];
-    }
-  };
-  return window;
-};
-
-const mountHarness = (): Harness => {
-  const window = setupDom();
-  const container = window.document.getElementById("root") as unknown as Element;
-  const root = createRoot(container);
-
-  const renders: (Date | null)[] = [];
-
-  const Probe = () => {
-    renders.push(useNowMinute());
-    return null;
-  };
-
-  React.act(() => {
-    root.render(React.createElement(Probe));
-  });
-
-  return {
-    now: () => renders[renders.length - 1] ?? null,
-    unmount: () => {
-      React.act(() => {
-        root.unmount();
-      });
-      restoreDom();
-    },
-  };
+const setVisibility = (state: DocumentVisibilityState) => {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
 };
 
 describe("useNowMinute", () => {
@@ -96,27 +21,60 @@ describe("useNowMinute", () => {
   });
 
   it("reads the clock on mount and ticks on the next minute boundary", () => {
-    const harness = mountHarness();
-    expect(harness.now()?.getMinutes()).toBe(42);
+    const hook = mountHook(useNowMinute);
+    expect(hook.latest()?.getMinutes()).toBe(42);
 
     React.act(() => {
       vi.advanceTimersByTime(29 * SECOND_MS);
     });
-    expect(harness.now()?.getMinutes()).toBe(42);
+    expect(hook.latest()?.getMinutes()).toBe(42);
 
     React.act(() => {
       vi.advanceTimersByTime(SECOND_MS);
     });
-    expect(harness.now()?.getMinutes()).toBe(43);
-    expect(harness.now()?.getSeconds()).toBe(0);
+    expect(hook.latest()?.getMinutes()).toBe(43);
+    expect(hook.latest()?.getSeconds()).toBe(0);
 
-    harness.unmount();
+    hook.unmount();
+  });
+
+  it("re-reads a stale clock when the tab becomes visible, not while hidden", () => {
+    const hook = mountHook(useNowMinute);
+    vi.setSystemTime(new Date(2026, 0, 5, 10, 45, 10));
+
+    setVisibility("hidden");
+    React.act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(hook.latest()?.getMinutes()).toBe(42);
+
+    setVisibility("visible");
+    React.act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(hook.latest()?.getMinutes()).toBe(45);
+
+    hook.unmount();
+  });
+
+  it("keeps the same Date when focus lands inside the current minute", () => {
+    const hook = mountHook(useNowMinute);
+    const before = hook.latest();
+    setVisibility("visible");
+
+    React.act(() => {
+      globalThis.dispatchEvent(new NativeEvent("focus"));
+    });
+    expect(hook.latest()).toBe(before);
+
+    hook.unmount();
   });
 
   it("stops ticking when the component unmounts", () => {
-    const harness = mountHarness();
-    harness.unmount();
+    const hook = mountHook(useNowMinute);
+    expect(vi.getTimerCount()).toBe(1);
 
+    hook.unmount();
     expect(vi.getTimerCount()).toBe(0);
   });
 });

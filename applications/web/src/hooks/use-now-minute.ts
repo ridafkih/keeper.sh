@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 
 const MS_PER_MINUTE = 60_000;
 
+const sameMinute = (a: Date, b: Date): boolean =>
+  Math.floor(a.getTime() / MS_PER_MINUTE) === Math.floor(b.getTime() / MS_PER_MINUTE);
+
 /** Null until mounted so SSR and hydration agree; re-read on focus since throttled tabs deliver late ticks. */
 export function useNowMinute(): Date | null {
   const [now, setNow] = useState<Date | null>(null);
@@ -9,7 +12,8 @@ export function useNowMinute(): Date | null {
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout>;
     const tick = () => {
-      setNow(new Date());
+      const next = new Date();
+      setNow((previous) => (previous && sameMinute(previous, next) ? previous : next));
       timeoutId = globalThis.setTimeout(tick, MS_PER_MINUTE - (Date.now() % MS_PER_MINUTE));
     };
     const resync = () => {

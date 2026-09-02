@@ -17,6 +17,8 @@ const MAX_CARD_ELEVATION = 8;
 
 interface DayColumnProps {
   day: Date;
+  /** Null except on today, so only today's column re-renders on the minute tick. */
+  now: Date | null;
   events: CalendarEvent[];
 }
 
@@ -41,7 +43,7 @@ function resolveCardStyle(item: PositionedEvent): CSSProperties {
   };
 }
 
-export const DayColumn = memo(function DayColumn({ day, events }: DayColumnProps) {
+export const DayColumn = memo(function DayColumn({ day, now, events }: DayColumnProps) {
   const positioned = layoutDayEvents(events, day);
 
   return (
@@ -57,7 +59,7 @@ export const DayColumn = memo(function DayColumn({ day, events }: DayColumnProps
         <EventCard
           key={item.event.id}
           event={item.event}
-          past={isEventPast(item.event.endTime)}
+          past={isEventPast(item.event.endTime, now?.getTime())}
           layout="grid"
           style={resolveCardStyle(item)}
         />

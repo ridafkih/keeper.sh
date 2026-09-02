@@ -29,8 +29,8 @@ export const formatTimeUntil = (date: Date): string => {
   return `${prefix}${days}d${suffix}`;
 };
 
-export const isEventPast = (endTime: Date): boolean =>
-  endTime.getTime() < Date.now();
+export const isEventPast = (endTime: Date, nowMs = Date.now()): boolean =>
+  endTime.getTime() < nowMs;
 
 const resolvePeriod = (hours: number): string => {
   if (hours >= 12) return "PM";
