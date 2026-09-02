@@ -36,7 +36,7 @@ export function NowPill({ now, topFraction }: NowPillProps) {
   return (
     <span
       aria-hidden
-      className="pointer-events-none absolute right-1.5 -translate-y-1/2 rounded-full bg-red-400 px-1.5 py-0.5 text-[10px] font-medium leading-none tabular-nums text-neutral-950"
+      className="pointer-events-none absolute right-0 -translate-y-1/2 rounded-full bg-red-400 px-1.5 py-0.5 text-[10px] font-medium leading-none tabular-nums text-neutral-950"
       style={{ top: `${topFraction * 100}%` }}
     >
       {formatClock(now)}
