@@ -53,7 +53,7 @@ function ReportPage() {
           description="Your report has been submitted. We'll look into this as soon as possible."
           level={1}
         />
-        <LinkButton to="/dashboard" variant="elevated" className="w-full justify-center">
+        <LinkButton to="/dashboard" variant="border" className="w-full justify-center">
           <ButtonText>Back to Dashboard</ButtonText>
         </LinkButton>
       </div>

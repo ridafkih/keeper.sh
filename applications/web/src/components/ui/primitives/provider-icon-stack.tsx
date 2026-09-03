@@ -12,7 +12,7 @@ interface ProviderIconStackProps {
 
 function ProviderIconStackItem({ provider, calendarType }: { provider?: string; calendarType?: string }) {
   return (
-    <div className="size-6 rounded-full bg-background-elevated border border-border-elevated flex items-center justify-center">
+    <div className="size-6 rounded-full bg-background border border-interactive-border flex items-center justify-center">
       <ProviderIcon provider={provider} calendarType={calendarType} size={12} />
     </div>
   );
@@ -57,7 +57,7 @@ function ProviderIconStack({ providers, max = 4, animate = false }: ProviderIcon
                 exit={HIDDEN}
                 className="max-w-3 flex justify-start"
             >
-              <div className="size-6 min-w-6 grid place-items-center bg-background-elevated border border-border-elevated rounded-full">
+              <div className="size-6 min-w-6 grid place-items-center bg-background border border-interactive-border rounded-full">
                   <Text size="xs" tone="muted" className="tabular-nums text-[0.625rem]">+{overflow}</Text>
                 </div>
               </m.div>

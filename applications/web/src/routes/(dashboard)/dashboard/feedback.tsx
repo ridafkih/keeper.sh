@@ -51,7 +51,7 @@ function FeedbackPage() {
           description="Your feedback has been submitted. We appreciate you taking the time to help us improve."
           level={1}
         />
-        <LinkButton to="/dashboard" variant="elevated" className="w-full justify-center">
+        <LinkButton to="/dashboard" variant="border" className="w-full justify-center">
           <ButtonText>Back to Dashboard</ButtonText>
         </LinkButton>
       </div>
