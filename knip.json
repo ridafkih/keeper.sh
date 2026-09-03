@@ -10,16 +10,28 @@
     "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
-  "ignoreDependencies": ["@keeper.sh/otelemetry", "@keeper.sh/fixtures"],
-  "ignoreWorkspaces": ["packages/typescript-config"],
+  "ignoreDependencies": [
+    "@keeper.sh/otelemetry",
+    "@keeper.sh/fixtures"
+  ],
+  "ignoreWorkspaces": [
+    "packages/typescript-config"
+  ],
   "ignoreExportsUsedInFile": true,
   "workspaces": {
     "packages/*": {
-      "entry": ["src/{index.ts,api.ts,cron.ts}"],
+      "entry": [
+        "src/{index.ts,api.ts,cron.ts}"
+      ],
       "project": "src/**/*.{ts,tsx}"
     },
+    "packages/sync-kit/*": {
+      "project": "src/**/*.ts"
+    },
     "applications/*": {
-      "entry": ["src/{index.ts,main.tsx,server.tsx}"],
+      "entry": [
+        "src/{index.ts,main.tsx,server.tsx}"
+      ],
       "project": "src/**/*.{ts,tsx}"
     },
     "applications/web": {
@@ -29,22 +41,35 @@
         "plugins/**/*.ts",
         "scripts/**/*.ts"
       ],
-      "project": ["src/**/*.{ts,tsx}", "plugins/**/*.ts", "scripts/**/*.ts"],
-      "ignoreDependencies": ["@babel/preset-typescript"]
+      "project": [
+        "src/**/*.{ts,tsx}",
+        "plugins/**/*.ts",
+        "scripts/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@babel/preset-typescript"
+      ]
     },
     "services/*": {
       "project": "src/**/*.{ts,tsx}"
     },
     "services/api": {
-      "entry": ["src/routes/**/*.ts", "src/scripts/**/*.ts"],
+      "entry": [
+        "src/routes/**/*.ts",
+        "src/scripts/**/*.ts"
+      ],
       "project": "src/**/*.{ts,tsx}"
     },
     "services/cron": {
-      "entry": ["src/jobs/*.ts"],
+      "entry": [
+        "src/jobs/*.ts"
+      ],
       "project": "src/**/*.{ts,tsx}"
     },
     "services/mcp": {
-      "entry": ["src/routes/**/*.ts"],
+      "entry": [
+        "src/routes/**/*.ts"
+      ],
       "project": "src/**/*.{ts,tsx}"
     }
   }
