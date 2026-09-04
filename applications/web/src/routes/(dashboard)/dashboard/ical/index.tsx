@@ -170,7 +170,7 @@ function CreateFeedItem({
               <CreateSubmitButton isCreating={isCreating} />
               <Button
                 type="button"
-                variant="border"
+                variant="elevated"
                 className="w-full justify-center"
                 onClick={() => setCreateOpen(false)}
               >
