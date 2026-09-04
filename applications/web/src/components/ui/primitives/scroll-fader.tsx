@@ -72,7 +72,7 @@ export function ScrollFader({ children }: PropsWithChildren) {
   const band = (
     <div
       ref={bandRef}
-      className="pointer-events-none fixed z-10 bg-linear-to-t from-background to-transparent opacity-0"
+      className="pointer-events-none fixed z-[5] bg-linear-to-t from-background to-transparent opacity-0"
       style={{ height: BAND_HEIGHT_PX }}
     />
   );
