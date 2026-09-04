@@ -23,6 +23,17 @@ body {
   overflow-x: hidden;
 }
 
+/* The colour inherits from the root; the width does not, so every scroller sets it in the base layer, where utilities such as `[scrollbar-width:none]` still win. */
+@layer base {
+  html {
+    scrollbar-color: var(--ui-interactive-border) transparent;
+  }
+
+  * {
+    scrollbar-width: thin;
+  }
+}
+
 @media (width < 48rem) {
   body:has(#marketing-header-menu) {
     overflow-y: hidden;
