@@ -36,7 +36,7 @@ function DashboardLayout() {
 
   return (
     <div className="relative flex min-h-dvh justify-center lg:justify-start lg:gap-4 lg:p-4">
-      <div className="relative flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:overscroll-y-none lg:px-1 lg:pt-6">
+      <div className="relative flex w-full max-w-sm shrink-0 flex-col gap-3 px-4 pb-12 pt-4 xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:px-1 lg:pt-6">
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence>
             {overlayActive && (

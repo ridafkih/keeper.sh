@@ -10,7 +10,7 @@ import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { serializedPatch } from "@/lib/serialized-mutate";
 import { formatDate } from "@/lib/time";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Button, ButtonIcon } from "@/components/ui/primitives/button";
 import { Input } from "@/components/ui/primitives/input";
@@ -197,15 +197,15 @@ function ICalFeedDetailPage() {
   };
 
   return (
-    <ScrollFader>
-      <div className="flex flex-col gap-1.5">
-        <StickyPageHeader className="gap-1.5">
-          <div className="flex items-center justify-between">
-            <BackButton fallback="/dashboard/ical" />
-            <FeedPrevNext feedId={feedId} />
-          </div>
-          <FeedHeader name={feed.name} />
-        </StickyPageHeader>
+    <div className="flex flex-col gap-1.5 lg:h-full">
+      <StickyPageHeader className="gap-1.5">
+        <div className="flex items-center justify-between">
+          <BackButton fallback="/dashboard/ical" />
+          <FeedPrevNext feedId={feedId} />
+        </div>
+        <FeedHeader name={feed.name} />
+      </StickyPageHeader>
+      <PageBody className="gap-1.5">
         {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
         <DashboardSection
           title="Feed Link"
@@ -307,8 +307,8 @@ function ICalFeedDetailPage() {
             />
           </>
         )}
-      </div>
-    </ScrollFader>
+      </PageBody>
+    </div>
   );
 }
 

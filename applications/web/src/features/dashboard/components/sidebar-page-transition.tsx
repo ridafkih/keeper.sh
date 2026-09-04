@@ -114,10 +114,11 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
 
   return (
     <LazyMotion features={loadMotionFeatures}>
-      <div ref={containerRef} className="relative">
+      <div ref={containerRef} className="relative lg:h-full">
         {exiting && <ExitingPageLayer key={exiting.key} page={exiting} onDone={clearExiting} />}
         <m.div
           key={pathname}
+          className="lg:h-full"
           custom={tracked.direction}
           variants={pageVariants}
           initial={tracked.direction ? "enter" : false}

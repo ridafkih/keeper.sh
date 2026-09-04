@@ -4,7 +4,7 @@ import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
@@ -148,14 +148,14 @@ function AccountDetailPage() {
   );
 
   return (
-    <ScrollFader>
-      <div className="flex flex-col gap-1.5">
-        <StickyPageHeader>
-          <div className="flex items-center justify-between">
-            <BackButton />
-            <AccountPrevNext accountId={accountId} />
-          </div>
-        </StickyPageHeader>
+    <div className="flex flex-col gap-1.5 lg:h-full">
+      <StickyPageHeader>
+        <div className="flex items-center justify-between">
+          <BackButton />
+          <AccountPrevNext accountId={accountId} />
+        </div>
+      </StickyPageHeader>
+      <PageBody className="gap-1.5">
         <DashboardSection
           title="Account Information"
           description="View details about the account and its calendars."
@@ -198,8 +198,8 @@ function AccountDetailPage() {
           deleting={isDeleting}
           onConfirm={handleConfirmDelete}
         />
-      </div>
-    </ScrollFader>
+      </PageBody>
+    </div>
   );
 }
 

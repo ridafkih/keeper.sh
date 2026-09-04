@@ -6,7 +6,7 @@ import { useAtomValue, useStore } from "jotai";
 import type { SyncRange } from "@keeper.sh/data-schemas";
 import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { UpgradeHint, PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
@@ -158,15 +158,15 @@ function CalendarDetailPage() {
   const isPushCapable = canPush(calendar);
 
   return (
-    <ScrollFader>
-      <div className="flex flex-col gap-1.5">
-        <StickyPageHeader className="gap-1.5">
-          <div className="flex items-center justify-between">
-            <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-            <CalendarPrevNext calendarId={calendarId} />
-          </div>
-          <CalendarHeader account={account} />
-        </StickyPageHeader>
+    <div className="flex flex-col gap-1.5 lg:h-full">
+      <StickyPageHeader className="gap-1.5">
+        <div className="flex items-center justify-between">
+          <BackButton fallback={`/dashboard/accounts/${accountId}`} />
+          <CalendarPrevNext calendarId={calendarId} />
+        </div>
+        <CalendarHeader account={account} />
+      </StickyPageHeader>
+      <PageBody className="gap-1.5">
         <ProviderMissingNotice />
         <RenameSection calendarId={calendarId} />
         {isPullCapable && (
@@ -183,8 +183,8 @@ function CalendarDetailPage() {
         {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
         <CalendarInfoSection account={account} accountId={accountId} />
         {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
-      </div>
-    </ScrollFader>
+      </PageBody>
+    </div>
   );
 }
 
