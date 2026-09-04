@@ -6,7 +6,7 @@ export function StickyPageHeader({ children, className }: PropsWithChildren<{ cl
   return (
     <div
       className={cn(
-        "sticky top-0 z-[5] flex flex-col bg-background pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent lg:-top-6 lg:-mx-1 lg:-mt-6 lg:px-1 lg:pt-6",
+        "sticky top-0 z-[5] flex flex-col bg-background pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent lg:-top-(--sidebar-pad-t) lg:-mx-(--sidebar-pad-x) lg:-mt-(--sidebar-pad-t) lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t)",
         className,
       )}
     >
