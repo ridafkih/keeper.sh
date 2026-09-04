@@ -95,6 +95,7 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
     select: (state) => state.matches[state.matches.length - 1]?.pathname ?? state.location.pathname,
   });
   const index = useLocation({ select: (location) => location.state.__TSR_index });
+  const declared = useLocation({ select: (location) => location.state.sidebarDirection });
   const reduceMotion = useReducedMotion() ?? false;
   const [tracked, setTracked] = useState<TrackedLocation>({ location: { pathname, index }, direction: null });
   const [exiting, setExiting] = useState<ExitingPage | null>(null);
@@ -103,7 +104,7 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
 
   if (tracked.location.pathname !== pathname) {
     const location = { pathname, index };
-    setTracked({ location, direction: resolveSidebarDirection(tracked.location, location) });
+    setTracked({ location, direction: resolveSidebarDirection(tracked.location, location, declared) });
   }
 
   // The router cannot keep an exited match rendered, so the outgoing page animates as its retained DOM node.

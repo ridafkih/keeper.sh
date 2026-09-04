@@ -17,7 +17,7 @@ export function PaginationPrevious({ to, onMouseEnter }: { to?: string; onMouseE
   }
 
   return (
-    <LinkButton to={to} replace variant="border" size="compact" className="aspect-square" onMouseEnter={onMouseEnter}>
+    <LinkButton to={to} replace state={{ sidebarDirection: "back" }} variant="border" size="compact" className="aspect-square" onMouseEnter={onMouseEnter}>
       <ButtonIcon><ChevronLeft size={16} /></ButtonIcon>
     </LinkButton>
   );
@@ -33,7 +33,7 @@ export function PaginationNext({ to, onMouseEnter }: { to?: string; onMouseEnter
   }
 
   return (
-    <LinkButton to={to} replace variant="border" size="compact" className="aspect-square" onMouseEnter={onMouseEnter}>
+    <LinkButton to={to} replace state={{ sidebarDirection: "forward" }} variant="border" size="compact" className="aspect-square" onMouseEnter={onMouseEnter}>
       <ButtonIcon><ChevronRight size={16} /></ButtonIcon>
     </LinkButton>
   );

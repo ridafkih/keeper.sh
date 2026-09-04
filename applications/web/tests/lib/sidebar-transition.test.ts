@@ -22,4 +22,12 @@ describe("resolveSidebarDirection", () => {
       expect(resolveSidebarDirection(testCase.from, testCase.to)).toBe(testCase.expected);
     });
   }
+
+  it("honours a declared direction on a replace to a sibling", () => {
+    expect(resolveSidebarDirection(at("/dashboard/accounts/a/c2", 1), at("/dashboard/accounts/a/c1", 1), "back")).toBe("back");
+  });
+
+  it("ignores a declared direction once the history index moves", () => {
+    expect(resolveSidebarDirection(at("/dashboard", 0), at("/dashboard/accounts/a/c1", 1), "back")).toBe("forward");
+  });
 });
