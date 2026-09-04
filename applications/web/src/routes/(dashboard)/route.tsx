@@ -7,6 +7,7 @@ import { popoverOverlayAtom } from "@/state/popover-overlay";
 import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
+import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
 
 export const Route = createFileRoute("/(dashboard)")({
   beforeLoad: ({ context }) => {
@@ -50,7 +51,9 @@ function DashboardLayout() {
           </AnimatePresence>
         </LazyMotion>
         <SyncProvider />
-        <Outlet />
+        <SidebarPageTransition>
+          <Outlet />
+        </SidebarPageTransition>
       </div>
       {/* `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10). */}
       <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
