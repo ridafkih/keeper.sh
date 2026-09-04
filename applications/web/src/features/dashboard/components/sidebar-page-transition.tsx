@@ -13,6 +13,7 @@ import {
 const NUDGE = 32;
 const TRANSITION = { duration: 0.22, ease: [0.2, 0, 0, 1] as const };
 const INSTANT = { duration: 0 };
+const PAGE_SCROLLER_SELECTOR = "[data-page-scroller]";
 
 const pageVariants: Variants = {
   enter: (direction: SidebarDirection) => ({ x: direction === "forward" ? NUDGE : -NUDGE, opacity: 0 }),
@@ -25,10 +26,18 @@ interface TrackedLocation {
   direction: SidebarDirection | null;
 }
 
+interface Box {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+}
+
 interface DetachedPage {
   node: HTMLElement;
-  height: number;
-  scrollOffset: number;
+  box: Box;
+  scrollport: Box;
+  innerScrollTop: number;
 }
 
 interface ExitingPage extends DetachedPage {
@@ -36,9 +45,12 @@ interface ExitingPage extends DetachedPage {
   direction: SidebarDirection;
 }
 
-function resolveScrollTop(element: HTMLElement): number {
+const toBox = ({ top, left, width, height }: DOMRect): Box => ({ top, left, width, height });
+
+function resolveScrollportBox(element: HTMLElement): Box {
   const parent = resolveScrollParent(element);
-  return parent ? parent.scrollTop : window.scrollY;
+  if (parent) return toBox(parent.getBoundingClientRect());
+  return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
 }
 
 function scrollToTop(element: HTMLElement): void {
@@ -47,23 +59,33 @@ function scrollToTop(element: HTMLElement): void {
   else window.scrollTo(0, 0);
 }
 
+// Pinned to the viewport where it last stood, so scrolling or restoring the live page cannot drag it along.
 function ExitingPageLayer({ page, onDone }: { page: ExitingPage; onDone: () => void }) {
   const attach = useCallback((element: HTMLDivElement | null) => {
-    element?.replaceChildren(page.node);
-  }, [page.node]);
+    if (!element) return;
+    element.replaceChildren(page.node);
+    const scroller = page.node.querySelector<HTMLElement>(PAGE_SCROLLER_SELECTOR);
+    if (scroller) scroller.scrollTop = page.innerScrollTop;
+  }, [page]);
+  const { box, scrollport } = page;
 
   return (
-    <m.div
-      className="pointer-events-none absolute inset-x-0"
-      style={{ top: -page.scrollOffset, height: page.height }}
-      custom={page.direction}
-      variants={pageVariants}
-      initial="center"
-      animate="exit"
-      transition={TRANSITION}
-      onAnimationComplete={onDone}
-      ref={attach}
-    />
+    <div
+      className="pointer-events-none fixed overflow-hidden"
+      style={{ top: scrollport.top, left: scrollport.left, width: scrollport.width, height: scrollport.height }}
+    >
+      <m.div
+        className="absolute"
+        style={{ top: box.top - scrollport.top, left: box.left - scrollport.left, width: box.width, height: box.height }}
+        custom={page.direction}
+        variants={pageVariants}
+        initial="center"
+        animate="exit"
+        transition={TRANSITION}
+        onAnimationComplete={onDone}
+        ref={attach}
+      />
+    </div>
   );
 }
 
@@ -92,19 +114,20 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
     return () => {
       detachedRef.current = {
         node: element,
-        height: element.offsetHeight,
-        scrollOffset: resolveScrollTop(element),
+        box: toBox(element.getBoundingClientRect()),
+        scrollport: resolveScrollportBox(element),
+        innerScrollTop: element.querySelector<HTMLElement>(PAGE_SCROLLER_SELECTOR)?.scrollTop ?? 0,
       };
     };
   }, []);
 
-  // The new page starts at the top; the outgoing one is offset so it keeps the spot it had on screen.
+  // Forward navigation starts the new page at the top; going back leaves the position to the router's restoration.
   useLayoutEffect(() => {
     const detached = detachedRef.current;
     const container = containerRef.current;
     detachedRef.current = null;
     if (!detached || !container || !tracked.direction) return;
-    scrollToTop(container);
+    if (tracked.direction === "forward") scrollToTop(container);
     if (reduceMotion) return;
     const { pathname: to, index: at } = tracked.location;
     setExiting({ ...detached, key: `${to}:${at}`, direction: tracked.direction });
