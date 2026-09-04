@@ -4,6 +4,8 @@ import useSWR, { preload, useSWRConfig } from "swr";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
@@ -146,53 +148,57 @@ function AccountDetailPage() {
   );
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <BackButton />
-        <AccountPrevNext accountId={accountId} />
-      </div>
-      <DashboardSection
-        title="Account Information"
-        description="View details about the account and its calendars."
-      />
-      <NavigationMenu>
-        <MetadataRow label="Resource Type" value="Account" />
-        <MetadataRow label="Calendar Count" value={String(calendars.length)} />
-        <MetadataRow label="Identifier" value={account.accountIdentifier ?? ""} truncate />
-        <MetadataRow label="Provider" value={account.providerName} />
-        <MetadataRow label="Authenticated" value={account.authType} />
-        <MetadataRow label="Connected" value={formatDate(account.createdAt)} />
-        {account.calendarsRefreshedAt && (
-          <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
-        )}
-      </NavigationMenu>
-      <NavigationMenu>
-        <RefreshCalendarsItem accountId={accountId} />
-      </NavigationMenu>
-      <DashboardSection
-        title="Account Calendars"
-        description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars no longer found at the provider are noted below.</>}
-      />
-      <NavigationMenu>
-        <CalendarList calendars={calendars} accountId={accountId} />
-      </NavigationMenu>
-      <NavigationMenu>
-        <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
-          <NavigationMenuItemIcon>
-            <Trash2 size={15} className="text-destructive" />
-          </NavigationMenuItemIcon>
-          <Text size="sm" tone="danger">Delete Account</Text>
-        </NavigationMenuButtonItem>
-      </NavigationMenu>
-      {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
-      <DeleteConfirmation
-        title="Delete calendar account?"
-        description="This will remove the account and all its calendars. Any sync profiles using these calendars will be affected."
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        deleting={isDeleting}
-        onConfirm={handleConfirmDelete}
-      />
+    <div className="flex flex-col gap-1.5 lg:h-full">
+      <StickyPageHeader>
+        <div className="flex items-center justify-between">
+          <BackButton />
+          <AccountPrevNext accountId={accountId} />
+        </div>
+      </StickyPageHeader>
+      <PageBody className="gap-1.5">
+        <DashboardSection
+          title="Account Information"
+          description="View details about the account and its calendars."
+        />
+        <NavigationMenu>
+          <MetadataRow label="Resource Type" value="Account" />
+          <MetadataRow label="Calendar Count" value={String(calendars.length)} />
+          <MetadataRow label="Identifier" value={account.accountIdentifier ?? ""} truncate />
+          <MetadataRow label="Provider" value={account.providerName} />
+          <MetadataRow label="Authenticated" value={account.authType} />
+          <MetadataRow label="Connected" value={formatDate(account.createdAt)} />
+          {account.calendarsRefreshedAt && (
+            <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
+          )}
+        </NavigationMenu>
+        <NavigationMenu>
+          <RefreshCalendarsItem accountId={accountId} />
+        </NavigationMenu>
+        <DashboardSection
+          title="Account Calendars"
+          description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars no longer found at the provider are noted below.</>}
+        />
+        <NavigationMenu>
+          <CalendarList calendars={calendars} accountId={accountId} />
+        </NavigationMenu>
+        <NavigationMenu>
+          <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
+            <NavigationMenuItemIcon>
+              <Trash2 size={15} className="text-destructive" />
+            </NavigationMenuItemIcon>
+            <Text size="sm" tone="danger">Delete Account</Text>
+          </NavigationMenuButtonItem>
+        </NavigationMenu>
+        {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
+        <DeleteConfirmation
+          title="Delete calendar account?"
+          description="This will remove the account and all its calendars. Any sync profiles using these calendars will be affected."
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          deleting={isDeleting}
+          onConfirm={handleConfirmDelete}
+        />
+      </PageBody>
     </div>
   );
 }

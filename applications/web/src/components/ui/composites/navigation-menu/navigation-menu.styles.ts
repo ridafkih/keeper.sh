@@ -4,7 +4,7 @@ export const navigationMenuStyle = tv({
   base: "flex flex-col rounded-2xl p-0.5",
   variants: {
     variant: {
-      default: "bg-background-elevated border border-border-elevated shadow-xs",
+      default: "bg-background border border-interactive-border shadow-xs",
       highlight: "relative before:absolute before:top-0.5 before:inset-x-0 before:h-px before:bg-linear-to-r before:mx-4 before:z-10 before:from-transparent before:to-transparent dark:bg-blue-700 dark:before:via-blue-400 bg-blue-500 before:via-blue-300"
     },
   },

@@ -11,7 +11,7 @@ interface BackButtonProps {
 
 export function BackButton({
   fallback = "/dashboard",
-  variant = "elevated",
+  variant = "border",
   size = "compact",
   className = "aspect-square",
 }: BackButtonProps) {

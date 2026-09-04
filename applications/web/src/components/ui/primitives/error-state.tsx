@@ -16,7 +16,7 @@ export function ErrorState({
         {message}
       </Text>
       {onRetry && (
-        <Button variant="elevated" size="compact" onClick={onRetry}>
+        <Button variant="border" size="compact" onClick={onRetry}>
           <ButtonText>Retry</ButtonText>
         </Button>
       )}
