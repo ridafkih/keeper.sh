@@ -6,6 +6,7 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { ErrorState } from "@/components/ui/primitives/error-state";
+import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
 import { isEventPast, formatDayHeader } from "@/lib/time";
@@ -73,10 +74,12 @@ const resolveGroupOffsets = (groups: DayGroup[]): number[] => {
 
 function EventsPage() {
   return (
-    <div className="flex flex-col gap-3">
-      <BackButton />
-      <EventsContent />
-    </div>
+    <ScrollFader>
+      <div className="flex flex-col gap-3">
+        <BackButton />
+        <EventsContent />
+      </div>
+    </ScrollFader>
   );
 }
 
