@@ -26,9 +26,12 @@ interface DayGroup {
 interface DaySectionProps {
   label: string;
   events: CalendarEvent[];
-  startIndex: number;
-  firstNewIndex: number;
-  reduceMotion: boolean;
+  newOrders: ReadonlyMap<string, number>;
+}
+
+interface SeenIds {
+  previous: ReadonlySet<string>;
+  current: ReadonlySet<string>;
 }
 
 const CARD_HIDDEN = { opacity: 0, y: 8 };
@@ -36,12 +39,20 @@ const CARD_VISIBLE = { opacity: 1, y: 0 };
 const CARD_TRANSITION = { duration: 0.28, ease: [0.2, 0, 0, 1] as const };
 const CARD_STAGGER = 0.035;
 const CARD_STAGGER_CAP = 12;
-const INSTANT = { duration: 0 };
+const NO_NEW_CARDS: ReadonlyMap<string, number> = new Map();
 
-function resolveCardTransition(order: number, reduceMotion: boolean) {
-  if (reduceMotion) return INSTANT;
-  return { ...CARD_TRANSITION, delay: Math.min(order, CARD_STAGGER_CAP) * CARD_STAGGER };
-}
+const resolveCardTransition = (order: number) => ({
+  ...CARD_TRANSITION,
+  delay: Math.min(order, CARD_STAGGER_CAP) * CARD_STAGGER,
+});
+
+const resolveNewOrders = (events: CalendarEvent[], seen: ReadonlySet<string>): ReadonlyMap<string, number> => {
+  const orders = new Map<string, number>();
+  for (const event of events) {
+    if (!seen.has(event.id)) orders.set(event.id, orders.size);
+  }
+  return orders;
+};
 
 interface LoadMoreSentinelProps {
   isValidating: boolean;
@@ -62,15 +73,6 @@ const groupEventsByDay = (events: CalendarEvent[]): DayGroup[] => {
     label: formatDayHeader(new Date(key)),
     events: dayEvents,
   }));
-};
-
-const resolveGroupOffsets = (groups: DayGroup[]): number[] => {
-  let offset = 0;
-  return groups.map((group) => {
-    const start = offset;
-    offset += group.events.length;
-    return start;
-  });
 };
 
 function EventsPage() {
@@ -99,13 +101,17 @@ function EventsHeader() {
 function EventsContent() {
   const { events, error, isLoading, isValidating, hasMore, loadMore } = useEvents();
   const reduceMotion = useReducedMotion() ?? false;
-  // Cards already on screen when the page mounts (cached data) stay put; only newly fetched ones rise in.
-  const [revealed, setRevealed] = useState({ count: isLoading ? 0 : events.length, seen: events.length });
-  if (revealed.seen !== events.length) {
-    setRevealed({ count: revealed.seen, seen: events.length });
+  // Cards already on screen when the page mounts (cached data) stay put; ids seen for the first time rise in.
+  const [seen, setSeen] = useState<SeenIds>(() => {
+    const initial = new Set(isLoading ? [] : events.map((event) => event.id));
+    return { previous: initial, current: initial };
+  });
+  const unseen = events.filter((event) => !seen.current.has(event.id));
+  if (unseen.length > 0) {
+    setSeen({ previous: seen.current, current: new Set([...seen.current, ...unseen.map((event) => event.id)]) });
   }
+  const newOrders = reduceMotion ? NO_NEW_CARDS : resolveNewOrders(events, seen.previous);
   const dayGroups = groupEventsByDay(events);
-  const groupOffsets = resolveGroupOffsets(dayGroups);
 
   if (isLoading) return <LoadingIndicator />;
   if (error) return <ErrorState message="Failed to load events." />;
@@ -114,15 +120,8 @@ function EventsContent() {
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-4">
         <LazyMotion features={loadMotionFeatures}>
-          {dayGroups.map((group, groupIndex) => (
-            <DaySection
-              key={group.label}
-              label={group.label}
-              events={group.events}
-              startIndex={groupOffsets[groupIndex]}
-              firstNewIndex={revealed.count}
-              reduceMotion={reduceMotion}
-            />
+          {dayGroups.map((group) => (
+            <DaySection key={group.label} label={group.label} events={group.events} newOrders={newOrders} />
           ))}
         </LazyMotion>
       </div>
@@ -172,25 +171,19 @@ function LoadingIndicator() {
   );
 }
 
-const DaySection = memo(function DaySection({
-  label,
-  events,
-  startIndex,
-  firstNewIndex,
-  reduceMotion,
-}: DaySectionProps) {
+const DaySection = memo(function DaySection({ label, events, newOrders }: DaySectionProps) {
   return (
     <div className="flex flex-col px-0.5">
       <DashboardHeading2>{label}</DashboardHeading2>
       <div className="flex flex-col gap-2 pt-1">
-        {events.map((event, eventIndex) => {
-          const order = startIndex + eventIndex - firstNewIndex;
+        {events.map((event) => {
+          const order = newOrders.get(event.id);
           return (
             <m.div
               key={event.id}
-              initial={order < 0 ? false : CARD_HIDDEN}
+              initial={order === undefined ? false : CARD_HIDDEN}
               animate={CARD_VISIBLE}
-              transition={resolveCardTransition(Math.max(order, 0), reduceMotion)}
+              transition={order === undefined ? undefined : resolveCardTransition(order)}
             >
               <EventCard event={event} past={isEventPast(event.endTime)} />
             </m.div>
