@@ -76,10 +76,23 @@ function EventsPage() {
   return (
     <ScrollFader>
       <div className="flex flex-col gap-3">
-        <BackButton />
+        <EventsHeader />
         <EventsContent />
       </div>
     </ScrollFader>
+  );
+}
+
+// Reaches up over the column's top padding at lg so nothing shows above it while stuck.
+function EventsHeader() {
+  return (
+    <div className="sticky top-0 z-10 flex flex-col gap-3 bg-background pb-1 after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent lg:-top-6 lg:-mx-1 lg:-mt-6 lg:px-1 lg:pt-6">
+      <BackButton />
+      <div className="flex flex-col">
+        <DashboardHeading1>Events</DashboardHeading1>
+        <Text size="sm">View all of the events across all of your calendars.</Text>
+      </div>
+    </div>
   );
 }
 
@@ -100,10 +113,6 @@ function EventsContent() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-col">
-          <DashboardHeading1>Events</DashboardHeading1>
-          <Text size="sm">View all of the events across all of your calendars.</Text>
-        </div>
         <LazyMotion features={loadMotionFeatures}>
           {dayGroups.map((group, groupIndex) => (
             <DaySection
