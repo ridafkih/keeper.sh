@@ -7,6 +7,7 @@ import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { ErrorState } from "@/components/ui/primitives/error-state";
 import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
 import { isEventPast, formatDayHeader } from "@/lib/time";
@@ -83,16 +84,15 @@ function EventsPage() {
   );
 }
 
-// Reaches up over the column's top padding at lg so nothing shows above it while stuck.
 function EventsHeader() {
   return (
-    <div className="sticky top-0 z-10 flex flex-col gap-3 bg-background pb-1 after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent lg:-top-6 lg:-mx-1 lg:-mt-6 lg:px-1 lg:pt-6">
+    <StickyPageHeader className="gap-3">
       <BackButton />
       <div className="flex flex-col">
         <DashboardHeading1>Events</DashboardHeading1>
         <Text size="sm">View all of the events across all of your calendars.</Text>
       </div>
-    </div>
+    </StickyPageHeader>
   );
 }
 

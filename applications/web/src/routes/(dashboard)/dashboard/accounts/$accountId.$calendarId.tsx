@@ -6,6 +6,8 @@ import { useAtomValue, useStore } from "jotai";
 import type { SyncRange } from "@keeper.sh/data-schemas";
 import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { UpgradeHint, PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
@@ -156,29 +158,33 @@ function CalendarDetailPage() {
   const isPushCapable = canPush(calendar);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <BackButton fallback={`/dashboard/accounts/${accountId}`} />
-        <CalendarPrevNext calendarId={calendarId} />
+    <ScrollFader>
+      <div className="flex flex-col gap-1.5">
+        <StickyPageHeader className="gap-1.5">
+          <div className="flex items-center justify-between">
+            <BackButton fallback={`/dashboard/accounts/${accountId}`} />
+            <CalendarPrevNext calendarId={calendarId} />
+          </div>
+          <CalendarHeader account={account} />
+        </StickyPageHeader>
+        <ProviderMissingNotice />
+        <RenameSection calendarId={calendarId} />
+        {isPullCapable && (
+          <>
+            <DashboardSection
+              title="Send Events to Calendars"
+              description="Select which calendars should receive events from this calendar."
+            />
+            <DestinationsSection calendarId={calendarId} />
+          </>
+        )}
+        {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
+        {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
+        {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
+        <CalendarInfoSection account={account} accountId={accountId} />
+        {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
       </div>
-      <CalendarHeader account={account} />
-      <ProviderMissingNotice />
-      <RenameSection calendarId={calendarId} />
-      {isPullCapable && (
-        <>
-          <DashboardSection
-            title="Send Events to Calendars"
-            description="Select which calendars should receive events from this calendar."
-          />
-          <DestinationsSection calendarId={calendarId} />
-        </>
-      )}
-      {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
-      {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
-      {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
-      <CalendarInfoSection account={account} accountId={accountId} />
-      {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
-    </div>
+    </ScrollFader>
   );
 }
 

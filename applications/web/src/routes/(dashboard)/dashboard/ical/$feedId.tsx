@@ -10,6 +10,8 @@ import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { serializedPatch } from "@/lib/serialized-mutate";
 import { formatDate } from "@/lib/time";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { ScrollFader } from "@/components/ui/primitives/scroll-fader";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Button, ButtonIcon } from "@/components/ui/primitives/button";
 import { Input } from "@/components/ui/primitives/input";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -195,114 +197,118 @@ function ICalFeedDetailPage() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center justify-between">
-        <BackButton fallback="/dashboard/ical" />
-        <FeedPrevNext feedId={feedId} />
-      </div>
-      <FeedHeader name={feed.name} />
-      {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
-      <DashboardSection
-        title="Feed Link"
-        description="Subscribe to this link in any calendar app."
-      />
-      <FeedLinkField url={feed.icalUrl} onError={setMutationError} />
-      <Text size="sm" tone="muted" className="px-0.5">{resolveFeedDisclosure(feed)}</Text>
-      <DashboardSection
-        title="Feed Name"
-        description="Click below to rename this feed. Only you can see this name."
-      />
-      <NavigationMenu>
-        <NavigationMenuEditableItem value={feed.name} onCommit={handleRename} />
-      </NavigationMenu>
-      <CalendarsSection
-        isDefault={feed.isDefault}
-        selected={selected}
-        onToggle={handleToggleCalendar}
-      />
-      <DashboardSection
-        title="Feed Settings"
-        description={<>Choose which event details this link includes. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
-      />
-      <PremiumFeatureGate locked={locked} hint="Feed settings are a Pro feature.">
+    <ScrollFader>
+      <div className="flex flex-col gap-1.5">
+        <StickyPageHeader className="gap-1.5">
+          <div className="flex items-center justify-between">
+            <BackButton fallback="/dashboard/ical" />
+            <FeedPrevNext feedId={feedId} />
+          </div>
+          <FeedHeader name={feed.name} />
+        </StickyPageHeader>
+        {mutationError && <Text size="sm" tone="danger">{mutationError}</Text>}
+        <DashboardSection
+          title="Feed Link"
+          description="Subscribe to this link in any calendar app."
+        />
+        <FeedLinkField url={feed.icalUrl} onError={setMutationError} />
+        <Text size="sm" tone="muted" className="px-0.5">{resolveFeedDisclosure(feed)}</Text>
+        <DashboardSection
+          title="Feed Name"
+          description="Click below to rename this feed. Only you can see this name."
+        />
         <NavigationMenu>
-          <EventNameTemplateItem
-            customEventName={feed.customEventName}
-            disabled={locked || feed.includeEventName}
-            onCommit={(customEventName) => patchFeed({ customEventName })}
-          />
-          <NavigationMenuToggleItem
-            checked={feed.includeEventName}
-            disabled={locked}
-            onCheckedChange={handleToggleEventName}
-          >
-            <NavigationMenuItemLabel>Include Event Name</NavigationMenuItemLabel>
-          </NavigationMenuToggleItem>
-          {SETTING_TOGGLES.map(({ field, label }) => (
-            <NavigationMenuToggleItem
-              key={field}
-              checked={feed[field]}
-              disabled={locked}
-              onCheckedChange={() => handleToggleSetting(field)}
-            >
-              <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
-            </NavigationMenuToggleItem>
-          ))}
+          <NavigationMenuEditableItem value={feed.name} onCommit={handleRename} />
         </NavigationMenu>
-      </PremiumFeatureGate>
-      <DashboardSection
-        title="Event Filters"
-        description="Leave these event types out of this link."
-      />
-      <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
-        <NavigationMenu>
-          {FILTER_TOGGLES.map(({ field, label }) => (
-            <NavigationMenuToggleItem
-              key={field}
-              checked={feed[field]}
-              disabled={locked}
-              onCheckedChange={() => handleToggleSetting(field)}
-            >
-              <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
-            </NavigationMenuToggleItem>
-          ))}
-        </NavigationMenu>
-      </PremiumFeatureGate>
-      <DashboardSection
-        title="Feed Information"
-        description="View details about this feed."
-      />
-      <NavigationMenu>
-        <MetadataRow label="Resource Type" value={feed.isDefault ? "Default Feed" : "Feed"} />
-        <MetadataRow label="Created" value={formatDate(feed.createdAt)} />
-      </NavigationMenu>
-      {feed.isDefault && (
-        <Text size="sm" tone="muted" className="px-0.5">
-          Your default feed cannot be deleted. Create another feed to share a narrower set of
-          calendars.
-        </Text>
-      )}
-      {!feed.isDefault && (
-        <>
+        <CalendarsSection
+          isDefault={feed.isDefault}
+          selected={selected}
+          onToggle={handleToggleCalendar}
+        />
+        <DashboardSection
+          title="Feed Settings"
+          description={<>Choose which event details this link includes. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
+        />
+        <PremiumFeatureGate locked={locked} hint="Feed settings are a Pro feature.">
           <NavigationMenu>
-            <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
-              <NavigationMenuItemIcon>
-                <Trash2 size={15} className="text-destructive" />
-              </NavigationMenuItemIcon>
-              <Text size="sm" tone="danger">Delete Feed</Text>
-            </NavigationMenuButtonItem>
+            <EventNameTemplateItem
+              customEventName={feed.customEventName}
+              disabled={locked || feed.includeEventName}
+              onCommit={(customEventName) => patchFeed({ customEventName })}
+            />
+            <NavigationMenuToggleItem
+              checked={feed.includeEventName}
+              disabled={locked}
+              onCheckedChange={handleToggleEventName}
+            >
+              <NavigationMenuItemLabel>Include Event Name</NavigationMenuItemLabel>
+            </NavigationMenuToggleItem>
+            {SETTING_TOGGLES.map(({ field, label }) => (
+              <NavigationMenuToggleItem
+                key={field}
+                checked={feed[field]}
+                disabled={locked}
+                onCheckedChange={() => handleToggleSetting(field)}
+              >
+                <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+              </NavigationMenuToggleItem>
+            ))}
           </NavigationMenu>
-          <DeleteConfirmation
-            title="Delete feed?"
-            description={`This permanently removes "${feed.name}". Calendar apps subscribed to its link will stop receiving events.`}
-            open={deleteOpen}
-            onOpenChange={setDeleteOpen}
-            deleting={deleting}
-            onConfirm={handleDelete}
-          />
-        </>
-      )}
-    </div>
+        </PremiumFeatureGate>
+        <DashboardSection
+          title="Event Filters"
+          description="Leave these event types out of this link."
+        />
+        <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
+          <NavigationMenu>
+            {FILTER_TOGGLES.map(({ field, label }) => (
+              <NavigationMenuToggleItem
+                key={field}
+                checked={feed[field]}
+                disabled={locked}
+                onCheckedChange={() => handleToggleSetting(field)}
+              >
+                <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
+              </NavigationMenuToggleItem>
+            ))}
+          </NavigationMenu>
+        </PremiumFeatureGate>
+        <DashboardSection
+          title="Feed Information"
+          description="View details about this feed."
+        />
+        <NavigationMenu>
+          <MetadataRow label="Resource Type" value={feed.isDefault ? "Default Feed" : "Feed"} />
+          <MetadataRow label="Created" value={formatDate(feed.createdAt)} />
+        </NavigationMenu>
+        {feed.isDefault && (
+          <Text size="sm" tone="muted" className="px-0.5">
+            Your default feed cannot be deleted. Create another feed to share a narrower set of
+            calendars.
+          </Text>
+        )}
+        {!feed.isDefault && (
+          <>
+            <NavigationMenu>
+              <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
+                <NavigationMenuItemIcon>
+                  <Trash2 size={15} className="text-destructive" />
+                </NavigationMenuItemIcon>
+                <Text size="sm" tone="danger">Delete Feed</Text>
+              </NavigationMenuButtonItem>
+            </NavigationMenu>
+            <DeleteConfirmation
+              title="Delete feed?"
+              description={`This permanently removes "${feed.name}". Calendar apps subscribed to its link will stop receiving events.`}
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+              deleting={deleting}
+              onConfirm={handleDelete}
+            />
+          </>
+        )}
+      </div>
+    </ScrollFader>
   );
 }
 
