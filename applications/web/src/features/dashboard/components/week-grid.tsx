@@ -121,6 +121,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
       <div
         className={periodWash({
           period,
+          edge: "fadeTop",
           className:
             "flex flex-col group-data-highlighting:opacity-45 data-active:opacity-100",
         })}

@@ -20,12 +20,17 @@ export const periodFill = tv({
 });
 
 export const periodWash = tv({
-  base: "transition-[background-color,opacity] duration-150",
+  base: "transition-[background-color,background-image,opacity] duration-150",
   variants: {
     period: {
-      past: "data-active:bg-background-hover",
-      today: "data-active:bg-emerald-400/8",
-      future: "data-active:bg-emerald-400/8",
+      past: "[--wash:var(--color-background-hover)]",
+      today: "[--wash:color-mix(in_oklab,var(--color-emerald-400)_8%,transparent)]",
+      future: "[--wash:color-mix(in_oklab,var(--color-emerald-400)_8%,transparent)]",
+    },
+    edge: {
+      flat: "data-active:bg-(--wash)",
+      fadeTop: "data-active:bg-[linear-gradient(to_bottom,transparent,var(--wash)_1.5rem)]",
     },
   },
+  defaultVariants: { edge: "flat" },
 });
