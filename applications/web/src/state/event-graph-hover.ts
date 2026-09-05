@@ -10,3 +10,11 @@ export function resolveGraphSlotIndex(dayOffset: number): number | null {
   if (dayOffset < -EVENT_GRAPH_DAYS_BEFORE || dayOffset > EVENT_GRAPH_DAYS_AFTER) return null;
   return dayOffset + EVENT_GRAPH_DAYS_BEFORE;
 }
+
+export const eventGraphPointerAtom = atom(false);
+
+export const calendarHighlightSlotAtom = atom((get) =>
+  get(eventGraphPointerAtom) ? get(eventGraphHoverIndexAtom) : null,
+);
+
+export const calendarJumpAtom = atom<{ dayMs: number } | null>(null);

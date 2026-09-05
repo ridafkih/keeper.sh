@@ -1,12 +1,19 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { useSetAtom } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
+import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
-import { eventGraphHoverIndexAtom, resolveGraphSlotIndex } from "@/state/event-graph-hover";
+import {
+  EVENT_GRAPH_DAYS_BEFORE,
+  calendarHighlightSlotAtom,
+  eventGraphHoverIndexAtom,
+  resolveGraphSlotIndex,
+} from "@/state/event-graph-hover";
+import { useCalendarHighlightedDay } from "@/hooks/use-calendar-highlighted-day";
 import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import { useNowMinute } from "@/hooks/use-now-minute";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
@@ -26,7 +33,7 @@ import {
   resolveVisiblePillCount,
 } from "./event-layout";
 import type { DayEvents } from "./event-layout";
-import { periodFill, resolvePeriod } from "./density-period";
+import { periodFill, periodWash, resolvePeriod } from "./density-period";
 import type { Period } from "./density-period";
 import {
   addDays,
@@ -96,6 +103,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
   const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
   const period = resolvePeriod(dayOffset);
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  const active = useCalendarHighlightedDay(dayOffset);
 
   return (
     <div
@@ -111,30 +119,39 @@ const DayHeaderCell = memo(function DayHeaderCell({
         className="pointer-events-none absolute top-0 -bottom-40 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
       />
       <div
-        className="flex shrink-0 flex-col items-center justify-center gap-1"
-        style={{ height: HEADER_HEIGHT }}
+        className={periodWash({
+          period,
+          className:
+            "flex flex-col group-data-highlighting:opacity-45 data-active:opacity-100",
+        })}
+        data-active={resolveDataAttr(active)}
       >
-        <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
-          {day.toLocaleDateString("en-US", { weekday: "short" })}
-        </Text>
-        <span
-          className={cn(
-            "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
-            period === "today" ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
-          )}
+        <div
+          className="flex shrink-0 flex-col items-center justify-center gap-1"
+          style={{ height: HEADER_HEIGHT }}
         >
-          {day.getDate()}
-        </span>
-        <DayDensityPips count={timedCount} period={period} />
-      </div>
-      <div
-        className="flex flex-col overflow-clip px-0.5 transition-[height] duration-200 motion-reduce:transition-none"
-        style={{ height: bandHeight, gap: EVENT_PILL_GAP_PX }}
-      >
-        {allDay.slice(0, visibleCount).map((event) => (
-          <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
-        ))}
-        {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
+          <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
+            {day.toLocaleDateString("en-US", { weekday: "short" })}
+          </Text>
+          <span
+            className={cn(
+              "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
+              period === "today" ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
+            )}
+          >
+            {day.getDate()}
+          </span>
+          <DayDensityPips count={timedCount} period={period} />
+        </div>
+        <div
+          className="flex flex-col overflow-clip px-0.5 transition-[height] duration-200 motion-reduce:transition-none"
+          style={{ height: bandHeight, gap: EVENT_PILL_GAP_PX }}
+        >
+          {allDay.slice(0, visibleCount).map((event) => (
+            <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
+          ))}
+          {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
+        </div>
       </div>
     </div>
   );
@@ -172,6 +189,13 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
 
   const now = useNowMinute();
   const nowLayout = now && resolveNowLayout(stripDays, now);
+  const resolveDayOffset = (day: Date) =>
+    Math.round((day.getTime() - today.getTime()) / MS_PER_DAY);
+  const highlightSlot = useAtomValue(calendarHighlightSlotAtom);
+  const highlightVisible =
+    highlightSlot !== null &&
+    Math.abs(highlightSlot - EVENT_GRAPH_DAYS_BEFORE - resolveDayOffset(startOfDay(anchor))) <=
+      CENTER_OFFSET;
 
   const columnWidth = useCallback(() => {
     const el = scrollerRef.current;
@@ -364,7 +388,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       <div className="relative min-w-0 flex-1 overflow-x-clip">
         <div
           ref={rowRef}
-          className="relative grid"
+          className="group relative grid"
+          data-highlighting={resolveDataAttr(highlightVisible)}
           style={{
             gridTemplateColumns: columnsTemplate,
             width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
@@ -374,7 +399,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayHeaderCell
               key={day.getTime()}
               day={day}
-              dayOffset={Math.round((day.getTime() - today.getTime()) / MS_PER_DAY)}
+              dayOffset={resolveDayOffset(day)}
               timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
               allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
               bandRows={bandRows}
@@ -430,6 +455,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayColumn
               key={day.getTime()}
               day={day}
+              dayOffset={resolveDayOffset(day)}
               now={isSameDay(day, today) ? now : null}
               events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
             />

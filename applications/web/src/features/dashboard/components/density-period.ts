@@ -18,3 +18,14 @@ export const periodFill = tv({
     },
   },
 });
+
+export const periodWash = tv({
+  base: "transition-[background-color,opacity] duration-150",
+  variants: {
+    period: {
+      past: "data-active:bg-background-hover",
+      today: "data-active:bg-emerald-400/8",
+      future: "data-active:bg-emerald-400/8",
+    },
+  },
+});

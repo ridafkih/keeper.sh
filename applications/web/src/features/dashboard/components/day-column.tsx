@@ -1,8 +1,11 @@
 import { memo } from "react";
 import type { CSSProperties } from "react";
 import { isEventPast } from "@/lib/time";
+import { resolveDataAttr } from "@/utils/data-attr";
+import { useCalendarHighlightedDay } from "@/hooks/use-calendar-highlighted-day";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { HOUR_HEIGHT } from "./calendar-helpers";
+import { periodWash, resolvePeriod } from "./density-period";
 import { EventCard } from "./event-card";
 import { layoutDayEvents, stackIndentPx, tileBox } from "./event-layout";
 import type { PositionedEvent } from "./event-layout";
@@ -17,6 +20,7 @@ const MAX_CARD_ELEVATION = 8;
 
 interface DayColumnProps {
   day: Date;
+  dayOffset: number;
   /** Null except on today, so only today's column re-renders on the minute tick. */
   now: Date | null;
   events: CalendarEvent[];
@@ -43,11 +47,15 @@ function resolveCardStyle(item: PositionedEvent): CSSProperties {
   };
 }
 
-export const DayColumn = memo(function DayColumn({ day, now, events }: DayColumnProps) {
+export const DayColumn = memo(function DayColumn({ day, dayOffset, now, events }: DayColumnProps) {
   const positioned = layoutDayEvents(events, day);
+  const active = useCalendarHighlightedDay(dayOffset);
 
   return (
-    <div className="relative snap-start">
+    <div
+      className={periodWash({ period: resolvePeriod(dayOffset), className: "relative snap-start" })}
+      data-active={resolveDataAttr(active)}
+    >
       {/* Hour rules, per cell — one strip-wide background layer is too large for some engines to paint. */}
       <div
         aria-hidden

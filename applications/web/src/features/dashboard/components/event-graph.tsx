@@ -8,8 +8,11 @@ import {
   EVENT_GRAPH_DAYS_AFTER,
   EVENT_GRAPH_DAYS_BEFORE,
   EVENT_GRAPH_TOTAL_DAYS,
+  calendarJumpAtom,
   eventGraphHoverIndexAtom,
+  eventGraphPointerAtom,
 } from "@/state/event-graph-hover";
+import { resolveDataAttr } from "@/utils/data-attr";
 import { fetcher } from "@/lib/fetcher";
 import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { pluralize } from "@/lib/pluralize";
@@ -46,20 +49,24 @@ const countEventsByDay = (events: ApiEventSummary[], todayTimestamp: number): nu
 interface DayData {
   count: number;
   dayOffset: number;
+  dayMs: number;
   height: number;
   fullLabel: string;
   period: Period;
 }
 
-const formatDayLabel = (todayStart: Date, dayOffset: number): string => {
+const resolveDay = (todayStart: Date, dayOffset: number): Date => {
   const date = new Date(todayStart);
   date.setDate(date.getDate() + dayOffset);
-  return date.toLocaleDateString("en-US", {
+  return date;
+};
+
+const formatDayLabel = (day: Date): string =>
+  day.toLocaleDateString("en-US", {
     weekday: "long",
     month: "short",
     day: "numeric",
   });
-};
 
 const GROWTH_SPACE = GRAPH_HEIGHT - MIN_BAR_HEIGHT;
 
@@ -72,11 +79,13 @@ const normalizeDayData = (counts: number[], todayStart: Date): DayData[] => {
 
   return counts.map((count, slotIndex) => {
     const dayOffset = slotIndex - EVENT_GRAPH_DAYS_BEFORE;
+    const day = resolveDay(todayStart, dayOffset);
     return {
       count,
       dayOffset,
+      dayMs: day.getTime(),
       height: resolveBarHeight(count, maxCount),
-      fullLabel: formatDayLabel(todayStart, dayOffset),
+      fullLabel: formatDayLabel(day),
       period: resolvePeriod(dayOffset),
     };
   });
@@ -99,11 +108,6 @@ function resolveEventCount(hoverIndex: number | null, days: DayData[]): number {
 function resolveLabel(hoverIndex: number | null, days: DayData[]): string {
   if (hoverIndex !== null) return days[hoverIndex].fullLabel;
   return "This Week";
-}
-
-function resolveDataAttr(condition: boolean): "" | undefined {
-  if (condition) return "";
-  return undefined;
 }
 
 interface EventGraphSummaryProps {
@@ -168,12 +172,16 @@ interface EventGraphBarProps {
 const EventGraphBar = memo(function EventGraphBar({ day, dayIndex, shouldAnimate }: EventGraphBarProps) {
   const isHighlighted = useIsHighlighted(dayIndex);
   const setHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  const setJump = useSetAtom(calendarJumpAtom);
 
   return (
-    <div
-      className="flex-1 flex flex-col gap-2"
+    <button
+      type="button"
+      aria-label={day.fullLabel}
+      className="flex-1 flex flex-col gap-2 cursor-pointer rounded-[0.625rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       data-active={resolveDataAttr(isHighlighted)}
       onPointerEnter={() => setHoverIndex(dayIndex)}
+      onClick={() => setJump({ dayMs: day.dayMs })}
     >
       <div
         className="flex items-end"
@@ -190,6 +198,7 @@ const EventGraphBar = memo(function EventGraphBar({ day, dayIndex, shouldAnimate
         />
       </div>
       <Text
+        as="span"
         size="xs"
         tone="default"
         align="center"
@@ -197,7 +206,7 @@ const EventGraphBar = memo(function EventGraphBar({ day, dayIndex, shouldAnimate
       >
         {day.dayOffset}
       </Text>
-    </div>
+    </button>
   );
 });
 
@@ -209,6 +218,7 @@ interface EventGraphBarsProps {
 function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
   const isHighlighting = useAtomValue(isHighlightingAtom);
   const setHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  const setPointerOver = useSetAtom(eventGraphPointerAtom);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const resolveIndexFromTouch = useCallback((touch: React.Touch) => {
@@ -222,10 +232,11 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
   }, []);
 
   const handleTouchStart = useCallback(({ touches }: React.TouchEvent) => {
+    setPointerOver(true);
     const touch = touches[0];
     if (!touch) return;
     setHoverIndex(resolveIndexFromTouch(touch));
-  }, [resolveIndexFromTouch, setHoverIndex]);
+  }, [resolveIndexFromTouch, setHoverIndex, setPointerOver]);
 
   const handleTouchMove = useCallback((event: React.TouchEvent | TouchEvent) => {
     event.preventDefault();
@@ -243,14 +254,21 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
     return () => container.removeEventListener("touchmove", listener);
   }, [handleTouchMove]);
 
-  const handleTouchEnd = () => setHoverIndex(null);
+  const handleTouchEnd = () => {
+    setPointerOver(false);
+    setHoverIndex(null);
+  };
 
   return (
     <div
       ref={containerRef}
       className="flex gap-0.5 data-highlighting:*:opacity-50 data-highlighting:*:data-active:opacity-100"
       data-highlighting={resolveDataAttr(isHighlighting)}
-      onPointerLeave={() => setHoverIndex(null)}
+      onPointerEnter={() => setPointerOver(true)}
+      onPointerLeave={() => {
+        setPointerOver(false);
+        setHoverIndex(null);
+      }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
