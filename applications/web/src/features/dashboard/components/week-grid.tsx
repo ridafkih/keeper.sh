@@ -1,11 +1,19 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { useSetAtom } from "jotai";
+import { atom, useAtomValue, useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
+import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
+import {
+  EVENT_GRAPH_DAYS_BEFORE,
+  calendarHighlightSlotAtom,
+  eventGraphHoverIndexAtom,
+  resolveGraphSlotIndex,
+} from "@/state/event-graph-hover";
+import { useCalendarHighlightedDay } from "@/hooks/use-calendar-highlighted-day";
 import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import { useNowMinute } from "@/hooks/use-now-minute";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
@@ -18,8 +26,15 @@ import { EventPill, EventPillOverflow } from "./event-card";
 import { EventDetailPopover } from "./event-detail-popover";
 import { NowIndicator, NowPill } from "./now-indicator";
 import { resolveNowLayout } from "./now-layout";
-import { EVENT_PILL_GAP_PX, EVENT_PILL_HEIGHT_PX, resolveVisiblePillCount } from "./event-layout";
+import {
+  EVENT_PILL_GAP_PX,
+  EVENT_PILL_HEIGHT_PX,
+  resolveDensityPips,
+  resolveVisiblePillCount,
+} from "./event-layout";
 import type { DayEvents } from "./event-layout";
+import { periodFill, periodWash, resolvePeriod } from "./density-period";
+import type { Period } from "./density-period";
 import {
   addDays,
   formatHourLabel,
@@ -32,7 +47,7 @@ import {
 } from "./calendar-helpers";
 
 const GUTTER_WIDTH = 52;
-const HEADER_HEIGHT = 56;
+const HEADER_HEIGHT = 64;
 const ALL_DAY_MAX_ROWS = 2;
 const ALL_DAY_BAND_PADDING_BOTTOM = 4;
 const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
@@ -45,52 +60,108 @@ const MS_PER_DAY = 86_400_000;
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
 
+const resolveBandHeight = (bandRows: number): number =>
+  bandRows === 0
+    ? 0
+    : bandRows * EVENT_PILL_HEIGHT_PX +
+      (bandRows - 1) * EVENT_PILL_GAP_PX +
+      ALL_DAY_BAND_PADDING_BOTTOM;
+
+interface DayDensityPipsProps {
+  count: number;
+  period: Period;
+}
+
+function DayDensityPips({ count, period }: DayDensityPipsProps) {
+  const { pips, overflow } = resolveDensityPips(count);
+
+  return (
+    <div className="flex h-1 justify-center gap-0.5">
+      {Array.from({ length: pips }, (_, index) => (
+        <span
+          key={index}
+          className={periodFill({
+            period,
+            className: cn("h-1 rounded-full", overflow && index === pips - 1 ? "w-4" : "w-[7px]"),
+          })}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface DayHeaderCellProps {
   day: Date;
-  isToday: boolean;
+  dayOffset: number;
+  timedCount: number;
   allDay: CalendarEvent[];
   bandRows: number;
 }
 
 const DayHeaderCell = memo(function DayHeaderCell({
   day,
-  isToday,
+  dayOffset,
+  timedCount,
   allDay,
   bandRows,
 }: DayHeaderCellProps) {
   const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
+  const bandHeight = resolveBandHeight(bandRows);
+  const period = resolvePeriod(dayOffset);
+  const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  const active = useCalendarHighlightedDay(dayOffset);
 
   return (
-    <div className="relative flex flex-col overflow-hidden">
-      {/* Ramps upward as the header fill evaporates downward, so the rules strengthen across the seam. */}
+    <div
+      className="relative flex flex-col overflow-x-clip"
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setGraphHoverIndex(resolveGraphSlotIndex(dayOffset));
+      }}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setGraphHoverIndex(null);
+      }}
+    >
+      {/* Ramps upward as the header fill evaporates downward, and runs on under the grid so a vertical overscroll bounce can't part it from the column rule. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated mask-t-from-35%"
+        className="pointer-events-none absolute top-0 -bottom-40 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
       />
       <div
-        className="flex shrink-0 flex-col items-center justify-center gap-1"
-        style={{ height: HEADER_HEIGHT }}
+        className={periodWash({
+          period,
+          edge: "fadeTop",
+          className:
+            "flex flex-col group-data-highlighting:opacity-45 data-active:opacity-100",
+        })}
+        data-active={resolveDataAttr(active)}
       >
-        <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
-          {day.toLocaleDateString("en-US", { weekday: "short" })}
-        </Text>
-        <span
-          className={cn(
-            "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
-            isToday ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
-          )}
+        <div
+          className="flex shrink-0 flex-col items-center justify-center gap-1"
+          style={{ height: HEADER_HEIGHT }}
         >
-          {day.getDate()}
-        </span>
-      </div>
-      {allDay.length > 0 && (
-        <div className="flex flex-col px-0.5" style={{ gap: EVENT_PILL_GAP_PX }}>
+          <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
+            {day.toLocaleDateString("en-US", { weekday: "short" })}
+          </Text>
+          <span
+            className={cn(
+              "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
+              period === "today" ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
+            )}
+          >
+            {day.getDate()}
+          </span>
+          <DayDensityPips count={timedCount} period={period} />
+        </div>
+        <div
+          className="flex flex-col overflow-clip px-0.5 transition-[height] duration-200 motion-reduce:transition-none"
+          style={{ height: bandHeight, gap: EVENT_PILL_GAP_PX }}
+        >
           {allDay.slice(0, visibleCount).map((event) => (
             <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
           ))}
           {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
         </div>
-      )}
+      </div>
     </div>
   );
 });
@@ -127,6 +198,25 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
 
   const now = useNowMinute();
   const nowLayout = now && resolveNowLayout(stripDays, now);
+  const resolveDayOffset = (day: Date) =>
+    Math.round((day.getTime() - today.getTime()) / MS_PER_DAY);
+  /** Centre day the strip has actually reached; the anchor runs ahead of it during a smooth scroll. */
+  const [visibleCenterMs, setVisibleCenterMs] = useState(() => startOfDay(anchor).getTime());
+  const visibleCenterOffset = resolveDayOffset(new Date(visibleCenterMs));
+  const highlightVisibleAtom = useMemo(
+    () =>
+      atom((get) => {
+        const slot = get(calendarHighlightSlotAtom);
+        return (
+          slot !== null &&
+          Math.abs(slot - EVENT_GRAPH_DAYS_BEFORE - visibleCenterOffset) <= CENTER_OFFSET
+        );
+      }),
+    [visibleCenterOffset],
+  );
+  const highlightVisible = useAtomValue(highlightVisibleAtom);
+  const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
   const columnWidth = useCallback(() => {
     const el = scrollerRef.current;
@@ -286,6 +376,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         Math.min(Math.round(el.scrollLeft / columnWidth()), stripDays.length - VISIBLE_COLUMNS),
       );
       const centerDay = stripDays[index + CENTER_OFFSET];
+      setVisibleCenterMs(centerDay.getTime());
       if (centerDay.getTime() === alignedCenterMsRef.current) return;
       alignedCenterMsRef.current = centerDay.getTime();
       onCenterDayChange(centerDay);
@@ -306,23 +397,15 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     mostAllDay = Math.max(mostAllDay, allDayCount);
   }
   const bandRows = Math.min(mostAllDay, ALL_DAY_MAX_ROWS);
-  const bandHeight =
-    bandRows === 0
-      ? 0
-      : bandRows * EVENT_PILL_HEIGHT_PX +
-        (bandRows - 1) * EVENT_PILL_GAP_PX +
-        ALL_DAY_BAND_PADDING_BOTTOM;
 
   const dayRow = (
-    <div
-      className="flex transition-[height] duration-200 motion-reduce:transition-none"
-      style={{ height: HEADER_HEIGHT + bandHeight }}
-    >
+    <div className="flex">
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-      <div className="relative min-w-0 flex-1 overflow-hidden">
+      <div className="relative min-w-0 flex-1 overflow-x-clip">
         <div
           ref={rowRef}
-          className="relative grid h-full"
+          className="group relative grid"
+          data-highlighting={resolveDataAttr(highlightVisible)}
           style={{
             gridTemplateColumns: columnsTemplate,
             width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
@@ -332,7 +415,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayHeaderCell
               key={day.getTime()}
               day={day}
-              isToday={isSameDay(day, today)}
+              dayOffset={resolveDayOffset(day)}
+              timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
               allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
               bandRows={bandRows}
             />
@@ -386,6 +470,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayColumn
               key={day.getTime()}
               day={day}
+              dayOffset={resolveDayOffset(day)}
               now={isSameDay(day, today) ? now : null}
               events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
             />

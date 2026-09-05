@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
+import { useStore } from "jotai";
+import { calendarJumpAtom } from "@/state/event-graph-hover";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { cn } from "@/utils/cn";
@@ -28,6 +30,18 @@ const navButton =
 export function CalendarView() {
   const [view, setView] = useState<CalendarViewMode>("week");
   const [anchor, setAnchor] = useState(() => new Date());
+
+  const store = useStore();
+  useEffect(
+    () =>
+      store.sub(calendarJumpAtom, () => {
+        const jump = store.get(calendarJumpAtom);
+        if (!jump) return;
+        setView("week");
+        setAnchor(new Date(jump.dayMs));
+      }),
+    [store],
+  );
 
   const monthDays = useMemo(() => getMonthGridDays(anchor), [anchor]);
 

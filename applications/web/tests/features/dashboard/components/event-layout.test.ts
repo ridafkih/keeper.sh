@@ -5,6 +5,7 @@ import {
   bucketEventsByDay,
   layoutDayEvents,
   MIN_EVENT_SPAN_MS,
+  resolveDensityPips,
   resolvePillRows,
   resolveVisiblePillCount,
   stackIndentPx,
@@ -392,5 +393,18 @@ describe("timeOfDayFraction", () => {
 
   it("keeps noon halfway down a daylight-saving day", () => {
     expect(timeOfDayFraction(new Date(2026, 2, 8, 12))).toBe(0.5);
+  });
+});
+
+describe("resolveDensityPips", () => {
+  it("shows one pip per event up to the cap", () => {
+    expect(resolveDensityPips(0)).toEqual({ pips: 0, overflow: false });
+    expect(resolveDensityPips(3)).toEqual({ pips: 3, overflow: false });
+    expect(resolveDensityPips(5)).toEqual({ pips: 5, overflow: false });
+  });
+
+  it("caps at five and flags the overflow", () => {
+    expect(resolveDensityPips(6)).toEqual({ pips: 5, overflow: true });
+    expect(resolveDensityPips(12)).toEqual({ pips: 5, overflow: true });
   });
 });
