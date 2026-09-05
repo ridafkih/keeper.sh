@@ -6,6 +6,7 @@ import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { eventDetailAtom } from "@/state/event-detail";
+import { eventGraphHoverIndexAtom, resolveGraphSlotIndex } from "@/state/event-graph-hover";
 import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import { useNowMinute } from "@/hooks/use-now-minute";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
@@ -18,8 +19,15 @@ import { EventPill, EventPillOverflow } from "./event-card";
 import { EventDetailPopover } from "./event-detail-popover";
 import { NowIndicator, NowPill } from "./now-indicator";
 import { resolveNowLayout } from "./now-layout";
-import { EVENT_PILL_GAP_PX, EVENT_PILL_HEIGHT_PX, resolveVisiblePillCount } from "./event-layout";
+import {
+  EVENT_PILL_GAP_PX,
+  EVENT_PILL_HEIGHT_PX,
+  resolveDensityPips,
+  resolveVisiblePillCount,
+} from "./event-layout";
 import type { DayEvents } from "./event-layout";
+import { periodFill, resolvePeriod } from "./density-period";
+import type { Period } from "./density-period";
 import {
   addDays,
   formatHourLabel,
@@ -32,7 +40,7 @@ import {
 } from "./calendar-helpers";
 
 const GUTTER_WIDTH = 52;
-const HEADER_HEIGHT = 56;
+const HEADER_HEIGHT = 64;
 const ALL_DAY_MAX_ROWS = 2;
 const ALL_DAY_BAND_PADDING_BOTTOM = 4;
 const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
@@ -45,23 +53,56 @@ const MS_PER_DAY = 86_400_000;
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
 
+interface DayDensityPipsProps {
+  count: number;
+  period: Period;
+}
+
+function DayDensityPips({ count, period }: DayDensityPipsProps) {
+  const { pips, overflow } = resolveDensityPips(count);
+
+  return (
+    <div className="flex h-1 justify-center gap-0.5">
+      {Array.from({ length: pips }, (_, index) => (
+        <span
+          key={index}
+          className={periodFill({
+            period,
+            className: cn("h-1 rounded-full", overflow && index === pips - 1 ? "w-4" : "w-[7px]"),
+          })}
+        />
+      ))}
+    </div>
+  );
+}
+
 interface DayHeaderCellProps {
   day: Date;
-  isToday: boolean;
+  dayOffset: number;
+  timedCount: number;
   allDay: CalendarEvent[];
   bandRows: number;
 }
 
 const DayHeaderCell = memo(function DayHeaderCell({
   day,
-  isToday,
+  dayOffset,
+  timedCount,
   allDay,
   bandRows,
 }: DayHeaderCellProps) {
   const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
+  const period = resolvePeriod(dayOffset);
+  const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
 
   return (
-    <div className="relative flex flex-col overflow-hidden">
+    <div
+      className="relative flex flex-col overflow-hidden"
+      onPointerEnter={(event) => {
+        if (event.pointerType === "mouse") setGraphHoverIndex(resolveGraphSlotIndex(dayOffset));
+      }}
+      onPointerLeave={() => setGraphHoverIndex(null)}
+    >
       {/* Ramps upward as the header fill evaporates downward, so the rules strengthen across the seam. */}
       <div
         aria-hidden
@@ -77,11 +118,12 @@ const DayHeaderCell = memo(function DayHeaderCell({
         <span
           className={cn(
             "flex size-6 items-center justify-center text-xs font-medium tabular-nums",
-            isToday ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
+            period === "today" ? "rounded-full bg-emerald-400 text-neutral-950" : "text-foreground",
           )}
         >
           {day.getDate()}
         </span>
+        <DayDensityPips count={timedCount} period={period} />
       </div>
       {allDay.length > 0 && (
         <div className="flex flex-col px-0.5" style={{ gap: EVENT_PILL_GAP_PX }}>
@@ -332,7 +374,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
             <DayHeaderCell
               key={day.getTime()}
               day={day}
-              isToday={isSameDay(day, today)}
+              dayOffset={Math.round((day.getTime() - today.getTime()) / MS_PER_DAY)}
+              timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
               allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
               bandRows={bandRows}
             />

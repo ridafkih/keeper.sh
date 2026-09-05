@@ -244,3 +244,9 @@ export function resolvePillRows(availableHeight: number): number {
   const rowPitch = EVENT_PILL_HEIGHT_PX + EVENT_PILL_GAP_PX;
   return Math.max(Math.floor((availableHeight + EVENT_PILL_GAP_PX) / rowPitch), 0);
 }
+
+const DENSITY_PIP_CAP = 5;
+
+export function resolveDensityPips(count: number): { pips: number; overflow: boolean } {
+  return { pips: Math.min(count, DENSITY_PIP_CAP), overflow: count > DENSITY_PIP_CAP };
+}
