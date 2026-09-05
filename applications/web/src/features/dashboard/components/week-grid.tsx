@@ -82,6 +82,7 @@ interface DayHeaderCellProps {
   timedCount: number;
   allDay: CalendarEvent[];
   bandRows: number;
+  bandHeight: number;
 }
 
 const DayHeaderCell = memo(function DayHeaderCell({
@@ -90,6 +91,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
   timedCount,
   allDay,
   bandRows,
+  bandHeight,
 }: DayHeaderCellProps) {
   const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
   const period = resolvePeriod(dayOffset);
@@ -97,16 +99,16 @@ const DayHeaderCell = memo(function DayHeaderCell({
 
   return (
     <div
-      className="relative flex flex-col overflow-hidden"
+      className="relative flex flex-col overflow-x-clip"
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") setGraphHoverIndex(resolveGraphSlotIndex(dayOffset));
       }}
       onPointerLeave={() => setGraphHoverIndex(null)}
     >
-      {/* Ramps upward as the header fill evaporates downward, so the rules strengthen across the seam. */}
+      {/* Ramps upward as the header fill evaporates downward, and runs on under the grid so a vertical overscroll bounce can't part it from the column rule. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated mask-t-from-35%"
+        className="pointer-events-none absolute top-0 -bottom-40 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
       />
       <div
         className="flex shrink-0 flex-col items-center justify-center gap-1"
@@ -125,14 +127,15 @@ const DayHeaderCell = memo(function DayHeaderCell({
         </span>
         <DayDensityPips count={timedCount} period={period} />
       </div>
-      {allDay.length > 0 && (
-        <div className="flex flex-col px-0.5" style={{ gap: EVENT_PILL_GAP_PX }}>
-          {allDay.slice(0, visibleCount).map((event) => (
-            <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
-          ))}
-          {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
-        </div>
-      )}
+      <div
+        className="flex flex-col overflow-clip px-0.5 transition-[height] duration-200 motion-reduce:transition-none"
+        style={{ height: bandHeight, gap: EVENT_PILL_GAP_PX }}
+      >
+        {allDay.slice(0, visibleCount).map((event) => (
+          <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
+        ))}
+        {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
+      </div>
     </div>
   );
 });
@@ -356,15 +359,12 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         ALL_DAY_BAND_PADDING_BOTTOM;
 
   const dayRow = (
-    <div
-      className="flex transition-[height] duration-200 motion-reduce:transition-none"
-      style={{ height: HEADER_HEIGHT + bandHeight }}
-    >
+    <div className="flex">
       <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-      <div className="relative min-w-0 flex-1 overflow-hidden">
+      <div className="relative min-w-0 flex-1 overflow-x-clip">
         <div
           ref={rowRef}
-          className="relative grid h-full"
+          className="relative grid"
           style={{
             gridTemplateColumns: columnsTemplate,
             width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
@@ -378,6 +378,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
               timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
               allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
               bandRows={bandRows}
+              bandHeight={bandHeight}
             />
           ))}
         </div>
