@@ -395,7 +395,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ scrollPaddingLeft: GUTTER_WIDTH }}
       >
         <div
