@@ -18,28 +18,30 @@ import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { pluralize } from "@/lib/pluralize";
 import { Text } from "@/components/ui/primitives/text";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import type { ApiEventSummary } from "@/types/api";
+import { addDays, startOfDay } from "./calendar-helpers";
 import { periodFill, resolvePeriod } from "./density-period";
 import type { Period } from "./density-period";
 
 const GRAPH_HEIGHT = 96;
 const MIN_BAR_HEIGHT = 20;
+/** The layout's `lg:` gate on the calendar column; below it a bar has nothing to jump. */
+const CALENDAR_VISIBLE_QUERY = "(min-width: 64rem)";
 
 const MS_PER_DAY = 86_400_000;
 
 const buildGraphUrl = (todayStart: Date): string => {
-  const from = new Date(todayStart.getTime() - EVENT_GRAPH_DAYS_BEFORE * MS_PER_DAY);
-  const to = new Date(
-    todayStart.getTime() + EVENT_GRAPH_DAYS_AFTER * MS_PER_DAY + MS_PER_DAY - 1,
-  );
+  const from = addDays(todayStart, -EVENT_GRAPH_DAYS_BEFORE);
+  const to = new Date(addDays(todayStart, EVENT_GRAPH_DAYS_AFTER + 1).getTime() - 1);
   return `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`;
 };
 
 const countEventsByDay = (events: ApiEventSummary[], todayTimestamp: number): number[] => {
   const counts = new Array<number>(EVENT_GRAPH_TOTAL_DAYS).fill(0);
   for (const event of events) {
-    const eventDate = new Date(event.startTime);
-    const dayOffset = Math.floor((eventDate.getTime() - todayTimestamp) / MS_PER_DAY);
+    const eventDay = startOfDay(new Date(event.startTime));
+    const dayOffset = Math.round((eventDay.getTime() - todayTimestamp) / MS_PER_DAY);
     const slotIndex = dayOffset + EVENT_GRAPH_DAYS_BEFORE;
     if (slotIndex >= 0 && slotIndex < EVENT_GRAPH_TOTAL_DAYS) counts[slotIndex]++;
   }
@@ -54,12 +56,6 @@ interface DayData {
   fullLabel: string;
   period: Period;
 }
-
-const resolveDay = (todayStart: Date, dayOffset: number): Date => {
-  const date = new Date(todayStart);
-  date.setDate(date.getDate() + dayOffset);
-  return date;
-};
 
 const formatDayLabel = (day: Date): string =>
   day.toLocaleDateString("en-US", {
@@ -79,7 +75,7 @@ const normalizeDayData = (counts: number[], todayStart: Date): DayData[] => {
 
   return counts.map((count, slotIndex) => {
     const dayOffset = slotIndex - EVENT_GRAPH_DAYS_BEFORE;
-    const day = resolveDay(todayStart, dayOffset);
+    const day = addDays(todayStart, dayOffset);
     return {
       count,
       dayOffset,
@@ -167,21 +163,39 @@ interface EventGraphBarProps {
   day: DayData;
   dayIndex: number;
   shouldAnimate: boolean;
+  calendarVisible: boolean;
 }
 
-const EventGraphBar = memo(function EventGraphBar({ day, dayIndex, shouldAnimate }: EventGraphBarProps) {
+const EventGraphBar = memo(function EventGraphBar({
+  day,
+  dayIndex,
+  shouldAnimate,
+  calendarVisible,
+}: EventGraphBarProps) {
   const isHighlighted = useIsHighlighted(dayIndex);
   const setHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  const setPointerOver = useSetAtom(eventGraphPointerAtom);
   const setJump = useSetAtom(calendarJumpAtom);
 
   return (
     <button
       type="button"
       aria-label={day.fullLabel}
-      className="flex-1 flex flex-col gap-2 cursor-pointer rounded-[0.625rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      tabIndex={calendarVisible && day.period === "today" ? 0 : -1}
+      className="flex-1 flex flex-col gap-2 rounded-[0.625rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:cursor-pointer"
       data-active={resolveDataAttr(isHighlighted)}
       onPointerEnter={() => setHoverIndex(dayIndex)}
-      onClick={() => setJump({ dayMs: day.dayMs })}
+      onFocus={() => {
+        setPointerOver(true);
+        setHoverIndex(dayIndex);
+      }}
+      onBlur={() => {
+        setPointerOver(false);
+        setHoverIndex(null);
+      }}
+      onClick={() => {
+        if (calendarVisible) setJump({ dayMs: day.dayMs });
+      }}
     >
       <div
         className="flex items-end"
@@ -219,7 +233,26 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
   const isHighlighting = useAtomValue(isHighlightingAtom);
   const setHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   const setPointerOver = useSetAtom(eventGraphPointerAtom);
+  const calendarVisible = useMediaQuery(CALENDAR_VISIBLE_QUERY);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(
+    () => () => {
+      setPointerOver(false);
+      setHoverIndex(null);
+    },
+    [setPointerOver, setHoverIndex],
+  );
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (step === 0) return;
+    const bars = Array.from(containerRef.current?.querySelectorAll("button") ?? []);
+    const next = bars[bars.indexOf(event.target as HTMLButtonElement) + step];
+    if (!next) return;
+    event.preventDefault();
+    next.focus();
+  };
 
   const resolveIndexFromTouch = useCallback((touch: React.Touch) => {
     const container = containerRef.current;
@@ -271,6 +304,8 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
       }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onKeyDown={handleKeyDown}
     >
       {days.map((day, dayIndex) => (
         <EventGraphBar
@@ -278,6 +313,7 @@ function EventGraphBars({ days, shouldAnimate }: EventGraphBarsProps) {
           day={day}
           dayIndex={dayIndex}
           shouldAnimate={shouldAnimate}
+          calendarVisible={calendarVisible}
         />
       ))}
     </div>

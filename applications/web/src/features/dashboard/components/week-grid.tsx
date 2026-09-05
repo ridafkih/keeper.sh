@@ -1,7 +1,7 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtomValue, useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
@@ -60,6 +60,13 @@ const MS_PER_DAY = 86_400_000;
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
 
+const resolveBandHeight = (bandRows: number): number =>
+  bandRows === 0
+    ? 0
+    : bandRows * EVENT_PILL_HEIGHT_PX +
+      (bandRows - 1) * EVENT_PILL_GAP_PX +
+      ALL_DAY_BAND_PADDING_BOTTOM;
+
 interface DayDensityPipsProps {
   count: number;
   period: Period;
@@ -89,7 +96,6 @@ interface DayHeaderCellProps {
   timedCount: number;
   allDay: CalendarEvent[];
   bandRows: number;
-  bandHeight: number;
 }
 
 const DayHeaderCell = memo(function DayHeaderCell({
@@ -98,9 +104,9 @@ const DayHeaderCell = memo(function DayHeaderCell({
   timedCount,
   allDay,
   bandRows,
-  bandHeight,
 }: DayHeaderCellProps) {
   const { visibleCount, hiddenCount } = resolveVisiblePillCount(allDay.length, bandRows);
+  const bandHeight = resolveBandHeight(bandRows);
   const period = resolvePeriod(dayOffset);
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   const active = useCalendarHighlightedDay(dayOffset);
@@ -111,7 +117,9 @@ const DayHeaderCell = memo(function DayHeaderCell({
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") setGraphHoverIndex(resolveGraphSlotIndex(dayOffset));
       }}
-      onPointerLeave={() => setGraphHoverIndex(null)}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "mouse") setGraphHoverIndex(null);
+      }}
     >
       {/* Ramps upward as the header fill evaporates downward, and runs on under the grid so a vertical overscroll bounce can't part it from the column rule. */}
       <div
@@ -192,11 +200,23 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const nowLayout = now && resolveNowLayout(stripDays, now);
   const resolveDayOffset = (day: Date) =>
     Math.round((day.getTime() - today.getTime()) / MS_PER_DAY);
-  const highlightSlot = useAtomValue(calendarHighlightSlotAtom);
-  const highlightVisible =
-    highlightSlot !== null &&
-    Math.abs(highlightSlot - EVENT_GRAPH_DAYS_BEFORE - resolveDayOffset(startOfDay(anchor))) <=
-      CENTER_OFFSET;
+  /** Centre day the strip has actually reached; the anchor runs ahead of it during a smooth scroll. */
+  const [visibleCenterMs, setVisibleCenterMs] = useState(() => startOfDay(anchor).getTime());
+  const visibleCenterOffset = resolveDayOffset(new Date(visibleCenterMs));
+  const highlightVisibleAtom = useMemo(
+    () =>
+      atom((get) => {
+        const slot = get(calendarHighlightSlotAtom);
+        return (
+          slot !== null &&
+          Math.abs(slot - EVENT_GRAPH_DAYS_BEFORE - visibleCenterOffset) <= CENTER_OFFSET
+        );
+      }),
+    [visibleCenterOffset],
+  );
+  const highlightVisible = useAtomValue(highlightVisibleAtom);
+  const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
+  useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
   const columnWidth = useCallback(() => {
     const el = scrollerRef.current;
@@ -356,6 +376,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         Math.min(Math.round(el.scrollLeft / columnWidth()), stripDays.length - VISIBLE_COLUMNS),
       );
       const centerDay = stripDays[index + CENTER_OFFSET];
+      setVisibleCenterMs(centerDay.getTime());
       if (centerDay.getTime() === alignedCenterMsRef.current) return;
       alignedCenterMsRef.current = centerDay.getTime();
       onCenterDayChange(centerDay);
@@ -376,12 +397,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     mostAllDay = Math.max(mostAllDay, allDayCount);
   }
   const bandRows = Math.min(mostAllDay, ALL_DAY_MAX_ROWS);
-  const bandHeight =
-    bandRows === 0
-      ? 0
-      : bandRows * EVENT_PILL_HEIGHT_PX +
-        (bandRows - 1) * EVENT_PILL_GAP_PX +
-        ALL_DAY_BAND_PADDING_BOTTOM;
 
   const dayRow = (
     <div className="flex">
@@ -404,7 +419,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
               timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
               allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
               bandRows={bandRows}
-              bandHeight={bandHeight}
             />
           ))}
         </div>

@@ -36,7 +36,9 @@ export function CalendarView() {
     () =>
       store.sub(calendarJumpAtom, () => {
         const jump = store.get(calendarJumpAtom);
-        if (jump) setAnchor(new Date(jump.dayMs));
+        if (!jump) return;
+        setView("week");
+        setAnchor(new Date(jump.dayMs));
       }),
     [store],
   );
