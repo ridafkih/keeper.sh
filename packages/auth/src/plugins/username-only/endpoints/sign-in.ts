@@ -1,6 +1,6 @@
 import { createAuthEndpoint } from "better-auth/api";
 import { APIError } from "better-call";
-import { z } from "zod";
+import { object, string } from "zod";
 import type { CredentialAccount, User } from "../types";
 
 const INVALID_CREDENTIALS_ERROR = {
@@ -11,9 +11,9 @@ const createSignInEndpoint = () =>
   createAuthEndpoint(
     "/username-only/sign-in",
     {
-      body: z.object({
-        password: z.string(),
-        username: z.string().regex(/^[a-zA-Z0-9._-]+$/),
+      body: object({
+        password: string(),
+        username: string().regex(/^[a-zA-Z0-9._-]+$/),
       }),
       method: "POST",
     },
