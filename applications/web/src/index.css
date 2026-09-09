@@ -2,6 +2,15 @@
 
 @custom-variant pointer-hover (@media (hover: hover));
 
+/* The amber hatching, as one definition every attention surface can share. */
+@utility attention-hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    transparent 0 4px,
+    var(--ui-attention-hatch) 4px 8px
+  );
+}
+
 /* Height bands for grid event cards (48px hour); each floor sits 1px under its band's content height. */
 @custom-variant event-compact (@container event-card (height < 27px));
 @custom-variant event-short (@container event-card (height < 43px));
@@ -105,6 +114,11 @@ html {
   --ui-destructive-background: var(--color-red-50);
   --ui-destructive-border: var(--color-red-200);
   --ui-destructive-background-hover: var(--color-red-100);
+  --ui-attention: var(--color-amber-800);
+  --ui-attention-background: var(--color-amber-50);
+  --ui-attention-border: color-mix(in oklab, var(--color-amber-600), transparent 72%);
+  --ui-attention-background-hover: var(--color-amber-100);
+  --ui-attention-hatch: color-mix(in oklab, var(--color-amber-500), transparent 88%);
   --ui-ring: var(--color-blue-500);
   --ui-template: var(--color-purple-600);
   --ui-template-muted: color-mix(in srgb, var(--ui-template), transparent 50%);
@@ -151,6 +165,10 @@ html {
   --color-destructive-background: var(--ui-destructive-background);
   --color-destructive-border: var(--ui-destructive-border);
   --color-destructive-background-hover: var(--ui-destructive-background-hover);
+  --color-attention: var(--ui-attention);
+  --color-attention-background: var(--ui-attention-background);
+  --color-attention-border: var(--ui-attention-border);
+  --color-attention-background-hover: var(--ui-attention-background-hover);
   --color-ring: var(--ui-ring);
   --color-template: var(--ui-template);
   --color-template-muted: var(--ui-template-muted);
@@ -258,6 +276,22 @@ html {
       in srgb,
       var(--color-red-500),
       transparent 80%
+    );
+    --ui-attention: var(--color-amber-400);
+    --ui-attention-background: color-mix(
+      in srgb,
+      var(--color-amber-500),
+      var(--ui-background) 90%
+    );
+    --ui-attention-border: color-mix(
+      in srgb,
+      var(--color-amber-500),
+      transparent 80%
+    );
+    --ui-attention-background-hover: color-mix(
+      in srgb,
+      var(--color-amber-500),
+      var(--ui-background) 80%
     );
     --ui-ring: var(--color-blue-400);
     --ui-template: var(--color-purple-400);

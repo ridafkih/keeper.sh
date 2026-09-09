@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { UpgradeHint } from "@/components/ui/primitives/upgrade-hint";
+import { PremiumHint } from "@/components/ui/primitives/menu-hint";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Button, LinkButton, ButtonText } from "@/components/ui/primitives/button";
 import { apiFetch } from "@/lib/fetcher";
@@ -523,7 +523,7 @@ function DestinationsSection({
           );
         })}
       </NavigationMenu>
-      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
+      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}
@@ -587,7 +587,7 @@ function SourcesSection({
           );
         })}
       </NavigationMenu>
-      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
+      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}

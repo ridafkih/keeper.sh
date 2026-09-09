@@ -91,6 +91,12 @@ const withFeedBookkeepingInserts = (
   return insert(table);
 };
 
+const createUpdateBuilder = (): unknown => ({
+  set: () => ({
+    where: () => Promise.resolve(),
+  }),
+});
+
 const createTxInstance = (): object => ({
   execute: () => Promise.resolve(),
   insert: withFeedBookkeepingInserts(() => createInsertBuilder([])),
@@ -98,6 +104,7 @@ const createTxInstance = (): object => ({
   selectDistinct: () => ({
     from: () => ({}),
   }),
+  update: () => createUpdateBuilder(),
 });
 
 beforeAll(async () => {
@@ -294,6 +301,7 @@ describe("Account locks", () => {
       selectDistinct: () => ({
         from: () => ({}),
       }),
+      update: () => createUpdateBuilder(),
     };
 
     const accountId = await importOAuthAccountCalendars({

@@ -3,7 +3,7 @@ import Calendar from "lucide-react/dist/esm/icons/calendar";
 import LinkIcon from "lucide-react/dist/esm/icons/link";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
-import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import {
   NavigationMenu,
@@ -24,7 +24,7 @@ function ConnectPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton />
-      <PremiumFeatureGate locked={atLimit} hint="Account limit reached.">
+      <PremiumGate locked={atLimit} hint="Account limit reached.">
         <NavigationMenu>
           <div data-visitors-event={ANALYTICS_EVENTS.calendar_connect_started} data-visitors-provider="ical">
             <NavigationMenuLinkItem to="/dashboard/connect/ical-link" disabled={atLimit}>
@@ -94,7 +94,7 @@ function ConnectPage() {
             </NavigationMenuLinkItem>
           </div>
         </NavigationMenu>
-      </PremiumFeatureGate>
+      </PremiumGate>
     </div>
   );
 }

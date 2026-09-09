@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/primitives/input";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
-import { UpgradeHint } from "@/components/ui/primitives/upgrade-hint";
+import { PremiumHint } from "@/components/ui/primitives/menu-hint";
 import {
   Modal,
   ModalContent,
@@ -91,7 +91,7 @@ function ICalFeedsPage() {
           onError={setMutationError}
         />
       </NavigationMenu>
-      {!canCreate && <UpgradeHint>Free plans include one iCal feed.</UpgradeHint>}
+      {!canCreate && <PremiumHint>Free plans include one iCal feed.</PremiumHint>}
     </div>
   );
 }

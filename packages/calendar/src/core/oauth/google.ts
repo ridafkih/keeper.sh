@@ -27,6 +27,8 @@ interface AuthorizationUrlOptions {
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
+  loginHint?: string;
 }
 
 interface GoogleOAuthService {
@@ -223,6 +225,9 @@ const createGoogleOAuthService = (
     url.searchParams.set("scope", scopes.join(" "));
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
+    if (options.loginHint) {
+      url.searchParams.set("login_hint", options.loginHint);
+    }
     url.searchParams.set("state", state);
 
     return url.toString();

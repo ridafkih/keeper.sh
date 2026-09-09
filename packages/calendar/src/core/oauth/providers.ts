@@ -17,6 +17,8 @@ interface AuthorizationUrlOptions {
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
+  loginHint?: string;
 }
 
 interface NormalizedUserInfo {

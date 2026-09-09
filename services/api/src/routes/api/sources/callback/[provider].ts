@@ -53,7 +53,7 @@ const GET = withWideEvent(async ({ request, params }) => {
       throw new OAuthError("Invalid or expired state", errorUrl);
     }
 
-    const { userId } = validatedState;
+    const { userId, sourceCredentialId } = validatedState;
 
     const callbackUrl = new URL(`/api/sources/callback/${provider}`, baseUrl);
     const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
@@ -82,7 +82,13 @@ const GET = withWideEvent(async ({ request, params }) => {
       userId,
     });
 
-    const successUrl = buildRedirectUrl(`/dashboard/accounts/${accountId}/setup`, baseUrl);
+    /* A reconnect already has its calendars chosen, so only a first connection — which
+       carries no source credential in its state — belongs in the setup wizard. */
+    let successPath = `/dashboard/accounts/${accountId}/setup`;
+    if (sourceCredentialId) {
+      successPath = `/dashboard/accounts/${accountId}`;
+    }
+    const successUrl = buildRedirectUrl(successPath, baseUrl);
     return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {

@@ -43,6 +43,9 @@ import { ProviderIconStack } from "@/components/ui/primitives/provider-icon-stac
 import { pluralize } from "@/lib/pluralize";
 import { useAnimatedSWR } from "@/hooks/use-animated-swr";
 import { SyncStatus } from "@/features/dashboard/components/sync-status";
+import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
+import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
+import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/reauth-notice";
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
@@ -83,6 +86,7 @@ function DashboardPage() {
       <SyncStatus />
       <EventGraph />
       <div className="flex flex-col gap-1.5">
+        <DashboardReauthNotice />
         <CalendarSourcesMenu />
         <CalendarsMenu />
         <NavigationMenu>
@@ -102,16 +106,7 @@ function DashboardPage() {
           </NavigationMenuLinkItem>
         </NavigationMenu>
         <PlanMenu />
-        <NavigationMenu>
-          <AccountsPopover />
-          <NavigationMenuLinkItem to="/dashboard/settings">
-            <NavigationMenuItemIcon>
-              <Settings size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Settings</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
+        <AccountsMenu />
         <NavigationMenu>
           <NavigationMenuButtonItem onClick={handleLogout}>
             <NavigationMenuItemIcon>
@@ -235,7 +230,14 @@ function CalendarSourcesMenu() {
   );
 }
 
+function AttentionDot() {
+  return (
+    <span className="size-1.5 shrink-0 rounded-full bg-linear-to-b from-amber-400 to-amber-500" />
+  );
+}
+
 function CalendarsMenu() {
+  const reauthIds = new Set(useReauthAccounts().map((account) => account.id));
   const { data: calendarsData, shouldAnimate: animateCalendars, isLoading: calendarsLoading, error, mutate: mutateCalendars } = useAnimatedSWR<CalendarSource[]>("/api/sources");
   const calendars = calendarsData ?? [];
 
@@ -255,7 +257,14 @@ function CalendarsMenu() {
               {calendars.length > 0 ? "Calendars" : "No Calendars"}
             </NavigationMenuItemLabel>
             <NavigationMenuItemTrailing>
-              <ProviderIconStack providers={calendars} />
+              <ProviderIconStack
+                providers={calendars}
+                leading={
+                  calendars.some((calendar) => reauthIds.has(calendar.accountId))
+                    ? <AttentionDot />
+                    : undefined
+                }
+              />
             </NavigationMenuItemTrailing>
           </>
         }
@@ -278,9 +287,26 @@ function CalendarsMenu() {
             <NavigationMenuItemIcon>
               <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing className="overflow-hidden">
-              <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
+            <NavigationMenuItemLabel
+              className="shrink-0"
+              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
+            >
+              {calendar.name}
+            </NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing
+              className="overflow-hidden"
+              indicator={
+                reauthIds.has(calendar.accountId)
+                  ? <TriangleAlert size={15} className="shrink-0 text-attention" />
+                  : undefined
+              }
+            >
+              <Text
+                size="sm"
+                tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
+                align="right"
+                className="flex-1 min-w-0 truncate"
+              >
                 {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
               </Text>
             </NavigationMenuItemTrailing>
@@ -309,7 +335,24 @@ function CalendarsMenu() {
   );
 }
 
-function AccountsPopover() {
+function AccountsMenu() {
+  const reauthAccounts = useReauthAccounts();
+  const reauthIds = new Set(reauthAccounts.map((account) => account.id));
+  return (
+    <NavigationMenu>
+      <AccountsPopover reauthIds={reauthIds} />
+      <NavigationMenuLinkItem to="/dashboard/settings">
+        <NavigationMenuItemIcon>
+          <Settings size={15} />
+        </NavigationMenuItemIcon>
+        <NavigationMenuItemLabel>Settings</NavigationMenuItemLabel>
+        <NavigationMenuItemTrailing />
+      </NavigationMenuLinkItem>
+    </NavigationMenu>
+  );
+}
+
+function AccountsPopover({ reauthIds }: { reauthIds: Set<string> }) {
   const { data: accountsData, isLoading: accountsLoading, error: accountsError, mutate: mutateAccounts } = useAnimatedSWR<CalendarAccount[]>("/api/accounts");
   const accounts = accountsData ?? [];
 
@@ -325,7 +368,14 @@ function AccountsPopover() {
             {accounts.length > 0 ? "Calendar Sources" : "No Calendar Sources"}
           </NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
-            <ProviderIconStack providers={accounts} />
+            <ProviderIconStack
+              providers={accounts}
+              leading={
+                reauthIds.size > 0
+                  ? <AttentionDot />
+                  : undefined
+              }
+            />
           </NavigationMenuItemTrailing>
         </>
       }
@@ -336,18 +386,32 @@ function AccountsPopover() {
           <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
         </div>
       )}
-      {accounts.map((account) => (
-        <NavigationMenuLinkItem
-          key={account.id}
-          to={`/dashboard/accounts/${account.id}`}
-        >
-          <NavigationMenuItemIcon>
-            <ProviderIcon provider={account.provider} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{account.accountLabel}</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuLinkItem>
-      ))}
+      {accounts.map((account) => {
+        const needsReauth = reauthIds.has(account.id);
+        return (
+          <NavigationMenuLinkItem
+            key={account.id}
+            to={`/dashboard/accounts/${account.id}`}
+          >
+            <NavigationMenuItemIcon>
+              <ProviderIcon provider={account.provider} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel tone={needsReauth ? "attention" : undefined}>
+              {account.accountLabel}
+            </NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing
+              indicator={
+                needsReauth ? (
+                  <TriangleAlert
+                    size={15}
+                    className="shrink-0 text-amber-600 dark:text-amber-400"
+                  />
+                ) : undefined
+              }
+            />
+          </NavigationMenuLinkItem>
+        );
+      })}
     </NavigationMenuPopover>
   );
 }

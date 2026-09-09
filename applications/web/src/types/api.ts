@@ -14,6 +14,9 @@ export interface CalendarAccount {
   calendarCount: number;
   calendarsRefreshedAt: string | null;
   createdAt: string;
+  /** Present only on the account detail payload, and only for CalDAV accounts. */
+  caldavServerUrl?: string | null;
+  caldavUsername?: string | null;
 }
 
 export interface CalendarSource {

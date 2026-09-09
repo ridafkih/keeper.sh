@@ -1,6 +1,6 @@
 import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
-import { isOAuthReauthRequiredError } from "./error-classification";
+import { isOAuthOperatorFaultError, isOAuthReauthRequiredError } from "./error-classification";
 import {
   readPriorReauthenticationState,
   recordReauthenticationDemand,
@@ -120,6 +120,14 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
 
           return result;
         } catch (error) {
+          if (isOAuthOperatorFaultError(error)) {
+            /* Fleet-wide and invisible otherwise: no reauthentication demand is raised, so
+               no account turns amber and nothing else marks the provider as broken. */
+            widelog.set("oauth.operator_fault", true);
+            widelog.set("reauth.suppressed", true);
+            widelog.errorFields(error, { slug: "oauth-client-misconfigured" });
+          }
+
           if (isOAuthReauthRequiredError(error)) {
             const prior = await readPriorReauthenticationState(database, calendarAccountId);
             await database

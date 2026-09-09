@@ -1,4 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
+import { CalendarReauthStrip } from "./reauth/calendar-reauth-notice";
 
 interface CalendarFrameProps {
   toolbar: ReactNode;
@@ -20,6 +21,7 @@ export function CalendarFrame({
         <div className="flex items-center justify-between gap-3 rounded-t-[calc(var(--radius-2xl)-1px)] bg-background-elevated px-4 py-3 [view-transition-name:calendar-toolbar]">
           {toolbar}
         </div>
+        <CalendarReauthStrip />
         <div className="relative [view-transition-name:calendar-column-header]">
           {/* Scoped to the column header rather than the whole header, so the fill starts dissolving right below the toolbar in both views. */}
           <div

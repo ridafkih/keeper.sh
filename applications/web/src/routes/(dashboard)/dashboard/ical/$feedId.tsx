@@ -21,7 +21,7 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { TemplateText } from "@/components/ui/primitives/template-text";
 import { Text } from "@/components/ui/primitives/text";
-import { PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import { PremiumGate } from "@/components/ui/primitives/menu-hint";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -229,7 +229,7 @@ function ICalFeedDetailPage() {
           title="Feed Settings"
           description={<>Choose which event details this link includes. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
         />
-        <PremiumFeatureGate locked={locked} hint="Feed settings are a Pro feature.">
+        <PremiumGate locked={locked} hint="Feed settings are a Pro feature.">
           <NavigationMenu>
             <EventNameTemplateItem
               customEventName={feed.customEventName}
@@ -254,12 +254,12 @@ function ICalFeedDetailPage() {
               </NavigationMenuToggleItem>
             ))}
           </NavigationMenu>
-        </PremiumFeatureGate>
+        </PremiumGate>
         <DashboardSection
           title="Event Filters"
           description="Leave these event types out of this link."
         />
-        <PremiumFeatureGate locked={locked} hint="Event filters are a Pro feature.">
+        <PremiumGate locked={locked} hint="Event filters are a Pro feature.">
           <NavigationMenu>
             {FILTER_TOGGLES.map(({ field, label }) => (
               <NavigationMenuToggleItem
@@ -272,7 +272,7 @@ function ICalFeedDetailPage() {
               </NavigationMenuToggleItem>
             ))}
           </NavigationMenu>
-        </PremiumFeatureGate>
+        </PremiumGate>
         <DashboardSection
           title="Feed Information"
           description="View details about this feed."

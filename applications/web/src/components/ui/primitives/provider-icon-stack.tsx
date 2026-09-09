@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
@@ -8,6 +9,8 @@ interface ProviderIconStackProps {
   providers: { provider?: string; calendarType?: string }[];
   max?: number;
   animate?: boolean;
+  /** Sits inside the stack's own absolute box, so it tracks the icons rather than the flex row. */
+  leading?: ReactNode;
 }
 
 function ProviderIconStackItem({ provider, calendarType }: { provider?: string; calendarType?: string }) {
@@ -26,14 +29,15 @@ function resolveInitial(animate: boolean) {
   return false as const;
 }
 
-function ProviderIconStack({ providers, max = 4, animate = false }: ProviderIconStackProps) {
+function ProviderIconStack({ providers, max = 4, animate = false, leading }: ProviderIconStackProps) {
   const visible = providers.slice(0, max);
   const overflow = providers.length - max;
   const initial = resolveInitial(animate);
 
   return (
     <LazyMotion features={loadMotionFeatures}>
-      <div className="absolute flex items-center justify-end overflow-visible pr-1">
+      <div className="absolute flex items-center justify-end gap-2 overflow-visible pr-1">
+        {leading}
         <div className="flex items-center">
           <AnimatePresence mode="sync">
             {visible.map((entry, index) => (

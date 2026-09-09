@@ -26,6 +26,8 @@ interface AuthorizationUrlOptions {
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
+  loginHint?: string;
 }
 
 interface MicrosoftOAuthService {
@@ -91,7 +93,13 @@ const createMicrosoftOAuthService = (
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", scopes.join(" "));
     url.searchParams.set("response_mode", "query");
-    url.searchParams.set("prompt", "select_account");
+    // A hinted reconnect targets one account, so the picker would only invite the wrong choice.
+    if (options.loginHint) {
+      url.searchParams.set("prompt", "consent");
+      url.searchParams.set("login_hint", options.loginHint);
+    } else {
+      url.searchParams.set("prompt", "select_account");
+    }
     url.searchParams.set("state", state);
 
     return url.toString();

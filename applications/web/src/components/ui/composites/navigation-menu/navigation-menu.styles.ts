@@ -5,7 +5,8 @@ export const navigationMenuStyle = tv({
   variants: {
     variant: {
       default: "bg-background border border-interactive-border shadow-xs",
-      highlight: "relative before:absolute before:top-0.5 before:inset-x-0 before:h-px before:bg-linear-to-r before:mx-4 before:z-10 before:from-transparent before:to-transparent dark:bg-blue-700 dark:before:via-blue-400 bg-blue-500 before:via-blue-300"
+      highlight: "relative before:absolute before:top-0.5 before:inset-x-0 before:h-px before:bg-linear-to-r before:mx-4 before:z-10 before:from-transparent before:to-transparent dark:bg-blue-700 dark:before:via-blue-400 bg-blue-500 before:via-blue-300",
+      attention: "relative bg-attention-background border border-attention-border shadow-xs attention-hatch before:absolute before:inset-0.5 before:rounded-[0.875rem] before:bg-attention-background before:pointer-events-none",
     },
   },
   defaultVariants: {
@@ -21,6 +22,7 @@ export const navigationMenuItemStyle = tv({
     variant: {
       default: "",
       highlight: "bg-linear-to-t dark:to-blue-600 dark:from-blue-700 to-blue-500 from-blue-600",
+      attention: "relative",
     },
     interactive: {
       true: "hover:cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -30,6 +32,7 @@ export const navigationMenuItemStyle = tv({
   compoundVariants: [
     { variant: "default", interactive: true, className: "hover:bg-background-hover" },
     { variant: "highlight", interactive: true, className: "hover:brightness-110" },
+    { variant: "attention", interactive: true, className: "hover:bg-attention-background-hover" },
   ],
   defaultVariants: {
     variant: "default",
@@ -43,6 +46,7 @@ export const navigationMenuItemIconStyle = tv({
     variant: {
       default: "text-foreground-muted",
       highlight: "text-white",
+      attention: "text-attention",
     },
     disabled: {
       true: "text-foreground-disabled",
@@ -60,6 +64,7 @@ export const navigationMenuToggleTrack = tv({
     variant: {
       default: "",
       highlight: "",
+      attention: "",
     },
     checked: {
       true: "",
@@ -75,6 +80,8 @@ export const navigationMenuToggleTrack = tv({
     { variant: "default", checked: true, className: "bg-foreground" },
     { variant: "highlight", checked: false, className: "bg-foreground-inverse-muted" },
     { variant: "highlight", checked: true, className: "bg-foreground-inverse" },
+    { variant: "attention", checked: false, className: "bg-interactive-border" },
+    { variant: "attention", checked: true, className: "bg-foreground" },
   ],
   defaultVariants: {
     variant: "default",
@@ -89,6 +96,7 @@ export const navigationMenuToggleThumb = tv({
     variant: {
       default: "bg-background-elevated",
       highlight: "bg-foreground",
+      attention: "bg-background-elevated",
     },
     checked: {
       true: "ml-auto",
@@ -107,6 +115,7 @@ export const navigationMenuCheckbox = tv({
     variant: {
       default: "border-interactive-border",
       highlight: "border-foreground-inverse-muted",
+      attention: "border-interactive-border",
     },
     checked: {
       true: "",
@@ -116,6 +125,7 @@ export const navigationMenuCheckbox = tv({
   compoundVariants: [
     { variant: "default", checked: true, className: "bg-foreground border-foreground" },
     { variant: "highlight", checked: true, className: "bg-foreground-inverse border-foreground-inverse" },
+    { variant: "attention", checked: true, className: "bg-foreground border-foreground" },
   ],
   defaultVariants: {
     variant: "default",
@@ -129,6 +139,7 @@ export const navigationMenuCheckboxIcon = tv({
     variant: {
       default: "text-foreground-inverse",
       highlight: "text-foreground",
+      attention: "text-foreground-inverse",
     },
   },
   defaultVariants: {
@@ -136,15 +147,20 @@ export const navigationMenuCheckboxIcon = tv({
   },
 });
 
-export const LABEL_TONE: Record<NonNullable<MenuVariant>, "muted" | "inverse" | "highlight"> = {
+export const LABEL_TONE: Record<
+  NonNullable<MenuVariant>,
+  "muted" | "inverse" | "highlight" | "attention" | "default"
+> = {
   default: "muted",
   highlight: "highlight",
+  attention: "default",
 };
 
 export const DISABLED_LABEL_TONE: Record<
   NonNullable<MenuVariant>,
-  "disabled" | "inverseMuted" | "highlight"
+  "disabled" | "inverseMuted" | "highlight" | "attention"
 > = {
   default: "disabled",
   highlight: "highlight",
+  attention: "disabled",
 };

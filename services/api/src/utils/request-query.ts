@@ -3,6 +3,7 @@ import { type } from "arktype";
 const sourceAuthorizeQuerySchema = type({
   provider: "string",
   "credentialId?": "string",
+  "accountId?": "string",
   "+": "reject",
 });
 type SourceAuthorizeQuery = typeof sourceAuthorizeQuerySchema.infer;

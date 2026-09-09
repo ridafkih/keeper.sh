@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, PropsWithChildren } from "react";
+import type { ComponentPropsWithoutRef, PropsWithChildren, ReactNode } from "react";
 import { use } from "react";
 import { Link } from "@tanstack/react-router";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
@@ -58,10 +58,14 @@ type NavigationMenuButtonItemProps = PropsWithChildren<{
 
 type NavigationMenuItemLabelProps = PropsWithChildren<{
   className?: string;
+  /** Overrides the tone the menu variant would otherwise pick, for a row with its own status. */
+  tone?: ComponentPropsWithoutRef<typeof Text>["tone"];
 }>;
 
 type NavigationMenuItemTrailingProps = PropsWithChildren<{
   className?: string;
+  /** Replaces the link arrow, for rows that need to end on a status rather than an affordance. */
+  indicator?: ReactNode;
 }>;
 
 export function NavigationMenuItem({
@@ -151,6 +155,7 @@ export function NavigationMenuItemIcon({ children }: PropsWithChildren) {
 export function NavigationMenuItemLabel({
   children,
   className,
+  tone,
 }: NavigationMenuItemLabelProps) {
   const variant = use(MenuVariantContext);
   const disabled = use(ItemDisabledContext);
@@ -159,7 +164,7 @@ export function NavigationMenuItemLabel({
   return (
     <Text
       size="sm"
-      tone={toneMap[variant ?? "default"]}
+      tone={tone ?? toneMap[variant ?? "default"]}
       align="left"
       className={cn("min-w-0 truncate", className)}
     >
@@ -190,6 +195,7 @@ export function NavigationMenuEmptyItem({ children }: PropsWithChildren) {
 export function NavigationMenuItemTrailing({
   children,
   className,
+  indicator,
 }: NavigationMenuItemTrailingProps) {
   const isLink = use(ItemIsLinkContext);
   const variant = use(MenuVariantContext);
@@ -197,7 +203,8 @@ export function NavigationMenuItemTrailing({
   return (
     <div className={cn("flex grow min-w-0 items-center gap-1 justify-end", className)}>
       {children}
-      {isLink && (
+      {indicator}
+      {isLink && !indicator && (
         <ArrowRight
           className={cn("shrink-0", navigationMenuItemIconStyle({ variant }))}
           size={15}

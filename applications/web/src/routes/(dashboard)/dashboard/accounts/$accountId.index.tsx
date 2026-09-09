@@ -9,7 +9,9 @@ import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header"
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
+import { MenuGate } from "@/components/ui/primitives/menu-hint";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
+import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { fetcher, apiFetch } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { formatDate } from "@/lib/time";
@@ -105,6 +107,7 @@ function RefreshCalendarsItem({ accountId }: { accountId: string }) {
 
 function AccountDetailPage() {
   const { accountId } = Route.useParams();
+  const needsReauth = useReauthAccounts().some((account) => account.id === accountId);
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
   const { data: account, isLoading: accountLoading, error: accountError } = useSWR<CalendarAccount>(
@@ -160,26 +163,43 @@ function AccountDetailPage() {
           title="Account Information"
           description="View details about the account and its calendars."
         />
-        <NavigationMenu>
-          <MetadataRow label="Resource Type" value="Account" />
-          <MetadataRow label="Calendar Count" value={String(calendars.length)} />
-          <MetadataRow label="Identifier" value={account.accountIdentifier ?? ""} truncate />
-          <MetadataRow label="Provider" value={account.providerName} />
-          <MetadataRow label="Authenticated" value={account.authType} />
-          <MetadataRow label="Connected" value={formatDate(account.createdAt)} />
-          {account.calendarsRefreshedAt && (
-            <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
-          )}
-        </NavigationMenu>
-        <NavigationMenu>
-          <RefreshCalendarsItem accountId={accountId} />
-        </NavigationMenu>
+        <MenuGate
+          active={needsReauth}
+          tone="attention"
+          hint="Authorization for this account has been lost,"
+          action={{
+            label: "click here to restore access",
+            to: `/dashboard/accounts/${accountId}/reconnect`,
+            trailing: ".",
+          }}
+        >
+          <NavigationMenu>
+            <MetadataRow
+              label="Status"
+              value={needsReauth ? "Needs Reauthentication" : "Healthy"}
+              tone={needsReauth ? "attention" : undefined}
+              to={needsReauth ? `/dashboard/accounts/${accountId}/reconnect` : undefined}
+            />
+            <MetadataRow label="Resource Type" value="Account" />
+            <MetadataRow label="Calendar Count" value={String(calendars.length)} />
+            <MetadataRow label="Identifier" value={account.accountIdentifier ?? ""} truncate />
+            <MetadataRow label="Provider" value={account.providerName} />
+            <MetadataRow label="Authenticated" value={account.authType} />
+            <MetadataRow label="Connected" value={formatDate(account.createdAt)} />
+            {account.calendarsRefreshedAt && (
+              <MetadataRow label="Calendars Checked" value={formatDate(account.calendarsRefreshedAt)} />
+            )}
+          </NavigationMenu>
+        </MenuGate>
         <DashboardSection
           title="Account Calendars"
           description={<>This account has {pluralize(calendars.length, "calendar")} attached to it, choose a calendar below to view more details and configure it. Calendars no longer found at the provider are noted below.</>}
         />
         <NavigationMenu>
           <CalendarList calendars={calendars} accountId={accountId} />
+        </NavigationMenu>
+        <NavigationMenu>
+          <RefreshCalendarsItem accountId={accountId} />
         </NavigationMenu>
         <NavigationMenu>
           <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>

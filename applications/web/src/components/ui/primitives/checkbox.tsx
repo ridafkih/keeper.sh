@@ -10,6 +10,7 @@ const checkboxIndicator = tv({
     variant: {
       default: "border-interactive-border",
       highlight: "border-foreground-inverse-muted",
+      attention: "border-interactive-border",
     },
     checked: {
       true: "",
@@ -19,6 +20,7 @@ const checkboxIndicator = tv({
   compoundVariants: [
     { variant: "default", checked: true, className: "bg-foreground border-foreground" },
     { variant: "highlight", checked: true, className: "bg-foreground-inverse border-foreground-inverse" },
+    { variant: "attention", checked: true, className: "bg-foreground border-foreground" },
   ],
   defaultVariants: {
     variant: "default",
@@ -32,6 +34,7 @@ const checkboxIcon = tv({
     variant: {
       default: "text-foreground-inverse",
       highlight: "text-foreground",
+      attention: "text-foreground-inverse",
     },
   },
   defaultVariants: {
@@ -39,7 +42,7 @@ const checkboxIcon = tv({
   },
 });
 
-type CheckboxVariant = "default" | "highlight";
+type CheckboxVariant = "default" | "highlight" | "attention";
 
 interface CheckboxIndicatorProps {
   checked: boolean;

@@ -914,7 +914,7 @@ const importOAuthAccountCalendars = async (
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${options.userId}))`,
     );
 
-    return importOAuthAccountCalendarsWithDependencies(options, {
+    const importedAccountId = await importOAuthAccountCalendarsWithDependencies(options, {
       ...dependencies,
       adoptProviderAccountId: (accountOptions) =>
         adoptProviderAccountIdWithDatabase(tx, accountOptions),
@@ -929,6 +929,21 @@ const importOAuthAccountCalendars = async (
       insertCalendars: (userId, accountId, calendars) =>
         insertOAuthCalendarsWithDatabase(tx, userId, accountId, calendars),
     });
+
+    /* A fresh grant is proof the credential works, and it is the only thing that can settle a
+       demand the token refresh raised. Without this every reauthentication surface stays lit
+       after the user has already fixed the account. */
+    await tx
+      .update(calendarAccountsTable)
+      .set({ needsReauthentication: false, reauthenticationSource: null })
+      .where(
+        and(
+          eq(calendarAccountsTable.id, importedAccountId),
+          eq(calendarAccountsTable.userId, options.userId),
+        ),
+      );
+
+    return importedAccountId;
   });
 };
 

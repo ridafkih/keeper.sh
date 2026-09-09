@@ -1,4 +1,4 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
+import { caldavCredentialsTable, calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
@@ -27,16 +27,24 @@ const GET = withWideEvent(
         calendarCount: count(calendarsTable.id),
         calendarsRefreshedAt: calendarAccountsTable.calendarsRefreshedAt,
         createdAt: calendarAccountsTable.createdAt,
+        /* Reconnecting a CalDAV account replaces only the password, so the page needs
+           the rest of the credential to show what it is repairing. */
+        caldavServerUrl: caldavCredentialsTable.serverUrl,
+        caldavUsername: caldavCredentialsTable.username,
       })
       .from(calendarAccountsTable)
       .leftJoin(calendarsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+      .leftJoin(
+        caldavCredentialsTable,
+        eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
+      )
       .where(
         and(
           eq(calendarAccountsTable.id, id),
           eq(calendarAccountsTable.userId, userId),
         ),
       )
-      .groupBy(calendarAccountsTable.id)
+      .groupBy(calendarAccountsTable.id, caldavCredentialsTable.id)
       .limit(1);
 
     if (!account) {

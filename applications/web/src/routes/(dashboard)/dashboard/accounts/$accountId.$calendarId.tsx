@@ -8,9 +8,11 @@ import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
-import { UpgradeHint, PremiumFeatureGate } from "@/components/ui/primitives/upgrade-hint";
+import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
+import { MenuHint, PremiumHint, PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
+import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -27,6 +29,7 @@ import {
   NavigationMenuButtonItem,
   NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
+  NavigationMenuLinkItem,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
@@ -167,6 +170,7 @@ function CalendarDetailPage() {
         <CalendarHeader account={account} />
       </StickyPageHeader>
       <PageBody className="gap-1.5">
+        <ReauthNotice account={account} />
         <ProviderMissingNotice />
         <RenameSection calendarId={calendarId} />
         {isPullCapable && (
@@ -201,7 +205,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
         title="Sync Window"
         description="Choose how far back and ahead Keeper syncs events into this calendar. Narrowing a range removes already-synced events outside it from this calendar."
       />
-      <PremiumFeatureGate locked={locked} hint="Custom sync windows are a Pro feature.">
+      <PremiumGate locked={locked} hint="Custom sync windows are a Pro feature.">
         <NavigationMenu>
           <SyncRangeItem
             calendarId={calendarId}
@@ -216,7 +220,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
             locked={disabled}
           />
         </NavigationMenu>
-      </PremiumFeatureGate>
+      </PremiumGate>
     </>
   );
 }
@@ -397,6 +401,30 @@ function RenameItemValue() {
   );
 }
 
+/** Leads the page when the owning account has lost authorization; this calendar cannot sync until it is restored. */
+function ReauthNotice({ account }: { account: CalendarAccount }) {
+  const needsReauth = useReauthAccounts().some((entry) => entry.id === account.id);
+  if (!needsReauth) return null;
+
+  return (
+    <>
+      <NavigationMenu variant="attention">
+        <NavigationMenuLinkItem to={`/dashboard/accounts/${account.id}/reconnect`}>
+          <NavigationMenuItemIcon>
+            <TriangleAlert size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>Reconnect 1 Account</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing />
+        </NavigationMenuLinkItem>
+      </NavigationMenu>
+      <MenuHint>
+        Authorization for this account has been lost. This calendar will drift out of date until
+        access is restored.
+      </MenuHint>
+    </>
+  );
+}
+
 function ProviderMissingNotice() {
   const providerMissingSince = useAtomValue(calendarProviderMissingSinceAtom);
   if (!providerMissingSince) return null;
@@ -498,7 +526,7 @@ function DestinationsSection({ calendarId }: { calendarId: string }) {
           ))
         )}
       </NavigationMenu>
-      {atLimit && <UpgradeHint>Mapping limit reached.</UpgradeHint>}
+      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
     </>
   );
 }
@@ -615,7 +643,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         title="Sync Settings"
         description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <PremiumFeatureGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
@@ -631,7 +659,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
             />
           ))}
         </NavigationMenu>
-      </PremiumFeatureGate>
+      </PremiumGate>
     </>
   );
 }
@@ -823,7 +851,7 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
         title="Exclusions"
         description="Choose which event types to exclude from syncing."
       />
-      <PremiumFeatureGate locked={locked} hint="Event exclusions are a Pro feature.">
+      <PremiumGate locked={locked} hint="Event exclusions are a Pro feature.">
         <NavigationMenu>
           {exclusionSettings.map((setting) => (
             <ExcludeFieldToggle
@@ -836,7 +864,7 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
             />
           ))}
         </NavigationMenu>
-      </PremiumFeatureGate>
+      </PremiumGate>
     </>
   );
 }
