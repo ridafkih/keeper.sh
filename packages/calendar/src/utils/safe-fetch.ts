@@ -26,6 +26,9 @@ class UrlSafetyError extends Error {
 
 type SafeFetch = (input: string | Request | URL, init?: RequestInit) => Promise<Response>;
 
+const GLOBAL_UNICAST_IPV6 = ipaddr.parseCIDR("2000::/3");
+const IPV6_DOCUMENTATION = ipaddr.parseCIDR("3fff::/20");
+
 const normalizeToIPv4 = (parsed: ipaddr.IPv4 | ipaddr.IPv6): ipaddr.IPv4 | ipaddr.IPv6 => {
   if (parsed.kind() === "ipv6" && "isIPv4MappedAddress" in parsed && parsed.isIPv4MappedAddress()) {
     return parsed.toIPv4Address();
@@ -33,17 +36,23 @@ const normalizeToIPv4 = (parsed: ipaddr.IPv4 | ipaddr.IPv6): ipaddr.IPv4 | ipadd
   return parsed;
 };
 
-const isUnicastAddress = (address: string): boolean => {
+const isGloballyRoutableAddress = (address: string): boolean => {
   try {
     const parsed = normalizeToIPv4(ipaddr.parse(address));
-    return parsed.range() === "unicast";
+    if (parsed.kind() === "ipv4") {
+      return parsed.range() === "unicast";
+    }
+    if (parsed.range() !== "unicast" || parsed.match(IPV6_DOCUMENTATION)) {
+      return false;
+    }
+    return parsed.match(GLOBAL_UNICAST_IPV6);
   } catch {
     return false;
   }
 };
 
-const assertUnicastAddress = (address: string, message: string): void => {
-  if (!isUnicastAddress(address)) {
+const assertGloballyRoutableAddress = (address: string, message: string): void => {
+  if (!isGloballyRoutableAddress(address)) {
     throw new UrlSafetyError(message);
   }
 };
@@ -128,14 +137,14 @@ const resolveConnection = async (url: string, options?: SafeFetchOptions): Promi
   const hostname = stripBrackets(parsed.hostname);
 
   if (ipaddr.isValid(hostname)) {
-    assertUnicastAddress(hostname, "The provided URL points to a private or reserved network address.");
+    assertGloballyRoutableAddress(hostname, "The provided URL points to a private or reserved network address.");
     return null;
   }
 
   const addresses = await resolveAllAddresses(hostname);
 
   for (const address of addresses) {
-    assertUnicastAddress(address, "The provided URL resolves to a private or reserved network address.");
+    assertGloballyRoutableAddress(address, "The provided URL resolves to a private or reserved network address.");
   }
 
   return buildPinnedConnection(parsed, addresses);
