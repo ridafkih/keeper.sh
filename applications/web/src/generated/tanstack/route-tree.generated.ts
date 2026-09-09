@@ -67,6 +67,7 @@ import { Route as oauthDashboardConnectOutlookRouteImport } from './../../routes
 import { Route as oauthDashboardConnectMicrosoftRouteImport } from './../../routes/(oauth)/dashboard/connect/microsoft'
 import { Route as oauthDashboardConnectIcsFileRouteImport } from './../../routes/(oauth)/dashboard/connect/ics-file'
 import { Route as oauthDashboardConnectIcalLinkRouteImport } from './../../routes/(oauth)/dashboard/connect/ical-link'
+import { Route as oauthDashboardConnectGraphRouteImport } from './../../routes/(oauth)/dashboard/connect/graph'
 import { Route as oauthDashboardConnectGoogleRouteImport } from './../../routes/(oauth)/dashboard/connect/google'
 import { Route as oauthDashboardConnectFastmailRouteImport } from './../../routes/(oauth)/dashboard/connect/fastmail'
 import { Route as oauthDashboardConnectEwsRouteImport } from './../../routes/(oauth)/dashboard/connect/ews'
@@ -386,6 +387,12 @@ const oauthDashboardConnectIcalLinkRoute =
     path: '/ical-link',
     getParentRoute: () => oauthDashboardConnectRouteRoute,
   } as any)
+const oauthDashboardConnectGraphRoute =
+  oauthDashboardConnectGraphRouteImport.update({
+    id: '/graph',
+    path: '/graph',
+    getParentRoute: () => oauthDashboardConnectRouteRoute,
+  } as any)
 const oauthDashboardConnectGoogleRoute =
   oauthDashboardConnectGoogleRouteImport.update({
     id: '/google',
@@ -518,6 +525,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
+  '/dashboard/connect/graph': typeof oauthDashboardConnectGraphRoute
   '/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
   '/dashboard/connect/ics-file': typeof oauthDashboardConnectIcsFileRoute
   '/dashboard/connect/microsoft': typeof oauthDashboardConnectMicrosoftRoute
@@ -581,6 +589,7 @@ export interface FileRoutesByTo {
   '/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
+  '/dashboard/connect/graph': typeof oauthDashboardConnectGraphRoute
   '/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
   '/dashboard/connect/ics-file': typeof oauthDashboardConnectIcsFileRoute
   '/dashboard/connect/microsoft': typeof oauthDashboardConnectMicrosoftRoute
@@ -654,6 +663,7 @@ export interface FileRoutesById {
   '/(oauth)/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/(oauth)/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/(oauth)/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
+  '/(oauth)/dashboard/connect/graph': typeof oauthDashboardConnectGraphRoute
   '/(oauth)/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
   '/(oauth)/dashboard/connect/ics-file': typeof oauthDashboardConnectIcsFileRoute
   '/(oauth)/dashboard/connect/microsoft': typeof oauthDashboardConnectMicrosoftRoute
@@ -724,6 +734,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect/ews'
     | '/dashboard/connect/fastmail'
     | '/dashboard/connect/google'
+    | '/dashboard/connect/graph'
     | '/dashboard/connect/ical-link'
     | '/dashboard/connect/ics-file'
     | '/dashboard/connect/microsoft'
@@ -787,6 +798,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect/ews'
     | '/dashboard/connect/fastmail'
     | '/dashboard/connect/google'
+    | '/dashboard/connect/graph'
     | '/dashboard/connect/ical-link'
     | '/dashboard/connect/ics-file'
     | '/dashboard/connect/microsoft'
@@ -859,6 +871,7 @@ export interface FileRouteTypes {
     | '/(oauth)/dashboard/connect/ews'
     | '/(oauth)/dashboard/connect/fastmail'
     | '/(oauth)/dashboard/connect/google'
+    | '/(oauth)/dashboard/connect/graph'
     | '/(oauth)/dashboard/connect/ical-link'
     | '/(oauth)/dashboard/connect/ics-file'
     | '/(oauth)/dashboard/connect/microsoft'
@@ -1290,6 +1303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof oauthDashboardConnectIcalLinkRouteImport
       parentRoute: typeof oauthDashboardConnectRouteRoute
     }
+    '/(oauth)/dashboard/connect/graph': {
+      id: '/(oauth)/dashboard/connect/graph'
+      path: '/graph'
+      fullPath: '/dashboard/connect/graph'
+      preLoaderRoute: typeof oauthDashboardConnectGraphRouteImport
+      parentRoute: typeof oauthDashboardConnectRouteRoute
+    }
     '/(oauth)/dashboard/connect/google': {
       id: '/(oauth)/dashboard/connect/google'
       path: '/google'
@@ -1619,6 +1639,7 @@ interface oauthDashboardConnectRouteRouteChildren {
   oauthDashboardConnectEwsRoute: typeof oauthDashboardConnectEwsRoute
   oauthDashboardConnectFastmailRoute: typeof oauthDashboardConnectFastmailRoute
   oauthDashboardConnectGoogleRoute: typeof oauthDashboardConnectGoogleRoute
+  oauthDashboardConnectGraphRoute: typeof oauthDashboardConnectGraphRoute
   oauthDashboardConnectIcalLinkRoute: typeof oauthDashboardConnectIcalLinkRoute
   oauthDashboardConnectIcsFileRoute: typeof oauthDashboardConnectIcsFileRoute
   oauthDashboardConnectMicrosoftRoute: typeof oauthDashboardConnectMicrosoftRoute
@@ -1632,6 +1653,7 @@ const oauthDashboardConnectRouteRouteChildren: oauthDashboardConnectRouteRouteCh
     oauthDashboardConnectEwsRoute: oauthDashboardConnectEwsRoute,
     oauthDashboardConnectFastmailRoute: oauthDashboardConnectFastmailRoute,
     oauthDashboardConnectGoogleRoute: oauthDashboardConnectGoogleRoute,
+    oauthDashboardConnectGraphRoute: oauthDashboardConnectGraphRoute,
     oauthDashboardConnectIcalLinkRoute: oauthDashboardConnectIcalLinkRoute,
     oauthDashboardConnectIcsFileRoute: oauthDashboardConnectIcsFileRoute,
     oauthDashboardConnectMicrosoftRoute: oauthDashboardConnectMicrosoftRoute,

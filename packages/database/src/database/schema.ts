@@ -35,6 +35,9 @@ const oauthCredentialsTable = pgTable(
     id: uuid().notNull().primaryKey().defaultRandom(),
     needsReauthentication: boolean().notNull().default(false),
     provider: text().notNull(),
+    microsoftClientId: text(),
+    microsoftTenant: text(),
+    microsoftScope: text(),
     refreshToken: text().notNull(),
     updatedAt: timestamp({ withTimezone: true })
       .notNull()

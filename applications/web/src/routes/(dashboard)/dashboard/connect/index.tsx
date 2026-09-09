@@ -84,6 +84,11 @@ function ConnectPage() {
           </div>
         </NavigationMenu>
         <NavigationMenu>
+          <NavigationMenuLinkItem to="/dashboard/connect/graph" disabled={atLimit}>
+            <NavigationMenuItemIcon><Calendar size={15} /></NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>Connect Microsoft Graph (custom Client ID)</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuLinkItem>
           <NavigationMenuLinkItem to="/dashboard/connect/ews" disabled={atLimit}>
             <NavigationMenuItemIcon><Calendar size={15} /></NavigationMenuItemIcon>
             <NavigationMenuItemLabel>Connect Exchange EWS</NavigationMenuItemLabel>

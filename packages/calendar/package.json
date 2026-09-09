@@ -12,7 +12,8 @@
     "./ics": "./src/ics/index.ts",
     "./safe-fetch": "./src/utils/safe-fetch.ts",
     "./digest-fetch": "./src/providers/caldav/shared/digest-fetch.ts",
-    "./ews": "./src/providers/ews/index.ts"
+    "./ews": "./src/providers/ews/index.ts",
+    "./graph": "./src/providers/graph/index.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",

@@ -639,10 +639,10 @@ const resolveTokenRefresher = (provider: string) => {
     });
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+  if (provider === "outlook") {
     return createMicrosoftTokenRefresher({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+      clientId: env.MICROSOFT_CLIENT_ID ?? "",
+      clientSecret: env.MICROSOFT_CLIENT_SECRET ?? "",
     });
   }
 
@@ -675,7 +675,7 @@ const resolveRateLimiter = (
     return createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest");
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+  if (provider === "outlook") {
     if (!source.accountId) {
       return;
     }
@@ -760,7 +760,7 @@ const resolveOAuthFetcher = (
   if (provider === "google") {
     return createGoogleSourceFetcher(params);
   }
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+  if (provider === "outlook") {
     return createOutlookSourceFetcher(params);
   }
   return null;
@@ -1376,6 +1376,7 @@ const ingestOAuthSources = async (
                 };
                 if (rawRefresher) {
                   const tokenRefresher = createCoordinatedRefresher({
+        microsoft: currentSource.provider === "outlook",
                     database,
                     oauthCredentialId: currentSource.oauthCredentialId,
                     calendarAccountId: currentSource.accountId,

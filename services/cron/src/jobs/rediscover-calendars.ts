@@ -130,10 +130,10 @@ const resolveTokenRefresher = (provider: string) => {
     });
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+  if (provider === "outlook") {
     return createMicrosoftTokenRefresher({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+      clientId: env.MICROSOFT_CLIENT_ID ?? "",
+      clientSecret: env.MICROSOFT_CLIENT_SECRET ?? "",
     });
   }
 
@@ -160,6 +160,7 @@ const discoverOAuthCalendars = async (
   const rawRefresher = resolveTokenRefresher(account.provider);
   if (rawRefresher) {
     await ensureValidToken(tokenState, createCoordinatedRefresher({
+        microsoft: account.provider === "outlook",
       calendarAccountId: account.accountId,
       database,
       oauthCredentialId: account.oauthCredentialId,

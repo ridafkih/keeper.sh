@@ -82,7 +82,17 @@ function OAuthReconnect({ account }: { account: CalendarAccount }) {
   }
 
   // A full page load, not a client navigation: the response is a redirect to the provider.
-  const handleReconnect = () => {
+  const handleReconnect = async () => {
+    if (account.provider === "outlook") {
+      const response = await apiFetch(`/api/sources/graph?accountId=${encodeURIComponent(account.id)}`, {});
+      if (response.ok) {
+        const config = await response.json() as { clientId?: string };
+        if (config.clientId) {
+          window.location.href = `/dashboard/connect/graph?accountId=${encodeURIComponent(account.id)}`;
+          return;
+        }
+      }
+    }
     const search = new URLSearchParams({
       provider: authorizeProvider,
       accountId: account.id,

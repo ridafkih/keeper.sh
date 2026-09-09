@@ -89,13 +89,13 @@ const resolveOAuthProvider = async (
     });
   }
 
-  if (provider === "outlook" && oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret) {
+  if (provider === "outlook") {
     if (!oauthCred.externalCalendarId) {
       return null;
     }
     const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-      clientId: oauthConfig.microsoftClientId,
-      clientSecret: oauthConfig.microsoftClientSecret,
+      clientId: oauthConfig.microsoftClientId ?? "",
+      clientSecret: oauthConfig.microsoftClientSecret ?? "",
     });
     return createOutlookSyncProvider({
       accessToken: oauthCred.accessToken,
@@ -105,6 +105,7 @@ const resolveOAuthProvider = async (
       calendarId,
       userId,
       refreshAccessToken: createCoordinatedRefresher({
+        microsoft: provider === "outlook",
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,

@@ -3,9 +3,9 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
-import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
+import { createCoordinatedRefresher, createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
-import { database, env } from "@/context";
+import { database, env, refreshLockStore } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -29,45 +29,6 @@ const refreshGoogleAccessToken = async (
   });
 
   const tokenData = await refreshGoogleToken(refreshToken);
-  const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
-
-  const [account] = await database
-    .select({ oauthCredentialId: calendarAccountsTable.oauthCredentialId })
-    .from(calendarAccountsTable)
-    .where(eq(calendarAccountsTable.id, accountId))
-    .limit(FIRST_RESULT_LIMIT);
-
-  if (account?.oauthCredentialId) {
-    await database
-      .update(oauthCredentialsTable)
-      .set({
-        accessToken: tokenData.access_token,
-        expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
-      })
-      .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
-  }
-
-  return {
-    accessToken: tokenData.access_token,
-    expiresAt: newExpiresAt,
-  };
-};
-
-const refreshMicrosoftAccessToken = async (
-  accountId: string,
-  refreshToken: string,
-): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft OAuth not configured");
-  }
-
-  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  });
-
-  const tokenData = await refreshMicrosoftToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
 
   const [account] = await database
@@ -125,34 +86,29 @@ const refreshGoogleSourceAccessToken = async (
 };
 
 const refreshMicrosoftSourceAccessToken = async (
-  credentialId: string,
-  refreshToken: string,
+  credentialId: string, refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
-    throw new Error("Microsoft OAuth not configured");
-  }
-
-  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
+  const [account] = await database.select({ id: calendarAccountsTable.id }).from(calendarAccountsTable)
+    .where(eq(calendarAccountsTable.oauthCredentialId, credentialId)).limit(1);
+  if (!account) { throw new Error("Missing Microsoft account"); }
+  const refresh = createCoordinatedRefresher({
+    database, oauthCredentialId: credentialId, calendarAccountId: account.id,
+    refreshLockStore, microsoft: true,
+    rawRefresh: createMicrosoftTokenRefresher({
+      clientId: env.MICROSOFT_CLIENT_ID ?? "", clientSecret: env.MICROSOFT_CLIENT_SECRET ?? "",
+    }),
   });
+  const result = await refresh(refreshToken);
+  return { accessToken: result.access_token, expiresAt: new Date(Date.now() + result.expires_in * MS_PER_SECOND) };
+};
 
-  const tokenData = await refreshMicrosoftToken(refreshToken);
-  const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
-
-  await database
-    .update(oauthCredentialsTable)
-    .set({
-      accessToken: tokenData.access_token,
-      expiresAt: newExpiresAt,
-      refreshToken: tokenData.refresh_token ?? refreshToken,
-    })
-    .where(eq(oauthCredentialsTable.id, credentialId));
-
-  return {
-    accessToken: tokenData.access_token,
-    expiresAt: newExpiresAt,
-  };
+const refreshMicrosoftAccessToken = async (
+  accountId: string, refreshToken: string,
+): Promise<RefreshResult> => {
+  const [account] = await database.select({ credentialId: calendarAccountsTable.oauthCredentialId })
+    .from(calendarAccountsTable).where(eq(calendarAccountsTable.id, accountId)).limit(1);
+  if (!account?.credentialId) { throw new Error("Missing Microsoft credential"); }
+  return refreshMicrosoftSourceAccessToken(account.credentialId, refreshToken);
 };
 
 export {

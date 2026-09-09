@@ -1,11 +1,14 @@
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { database } from "@/context";
+import type { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 
 interface CreateOAuthSourceCredentialData {
   provider: string;
+  microsoftClientId?: string;
+  microsoftTenant?: string;
+  microsoftScope?: string;
   email: string | null;
   accessToken: string;
   refreshToken: string;
@@ -15,8 +18,14 @@ interface CreateOAuthSourceCredentialData {
 const createOAuthSourceCredential = async (
   userId: string,
   data: CreateOAuthSourceCredentialData,
+  storage?: Pick<typeof database, "select" | "insert" | "update">,
 ): Promise<string> => {
-  const [existing] = await database
+  let databaseClient = storage;
+  if (!databaseClient) {
+    const context = await import("@/context");
+    databaseClient = context.database;
+  }
+  const [existing] = await databaseClient
     .select({ id: oauthCredentialsTable.id })
     .from(oauthCredentialsTable)
     .where(
@@ -29,9 +38,12 @@ const createOAuthSourceCredential = async (
     .limit(FIRST_RESULT_LIMIT);
 
   if (existing) {
-    await database
+    await databaseClient
       .update(oauthCredentialsTable)
       .set({
+        microsoftClientId: data.microsoftClientId ?? null,
+        microsoftTenant: data.microsoftTenant ?? null,
+        microsoftScope: data.microsoftScope ?? null,
         accessToken: data.accessToken,
         expiresAt: data.expiresAt,
         needsReauthentication: false,
@@ -42,9 +54,12 @@ const createOAuthSourceCredential = async (
     return existing.id;
   }
 
-  const [credential] = await database
+  const [credential] = await databaseClient
     .insert(oauthCredentialsTable)
     .values({
+      microsoftClientId: data.microsoftClientId ?? null,
+      microsoftTenant: data.microsoftTenant ?? null,
+        microsoftScope: data.microsoftScope ?? null,
       accessToken: data.accessToken,
       email: data.email,
       expiresAt: data.expiresAt,
@@ -62,3 +77,4 @@ const createOAuthSourceCredential = async (
 };
 
 export { createOAuthSourceCredential };
+export type { CreateOAuthSourceCredentialData };
