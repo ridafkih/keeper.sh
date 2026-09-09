@@ -15,6 +15,7 @@ import { usePasskeys } from "@/hooks/use-passkeys";
 import { useHasPassword } from "@/hooks/use-has-password";
 import { Input } from "@/components/ui/primitives/input";
 import { deleteAccount } from "@/lib/auth";
+import { resolveAccountIdentity } from "@/lib/account-identity";
 import {
   Modal,
   ModalContent,
@@ -52,11 +53,7 @@ function SettingsPage() {
   const navigate = useNavigate();
   const passwordRef = useRef<HTMLInputElement>(null);
   const { data: hasPassword = false } = useHasPassword();
-  const accountLabel = authCapabilities.credentialMode === "username" ? "Username" : "Email";
-  const accountValue =
-    authCapabilities.credentialMode === "username"
-      ? (user?.username ?? user?.name ?? "")
-      : (user?.email ?? "");
+  const { label: accountLabel, value: accountValue } = resolveAccountIdentity(user);
   const { data: apiTokens = [] } = useApiTokens();
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
   const analyticsConsent = useEffectiveConsent();
