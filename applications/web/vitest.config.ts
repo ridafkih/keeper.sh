@@ -14,6 +14,9 @@ export default defineConfig({
     },
   },
   test: {
+    deps: {
+      interopDefault: false,
+    },
     globals: true,
     include: ["./tests/**/*.test.ts", "./tests/**/*.test.tsx"],
     onConsoleLog: (log) => (log.startsWith("[subscription]") ? false : undefined),

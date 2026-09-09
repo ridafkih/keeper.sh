@@ -9,6 +9,9 @@ export default defineConfig({
     },
   },
   test: {
+    deps: {
+      interopDefault: false,
+    },
     globals: true,
     /*
      * Several suites here shell out to a real `bun` subprocess or build a

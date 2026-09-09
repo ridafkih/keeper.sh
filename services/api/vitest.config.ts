@@ -9,6 +9,9 @@ export default defineConfig({
     },
   },
   test: {
+    deps: {
+      interopDefault: false,
+    },
     globals: true,
     /*
      * Suites here boot an in-process PGlite and apply their schema in a setup
