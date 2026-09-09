@@ -3,7 +3,7 @@ import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { EditableEventContentSnapshot } from "./events/content-hash";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
-type AuthType = "oauth" | "caldav" | "none";
+type AuthType = "oauth" | "caldav" | "ews" | "none";
 type EventAvailability = "busy" | "free" | "oof" | "workingElsewhere";
 type SourceEventType = "default" | "focusTime" | "outOfOffice" | "workingLocation";
 

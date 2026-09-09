@@ -43,7 +43,7 @@ const assertRefreshable = (
   account: RefreshableAccount,
   encryptionKey: string | null,
 ): void => {
-  if (account.authType !== "caldav" && account.authType !== "oauth") {
+  if (account.authType !== "caldav" && account.authType !== "oauth" && account.authType !== "ews") {
     throw new CalendarRefreshUnsupportedError(
       "This account does not support calendar discovery.",
     );
@@ -55,7 +55,7 @@ const assertRefreshable = (
     );
   }
 
-  if (account.authType === "caldav" && !encryptionKey) {
+  if ((account.authType === "caldav" || account.authType === "ews") && !encryptionKey) {
     throw new CalendarRefreshUnconfiguredError("Encryption key not configured");
   }
 };
@@ -123,6 +123,7 @@ const createDefaultAccountCalendarRefreshDependencies = async (
   const { enqueuePushSync } = await import("./enqueue-push-sync");
   const {
     discoverCalDAVAccountCalendars,
+    discoverEwsAccountCalendars,
     discoverOAuthAccountCalendars,
     loadRefreshableAccount,
     markAccountNeedsReauthentication,
@@ -131,6 +132,10 @@ const createDefaultAccountCalendarRefreshDependencies = async (
   return {
     applyPlan: (input) => applyCalendarRediscoveryPlan(database, input),
     discoverCalendars: (account) => {
+      if (account.authType === "ews") {
+        if (!encryptionKey) {throw new CalendarRefreshUnconfiguredError("Encryption key not configured");}
+        return discoverEwsAccountCalendars(account.id, encryptionKey);
+      }
       if (account.authType !== "caldav") {
         return discoverOAuthAccountCalendars(account.id, account.provider);
       }
