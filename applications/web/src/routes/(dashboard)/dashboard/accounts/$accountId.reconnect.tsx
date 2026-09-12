@@ -28,6 +28,7 @@ export const Route = createFileRoute("/(dashboard)/dashboard/accounts/$accountId
  * pinned to this account; CalDAV replaces the stored password in place.
  */
 function ReconnectAccountPage() {
+  const navigate = useNavigate();
   const { accountId } = Route.useParams();
   const { data: account, isLoading, error, mutate } = useSWR<CalendarAccount>(
     `/api/accounts/${accountId}`,
@@ -56,11 +57,13 @@ function ReconnectAccountPage() {
         <DashboardHeading1>Restore access</DashboardHeading1>
       </StickyPageHeader>
       <PageBody className="gap-1.5">
-        {account.authType === "caldav" ? (
+        {account.authType === "ews" ? (
+          <Button onClick={() => navigate({ to: "/dashboard/connect/ews", search: { accountId: account.id } })}><ButtonText>Configure EWS connection</ButtonText></Button>
+        ) : (account.authType === "caldav" ? (
           <CalDAVReconnect account={account} />
         ) : (
           <OAuthReconnect account={account} />
-        )}
+        ))}
       </PageBody>
     </div>
   );
@@ -128,8 +131,8 @@ function CalDAVReconnect({ account }: { account: CalendarAccount }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ password }),
         });
-      } catch (err) {
-        setError(resolveErrorMessage(err, "Those credentials were rejected"));
+      } catch (error) {
+        setError(resolveErrorMessage(error, "Those credentials were rejected"));
         return;
       }
 

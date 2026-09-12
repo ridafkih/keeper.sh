@@ -152,6 +152,7 @@ describe("ingestOAuthSources selection", () => {
       renderOrdering(FLEET_PRIORITY_ORDERING),
       renderOrdering(FLEET_PRIORITY_ORDERING),
       renderOrdering(FLEET_PRIORITY_ORDERING),
+      renderOrdering(FLEET_PRIORITY_ORDERING),
     ]);
   });
 });
