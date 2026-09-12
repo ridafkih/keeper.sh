@@ -47,6 +47,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends redis-server \
 RUN curl -fsSL https://caddyserver.com/api/download?os=linux\&arch=${TARGETARCH} -o /usr/bin/caddy \
   && chmod +x /usr/bin/caddy
 
+RUN curl --version | grep -qw NTLM
+
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 

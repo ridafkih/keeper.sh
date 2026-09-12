@@ -105,12 +105,10 @@ const resolveTokenRefresher = (
 
   if (
     provider === "outlook"
-    && clientCredentials.microsoftClientId
-    && clientCredentials.microsoftClientSecret
   ) {
     return createMicrosoftTokenRefresher({
-      clientId: clientCredentials.microsoftClientId,
-      clientSecret: clientCredentials.microsoftClientSecret,
+      clientId: clientCredentials.microsoftClientId ?? "",
+      clientSecret: clientCredentials.microsoftClientSecret ?? "",
     });
   }
 
@@ -177,6 +175,7 @@ const deregisterPushChannelsWithin = async (
       });
       if (rawRefresh) {
         await ensureValidToken(tokenState, createCoordinatedRefresher({
+        microsoft: channel.provider === "outlook",
           calendarAccountId: credentials.calendarAccountId,
           database,
           oauthCredentialId: credentials.oauthCredentialId,

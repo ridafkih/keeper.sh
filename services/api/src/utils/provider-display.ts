@@ -26,10 +26,14 @@ const getProviderName = (providerId: string): string =>
 const getProviderIcon = (providerId: string): string | null =>
   toNonEmptyValue(getProvider(providerId)?.icon);
 
-const getAccountIdentifier = (input: AccountDisplayInput): string | null =>
-  toNonEmptyValue(input.email)
-  ?? toNonEmptyValue(input.accountIdentifier)
-  ?? toNonEmptyValue(input.displayName);
+const getAccountIdentifier = (input: AccountDisplayInput): string | null => {
+  if (input.provider === "ews") {
+    return toNonEmptyValue(input.email) ?? toNonEmptyValue(input.displayName) ?? getProviderName(input.provider);
+  }
+  return toNonEmptyValue(input.email)
+    ?? toNonEmptyValue(input.accountIdentifier)
+    ?? toNonEmptyValue(input.displayName);
+};
 
 const getAccountLabel = (input: AccountDisplayInput): string =>
   getAccountIdentifier(input) ?? getProviderName(input.provider);

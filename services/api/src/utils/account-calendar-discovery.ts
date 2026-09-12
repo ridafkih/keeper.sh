@@ -1,5 +1,7 @@
+import { createEwsTokenProvider, EwsClient, parseEwsConfig, toDiscoveredEwsCalendars } from "@keeper.sh/calendar/ews";
 import {
   caldavCredentialsTable,
+  ewsCredentialsTable,
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
@@ -211,7 +213,7 @@ const loadRefreshableAccountsForUser = async (
     .where(and(
       eq(calendarAccountsTable.userId, userId),
       eq(calendarAccountsTable.needsReauthentication, false),
-      inArray(calendarAccountsTable.authType, ["oauth", "caldav"]),
+      inArray(calendarAccountsTable.authType, ["oauth", "caldav", "ews"]),
     ));
 
   return accounts
@@ -219,7 +221,16 @@ const loadRefreshableAccountsForUser = async (
     .filter((account) => account.hasImportedCalendar);
 };
 
+const discoverEwsAccountCalendars = async (accountId: string, encryptionKey: string): Promise<DiscoveredCalendar[]> => {
+  const { database } = await import("@/context");
+  const [credential] = await database.select().from(ewsCredentialsTable).where(eq(ewsCredentialsTable.accountId, accountId)).limit(1);
+  if (!credential) {throw new Error("EWS credential unavailable");}
+  const config = parseEwsConfig(JSON.parse(decryptPassword(credential.encryptedConfig, encryptionKey)));
+  return toDiscoveredEwsCalendars(await new EwsClient(config, { safeFetchOptions, getAccessToken: createEwsTokenProvider(database, accountId, encryptionKey, { safeFetchOptions }) }).discoverCalendars());
+};
+
 export {
+  discoverEwsAccountCalendars,
   discoverCalDAVAccountCalendars,
   discoverOAuthAccountCalendars,
   loadRefreshableAccount,

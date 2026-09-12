@@ -2,7 +2,7 @@ import type { GoogleCalendarListEntry } from "@keeper.sh/data-schemas";
 import { normalizeCalDAVCalendarKey } from "../../providers/caldav/shared/calendar-identity";
 import type { CalendarInfo } from "../../providers/caldav/types";
 
-type RediscoveryCalendarType = "caldav" | "oauth";
+type RediscoveryCalendarType = "caldav" | "oauth" | "ews";
 
 interface DiscoveredCalendar {
   identityKey: string;
@@ -229,7 +229,7 @@ const resolveStoredIdentityKey = (
   row: CalendarIdentityRow,
   calendarType: RediscoveryCalendarType,
 ): string[] => {
-  if (calendarType === "oauth") {
+  if (calendarType === "oauth" || calendarType === "ews") {
     if (!row.externalCalendarId) {
       return [];
     }
@@ -267,6 +267,7 @@ const toRemovedIdentityKeys = (
   new Set(rows.flatMap((row) => resolveStoredIdentityKey(row, calendarType)));
 
 const resolveRediscoveryCalendarType = (authType: string): RediscoveryCalendarType => {
+  if (authType === "ews") {return "ews";}
   if (authType === "caldav") {
     return "caldav";
   }
