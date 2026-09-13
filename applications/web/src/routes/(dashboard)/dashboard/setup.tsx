@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { useSWRConfig } from "swr";
+import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -46,6 +49,12 @@ interface OpenSlot {
   slot: SentenceSlot;
 }
 
+const RULE_HIDDEN = { height: 0, opacity: 0, filter: "blur(4px)" };
+const RULE_VISIBLE = { height: "fit-content", opacity: 1, filter: "blur(0)" };
+const RULE_CLIP = { overflow: "clip" as const, overflowClipMargin: 4 };
+const RULE_TRANSITION = { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const };
+const INSTANT = { duration: 0 };
+
 async function loadSources(fetchApi: AppJsonFetcher): Promise<CalendarSource[] | null> {
   try {
     return await fetchApi<CalendarSource[]>("/api/sources");
@@ -78,6 +87,7 @@ function SetupPage() {
   });
   const [open, setOpen] = useState<OpenSlot | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion() ?? false;
   const { mutate: globalMutate } = useSWRConfig();
   const { commit, status } = useCommitRules({ clear, draft, entitlements, update });
   const hydrated = draft !== null;
@@ -149,18 +159,32 @@ function SetupPage() {
         description="Fill in the blanks, read it back, then start syncing."
       />
       <div ref={anchorRef} className="relative z-20 flex flex-col gap-1.5">
-        <div className="flex flex-col gap-3 px-0.5 py-2">
-          {draft.rules.map((rule) => (
-            <SetupSentence
-              key={rule.id}
-              rule={rule}
-              calendarsById={calendarsById}
-              openSlot={open?.ruleId === rule.id ? open.slot : null}
-              onOpen={(slot) => toggle(rule.id, slot)}
-              onRemove={draft.rules.length > 1 ? () => applyDraft(ANALYTICS_EVENTS.setup_rule_removed, (current) => removeRule(current, rule.id)) : undefined}
-            />
-          ))}
-        </div>
+        <LazyMotion features={loadMotionFeatures}>
+          <div className="flex flex-col px-0.5 py-2">
+            <AnimatePresence initial={false}>
+              {draft.rules.map((rule) => (
+                <m.div
+                  key={rule.id}
+                  style={RULE_CLIP}
+                  initial={RULE_HIDDEN}
+                  animate={RULE_VISIBLE}
+                  exit={RULE_HIDDEN}
+                  transition={reduceMotion ? INSTANT : RULE_TRANSITION}
+                >
+                  <div className="py-1.5">
+                    <SetupSentence
+                      rule={rule}
+                      calendarsById={calendarsById}
+                      openSlot={open?.ruleId === rule.id ? open.slot : null}
+                      onOpen={(slot) => toggle(rule.id, slot)}
+                      onRemove={draft.rules.length > 1 ? () => applyDraft(ANALYTICS_EVENTS.setup_rule_removed, (current) => removeRule(current, rule.id)) : undefined}
+                    />
+                  </div>
+                </m.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        </LazyMotion>
         <SentencePanel open={open !== null} anchorRef={anchorRef} onClose={close}>
           {open && openRule && isBlank(open.slot) && (
             <CalendarOptions

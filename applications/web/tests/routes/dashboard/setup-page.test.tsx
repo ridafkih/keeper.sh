@@ -55,6 +55,7 @@ vi.mock("swr", () => {
 vi.mock("motion/react", () => ({
   AnimatePresence: ({ children }: React.PropsWithChildren) => <>{children}</>,
   LazyMotion: ({ children }: React.PropsWithChildren) => <>{children}</>,
+  useReducedMotion: () => false,
 }));
 
 vi.mock("motion/react-m", () => ({
