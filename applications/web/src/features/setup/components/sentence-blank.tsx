@@ -11,7 +11,7 @@ const blank = tv({
     state: {
       empty: "border-dashed border-interactive-border text-foreground-muted",
       filled: "border-interactive-border bg-background text-foreground",
-      open: "border-interactive-border bg-background text-foreground ring-2 ring-ring",
+      open: "border-ring bg-background text-foreground ring-1 ring-inset ring-ring",
     },
   },
 });

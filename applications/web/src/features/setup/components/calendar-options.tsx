@@ -46,9 +46,9 @@ export function CalendarOptions({ blank, calendars, excludeIds, selectedId, onSe
               <NavigationMenuItemIcon>
                 <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
               </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing className="overflow-hidden">
-                <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
+              <NavigationMenuItemLabel>{calendar.name}</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing className="shrink-0 grow-0 max-w-[45%]">
+                <Text size="sm" tone="muted" align="right" className="min-w-0 truncate">
                   {calendar.accountLabel}
                 </Text>
                 {calendar.id === selectedId && <CheckIcon size={14} className="shrink-0 text-foreground" />}
