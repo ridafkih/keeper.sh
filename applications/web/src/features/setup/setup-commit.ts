@@ -29,9 +29,11 @@ export const buildDestinationPuts = (
 ): DestinationPut[] => {
   const puts = new Map<string, string[]>();
   for (const rule of rules) {
-    const existing = puts.get(rule.fromId) ?? existingByFrom[rule.fromId] ?? [];
-    if (existing.includes(rule.toId)) continue;
-    puts.set(rule.fromId, [...existing, rule.toId]);
+    for (const toId of rule.toIds) {
+      const existing = puts.get(rule.fromId) ?? existingByFrom[rule.fromId] ?? [];
+      if (existing.includes(toId)) continue;
+      puts.set(rule.fromId, [...existing, toId]);
+    }
   }
   return [...puts].map(([sourceId, calendarIds]) => ({ calendarIds, sourceId }));
 };

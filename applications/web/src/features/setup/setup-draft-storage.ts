@@ -9,18 +9,20 @@ const ruleSchema = type({
   detail: "'calendar_name' | 'busy' | 'titles'",
   fromId: "string | null",
   id: "string",
-  toId: "string | null",
+  toIds: "string[]",
 });
 
+const blankSchema = type({ kind: "'from'" }).or({ index: "number.integer >= 0", kind: "'to'" });
+
 const pendingSchema = type({
-  blank: "'from' | 'to'",
+  blank: blankSchema,
   ruleId: "string",
 });
 
 const draftSchema = type({
   pending: pendingSchema.or("null"),
   rules: ruleSchema.array(),
-  version: "1",
+  version: "2",
 });
 
 export const resolveSessionStorage = (): DraftStorage | null => {

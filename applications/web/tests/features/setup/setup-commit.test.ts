@@ -7,13 +7,13 @@ import {
   exceedsMappingLimit,
 } from "../../../src/features/setup/setup-commit";
 
-const rule = (id: string, fromId: string, toId: string, detail: CompleteRule["detail"] = "calendar_name"): CompleteRule =>
-  ({ detail, fromId, id, toId });
+const rule = (id: string, fromId: string, toIds: string | string[], detail: CompleteRule["detail"] = "calendar_name"): CompleteRule =>
+  ({ detail, fromId, id, toIds: Array.isArray(toIds) ? toIds : [toIds] });
 
 describe("buildDestinationPuts", () => {
   it("merges with existing destinations without dropping or duplicating", () => {
     const puts = buildDestinationPuts(
-      [rule("a", "work", "personal"), rule("b", "work", "feed"), rule("c", "personal", "work")],
+      [rule("a", "work", ["personal", "feed"]), rule("b", "work", "feed"), rule("c", "personal", "work")],
       { work: ["feed", "archive"] },
     );
     expect(puts).toEqual([

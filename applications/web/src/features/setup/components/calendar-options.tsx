@@ -17,25 +17,25 @@ import {
   NavigationMenuItemTrailing,
   NavigationMenuLinkItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
-import type { BlankKind } from "../setup-draft";
+import type { SetupBlank } from "../setup-draft";
 
 interface CalendarOptionsProps {
-  blank: BlankKind;
+  blank: SetupBlank;
   calendars: CalendarSource[];
-  excludeId: string | null;
+  excludeIds: string[];
   selectedId: string | null;
   onSelect: (calendarId: string) => void;
   onConnect: () => void;
 }
 
-const fits = (blank: BlankKind, calendar: CalendarSource): boolean =>
-  blank === "from" ? canPull(calendar) : canPush(calendar);
+const fits = (blank: SetupBlank, calendar: CalendarSource): boolean =>
+  blank.kind === "from" ? canPull(calendar) : canPush(calendar);
 
-export function CalendarOptions({ blank, calendars, excludeId, selectedId, onSelect, onConnect }: CalendarOptionsProps) {
+export function CalendarOptions({ blank, calendars, excludeIds, selectedId, onSelect, onConnect }: CalendarOptionsProps) {
   const { data: entitlements } = useEntitlements();
   const atLimit = !canAddMore(entitlements?.accounts);
-  const options = calendars.filter((calendar) => fits(blank, calendar) && calendar.id !== excludeId);
-  const providers = CONNECT_PROVIDERS.filter((provider) => blank === "from" || !provider.pullOnly);
+  const options = calendars.filter((calendar) => fits(blank, calendar) && !excludeIds.includes(calendar.id));
+  const providers = CONNECT_PROVIDERS.filter((provider) => blank.kind === "from" || !provider.pullOnly);
 
   return (
     <div className="flex flex-col gap-1.5">

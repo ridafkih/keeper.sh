@@ -92,6 +92,7 @@ vi.mock("../../../src/config/commercial", () => ({
 const sources = [
   makeSource("work", "google-account", ["pull", "push"], { name: "Work" }),
   makeSource("personal", "outlook-account", ["pull", "push"], { name: "Personal", provider: "outlook" }),
+  makeSource("family", "outlook-account", ["pull", "push"], { name: "Family", provider: "outlook" }),
 ];
 
 const renderPage = (draft: SetupDraft): string => {
@@ -105,14 +106,14 @@ const renderPage = (draft: SetupDraft): string => {
 
 const emptyDraft: SetupDraft = {
   pending: null,
-  rules: [{ detail: "calendar_name", fromId: null, id: "rule-1", toId: null }],
-  version: 1,
+  rules: [{ detail: "calendar_name", fromId: null, id: "rule-1", toIds: [] }],
+  version: 2,
 };
 
 const completeDraft: SetupDraft = {
   pending: null,
-  rules: [{ detail: "calendar_name", fromId: "work", id: "rule-1", toId: "personal" }],
-  version: 1,
+  rules: [{ detail: "calendar_name", fromId: "work", id: "rule-1", toIds: ["personal", "family"] }],
+  version: 2,
 };
 
 const START_DISABLED = /<button[^>]* disabled=""[^>]*><span[^>]*>Start Syncing/;
@@ -132,8 +133,9 @@ describe("setup page", () => {
     const markup = renderPage(completeDraft);
 
     expect(markup).toContain("Work");
-    expect(markup).toContain("Personal");
-    expect(markup).toContain("1 of 3 syncs on the free plan.");
+    expect(markup).toMatch(/Personal[\s\S]{0,600}, [\s\S]{0,600}Family/);
+    expect(markup).toContain('aria-label="Add another destination"');
+    expect(markup).toContain("2 of 3 syncs on the free plan.");
     expect(markup).not.toMatch(START_DISABLED);
   });
 });

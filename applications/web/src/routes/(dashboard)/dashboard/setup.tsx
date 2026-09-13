@@ -17,11 +17,13 @@ import {
   completeRules,
   markPending,
   pruneStaleIds,
+  removeDestination,
   removeRule,
   resolveConnectedAccount,
   setBlank,
   setRuleDetail,
-  type BlankKind,
+  takenIds,
+  type SetupBlank,
   type SetupDraft,
 } from "@/features/setup/setup-draft";
 import { buildDestinationPuts, countNewMappings, exceedsMappingLimit } from "@/features/setup/setup-commit";
@@ -32,7 +34,8 @@ import { CalendarOptions } from "@/features/setup/components/calendar-options";
 import { DetailOptions } from "@/features/setup/components/detail-options";
 import { SentencePanel } from "@/features/setup/components/sentence-panel";
 import { SetupActions } from "@/features/setup/components/setup-actions";
-import { SetupSentence, type SentenceSlot } from "@/features/setup/components/setup-sentence";
+import { SetupSentence } from "@/features/setup/components/setup-sentence";
+import { sameSlot, type SentenceSlot } from "@/features/setup/sentence-slot";
 
 interface SetupSearch {
   accountId?: string;
@@ -59,7 +62,10 @@ export const Route = createFileRoute("/(dashboard)/dashboard/setup")({
   component: SetupPage,
 });
 
-const isBlank = (slot: SentenceSlot): slot is BlankKind => slot !== "detail";
+const isBlank = (slot: SentenceSlot): slot is SetupBlank => slot.kind !== "detail";
+
+const selectedFor = (rule: { fromId: string | null; toIds: string[] }, blank: SetupBlank): string | null =>
+  blank.kind === "from" ? rule.fromId : rule.toIds[blank.index] ?? null;
 
 function SetupPage() {
   const { accountId } = Route.useSearch();
@@ -111,17 +117,21 @@ function SetupPage() {
   const detailLocked = !entitlements || !entitlements.canUseEventFilters;
 
   const toggle = (ruleId: string, slot: SentenceSlot) => {
-    setOpen((current) => (current?.ruleId === ruleId && current.slot === slot ? null : { ruleId, slot }));
+    setOpen((current) => (current?.ruleId === ruleId && sameSlot(current.slot, slot) ? null : { ruleId, slot }));
   };
 
-  const select = (ruleId: string, blank: BlankKind, calendarId: string) => {
-    track(ANALYTICS_EVENTS.setup_blank_selected, { blank, source: "calendar" });
-    update((current) => setBlank(current, ruleId, blank, calendarId));
+  const select = (ruleId: string, blank: SetupBlank, calendarId: string, selectedId: string | null) => {
+    track(ANALYTICS_EVENTS.setup_blank_selected, { blank: blank.kind, source: "calendar" });
+    update((current) => (
+      calendarId === selectedId && blank.kind === "to"
+        ? removeDestination(current, ruleId, calendarId)
+        : setBlank(current, ruleId, blank, calendarId)
+    ));
     close();
   };
 
-  const connect = (ruleId: string, blank: BlankKind) => {
-    track(ANALYTICS_EVENTS.setup_blank_selected, { blank, source: "connect" });
+  const connect = (ruleId: string, blank: SetupBlank) => {
+    track(ANALYTICS_EVENTS.setup_blank_selected, { blank: blank.kind, source: "connect" });
     update((current) => markPending(current, ruleId, blank));
   };
 
@@ -156,13 +166,13 @@ function SetupPage() {
             <CalendarOptions
               blank={open.slot}
               calendars={sources}
-              excludeId={open.slot === "from" ? openRule.toId : openRule.fromId}
-              selectedId={open.slot === "from" ? openRule.fromId : openRule.toId}
-              onSelect={(calendarId) => select(openRule.id, open.slot as BlankKind, calendarId)}
-              onConnect={() => connect(openRule.id, open.slot as BlankKind)}
+              excludeIds={takenIds(openRule, open.slot)}
+              selectedId={selectedFor(openRule, open.slot)}
+              onSelect={(calendarId) => select(openRule.id, open.slot as SetupBlank, calendarId, selectedFor(openRule, open.slot as SetupBlank))}
+              onConnect={() => connect(openRule.id, open.slot as SetupBlank)}
             />
           )}
-          {open && openRule && open.slot === "detail" && (
+          {open && openRule && open.slot.kind === "detail" && (
             <DetailOptions
               selected={openRule.detail}
               locked={detailLocked}
@@ -177,7 +187,7 @@ function SetupPage() {
       </div>
       <SetupActions
         canReverse={Boolean(reversible)}
-        onReverse={() => reversible && applyDraft(ANALYTICS_EVENTS.setup_reverse_added, (current) => addReverseRule(current, reversible.id))}
+        onReverse={() => reversible && applyDraft(ANALYTICS_EVENTS.setup_reverse_added, (current) => addReverseRule(current, reversible.id, calendarsById))}
         onAddRule={() => applyDraft(ANALYTICS_EVENTS.setup_rule_added, addRule)}
         canStart={rules.length > 0}
         starting={status.kind === "committing"}

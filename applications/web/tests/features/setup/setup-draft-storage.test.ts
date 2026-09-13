@@ -32,7 +32,7 @@ describe("setup draft storage", () => {
     const storage = createStorage();
     storage.setItem(SETUP_DRAFT_KEY, "{not json");
     expect(readSetupDraft(storage)).toBeNull();
-    storage.setItem(SETUP_DRAFT_KEY, JSON.stringify({ ...createEmptyDraft(), version: 0 }));
+    storage.setItem(SETUP_DRAFT_KEY, JSON.stringify({ ...createEmptyDraft(), version: 1 }));
     expect(readSetupDraft(storage)).toBeNull();
   });
 

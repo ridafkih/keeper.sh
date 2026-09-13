@@ -18,17 +18,24 @@ const blank = tv({
 
 interface SentenceBlankProps {
   state: BlankState;
-  label: string;
+  label?: string;
+  ariaLabel?: string;
   icon?: ReactNode;
   onClick: () => void;
 }
 
-export function SentenceBlank({ state, label, icon, onClick }: SentenceBlankProps) {
+export function SentenceBlank({ state, label, ariaLabel, icon, onClick }: SentenceBlankProps) {
   return (
-    <button type="button" aria-expanded={state === "open"} onClick={onClick} className={blank({ state })}>
+    <button
+      type="button"
+      aria-label={ariaLabel}
+      aria-expanded={state === "open"}
+      onClick={onClick}
+      className={blank({ state })}
+    >
       {state === "empty" ? <Plus size={14} className="shrink-0" /> : icon}
-      <span className="min-w-0 truncate">{label}</span>
-      <ChevronsUpDown size={14} className="shrink-0 text-foreground-muted" />
+      {label && <span className="min-w-0 truncate">{label}</span>}
+      {label && <ChevronsUpDown size={14} className="shrink-0 text-foreground-muted" />}
     </button>
   );
 }
