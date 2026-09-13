@@ -1,12 +1,13 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { atom, useAtomValue, useSetAtom } from "jotai";
+import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
+import { sidebarResizingAtom } from "@/state/sidebar-resizing";
 import {
   EVENT_GRAPH_DAYS_BEFORE,
   calendarHighlightSlotAtom,
@@ -215,6 +216,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [visibleCenterOffset],
   );
   const highlightVisible = useAtomValue(highlightVisibleAtom);
+  const sidebarResizing = useAtomValue(sidebarResizingAtom);
+  const store = useStore();
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
@@ -257,10 +260,15 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   }, [anchor, scrollToCenter]);
 
   // The day row follows the grid via Motion's ScrollTimeline — a scrollLeft mirror trails compositor scrolling by a frame.
+  // While the sidebar resizes, the timeline samples stale metrics each frame, so the resize observer drives the row instead.
   useEffect(() => {
     const scroller = scrollerRef.current;
     const row = rowRef.current;
     if (!scroller || !row) return;
+    if (sidebarResizing) {
+      row.style.transform = `translateX(${-scroller.scrollLeft}px)`;
+      return;
+    }
     const travel = (-100 * (stripDays.length - VISIBLE_COLUMNS)) / stripDays.length;
     const animation = animate(
       row,
@@ -268,11 +276,16 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       { ease: "linear" },
     );
     const cancel = scroll(animation, { container: scroller, axis: "x" });
+    // The timeline overrides the inline offset once it paints; clearing it a frame later avoids a blank frame in between.
+    const clearInline = requestAnimationFrame(() => {
+      row.style.transform = "";
+    });
     return () => {
+      cancelAnimationFrame(clearInline);
       cancel();
       animation.cancel();
     };
-  }, [stripDays]);
+  }, [stripDays, sidebarResizing]);
 
   // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
   useEffect(
@@ -299,11 +312,13 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         alignedWidthRef.current = width;
         return;
       }
-      scrollToCenter(new Date(alignedCenterMs), "auto");
+      scrollToCenter(new Date(alignedCenterMs), "instant");
+      const row = rowRef.current;
+      if (row && store.get(sidebarResizingAtom)) row.style.transform = `translateX(${-el.scrollLeft}px)`;
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [scrollToCenter]);
+  }, [scrollToCenter, store]);
 
   // Write-only: subscribing would reconcile all 742 memoised day cells on every open/close.
   const setDetail = useSetAtom(eventDetailAtom);
@@ -436,7 +451,10 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className={cn(
+          "flex min-h-0 flex-1 items-start overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          sidebarResizing ? "snap-none" : "snap-x snap-mandatory",
+        )}
         style={{ scrollPaddingLeft: GUTTER_WIDTH }}
       >
         <div

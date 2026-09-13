@@ -1,10 +1,11 @@
 import { useLayoutEffect, useRef, type RefObject } from "react";
 import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "@/state/popover-overlay";
+import { sidebarResizingAtom } from "@/state/sidebar-resizing";
 import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
@@ -34,59 +35,37 @@ export const Route = createFileRoute("/(dashboard)")({
   }),
 });
 
-const SIDEBAR_REM = { narrow: 24, wide: 32 };
-const GAP_REM = 1;
-const RELEASE_FALLBACK_MS = 400;
+const RESIZE_FALLBACK_MS = 400;
 
-/* The week grid re-measures on every width it is given, so while the sidebar tweens the calendar is
-   pinned at its final width, right-aligned and clipped: it snaps once and the sidebar moves over it. */
-function usePinnedCalendarWidth(
-  wide: boolean,
-  sidebarRef: RefObject<HTMLDivElement | null>,
-  paneRef: RefObject<HTMLDivElement | null>,
-  calendarRef: RefObject<HTMLDivElement | null>,
-) {
+// Flags the tween so the week grid can suspend scroll snapping instead of re-snapping every frame.
+function useSidebarResizing(wide: boolean, sidebarRef: RefObject<HTMLDivElement | null>) {
+  const setResizing = useSetAtom(sidebarResizingAtom);
   const previous = useRef(wide);
 
   useLayoutEffect(() => {
     if (previous.current === wide) return;
     previous.current = wide;
     const sidebar = sidebarRef.current;
-    const pane = paneRef.current;
-    const calendar = calendarRef.current;
-    const root = sidebar?.parentElement;
-    if (!sidebar || !pane || !calendar || !root || pane.clientWidth === 0) return;
-
-    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
-    const rootStyle = getComputedStyle(root);
-    const content = root.clientWidth - Number.parseFloat(rootStyle.paddingLeft) - Number.parseFloat(rootStyle.paddingRight);
-    const sidebarWidth = (wide ? SIDEBAR_REM.wide : SIDEBAR_REM.narrow) * rem;
-    calendar.style.width = `${content - sidebarWidth - GAP_REM * rem}px`;
-    pane.style.overflow = "hidden";
-    pane.style.justifyContent = "flex-end";
-
-    const release = () => {
-      calendar.style.width = "";
-      pane.style.overflow = "";
-      pane.style.justifyContent = "";
-      sidebar.removeEventListener("transitionend", release);
+    if (!sidebar) return;
+    setResizing(true);
+    const settle = () => {
+      setResizing(false);
+      sidebar.removeEventListener("transitionend", settle);
     };
-    sidebar.addEventListener("transitionend", release);
-    const fallback = setTimeout(release, RELEASE_FALLBACK_MS);
+    sidebar.addEventListener("transitionend", settle);
+    const fallback = setTimeout(settle, RESIZE_FALLBACK_MS);
     return () => {
       clearTimeout(fallback);
-      release();
+      settle();
     };
-  }, [wide, sidebarRef, paneRef, calendarRef]);
+  }, [wide, sidebarRef, setResizing]);
 }
 
 function DashboardLayout() {
   const overlayActive = useAtomValue(popoverOverlayAtom);
   const wide = useRouterState({ select: (state) => isWideSidebarPath(state.location.pathname) });
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const paneRef = useRef<HTMLDivElement>(null);
-  const calendarRef = useRef<HTMLDivElement>(null);
-  usePinnedCalendarWidth(wide, sidebarRef, paneRef, calendarRef);
+  useSidebarResizing(wide, sidebarRef);
 
   return (
     <div className="relative flex min-h-dvh justify-center lg:justify-start lg:gap-4 lg:p-4">
@@ -117,10 +96,8 @@ function DashboardLayout() {
         </SidebarPageTransition>
       </div>
       {/* `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10). */}
-      <div ref={paneRef} className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
-        <div ref={calendarRef} className="flex h-full w-full min-w-0 shrink-0">
-          <CalendarView />
-        </div>
+      <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
+        <CalendarView />
       </div>
     </div>
   );
