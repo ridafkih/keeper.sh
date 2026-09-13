@@ -6,7 +6,7 @@ import type { CalendarSource } from "@/types/api";
 import type { SetupRule } from "../setup-draft";
 import { DETAIL_LABELS } from "../detail-labels";
 import { sameSlot, type SentenceSlot } from "../sentence-slot";
-import { SentenceBlank, type BlankState } from "./sentence-blank";
+import { SentenceBlank } from "./sentence-blank";
 
 interface SetupSentenceProps {
   rule: SetupRule;
@@ -15,11 +15,6 @@ interface SetupSentenceProps {
   onOpen: (slot: SentenceSlot) => void;
   onRemove?: () => void;
 }
-
-const stateFor = (filled: boolean, open: boolean): BlankState => {
-  if (open) return "open";
-  return filled ? "filled" : "empty";
-};
 
 export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove }: SetupSentenceProps) {
   const from = rule.fromId ? calendarsById.get(rule.fromId) : undefined;
@@ -32,7 +27,8 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
       <p className={heading({ level: 3, className: "min-w-0 flex-1 leading-relaxed" })}>
         Copy events from{" "}
         <SentenceBlank
-          state={stateFor(Boolean(from), isOpen({ kind: "from" }))}
+          filled={Boolean(from)}
+          open={isOpen({ kind: "from" })}
           label={from?.name ?? "a calendar"}
           icon={from && <ProviderIcon provider={from.provider} calendarType={from.calendarType} size={14} />}
           onClick={() => onOpen({ kind: "from" })}
@@ -40,7 +36,8 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
         {" "}to{" "}
         {destinations.length === 0 && (
           <SentenceBlank
-            state={stateFor(false, isOpen(addSlot))}
+            filled={false}
+            open={isOpen(addSlot)}
             label="another calendar"
             onClick={() => onOpen(addSlot)}
           />
@@ -50,7 +47,8 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
             {index > 0 && " "}
             <span className="whitespace-nowrap">
               <SentenceBlank
-                state={stateFor(true, isOpen({ index, kind: "to" }))}
+                filled
+                open={isOpen({ index, kind: "to" })}
                 label={calendar.name}
                 icon={<ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
                 onClick={() => onOpen({ index, kind: "to" })}
@@ -63,7 +61,8 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
           <>
             {" "}
             <SentenceBlank
-              state={stateFor(false, isOpen(addSlot))}
+              filled={false}
+              open={isOpen(addSlot)}
               ariaLabel="Add another destination"
               onClick={() => onOpen(addSlot)}
             />
@@ -72,7 +71,8 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
         {" "}and show them as{" "}
         <span className="whitespace-nowrap">
           <SentenceBlank
-            state={stateFor(true, isOpen({ kind: "detail" }))}
+            filled
+            open={isOpen({ kind: "detail" })}
             label={DETAIL_LABELS[rule.detail]}
             onClick={() => onOpen({ kind: "detail" })}
           />

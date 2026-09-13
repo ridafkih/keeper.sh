@@ -3,37 +3,39 @@ import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import { tv } from "tailwind-variants/lite";
 
-export type BlankState = "empty" | "filled" | "open";
-
 const blank = tv({
-  base: "inline-flex max-w-[min(100%,14rem)] items-center gap-1.5 rounded-lg border px-2 py-0.5 align-baseline font-sans text-base font-normal tracking-tight hover:cursor-pointer hover:bg-background-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+  base: "inline-flex max-w-[min(100%,14rem)] items-center gap-1.5 rounded-lg border px-2 py-0.5 align-baseline font-sans text-base font-normal leading-6 tracking-tight hover:cursor-pointer hover:bg-background-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   variants: {
-    state: {
-      empty: "border-dashed border-interactive-border text-foreground-muted",
-      filled: "border-interactive-border bg-background text-foreground",
-      open: "border-ring bg-background text-foreground ring-1 ring-inset ring-ring",
+    filled: {
+      true: "border-interactive-border bg-background text-foreground",
+      false: "border-dashed border-interactive-border text-foreground-muted",
+    },
+    open: {
+      true: "border-ring ring-1 ring-inset ring-ring",
+      false: "",
     },
   },
 });
 
 interface SentenceBlankProps {
-  state: BlankState;
+  filled: boolean;
+  open: boolean;
   label?: string;
   ariaLabel?: string;
   icon?: ReactNode;
   onClick: () => void;
 }
 
-export function SentenceBlank({ state, label, ariaLabel, icon, onClick }: SentenceBlankProps) {
+export function SentenceBlank({ filled, open, label, ariaLabel, icon, onClick }: SentenceBlankProps) {
   return (
     <button
       type="button"
       aria-label={ariaLabel}
-      aria-expanded={state === "open"}
+      aria-expanded={open}
       onClick={onClick}
-      className={blank({ state })}
+      className={blank({ filled, open })}
     >
-      {state === "empty" ? <Plus size={14} className="shrink-0" /> : icon}
+      {filled ? icon : <Plus size={14} className="h-6 shrink-0" />}
       {label && <span className="min-w-0 truncate">{label}</span>}
       {label && <ChevronsUpDown size={14} className="shrink-0 text-foreground-muted" />}
     </button>
