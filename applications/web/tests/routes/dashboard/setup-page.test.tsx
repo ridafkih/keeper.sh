@@ -133,7 +133,7 @@ describe("setup page", () => {
     const markup = renderPage(completeDraft);
 
     expect(markup).toContain("Work");
-    expect(markup).toMatch(/Personal[\s\S]{0,600}, [\s\S]{0,600}Family/);
+    expect(markup).toMatch(/Personal[\s\S]{0,600},<\/span> [\s\S]{0,700}Family/);
     expect(markup).toContain('aria-label="Add another destination"');
     expect(markup).toContain("2 of 3 syncs on the free plan.");
     expect(markup).not.toMatch(START_DISABLED);
