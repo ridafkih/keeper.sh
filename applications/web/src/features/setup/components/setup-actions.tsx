@@ -19,6 +19,7 @@ interface SetupActionsProps {
   canStart: boolean;
   starting: boolean;
   onStart: () => void;
+  startLabel: string;
   onSkip: () => void;
   projected: number;
   limit: number | null;
@@ -33,6 +34,7 @@ export function SetupActions({
   canStart,
   starting,
   onStart,
+  startLabel,
   onSkip,
   projected,
   limit,
@@ -63,7 +65,7 @@ export function SetupActions({
       {overLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
       <Button className="w-full justify-center" disabled={!canStart || starting || overLimit} onClick={onStart}>
         {starting && <LoaderCircle size={16} className="animate-spin" />}
-        <ButtonText>Start Syncing</ButtonText>
+        <ButtonText>{startLabel}</ButtonText>
       </Button>
       <LinkButton to="/dashboard" variant="ghost" className="w-full justify-center" onClick={onSkip}>
         <ButtonText>Skip for Now</ButtonText>

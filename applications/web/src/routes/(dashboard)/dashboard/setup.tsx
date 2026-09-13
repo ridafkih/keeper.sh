@@ -18,6 +18,7 @@ import {
   canReverse,
   clearPending,
   completeRules,
+  isEditingDraft,
   markPending,
   pruneStaleIds,
   removeDestination,
@@ -216,6 +217,7 @@ function SetupPage() {
         canStart={rules.length > 0}
         starting={status.kind === "committing"}
         onStart={() => void commit()}
+        startLabel={isEditingDraft(draft) ? "Save Changes" : "Start Syncing"}
         onSkip={() => track(ANALYTICS_EVENTS.setup_skipped)}
         projected={projected}
         limit={limit}

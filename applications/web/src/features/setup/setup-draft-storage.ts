@@ -9,6 +9,8 @@ const ruleSchema = type({
   detail: "'calendar_name' | 'busy' | 'titles'",
   fromId: "string | null",
   id: "string",
+  "loadedDetail?": "'calendar_name' | 'busy' | 'titles'",
+  "replace?": "boolean",
   toIds: "string[]",
 });
 

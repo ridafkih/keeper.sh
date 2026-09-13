@@ -5,11 +5,13 @@ export interface SourcePatch {
   customEventName: string;
 }
 
-export const DETAIL_PATCHES: Record<DetailChoice, SourcePatch | null> = {
+export const DETAIL_PATCHES: Record<DetailChoice, SourcePatch> = {
   busy: { customEventName: "Busy", excludeEventName: true },
-  calendar_name: null,
+  calendar_name: { customEventName: "{{calendar_name}}", excludeEventName: true },
   titles: { customEventName: "{{event_name}}", excludeEventName: false },
 };
+
+const DEFAULT_DETAIL: DetailChoice = "calendar_name";
 
 export interface DestinationPut {
   sourceId: string;
@@ -28,21 +30,29 @@ export const buildDestinationPuts = (
   existingByFrom: ExistingDestinations,
 ): DestinationPut[] => {
   const puts = new Map<string, string[]>();
+  const replaced = new Set(rules.filter((rule) => rule.replace).map((rule) => rule.fromId));
   for (const rule of rules) {
     for (const toId of rule.toIds) {
-      const existing = puts.get(rule.fromId) ?? existingByFrom[rule.fromId] ?? [];
+      const base = replaced.has(rule.fromId) ? [] : existingByFrom[rule.fromId] ?? [];
+      const existing = puts.get(rule.fromId) ?? base;
       if (existing.includes(toId)) continue;
       puts.set(rule.fromId, [...existing, toId]);
     }
   }
-  return [...puts].map(([sourceId, calendarIds]) => ({ calendarIds, sourceId }));
+  const unchanged = (sourceId: string, calendarIds: string[]) => {
+    const current = existingByFrom[sourceId] ?? [];
+    return current.length === calendarIds.length && current.every((id) => calendarIds.includes(id));
+  };
+  return [...puts]
+    .filter(([sourceId, calendarIds]) => !unchanged(sourceId, calendarIds))
+    .map(([sourceId, calendarIds]) => ({ calendarIds, sourceId }));
 };
 
 export const buildSourcePatches = (rules: CompleteRule[]): SourcePatchWrite[] => {
   const patches = new Map<string, SourcePatch>();
   for (const rule of rules) {
-    const body = DETAIL_PATCHES[rule.detail];
-    if (body && !patches.has(rule.fromId)) patches.set(rule.fromId, body);
+    if (rule.detail === (rule.loadedDetail ?? DEFAULT_DETAIL) || patches.has(rule.fromId)) continue;
+    patches.set(rule.fromId, DETAIL_PATCHES[rule.detail]);
   }
   return [...patches].map(([sourceId, body]) => ({ body, sourceId }));
 };

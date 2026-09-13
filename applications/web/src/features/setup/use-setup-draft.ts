@@ -29,10 +29,15 @@ export function useSetupDraft() {
     writeSetupDraft(resolveSessionStorage(), next);
   }, [store]);
 
+  const replaceDraft = useCallback((next: SetupDraft) => {
+    store.set(setupDraftAtom, next);
+    writeSetupDraft(resolveSessionStorage(), next);
+  }, [store]);
+
   const clear = useCallback(() => {
     clearSetupDraft(resolveSessionStorage());
     store.set(setupDraftAtom, createEmptyDraft());
   }, [store]);
 
-  return { clear, draft, update };
+  return { clear, draft, replaceDraft, update };
 }

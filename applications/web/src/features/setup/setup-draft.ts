@@ -10,6 +10,9 @@ export interface SetupRule {
   fromId: string | null;
   toIds: string[];
   detail: DetailChoice;
+  // Set when the rule was opened from the rules page: its destinations replace the source's, not extend them.
+  replace?: boolean;
+  loadedDetail?: DetailChoice;
 }
 
 export interface SetupPending {
@@ -87,9 +90,9 @@ export const setBlank = (
     if (rule.id !== ruleId) return rule;
     if (blank.kind === "from") {
       return {
-        ...rule,
         detail: sharedDetail(draft.rules, calendarId) ?? rule.detail,
         fromId: calendarId,
+        id: rule.id,
         toIds: withoutId(rule.toIds, calendarId),
       };
     }
@@ -222,3 +225,11 @@ export const removeRulesFrom = (draft: SetupDraft, fromId: string): SetupDraft =
   if (rules.length === draft.rules.length) return draft;
   return withRules(draft, rules.length > 0 ? rules : [createRule()]);
 };
+
+export const isEditingDraft = (draft: SetupDraft): boolean => draft.rules.some((rule) => rule.replace === true);
+
+export const createEditDraft = (fromId: string, toIds: string[], detail: DetailChoice): SetupDraft => ({
+  pending: null,
+  rules: [{ ...createRule(fromId, toIds, detail), loadedDetail: detail, replace: true }],
+  version: DRAFT_VERSION,
+});

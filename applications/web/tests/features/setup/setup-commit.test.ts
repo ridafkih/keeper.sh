@@ -25,6 +25,14 @@ describe("buildDestinationPuts", () => {
   it("skips a source whose mappings already exist", () => {
     expect(buildDestinationPuts([rule("a", "work", "personal")], { work: ["personal"] })).toEqual([]);
   });
+
+  it("replaces a source's destinations when the rule was opened for editing", () => {
+    const edited = { ...rule("a", "work", ["family"]), loadedDetail: "calendar_name" as const, replace: true };
+    expect(buildDestinationPuts([edited], { work: ["personal", "feed"] })).toEqual([
+      { calendarIds: ["family"], sourceId: "work" },
+    ]);
+    expect(buildDestinationPuts([{ ...edited, toIds: ["feed", "personal"] }], { work: ["personal", "feed"] })).toEqual([]);
+  });
 });
 
 describe("buildSourcePatches", () => {
@@ -40,12 +48,23 @@ describe("buildSourcePatches", () => {
       { body: { customEventName: "{{event_name}}", excludeEventName: false }, sourceId: "feed" },
     ]);
   });
+
+  it("only patches an edited rule when its title choice changed", () => {
+    const unchanged = { ...rule("a", "work", "personal", "busy"), loadedDetail: "busy" as const, replace: true };
+    const reset = { ...rule("b", "feed", "work"), loadedDetail: "busy" as const, replace: true };
+    expect(buildSourcePatches([unchanged, reset])).toEqual([
+      { body: { customEventName: "{{calendar_name}}", excludeEventName: true }, sourceId: "feed" },
+    ]);
+  });
 });
 
 describe("mapping counts", () => {
-  it("counts only the ids that are new", () => {
+  it("counts only the ids that are new, and removals as negative", () => {
     const puts = buildDestinationPuts([rule("a", "work", "personal")], { work: ["feed"] });
     expect(countNewMappings(puts, { work: ["feed"] })).toBe(1);
+    const edited = { ...rule("b", "work", "personal"), loadedDetail: "calendar_name" as const, replace: true };
+    const replaced = buildDestinationPuts([edited], { work: ["feed", "archive"] });
+    expect(countNewMappings(replaced, { work: ["feed", "archive"] })).toBe(-1);
   });
 
   it("treats a null limit as unlimited", () => {

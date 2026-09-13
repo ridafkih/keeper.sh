@@ -51,6 +51,7 @@ import { Route as marketingCompareSlugRouteImport } from './../../routes/(market
 import { Route as marketingChangelogSlugRouteImport } from './../../routes/(marketing)/changelog/$slug'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardSetupRouteImport } from './../../routes/(dashboard)/dashboard/setup'
+import { Route as dashboardDashboardRulesRouteImport } from './../../routes/(dashboard)/dashboard/rules'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
 import { Route as oauthDashboardConnectRouteRouteImport } from './../../routes/(oauth)/dashboard/connect/route'
@@ -288,6 +289,11 @@ const dashboardDashboardSetupRoute = dashboardDashboardSetupRouteImport.update({
   path: '/dashboard/setup',
   getParentRoute: () => dashboardRouteRoute,
 } as any)
+const dashboardDashboardRulesRoute = dashboardDashboardRulesRouteImport.update({
+  id: '/dashboard/rules',
+  path: '/dashboard/rules',
+  getParentRoute: () => dashboardRouteRoute,
+} as any)
 const dashboardDashboardReportRoute =
   dashboardDashboardReportRouteImport.update({
     id: '/dashboard/report',
@@ -482,6 +488,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -545,6 +552,7 @@ export interface FileRoutesByTo {
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -616,6 +624,7 @@ export interface FileRoutesById {
   '/(oauth)/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
+  '/(dashboard)/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/(dashboard)/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(marketing)/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -685,6 +694,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/feedback'
     | '/dashboard/report'
+    | '/dashboard/rules'
     | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
@@ -748,6 +758,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect'
     | '/dashboard/feedback'
     | '/dashboard/report'
+    | '/dashboard/rules'
     | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
@@ -818,6 +829,7 @@ export interface FileRouteTypes {
     | '/(oauth)/dashboard/connect'
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
+    | '/(dashboard)/dashboard/rules'
     | '/(dashboard)/dashboard/setup'
     | '/(marketing)/blog/$slug'
     | '/(marketing)/changelog/$slug'
@@ -1164,6 +1176,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardSetupRouteImport
       parentRoute: typeof dashboardRouteRoute
     }
+    '/(dashboard)/dashboard/rules': {
+      id: '/(dashboard)/dashboard/rules'
+      path: '/dashboard/rules'
+      fullPath: '/dashboard/rules'
+      preLoaderRoute: typeof dashboardDashboardRulesRouteImport
+      parentRoute: typeof dashboardRouteRoute
+    }
     '/(dashboard)/dashboard/report': {
       id: '/(dashboard)/dashboard/report'
       path: '/dashboard/report'
@@ -1466,6 +1485,7 @@ interface dashboardRouteRouteChildren {
   dashboardDashboardSettingsRouteRoute: typeof dashboardDashboardSettingsRouteRouteWithChildren
   dashboardDashboardFeedbackRoute: typeof dashboardDashboardFeedbackRoute
   dashboardDashboardReportRoute: typeof dashboardDashboardReportRoute
+  dashboardDashboardRulesRoute: typeof dashboardDashboardRulesRoute
   dashboardDashboardSetupRoute: typeof dashboardDashboardSetupRoute
   dashboardDashboardIndexRoute: typeof dashboardDashboardIndexRoute
   dashboardDashboardEventsIndexRoute: typeof dashboardDashboardEventsIndexRoute
@@ -1484,6 +1504,7 @@ const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
     dashboardDashboardSettingsRouteRouteWithChildren,
   dashboardDashboardFeedbackRoute: dashboardDashboardFeedbackRoute,
   dashboardDashboardReportRoute: dashboardDashboardReportRoute,
+  dashboardDashboardRulesRoute: dashboardDashboardRulesRoute,
   dashboardDashboardSetupRoute: dashboardDashboardSetupRoute,
   dashboardDashboardIndexRoute: dashboardDashboardIndexRoute,
   dashboardDashboardEventsIndexRoute: dashboardDashboardEventsIndexRoute,

@@ -3,7 +3,9 @@ import {
   addReverseRule,
   addRule,
   canReverse,
+  createEditDraft,
   createEmptyDraft,
+  isEditingDraft,
   markPending,
   pruneStaleIds,
   removeDestination,
@@ -174,5 +176,16 @@ describe("removeRulesFrom", () => {
     const next = removeRulesFrom(completeDraft(), "work");
     expect(next.rules).toHaveLength(1);
     expect(next.rules[0]).toMatchObject({ fromId: null, toIds: [] });
+  });
+});
+
+describe("createEditDraft", () => {
+  it("opens a source's existing rule for replacement and forgets that when the source changes", () => {
+    const draft = createEditDraft("work", ["personal", "family"], "busy");
+    expect(isEditingDraft(draft)).toBe(true);
+    expect(draft.rules[0]).toMatchObject({ fromId: "work", loadedDetail: "busy", replace: true, toIds: ["personal", "family"] });
+    const moved = setBlank(draft, firstRuleId(draft), FROM, "feed");
+    expect(isEditingDraft(moved)).toBe(false);
+    expect(moved.rules[0]?.loadedDetail).toBeUndefined();
   });
 });
