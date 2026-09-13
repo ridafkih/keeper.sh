@@ -35,7 +35,8 @@ export function SentenceBlank({ filled, open, label, ariaLabel, icon, onClick }:
       onClick={onClick}
       className={blank({ filled, open })}
     >
-      {filled ? icon : <Plus size={14} className="h-6 shrink-0" />}
+      <span aria-hidden className="w-0 select-none">{"\u200B"}</span>
+      {filled ? icon : <Plus size={14} className="shrink-0" />}
       {label && <span className="min-w-0 truncate">{label}</span>}
       {label && <ChevronsUpDown size={14} className="shrink-0 text-foreground-muted" />}
     </button>
