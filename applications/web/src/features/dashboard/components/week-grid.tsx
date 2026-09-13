@@ -179,6 +179,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const today = useStartOfToday();
   const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
@@ -221,11 +222,19 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
+  // Fractional: mid-resize the scroller is rarely a whole pixel wide, and an integer width drifts by columns.
   const columnWidth = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return 1;
-    return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
+    return Math.max((el.getBoundingClientRect().width - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
   }, []);
+
+  const columnOffset = useCallback((index: number) => {
+    const grid = gridRef.current;
+    const column = grid?.children[index];
+    if (!grid || !column) return index * columnWidth();
+    return column.getBoundingClientRect().left - grid.getBoundingClientRect().left;
+  }, [columnWidth]);
 
   const scrollToCenter = useCallback(
     (centerDay: Date, behavior: ScrollBehavior) => {
@@ -236,9 +245,9 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       const clamped = Math.max(0, Math.min(index, stripDays.length - VISIBLE_COLUMNS));
       alignedCenterMsRef.current = centerDay.getTime();
       alignedWidthRef.current = el.clientWidth;
-      el.scrollTo({ left: clamped * columnWidth(), behavior });
+      el.scrollTo({ left: columnOffset(clamped), behavior });
     },
-    [columnWidth, stripDays],
+    [columnOffset, stripDays],
   );
 
   // Mount: centre the anchor and jump to business hours; afterwards, smooth-scroll on anchor moves.
@@ -476,6 +485,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           {nowLayout && <NowPill layout={nowLayout} />}
         </div>
         <div
+          ref={gridRef}
           onClick={handleEventClick}
           className="relative grid shrink-0"
           style={{
