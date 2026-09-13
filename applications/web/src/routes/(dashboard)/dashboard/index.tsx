@@ -49,7 +49,10 @@ import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/re
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { openCustomerPortal } from "@/utils/checkout";
+import { SetupCard } from "@/features/setup/components/setup-card";
+import { resolveSetupSteps } from "@/features/setup/setup-card-steps";
 
 async function loadSubscription(context: {
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -87,6 +90,7 @@ function DashboardPage() {
       <EventGraph />
       <div className="flex flex-col gap-1.5">
         <DashboardReauthNotice />
+        <DashboardSetupCard />
         <CalendarSourcesMenu />
         <CalendarsMenu />
         <NavigationMenu>
@@ -126,6 +130,22 @@ function DashboardPage() {
 interface RefreshStatus {
   message: string;
   tone: "muted" | "danger";
+}
+
+function DashboardSetupCard() {
+  const { data: sources, shouldAnimate } = useAnimatedSWR<CalendarSource[]>("/api/sources");
+  const { data: entitlements } = useEntitlements();
+  const ready = Boolean(sources && entitlements);
+  const sourceCount = sources?.length ?? 0;
+  const accountCount = new Set(sources?.map((source) => source.accountId)).size;
+  const mappingCount = entitlements?.mappings.current ?? 0;
+  const { show } = resolveSetupSteps({ accountCount, mappingCount, sourceCount });
+
+  return (
+    <AnimatedReveal show={ready && show} skipInitial={!shouldAnimate}>
+      <SetupCard sourceCount={sourceCount} accountCount={accountCount} mappingCount={mappingCount} />
+    </AnimatedReveal>
+  );
 }
 
 function PlanMenu() {

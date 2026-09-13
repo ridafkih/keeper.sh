@@ -50,6 +50,7 @@ import { Route as marketingDocsSlugRouteImport } from './../../routes/(marketing
 import { Route as marketingCompareSlugRouteImport } from './../../routes/(marketing)/compare/$slug'
 import { Route as marketingChangelogSlugRouteImport } from './../../routes/(marketing)/changelog/$slug'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
+import { Route as dashboardDashboardSetupRouteImport } from './../../routes/(dashboard)/dashboard/setup'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
 import { Route as oauthDashboardConnectRouteRouteImport } from './../../routes/(oauth)/dashboard/connect/route'
@@ -76,7 +77,6 @@ import { Route as dashboardDashboardSettingsChangePasswordRouteImport } from './
 import { Route as dashboardDashboardSettingsApiTokensRouteImport } from './../../routes/(dashboard)/dashboard/settings/api-tokens'
 import { Route as dashboardDashboardIcalFeedIdRouteImport } from './../../routes/(dashboard)/dashboard/ical/$feedId'
 import { Route as dashboardDashboardAccountsAccountIdIndexRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.index'
-import { Route as dashboardDashboardAccountsAccountIdSetupRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.setup'
 import { Route as dashboardDashboardAccountsAccountIdReconnectRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.reconnect'
 import { Route as dashboardDashboardAccountsAccountIdCalendarIdRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId'
 
@@ -283,6 +283,11 @@ const marketingBlogSlugRoute = marketingBlogSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => marketingBlogRouteRoute,
 } as any)
+const dashboardDashboardSetupRoute = dashboardDashboardSetupRouteImport.update({
+  id: '/dashboard/setup',
+  path: '/dashboard/setup',
+  getParentRoute: () => dashboardRouteRoute,
+} as any)
 const dashboardDashboardReportRoute =
   dashboardDashboardReportRouteImport.update({
     id: '/dashboard/report',
@@ -439,12 +444,6 @@ const dashboardDashboardAccountsAccountIdIndexRoute =
     path: '/$accountId/',
     getParentRoute: () => dashboardDashboardAccountsRouteRoute,
   } as any)
-const dashboardDashboardAccountsAccountIdSetupRoute =
-  dashboardDashboardAccountsAccountIdSetupRouteImport.update({
-    id: '/$accountId/setup',
-    path: '/$accountId/setup',
-    getParentRoute: () => dashboardDashboardAccountsRouteRoute,
-  } as any)
 const dashboardDashboardAccountsAccountIdReconnectRoute =
   dashboardDashboardAccountsAccountIdReconnectRouteImport.update({
     id: '/$accountId/reconnect',
@@ -483,6 +482,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
@@ -522,7 +522,6 @@ export interface FileRoutesByFullPath {
   '/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
-  '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -546,6 +545,7 @@ export interface FileRoutesByTo {
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
+  '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
@@ -583,7 +583,6 @@ export interface FileRoutesByTo {
   '/dashboard/upgrade': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
-  '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId': typeof dashboardDashboardAccountsAccountIdIndexRoute
 }
 export interface FileRoutesById {
@@ -617,6 +616,7 @@ export interface FileRoutesById {
   '/(oauth)/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
+  '/(dashboard)/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(marketing)/changelog/$slug': typeof marketingChangelogSlugRoute
   '/(marketing)/compare/$slug': typeof marketingCompareSlugRoute
@@ -656,7 +656,6 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/(dashboard)/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/(dashboard)/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
-  '/(dashboard)/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/(dashboard)/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -686,6 +685,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings'
     | '/dashboard/feedback'
     | '/dashboard/report'
+    | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
     | '/compare/$slug'
@@ -725,7 +725,6 @@ export interface FileRouteTypes {
     | '/dashboard/upgrade/'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
-    | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -749,6 +748,7 @@ export interface FileRouteTypes {
     | '/dashboard/connect'
     | '/dashboard/feedback'
     | '/dashboard/report'
+    | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
     | '/compare/$slug'
@@ -786,7 +786,6 @@ export interface FileRouteTypes {
     | '/dashboard/upgrade'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
-    | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId'
   id:
     | '__root__'
@@ -819,6 +818,7 @@ export interface FileRouteTypes {
     | '/(oauth)/dashboard/connect'
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
+    | '/(dashboard)/dashboard/setup'
     | '/(marketing)/blog/$slug'
     | '/(marketing)/changelog/$slug'
     | '/(marketing)/compare/$slug'
@@ -858,7 +858,6 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/upgrade/'
     | '/(dashboard)/dashboard/accounts/$accountId/$calendarId'
     | '/(dashboard)/dashboard/accounts/$accountId/reconnect'
-    | '/(dashboard)/dashboard/accounts/$accountId/setup'
     | '/(dashboard)/dashboard/accounts/$accountId/'
   fileRoutesById: FileRoutesById
 }
@@ -1158,6 +1157,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof marketingBlogSlugRouteImport
       parentRoute: typeof marketingBlogRouteRoute
     }
+    '/(dashboard)/dashboard/setup': {
+      id: '/(dashboard)/dashboard/setup'
+      path: '/dashboard/setup'
+      fullPath: '/dashboard/setup'
+      preLoaderRoute: typeof dashboardDashboardSetupRouteImport
+      parentRoute: typeof dashboardRouteRoute
+    }
     '/(dashboard)/dashboard/report': {
       id: '/(dashboard)/dashboard/report'
       path: '/dashboard/report'
@@ -1340,13 +1346,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardAccountsAccountIdIndexRouteImport
       parentRoute: typeof dashboardDashboardAccountsRouteRoute
     }
-    '/(dashboard)/dashboard/accounts/$accountId/setup': {
-      id: '/(dashboard)/dashboard/accounts/$accountId/setup'
-      path: '/$accountId/setup'
-      fullPath: '/dashboard/accounts/$accountId/setup'
-      preLoaderRoute: typeof dashboardDashboardAccountsAccountIdSetupRouteImport
-      parentRoute: typeof dashboardDashboardAccountsRouteRoute
-    }
     '/(dashboard)/dashboard/accounts/$accountId/reconnect': {
       id: '/(dashboard)/dashboard/accounts/$accountId/reconnect'
       path: '/$accountId/reconnect'
@@ -1389,7 +1388,6 @@ const authRouteRouteWithChildren = authRouteRoute._addFileChildren(
 interface dashboardDashboardAccountsRouteRouteChildren {
   dashboardDashboardAccountsAccountIdCalendarIdRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   dashboardDashboardAccountsAccountIdReconnectRoute: typeof dashboardDashboardAccountsAccountIdReconnectRoute
-  dashboardDashboardAccountsAccountIdSetupRoute: typeof dashboardDashboardAccountsAccountIdSetupRoute
   dashboardDashboardAccountsAccountIdIndexRoute: typeof dashboardDashboardAccountsAccountIdIndexRoute
 }
 
@@ -1399,8 +1397,6 @@ const dashboardDashboardAccountsRouteRouteChildren: dashboardDashboardAccountsRo
       dashboardDashboardAccountsAccountIdCalendarIdRoute,
     dashboardDashboardAccountsAccountIdReconnectRoute:
       dashboardDashboardAccountsAccountIdReconnectRoute,
-    dashboardDashboardAccountsAccountIdSetupRoute:
-      dashboardDashboardAccountsAccountIdSetupRoute,
     dashboardDashboardAccountsAccountIdIndexRoute:
       dashboardDashboardAccountsAccountIdIndexRoute,
   }
@@ -1470,6 +1466,7 @@ interface dashboardRouteRouteChildren {
   dashboardDashboardSettingsRouteRoute: typeof dashboardDashboardSettingsRouteRouteWithChildren
   dashboardDashboardFeedbackRoute: typeof dashboardDashboardFeedbackRoute
   dashboardDashboardReportRoute: typeof dashboardDashboardReportRoute
+  dashboardDashboardSetupRoute: typeof dashboardDashboardSetupRoute
   dashboardDashboardIndexRoute: typeof dashboardDashboardIndexRoute
   dashboardDashboardEventsIndexRoute: typeof dashboardDashboardEventsIndexRoute
   dashboardDashboardIntegrationsIndexRoute: typeof dashboardDashboardIntegrationsIndexRoute
@@ -1487,6 +1484,7 @@ const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
     dashboardDashboardSettingsRouteRouteWithChildren,
   dashboardDashboardFeedbackRoute: dashboardDashboardFeedbackRoute,
   dashboardDashboardReportRoute: dashboardDashboardReportRoute,
+  dashboardDashboardSetupRoute: dashboardDashboardSetupRoute,
   dashboardDashboardIndexRoute: dashboardDashboardIndexRoute,
   dashboardDashboardEventsIndexRoute: dashboardDashboardEventsIndexRoute,
   dashboardDashboardIntegrationsIndexRoute:

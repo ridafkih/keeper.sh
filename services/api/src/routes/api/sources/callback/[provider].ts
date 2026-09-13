@@ -83,12 +83,11 @@ const GET = withWideEvent(async ({ request, params }) => {
     });
 
     /* A reconnect already has its calendars chosen, so only a first connection — which
-       carries no source credential in its state — belongs in the setup wizard. */
-    let successPath = `/dashboard/accounts/${accountId}/setup`;
+       carries no source credential in its state — belongs in the setup sentence. */
+    let successUrl = buildRedirectUrl("/dashboard/setup", baseUrl, { accountId });
     if (sourceCredentialId) {
-      successPath = `/dashboard/accounts/${accountId}`;
+      successUrl = buildRedirectUrl(`/dashboard/accounts/${accountId}`, baseUrl);
     }
-    const successUrl = buildRedirectUrl(successPath, baseUrl);
     return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
