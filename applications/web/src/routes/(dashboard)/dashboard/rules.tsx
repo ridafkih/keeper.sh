@@ -5,6 +5,8 @@ import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { Text } from "@/components/ui/primitives/text";
 import { RouteShell } from "@/components/ui/shells/route-shell";
@@ -49,52 +51,56 @@ function RulesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <BackButton fallback="/dashboard" />
-      <DashboardSection
-        title="Rules"
-        description={total > 0 ? `${pluralize(total, "rule")}. Tap one to change where that calendar sends events.` : "Every calendar that copies events into another."}
-      />
-      {groups.length === 0 && (
-        <NavigationMenu>
-          <NavigationMenuEmptyItem>No rules yet</NavigationMenuEmptyItem>
-        </NavigationMenu>
-      )}
-      {groups.map((group) => (
-        <div key={group.source.id} className="flex flex-col gap-1.5">
-          <Text size="xs" tone="muted" className="px-0.5 pt-2 truncate">
-            {group.source.name} · {group.source.accountLabel}
-          </Text>
+    <div className="flex flex-col gap-1.5 lg:h-full">
+      <StickyPageHeader className="gap-1.5">
+        <BackButton fallback="/dashboard" />
+        <DashboardSection
+          title="Rules"
+          description={total > 0 ? `${pluralize(total, "rule")}. Tap one to change where that calendar sends events.` : "Every calendar that copies events into another."}
+        />
+      </StickyPageHeader>
+      <PageBody className="gap-1.5">
+        {groups.length === 0 && (
           <NavigationMenu>
-            {group.rows.map((row) => (
-              <NavigationMenuButtonItem key={row.destination.id} onClick={() => edit(group)}>
-                <NavigationMenuItemIcon>
-                  <ProviderIcon provider={group.source.provider} calendarType={group.source.calendarType} />
-                </NavigationMenuItemIcon>
-                <NavigationMenuItemLabel className="shrink-0 max-w-[30%]">{group.source.name}</NavigationMenuItemLabel>
-                <ArrowRight size={14} className="shrink-0 text-emerald-500" />
-                <NavigationMenuItemIcon>
-                  <ProviderIcon provider={row.destination.provider} calendarType={row.destination.calendarType} />
-                </NavigationMenuItemIcon>
-                <NavigationMenuItemLabel>{row.destination.name}</NavigationMenuItemLabel>
-                <NavigationMenuItemTrailing className="shrink-0 grow-0 max-w-[36%]">
-                  <Text size="sm" tone="muted" className="min-w-0 truncate">{titleModeLabel(row.mode, row.customTitle)}</Text>
-                  <ChevronRight size={14} className="shrink-0 text-foreground-muted" />
-                </NavigationMenuItemTrailing>
-              </NavigationMenuButtonItem>
-            ))}
+            <NavigationMenuEmptyItem>No rules yet</NavigationMenuEmptyItem>
           </NavigationMenu>
-        </div>
-      ))}
-      <NavigationMenu>
-        <NavigationMenuLinkItem to="/dashboard/setup">
-          <NavigationMenuItemIcon>
-            <Plus size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>Add a Rule</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuLinkItem>
-      </NavigationMenu>
+        )}
+        {groups.map((group) => (
+          <div key={group.source.id} className="flex flex-col gap-1.5">
+            <Text size="xs" tone="muted" className="px-0.5 pt-2 truncate">
+              {group.source.name} · {group.source.accountLabel}
+            </Text>
+            <NavigationMenu>
+              {group.rows.map((row) => (
+                <NavigationMenuButtonItem key={row.destination.id} onClick={() => edit(group)}>
+                  <NavigationMenuItemIcon>
+                    <ProviderIcon provider={group.source.provider} calendarType={group.source.calendarType} />
+                  </NavigationMenuItemIcon>
+                  <NavigationMenuItemLabel className="shrink-0 max-w-[30%]">{group.source.name}</NavigationMenuItemLabel>
+                  <ArrowRight size={14} className="shrink-0 text-emerald-500" />
+                  <NavigationMenuItemIcon>
+                    <ProviderIcon provider={row.destination.provider} calendarType={row.destination.calendarType} />
+                  </NavigationMenuItemIcon>
+                  <NavigationMenuItemLabel>{row.destination.name}</NavigationMenuItemLabel>
+                  <NavigationMenuItemTrailing className="shrink-0 grow-0 max-w-[36%]">
+                    <Text size="sm" tone="muted" className="min-w-0 truncate">{titleModeLabel(row.mode, row.customTitle)}</Text>
+                    <ChevronRight size={14} className="shrink-0 text-foreground-muted" />
+                  </NavigationMenuItemTrailing>
+                </NavigationMenuButtonItem>
+              ))}
+            </NavigationMenu>
+          </div>
+        ))}
+        <NavigationMenu>
+          <NavigationMenuLinkItem to="/dashboard/setup">
+            <NavigationMenuItemIcon>
+              <Plus size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>Add a Rule</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuLinkItem>
+        </NavigationMenu>
+      </PageBody>
     </div>
   );
 }
