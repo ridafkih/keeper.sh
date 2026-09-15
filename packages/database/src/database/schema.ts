@@ -3,6 +3,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -17,6 +18,7 @@ import {
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
+import type { RuleAction, RuleCondition } from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -538,6 +540,62 @@ const icalFeedCalendarsTable = pgTable(
   ],
 );
 
+const syncRulesTable = pgTable(
+  "sync_rules",
+  {
+    actions: jsonb().$type<RuleAction[]>().notNull().default([]),
+    conditions: jsonb().$type<RuleCondition[]>().notNull().default([]),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    isDefault: boolean().notNull().default(false),
+    name: text().notNull(),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("sync_rules_user_idx").on(table.userId),
+    uniqueIndex("sync_rules_user_default_idx")
+      .on(table.userId)
+      .where(eq(table.isDefault, sql`true`)),
+  ],
+);
+
+const syncRuleAssignmentsTable = pgTable(
+  "sync_rule_assignments",
+  {
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    destinationCalendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    position: integer().notNull(),
+    ruleId: uuid()
+      .notNull()
+      .references(() => syncRulesTable.id, { onDelete: "cascade" }),
+    sourceCalendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("sync_rule_assignments_pair_rule_idx").on(
+      table.sourceCalendarId,
+      table.destinationCalendarId,
+      table.ruleId,
+    ),
+    index("sync_rule_assignments_pair_position_idx").on(
+      table.sourceCalendarId,
+      table.destinationCalendarId,
+      table.position,
+    ),
+    index("sync_rule_assignments_rule_idx").on(table.ruleId),
+  ],
+);
+
 export {
   apiTokensTable,
   caldavCredentialsTable,
@@ -554,6 +612,8 @@ export {
   icalFeedsTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  syncRuleAssignmentsTable,
+  syncRulesTable,
   syncStatusTable,
   userSyncRequestsTable,
   userEventsTable,

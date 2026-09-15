@@ -51,16 +51,17 @@ import { Route as marketingCompareSlugRouteImport } from './../../routes/(market
 import { Route as marketingChangelogSlugRouteImport } from './../../routes/(marketing)/changelog/$slug'
 import { Route as marketingBlogSlugRouteImport } from './../../routes/(marketing)/blog/$slug'
 import { Route as dashboardDashboardSetupRouteImport } from './../../routes/(dashboard)/dashboard/setup'
-import { Route as dashboardDashboardRulesRouteImport } from './../../routes/(dashboard)/dashboard/rules'
 import { Route as dashboardDashboardReportRouteImport } from './../../routes/(dashboard)/dashboard/report'
 import { Route as dashboardDashboardFeedbackRouteImport } from './../../routes/(dashboard)/dashboard/feedback'
 import { Route as oauthDashboardConnectRouteRouteImport } from './../../routes/(oauth)/dashboard/connect/route'
 import { Route as dashboardDashboardSettingsRouteRouteImport } from './../../routes/(dashboard)/dashboard/settings/route'
+import { Route as dashboardDashboardRulesRouteRouteImport } from './../../routes/(dashboard)/dashboard/rules/route'
 import { Route as dashboardDashboardIcalRouteRouteImport } from './../../routes/(dashboard)/dashboard/ical/route'
 import { Route as dashboardDashboardConnectRouteRouteImport } from './../../routes/(dashboard)/dashboard/connect/route'
 import { Route as dashboardDashboardAccountsRouteRouteImport } from './../../routes/(dashboard)/dashboard/accounts/route'
 import { Route as dashboardDashboardUpgradeIndexRouteImport } from './../../routes/(dashboard)/dashboard/upgrade/index'
 import { Route as dashboardDashboardSettingsIndexRouteImport } from './../../routes/(dashboard)/dashboard/settings/index'
+import { Route as dashboardDashboardRulesIndexRouteImport } from './../../routes/(dashboard)/dashboard/rules/index'
 import { Route as dashboardDashboardIntegrationsIndexRouteImport } from './../../routes/(dashboard)/dashboard/integrations/index'
 import { Route as dashboardDashboardIcalIndexRouteImport } from './../../routes/(dashboard)/dashboard/ical/index'
 import { Route as dashboardDashboardEventsIndexRouteImport } from './../../routes/(dashboard)/dashboard/events/index'
@@ -76,10 +77,12 @@ import { Route as oauthDashboardConnectAppleRouteImport } from './../../routes/(
 import { Route as dashboardDashboardSettingsPasskeysRouteImport } from './../../routes/(dashboard)/dashboard/settings/passkeys'
 import { Route as dashboardDashboardSettingsChangePasswordRouteImport } from './../../routes/(dashboard)/dashboard/settings/change-password'
 import { Route as dashboardDashboardSettingsApiTokensRouteImport } from './../../routes/(dashboard)/dashboard/settings/api-tokens'
+import { Route as dashboardDashboardRulesRuleIdRouteImport } from './../../routes/(dashboard)/dashboard/rules/$ruleId'
 import { Route as dashboardDashboardIcalFeedIdRouteImport } from './../../routes/(dashboard)/dashboard/ical/$feedId'
 import { Route as dashboardDashboardAccountsAccountIdIndexRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.index'
 import { Route as dashboardDashboardAccountsAccountIdReconnectRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.reconnect'
 import { Route as dashboardDashboardAccountsAccountIdCalendarIdRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId'
+import { Route as dashboardDashboardRulesPairsSourceIdDestinationIdRouteImport } from './../../routes/(dashboard)/dashboard/rules/pairs.$sourceId.$destinationId'
 
 const oauthRouteRoute = oauthRouteRouteImport.update({
   id: '/(oauth)',
@@ -289,11 +292,6 @@ const dashboardDashboardSetupRoute = dashboardDashboardSetupRouteImport.update({
   path: '/dashboard/setup',
   getParentRoute: () => dashboardRouteRoute,
 } as any)
-const dashboardDashboardRulesRoute = dashboardDashboardRulesRouteImport.update({
-  id: '/dashboard/rules',
-  path: '/dashboard/rules',
-  getParentRoute: () => dashboardRouteRoute,
-} as any)
 const dashboardDashboardReportRoute =
   dashboardDashboardReportRouteImport.update({
     id: '/dashboard/report',
@@ -316,6 +314,12 @@ const dashboardDashboardSettingsRouteRoute =
   dashboardDashboardSettingsRouteRouteImport.update({
     id: '/dashboard/settings',
     path: '/dashboard/settings',
+    getParentRoute: () => dashboardRouteRoute,
+  } as any)
+const dashboardDashboardRulesRouteRoute =
+  dashboardDashboardRulesRouteRouteImport.update({
+    id: '/dashboard/rules',
+    path: '/dashboard/rules',
     getParentRoute: () => dashboardRouteRoute,
   } as any)
 const dashboardDashboardIcalRouteRoute =
@@ -347,6 +351,12 @@ const dashboardDashboardSettingsIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => dashboardDashboardSettingsRouteRoute,
+  } as any)
+const dashboardDashboardRulesIndexRoute =
+  dashboardDashboardRulesIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => dashboardDashboardRulesRouteRoute,
   } as any)
 const dashboardDashboardIntegrationsIndexRoute =
   dashboardDashboardIntegrationsIndexRouteImport.update({
@@ -438,6 +448,12 @@ const dashboardDashboardSettingsApiTokensRoute =
     path: '/api-tokens',
     getParentRoute: () => dashboardDashboardSettingsRouteRoute,
   } as any)
+const dashboardDashboardRulesRuleIdRoute =
+  dashboardDashboardRulesRuleIdRouteImport.update({
+    id: '/$ruleId',
+    path: '/$ruleId',
+    getParentRoute: () => dashboardDashboardRulesRouteRoute,
+  } as any)
 const dashboardDashboardIcalFeedIdRoute =
   dashboardDashboardIcalFeedIdRouteImport.update({
     id: '/$feedId',
@@ -462,6 +478,12 @@ const dashboardDashboardAccountsAccountIdCalendarIdRoute =
     path: '/$accountId/$calendarId',
     getParentRoute: () => dashboardDashboardAccountsRouteRoute,
   } as any)
+const dashboardDashboardRulesPairsSourceIdDestinationIdRoute =
+  dashboardDashboardRulesPairsSourceIdDestinationIdRouteImport.update({
+    id: '/pairs/$sourceId/$destinationId',
+    path: '/pairs/$sourceId/$destinationId',
+    getParentRoute: () => dashboardDashboardRulesRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/blog': typeof marketingBlogRouteRouteWithChildren
@@ -485,10 +507,10 @@ export interface FileRoutesByFullPath {
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
   '/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
   '/dashboard/ical': typeof dashboardDashboardIcalRouteRouteWithChildren
+  '/dashboard/rules': typeof dashboardDashboardRulesRouteRouteWithChildren
   '/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
-  '/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -510,6 +532,7 @@ export interface FileRoutesByFullPath {
   '/guides/': typeof marketingGuidesIndexRoute
   '/recipes/': typeof marketingRecipesIndexRoute
   '/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
+  '/dashboard/rules/$ruleId': typeof dashboardDashboardRulesRuleIdRoute
   '/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
@@ -525,11 +548,13 @@ export interface FileRoutesByFullPath {
   '/dashboard/events/': typeof dashboardDashboardEventsIndexRoute
   '/dashboard/ical/': typeof dashboardDashboardIcalIndexRoute
   '/dashboard/integrations/': typeof dashboardDashboardIntegrationsIndexRoute
+  '/dashboard/rules/': typeof dashboardDashboardRulesIndexRoute
   '/dashboard/settings/': typeof dashboardDashboardSettingsIndexRoute
   '/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/rules/pairs/$sourceId/$destinationId': typeof dashboardDashboardRulesPairsSourceIdDestinationIdRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof oauthAuthRouteRouteWithChildren
@@ -552,7 +577,6 @@ export interface FileRoutesByTo {
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
-  '/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/blog/$slug': typeof marketingBlogSlugRoute
   '/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -573,6 +597,7 @@ export interface FileRoutesByTo {
   '/guides': typeof marketingGuidesIndexRoute
   '/recipes': typeof marketingRecipesIndexRoute
   '/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
+  '/dashboard/rules/$ruleId': typeof dashboardDashboardRulesRuleIdRoute
   '/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
@@ -587,11 +612,13 @@ export interface FileRoutesByTo {
   '/dashboard/events': typeof dashboardDashboardEventsIndexRoute
   '/dashboard/ical': typeof dashboardDashboardIcalIndexRoute
   '/dashboard/integrations': typeof dashboardDashboardIntegrationsIndexRoute
+  '/dashboard/rules': typeof dashboardDashboardRulesIndexRoute
   '/dashboard/settings': typeof dashboardDashboardSettingsIndexRoute
   '/dashboard/upgrade': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/dashboard/accounts/$accountId': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/rules/pairs/$sourceId/$destinationId': typeof dashboardDashboardRulesPairsSourceIdDestinationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -620,11 +647,11 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
   '/(dashboard)/dashboard/connect': typeof dashboardDashboardConnectRouteRouteWithChildren
   '/(dashboard)/dashboard/ical': typeof dashboardDashboardIcalRouteRouteWithChildren
+  '/(dashboard)/dashboard/rules': typeof dashboardDashboardRulesRouteRouteWithChildren
   '/(dashboard)/dashboard/settings': typeof dashboardDashboardSettingsRouteRouteWithChildren
   '/(oauth)/dashboard/connect': typeof oauthDashboardConnectRouteRouteWithChildren
   '/(dashboard)/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/(dashboard)/dashboard/report': typeof dashboardDashboardReportRoute
-  '/(dashboard)/dashboard/rules': typeof dashboardDashboardRulesRoute
   '/(dashboard)/dashboard/setup': typeof dashboardDashboardSetupRoute
   '/(marketing)/blog/$slug': typeof marketingBlogSlugRoute
   '/(marketing)/changelog/$slug': typeof marketingChangelogSlugRoute
@@ -646,6 +673,7 @@ export interface FileRoutesById {
   '/(marketing)/guides/': typeof marketingGuidesIndexRoute
   '/(marketing)/recipes/': typeof marketingRecipesIndexRoute
   '/(dashboard)/dashboard/ical/$feedId': typeof dashboardDashboardIcalFeedIdRoute
+  '/(dashboard)/dashboard/rules/$ruleId': typeof dashboardDashboardRulesRuleIdRoute
   '/(dashboard)/dashboard/settings/api-tokens': typeof dashboardDashboardSettingsApiTokensRoute
   '/(dashboard)/dashboard/settings/change-password': typeof dashboardDashboardSettingsChangePasswordRoute
   '/(dashboard)/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
@@ -661,11 +689,13 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/events/': typeof dashboardDashboardEventsIndexRoute
   '/(dashboard)/dashboard/ical/': typeof dashboardDashboardIcalIndexRoute
   '/(dashboard)/dashboard/integrations/': typeof dashboardDashboardIntegrationsIndexRoute
+  '/(dashboard)/dashboard/rules/': typeof dashboardDashboardRulesIndexRoute
   '/(dashboard)/dashboard/settings/': typeof dashboardDashboardSettingsIndexRoute
   '/(dashboard)/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/(dashboard)/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/(dashboard)/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/(dashboard)/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/(dashboard)/dashboard/rules/pairs/$sourceId/$destinationId': typeof dashboardDashboardRulesPairsSourceIdDestinationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -691,10 +721,10 @@ export interface FileRouteTypes {
     | '/dashboard/accounts'
     | '/dashboard/connect'
     | '/dashboard/ical'
+    | '/dashboard/rules'
     | '/dashboard/settings'
     | '/dashboard/feedback'
     | '/dashboard/report'
-    | '/dashboard/rules'
     | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
@@ -716,6 +746,7 @@ export interface FileRouteTypes {
     | '/guides/'
     | '/recipes/'
     | '/dashboard/ical/$feedId'
+    | '/dashboard/rules/$ruleId'
     | '/dashboard/settings/api-tokens'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
@@ -731,11 +762,13 @@ export interface FileRouteTypes {
     | '/dashboard/events/'
     | '/dashboard/ical/'
     | '/dashboard/integrations/'
+    | '/dashboard/rules/'
     | '/dashboard/settings/'
     | '/dashboard/upgrade/'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
     | '/dashboard/accounts/$accountId/'
+    | '/dashboard/rules/pairs/$sourceId/$destinationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -758,7 +791,6 @@ export interface FileRouteTypes {
     | '/dashboard/connect'
     | '/dashboard/feedback'
     | '/dashboard/report'
-    | '/dashboard/rules'
     | '/dashboard/setup'
     | '/blog/$slug'
     | '/changelog/$slug'
@@ -779,6 +811,7 @@ export interface FileRouteTypes {
     | '/guides'
     | '/recipes'
     | '/dashboard/ical/$feedId'
+    | '/dashboard/rules/$ruleId'
     | '/dashboard/settings/api-tokens'
     | '/dashboard/settings/change-password'
     | '/dashboard/settings/passkeys'
@@ -793,11 +826,13 @@ export interface FileRouteTypes {
     | '/dashboard/events'
     | '/dashboard/ical'
     | '/dashboard/integrations'
+    | '/dashboard/rules'
     | '/dashboard/settings'
     | '/dashboard/upgrade'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
     | '/dashboard/accounts/$accountId'
+    | '/dashboard/rules/pairs/$sourceId/$destinationId'
   id:
     | '__root__'
     | '/(auth)'
@@ -825,11 +860,11 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/accounts'
     | '/(dashboard)/dashboard/connect'
     | '/(dashboard)/dashboard/ical'
+    | '/(dashboard)/dashboard/rules'
     | '/(dashboard)/dashboard/settings'
     | '/(oauth)/dashboard/connect'
     | '/(dashboard)/dashboard/feedback'
     | '/(dashboard)/dashboard/report'
-    | '/(dashboard)/dashboard/rules'
     | '/(dashboard)/dashboard/setup'
     | '/(marketing)/blog/$slug'
     | '/(marketing)/changelog/$slug'
@@ -851,6 +886,7 @@ export interface FileRouteTypes {
     | '/(marketing)/guides/'
     | '/(marketing)/recipes/'
     | '/(dashboard)/dashboard/ical/$feedId'
+    | '/(dashboard)/dashboard/rules/$ruleId'
     | '/(dashboard)/dashboard/settings/api-tokens'
     | '/(dashboard)/dashboard/settings/change-password'
     | '/(dashboard)/dashboard/settings/passkeys'
@@ -866,11 +902,13 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/events/'
     | '/(dashboard)/dashboard/ical/'
     | '/(dashboard)/dashboard/integrations/'
+    | '/(dashboard)/dashboard/rules/'
     | '/(dashboard)/dashboard/settings/'
     | '/(dashboard)/dashboard/upgrade/'
     | '/(dashboard)/dashboard/accounts/$accountId/$calendarId'
     | '/(dashboard)/dashboard/accounts/$accountId/reconnect'
     | '/(dashboard)/dashboard/accounts/$accountId/'
+    | '/(dashboard)/dashboard/rules/pairs/$sourceId/$destinationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1176,13 +1214,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardSetupRouteImport
       parentRoute: typeof dashboardRouteRoute
     }
-    '/(dashboard)/dashboard/rules': {
-      id: '/(dashboard)/dashboard/rules'
-      path: '/dashboard/rules'
-      fullPath: '/dashboard/rules'
-      preLoaderRoute: typeof dashboardDashboardRulesRouteImport
-      parentRoute: typeof dashboardRouteRoute
-    }
     '/(dashboard)/dashboard/report': {
       id: '/(dashboard)/dashboard/report'
       path: '/dashboard/report'
@@ -1209,6 +1240,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard/settings'
       fullPath: '/dashboard/settings'
       preLoaderRoute: typeof dashboardDashboardSettingsRouteRouteImport
+      parentRoute: typeof dashboardRouteRoute
+    }
+    '/(dashboard)/dashboard/rules': {
+      id: '/(dashboard)/dashboard/rules'
+      path: '/dashboard/rules'
+      fullPath: '/dashboard/rules'
+      preLoaderRoute: typeof dashboardDashboardRulesRouteRouteImport
       parentRoute: typeof dashboardRouteRoute
     }
     '/(dashboard)/dashboard/ical': {
@@ -1245,6 +1283,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/settings/'
       preLoaderRoute: typeof dashboardDashboardSettingsIndexRouteImport
       parentRoute: typeof dashboardDashboardSettingsRouteRoute
+    }
+    '/(dashboard)/dashboard/rules/': {
+      id: '/(dashboard)/dashboard/rules/'
+      path: '/'
+      fullPath: '/dashboard/rules/'
+      preLoaderRoute: typeof dashboardDashboardRulesIndexRouteImport
+      parentRoute: typeof dashboardDashboardRulesRouteRoute
     }
     '/(dashboard)/dashboard/integrations/': {
       id: '/(dashboard)/dashboard/integrations/'
@@ -1351,6 +1396,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardSettingsApiTokensRouteImport
       parentRoute: typeof dashboardDashboardSettingsRouteRoute
     }
+    '/(dashboard)/dashboard/rules/$ruleId': {
+      id: '/(dashboard)/dashboard/rules/$ruleId'
+      path: '/$ruleId'
+      fullPath: '/dashboard/rules/$ruleId'
+      preLoaderRoute: typeof dashboardDashboardRulesRuleIdRouteImport
+      parentRoute: typeof dashboardDashboardRulesRouteRoute
+    }
     '/(dashboard)/dashboard/ical/$feedId': {
       id: '/(dashboard)/dashboard/ical/$feedId'
       path: '/$feedId'
@@ -1378,6 +1430,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/accounts/$accountId/$calendarId'
       preLoaderRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdRouteImport
       parentRoute: typeof dashboardDashboardAccountsRouteRoute
+    }
+    '/(dashboard)/dashboard/rules/pairs/$sourceId/$destinationId': {
+      id: '/(dashboard)/dashboard/rules/pairs/$sourceId/$destinationId'
+      path: '/pairs/$sourceId/$destinationId'
+      fullPath: '/dashboard/rules/pairs/$sourceId/$destinationId'
+      preLoaderRoute: typeof dashboardDashboardRulesPairsSourceIdDestinationIdRouteImport
+      parentRoute: typeof dashboardDashboardRulesRouteRoute
     }
   }
 }
@@ -1455,6 +1514,25 @@ const dashboardDashboardIcalRouteRouteWithChildren =
     dashboardDashboardIcalRouteRouteChildren,
   )
 
+interface dashboardDashboardRulesRouteRouteChildren {
+  dashboardDashboardRulesRuleIdRoute: typeof dashboardDashboardRulesRuleIdRoute
+  dashboardDashboardRulesIndexRoute: typeof dashboardDashboardRulesIndexRoute
+  dashboardDashboardRulesPairsSourceIdDestinationIdRoute: typeof dashboardDashboardRulesPairsSourceIdDestinationIdRoute
+}
+
+const dashboardDashboardRulesRouteRouteChildren: dashboardDashboardRulesRouteRouteChildren =
+  {
+    dashboardDashboardRulesRuleIdRoute: dashboardDashboardRulesRuleIdRoute,
+    dashboardDashboardRulesIndexRoute: dashboardDashboardRulesIndexRoute,
+    dashboardDashboardRulesPairsSourceIdDestinationIdRoute:
+      dashboardDashboardRulesPairsSourceIdDestinationIdRoute,
+  }
+
+const dashboardDashboardRulesRouteRouteWithChildren =
+  dashboardDashboardRulesRouteRoute._addFileChildren(
+    dashboardDashboardRulesRouteRouteChildren,
+  )
+
 interface dashboardDashboardSettingsRouteRouteChildren {
   dashboardDashboardSettingsApiTokensRoute: typeof dashboardDashboardSettingsApiTokensRoute
   dashboardDashboardSettingsChangePasswordRoute: typeof dashboardDashboardSettingsChangePasswordRoute
@@ -1482,10 +1560,10 @@ interface dashboardRouteRouteChildren {
   dashboardDashboardAccountsRouteRoute: typeof dashboardDashboardAccountsRouteRouteWithChildren
   dashboardDashboardConnectRouteRoute: typeof dashboardDashboardConnectRouteRouteWithChildren
   dashboardDashboardIcalRouteRoute: typeof dashboardDashboardIcalRouteRouteWithChildren
+  dashboardDashboardRulesRouteRoute: typeof dashboardDashboardRulesRouteRouteWithChildren
   dashboardDashboardSettingsRouteRoute: typeof dashboardDashboardSettingsRouteRouteWithChildren
   dashboardDashboardFeedbackRoute: typeof dashboardDashboardFeedbackRoute
   dashboardDashboardReportRoute: typeof dashboardDashboardReportRoute
-  dashboardDashboardRulesRoute: typeof dashboardDashboardRulesRoute
   dashboardDashboardSetupRoute: typeof dashboardDashboardSetupRoute
   dashboardDashboardIndexRoute: typeof dashboardDashboardIndexRoute
   dashboardDashboardEventsIndexRoute: typeof dashboardDashboardEventsIndexRoute
@@ -1500,11 +1578,12 @@ const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
     dashboardDashboardConnectRouteRouteWithChildren,
   dashboardDashboardIcalRouteRoute:
     dashboardDashboardIcalRouteRouteWithChildren,
+  dashboardDashboardRulesRouteRoute:
+    dashboardDashboardRulesRouteRouteWithChildren,
   dashboardDashboardSettingsRouteRoute:
     dashboardDashboardSettingsRouteRouteWithChildren,
   dashboardDashboardFeedbackRoute: dashboardDashboardFeedbackRoute,
   dashboardDashboardReportRoute: dashboardDashboardReportRoute,
-  dashboardDashboardRulesRoute: dashboardDashboardRulesRoute,
   dashboardDashboardSetupRoute: dashboardDashboardSetupRoute,
   dashboardDashboardIndexRoute: dashboardDashboardIndexRoute,
   dashboardDashboardEventsIndexRoute: dashboardDashboardEventsIndexRoute,

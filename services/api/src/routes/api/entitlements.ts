@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database, premiumService, webhookConfig } from "@/context";
 import { getUserMappings } from "@/utils/source-destination-mappings";
+import { countUserRules } from "@/utils/sync-rules";
 
 interface EntitlementsRouteContext {
   userId: string;
@@ -16,6 +17,8 @@ interface EntitlementsDependencies {
   getFeedLimit: (plan: Plan) => number;
   getMappingCount: (userId: string) => Promise<number>;
   getMappingLimit: (plan: Plan) => number;
+  getRuleCount: (userId: string) => Promise<number>;
+  getRuleLimit: (plan: Plan) => number;
   getUserPlan: (userId: string) => Promise<Plan>;
   webhookConfigured: boolean;
 }
@@ -31,10 +34,11 @@ const handleEntitlementsRoute = async (
   context: EntitlementsRouteContext,
   dependencies: EntitlementsDependencies,
 ): Promise<Response> => {
-  const [accountCount, mappingCount, feedCount, plan] = await Promise.all([
+  const [accountCount, mappingCount, feedCount, ruleCount, plan] = await Promise.all([
     dependencies.getAccountCount(context.userId),
     dependencies.getMappingCount(context.userId),
     dependencies.getFeedCount(context.userId),
+    dependencies.getRuleCount(context.userId),
     dependencies.getUserPlan(context.userId),
   ]);
 
@@ -55,6 +59,10 @@ const handleEntitlementsRoute = async (
     },
     plan,
     realtimeSync: plan === "pro" && dependencies.webhookConfigured,
+    rules: {
+      current: ruleCount,
+      limit: toReportedLimit(dependencies.getRuleLimit(plan)),
+    },
   });
 };
 
@@ -81,6 +89,8 @@ const GET = withWideEvent(
       return mappings.length;
     },
     getMappingLimit: (plan) => premiumService.getMappingLimit(plan),
+    getRuleCount: (resolvedUserId) => countUserRules(database, resolvedUserId),
+    getRuleLimit: (plan) => premiumService.getRuleLimit(plan),
     getUserPlan: (resolvedUserId) => premiumService.getUserPlan(resolvedUserId),
     webhookConfigured: webhookConfig !== null,
   })),

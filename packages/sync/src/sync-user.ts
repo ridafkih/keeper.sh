@@ -392,7 +392,9 @@ const createDestinationReconciliationWideEventFields = (
   "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids
     .slice(0, OVER_BUDGET_SERIES_UID_SAMPLE_SIZE)
     .join(","),
+  "local_event_states.skipped_by_rule_count": context.eventReadDiagnostics.skippedByRuleCount,
   "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
+  "local_event_states.unmatched_by_rule_count": context.eventReadDiagnostics.unmatchedByRuleCount,
   "reconciliation.local_read.duration_ms": context.localReadDurationMs,
   "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
   "reconciliation.source_calendars.at_local_read_count": context.sourceCalendarIdsAtLocalRead.length,
@@ -917,7 +919,9 @@ const syncDestinationsForUser = async (
           overBudgetSourceEventStateIds: [],
           overBudgetSourceEventUids: [],
           outsideReconciliationWindowCount: 0,
+          skippedByRuleCount: 0,
           syncableEventCount: 0,
+          unmatchedByRuleCount: 0,
         };
         let localReadDurationMs = 0;
         let remoteReadDurationMs = 0;
@@ -995,6 +999,7 @@ const syncDestinationsForUser = async (
                       lockedDatabase,
                       [...authoritativeSourceWindows.keys()],
                       localReadWindow,
+                      { destinationCalendarId: destination.calendarId },
                     );
                     eventReadDiagnostics = eventRead.diagnostics;
                     localEvents.push(...eventRead.events);

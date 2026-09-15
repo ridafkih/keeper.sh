@@ -265,7 +265,7 @@ function CalendarsMenu() {
   const { data: eventCountData, error: eventCountError } = useSWR<{ count: number }>("/api/events/count");
   const eventCount = eventCountError ? undefined : eventCountData?.count;
   const { data: entitlements } = useEntitlements();
-  const mappingCount = entitlements?.mappings.current;
+  const ruleCount = entitlements?.rules.current;
 
   return (
     <NavigationMenu>
@@ -352,7 +352,7 @@ function CalendarsMenu() {
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>Rules</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
-            {mappingCount != null && <Text size="sm" tone="muted">{pluralize(mappingCount, "rule")}</Text>}
+            {ruleCount != null && <Text size="sm" tone="muted">{pluralize(ruleCount, "rule")}</Text>}
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
         <NavigationMenuLinkItem to="/dashboard/ical">

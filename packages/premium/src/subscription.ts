@@ -5,9 +5,11 @@ import {
   FREE_ACCOUNT_LIMIT,
   FREE_FEED_LIMIT,
   FREE_MAPPING_LIMIT,
+  FREE_RULE_LIMIT,
   PRO_ACCOUNT_LIMIT,
   PRO_FEED_LIMIT,
   PRO_MAPPING_LIMIT,
+  PRO_RULE_LIMIT,
 } from "./constants";
 import { planSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
@@ -29,9 +31,11 @@ interface PremiumService {
   getAccountLimit: (plan: Plan) => number;
   getMappingLimit: (plan: Plan) => number;
   getFeedLimit: (plan: Plan) => number;
+  getRuleLimit: (plan: Plan) => number;
   canAddAccount: (userId: string, currentCount: number) => Promise<boolean>;
   canAddMapping: (userId: string, currentCount: number) => Promise<boolean>;
   canAddFeed: (userId: string, currentCount: number) => Promise<boolean>;
+  canAddRule: (userId: string, currentCount: number) => Promise<boolean>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
   canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
 }
@@ -86,6 +90,13 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     return FREE_FEED_LIMIT;
   };
 
+  const getRuleLimit = (plan: Plan): number => {
+    if (plan === "pro") {
+      return PRO_RULE_LIMIT;
+    }
+    return FREE_RULE_LIMIT;
+  };
+
   const canAddAccount = async (userId: string, currentCount: number): Promise<boolean> => {
     const subscription = await getUserSubscription(userId);
     const limit = getAccountLimit(subscription.plan);
@@ -104,6 +115,12 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     return currentCount < limit;
   };
 
+  const canAddRule = async (userId: string, currentCount: number): Promise<boolean> => {
+    const subscription = await getUserSubscription(userId);
+    const limit = getRuleLimit(subscription.plan);
+    return currentCount < limit;
+  };
+
   const canUseEventFilters = async (userId: string): Promise<boolean> => {
     const subscription = await getUserSubscription(userId);
     return subscription.plan === "pro";
@@ -118,11 +135,13 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     canAddAccount,
     canAddFeed,
     canAddMapping,
+    canAddRule,
     canCustomizeIcalFeed,
     canUseEventFilters,
     getAccountLimit,
     getFeedLimit,
     getMappingLimit,
+    getRuleLimit,
     getUserPlan,
     getUserSubscription,
   };

@@ -149,7 +149,9 @@ describe("createDestinationReconciliationWideEventFields", () => {
     outsideReconciliationWindowCount: 1,
     overBudgetSourceEventStateIds: [],
     overBudgetSourceEventUids: ["pathological-series"],
+    skippedByRuleCount: 0,
     syncableEventCount: 4,
+    unmatchedByRuleCount: 0,
   };
 
   it("records each stage that can reduce the local destination snapshot to zero", () => {
@@ -279,7 +281,9 @@ describe("createDestinationReconciliationScope", () => {
     outsideReconciliationWindowCount: 0,
     overBudgetSourceEventStateIds: [] as string[],
     overBudgetSourceEventUids: [] as string[],
+    skippedByRuleCount: 0,
     syncableEventCount: 0,
+    unmatchedByRuleCount: 0,
   };
 
   const createScope = (overBudgetSourceEventStateIds: string[]) =>

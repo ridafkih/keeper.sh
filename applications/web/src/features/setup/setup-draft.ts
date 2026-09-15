@@ -1,18 +1,14 @@
 import type { CalendarSource } from "@/types/api";
 import { canPull, canPush } from "@/utils/calendars";
 
-export type DetailChoice = "calendar_name" | "busy" | "titles";
-
 export type SetupBlank = { kind: "from" } | { kind: "to"; index: number };
 
 export interface SetupRule {
   id: string;
   fromId: string | null;
   toIds: string[];
-  detail: DetailChoice;
-  // Set when the rule was opened from the rules page: its destinations replace the source's, not extend them.
-  replace?: boolean;
-  loadedDetail?: DetailChoice;
+  // Null keeps the default rule the server assigns to a new pair.
+  syncRuleId: string | null;
 }
 
 export interface SetupPending {
@@ -21,20 +17,19 @@ export interface SetupPending {
 }
 
 export interface SetupDraft {
-  version: 2;
+  version: 3;
   rules: SetupRule[];
   pending: SetupPending | null;
 }
 
 export type CompleteRule = SetupRule & { fromId: string };
 
-const DRAFT_VERSION = 2;
-const DEFAULT_DETAIL: DetailChoice = "calendar_name";
+const DRAFT_VERSION = 3;
 
-const createRule = (fromId: string | null = null, toIds: string[] = [], detail: DetailChoice = DEFAULT_DETAIL): SetupRule => ({
-  detail,
+const createRule = (fromId: string | null = null, toIds: string[] = [], syncRuleId: string | null = null): SetupRule => ({
   fromId,
   id: crypto.randomUUID(),
+  syncRuleId,
   toIds,
 });
 
@@ -51,10 +46,6 @@ export const isRuleComplete = (rule: SetupRule): rule is CompleteRule =>
   rule.fromId !== null && rule.toIds.length > 0;
 
 export const completeRules = (draft: SetupDraft): CompleteRule[] => draft.rules.filter(isRuleComplete);
-
-// Detail is stored per source calendar, so every rule sharing a "from" must agree.
-const sharedDetail = (rules: SetupRule[], fromId: string): DetailChoice | undefined =>
-  rules.find((rule) => rule.fromId === fromId)?.detail;
 
 const fillsBlank = (blank: SetupBlank, calendar: CalendarSource): boolean =>
   blank.kind === "from" ? canPull(calendar) : canPush(calendar);
@@ -89,12 +80,7 @@ export const setBlank = (
   withRules(draft, draft.rules.map((rule) => {
     if (rule.id !== ruleId) return rule;
     if (blank.kind === "from") {
-      return {
-        detail: sharedDetail(draft.rules, calendarId) ?? rule.detail,
-        fromId: calendarId,
-        id: rule.id,
-        toIds: withoutId(rule.toIds, calendarId),
-      };
+      return { ...rule, fromId: calendarId, toIds: withoutId(rule.toIds, calendarId) };
     }
     return {
       ...rule,
@@ -107,13 +93,8 @@ export const removeDestination = (draft: SetupDraft, ruleId: string, calendarId:
   withRules(draft, draft.rules.map((rule) =>
     rule.id === ruleId ? { ...rule, toIds: withoutId(rule.toIds, calendarId) } : rule));
 
-export const setRuleDetail = (draft: SetupDraft, ruleId: string, detail: DetailChoice): SetupDraft => {
-  const target = draft.rules.find((rule) => rule.id === ruleId);
-  if (!target) return draft;
-  const affects = (rule: SetupRule) =>
-    rule.id === ruleId || (target.fromId !== null && rule.fromId === target.fromId);
-  return withRules(draft, draft.rules.map((rule) => (affects(rule) ? { ...rule, detail } : rule)));
-};
+export const setRuleChoice = (draft: SetupDraft, ruleId: string, syncRuleId: string | null): SetupDraft =>
+  withRules(draft, draft.rules.map((rule) => (rule.id === ruleId ? { ...rule, syncRuleId } : rule)));
 
 const hasPair = (rules: SetupRule[], fromId: string, toId: string): boolean =>
   rules.some((rule) => rule.fromId === fromId && rule.toIds.includes(toId));
@@ -148,8 +129,9 @@ export const addReverseRule = (
   calendarsById: ReadonlyMap<string, CalendarSource>,
 ): SetupDraft => {
   const index = draft.rules.findIndex((rule) => rule.id === ruleId);
+  const rule = draft.rules[index];
   const reverses = missingReverses(draft, ruleId, calendarsById).map(({ fromId, toId }) =>
-    createRule(fromId, [toId], sharedDetail(draft.rules, fromId)));
+    createRule(fromId, [toId], rule?.syncRuleId ?? null));
   if (reverses.length === 0) return draft;
   const rules = [...draft.rules.slice(0, index + 1), ...reverses, ...draft.rules.slice(index + 1)];
   return withRules(draft, rules);
@@ -226,10 +208,17 @@ export const removeRulesFrom = (draft: SetupDraft, fromId: string): SetupDraft =
   return withRules(draft, rules.length > 0 ? rules : [createRule()]);
 };
 
-export const isEditingDraft = (draft: SetupDraft): boolean => draft.rules.some((rule) => rule.replace === true);
-
-export const createEditDraft = (fromId: string, toIds: string[], detail: DetailChoice): SetupDraft => ({
-  pending: null,
-  rules: [{ ...createRule(fromId, toIds, detail), loadedDetail: detail, replace: true }],
-  version: DRAFT_VERSION,
-});
+// Every distinct source → destination pair in the sentence, first mention wins.
+export const uniquePairs = (rules: CompleteRule[]): { fromId: string; toId: string; syncRuleId: string | null }[] => {
+  const seen = new Set<string>();
+  const pairs: { fromId: string; toId: string; syncRuleId: string | null }[] = [];
+  for (const rule of rules) {
+    for (const toId of rule.toIds) {
+      const key = `${rule.fromId}::${toId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ fromId: rule.fromId, syncRuleId: rule.syncRuleId, toId });
+    }
+  }
+  return pairs;
+};

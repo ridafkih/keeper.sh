@@ -6,11 +6,9 @@ export const SETUP_DRAFT_KEY = "keeper.setup_draft";
 export type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 const ruleSchema = type({
-  detail: "'calendar_name' | 'busy' | 'titles'",
   fromId: "string | null",
   id: "string",
-  "loadedDetail?": "'calendar_name' | 'busy' | 'titles'",
-  "replace?": "boolean",
+  syncRuleId: "string | null",
   toIds: "string[]",
 });
 
@@ -24,7 +22,7 @@ const pendingSchema = type({
 const draftSchema = type({
   pending: pendingSchema.or("null"),
   rules: ruleSchema.array(),
-  version: "2",
+  version: "3",
 });
 
 export const resolveSessionStorage = (): DraftStorage | null => {

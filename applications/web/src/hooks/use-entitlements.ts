@@ -13,6 +13,7 @@ interface Entitlements {
   accounts: EntitlementLimit;
   feeds: EntitlementLimit;
   mappings: EntitlementLimit;
+  rules: EntitlementLimit;
   canCustomizeIcalFeed: boolean;
   canUseEventFilters: boolean;
   realtimeSync: boolean;
@@ -26,6 +27,7 @@ function buildOptimisticProEntitlements(): Entitlements {
     accounts: { current: 0, limit: null },
     feeds: { current: 0, limit: null },
     mappings: { current: 0, limit: null },
+    rules: { current: 0, limit: null },
     canCustomizeIcalFeed: true,
     canUseEventFilters: true,
     realtimeSync: false,

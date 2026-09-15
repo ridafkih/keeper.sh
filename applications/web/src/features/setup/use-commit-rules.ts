@@ -6,10 +6,12 @@ import { invalidateAccountsAndSources } from "@/lib/swr";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { resolveErrorMessage } from "@/utils/errors";
 import { useMutateEntitlements, type Entitlements } from "@/hooks/use-entitlements";
-import { completeRules, removeRulesFrom, type SetupDraft } from "./setup-draft";
+import { pairPagePath, pairRulesPath } from "@/features/rules/rules";
+import { RULES_KEY } from "@/features/rules/use-rules";
+import { completeRules, removeRulesFrom, uniquePairs, type SetupDraft } from "./setup-draft";
 import {
   buildDestinationPuts,
-  buildSourcePatches,
+  buildPairRulePuts,
   countNewMappings,
   exceedsMappingLimit,
   type ExistingDestinations,
@@ -82,16 +84,22 @@ export function useCommitRules({ draft, entitlements, update, clear }: UseCommit
 
       track(ANALYTICS_EVENTS.setup_completed, { rules: rules.length });
 
-      for (const patch of buildSourcePatches(rules)) {
-        await apiFetch(`/api/sources/${patch.sourceId}`, {
-          body: JSON.stringify(patch.body),
+      for (const put of buildPairRulePuts(rules)) {
+        await apiFetch(pairRulesPath(put.sourceId, put.destinationId), {
+          body: JSON.stringify({ ruleIds: put.ruleIds }),
           headers: JSON_HEADERS,
-          method: "PATCH",
+          method: "PUT",
         });
       }
 
-      await invalidateAccountsAndSources(mutate, "/api/entitlements");
+      await invalidateAccountsAndSources(mutate, "/api/entitlements", RULES_KEY);
       clear();
+      const pairs = uniquePairs(rules);
+      const [only] = pairs;
+      if (pairs.length === 1 && only) {
+        navigate({ to: pairPagePath(only.fromId, only.toId) });
+        return;
+      }
       navigate({ to: "/dashboard" });
     } catch (error) {
       if (error instanceof HttpError && error.status === HTTP_PAYMENT_REQUIRED) {

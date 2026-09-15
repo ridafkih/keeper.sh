@@ -13,6 +13,8 @@ const makeDependencies = (
   getFeedLimit: () => Number.POSITIVE_INFINITY,
   getMappingCount: () => Promise.resolve(3),
   getMappingLimit: () => Number.POSITIVE_INFINITY,
+  getRuleCount: () => Promise.resolve(1),
+  getRuleLimit: () => Number.POSITIVE_INFINITY,
   getUserPlan: () => Promise.resolve("pro" as const),
   webhookConfigured: true,
   ...overrides,
@@ -71,6 +73,7 @@ describe("handleEntitlementsRoute realtimeSync", () => {
       mappings: { current: 3, limit: null },
       plan: "pro",
       realtimeSync: true,
+      rules: { current: 1, limit: null },
     });
   });
 });
@@ -93,5 +96,22 @@ describe("handleEntitlementsRoute feeds", () => {
     expect(await readJson(response)).toMatchObject({
       feeds: { current: 1, limit: 1 },
     });
+  });
+});
+
+describe("handleEntitlementsRoute rules", () => {
+  it("reports the rule count with no limit on a pro plan", async () => {
+    const response = await handleEntitlementsRoute({ userId: "user-1" }, makeDependencies());
+
+    expect(await readJson(response)).toMatchObject({ rules: { current: 1, limit: null } });
+  });
+
+  it("reports the free plan's single-rule limit", async () => {
+    const response = await handleEntitlementsRoute(
+      { userId: "user-1" },
+      makeDependencies({ getRuleLimit: () => 1, getUserPlan: () => Promise.resolve("free" as const) }),
+    );
+
+    expect(await readJson(response)).toMatchObject({ rules: { current: 1, limit: 1 } });
   });
 });

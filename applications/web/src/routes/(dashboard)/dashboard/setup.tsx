@@ -7,9 +7,10 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { Text } from "@/components/ui/primitives/text";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { useEntitlements } from "@/hooks/use-entitlements";
+import { canAddMore, useEntitlements } from "@/hooks/use-entitlements";
 import type { AppJsonFetcher } from "@/lib/router-context";
 import type { CalendarSource } from "@/types/api";
 import {
@@ -18,24 +19,29 @@ import {
   canReverse,
   clearPending,
   completeRules,
-  isEditingDraft,
   markPending,
   pruneStaleIds,
   removeDestination,
   removeRule,
   resolveConnectedAccount,
   setBlank,
-  setRuleDetail,
+  setRuleChoice,
   takenIds,
   type SetupBlank,
   type SetupDraft,
+  type SetupRule,
 } from "@/features/setup/setup-draft";
 import { buildDestinationPuts, countNewMappings, exceedsMappingLimit } from "@/features/setup/setup-commit";
 import { useSetupDraft } from "@/features/setup/use-setup-draft";
 import { useCommitRules } from "@/features/setup/use-commit-rules";
 import { useLoginImport } from "@/features/setup/use-login-import";
+import { DEFAULT_RULE } from "@keeper.sh/data-schemas";
+import type { SyncRule } from "@keeper.sh/data-schemas";
+import { resolveDefaultRule } from "@/features/rules/rules";
+import { useRules } from "@/features/rules/use-rules";
+import { CreateRuleModal } from "@/features/rules/components/create-rule-modal";
+import { RuleOptions } from "@/features/rules/components/rule-options";
 import { CalendarOptions } from "@/features/setup/components/calendar-options";
-import { DetailOptions } from "@/features/setup/components/detail-options";
 import { SentencePanel } from "@/features/setup/components/sentence-panel";
 import { SetupActions } from "@/features/setup/components/setup-actions";
 import { SetupSentence } from "@/features/setup/components/setup-sentence";
@@ -72,7 +78,12 @@ export const Route = createFileRoute("/(dashboard)/dashboard/setup")({
   component: SetupPage,
 });
 
-const isBlank = (slot: SentenceSlot): slot is SetupBlank => slot.kind !== "detail";
+const isBlank = (slot: SentenceSlot): slot is SetupBlank => slot.kind !== "rule";
+
+const ruleLabelFor = (rule: SetupRule, rules: SyncRule[] | undefined): string => {
+  const chosen = rule.syncRuleId ? rules?.find((candidate) => candidate.id === rule.syncRuleId) : undefined;
+  return (chosen ?? resolveDefaultRule(rules))?.name ?? DEFAULT_RULE.name;
+};
 
 const selectedFor = (rule: { fromId: string | null; toIds: string[] }, blank: SetupBlank): string | null =>
   blank.kind === "from" ? rule.fromId : rule.toIds[blank.index] ?? null;
@@ -86,7 +97,11 @@ function SetupPage() {
   const { data: sources, error, mutate } = useSWR<CalendarSource[]>("/api/sources", {
     fallbackData: preloaded ?? undefined,
   });
+  const { data: syncRules } = useRules();
   const [open, setOpen] = useState<OpenSlot | null>(null);
+  // The sentence panel closes when the modal takes the pointer, so the sentence being edited is kept aside.
+  const [createFor, setCreateFor] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const reduceMotion = useReducedMotion() ?? false;
   const { mutate: globalMutate } = useSWRConfig();
@@ -125,7 +140,7 @@ function SetupPage() {
   const puts = buildDestinationPuts(rules, {});
   const projected = (entitlements?.mappings.current ?? 0) + countNewMappings(puts, {});
   const limit = entitlements?.mappings.limit ?? null;
-  const detailLocked = !entitlements || !entitlements.canUseEventFilters;
+  const defaultRule = resolveDefaultRule(syncRules);
 
   const toggle = (ruleId: string, slot: SentenceSlot) => {
     setOpen((current) => (current?.ruleId === ruleId && sameSlot(current.slot, slot) ? null : { ruleId, slot }));
@@ -152,6 +167,12 @@ function SetupPage() {
     close();
   };
 
+  const chooseRule = (ruleId: string, syncRuleId: string, source: "existing" | "new") => {
+    track(ANALYTICS_EVENTS.setup_rule_selected, { source });
+    update((current) => setRuleChoice(current, ruleId, syncRuleId));
+    close();
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard" />
@@ -175,6 +196,7 @@ function SetupPage() {
                   <div className="py-1.5">
                     <SetupSentence
                       rule={rule}
+                      ruleLabel={ruleLabelFor(rule, syncRules)}
                       calendarsById={calendarsById}
                       openSlot={open?.ruleId === rule.id ? open.slot : null}
                       onOpen={(slot) => toggle(rule.id, slot)}
@@ -197,19 +219,24 @@ function SetupPage() {
               onConnect={() => connect(openRule.id, open.slot as SetupBlank)}
             />
           )}
-          {open && openRule && open.slot.kind === "detail" && (
-            <DetailOptions
-              selected={openRule.detail}
-              locked={detailLocked}
-              onSelect={(detail) => {
-                track(ANALYTICS_EVENTS.setup_detail_selected, { detail });
-                update((current) => setRuleDetail(current, openRule.id, detail));
-                close();
-              }}
+          {open && openRule && open.slot.kind === "rule" && (
+            <RuleOptions
+              rules={syncRules ?? []}
+              selectedId={openRule.syncRuleId ?? defaultRule?.id ?? null}
+              canCreate={canAddMore(entitlements?.rules)}
+              onSelect={(syncRuleId) => chooseRule(openRule.id, syncRuleId, "existing")}
+              onCreate={() => setCreateFor(openRule.id)}
             />
           )}
         </SentencePanel>
       </div>
+      {createError && <Text size="sm" tone="danger" className="px-0.5">{createError}</Text>}
+      <CreateRuleModal
+        open={createFor !== null}
+        onOpenChange={(nextOpen) => { if (!nextOpen) setCreateFor(null); }}
+        onError={setCreateError}
+        onCreated={(created) => { if (createFor) chooseRule(createFor, created.id, "new"); }}
+      />
       <SetupActions
         canReverse={Boolean(reversible)}
         onReverse={() => reversible && applyDraft(ANALYTICS_EVENTS.setup_reverse_added, (current) => addReverseRule(current, reversible.id, calendarsById))}
@@ -217,7 +244,7 @@ function SetupPage() {
         canStart={rules.length > 0}
         starting={status.kind === "committing"}
         onStart={() => void commit()}
-        startLabel={isEditingDraft(draft) ? "Save Changes" : "Start Syncing"}
+        startLabel="Start Syncing"
         onSkip={() => track(ANALYTICS_EVENTS.setup_skipped)}
         projected={projected}
         limit={limit}

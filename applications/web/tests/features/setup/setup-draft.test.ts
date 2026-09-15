@@ -3,9 +3,7 @@ import {
   addReverseRule,
   addRule,
   canReverse,
-  createEditDraft,
   createEmptyDraft,
-  isEditingDraft,
   markPending,
   pruneStaleIds,
   removeDestination,
@@ -13,8 +11,9 @@ import {
   resolveConnectedAccount,
   resolveNewAccountDraft,
   setBlank,
-  setRuleDetail,
+  setRuleChoice,
   takenIds,
+  uniquePairs,
   type SetupBlank,
   type SetupDraft,
 } from "../../../src/features/setup/setup-draft";
@@ -46,12 +45,11 @@ describe("setBlank", () => {
     expect(next.rules[0]).toMatchObject({ fromId: "personal", toIds: [] });
   });
 
-  it("inherits the detail already chosen for that source", () => {
-    const draft = completeDraft();
-    const second = addRule(setRuleDetail(draft, firstRuleId(draft), "busy"));
-    const secondId = second.rules[1]?.id ?? "";
-    const next = setBlank(second, secondId, FROM, "work");
-    expect(next.rules[1]?.detail).toBe("busy");
+  it("keeps the chosen rule when the source changes", () => {
+    const base = completeDraft();
+    const draft = setRuleChoice(base, firstRuleId(base), "rule-ooo");
+    const next = setBlank(draft, firstRuleId(draft), FROM, "family");
+    expect(next.rules[0]).toMatchObject({ fromId: "family", syncRuleId: "rule-ooo" });
   });
 
   it("adds a second destination after the first and never repeats one", () => {
@@ -78,13 +76,12 @@ describe("takenIds", () => {
   });
 });
 
-describe("setRuleDetail", () => {
-  it("applies to every rule sharing the same source calendar", () => {
+describe("setRuleChoice", () => {
+  it("only changes the sentence it was made in", () => {
     const draft = addRule(completeDraft());
-    const secondId = draft.rules[1]?.id ?? "";
-    const shared = setBlank(setBlank(draft, secondId, FROM, "work"), secondId, TO, "family");
-    const next = setRuleDetail(shared, firstRuleId(shared), "titles");
-    expect(next.rules.map((rule) => rule.detail)).toEqual(["titles", "titles"]);
+    const next = setRuleChoice(draft, firstRuleId(draft), "rule-ooo");
+    expect(next.rules.map((rule) => rule.syncRuleId)).toEqual(["rule-ooo", null]);
+    expect(setRuleChoice(next, firstRuleId(next), null).rules[0]?.syncRuleId).toBeNull();
   });
 });
 
@@ -101,11 +98,12 @@ describe("canReverse", () => {
     expect(canReverse(fromFeed, ruleId, byId)).toBe(false);
   });
 
-  it("refuses once the reverse rule exists", () => {
-    const draft = completeDraft();
+  it("refuses once the reverse rule exists and lets it inherit the chosen rule", () => {
+    const base = completeDraft();
+    const draft = setRuleChoice(base, firstRuleId(base), "rule-ooo");
     const reversed = addReverseRule(draft, firstRuleId(draft), byId);
     expect(reversed.rules).toHaveLength(2);
-    expect(reversed.rules[1]).toMatchObject({ fromId: "personal", toIds: ["work"] });
+    expect(reversed.rules[1]).toMatchObject({ fromId: "personal", syncRuleId: "rule-ooo", toIds: ["work"] });
     expect(canReverse(reversed, firstRuleId(reversed), byId)).toBe(false);
   });
 
@@ -179,13 +177,15 @@ describe("removeRulesFrom", () => {
   });
 });
 
-describe("createEditDraft", () => {
-  it("opens a source's existing rule for replacement and forgets that when the source changes", () => {
-    const draft = createEditDraft("work", ["personal", "family"], "busy");
-    expect(isEditingDraft(draft)).toBe(true);
-    expect(draft.rules[0]).toMatchObject({ fromId: "work", loadedDetail: "busy", replace: true, toIds: ["personal", "family"] });
-    const moved = setBlank(draft, firstRuleId(draft), FROM, "feed");
-    expect(isEditingDraft(moved)).toBe(false);
-    expect(moved.rules[0]?.loadedDetail).toBeUndefined();
+describe("uniquePairs", () => {
+  it("lists each source → destination once, keeping the first sentence's rule", () => {
+    const base = completeDraft();
+    const draft = addRule(setRuleChoice(base, firstRuleId(base), "rule-ooo"));
+    const secondId = draft.rules[1]?.id ?? "";
+    const both = setBlank(setBlank(setBlank(draft, secondId, FROM, "work"), secondId, TO, "personal"), secondId, SECOND_TO, "family");
+    expect(uniquePairs(both.rules.filter((rule) => rule.fromId !== null).map((rule) => ({ ...rule, fromId: rule.fromId ?? "" })))).toEqual([
+      { fromId: "work", syncRuleId: "rule-ooo", toId: "personal" },
+      { fromId: "work", syncRuleId: null, toId: "family" },
+    ]);
   });
 });

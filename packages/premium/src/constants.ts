@@ -7,6 +7,9 @@ const PRO_MAPPING_LIMIT = Infinity;
 const FREE_FEED_LIMIT = 1;
 const PRO_FEED_LIMIT = Infinity;
 
+const FREE_RULE_LIMIT = 1;
+const PRO_RULE_LIMIT = Infinity;
+
 export {
   FREE_ACCOUNT_LIMIT,
   PRO_ACCOUNT_LIMIT,
@@ -14,4 +17,6 @@ export {
   PRO_MAPPING_LIMIT,
   FREE_FEED_LIMIT,
   PRO_FEED_LIMIT,
+  FREE_RULE_LIMIT,
+  PRO_RULE_LIMIT,
 };

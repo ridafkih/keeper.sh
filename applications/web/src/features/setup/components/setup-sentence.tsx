@@ -4,19 +4,19 @@ import { heading } from "@/components/ui/primitives/heading.styles";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import type { CalendarSource } from "@/types/api";
 import type { SetupRule } from "../setup-draft";
-import { DETAIL_LABELS } from "../detail-labels";
 import { sameSlot, type SentenceSlot } from "../sentence-slot";
 import { SentenceBlank } from "./sentence-blank";
 
 interface SetupSentenceProps {
   rule: SetupRule;
+  ruleLabel: string;
   calendarsById: ReadonlyMap<string, CalendarSource>;
   openSlot: SentenceSlot | null;
   onOpen: (slot: SentenceSlot) => void;
   onRemove?: () => void;
 }
 
-export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove }: SetupSentenceProps) {
+export function SetupSentence({ rule, ruleLabel, calendarsById, openSlot, onOpen, onRemove }: SetupSentenceProps) {
   const from = rule.fromId ? calendarsById.get(rule.fromId) : undefined;
   const destinations = rule.toIds.map((id) => calendarsById.get(id)).filter((calendar) => calendar !== undefined);
   const isOpen = (slot: SentenceSlot) => openSlot !== null && sameSlot(openSlot, slot);
@@ -68,13 +68,13 @@ export function SetupSentence({ rule, calendarsById, openSlot, onOpen, onRemove 
             />
           </>
         )}
-        {" "}and show them as{" "}
+        {" "}using{" "}
         <span className="whitespace-nowrap">
           <SentenceBlank
             filled
-            open={isOpen({ kind: "detail" })}
-            label={DETAIL_LABELS[rule.detail]}
-            onClick={() => onOpen({ kind: "detail" })}
+            open={isOpen({ kind: "rule" })}
+            label={ruleLabel}
+            onClick={() => onOpen({ kind: "rule" })}
           />
           .
         </span>

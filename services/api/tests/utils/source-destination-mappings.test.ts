@@ -288,6 +288,91 @@ describe("runSetDestinationsForSource", () => {
   });
 });
 
+const createRuleMembers = (log: string[]) => ({
+  assignDefaultRuleToPairs: (
+    ruleId: string,
+    pairs: { sourceCalendarId: string; destinationCalendarId: string }[],
+  ) => {
+    log.push(`assign:${ruleId}:${pairs.map((pair) => pair.destinationCalendarId).join(",")}`);
+    return Promise.resolve();
+  },
+  deleteAssignmentsForPairs: (
+    pairs: { sourceCalendarId: string; destinationCalendarId: string }[],
+  ) => {
+    log.push(`prune:${pairs.map((pair) => pair.destinationCalendarId).join(",")}`);
+    return Promise.resolve();
+  },
+  ensureDefaultRule: () => {
+    log.push("ensure-default");
+    return Promise.resolve({ id: "rule-default" });
+  },
+});
+
+
+describe("rule assignment maintenance", () => {
+  it("gives new pairs the default rule and prunes removed pairs when a source's destinations change", async () => {
+    const log: string[] = [];
+
+    await runSetDestinationsForSource("user-1", "source-1", ["dest-1", "dest-3"], {
+      withTransaction: (transactionCallback) =>
+        transactionCallback({
+          ...createRuleMembers(log),
+          acquireUserLock: () => Promise.resolve(),
+          ensureDestinationSyncStatuses: () => Promise.resolve(),
+          findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-3"]),
+          listDestinationsForSource: () => Promise.resolve(["dest-1", "dest-2"]),
+          replaceSourceMappings: () => {
+            log.push("replace");
+            return Promise.resolve();
+          },
+          sourceExists: () => Promise.resolve(true),
+        }),
+    });
+
+    expect(log).toEqual(["replace", "prune:dest-2", "ensure-default", "assign:rule-default:dest-3"]);
+  });
+
+  it("leaves retained pairs alone and skips the default lookup when nothing was added", async () => {
+    const log: string[] = [];
+
+    await runSetSourcesForDestination("user-1", "dest-1", ["source-1"], {
+      withTransaction: (transactionCallback) =>
+        transactionCallback({
+          ...createRuleMembers(log),
+          acquireUserLock: () => Promise.resolve(),
+          destinationExists: () => Promise.resolve(true),
+          ensureDestinationSyncStatus: () => Promise.resolve(),
+          findOwnedSourceIds: () => Promise.resolve(["source-1"]),
+          listSourcesForDestination: () => Promise.resolve(["source-1", "source-2"]),
+          replaceDestinationMappings: () => {
+            log.push("replace");
+            return Promise.resolve();
+          },
+        }),
+    });
+
+    expect(log).toEqual(["replace", "prune:dest-1"]);
+  });
+
+  it("does nothing for transactions that cannot list previous pairs", async () => {
+    const log: string[] = [];
+
+    await runSetDestinationsForSource("user-1", "source-1", ["dest-1"], {
+      withTransaction: (transactionCallback) =>
+        transactionCallback({
+          ...createRuleMembers(log),
+          acquireUserLock: () => Promise.resolve(),
+          ensureDestinationSyncStatuses: () => Promise.resolve(),
+          findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
+          replaceSourceMappings: () => Promise.resolve(),
+          sourceExists: () => Promise.resolve(true),
+        }),
+    });
+
+    expect(log).toEqual([]);
+  });
+});
+
 describe("mapping transaction adversarial behavior", () => {
   it("serializes concurrent destination writes for the same source", async () => {
     let mappings = new Set<string>([

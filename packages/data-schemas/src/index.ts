@@ -589,6 +589,34 @@ export {
   pushChannelStateSchema,
 };
 
+export {
+  DEFAULT_RULE,
+  applyRuleActions,
+  areRuleActionsEqual,
+  areRuleConditionsEqual,
+  createSyncRuleBodySchema,
+  evaluateRules,
+  findMatchingRule,
+  matchesCondition,
+  patchSyncRuleBodySchema,
+  resolveEventNameTemplate,
+  ruleActionSchema,
+  ruleConditionSchema,
+  syncRuleAssignmentsBodySchema,
+  syncRuleNameSchema,
+  syncRuleSchema,
+} from "./sync-rules";
+export type {
+  CreateSyncRuleBody,
+  PatchSyncRuleBody,
+  RuleAction,
+  RuleCondition,
+  RuleEvaluation,
+  RuleEventFacts,
+  SyncRule,
+  SyncRuleAssignmentsBody,
+} from "./sync-rules";
+
 export type {
   ProxyableMethods,
   Plan,

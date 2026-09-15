@@ -30,7 +30,9 @@ const EVENT_READ_DIAGNOSTICS = {
   outsideReconciliationWindowCount: 0,
   overBudgetSourceEventStateIds: [] as string[],
   overBudgetSourceEventUids: [] as string[],
+  skippedByRuleCount: 0,
   syncableEventCount: 0,
+  unmatchedByRuleCount: 0,
 };
 
 const createStartTime = (index: number): Date =>

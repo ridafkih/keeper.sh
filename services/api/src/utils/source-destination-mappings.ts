@@ -11,6 +11,12 @@ import type { database as databaseInstance } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { spawnBackgroundJob } from "./background-task";
 import { assertAllIdsOwned } from "./owned-ids";
+import {
+  assignDefaultRuleToPairs,
+  deleteAssignmentsForPairs,
+  ensureDefaultRuleRow,
+  type CalendarPair,
+} from "./sync-rule-rows";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -27,11 +33,18 @@ interface SourceDestinationMapping {
   calendarType: string;
 }
 
-interface SetDestinationsTransaction {
+interface RuleAssignmentMaintenance {
+  ensureDefaultRule?: (userId: string) => Promise<{ id: string }>;
+  assignDefaultRuleToPairs?: (ruleId: string, pairs: CalendarPair[]) => Promise<void>;
+  deleteAssignmentsForPairs?: (pairs: CalendarPair[]) => Promise<void>;
+}
+
+interface SetDestinationsTransaction extends RuleAssignmentMaintenance {
   acquireUserLock: (userId: string) => Promise<void>;
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
   countUserMappings?: (userId: string) => Promise<number>;
   countMappingsForSource?: (sourceCalendarId: string) => Promise<number>;
+  listDestinationsForSource?: (sourceCalendarId: string) => Promise<string[]>;
   findOwnedDestinationIds: (
     userId: string,
     destinationCalendarIds: string[],
@@ -53,11 +66,12 @@ interface SetDestinationsDependencies {
   resolveMappingLimit?: ResolveMappingLimit;
 }
 
-interface SetSourcesTransaction {
+interface SetSourcesTransaction extends RuleAssignmentMaintenance {
   acquireUserLock: (userId: string) => Promise<void>;
   destinationExists: (userId: string, destinationCalendarId: string) => Promise<boolean>;
   countUserMappings?: (userId: string) => Promise<number>;
   countMappingsForDestination?: (destinationCalendarId: string) => Promise<number>;
+  listSourcesForDestination?: (destinationCalendarId: string) => Promise<string[]>;
   findOwnedSourceIds: (userId: string, sourceCalendarIds: string[]) => Promise<string[]>;
   replaceDestinationMappings: (
     destinationCalendarId: string,
@@ -88,6 +102,15 @@ interface SetSourcesDependencies {
   ) => Promise<TResult>;
   resolveMappingLimit?: ResolveMappingLimit;
 }
+
+const createRuleAssignmentMaintenance = (
+  transactionClient: DatabaseTransactionClient,
+): Required<RuleAssignmentMaintenance> => ({
+  assignDefaultRuleToPairs: (ruleId, pairs) =>
+    assignDefaultRuleToPairs(transactionClient, ruleId, pairs),
+  deleteAssignmentsForPairs: (pairs) => deleteAssignmentsForPairs(transactionClient, pairs),
+  ensureDefaultRule: (userId) => ensureDefaultRuleRow(transactionClient, userId),
+});
 
 const createSetDestinationsTransaction = (
   transactionClient: DatabaseTransactionClient,
@@ -148,6 +171,14 @@ const createSetDestinationsTransaction = (
 
     return ownedDestinations.map(({ id }) => id);
   },
+  listDestinationsForSource: async (sourceCalendarId) => {
+    const mappings = await transactionClient
+      .select({ destinationCalendarId: sourceDestinationMappingsTable.destinationCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
+
+    return mappings.map(({ destinationCalendarId }) => destinationCalendarId);
+  },
   replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
     await transactionClient
       .delete(sourceDestinationMappingsTable)
@@ -176,6 +207,7 @@ const createSetDestinationsTransaction = (
     }
   },
   requestUserSync: (userId) => requestUserSync(transactionClient, userId),
+  ...createRuleAssignmentMaintenance(transactionClient),
 });
 
 const createSetSourcesTransaction = (
@@ -239,6 +271,14 @@ const createSetSourcesTransaction = (
 
     return ownedSources.map(({ id }) => id);
   },
+  listSourcesForDestination: async (destinationCalendarId) => {
+    const mappings = await transactionClient
+      .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+
+    return mappings.map(({ sourceCalendarId }) => sourceCalendarId);
+  },
   replaceDestinationMappings: async (destinationCalendarId, sourceCalendarIds) => {
     await transactionClient
       .delete(sourceDestinationMappingsTable)
@@ -267,6 +307,7 @@ const createSetSourcesTransaction = (
       .onConflictDoNothing();
   },
   requestUserSync: (userId) => requestUserSync(transactionClient, userId),
+  ...createRuleAssignmentMaintenance(transactionClient),
 });
 
 const createSetDestinationsDependencies = async (): Promise<SetDestinationsDependencies> => {
@@ -305,6 +346,32 @@ const resolveMappingLimitOrNull = (
     return Promise.resolve(null);
   }
   return resolve(userId);
+};
+
+const pairKey = (pair: CalendarPair): string =>
+  `${pair.sourceCalendarId}::${pair.destinationCalendarId}`;
+
+// Assignments hang off the calendar pair, so pairs the save drops lose theirs and new pairs start on the default rule.
+const maintainRuleAssignments = async (
+  transaction: RuleAssignmentMaintenance,
+  userId: string,
+  previousPairs: CalendarPair[] | null,
+  nextPairs: CalendarPair[],
+): Promise<void> => {
+  if (previousPairs === null) {
+    return;
+  }
+  const previousKeys = new Set(previousPairs.map((pair) => pairKey(pair)));
+  const nextKeys = new Set(nextPairs.map((pair) => pairKey(pair)));
+  const removed = previousPairs.filter((pair) => !nextKeys.has(pairKey(pair)));
+  const added = nextPairs.filter((pair) => !previousKeys.has(pairKey(pair)));
+
+  await transaction.deleteAssignmentsForPairs?.(removed);
+  if (added.length === EMPTY_LIST_COUNT || !transaction.ensureDefaultRule) {
+    return;
+  }
+  const defaultRule = await transaction.ensureDefaultRule(userId);
+  await transaction.assignDefaultRuleToPairs?.(defaultRule.id, added);
 };
 
 const runSetDestinationsForSource = async (
@@ -355,7 +422,14 @@ const runSetDestinationsForSource = async (
       }
     }
 
+    const previousDestinationIds = await transaction.listDestinationsForSource?.(sourceCalendarId) ?? null;
     await transaction.replaceSourceMappings(sourceCalendarId, uniqueDestinationCalendarIds);
+    await maintainRuleAssignments(
+      transaction,
+      userId,
+      previousDestinationIds?.map((destinationCalendarId) => ({ destinationCalendarId, sourceCalendarId })) ?? null,
+      uniqueDestinationCalendarIds.map((destinationCalendarId) => ({ destinationCalendarId, sourceCalendarId })),
+    );
 
     if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatuses(uniqueDestinationCalendarIds);
@@ -408,7 +482,14 @@ const runSetSourcesForDestination = async (
       }
     }
 
+    const previousSourceIds = await transaction.listSourcesForDestination?.(destinationCalendarId) ?? null;
     await transaction.replaceDestinationMappings(destinationCalendarId, uniqueSourceCalendarIds);
+    await maintainRuleAssignments(
+      transaction,
+      userId,
+      previousSourceIds?.map((sourceCalendarId) => ({ destinationCalendarId, sourceCalendarId })) ?? null,
+      uniqueSourceCalendarIds.map((sourceCalendarId) => ({ destinationCalendarId, sourceCalendarId })),
+    );
 
     if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatus(destinationCalendarId);
@@ -719,6 +800,7 @@ const setSourcesForDestination = async (
 };
 
 export {
+  USER_MAPPING_LOCK_NAMESPACE,
   getUserMappings,
   getDestinationsForSource,
   getSourcesForDestination,

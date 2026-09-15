@@ -9,6 +9,8 @@ import {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
+  syncRuleAssignmentsTable,
+  syncRulesTable,
   userSyncRequestsTable,
 } from "../../src/database/schema";
 
@@ -320,5 +322,35 @@ describe("calendar rediscovery schema", () => {
     expect(indexedColumnNames(calendarAccountsTable)).not.toContain("calendarsRefreshedAt");
     expect(indexedColumnNames(calendarAccountsTable))
       .not.toContain("calendarsRefreshAttemptedAt");
+  });
+});
+
+const findTableIndex = (table: Parameters<typeof getTableConfig>[0], name: string) =>
+  getTableConfig(table).indexes.find((index) => index.config.name === name);
+
+const ruleIndexColumnNames = (index: ReturnType<typeof findTableIndex>): (string | null)[] =>
+  (index?.config.columns ?? []).map((column) => {
+    if ("name" in column && typeof column.name === "string") {
+      return column.name;
+    }
+    return null;
+  });
+
+describe("sync rule schema", () => {
+  it("allows one default rule per user", () => {
+    const defaultIndex = findTableIndex(syncRulesTable, "sync_rules_user_default_idx");
+
+    expect(defaultIndex?.config.unique).toBe(true);
+    expect(defaultIndex?.config.where).toBeDefined();
+    expect(ruleIndexColumnNames(defaultIndex)).toEqual(["userId"]);
+  });
+
+  it("applies a rule at most once per calendar pair and removes assignments with their rule or calendars", () => {
+    const pairIndex = findTableIndex(syncRuleAssignmentsTable, "sync_rule_assignments_pair_rule_idx");
+    const foreignKeys = getTableConfig(syncRuleAssignmentsTable).foreignKeys.map((key) => key.onDelete);
+
+    expect(pairIndex?.config.unique).toBe(true);
+    expect(ruleIndexColumnNames(pairIndex)).toEqual(["sourceCalendarId", "destinationCalendarId", "ruleId"]);
+    expect(foreignKeys).toEqual(["cascade", "cascade", "cascade"]);
   });
 });

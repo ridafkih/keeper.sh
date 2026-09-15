@@ -99,22 +99,34 @@ const sources = [
 const renderPage = (draft: SetupDraft): string => {
   swrData.clear();
   swrData.set("/api/sources", sources);
+  swrData.set("/api/rules", [busyOnly]);
   draftState.draft = draft;
   const Page = captured.component;
   if (!Page) throw new Error("Setup route did not register a component");
   return renderToStaticMarkup(<Page />);
 };
 
+const busyOnly = {
+  actions: [{ kind: "rename", template: "{{calendar_name}}" }, { kind: "drop_description" }, { kind: "drop_location" }],
+  assignmentCount: 0,
+  conditions: [],
+  createdAt: "2026-01-01T00:00:00.000Z",
+  id: "rule-busy",
+  isDefault: true,
+  name: "Busy only",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+};
+
 const emptyDraft: SetupDraft = {
   pending: null,
-  rules: [{ detail: "calendar_name", fromId: null, id: "rule-1", toIds: [] }],
-  version: 2,
+  rules: [{ fromId: null, id: "rule-1", syncRuleId: null, toIds: [] }],
+  version: 3,
 };
 
 const completeDraft: SetupDraft = {
   pending: null,
-  rules: [{ detail: "calendar_name", fromId: "work", id: "rule-1", toIds: ["personal", "family"] }],
-  version: 2,
+  rules: [{ fromId: "work", id: "rule-1", syncRuleId: null, toIds: ["personal", "family"] }],
+  version: 3,
 };
 
 const START_DISABLED = /<button[^>]* disabled=""[^>]*><span[^>]*>Start Syncing/;
@@ -126,7 +138,8 @@ describe("setup page", () => {
     expect(markup).toContain("Copy events from");
     expect(markup).toContain("a calendar");
     expect(markup).toContain("another calendar");
-    expect(markup).toContain("their calendar&#x27;s name");
+    expect(markup).toContain("using");
+    expect(markup).toContain("Busy only");
     expect(markup).toMatch(START_DISABLED);
   });
 
