@@ -5,6 +5,8 @@ import {
   getMonthGridDays,
   getWeekFetchRange,
   resolveColumnLayout,
+  resolveTweeningColumnLayout,
+  sameColumnLayout,
   startOfVisibleWeek,
   WEEK_STARTS_ON,
   WEEK_VIEW_DAYS,
@@ -57,14 +59,17 @@ describe("getMonthFetchRange", () => {
 });
 
 describe("resolveColumnLayout", () => {
-  it("gives every column a whole number of pixels and hands the remainder to the gutter", () => {
+  it("gives every column a whole number of pixels and lets the gutter absorb the remainder", () => {
     expect(resolveColumnLayout(1006, 52)).toEqual({ column: 136, gutter: 54 });
-    expect(resolveColumnLayout(1008, 52)).toEqual({ column: 136, gutter: 56 });
-    expect(resolveColumnLayout(1010, 52)).toEqual({ column: 136, gutter: 58 });
+    expect(resolveColumnLayout(1008, 52)).toEqual({ column: 137, gutter: 49 });
     expect(resolveColumnLayout(1011, 52)).toEqual({ column: 137, gutter: 52 });
+    expect(resolveColumnLayout(40, 52)).toEqual({ column: 1, gutter: 33 });
   });
 
-  it("never shrinks the gutter below its minimum or a column below one pixel", () => {
-    expect(resolveColumnLayout(40, 52)).toEqual({ column: 1, gutter: 52 });
+  it("keeps fractional columns and the nominal gutter while the frame is tweening", () => {
+    expect(resolveTweeningColumnLayout(1006, 52)).toEqual({ column: 954 / 7, gutter: 52 });
+    expect(resolveTweeningColumnLayout(40, 52)).toEqual({ column: 1, gutter: 52 });
+    expect(sameColumnLayout({ column: 136, gutter: 54 }, { column: 136, gutter: 54 })).toBe(true);
+    expect(sameColumnLayout({ column: 136, gutter: 54 }, { column: 136, gutter: 53 })).toBe(false);
   });
 });

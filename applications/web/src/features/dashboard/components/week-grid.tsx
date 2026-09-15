@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
-import { atom, useAtomValue, useSetAtom } from "jotai";
+import { flushSync } from "react-dom";
+import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
 import { cn } from "@/utils/cn";
 import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
@@ -41,6 +42,8 @@ import {
   HOURS,
   isSameDay,
   resolveColumnLayout,
+  resolveTweeningColumnLayout,
+  sameColumnLayout,
   startOfDay,
   startOfVisibleWeek,
   WEEK_VIEW_DAYS,
@@ -224,6 +227,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   );
   const highlightVisible = useAtomValue(highlightVisibleAtom);
   const sidebarResizing = useAtomValue(sidebarResizingAtom);
+  const store = useStore();
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
@@ -281,21 +285,25 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [router, scrollToCenter],
   );
 
+  // A resize is applied synchronously, inside the observer, so the columns and the frame edge move in the same frame.
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const measure = () => {
+    const measure = (sync: boolean) => {
       if (el.clientWidth === 0) return;
-      const next = resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
-      setColumns((current) =>
-        current.column === next.column && current.gutter === next.gutter ? current : next);
+      const next = store.get(sidebarResizingAtom)
+        ? resolveTweeningColumnLayout(el.getBoundingClientRect().width, GUTTER_WIDTH)
+        : resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
+      const apply = () => setColumns((current) => (sameColumnLayout(current, next) ? current : next));
+      if (sync) flushSync(apply);
+      else apply();
     };
-    measure();
+    measure(false);
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => measure(true));
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [store, sidebarResizing]);
 
   // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day once the new widths are laid out.
   useLayoutEffect(() => {

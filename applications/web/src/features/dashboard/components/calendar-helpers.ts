@@ -106,11 +106,19 @@ export interface ColumnLayout {
   gutter: number;
 }
 
-// Whole-pixel columns keep the header row and the scrolled grid on the same device pixels; the gutter takes the remainder.
-export function resolveColumnLayout(scrollerWidth: number, gutterMin: number): ColumnLayout {
-  const column = Math.max(Math.floor((scrollerWidth - gutterMin) / WEEK_VIEW_DAYS), 1);
-  return { column, gutter: Math.max(scrollerWidth - column * WEEK_VIEW_DAYS, gutterMin) };
+// Whole-pixel columns keep the header row and the scrolled grid on the same device pixels; the gutter takes the remainder, a few pixels either side of its nominal width.
+export function resolveColumnLayout(scrollerWidth: number, gutter: number): ColumnLayout {
+  const column = Math.max(Math.round((scrollerWidth - gutter) / WEEK_VIEW_DAYS), 1);
+  return { column, gutter: Math.max(scrollerWidth - column * WEEK_VIEW_DAYS, 1) };
 }
+
+// While the frame is mid-tween, fractional columns move with it smoothly; they snap to whole pixels once it settles.
+export function resolveTweeningColumnLayout(scrollerWidth: number, gutter: number): ColumnLayout {
+  return { column: Math.max((scrollerWidth - gutter) / WEEK_VIEW_DAYS, 1), gutter };
+}
+
+export const sameColumnLayout = (left: ColumnLayout, right: ColumnLayout): boolean =>
+  left.column === right.column && left.gutter === right.gutter;
 
 export function formatHourLabel(hour: number): string {
   return new Date(2023, 0, 1, hour)
