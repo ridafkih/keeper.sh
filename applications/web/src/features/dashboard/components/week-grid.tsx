@@ -42,10 +42,12 @@ import {
   HOUR_HEIGHT,
   HOURS,
   isSameDay,
+  resolveColumnLayout,
   startOfDay,
   startOfVisibleWeek,
   WEEK_VIEW_DAYS,
 } from "./calendar-helpers";
+import type { ColumnLayout } from "./calendar-helpers";
 
 const GUTTER_WIDTH = 52;
 const HEADER_HEIGHT = 64;
@@ -122,10 +124,10 @@ const DayHeaderCell = memo(function DayHeaderCell({
         if (event.pointerType === "mouse") setGraphHoverIndex(null);
       }}
     >
-      {/* Ramps upward as the header fill evaporates downward, and runs on under the grid so a vertical overscroll bounce can't part it from the column rule. */}
+      {/* Ramps upward as the header fill evaporates downward; the grid draws its own rule from the seam down. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 -bottom-40 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
+        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
       />
       <div
         className={periodWash({
@@ -196,7 +198,14 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       addDays(start, index),
     );
   });
-  const columnsTemplate = `repeat(${stripDays.length}, minmax(0, 1fr))`;
+  /** Whole-pixel column and gutter widths once the scroller has been measured; null on the first paint. */
+  const [columns, setColumns] = useState<ColumnLayout | null>(null);
+  const alignedColumnsRef = useRef<ColumnLayout | null>(null);
+  const gutter = columns?.gutter ?? GUTTER_WIDTH;
+  const columnsTemplate = columns
+    ? `repeat(${stripDays.length}, ${columns.column}px)`
+    : `repeat(${stripDays.length}, minmax(0, 1fr))`;
+  const stripWidth = columns ? `${stripDays.length * columns.column}px` : null;
 
   const now = useNowMinute();
   const nowLayout = now && resolveNowLayout(stripDays, now);
@@ -222,12 +231,12 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
-  // Fractional: mid-resize the scroller is rarely a whole pixel wide, and an integer width drifts by columns.
   const columnWidth = useCallback(() => {
+    if (columns) return columns.column;
     const el = scrollerRef.current;
     if (!el) return 1;
     return Math.max((el.getBoundingClientRect().width - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
-  }, []);
+  }, [columns]);
 
   const columnOffset = useCallback((index: number) => {
     const grid = gridRef.current;
@@ -309,25 +318,37 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [router, scrollToCenter],
   );
 
-  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const width = el.clientWidth;
-      if (width === 0 || width === alignedWidthRef.current) return;
-      const alignedCenterMs = alignedCenterMsRef.current;
-      if (alignedCenterMs === null) {
-        alignedWidthRef.current = width;
-        return;
-      }
-      scrollToCenter(new Date(alignedCenterMs), "instant");
-      const row = rowRef.current;
-      if (row && store.get(sidebarResizingAtom)) row.style.transform = `translateX(${-el.scrollLeft}px)`;
-    });
+    if (!el) return;
+    const measure = () => {
+      if (el.clientWidth === 0) return;
+      const next = resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
+      setColumns((current) =>
+        current && current.column === next.column && current.gutter === next.gutter ? current : next);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [scrollToCenter, store]);
+  }, []);
+
+  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day once the new widths are laid out.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !columns || alignedColumnsRef.current === columns) return;
+    const first = alignedColumnsRef.current === null;
+    alignedColumnsRef.current = columns;
+    const alignedCenterMs = alignedCenterMsRef.current;
+    if (alignedCenterMs === null) {
+      alignedWidthRef.current = el.clientWidth;
+      return;
+    }
+    scrollToCenter(new Date(alignedCenterMs), "instant");
+    const row = rowRef.current;
+    if (row && (first || store.get(sidebarResizingAtom))) row.style.transform = `translateX(${-el.scrollLeft}px)`;
+  }, [columns, scrollToCenter, store]);
 
   // Write-only: subscribing would reconcile all 742 memoised day cells on every open/close.
   const setDetail = useSetAtom(eventDetailAtom);
@@ -377,7 +398,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       anchor: rect,
       frame: {
         top: frameRect.top,
-        left: frameRect.left + GUTTER_WIDTH,
+        left: frameRect.left + gutter,
         right: frameRect.right,
         bottom: frameRect.bottom,
       },
@@ -424,7 +445,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
 
   const dayRow = (
     <div className="flex">
-      <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
+      <div className="shrink-0" style={{ width: gutter }} />
       <div className="relative min-w-0 flex-1 overflow-x-clip">
         <div
           ref={rowRef}
@@ -432,7 +453,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           data-highlighting={resolveDataAttr(highlightVisible)}
           style={{
             gridTemplateColumns: columnsTemplate,
-            width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
+            width: stripWidth ?? `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
           }}
         >
           {stripDays.map((day) => (
@@ -461,14 +482,14 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
         ref={scrollerRef}
         onScroll={handleScroll}
         className={cn(
-          "flex min-h-0 flex-1 items-start overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          "flex min-h-0 flex-1 items-start overflow-auto overscroll-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           sidebarResizing ? "snap-none" : "snap-x snap-mandatory",
         )}
-        style={{ scrollPaddingLeft: GUTTER_WIDTH }}
+        style={{ scrollPaddingLeft: gutter }}
       >
         <div
           className="sticky left-0 z-30 shrink-0 bg-background"
-          style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
+          style={{ width: gutter, height: HOUR_HEIGHT * HOURS.length }}
         >
           {HOURS.slice(1).map((hour) => (
             <span
@@ -490,7 +511,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
           className="relative grid shrink-0"
           style={{
             gridTemplateColumns: columnsTemplate,
-            width: `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})`,
+            width: stripWidth ?? `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})`,
             height: HOUR_HEIGHT * HOURS.length,
           }}
         >

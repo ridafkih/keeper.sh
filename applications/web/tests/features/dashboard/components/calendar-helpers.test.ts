@@ -4,6 +4,7 @@ import {
   getMonthFetchRange,
   getMonthGridDays,
   getWeekFetchRange,
+  resolveColumnLayout,
   startOfVisibleWeek,
   WEEK_STARTS_ON,
   WEEK_VIEW_DAYS,
@@ -52,5 +53,18 @@ describe("getMonthFetchRange", () => {
     expect(start.getTime()).toBe(days[0].getTime());
     expect(end.getTime()).toBe(addDays(days[41], 1).getTime());
     expect(Math.round((end.getTime() - start.getTime()) / MS_PER_DAY)).toBe(42);
+  });
+});
+
+describe("resolveColumnLayout", () => {
+  it("gives every column a whole number of pixels and hands the remainder to the gutter", () => {
+    expect(resolveColumnLayout(1006, 52)).toEqual({ column: 136, gutter: 54 });
+    expect(resolveColumnLayout(1008, 52)).toEqual({ column: 136, gutter: 56 });
+    expect(resolveColumnLayout(1010, 52)).toEqual({ column: 136, gutter: 58 });
+    expect(resolveColumnLayout(1011, 52)).toEqual({ column: 137, gutter: 52 });
+  });
+
+  it("never shrinks the gutter below its minimum or a column below one pixel", () => {
+    expect(resolveColumnLayout(40, 52)).toEqual({ column: 1, gutter: 52 });
   });
 });
