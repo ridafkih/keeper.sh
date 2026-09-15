@@ -659,6 +659,27 @@
       "when": 1788012241237,
       "tag": "0093_verify_existing_microsoft_registrations",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1788960327502,
+      "tag": "0094_configurable_ews",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1788967685086,
+      "tag": "0095_graph-client-config",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1788969579738,
+      "tag": "0096_graph-scopes",
+      "breakpoints": true
     }
   ]
 }
