@@ -45,9 +45,12 @@ const getEnabledSocialProviders = (
    * the defined metadata.
    * @param providerName
    */
-  const isValidProvider = (providerName: string): providerName is "google" | "microsoft" => {
+  const isValidProvider = (
+    providerName: string,
+  ): providerName is "google" | "microsoft" | "oidc" => {
     if (providerName === "google") return true;
     if (providerName === "microsoft") return true;
+    if (providerName === "oidc") return true;
     return false;
   }
 
@@ -59,6 +62,10 @@ const getEnabledSocialProviders = (
 
   return providers;
 }
+
+const resolveOidcProviderName = (
+  capabilities: AuthCapabilities,
+): string => capabilities.oidcProviderName ?? "SSO";
 
 const supportsPasskeys = (capabilities: AuthCapabilities): boolean =>
   capabilities.supportsPasskeys;
@@ -74,6 +81,7 @@ export {
   fetchAuthCapabilitiesWithApi,
   getEnabledSocialProviders,
   resolveCredentialField,
+  resolveOidcProviderName,
   supportsPasskeys,
 };
 export type { AuthCapabilities, CredentialField, SocialProviderId };
