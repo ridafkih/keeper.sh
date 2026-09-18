@@ -1,0 +1,24 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "keeper-sh",
+  "version": "1.0.0",
+  "description": "Connect Cursor to Keeper.sh calendar MCP: read and write events across Google, Outlook, iCloud, Fastmail, CalDAV, and iCal calendars you have synced. OAuth in the browser — no API key.",
+  "author": {
+    "name": "Keeper.sh",
+    "url": "https://www.keeper.sh/"
+  },
+  "homepage": "https://www.keeper.sh/docs/mcp",
+  "repository": "https://github.com/ridafkih/keeper.sh",
+  "license": "MIT",
+  "keywords": [
+    "calendar",
+    "mcp",
+    "keeper.sh",
+    "google-calendar",
+    "outlook",
+    "icloud",
+    "busy-block",
+    "oauth",
+    "scheduling"
+  ]
+}
