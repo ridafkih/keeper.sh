@@ -1,8 +1,8 @@
-# Keeper.sh (Cursor plugin)
+# Keeper.sh Cursor Plugin
 
 Marketplace package that wires Cursor to the hosted [Keeper.sh](https://www.keeper.sh/) MCP server so an agent can control the calendars you have already connected in Keeper.sh — read and write your schedule, check free/busy, send invites, and RSVP across Google Calendar, Outlook, iCloud, Fastmail, CalDAV, and iCal. Keeper.sh also syncs those calendars.
 
-## Install (once listed)
+## Install
 
 1. Open the [Cursor Marketplace](https://cursor.com/marketplace) and install **keeper-sh**, or search for Keeper.sh in **Customize → Plugins**.
 2. When prompted, complete OAuth in the browser at `https://www.keeper.sh/mcp` — there is no API key to paste and no `npx` process to run.
