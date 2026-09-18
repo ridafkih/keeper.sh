@@ -10,7 +10,29 @@
     {
       "name": "keeper-sh",
       "source": "cursor-plugin",
-      "description": "Keeper.sh lets you connect your agent to all your calendars, Google, Outlook, Apple, Fastmail, CalDAV and ICS."
+      "description": "Keeper.sh lets you connect your agent to all your calendars, Google, Outlook, Apple, Fastmail, CalDAV and ICS.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Keeper.sh"
+      },
+      "homepage": "https://www.keeper.sh/docs/mcp",
+      "repository": "https://github.com/ridafkih/keeper.sh",
+      "license": "MIT",
+      "logo": "assets/logo.svg",
+      "category": "MCP",
+      "keywords": [
+        "calendar",
+        "mcp",
+        "keeper.sh",
+        "google-calendar",
+        "outlook",
+        "icloud",
+        "fastmail",
+        "caldav",
+        "busy-block",
+        "oauth",
+        "scheduling"
+      ]
     }
   ]
 }
