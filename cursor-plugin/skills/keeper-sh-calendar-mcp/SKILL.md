@@ -16,7 +16,7 @@ description: >
 Use the **keeper-sh** MCP server from this plugin when the user:
 
 - Asks what is on their calendar, free/busy, or pending invites across accounts
-- Wants to book, move, cancel, or RSVP to events through Keeper.sh
+- Wants to book, move, cancel, or RSVP to events
 - Mentions Keeper.sh, busy-block sync, or calendars that cannot see each other (e.g. work Outlook + personal Google)
 - Needs scheduling help without wiring separate Google/Outlook/iCloud MCP servers
 
