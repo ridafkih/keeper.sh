@@ -1,3 +1,4 @@
+import { resolveGoogleDescription } from "./conference-link";
 import type {
   FetchEventsOptions,
   FetchEventsResult,
@@ -374,7 +375,7 @@ const parseGoogleEventsWithDiagnostics = (
     }
     result.push({
       availability: resolveGoogleAvailability(event),
-      description: event.description,
+      description: resolveGoogleDescription(event),
       endTime,
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
