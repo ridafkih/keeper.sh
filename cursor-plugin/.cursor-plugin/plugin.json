@@ -9,6 +9,7 @@
   "repository": "https://github.com/ridafkih/keeper.sh",
   "license": "MIT",
   "logo": "assets/logo.svg",
+  "category": "integrations",
   "keywords": [
     "calendar",
     "mcp",
