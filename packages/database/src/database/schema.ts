@@ -264,6 +264,7 @@ const eventStatesTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    conference: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     description: text(),
     endTime: timestamp({ withTimezone: true }).notNull(),

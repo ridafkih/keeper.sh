@@ -1,4 +1,5 @@
 import type { SyncableEvent } from "../types";
+import { conferenceIdentityValues } from "./conference";
 import { resolveIsAllDayEvent } from "./all-day";
 import stringify from "fast-json-stable-stringify";
 
@@ -15,6 +16,7 @@ type SyncableEventContent = Pick<SyncableEvent, "summary" | "description" | "loc
     | "recurrenceDuration"
     | "exceptionDates"
     | "recurrenceId"
+    | "conference"
   >>;
 
 const normalizeText = (value?: string): string =>
@@ -55,6 +57,8 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
     [...event.exceptionDates ?? []].map((date) => date.toISOString()).toSorted(),
     event.recurrenceId?.toISOString() ?? "",
     ...resolveHashedPrivacy(event.isPrivate),
+    // Appended, not slotted in: an event with no conference keeps the hash already stored against its mapping.
+    ...conferenceIdentityValues(event.conference),
   ]);
 
   return new Bun.CryptoHasher("sha256").update(payload).digest("hex");

@@ -4,10 +4,13 @@ import {
   parseStoredRecurrenceForMaterialization,
 } from "../events/stored-recurrence";
 import type { SourceEvent } from "../types";
+import type { EventConference } from "../events/conference";
+import { parseStoredEventConference } from "../events/conference";
 import { buildSourceEventInstanceKey } from "./event-instance";
 
 interface StoredSourceEventState {
   availability?: string | null;
+  conference?: string | null;
   description?: string | null;
   endTime: Date;
   exceptionDates: string | null;
@@ -26,8 +29,9 @@ interface StoredSourceEventState {
 
 interface ExistingSourceEventState extends Omit<
   StoredSourceEventState,
-  "exceptionDates" | "recurrenceRule"
+  "conference" | "exceptionDates" | "recurrenceRule"
 > {
+  conference?: EventConference;
   exceptionDates: IcsExceptionDates | null;
   recurrenceDuration?: SourceEvent["recurrenceDuration"];
   recurrenceRule: IcsRecurrenceRule | null;
@@ -62,6 +66,7 @@ const parseStoredSourceEventState = (
   });
   return {
     ...event,
+    conference: parseStoredEventConference(event.conference),
     exceptionDates: parseStoredIcsExceptionDates(event.exceptionDates, event.id),
     recurrenceDuration: recurrence.recurrenceDuration,
     recurrenceRule: recurrence.recurrenceRule ?? null,
