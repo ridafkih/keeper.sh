@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "keeper-sh",
-      "source": "cursor-plugin",
+      "source": "plugins/cursor-plugin",
       "description": "Keeper.sh lets you connect your agent to all your calendars, Google, Outlook, Apple, Fastmail, CalDAV and ICS.",
       "version": "1.0.0",
       "author": {

@@ -21,7 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 NOTE: This MIT license applies to the Cursor / Agent Plugins marketplace
-package under `cursor-plugin/` (manifests, skills, and plugin assets). The
+package under `plugins/cursor-plugin/` (manifests, skills, and plugin assets). The
 Keeper.sh product and the rest of the ridafkih/keeper.sh monorepo remain
 licensed under the GNU Affero General Public License v3 (AGPL-3.0) as stated
 in the repository root LICENSE.

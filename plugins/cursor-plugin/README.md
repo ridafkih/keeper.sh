@@ -42,7 +42,7 @@ Alongside the MCP, Keeper.sh syncs calendars — Google, Outlook, iCloud, Fastma
 ## Package layout
 
 ```text
-cursor-plugin/
+plugins/cursor-plugin/
 ├── plugin.json          # Agent Plugins manifest (name: keeper-sh)
 ├── mcp.json             # Hosted MCP: https://www.keeper.sh/mcp
 ├── skills/              # When to use the Keeper.sh calendar MCP
