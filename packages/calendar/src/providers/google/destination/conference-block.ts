@@ -29,4 +29,27 @@ const stripConferenceDelimiters = (value: string | undefined): string | undefine
   );
 };
 
-export { stripConferenceDelimiters };
+/*
+ * The mirror is compared against what Google reports back, and Google owns the
+ * delimited region: a block it writes there on its own is not content Keeper
+ * authored, so dropping the whole region on read keeps the comparison from
+ * diverging forever over text no write of ours can reproduce.
+ */
+const stripConferenceRegion = (value: string | undefined): string | undefined => {
+  if (!value) {
+    return value;
+  }
+
+  const markers = [...value.matchAll(CONFERENCE_DELIMITER)];
+  const [opening] = markers;
+  const closing = markers.at(-1);
+  if (!opening || !closing || opening === closing) {
+    return stripConferenceDelimiters(value);
+  }
+
+  const before = value.slice(0, opening.index);
+  const after = value.slice(closing.index + closing[0].length);
+  return `${before}${readDelimiterGap(before || globalThis.undefined, after || globalThis.undefined)}${after}`;
+};
+
+export { stripConferenceDelimiters, stripConferenceRegion };

@@ -15,6 +15,7 @@ import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventTime } from "../../shared/date-time";
 import { isKeeperEvent } from "../../../../core/events/identity";
+import { resolveGoogleEventConference } from "./conference";
 import { withBackoff } from "../../../../core/utils/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
 import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
@@ -374,6 +375,7 @@ const parseGoogleEventsWithDiagnostics = (
     }
     result.push({
       availability: resolveGoogleAvailability(event),
+      conference: resolveGoogleEventConference(event),
       description: event.description,
       endTime,
       isAllDay: isAllDayGoogleEvent(event),
