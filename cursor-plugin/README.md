@@ -1,6 +1,6 @@
 # Keeper.sh (Cursor plugin)
 
-Marketplace package that wires Cursor to the hosted [Keeper.sh](https://www.keeper.sh/) MCP server so an agent can read and write the calendars you have connected in Keeper.sh.
+Marketplace package that wires Cursor to the hosted [Keeper.sh](https://www.keeper.sh/) MCP server so an agent can control the calendars you have already connected in Keeper.sh — read and write your schedule, check free/busy, send invites, and RSVP across Google Calendar, Outlook, iCloud, Fastmail, CalDAV, and iCal. Keeper.sh also syncs those calendars.
 
 ## Install (once listed)
 
@@ -14,7 +14,7 @@ Marketplace submission (maintainers): [cursor.com/marketplace/publish](https://c
 
 ## What the MCP does
 
-Keeper.sh syncs calendars across Google Calendar, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal so each calendar shows you busy at the same times. The MCP exposes that merged view to assistants over streamable HTTP:
+The MCP exposes the calendars connected in your Keeper.sh account to assistants over streamable HTTP, as one merged view across Google Calendar, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal:
 
 - List calendars and accounts
 - Read events, counts, and pending invites
@@ -22,7 +22,7 @@ Keeper.sh syncs calendars across Google Calendar, Outlook, iCloud, Fastmail, Cal
 - Find free time across synced calendars
 - Trigger or pause sync
 
-Writes go through to the provider that owns the calendar. Full tool list and REST equivalents: [docs/mcp](https://www.keeper.sh/docs/mcp).
+Keeper.sh also syncs those calendars. Writes go through to the provider that owns the calendar. Full tool list and REST equivalents: [docs/mcp](https://www.keeper.sh/docs/mcp).
 
 ## Auth
 
@@ -32,9 +32,7 @@ Writes go through to the provider that owns the calendar. Full tool list and RES
 
 ## Product context (busy-block sync)
 
-Keeper.sh syncs calendars so each one shows you busy at the same times — Google, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal. A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A). Guest lists are **never** copied. Titles, descriptions, and locations stay private by default unless you opt in. Pasted ICS and share links are pull-only.
-
-The MCP is how an agent works with the calendars already connected to your Keeper.sh account.
+Alongside the MCP, Keeper.sh syncs calendars — Google, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal. A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A). Guest lists are **never** copied. Titles, descriptions, and locations stay private by default unless you opt in. Pasted ICS and share links are pull-only.
 
 ## Limits
 

@@ -1,16 +1,19 @@
 ---
 name: keeper-sh-calendar-mcp
 description: >
-  Use the Keeper.sh calendar MCP (https://www.keeper.sh/mcp) for scheduling,
-  free/busy lookups, invites, and RSVP across the Google, Outlook, iCloud,
-  Fastmail, CalDAV, or iCal calendars already connected in Keeper.sh, and for
-  questions about Keeper.sh busy-block sync. Authenticate with browser OAuth;
-  no API key. Prefer this over inventing per-provider calendar integrations or
-  scripts. Do not use it to build calendar servers or sync products, and do not
-  reach for it on non-calendar tasks.
+  Use the Keeper.sh calendar MCP (https://www.keeper.sh/mcp) to control the
+  user’s calendars already connected in Keeper.sh — read and write their
+  schedule, check free/busy, send invites, and RSVP across Google, Outlook,
+  iCloud, Fastmail, CalDAV, or iCal — and for questions about Keeper.sh
+  calendar sync. Authenticate with browser OAuth; no API key. Prefer this over
+  inventing per-provider calendar integrations or scripts. Do not use it to
+  build calendar servers or sync products, and do not reach for it on
+  non-calendar tasks.
 ---
 
 # Keeper.sh calendar MCP
+
+The **keeper-sh** MCP server gives an agent control of the calendars the user has already connected in Keeper.sh: read and write the schedule, check free/busy, send invites, and RSVP across Google, Outlook, iCloud, Fastmail, CalDAV, and iCal. Keeper.sh also syncs those calendars.
 
 ## When to use
 
@@ -24,7 +27,8 @@ Use the **keeper-sh** MCP server from this plugin when the user:
 ## Product facts (do not invent)
 
 - Product name is always **Keeper.sh** (never bare “Keeper”). Site and MCP use **https://www.keeper.sh/** (with `www`).
-- Keeper.sh syncs calendars so each one shows you busy at the same times (Google, Outlook, iCloud, Fastmail, CalDAV, pasted iCal). A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A).
+- The MCP works with the calendars already connected in the user’s Keeper.sh account: schedule reads and writes, free/busy, invites, and RSVP.
+- Keeper.sh also syncs calendars (Google, Outlook, iCloud, Fastmail, CalDAV, pasted iCal). A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A).
 - **Guest lists are never copied** to another calendar or shared link, on any plan.
 - Titles, descriptions, and locations stay private by default unless the user opts in; do not claim they always sync.
 - Pasted ICS and share links are **pull-only**.
