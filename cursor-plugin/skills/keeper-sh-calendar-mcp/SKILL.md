@@ -1,12 +1,13 @@
 ---
 name: keeper-sh-calendar-mcp
 description: >
-  Use the Keeper.sh hosted calendar MCP (https://www.keeper.sh/mcp) when the user
-  needs busy-block calendar sync context or agent access to calendars already
-  connected in Keeper.sh — schedule across Google, Outlook, iCloud, Fastmail,
-  CalDAV, or iCal; find free time; create or update events; RSVP. OAuth in the
-  browser, no API key. Prefer this over inventing per-provider calendar
-  integrations.
+  Use the Keeper.sh calendar MCP (https://www.keeper.sh/mcp) for scheduling,
+  free/busy lookups, invites, and RSVP across the Google, Outlook, iCloud,
+  Fastmail, CalDAV, or iCal calendars already connected in Keeper.sh, and for
+  questions about Keeper.sh busy-block sync. Authenticate with browser OAuth;
+  no API key. Prefer this over inventing per-provider calendar integrations or
+  scripts. Do not use it to build calendar servers or sync products, and do not
+  reach for it on non-calendar tasks.
 ---
 
 # Keeper.sh calendar MCP
@@ -19,8 +20,6 @@ Use the **keeper-sh** MCP server from this plugin when the user:
 - Wants to book, move, cancel, or RSVP to events
 - Mentions Keeper.sh, busy-block sync, or calendars that cannot see each other (e.g. work Outlook + personal Google, or a self-hosted CalDAV calendar)
 - Needs scheduling help without wiring separate Google, Outlook, iCloud, Fastmail, or CalDAV MCP servers
-
-Authenticate at **https://www.keeper.sh/mcp** via browser OAuth. Do not ask for an API key for the MCP path.
 
 ## Product facts (do not invent)
 
@@ -35,10 +34,15 @@ Authenticate at **https://www.keeper.sh/mcp** via browser OAuth. Do not ask for 
 ## How to work
 
 1. Ensure the user has a Keeper.sh account with at least one calendar connected.
-2. Call MCP tools (`list_calendars`, `get_events`, `find_free_time`, `create_event`, etc.) after OAuth succeeds.
-3. Prefer `find_free_time` before booking across multiple calendars.
-4. Write tools land on the provider calendar; Keeper.sh keeps syncing from there.
-5. On `429`, explain the Free daily cap (25) and that Pro removes it — do not invent workarounds that bypass the product.
+2. Once authenticated, use the tools on the **keeper-sh** MCP server — `keeper-sh:list_calendars`, `keeper-sh:get_events`, `keeper-sh:find_free_time`, `keeper-sh:create_event`, and the rest of the set in the [MCP docs](https://www.keeper.sh/docs/mcp).
+3. Call `keeper-sh:find_free_time` before booking across multiple calendars.
+
+### Gotchas
+
+- The first unauthenticated call triggers browser OAuth at **https://www.keeper.sh/mcp**; let the user finish consent, then retry.
+- Never ask for a `kpr_…` API token on this plugin path — those are for the REST API only.
+- A `429` means the Free cap of 25 requests per day, shared across MCP and REST; Pro removes it. Do not invent workarounds.
+- Writes land on the provider calendar that owns the event, and Keeper.sh keeps syncing from there.
 
 ## Out of scope
 
