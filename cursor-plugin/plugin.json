@@ -11,17 +11,18 @@
   "repository": "https://github.com/ridafkih/keeper.sh",
   "license": "MIT",
   "keywords": [
+    "keeper-sh",
     "calendar",
-    "mcp",
-    "keeper.sh",
     "google-calendar",
     "outlook",
     "icloud",
     "fastmail",
     "caldav",
+    "mcp",
+    "scheduling",
+    "events",
     "busy-block",
-    "oauth",
-    "scheduling"
+    "oauth"
   ],
   "logo": "assets/logo.svg"
 }

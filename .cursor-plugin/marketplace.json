@@ -19,19 +19,20 @@
       "repository": "https://github.com/ridafkih/keeper.sh",
       "license": "MIT",
       "logo": "assets/logo.svg",
-      "category": "MCP",
+      "category": "productivity",
       "keywords": [
+        "keeper-sh",
         "calendar",
-        "mcp",
-        "keeper.sh",
         "google-calendar",
         "outlook",
         "icloud",
         "fastmail",
         "caldav",
+        "mcp",
+        "scheduling",
+        "events",
         "busy-block",
-        "oauth",
-        "scheduling"
+        "oauth"
       ]
     }
   ]
