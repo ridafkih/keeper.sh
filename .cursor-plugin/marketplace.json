@@ -1,0 +1,38 @@
+{
+  "name": "keeper-sh",
+  "owner": {
+    "name": "Keeper.sh"
+  },
+  "metadata": {
+    "description": "Official Keeper.sh plugins for Cursor and Grok Bot."
+  },
+  "plugins": [
+    {
+      "name": "keeper-sh",
+      "source": "cursor-plugin",
+      "description": "Connect Cursor to Keeper.sh calendar MCP: read and write events across Google, Outlook, iCloud, Fastmail, CalDAV, and iCal calendars you have synced. OAuth in the browser \u2014 no API key.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Keeper.sh"
+      },
+      "homepage": "https://www.keeper.sh/docs/mcp",
+      "repository": "https://github.com/ridafkih/keeper.sh",
+      "license": "MIT",
+      "logo": "assets/logo.svg",
+      "category": "MCP",
+      "keywords": [
+        "calendar",
+        "mcp",
+        "keeper.sh",
+        "google-calendar",
+        "outlook",
+        "icloud",
+        "fastmail",
+        "caldav",
+        "busy-block",
+        "oauth",
+        "scheduling"
+      ]
+    }
+  ]
+}

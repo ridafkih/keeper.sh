@@ -58,3 +58,11 @@ cursor-plugin/
 - Product: [https://www.keeper.sh/](https://www.keeper.sh/)
 - MCP docs: [https://www.keeper.sh/docs/mcp](https://www.keeper.sh/docs/mcp)
 - Source monorepo: [https://github.com/ridafkih/keeper.sh](https://github.com/ridafkih/keeper.sh)
+
+## Logo
+
+Marketplace logo (black tile, white mark, matching the portfolio treatment):
+
+- https://www.keeper.sh/keeper-plugin-logo.svg
+- https://www.keeper.sh/keeper-plugin-logo.png
+
