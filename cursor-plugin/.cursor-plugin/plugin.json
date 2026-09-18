@@ -1,7 +1,7 @@
 {
   "name": "keeper-sh",
   "version": "1.0.0",
-  "description": "Connect Cursor to Keeper.sh calendar MCP: read and write events across Google, Outlook, iCloud, Fastmail, CalDAV, and iCal calendars you have synced. OAuth in the browser \u2014 no API key.",
+  "description": "Keeper.sh lets you connect your agent to all your calendars, Google, Outlook, Apple, Fastmail, CalDAV and ICS.",
   "author": {
     "name": "Keeper.sh"
   },
