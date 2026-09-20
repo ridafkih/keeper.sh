@@ -252,7 +252,7 @@ Once this is configured, set the client ID and client secret as the `GOOGLE_CLIE
 >
 > Once again, this is optional. If you do not configure this, you will not be able to configure Microsoft Outlook as a destination.
 
-The clearest non-legacy walkthrough for configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
+The clearest non-legacy walkthrough for configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`; `MailboxSettings.Read` is optional and only used to import Outlook category colors. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
 
 ## Standalone Container
 

@@ -10,6 +10,8 @@ const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
 const MICROSOFT_USER_SCOPE = "User.Read";
 const MICROSOFT_OFFLINE_SCOPE = "offline_access";
+/* Optional: only /me/outlook/masterCategories (event colors) needs it, so hasRequiredScopes ignores it. */
+const MICROSOFT_MAILBOX_SETTINGS_SCOPE = "MailboxSettings.Read";
 const REQUEST_TIMEOUT_MS = 15_000;
 
 const isRequestTimeoutError = (error: unknown): boolean =>
@@ -85,6 +87,7 @@ const createMicrosoftOAuthService = (
       MICROSOFT_CALENDAR_SCOPE,
       MICROSOFT_USER_SCOPE,
       MICROSOFT_OFFLINE_SCOPE,
+      MICROSOFT_MAILBOX_SETTINGS_SCOPE,
     ];
 
     const url = new URL(MICROSOFT_AUTH_URL);

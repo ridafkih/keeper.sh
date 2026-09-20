@@ -10,9 +10,11 @@ import {
   buildSourceEventsToAdd,
   buildSourceEventStateIdsToRemove,
 } from "../source/event-diff";
+import { buildSourceEventInstanceKey } from "../source/event-instance";
 import {
   buildInvalidStoredEventIdsToRemove,
   parseStoredSourceEventStatesRecoveringInvalid,
+  type ExistingSourceEventState,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
 import { recordSegment } from "../telemetry/segments";
@@ -66,6 +68,8 @@ interface FetchEventsResult {
   unsupportedEventUids?: string[];
   syncWindow?: SyncWindow;
   calendarColor?: string | null;
+  /** The provider's color lookup failed, so an absent event color means unknown, not cleared. */
+  eventColorsUnresolved?: boolean;
   coverage?: {
     futureRange: SyncRange;
     historicRange: SyncRange;
@@ -152,6 +156,28 @@ const applyAuxiliaryFetchChanges = (
   if (fetchResult.calendarColor !== globalThis.undefined) {
     changes.calendarColor = fetchResult.calendarColor;
   }
+};
+
+const inheritStoredEventColors = (
+  incomingEvents: SourceEvent[],
+  existingEvents: ExistingSourceEventState[],
+): SourceEvent[] => {
+  const storedColors = new Map<string, string>();
+  for (const existing of existingEvents) {
+    if (existing.color && existing.sourceEventUid) {
+      storedColors.set(
+        buildSourceEventInstanceKey({ ...existing, uid: existing.sourceEventUid }),
+        existing.color,
+      );
+    }
+  }
+  return incomingEvents.map((event) => {
+    const color = event.color ?? storedColors.get(buildSourceEventInstanceKey(event));
+    if (!color) {
+      return event;
+    }
+    return { ...event, color };
+  });
 };
 
 /*
@@ -345,8 +371,13 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         return EMPTY_RESULT;
       }
 
+      let incomingEvents = sourceEvents;
+      if (fetchResult.eventColorsUnresolved) {
+        incomingEvents = inheritStoredEventColors(sourceEvents, existingEvents);
+      }
+
       const { eventStateIdsToRemove, eventsToAdd } = measureDiff(() => {
-        const additions = buildSourceEventsToAdd(existingEvents, sourceEvents, {
+        const additions = buildSourceEventsToAdd(existingEvents, incomingEvents, {
           isDeltaSync,
         });
         const invalidStoredEventIdsToRemove = buildInvalidStoredEventIdsToRemove(

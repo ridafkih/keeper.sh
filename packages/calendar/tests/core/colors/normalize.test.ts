@@ -43,9 +43,12 @@ describe("resolveIcsColor", () => {
     expect(resolveIcsColor("#D63A47")).toBe("#d63a47");
   });
 
-  it.each([globalThis.undefined, "", "not-a-color"])("returns undefined for %j", (value) => {
-    expect(resolveIcsColor(value)).toBeUndefined();
-  });
+  it.each([globalThis.undefined, "", "not-a-color", "constructor", "__proto__", "toString"])(
+    "returns undefined for %j",
+    (value) => {
+      expect(resolveIcsColor(value)).toBeUndefined();
+    },
+  );
 });
 
 describe("resolveGoogleEventColor", () => {

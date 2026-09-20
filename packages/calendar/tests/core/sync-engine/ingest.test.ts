@@ -577,6 +577,36 @@ describe("ingestSource", () => {
     expect(flushedColors).toEqual([null]);
   });
 
+  it("keeps stored event colors when the provider could not resolve them", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const event = {
+      ...makeSourceEvent(
+        "uid-colored",
+        new Date("2026-03-08T14:00:00Z"),
+        new Date("2026-03-08T15:00:00Z"),
+      ),
+      isAllDay: false,
+    };
+    const stored = { ...toExistingEvent("colored-state", event), color: "#dc626d" };
+    const flushes: IngestionChanges[] = [];
+    const ingest = (eventColorsUnresolved: boolean) => ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.resolve({ eventColorsUnresolved, events: [event] }),
+      readExistingEvents: () => Promise.resolve([stored]),
+      flush: (changes) => {
+        flushes.push(changes);
+        return Promise.resolve();
+      },
+    });
+
+    await ingest(true);
+    expect(flushes).toEqual([]);
+
+    await ingest(false);
+    expect(flushes).toHaveLength(1);
+    expect(flushes[0]?.inserts[0]?.color).toBeUndefined();
+  });
+
   it("fetches before opening the persistence transaction", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const order: string[] = [];

@@ -93,28 +93,20 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
         }
 
-        if (changes.calendarColor !== globalThis.undefined) {
+        const calendarUpdate = {
+          ...(changes.calendarColor !== globalThis.undefined && { color: changes.calendarColor }),
+          ...(changes.coverage && {
+            ingestFutureRange: changes.coverage.futureRange,
+            ingestHistoricRange: changes.coverage.historicRange,
+            ingestWindowEnd: changes.coverage.window.timeMax,
+            ingestWindowRecordedAt: new Date(),
+            ingestWindowStart: changes.coverage.window.timeMin,
+          }),
+        };
+        if (Object.keys(calendarUpdate).length > 0) {
           await transaction
             .update(calendarsTable)
-            .set({ color: changes.calendarColor })
-            .where(
-              and(
-                eq(calendarsTable.id, calendarId),
-                sql`${calendarsTable.color} is distinct from ${changes.calendarColor}`,
-              ),
-            );
-        }
-
-        if (changes.coverage) {
-          await transaction
-            .update(calendarsTable)
-            .set({
-              ingestFutureRange: changes.coverage.futureRange,
-              ingestHistoricRange: changes.coverage.historicRange,
-              ingestWindowEnd: changes.coverage.window.timeMax,
-              ingestWindowRecordedAt: new Date(),
-              ingestWindowStart: changes.coverage.window.timeMin,
-            })
+            .set(calendarUpdate)
             .where(eq(calendarsTable.id, calendarId));
         }
       },

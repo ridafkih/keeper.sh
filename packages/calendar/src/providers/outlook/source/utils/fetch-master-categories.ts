@@ -5,14 +5,18 @@ import { buildTimeoutSignal } from "../../../../core/utils/fetch-with-timeout";
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const CACHE_TTL_MS = 600_000;
+const FAILURE_TTL_MS = 60_000;
 
 interface CategoryColorsCacheEntry {
-  colors: ReadonlyMap<string, string>;
+  colors: Promise<ReadonlyMap<string, string> | null>;
   expiresAt: number;
 }
 
-/* Token-keyed: the ingest loop carries no account handle, and one token maps to one account per run. */
+/* Keyed by token digest: the ingest loop carries no account handle, and bearer tokens must not outlive their request. */
 const categoryColorsCache = new Map<string, CategoryColorsCacheEntry>();
+
+const hashAccessToken = (accessToken: string): string =>
+  new Bun.CryptoHasher("sha256").update(accessToken).digest("hex");
 
 const fetchMasterCategoryColors = async (
   accessToken: string,
@@ -44,30 +48,37 @@ const fetchMasterCategoryColors = async (
   return colors;
 };
 
-const getMasterCategoryColors = async (
+const getMasterCategoryColors = (
   accessToken: string,
   signal?: AbortSignal,
 ): Promise<ReadonlyMap<string, string> | null> => {
   const now = Date.now();
-  for (const [token, entry] of categoryColorsCache) {
-    if (entry.expiresAt <= now) {
-      categoryColorsCache.delete(token);
+  for (const [key, expiring] of categoryColorsCache) {
+    if (expiring.expiresAt <= now) {
+      categoryColorsCache.delete(key);
     }
   }
 
-  const cached = categoryColorsCache.get(accessToken);
+  const cacheKey = hashAccessToken(accessToken);
+  const cached = categoryColorsCache.get(cacheKey);
   if (cached) {
     return cached.colors;
   }
 
-  try {
-    const colors = await fetchMasterCategoryColors(accessToken, signal);
-    categoryColorsCache.set(accessToken, { colors, expiresAt: now + CACHE_TTL_MS });
-    return colors;
-  } catch {
-    /* Colors are cosmetic; a categories failure must never fail the ingest. */
-    return null;
-  }
+  /* Colors are cosmetic; a categories failure must never fail the ingest. */
+  const entry: CategoryColorsCacheEntry = {
+    colors: fetchMasterCategoryColors(accessToken, signal).catch(() => {
+      if (signal?.aborted) {
+        categoryColorsCache.delete(cacheKey);
+      } else {
+        entry.expiresAt = Date.now() + FAILURE_TTL_MS;
+      }
+      return null;
+    }),
+    expiresAt: now + CACHE_TTL_MS,
+  };
+  categoryColorsCache.set(cacheKey, entry);
+  return entry.colors;
 };
 
 const clearMasterCategoryColorsCache = (): void => {

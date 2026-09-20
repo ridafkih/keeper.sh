@@ -5,9 +5,8 @@ import {
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { and, eq, isNotNull } from "drizzle-orm";
-import { resolveGoogleCalendarColor, resolveOutlookCalendarColor } from "@keeper.sh/calendar";
-import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
+import { listProviderCalendars } from "./list-provider-calendars";
+import type { ExternalCalendar } from "./list-provider-calendars";
 import {
   createSourceCalendarInsertDependencies,
   insertSourceCalendars,
@@ -22,17 +21,12 @@ class AccountNotFoundError extends Error {
   }
 }
 
-interface ExternalCalendar {
-  externalId: string;
-  name: string;
-  color: string | null;
-}
-
 interface ExistingCalendar {
   id: string;
   externalCalendarId: string | null;
   providerMissingSince: Date | null;
   createdAt: Date;
+  color?: string | null;
 }
 
 interface ReconciliationOptions {
@@ -58,6 +52,7 @@ interface ReconciliationPlan {
   toInsert: ExternalCalendar[];
   toMarkMissing: string[];
   toRestore: string[];
+  toSetColor: { id: string; color: string | null }[];
 }
 
 /**
@@ -81,10 +76,12 @@ const reconcileAccountCalendars = (
   options: ReconciliationOptions = {},
 ): ReconciliationPlan => {
   if (providerCalendars.length === 0 && existingCalendars.length > 0) {
-    return { toInsert: [], toMarkMissing: [], toRestore: [] };
+    return { toInsert: [], toMarkMissing: [], toRestore: [], toSetColor: [] };
   }
 
-  const providerExternalIds = new Set(providerCalendars.map((calendar) => calendar.externalId));
+  const providerColors = new Map(
+    providerCalendars.map((calendar) => [calendar.externalId, calendar.color]),
+  );
   const existingExternalIds = new Set(
     existingCalendars.map((calendar) => calendar.externalCalendarId),
   );
@@ -99,14 +96,19 @@ const reconcileAccountCalendars = (
 
   const toMarkMissing: string[] = [];
   const toRestore: string[] = [];
+  const toSetColor: ReconciliationPlan["toSetColor"] = [];
 
   for (const calendar of existingCalendars) {
     const stillPresent = calendar.externalCalendarId !== null
-      && providerExternalIds.has(calendar.externalCalendarId);
+      && providerColors.has(calendar.externalCalendarId);
 
     if (stillPresent) {
       if (calendar.providerMissingSince) {
         toRestore.push(calendar.id);
+      }
+      const color = providerColors.get(calendar.externalCalendarId ?? "") ?? null;
+      if (color !== (calendar.color ?? null)) {
+        toSetColor.push({ color, id: calendar.id });
       }
       continue;
     }
@@ -116,7 +118,7 @@ const reconcileAccountCalendars = (
     }
   }
 
-  return { toInsert, toMarkMissing, toRestore };
+  return { toInsert, toMarkMissing, toRestore, toSetColor };
 };
 
 const toRemovedExternalId = (externalCalendarId: string | null): string[] => {
@@ -149,31 +151,6 @@ const getValidAccessToken = async (
   }
 
   throw new Error(`No token refresh support for provider: ${credentials.provider}`);
-};
-
-const listProviderCalendars = async (
-  provider: string,
-  accessToken: string,
-): Promise<ExternalCalendar[]> => {
-  if (provider === "google") {
-    const calendars = await listGoogleCalendars(accessToken);
-    return calendars.map((calendar) => ({
-      color: resolveGoogleCalendarColor(calendar.backgroundColor),
-      externalId: calendar.id,
-      name: calendar.summary,
-    }));
-  }
-
-  if (provider === "outlook") {
-    const calendars = await listOutlookCalendars(accessToken);
-    return calendars.map((calendar) => ({
-      color: resolveOutlookCalendarColor(calendar.hexColor, calendar.color),
-      externalId: calendar.id,
-      name: calendar.name,
-    }));
-  }
-
-  throw new Error(`No calendar listing support for provider: ${provider}`);
 };
 
 const refreshAccountCalendars = async (
@@ -213,6 +190,7 @@ const refreshAccountCalendars = async (
 
   const existingCalendars = await database
     .select({
+      color: calendarsTable.color,
       createdAt: calendarsTable.createdAt,
       externalCalendarId: calendarsTable.externalCalendarId,
       id: calendarsTable.id,
@@ -238,7 +216,7 @@ const refreshAccountCalendars = async (
       ),
     );
 
-  const { toInsert, toMarkMissing, toRestore } = reconcileAccountCalendars(
+  const { toInsert, toMarkMissing, toRestore, toSetColor } = reconcileAccountCalendars(
     providerCalendars,
     existingCalendars,
     {
@@ -278,6 +256,13 @@ const refreshAccountCalendars = async (
       .update(calendarsTable)
       .set({ providerMissingSince: null })
       .where(eq(calendarsTable.id, calendarId));
+  }
+
+  for (const recolor of toSetColor) {
+    await database
+      .update(calendarsTable)
+      .set({ color: recolor.color })
+      .where(eq(calendarsTable.id, recolor.id));
   }
 
   return { imported: toInsert.length, missing: toMarkMissing.length, restored: toRestore.length };

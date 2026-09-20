@@ -355,10 +355,10 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
           });
         }
         const diagnosed = parseIcsEventsWithDiagnostics(calendar);
-        const rawCalendarColor = initialCalendar.nonStandard?.appleCalendarColor
-          ?? initialCalendar.nonStandard?.color;
         return {
-          calendarColor: (rawCalendarColor && resolveIcsColor(rawCalendarColor)) ?? null,
+          calendarColor: resolveIcsColor(initialCalendar.nonStandard?.appleCalendarColor)
+            ?? resolveIcsColor(initialCalendar.nonStandard?.color)
+            ?? null,
           calendarTimeZone: timeZone,
           normalized: normalizedIcal,
           parsed: diagnosed,

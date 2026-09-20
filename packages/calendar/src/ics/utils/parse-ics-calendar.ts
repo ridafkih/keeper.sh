@@ -37,7 +37,7 @@ const CALENDAR_NON_STANDARD_VALUES: ParseNonStandardValues<CalendarNonStandardVa
  * Property names start a physical line, so folded continuations cannot match.
  */
 const prefixRfc7986ColorProperties = (icsString: string): string =>
-  icsString.replaceAll(/(^|\r?\n)COLOR(?=[;:])/gi, "$1X-COLOR");
+  icsString.replaceAll(/(^|[\r\n])COLOR(?=[;:])/gi, "$1X-COLOR");
 
 const CALENDAR_BEGIN_PATTERN = /(?:^|[\r\n])BEGIN:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
 

@@ -94,14 +94,41 @@ describe("getMasterCategoryColors", () => {
     await expect(getMasterCategoryColors("token-1")).resolves.toBeNull();
   });
 
-  it("does not cache failures", async () => {
+  it("shares one in-flight fetch between concurrent callers", async () => {
     const requestedUrls: string[] = [];
+    globalThis.fetch = createFetchQueue([
+      Response.json({ value: [{ color: "preset7", displayName: "Blue" }] }),
+    ], requestedUrls);
+
+    const [first, second] = await Promise.all([
+      getMasterCategoryColors("token-1"),
+      getMasterCategoryColors("token-1"),
+    ]);
+
+    expect(requestedUrls).toHaveLength(1);
+    expect(first).toBe(second);
+  });
+
+  it("caches a failure briefly instead of refetching on every call", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = createFetchQueue([Response.json({}, { status: 403 })], requestedUrls);
+
+    expect(await getMasterCategoryColors("token-1")).toBeNull();
+    expect(await getMasterCategoryColors("token-1")).toBeNull();
+
+    expect(requestedUrls).toHaveLength(1);
+  });
+
+  it("does not cache a fetch its caller aborted", async () => {
+    const requestedUrls: string[] = [];
+    const controller = new AbortController();
     globalThis.fetch = createFetchQueue([
       Response.json({}, { status: 500 }),
       Response.json({ value: [{ color: "preset7", displayName: "Blue" }] }),
     ], requestedUrls);
 
-    expect(await getMasterCategoryColors("token-1")).toBeNull();
+    controller.abort();
+    expect(await getMasterCategoryColors("token-1", controller.signal)).toBeNull();
     const colors = await getMasterCategoryColors("token-1");
 
     expect(requestedUrls).toHaveLength(2);

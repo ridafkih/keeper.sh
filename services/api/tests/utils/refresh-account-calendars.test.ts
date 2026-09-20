@@ -111,4 +111,31 @@ describe("reconcileAccountCalendars", () => {
 
     expect(plan.toMarkMissing).toEqual(["cal-1"]);
   });
+
+  it("recolors a present calendar whose provider color changed", () => {
+    const plan = reconcileAccountCalendars(
+      [
+        { color: "#7986cb", externalId: "ext-1", name: "Recolored" },
+        { color: "#33b679", externalId: "ext-2", name: "Same" },
+      ],
+      [
+        {
+          color: null,
+          createdAt: new Date("2026-01-01"),
+          externalCalendarId: "ext-1",
+          id: "cal-1",
+          providerMissingSince: null,
+        },
+        {
+          color: "#33b679",
+          createdAt: new Date("2026-01-01"),
+          externalCalendarId: "ext-2",
+          id: "cal-2",
+          providerMissingSince: null,
+        },
+      ],
+    );
+
+    expect(plan.toSetColor).toEqual([{ color: "#7986cb", id: "cal-1" }]);
+  });
 });

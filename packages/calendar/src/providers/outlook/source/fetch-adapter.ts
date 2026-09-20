@@ -80,6 +80,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
         unrepresentable: parsed.unrepresentableCount,
       },
       selfAuthoredEventCount: parsed.selfAuthoredCount,
+      ...(hasCategorizedEvents && !categoryColors && { eventColorsUnresolved: true }),
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

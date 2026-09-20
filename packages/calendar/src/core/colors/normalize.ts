@@ -7,6 +7,14 @@ import {
 
 const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 
+/* Keys are provider- or feed-controlled, so inherited members like "constructor" must not resolve. */
+const lookupOwn = <Value>(table: Record<string, Value>, key: string): Value | undefined => {
+  if (!Object.hasOwn(table, key)) {
+    return;
+  }
+  return table[key];
+};
+
 const normalizeHexColor = (value: string): string | null => {
   const trimmed = value.trim().toLowerCase();
   if (!trimmed.startsWith("#")) {
@@ -31,14 +39,14 @@ const resolveIcsColor = (value: string | undefined): string | undefined => {
     return;
   }
   const trimmed = value.trim();
-  return normalizeHexColor(trimmed) ?? CSS_NAMED_COLORS[trimmed.toLowerCase()];
+  return normalizeHexColor(trimmed) ?? lookupOwn(CSS_NAMED_COLORS, trimmed.toLowerCase());
 };
 
 const resolveGoogleEventColor = (colorId: string | undefined): string | undefined => {
   if (!colorId) {
     return;
   }
-  return GOOGLE_EVENT_COLORS[colorId];
+  return lookupOwn(GOOGLE_EVENT_COLORS, colorId);
 };
 
 const resolveGoogleCalendarColor = (backgroundColor: string | undefined): string | null => {
@@ -54,7 +62,7 @@ const resolveOutlookCategoryColor = (
   if (!preset) {
     return;
   }
-  return OUTLOOK_PRESET_COLORS[preset];
+  return lookupOwn(OUTLOOK_PRESET_COLORS, preset);
 };
 
 const resolveOutlookCalendarColor = (
@@ -67,7 +75,7 @@ const resolveOutlookCalendarColor = (
       return normalized;
     }
   }
-  return (colorName && OUTLOOK_CALENDAR_ENUM_COLORS[colorName]) || null;
+  return (colorName && lookupOwn(OUTLOOK_CALENDAR_ENUM_COLORS, colorName)) || null;
 };
 
 const resolveCalDAVCalendarColor = (calendarColor: unknown): string | null => {
