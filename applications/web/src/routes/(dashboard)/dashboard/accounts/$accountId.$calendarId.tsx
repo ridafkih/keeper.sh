@@ -13,6 +13,7 @@ import { MenuHint, PremiumHint, PremiumGate } from "@/components/ui/primitives/m
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
+import { CalendarColorDot } from "@/features/dashboard/components/calendar-color-dot";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -52,6 +53,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { TemplateText } from "@/components/ui/primitives/template-text";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import {
+  calendarColorAtom,
   calendarDetailAtom,
   calendarDetailLoadedAtom,
   calendarDetailErrorAtom,
@@ -336,12 +338,14 @@ function CalendarPrevNext({ calendarId }: { calendarId: string }) {
 function CalendarHeader({ account }: { account: CalendarAccount }) {
   const provider = useAtomValue(calendarProviderAtom);
   const calendarType = useAtomValue(calendarTypeAtom);
+  const color = useAtomValue(calendarColorAtom);
 
   return (
     <div className="flex flex-col px-0.5 pt-4">
       <CalendarTitle />
       <div className="flex items-center gap-1.5 pt-0.5">
         <ProviderIcon provider={provider} calendarType={calendarType} size={14} />
+        <CalendarColorDot color={color} />
         <Text className="truncate overflow-hidden" size="sm" tone="muted">{account.accountLabel}</Text>
       </div>
     </div>

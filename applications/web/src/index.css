@@ -11,6 +11,23 @@
   );
 }
 
+/* Unlayered so it outranks the blue preset's utilities; engines without relative colours keep the preset. */
+@supports (color: oklch(from red l c h)) {
+  .event-tint {
+    --event-accent: oklch(from var(--event-color) clamp(0.55, l, 0.82) c h);
+    --event-surface: color-mix(in oklab, var(--event-accent) 16%, var(--color-background));
+    --event-ink: oklch(from var(--event-color) 0.32 min(c, 0.1) h);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .event-tint {
+      --event-accent: oklch(from var(--event-color) clamp(0.62, l, 0.85) c h);
+      --event-surface: color-mix(in oklab, var(--event-accent) 22%, var(--color-background));
+      --event-ink: oklch(from var(--event-color) 0.92 min(c, 0.06) h);
+    }
+  }
+}
+
 /* Height bands for grid event cards (48px hour); each floor sits 1px under its band's content height. */
 @custom-variant event-compact (@container event-card (height < 27px));
 @custom-variant event-short (@container event-card (height < 43px));

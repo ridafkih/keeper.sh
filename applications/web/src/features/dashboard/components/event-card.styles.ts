@@ -1,4 +1,6 @@
+import type { CSSProperties } from "react";
 import { cn } from "@/utils/cn";
+import type { CalendarEvent } from "@/hooks/use-events";
 
 export const EVENT_COLORS = {
   blue: cn(
@@ -7,4 +9,18 @@ export const EVENT_COLORS = {
   ),
 };
 
-export type EventColor = keyof typeof EVENT_COLORS;
+interface EventTint {
+  className: string;
+  style: CSSProperties | undefined;
+}
+
+export const resolveEventColor = (event: Pick<CalendarEvent, "color" | "calendarColor">): string | null =>
+  event.color ?? event.calendarColor;
+
+export const resolveEventTint = (hex: string | null): EventTint => {
+  if (!hex) return { className: EVENT_COLORS.blue, style: undefined };
+  return {
+    className: cn(EVENT_COLORS.blue, "event-tint"),
+    style: { "--event-color": hex } as CSSProperties,
+  };
+};
