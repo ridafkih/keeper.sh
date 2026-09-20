@@ -288,13 +288,12 @@ function CalendarsMenu() {
             <NavigationMenuItemIcon>
               <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
             </NavigationMenuItemIcon>
-            <CalendarColorDot color={calendar.color} className="-mx-1" />
-            <NavigationMenuItemLabel
-              className="shrink-0"
-              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
-            >
-              {calendar.name}
-            </NavigationMenuItemLabel>
+            <span className="flex shrink-0 items-center gap-2">
+              <CalendarColorDot color={calendar.color} className={calendar.unavailableSince ? "opacity-40" : undefined} />
+              <NavigationMenuItemLabel tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}>
+                {calendar.name}
+              </NavigationMenuItemLabel>
+            </span>
             <NavigationMenuItemTrailing
               className="overflow-hidden"
               indicator={

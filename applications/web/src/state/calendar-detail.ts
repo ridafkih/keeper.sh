@@ -9,7 +9,6 @@ export const calendarDetailErrorAtom = atom<Error | null>(null);
 export const calendarNameAtom = selectAtom(calendarDetailAtom, (detail) => detail?.name ?? "");
 export const calendarProviderAtom = selectAtom(calendarDetailAtom, (detail) => detail?.provider ?? "");
 export const calendarTypeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.calendarType ?? "");
-export const calendarColorAtom = selectAtom(calendarDetailAtom, (detail) => detail?.color ?? null);
 export const customEventNameAtom = selectAtom(calendarDetailAtom, (detail) => detail?.customEventName ?? "");
 
 export const excludeEventNameAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeEventName ?? false);

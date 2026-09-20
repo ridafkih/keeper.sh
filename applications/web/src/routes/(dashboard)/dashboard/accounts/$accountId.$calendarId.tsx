@@ -53,7 +53,6 @@ import { Text } from "@/components/ui/primitives/text";
 import { TemplateText } from "@/components/ui/primitives/template-text";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import {
-  calendarColorAtom,
   calendarDetailAtom,
   calendarDetailLoadedAtom,
   calendarDetailErrorAtom,
@@ -169,7 +168,7 @@ function CalendarDetailPage() {
           <BackButton fallback={`/dashboard/accounts/${accountId}`} />
           <CalendarPrevNext calendarId={calendarId} />
         </div>
-        <CalendarHeader account={account} />
+        <CalendarHeader account={account} color={calendar.color} />
       </StickyPageHeader>
       <PageBody className="gap-1.5">
         <ReauthNotice account={account} />
@@ -335,10 +334,9 @@ function CalendarPrevNext({ calendarId }: { calendarId: string }) {
   );
 }
 
-function CalendarHeader({ account }: { account: CalendarAccount }) {
+function CalendarHeader({ account, color }: { account: CalendarAccount; color: string | null }) {
   const provider = useAtomValue(calendarProviderAtom);
   const calendarType = useAtomValue(calendarTypeAtom);
-  const color = useAtomValue(calendarColorAtom);
 
   return (
     <div className="flex flex-col px-0.5 pt-4">

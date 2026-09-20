@@ -11,12 +11,29 @@
   );
 }
 
-/* Unlayered so it outranks the blue preset's utilities; engines without relative colours keep the preset. */
-@supports (color: oklch(from red l c h)) {
+/* The blue preset doubles as the tint's fallback; the tint below wins by source order alone. */
+.event-blue,
+.event-tint {
+  --event-ink: var(--color-blue-900);
+  --event-surface: var(--color-blue-100);
+  --event-accent: var(--color-blue-500);
+}
+
+@media (prefers-color-scheme: dark) {
+  .event-blue,
+  .event-tint {
+    --event-ink: var(--color-blue-100);
+    --event-surface: color-mix(in srgb, var(--color-blue-500) 20%, var(--color-background));
+    --event-accent: var(--color-blue-400);
+  }
+}
+
+/* Probes the exact shape used: early relative-colour engines pass a bare `from` yet reject math on channels. */
+@supports (color: oklch(from red clamp(0.5, l, 0.8) min(c, 0.1) h)) {
   .event-tint {
     --event-accent: oklch(from var(--event-color) clamp(0.55, l, 0.82) c h);
     --event-surface: color-mix(in oklab, var(--event-accent) 16%, var(--color-background));
-    --event-ink: oklch(from var(--event-color) 0.32 min(c, 0.1) h);
+    --event-ink: oklch(from var(--event-color) 0.28 min(c, 0.1) h);
   }
 
   @media (prefers-color-scheme: dark) {

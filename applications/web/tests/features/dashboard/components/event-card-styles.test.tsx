@@ -4,7 +4,7 @@ import type { CalendarEvent } from "../../../../src/hooks/use-events";
 import { CalendarColorDot } from "../../../../src/features/dashboard/components/calendar-color-dot";
 import { EventCard, EventPill } from "../../../../src/features/dashboard/components/event-card";
 import {
-  EVENT_COLORS,
+  EVENT_BLUE,
   resolveEventColor,
   resolveEventTint,
 } from "../../../../src/features/dashboard/components/event-card.styles";
@@ -40,14 +40,20 @@ describe("resolveEventColor", () => {
 });
 
 describe("resolveEventTint", () => {
-  it("tints from the hex over the blue preset", () => {
+  it("tints from the hex instead of the blue preset", () => {
     const tint = resolveEventTint("#33b679");
-    expect(tint.className).toBe(`${EVENT_COLORS.blue} event-tint`);
+    expect(tint.className).toBe("event-tint");
     expect(tint.style).toEqual({ "--event-color": "#33b679" });
   });
 
   it("leaves a colourless event on the blue preset", () => {
-    expect(resolveEventTint(null)).toEqual({ className: EVENT_COLORS.blue, style: undefined });
+    expect(resolveEventTint(null)).toEqual({ className: EVENT_BLUE, style: undefined });
+  });
+
+  it("keeps the blue preset for anything that is not a six-digit hex", () => {
+    for (const color of ["preset7", "none", "#fff", "rebeccapurple", ""]) {
+      expect(resolveEventTint(color)).toEqual({ className: EVENT_BLUE, style: undefined });
+    }
   });
 });
 
