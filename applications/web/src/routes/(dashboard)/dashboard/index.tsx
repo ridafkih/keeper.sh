@@ -287,14 +287,11 @@ function CalendarsMenu() {
             <NavigationMenuItemIcon>
               <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel
-              className="shrink-0"
-              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
-            >
+            <NavigationMenuItemLabel tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}>
               {calendar.name}
             </NavigationMenuItemLabel>
             <NavigationMenuItemTrailing
-              className="overflow-hidden"
+              className="basis-5 shrink-0 overflow-hidden"
               indicator={
                 reauthIds.has(calendar.accountId)
                   ? <TriangleAlert size={15} className="shrink-0 text-attention" />
