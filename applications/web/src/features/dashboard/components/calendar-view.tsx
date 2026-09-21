@@ -12,12 +12,11 @@ import { WeekGrid } from "./week-grid";
 import { bucketEventsByDay } from "./event-layout";
 import {
   addDays,
-  addMonths,
+  addMonthsClamped,
   formatMonthTitle,
   formatWeekTitle,
   getMonthFetchRange,
   getWeekFetchRange,
-  startOfMonth,
 } from "./calendar-helpers";
 
 type CalendarViewMode = "week" | "month";
@@ -69,9 +68,7 @@ export function CalendarView() {
 
   const step = (direction: 1 | -1) => {
     setAnchor((current) =>
-      view === "month"
-        ? addMonths(startOfMonth(current), direction)
-        : addDays(current, direction * 7),
+      view === "month" ? addMonthsClamped(current, direction) : addDays(current, direction * 7),
     );
   };
 

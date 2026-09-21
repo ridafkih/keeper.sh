@@ -2,19 +2,19 @@ import { describe, expect, it } from "vitest";
 import {
   addDays,
   addMonths,
+  addMonthsClamped,
+  DAYS_PER_WEEK,
   getMonthFetchRange,
   getMonthViewFocusDay,
   getWeekFetchRange,
   isSameMonth,
   MONTH_VIEW_ROWS,
-  startOfMonth,
+  MS_PER_DAY,
   startOfMonthGrid,
   startOfVisibleWeek,
   WEEK_STARTS_ON,
   WEEK_VIEW_DAYS,
 } from "../../../../src/features/dashboard/components/calendar-helpers";
-
-const MS_PER_DAY = 86_400_000;
 
 const visibleDays = (anchor: Date): Date[] =>
   Array.from({ length: WEEK_VIEW_DAYS }, (_, index) => addDays(startOfVisibleWeek(anchor), index));
@@ -51,7 +51,7 @@ describe("getWeekFetchRange", () => {
 // Two years of months cover daylight-saving changes and a year boundary.
 const MONTHS = Array.from({ length: 24 }, (_, index) => new Date(2026, index, 1));
 
-const MONTH_VIEW_DAYS = MONTH_VIEW_ROWS * 7;
+const MONTH_VIEW_DAYS = MONTH_VIEW_ROWS * DAYS_PER_WEEK;
 
 describe("getMonthFetchRange", () => {
   it("starts and ends at midnight on the first weekday", () => {
@@ -80,12 +80,12 @@ describe("getMonthFetchRange", () => {
     expect(uncovered).toEqual([]);
   });
 
-  it("holds still for every anchor within a month", () => {
+  it("holds still for every anchor within a quarter", () => {
     const moved: string[] = [];
-    for (const month of MONTHS) {
-      const expected = getMonthFetchRange(month);
-      const next = addMonths(month, 1);
-      for (let anchor = month; anchor < next; anchor = addDays(anchor, 1)) {
+    for (const quarter of MONTHS.filter((month) => month.getMonth() % 3 === 0)) {
+      const expected = getMonthFetchRange(quarter);
+      const next = addMonths(quarter, 3);
+      for (let anchor = quarter; anchor < next; anchor = addDays(anchor, 1)) {
         const range = getMonthFetchRange(anchor);
         if (
           range.start.getTime() !== expected.start.getTime() ||
@@ -119,10 +119,19 @@ describe("getMonthViewFocusDay", () => {
   });
 });
 
-describe("startOfMonth", () => {
-  it("lets a month step from the 31st land on the next month", () => {
-    const next = addMonths(startOfMonth(new Date(2026, 0, 31)), 1);
+describe("addMonthsClamped", () => {
+  it("keeps the day of the month", () => {
+    expect(addMonthsClamped(new Date(2026, 8, 21), 1).toDateString()).toBe(
+      new Date(2026, 9, 21).toDateString(),
+    );
+  });
 
-    expect([next.getFullYear(), next.getMonth()]).toEqual([2026, 1]);
+  it("holds the 31st to a shorter month's last day instead of skipping the month", () => {
+    expect(addMonthsClamped(new Date(2026, 0, 31), 1).toDateString()).toBe(
+      new Date(2026, 1, 28).toDateString(),
+    );
+    expect(addMonthsClamped(new Date(2026, 2, 31), -1).toDateString()).toBe(
+      new Date(2026, 1, 28).toDateString(),
+    );
   });
 });

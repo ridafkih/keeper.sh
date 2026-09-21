@@ -1,6 +1,10 @@
 /** 0 = Sunday, as `Date#getDay`. */
 export const WEEK_STARTS_ON = 0;
 
+export const MS_PER_DAY = 86_400_000;
+
+export const DAYS_PER_WEEK = 7;
+
 export const MONTH_VIEW_ROWS = 6;
 
 export const WEEK_VIEW_DAYS = 7;
@@ -15,6 +19,17 @@ export function startOfMonth(date: Date): Date {
 
 export function addMonths(date: Date, months: number): Date {
   return new Date(date.getFullYear(), date.getMonth() + months, date.getDate());
+}
+
+/** `day` of `month`, held to the month's last day (the 31st of a 30-day month is its 30th). */
+export function withDayOfMonth(month: Date, day: number): Date {
+  const lastDay = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  return new Date(month.getFullYear(), month.getMonth(), Math.min(day, lastDay));
+}
+
+/** `addMonths` that keeps the day of the month instead of overflowing into the month after. */
+export function addMonthsClamped(date: Date, months: number): Date {
+  return withDayOfMonth(addMonths(startOfMonth(date), months), date.getDate());
 }
 
 export function addDays(date: Date, days: number): Date {
@@ -50,7 +65,7 @@ export function startOfMonthGrid(anchor: Date): Date {
 
 /** Middle of the month view's visible days; its month is the one filling most of the viewport. */
 export function getMonthViewFocusDay(topWeekStart: Date): Date {
-  return addDays(topWeekStart, (MONTH_VIEW_ROWS * 7) / 2 - 1);
+  return addDays(topWeekStart, (MONTH_VIEW_ROWS * DAYS_PER_WEEK) / 2 - 1);
 }
 
 export const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, index) => {
@@ -88,12 +103,18 @@ export function getWeekFetchRange(anchor: Date): { start: Date; end: Date } {
   return { start, end: addDays(start, FETCH_WEEKS * 7) };
 }
 
-/** Half-open `[start, end)` over the classic layouts of the months either side, so the window holds still while rows scroll and a ±1-month page stays inside it while the next loads. */
+const FETCH_MONTHS = 3;
+
+/** Half-open `[start, end)` over a fixed quarter and the classic layouts of the months either side of it, so the window holds still while rows and months scroll, and a ±1-month page stays inside it while the next loads. */
 export function getMonthFetchRange(anchor: Date): { start: Date; end: Date } {
-  const month = startOfMonth(anchor);
+  const quarterMonth = Math.floor(anchor.getMonth() / FETCH_MONTHS) * FETCH_MONTHS;
+  const quarter = new Date(anchor.getFullYear(), quarterMonth, 1);
   return {
-    start: startOfMonthGrid(addMonths(month, -1)),
-    end: addDays(startOfMonthGrid(addMonths(month, 1)), MONTH_VIEW_ROWS * 7),
+    start: startOfMonthGrid(addMonths(quarter, -1)),
+    end: addDays(
+      startOfMonthGrid(addMonths(quarter, FETCH_MONTHS)),
+      MONTH_VIEW_ROWS * DAYS_PER_WEEK,
+    ),
   };
 }
 

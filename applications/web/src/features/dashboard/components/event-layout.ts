@@ -1,9 +1,8 @@
 import type { CalendarEvent } from "@/hooks/use-events";
-import { addDays, startOfDay } from "./calendar-helpers";
+import { addDays, MS_PER_DAY, startOfDay } from "./calendar-helpers";
 
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_DAY = 24 * 60;
-const MS_PER_DAY = 86_400_000;
 
 /** Floors the time geometry, so overlap and lane decisions see the same box the user does. */
 export const MIN_EVENT_SPAN_MS = 15 * MS_PER_MINUTE;

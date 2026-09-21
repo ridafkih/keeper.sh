@@ -1,6 +1,5 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
@@ -9,23 +8,35 @@ import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
 import {
   addDays,
+  DAYS_PER_WEEK,
   getMonthViewFocusDay,
   isSameDay,
   isSameMonth,
   MONTH_VIEW_ROWS,
+  MS_PER_DAY,
   startOfMonthGrid,
   WEEKDAY_LABELS,
+  withDayOfMonth,
 } from "./calendar-helpers";
 import { EventPill, EventPillOverflow } from "./event-card";
 import { EVENT_PILL_GAP_PX, resolvePillRows, resolveVisiblePillCount } from "./event-layout";
 import type { DayEvents } from "./event-layout";
+import { useStripRealign } from "./use-strip-realign";
+import { resolveWheelNotches, TRACKPAD_GESTURE_MS } from "./wheel-notches";
 
-const COLUMNS = 7;
+const COLUMNS = DAYS_PER_WEEK;
 const VISIBLE_ROWS = MONTH_VIEW_ROWS;
-/** Weeks buffered on each side of the entry month, so the strip scrolls without recentering logic. */
+/** Weeks buffered on each side of the month the strip was built around. */
 const BUFFER_WEEKS = 52;
+const LAST_INDEX = BUFFER_WEEKS * 2;
 
-const MS_PER_WEEK = 7 * 86_400_000;
+const MS_PER_WEEK = DAYS_PER_WEEK * MS_PER_DAY;
+
+const resolveStripStart = (anchor: Date): Date =>
+  addDays(startOfMonthGrid(anchor), -BUFFER_WEEKS * DAYS_PER_WEEK);
+
+const resolveStripIndex = (stripStart: Date, anchor: Date): number =>
+  Math.round((startOfMonthGrid(anchor).getTime() - stripStart.getTime()) / MS_PER_WEEK);
 
 const RULE = "var(--color-border-elevated) calc(100% - 1px)";
 
@@ -44,14 +55,6 @@ const resolveRowRules = (rows: number): CSSProperties => ({
 
 // One stable identity, so the memoised cells don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
-
-// Rows a notched wheel asks for, or 0 for a trackpad: trackpads report `wheelDeltaY` as -3 × `deltaY`, a wheel whole 120s (or lines, in Firefox).
-const resolveWheelNotches = (event: WheelEvent): number => {
-  const { wheelDeltaY = 0 } = event as WheelEvent & { wheelDeltaY?: number };
-  const notched = wheelDeltaY !== 0 && wheelDeltaY % 120 === 0 && wheelDeltaY !== event.deltaY * -3;
-  if (notched) return -wheelDeltaY / 120;
-  return event.deltaMode === 0 ? 0 : Math.sign(event.deltaY);
-};
 
 const formatDayLabel = (day: Date): string =>
   day.getDate() === 1
@@ -115,10 +118,14 @@ interface MonthGridProps {
 
 export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: MonthGridProps) {
   const today = useStartOfToday();
-  const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const mountedRef = useRef(false);
+  /** Strip the scroll position belongs to; a rebuilt strip is jumped to, not scrolled to. */
+  const alignedStripRef = useRef<Date[][] | null>(null);
+  /** When a wheel event last looked like a trackpad's; whole 120s right after it are still that gesture. */
+  const trackpadAtRef = useRef(Number.NEGATIVE_INFINITY);
+  // Only a notched wheel needs a cancellable listener; a passive one keeps trackpad scrolling off the main thread.
+  const [notchedWheel, setNotchedWheel] = useState(false);
   const anchorRef = useRef(anchor);
   /** Top row the strip is aligned to; what a resize or a replayed router offset snaps back to. */
   const alignedIndexRef = useRef<number | null>(null);
@@ -130,13 +137,19 @@ export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: Mont
   const pendingIndexRef = useRef<number | null>(null);
   const [pillRows, setPillRows] = useState(0);
 
-  const [stripWeeks] = useState(() => {
-    const start = addDays(startOfMonthGrid(anchor), -BUFFER_WEEKS * 7);
-    return Array.from({ length: BUFFER_WEEKS * 2 + VISIBLE_ROWS }, (_, index) =>
-      Array.from({ length: COLUMNS }, (_, column) => addDays(start, index * 7 + column)),
-    );
-  });
-  const lastIndex = stripWeeks.length - VISIBLE_ROWS;
+  const [stripStart, setStripStart] = useState(() => resolveStripStart(anchor));
+  const anchorIndex = resolveStripIndex(stripStart, anchor);
+  // The toolbar pages without limit; a month past the buffer gets a strip of its own.
+  if (anchorIndex < 0 || anchorIndex > LAST_INDEX) setStripStart(resolveStripStart(anchor));
+  const stripWeeks = useMemo(
+    () =>
+      Array.from({ length: LAST_INDEX + VISIBLE_ROWS }, (_, index) =>
+        Array.from({ length: COLUMNS }, (_, column) =>
+          addDays(stripStart, index * DAYS_PER_WEEK + column),
+        ),
+      ),
+    [stripStart],
+  );
 
   const observePillArea = useCallback((pillArea: HTMLDivElement | null) => {
     if (!pillArea || typeof ResizeObserver === "undefined") return;
@@ -155,62 +168,46 @@ export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: Mont
 
   const resolveIndex = useCallback(
     (el: HTMLDivElement) =>
-      Math.max(0, Math.min(Math.round(el.scrollTop / rowHeight()), lastIndex)),
-    [lastIndex, rowHeight],
+      Math.max(0, Math.min(Math.round(el.scrollTop / rowHeight()), LAST_INDEX)),
+    [rowHeight],
   );
 
   const scrollToIndex = useCallback(
     (index: number, behavior: ScrollBehavior) => {
       const el = scrollerRef.current;
       if (!el) return;
-      const clamped = Math.max(0, Math.min(index, lastIndex));
+      const clamped = Math.max(0, Math.min(index, LAST_INDEX));
       const moving = behavior === "smooth" && clamped !== resolveIndex(el);
       pendingIndexRef.current = moving ? clamped : null;
       alignedIndexRef.current = clamped;
       alignedHeightRef.current = el.clientHeight;
       el.scrollTo({ top: clamped * rowHeight(), behavior });
     },
-    [lastIndex, resolveIndex, rowHeight],
+    [resolveIndex, rowHeight],
   );
 
-  // Mount: jump to the anchor's month; afterwards, smooth-scroll on anchor moves the strip didn't report itself.
+  // A fresh strip is jumped to; afterwards, smooth-scroll on anchor moves the strip didn't report itself.
   useLayoutEffect(() => {
     anchorRef.current = anchor;
-    const gridStart = startOfMonthGrid(anchor);
-    const index = Math.round((gridStart.getTime() - stripWeeks[0][0].getTime()) / MS_PER_WEEK);
-    if (!mountedRef.current) {
-      mountedRef.current = true;
-      scrollToIndex(index, "auto");
+    if (anchorIndex < 0 || anchorIndex > LAST_INDEX) return;
+    if (alignedStripRef.current !== stripWeeks) {
+      alignedStripRef.current = stripWeeks;
+      scrollToIndex(anchorIndex, "auto");
       return;
     }
-    if (anchor.getTime() !== reportedAnchorMsRef.current) scrollToIndex(index, "smooth");
-  }, [anchor, scrollToIndex, stripWeeks]);
+    if (anchor.getTime() === reportedAnchorMsRef.current) {
+      reportedAnchorMsRef.current = null;
+      return;
+    }
+    scrollToIndex(anchorIndex, "smooth");
+  }, [anchor, anchorIndex, scrollToIndex, stripWeeks]);
 
-  // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
-  useEffect(
-    () =>
-      router.subscribe("onRendered", () => {
-        if (alignedIndexRef.current !== null) scrollToIndex(alignedIndexRef.current, "auto");
-      }),
-    [router, scrollToIndex],
-  );
-
-  // Row heights follow the scroller's height, so a resize would drift the strip; re-snap to the aligned row.
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const height = el.clientHeight;
-      if (height === 0 || height === alignedHeightRef.current) return;
-      if (alignedIndexRef.current === null) {
-        alignedHeightRef.current = height;
-        return;
-      }
-      scrollToIndex(alignedIndexRef.current, "auto");
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
+  const realign = useCallback(() => {
+    if (alignedIndexRef.current === null) return false;
+    scrollToIndex(alignedIndexRef.current, "auto");
+    return true;
   }, [scrollToIndex]);
+  useStripRealign({ scrollerRef, alignedSizeRef: alignedHeightRef, axis: "y", realign });
 
   const handleScroll = () => {
     if (rafRef.current !== null) return;
@@ -228,9 +225,11 @@ export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: Mont
       alignedIndexRef.current = index;
       const focusDay = getMonthViewFocusDay(stripWeeks[index][0]);
       if (isSameMonth(focusDay, anchorRef.current)) return;
-      anchorRef.current = focusDay;
-      reportedAnchorMsRef.current = focusDay.getTime();
-      onAnchorChange(focusDay);
+      // The day of the month carries over, so dropping into the week view lands where the user was.
+      const reported = withDayOfMonth(focusDay, anchorRef.current.getDate());
+      anchorRef.current = reported;
+      reportedAnchorMsRef.current = reported.getTime();
+      onAnchorChange(reported);
     });
   };
 
@@ -250,18 +249,24 @@ export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: Mont
     const el = scrollerRef.current;
     if (!el) return;
     const handleWheel = (event: WheelEvent) => {
-      const notches = event.ctrlKey ? 0 : resolveWheelNotches(event);
+      const inTrackpadGesture = event.timeStamp - trackpadAtRef.current < TRACKPAD_GESTURE_MS;
+      const notches = resolveWheelNotches(event, inTrackpadGesture);
       if (notches === 0) {
+        trackpadAtRef.current = event.timeStamp;
         pendingIndexRef.current = null;
+        setNotchedWheel(false);
         return;
       }
-      event.preventDefault();
+      setNotchedWheel(true);
+      if (notchedWheel) event.preventDefault();
+      // The first notch arrives uncancellable: one long enough to snap forward by itself is left to do so.
+      else if (Math.abs(event.deltaY) >= rowHeight() / 2) return;
       const from = pendingIndexRef.current ?? resolveIndex(el);
       scrollToIndex(from + notches, "smooth");
     };
-    el.addEventListener("wheel", handleWheel, { passive: false });
+    el.addEventListener("wheel", handleWheel, { passive: !notchedWheel });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, [resolveIndex, scrollToIndex]);
+  }, [notchedWheel, resolveIndex, rowHeight, scrollToIndex]);
 
   useEffect(
     () => () => {
@@ -289,20 +294,21 @@ export function MonthGrid({ anchor, eventsByDay, onAnchorChange, toolbar }: Mont
         </div>
       }
     >
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Vertical fade at the bottom only; a top fade would wash out the band the header dissolves into. */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 mask-b-from-[calc(100%-24px)] mask-x-from-[calc(100%-24px)]"
           style={COLUMN_RULES}
         />
+        {/* A pixel taller than its clip, so the bottom row's rule is cut off rather than doubling the frame's border. */}
         <div
           ref={scrollerRef}
           onScroll={handleScroll}
           onScrollEnd={handleScrollEnd}
-          onPointerDown={releasePending}
+          onTouchMove={releasePending}
           onKeyDown={releasePending}
-          className="relative min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="relative -mb-px min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-y-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <div
             className="relative grid"

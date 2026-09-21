@@ -20,7 +20,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { ApiEventSummary } from "@/types/api";
-import { addDays, startOfDay } from "./calendar-helpers";
+import { addDays, MS_PER_DAY, startOfDay } from "./calendar-helpers";
 import { periodFill, resolvePeriod } from "./density-period";
 import type { Period } from "./density-period";
 
@@ -28,8 +28,6 @@ const GRAPH_HEIGHT = 96;
 const MIN_BAR_HEIGHT = 20;
 /** The layout's `lg:` gate on the calendar column; below it a bar has nothing to jump. */
 const CALENDAR_VISIBLE_QUERY = "(min-width: 64rem)";
-
-const MS_PER_DAY = 86_400_000;
 
 const buildGraphUrl = (todayStart: Date): string => {
   const from = addDays(todayStart, -EVENT_GRAPH_DAYS_BEFORE);
