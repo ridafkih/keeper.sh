@@ -287,25 +287,36 @@ function CalendarsMenu() {
             <NavigationMenuItemIcon>
               <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}>
+            <NavigationMenuItemLabel
+              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
+              title={calendar.name}
+            >
               {calendar.name}
             </NavigationMenuItemLabel>
             <NavigationMenuItemTrailing
-              className="basis-5 shrink-0 overflow-hidden"
+              className="shrink-0 overflow-hidden"
               indicator={
                 reauthIds.has(calendar.accountId)
                   ? <TriangleAlert size={15} className="shrink-0 text-attention" />
                   : undefined
               }
             >
-              <Text
-                size="sm"
-                tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
-                align="right"
-                className="flex-1 min-w-0 truncate"
-              >
-                {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
-              </Text>
+              {calendar.unavailableSince ? (
+                <Text size="sm" tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}>
+                  Unavailable
+                </Text>
+              ) : (
+                <div className="@container w-0 grow">
+                  <Text
+                    size="sm"
+                    tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
+                    align="right"
+                    className="truncate @max-[3rem]:hidden"
+                  >
+                    {calendar.accountLabel}
+                  </Text>
+                </div>
+              )}
             </NavigationMenuItemTrailing>
           </NavigationMenuLinkItem>
         ))}
