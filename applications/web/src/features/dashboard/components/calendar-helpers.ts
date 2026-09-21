@@ -1,7 +1,7 @@
 /** 0 = Sunday, as `Date#getDay`. */
 export const WEEK_STARTS_ON = 0;
 
-const GRID_CELLS = 42;
+export const MONTH_VIEW_ROWS = 6;
 
 export const WEEK_VIEW_DAYS = 7;
 
@@ -43,17 +43,14 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-export function getMonthGridDays(anchor: Date): Date[] {
-  const monthStart = startOfMonth(anchor);
-  const leadingDays = (monthStart.getDay() - WEEK_STARTS_ON + 7) % 7;
-  const gridStart = new Date(
-    monthStart.getFullYear(),
-    monthStart.getMonth(),
-    monthStart.getDate() - leadingDays,
-  );
-  return Array.from({ length: GRID_CELLS }, (_, index) => {
-    return new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + index);
-  });
+/** Top row of the month's classic layout: the week holding the 1st. */
+export function startOfMonthGrid(anchor: Date): Date {
+  return startOfWeek(startOfMonth(anchor));
+}
+
+/** Middle of the month view's visible days; its month is the one filling most of the viewport. */
+export function getMonthViewFocusDay(topWeekStart: Date): Date {
+  return addDays(topWeekStart, (MONTH_VIEW_ROWS * 7) / 2 - 1);
 }
 
 export const WEEKDAY_LABELS = Array.from({ length: 7 }, (_, index) => {
@@ -91,10 +88,13 @@ export function getWeekFetchRange(anchor: Date): { start: Date; end: Date } {
   return { start, end: addDays(start, FETCH_WEEKS * 7) };
 }
 
-/** Half-open `[start, end)` covering exactly the 6×7 grid's days. */
+/** Half-open `[start, end)` over the classic layouts of the months either side, so the window holds still while rows scroll and a ±1-month page stays inside it while the next loads. */
 export function getMonthFetchRange(anchor: Date): { start: Date; end: Date } {
-  const days = getMonthGridDays(anchor);
-  return { start: days[0], end: addDays(days[days.length - 1], 1) };
+  const month = startOfMonth(anchor);
+  return {
+    start: startOfMonthGrid(addMonths(month, -1)),
+    end: addDays(startOfMonthGrid(addMonths(month, 1)), MONTH_VIEW_ROWS * 7),
+  };
 }
 
 export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
