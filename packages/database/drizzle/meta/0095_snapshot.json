@@ -1,6 +1,6 @@
 {
   "id": "73c0190a-4e5e-45ea-b926-4f7911bd3591",
-  "prevId": "86cf1c61-d14b-4132-a75c-2e1943c18b67",
+  "prevId": "1cf3b54c-9225-48f6-9e53-f841df302ef7",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -892,6 +892,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -1475,6 +1481,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
+        },
+        "color": {
+          "name": "color",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "createdAt": {
           "name": "createdAt",
