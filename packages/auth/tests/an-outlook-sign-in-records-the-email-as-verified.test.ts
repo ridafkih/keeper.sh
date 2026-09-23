@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 describe("an Outlook sign-in", () => {
-  it("records the email as verified when Entra omits the email_verified claim", async () => {
+  it("records a personal Microsoft account's email as verified when Entra omits the email_verified claim", async () => {
     stubGraphPhotoFetch();
 
     const auth = await createHostedAuth();
@@ -107,11 +107,42 @@ describe("an Outlook sign-in", () => {
       name: "New Outlook Customer",
       oid: "entra-object-id",
       sub: "entra-subject",
-      tid: "contoso-tenant",
+      tid: "9188040d-6c67-4c5b-b112-36a304b66dad",
     });
 
     expect(mapped.email).toBe("new-outlook-customer@keeper.sh");
     expect(mapped.emailVerified).toBe(true);
+  });
+
+  it("records a work account's email as verified when Entra marks the domain owner verified", async () => {
+    stubGraphPhotoFetch();
+
+    const auth = await createHostedAuth();
+    const mapped = await mapSocialProfile(auth, "microsoft", {
+      email: "domain-verified-customer@keeper.sh",
+      name: "Domain Verified Customer",
+      oid: "entra-object-id",
+      sub: "entra-subject",
+      tid: "contoso-tenant",
+      xms_edov: true,
+    });
+
+    expect(mapped.emailVerified).toBe(true);
+  });
+
+  it("leaves a work account's email unverified when Entra asserts nothing about it", async () => {
+    stubGraphPhotoFetch();
+
+    const auth = await createHostedAuth();
+    const mapped = await mapSocialProfile(auth, "microsoft", {
+      email: "unasserted-work-customer@keeper.sh",
+      name: "Unasserted Work Customer",
+      oid: "entra-object-id",
+      sub: "entra-subject",
+      tid: "contoso-tenant",
+    });
+
+    expect(mapped.emailVerified).toBe(false);
   });
 
   it("records the email as verified when Entra sends email_verified true", async () => {
@@ -140,7 +171,8 @@ describe("an Outlook sign-in", () => {
       name: "Unconfirmed Outlook Customer",
       oid: "entra-object-id",
       sub: "entra-subject",
-      tid: "contoso-tenant",
+      tid: "9188040d-6c67-4c5b-b112-36a304b66dad",
+      xms_edov: true,
     });
 
     expect(mapped.emailVerified).toBe(false);

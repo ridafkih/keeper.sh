@@ -112,6 +112,26 @@ const mcpJwtClaimsSchema = type({
   "+": "delete",
 });
 
+const MICROSOFT_CONSUMER_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad";
+
+interface MicrosoftEmailOwnershipClaims {
+  email_verified?: boolean;
+  tid?: string;
+  xms_edov?: boolean;
+}
+
+const isMicrosoftEmailOwnershipEstablished = (
+  profile: MicrosoftEmailOwnershipClaims,
+): boolean => {
+  if (typeof profile.email_verified === "boolean") {
+    return false;
+  }
+  if (profile.xms_edov === true) {
+    return true;
+  }
+  return profile.tid === MICROSOFT_CONSUMER_TENANT_ID;
+};
+
 const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
 
@@ -232,9 +252,12 @@ const createAuth = (config: AuthConfig) => {
     socialProviders.microsoft = {
       clientId: microsoftClientId,
       clientSecret: microsoftClientSecret,
-      mapProfileToUser: (profile) => ({
-        emailVerified: profile.email_verified ?? true,
-      }),
+      mapProfileToUser: (profile) => {
+        if (isMicrosoftEmailOwnershipEstablished(profile)) {
+          return { emailVerified: true };
+        }
+        return {};
+      },
       prompt: "consent",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
