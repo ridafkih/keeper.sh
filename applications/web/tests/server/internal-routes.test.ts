@@ -36,6 +36,7 @@ describe("resolveInternalProxyPath", () => {
 const serverConfig: ServerConfig = {
   apiProxyOrigin: "http://api.test",
   mcpProxyOrigin: null,
+  openaiAppsChallengeToken: null,
   environment: "production",
   isProduction: true,
   serverPort: 4000,
@@ -161,5 +162,26 @@ describe("/mcp/server-card", () => {
 
     expect(card).not.toHaveProperty("capabilities");
     expect(card).not.toHaveProperty("serverInfo");
+  });
+});
+
+describe("/.well-known/openai-apps-challenge", () => {
+  const challengeRequest = () =>
+    new Request("http://localhost/.well-known/openai-apps-challenge");
+
+  it("serves the configured token as plain text", async () => {
+    const response = await handleInternalRoute(challengeRequest(), {
+      ...serverConfig,
+      openaiAppsChallengeToken: "challenge-token",
+    });
+
+    expect(response?.headers.get("content-type")).toBe("text/plain; charset=UTF-8");
+    expect(await response?.text()).toBe("challenge-token");
+  });
+
+  it("falls through when no token is configured", async () => {
+    const response = await handleInternalRoute(challengeRequest(), serverConfig);
+
+    expect(response).toBeNull();
   });
 });

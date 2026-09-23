@@ -14,6 +14,7 @@ import type { Runtime, ServerConfig } from "../../src/server/types";
 const config: ServerConfig = {
   apiProxyOrigin: "http://api.test",
   mcpProxyOrigin: null,
+  openaiAppsChallengeToken: null,
   environment: "production",
   isProduction: true,
   serverPort: 4000,
