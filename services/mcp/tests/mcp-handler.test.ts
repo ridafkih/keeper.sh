@@ -10,7 +10,7 @@ const listedToolSchema = z.object({
   annotations: z.object({
     title: z.string(),
     readOnlyHint: z.boolean(),
-    destructiveHint: z.boolean().optional(),
+    destructiveHint: z.boolean(),
     openWorldHint: z.boolean(),
   }),
 });
@@ -180,6 +180,7 @@ describe("createKeeperMcpHandler", () => {
     expect(annotationsByName.get("get_events")).toEqual({
       title: "Get events",
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: false,
     });
     expect(annotationsByName.get("delete_event")).toEqual({
