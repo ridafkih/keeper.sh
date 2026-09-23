@@ -118,18 +118,50 @@ const findOutlookEventByUid = async (
   return item ?? null;
 };
 
+const resolveOutlookEventId = async (
+  accessToken: string,
+  reference: ProviderEventReference,
+): Promise<string | null> => {
+  if (reference.sourceEventId) {
+    return reference.sourceEventId;
+  }
+
+  const existing = await findOutlookEventByUid(accessToken, reference.sourceEventUid);
+  return existing?.id ?? null;
+};
+
+const findOutlookEvent = async (
+  accessToken: string,
+  reference: ProviderEventReference,
+): Promise<OutlookEvent | null> => {
+  if (!reference.sourceEventId) {
+    return findOutlookEventByUid(accessToken, reference.sourceEventUid);
+  }
+
+  const response = await fetch(
+    new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(reference.sourceEventId)}`),
+    { headers: buildHeaders(accessToken), method: "GET" },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return outlookEventSchema.assert(await response.json());
+};
+
 const updateOutlookEvent = async (
   accessToken: string,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   updates: EventUpdateInput,
 ): Promise<EventActionResult> => {
-  const existing = await findOutlookEventByUid(accessToken, sourceEventUid);
+  const existing = await findOutlookEvent(accessToken, reference);
 
   if (!existing?.id) {
     return { success: false, error: "Event not found on Outlook." };
   }
 
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}`);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(existing.id)}`);
 
   const patch: Record<string, unknown> = {};
   if ("title" in updates) {
@@ -191,15 +223,15 @@ const updateOutlookEvent = async (
 
 const deleteOutlookEvent = async (
   accessToken: string,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
 ): Promise<EventActionResult> => {
-  const existing = await findOutlookEventByUid(accessToken, sourceEventUid);
+  const eventId = await resolveOutlookEventId(accessToken, reference);
 
-  if (!existing?.id) {
+  if (!eventId) {
     return { success: true };
   }
 
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}`);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(eventId)}`);
 
   const response = await fetch(url, {
     headers: buildHeaders(accessToken),
@@ -226,13 +258,9 @@ const rsvpOutlookEvent = async (
   reference: ProviderEventReference,
   status: RsvpStatus,
 ): Promise<EventActionResult> => {
-  let { sourceEventId } = reference;
+  const sourceEventId = await resolveOutlookEventId(accessToken, reference);
   if (!sourceEventId) {
-    const existing = await findOutlookEventByUid(accessToken, reference.sourceEventUid);
-    sourceEventId = existing?.id ?? null;
-    if (!sourceEventId) {
-      return { success: false, error: "Event not found on Outlook." };
-    }
+    return { success: false, error: "Event not found on Outlook." };
   }
 
   const action = RSVP_ACTION_MAP[status];

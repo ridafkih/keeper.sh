@@ -19,6 +19,7 @@ interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
+  onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
 const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): KeeperApi => {
@@ -27,6 +28,7 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
     oauthTokenRefresher: options?.oauthTokenRefresher,
     refreshLockStore: options?.refreshLockStore,
     encryptionKey: options?.encryptionKey,
+    onSourceEventChanged: options?.onSourceEventChanged,
   };
 
   return {

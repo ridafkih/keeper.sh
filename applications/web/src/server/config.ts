@@ -4,6 +4,7 @@ import type { ServerConfig } from "./types";
 export const envSchema = type({
   VITE_API_URL: "string.url",
   VITE_MCP_URL: "string.url?",
+  OPENAI_APPS_CHALLENGE_TOKEN: "string?",
   ENV: "'development'|'production'|'test' = 'production'",
   PORT: "string",
 });
@@ -34,6 +35,7 @@ export function createServerConfig(environment: typeof envSchema.infer): ServerC
   return {
     apiProxyOrigin: environment.VITE_API_URL,
     mcpProxyOrigin: environment.VITE_MCP_URL ?? null,
+    openaiAppsChallengeToken: environment.OPENAI_APPS_CHALLENGE_TOKEN ?? null,
     environment: runtimeEnvironment,
     isProduction: runtimeEnvironment === "production",
     serverPort,

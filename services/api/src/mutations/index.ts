@@ -1,4 +1,4 @@
-import { userEventsTable } from "@keeper.sh/database/schema";
+import { eventStatesTable, userEventsTable } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 import type {
@@ -8,11 +8,14 @@ import type {
   EventCreateResult,
   PendingInvite,
   ProviderCredentials,
+  ProviderEventReference,
   RsvpStatus,
 } from "@/types";
 import { createCoordinatedRefresher } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
+import type { EventSource } from "./resolve-credentials";
+import { resolveSyncedEventWriteError } from "./synced-event-write";
 import { getEvent } from "@/queries/get-event";
 import { parseEventReference } from "@/queries/event-read-model";
 import {
@@ -46,6 +49,7 @@ interface MutationDependencies {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
+  onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
@@ -223,7 +227,7 @@ const createEventMutation = async (
 
 const dispatchUpdateEvent = async (
   credentials: ProviderCredentials,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   updates: EventUpdateInput,
   deps: MutationDependencies,
 ): Promise<EventActionResult> => {
@@ -236,11 +240,11 @@ const dispatchUpdateEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return updateGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, updates);
+      return updateGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid, updates);
     }
 
     if (credentials.provider === "outlook") {
-      return updateOutlookEvent(accessToken, sourceEventUid, updates);
+      return updateOutlookEvent(accessToken, reference, updates);
     }
 
     return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
@@ -256,7 +260,7 @@ const dispatchUpdateEvent = async (
         encryptedPassword: credentials.caldav.encryptedPassword,
         encryptionKey: deps.encryptionKey,
       },
-      sourceEventUid,
+      reference.sourceEventUid,
       updates,
     );
   }
@@ -310,6 +314,55 @@ const buildDbUpdates = (updates: EventUpdateInput): Record<string, unknown> => {
   return dbUpdates;
 };
 
+const readStoredEventRange = async (
+  database: KeeperDatabase,
+  eventSource: EventSource,
+  resourceId: string,
+): Promise<{ endTime: Date; startTime: Date } | undefined> => {
+  if (eventSource === "synced") {
+    const [stored] = await database
+      .select({ endTime: eventStatesTable.endTime, startTime: eventStatesTable.startTime })
+      .from(eventStatesTable)
+      .where(eq(eventStatesTable.id, resourceId))
+      .limit(1);
+    return stored;
+  }
+
+  const [stored] = await database
+    .select({ endTime: userEventsTable.endTime, startTime: userEventsTable.startTime })
+    .from(userEventsTable)
+    .where(eq(userEventsTable.id, resourceId))
+    .limit(1);
+  return stored;
+};
+
+const writeStoredEventUpdates = async (
+  database: KeeperDatabase,
+  eventSource: EventSource,
+  resourceId: string,
+  dbUpdates: Record<string, unknown>,
+): Promise<void> => {
+  if (eventSource === "synced") {
+    await database.update(eventStatesTable).set(dbUpdates).where(eq(eventStatesTable.id, resourceId));
+    return;
+  }
+
+  await database.update(userEventsTable).set(dbUpdates).where(eq(userEventsTable.id, resourceId));
+};
+
+const deleteStoredEvent = async (
+  database: KeeperDatabase,
+  eventSource: EventSource,
+  resourceId: string,
+): Promise<void> => {
+  if (eventSource === "synced") {
+    await database.delete(eventStatesTable).where(eq(eventStatesTable.id, resourceId));
+    return;
+  }
+
+  await database.delete(userEventsTable).where(eq(userEventsTable.id, resourceId));
+};
+
 const updateEventMutation = async (
   deps: MutationDependencies,
   userId: string,
@@ -323,7 +376,10 @@ const updateEventMutation = async (
   }
 
   if (resolved.eventSource === "synced") {
-    return { success: false, error: "Synced events cannot be updated. Only user-created events can be modified." };
+    const writeError = resolveSyncedEventWriteError(resolved);
+    if (writeError) {
+      return { success: false, error: writeError };
+    }
   }
 
   const reference = parseEventReference(eventId);
@@ -331,30 +387,23 @@ const updateEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, sourceEventUid } = resolved;
+  const { credentials, eventSource, sourceEventId, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
     return { success: false, error: "Event cannot be updated (no source UID)." };
   }
 
-  const [stored] = await deps.database
-    .select({
-      endTime: userEventsTable.endTime,
-      startTime: userEventsTable.startTime,
-    })
-    .from(userEventsTable)
-    .where(eq(userEventsTable.id, reference.resourceId))
-    .limit(1);
+  const stored = await readStoredEventRange(deps.database, eventSource, reference.resourceId);
 
   if (!stored) {
-    throw new Error(`User event ${reference.resourceId} resolved credentials but has no row.`);
+    throw new Error(`Event ${reference.resourceId} resolved credentials but has no row.`);
   }
 
   const completedUpdates = completeUpdateRange(updates, stored);
 
   const providerResult = await dispatchUpdateEvent(
     credentials,
-    sourceEventUid,
+    { sourceEventId, sourceEventUid },
     completedUpdates,
     deps,
   );
@@ -366,13 +415,55 @@ const updateEventMutation = async (
   const dbUpdates = buildDbUpdates(updates);
 
   if (Object.keys(dbUpdates).length > 0) {
-    await deps.database
-      .update(userEventsTable)
-      .set(dbUpdates)
-      .where(eq(userEventsTable.id, reference.resourceId));
+    await writeStoredEventUpdates(deps.database, eventSource, reference.resourceId, dbUpdates);
+  }
+
+  if (eventSource === "synced") {
+    await deps.onSourceEventChanged?.(userId);
   }
 
   return { success: true };
+};
+
+const dispatchDeleteEvent = async (
+  credentials: ProviderCredentials,
+  reference: ProviderEventReference,
+  deps: MutationDependencies,
+): Promise<EventActionResult | null> => {
+  if (credentials.oauth) {
+    const accessToken = await ensureValidAccessToken(
+      credentials.provider,
+      credentials.oauth,
+      credentials.accountId,
+      deps,
+    );
+
+    if (credentials.provider === "google") {
+      return deleteGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid);
+    }
+
+    if (credentials.provider === "outlook") {
+      return deleteOutlookEvent(accessToken, reference);
+    }
+
+    return null;
+  }
+
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+    return deleteCalDAVEvent(
+      {
+        serverUrl: credentials.caldav.serverUrl,
+        calendarUrl: credentials.calendarUrl,
+        username: credentials.caldav.username,
+        authMethod: credentials.caldav.authMethod,
+        encryptedPassword: credentials.caldav.encryptedPassword,
+        encryptionKey: deps.encryptionKey,
+      },
+      reference.sourceEventUid,
+    );
+  }
+
+  return null;
 };
 
 const deleteEventMutation = async (
@@ -387,7 +478,10 @@ const deleteEventMutation = async (
   }
 
   if (resolved.eventSource === "synced") {
-    return { success: false, error: "Synced events cannot be deleted. Only user-created events can be removed." };
+    const writeError = resolveSyncedEventWriteError(resolved);
+    if (writeError) {
+      return { success: false, error: writeError };
+    }
   }
 
   const reference = parseEventReference(eventId);
@@ -395,49 +489,25 @@ const deleteEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, sourceEventUid } = resolved;
+  const { credentials, eventSource, sourceEventId, sourceEventUid } = resolved;
 
   if (sourceEventUid) {
-    if (credentials.oauth) {
-      const accessToken = await ensureValidAccessToken(
-        credentials.provider,
-        credentials.oauth,
-        credentials.accountId,
-        deps,
-      );
+    const providerResult = await dispatchDeleteEvent(credentials, { sourceEventId, sourceEventUid }, deps);
 
-      if (credentials.provider === "google") {
-        const result = await deleteGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid);
-        if (!result.success) {
-          return result;
-        }
-      } else if (credentials.provider === "outlook") {
-        const result = await deleteOutlookEvent(accessToken, sourceEventUid);
-        if (!result.success) {
-          return result;
-        }
-      }
-    } else if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
-      const result = await deleteCalDAVEvent(
-        {
-          serverUrl: credentials.caldav.serverUrl,
-          calendarUrl: credentials.calendarUrl,
-          username: credentials.caldav.username,
-          authMethod: credentials.caldav.authMethod,
-          encryptedPassword: credentials.caldav.encryptedPassword,
-          encryptionKey: deps.encryptionKey,
-        },
-        sourceEventUid,
-      );
-      if (!result.success) {
-        return result;
-      }
+    if (providerResult && !providerResult.success) {
+      return providerResult;
+    }
+
+    if (!providerResult && eventSource === "synced") {
+      return { success: false, error: "Calendar provider not supported for event deletion." };
     }
   }
 
-  await deps.database
-    .delete(userEventsTable)
-    .where(eq(userEventsTable.id, reference.resourceId));
+  await deleteStoredEvent(deps.database, eventSource, reference.resourceId);
+
+  if (eventSource === "synced") {
+    await deps.onSourceEventChanged?.(userId);
+  }
 
   return { success: true };
 };

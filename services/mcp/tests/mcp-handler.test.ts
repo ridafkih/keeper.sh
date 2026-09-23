@@ -8,8 +8,9 @@ const toolset = createKeeperMcpToolset();
 const listedToolSchema = z.object({
   name: z.string(),
   annotations: z.object({
+    title: z.string(),
     readOnlyHint: z.boolean(),
-    destructiveHint: z.boolean().optional(),
+    destructiveHint: z.boolean(),
     openWorldHint: z.boolean(),
   }),
 });
@@ -177,10 +178,13 @@ describe("createKeeperMcpHandler", () => {
 
     expect(annotationsByName.size).toBe(Object.keys(toolset).length);
     expect(annotationsByName.get("get_events")).toEqual({
+      title: "Get events",
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: false,
     });
     expect(annotationsByName.get("delete_event")).toEqual({
+      title: "Delete event",
       readOnlyHint: false,
       destructiveHint: true,
       openWorldHint: false,

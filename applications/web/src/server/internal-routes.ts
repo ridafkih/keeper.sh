@@ -39,6 +39,8 @@ const buildProtectedResourceMetadata = (requestOrigin: string) => ({
   scopes_supported: KEEPER_API_RESOURCE_SCOPES,
 });
 
+const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
+
 const MCP_SERVER_CARD_PATH = "/mcp/server-card";
 const MCP_SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json";
 // SEP-2127 pins this exact string through the `$schema` pattern, so it stays as
@@ -133,6 +135,15 @@ export async function handleInternalRoute(
 
   if (requestUrl.pathname === "/.well-known/oauth-protected-resource") {
     return Response.json(buildProtectedResourceMetadata(resolvePublicOrigin(request)));
+  }
+
+  if (requestUrl.pathname === OPENAI_APPS_CHALLENGE_PATH && config.openaiAppsChallengeToken) {
+    return new Response(config.openaiAppsChallengeToken, {
+      headers: {
+        "content-type": "text/plain; charset=UTF-8",
+        "cache-control": "no-store",
+      },
+    });
   }
 
   if (requestUrl.pathname === MCP_SERVER_CARD_PATH) {

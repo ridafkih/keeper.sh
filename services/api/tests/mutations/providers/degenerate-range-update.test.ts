@@ -109,7 +109,7 @@ describe("updating an event to a range that covers no interval", () => {
     })));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await updateOutlookEvent("token", "uid", INVERTED);
+    const result = await updateOutlookEvent("token", { sourceEventId: null, sourceEventUid: "uid" }, INVERTED);
     const { end, start } = readPatchRange(fetchMock);
 
     expect(result.success).toBe(true);

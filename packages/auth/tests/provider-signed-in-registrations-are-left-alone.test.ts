@@ -233,7 +233,7 @@ describe("a registration created through a provider", () => {
       name: "Established Outlook Customer",
       oid: "entra-object-id",
       sub: "entra-subject",
-      tid: "contoso-tenant",
+      tid: "9188040d-6c67-4c5b-b112-36a304b66dad",
     });
 
     expect(mapped.email).toBe(email);
