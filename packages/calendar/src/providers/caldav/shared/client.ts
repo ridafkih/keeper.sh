@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { createDAVClient, DAVNamespaceShort } from "tsdav";
 import { chunkArray } from "../../../core/utils/chunk";
+import { resolveCalDAVCalendarColor } from "../../../core/colors/normalize";
 import { createSafeFetch } from "../../../utils/safe-fetch";
 import { sleepWithSignal } from "../../../core/utils/leased-semaphore";
 import { fetchHonouringRetryAfter } from "./throttle-retry";
@@ -263,11 +264,15 @@ class CalDAVClient {
 
     const discovered = calendars
       .filter(({ components }) => components?.includes("VEVENT"))
-      .map(({ url, displayName, ctag }) => ({
-        ctag,
-        displayName: getDisplayName(displayName),
-        url: bindUrlToAccount(url, this.config.serverUrl),
-      }));
+      .map(({ url, displayName, ctag, calendarColor }) => {
+        const color = resolveCalDAVCalendarColor(calendarColor);
+        return {
+          ctag,
+          displayName: getDisplayName(displayName),
+          url: bindUrlToAccount(url, this.config.serverUrl),
+          ...(color && { color }),
+        };
+      });
 
     await this.config.calendarDiscoveryCache?.write(discovered);
     return discovered;

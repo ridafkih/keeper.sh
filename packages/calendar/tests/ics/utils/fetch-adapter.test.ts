@@ -82,6 +82,89 @@ describe("createIcsSourceFetcher", () => {
     expect(result.unchanged).toBeUndefined();
   });
 
+  it("imports event and calendar colors from the feed", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const coloredIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "X-APPLE-CALENDAR-COLOR:#711A76",
+      "COLOR:turquoise",
+      "BEGIN:VEVENT",
+      "UID:colored-event@test",
+      "DTSTAMP:20260517T000000Z",
+      "DTSTART:20260517T120000Z",
+      "DTEND:20260517T130000Z",
+      "COLOR:tomato",
+      "SUMMARY:Colored",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical: coloredIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.calendarColor).toBe("#711a76");
+    expect(result.events[0]?.color).toBe("#ff6347");
+  });
+
+  it("falls back to the VCALENDAR COLOR name and reports null without any color", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const namedColorIcs = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//test//test//EN",
+      "COLOR:turquoise",
+      "BEGIN:VEVENT",
+      "UID:event-1@test",
+      "DTSTAMP:20260517T000000Z",
+      "DTSTART:20260517T120000Z",
+      "DTEND:20260517T130000Z",
+      "SUMMARY:Test",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    mockPullRemoteCalendar.mockResolvedValue({ ical: namedColorIcs });
+    mockPrepareCalendarSnapshot.mockResolvedValue({ changed: false });
+
+    const namedResult = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+    expect(namedResult.calendarColor).toBe("#40e0d0");
+    expect(namedResult.events[0]?.color).toBeUndefined();
+
+    mockPullRemoteCalendar.mockResolvedValue({ ical: MINIMAL_ICS });
+    const plainResult = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+    expect(plainResult.calendarColor).toBeNull();
+  });
+
+  it.each(["", "rgb(27,173,248)"])(
+    "falls back to the VCALENDAR COLOR when X-APPLE-CALENDAR-COLOR is %j",
+    async (appleColor) => {
+      const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+      const fallbackIcs = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//test//test//EN",
+        `X-APPLE-CALENDAR-COLOR:${appleColor}`,
+        "COLOR:tomato",
+        "BEGIN:VEVENT",
+        "UID:event-1@test",
+        "DTSTAMP:20260517T000000Z",
+        "DTSTART:20260517T120000Z",
+        "DTEND:20260517T130000Z",
+        "SUMMARY:Test",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n");
+      mockPullRemoteCalendar.mockResolvedValueOnce({ ical: fallbackIcs });
+      mockPrepareCalendarSnapshot.mockResolvedValueOnce({ changed: false });
+
+      const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+      expect(result.calendarColor).toBe("#ff6347");
+    },
+  );
+
   it("interprets floating event times using X-WR-TIMEZONE", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const floatingIcs = [

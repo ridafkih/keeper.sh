@@ -236,7 +236,7 @@ const createAuth = (config: AuthConfig) => {
         emailVerified: profile.email_verified ?? true,
       }),
       prompt: "consent",
-      scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
+      scope: ["offline_access", "User.Read", "Calendars.ReadWrite", "MailboxSettings.Read"],
     };
   }
 

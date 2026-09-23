@@ -310,6 +310,29 @@ describe("parseGoogleEvents", () => {
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Vancouver");
   });
 
+  it("resolves colorId to the modern palette hex", () => {
+    const googleEvent = createGoogleEvent({
+      colorId: "2",
+      iCalUID: "external-uid-color",
+    });
+
+    const parsedEvents = parseGoogleEvents([googleEvent]);
+
+    expect(parsedEvents).toHaveLength(1);
+    expect(parsedEvents[0]?.color).toBe("#33b679");
+  });
+
+  it("omits the color key for absent or unknown colorIds", () => {
+    const parsedEvents = parseGoogleEvents([
+      createGoogleEvent({ iCalUID: "external-uid-no-color" }),
+      createGoogleEvent({ colorId: "99", iCalUID: "external-uid-bad-color" }),
+    ]);
+
+    expect(parsedEvents).toHaveLength(2);
+    expect(parsedEvents[0]).not.toHaveProperty("color");
+    expect(parsedEvents[1]).not.toHaveProperty("color");
+  });
+
   it("marks working location events as working elsewhere", () => {
     const googleEvent = createGoogleEvent({
       eventType: "workingLocation",

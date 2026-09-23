@@ -21,6 +21,7 @@ import type {
 } from "./event-read-model";
 
 interface SyncedEventOwner extends SyncedEventRow {
+  calendarColor: string | null;
   calendarName: string;
   calendarProvider: string;
   calendarUrl: string | null;
@@ -35,6 +36,7 @@ interface EventReadRepository {
 const syncedEventColumns = {
   availability: eventStatesTable.availability,
   calendarId: eventStatesTable.calendarId,
+  color: eventStatesTable.color,
   description: eventStatesTable.description,
   endTime: eventStatesTable.endTime,
   exceptionDates: eventStatesTable.exceptionDates,
@@ -64,6 +66,7 @@ const getUserEvent = async (
       title: userEventsTable.title,
       description: userEventsTable.description,
       location: userEventsTable.location,
+      calendarColor: calendarsTable.color,
       calendarName: calendarsTable.name,
       calendarProvider: calendarAccountsTable.provider,
       calendarUrl: calendarsTable.url,
@@ -86,6 +89,7 @@ const getUserEvent = async (
   return toKeeperEvent(
     toUserProjection(result),
     {
+      calendarColor: result.calendarColor,
       name: result.calendarName,
       provider: result.calendarProvider,
       url: result.calendarUrl,
@@ -102,6 +106,7 @@ const getSyncedOwner = async (
   const [owner] = await database
     .select({
       ...syncedEventColumns,
+      calendarColor: calendarsTable.color,
       calendarName: calendarsTable.name,
       calendarProvider: calendarAccountsTable.provider,
       calendarUrl: calendarsTable.url,
@@ -147,6 +152,7 @@ const toPersistedSyncedProjection = (row: SyncedEventRow): KeeperEventProjection
 
   return {
     calendarId: row.calendarId,
+    color: row.color,
     description: row.description,
     eventStateId: row.id,
     id: row.id,
@@ -181,6 +187,7 @@ const resolveEventReadModel = async (
   }
 
   const source: SourceInfo = {
+    calendarColor: owner.calendarColor,
     name: owner.calendarName,
     provider: owner.calendarProvider,
     url: owner.calendarUrl,
