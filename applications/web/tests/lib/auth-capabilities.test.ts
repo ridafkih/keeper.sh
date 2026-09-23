@@ -10,12 +10,10 @@ import {
 const emailCapabilities: AuthCapabilities = {
   commercialMode: true,
   credentialMode: "email",
-  disableLocalAuth: false,
   requiresEmailVerification: true,
   socialProviders: {
     google: true,
     microsoft: false,
-    oidc: false,
   },
   supportsChangePassword: true,
   supportsPasskeys: true,

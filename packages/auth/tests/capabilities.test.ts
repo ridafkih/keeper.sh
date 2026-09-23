@@ -16,12 +16,10 @@ describe("resolveAuthCapabilities", () => {
     expect(capabilities).toEqual({
       commercialMode: false,
       credentialMode: "username",
-      disableLocalAuth: false,
       requiresEmailVerification: false,
       socialProviders: {
         google: true,
         microsoft: true,
-        oidc: false,
       },
       supportsChangePassword: true,
       supportsPasskeys: false,
@@ -43,12 +41,10 @@ describe("resolveAuthCapabilities", () => {
     expect(capabilities).toEqual({
       commercialMode: true,
       credentialMode: "email",
-      disableLocalAuth: false,
       requiresEmailVerification: true,
       socialProviders: {
         google: true,
         microsoft: true,
-        oidc: false,
       },
       supportsChangePassword: true,
       supportsPasskeys: true,
@@ -58,30 +54,41 @@ describe("resolveAuthCapabilities", () => {
 
   it("enables the oidc provider when issuer, client id and secret are configured", () => {
     const capabilities = resolveAuthCapabilities({
-      oidcIssuerUrl: "https://id.example.com",
       oidcClientId: "oidc-client-id",
       oidcClientSecret: "oidc-client-secret",
+      oidcIssuerUrl: "https://id.example.com",
     });
 
     expect(capabilities.socialProviders.oidc).toBe(true);
-    expect(capabilities.disableLocalAuth).toBe(false);
+    expect("disableLocalAuth" in capabilities).toBe(false);
   });
 
-  it("does not enable local-auth disabling without an oidc provider", () => {
+  it("leaves the oidc keys out entirely when oidc is not configured", () => {
     const capabilities = resolveAuthCapabilities({
       disableLocalAuth: true,
+      oidcProviderName: "Pocket ID",
     });
 
-    expect(capabilities.socialProviders.oidc).toBe(false);
-    expect(capabilities.disableLocalAuth).toBe(false);
+    expect("oidc" in capabilities.socialProviders).toBe(false);
+    expect("disableLocalAuth" in capabilities).toBe(false);
+    expect("oidcProviderName" in capabilities).toBe(false);
+  });
+
+  it("leaves oidc disabled when any of its credentials is missing", () => {
+    const capabilities = resolveAuthCapabilities({
+      oidcClientId: "oidc-client-id",
+      oidcIssuerUrl: "https://id.example.com",
+    });
+
+    expect("oidc" in capabilities.socialProviders).toBe(false);
   });
 
   it("disables local auth only when both oidc and DISABLE_LOCAL_AUTH are set", () => {
     const capabilities = resolveAuthCapabilities({
-      oidcIssuerUrl: "https://id.example.com",
+      disableLocalAuth: true,
       oidcClientId: "oidc-client-id",
       oidcClientSecret: "oidc-client-secret",
-      disableLocalAuth: true,
+      oidcIssuerUrl: "https://id.example.com",
     });
 
     expect(capabilities.socialProviders.oidc).toBe(true);
@@ -90,18 +97,12 @@ describe("resolveAuthCapabilities", () => {
 
   it("exposes the configured oidc provider name when oidc is enabled", () => {
     const capabilities = resolveAuthCapabilities({
-      oidcIssuerUrl: "https://id.example.com",
       oidcClientId: "oidc-client-id",
       oidcClientSecret: "oidc-client-secret",
+      oidcIssuerUrl: "https://id.example.com",
       oidcProviderName: "Pocket ID",
     });
 
     expect(capabilities.oidcProviderName).toBe("Pocket ID");
-  });
-
-  it("omits the oidc provider name when oidc is not enabled", () => {
-    const capabilities = resolveAuthCapabilities({});
-
-    expect("oidcProviderName" in capabilities).toBe(false);
   });
 });

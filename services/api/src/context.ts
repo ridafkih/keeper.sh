@@ -63,11 +63,16 @@ const parseTrustedOrigins = (origins?: string): string[] => {
 
 const trustedOrigins = parseTrustedOrigins(env.TRUSTED_ORIGINS);
 
-const parseOidcScopes = (scopes?: string): string[] | undefined => {
-  if (!scopes) {
-    return undefined;
+const parseOidcScopes = (scopes?: string): string[] | null => {
+  const parsed = (scopes ?? "")
+    .split(",")
+    .map((scope): string => scope.trim())
+    .filter(Boolean);
+
+  if (parsed.length === 0) {
+    return null;
   }
-  return scopes.split(",").map((scope): string => scope.trim()).filter(Boolean);
+  return parsed;
 };
 
 const { auth, capabilities: authCapabilities } = createAuth({

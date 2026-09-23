@@ -236,7 +236,7 @@ type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
 const authSocialProvidersSchema = type({
   google: "boolean",
   microsoft: "boolean",
-  oidc: "boolean",
+  "oidc?": "boolean",
   "+": "reject",
 });
 type AuthSocialProviders = typeof authSocialProvidersSchema.infer;
@@ -244,7 +244,7 @@ type AuthSocialProviders = typeof authSocialProvidersSchema.infer;
 const authCapabilitiesSchema = type({
   commercialMode: "boolean",
   credentialMode: "'email' | 'username'",
-  disableLocalAuth: "boolean",
+  "disableLocalAuth?": "boolean",
   "oidcProviderName?": "string",
   requiresEmailVerification: "boolean",
   socialProviders: authSocialProvidersSchema,

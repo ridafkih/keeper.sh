@@ -109,7 +109,7 @@ export function AuthForm({
   const hasSocialProviders = getEnabledSocialProviders(capabilities).length > 0;
   const switchSearch = resolveSwitchSearch(authorizationSearch);
   const switchHref = resolvePathWithSearch(copy.switchTo, switchSearch);
-  const hideCredentialForm = capabilities.disableLocalAuth;
+  const hideCredentialForm = capabilities.disableLocalAuth === true;
 
   return (
     <>

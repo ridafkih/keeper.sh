@@ -104,12 +104,10 @@ beforeAll(async () => {
 const capabilities: AuthCapabilities = {
   commercialMode: true,
   credentialMode: "email",
-  disableLocalAuth: false,
   requiresEmailVerification: true,
   socialProviders: {
     google: false,
     microsoft: false,
-    oidc: false,
   },
   supportsChangePassword: true,
   supportsPasskeys: true,

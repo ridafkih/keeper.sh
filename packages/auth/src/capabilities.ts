@@ -29,36 +29,41 @@ const resolveCredentialMode = (
   return "username";
 };
 
+const hasOidcCredentials = (config: ResolveAuthCapabilitiesConfig): boolean =>
+  Boolean(config.oidcIssuerUrl && config.oidcClientId && config.oidcClientSecret);
+
+const resolveOidcCapabilities = (
+  config: ResolveAuthCapabilitiesConfig,
+): Pick<AuthCapabilities, "disableLocalAuth" | "oidcProviderName"> => {
+  if (!hasOidcCredentials(config)) {
+    return {};
+  }
+
+  return {
+    ...(config.disableLocalAuth && { disableLocalAuth: true }),
+    ...(config.oidcProviderName && { oidcProviderName: config.oidcProviderName }),
+  };
+};
+
 const resolveAuthCapabilities = (
   config: ResolveAuthCapabilitiesConfig,
-): AuthCapabilities => {
-  const oidcEnabled = Boolean(
-    config.oidcIssuerUrl && config.oidcClientId && config.oidcClientSecret,
-  );
-
-  const capabilities: Record<string, unknown> = {
+): AuthCapabilities =>
+  authCapabilitiesSchema.assert({
     commercialMode: config.commercialMode ?? false,
     credentialMode: resolveCredentialMode(config.commercialMode),
-    disableLocalAuth: Boolean(config.disableLocalAuth && oidcEnabled),
     requiresEmailVerification: config.commercialMode ?? false,
     socialProviders: {
       google: hasOAuthCredentials(config.googleClientId, config.googleClientSecret),
       microsoft: hasOAuthCredentials(config.microsoftClientId, config.microsoftClientSecret),
-      oidc: oidcEnabled,
+      ...(hasOidcCredentials(config) && { oidc: true }),
     },
     supportsChangePassword: true,
     supportsPasskeys: Boolean(
       config.commercialMode && config.passkeyOrigin && config.passkeyRpId,
     ),
     supportsPasswordReset: config.commercialMode ?? false,
-  };
-
-  if (oidcEnabled && config.oidcProviderName) {
-    capabilities.oidcProviderName = config.oidcProviderName;
-  }
-
-  return authCapabilitiesSchema.assert(capabilities);
-};
+    ...resolveOidcCapabilities(config),
+  });
 
 export { resolveAuthCapabilities };
 export type { ResolveAuthCapabilitiesConfig };

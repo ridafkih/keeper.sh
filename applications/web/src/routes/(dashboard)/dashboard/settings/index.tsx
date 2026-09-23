@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
+import LogIn from "lucide-react/dist/esm/icons/log-in";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Cookie from "lucide-react/dist/esm/icons/cookie";
@@ -13,8 +14,10 @@ import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
 import { usePasskeys } from "@/hooks/use-passkeys";
 import { useHasPassword } from "@/hooks/use-has-password";
+import { useHasOidcAccount } from "@/hooks/use-has-oidc-account";
 import { Input } from "@/components/ui/primitives/input";
 import { deleteAccount } from "@/lib/auth";
+import { authClient } from "@/lib/auth-client";
 import { resolveAccountIdentity } from "@/lib/account-identity";
 import {
   Modal,
@@ -37,7 +40,10 @@ import { setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
 import { resolveErrorMessage } from "@/utils/errors";
-import { fetchAuthCapabilitiesWithApi } from "@/lib/auth-capabilities";
+import {
+  fetchAuthCapabilitiesWithApi,
+  resolveOidcProviderName,
+} from "@/lib/auth-capabilities";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({
   loader: async ({ context }) => {
@@ -56,6 +62,10 @@ function SettingsPage() {
   const { label: accountLabel, value: accountValue } = resolveAccountIdentity(user);
   const { data: apiTokens = [] } = useApiTokens();
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
+  const oidcEnabled = authCapabilities.socialProviders.oidc === true;
+  const { data: hasOidcAccount = false } = useHasOidcAccount(oidcEnabled);
+  const [oidcLinkError, setOidcLinkError] = useState<string | null>(null);
+  const [isLinkingOidc, setIsLinkingOidc] = useState(false);
   const analyticsConsent = useEffectiveConsent();
   const handleAnalyticsToggle = useCallback((checked: boolean) => {
     track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
@@ -66,6 +76,19 @@ function SettingsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
 
+
+  const handleLinkOidc = async () => {
+    setOidcLinkError(null);
+    setIsLinkingOidc(true);
+    const { error } = await authClient.oauth2.link({
+      callbackURL: "/dashboard/settings",
+      providerId: "oidc",
+    });
+    if (error) {
+      setOidcLinkError(error.message ?? "Failed to start linking.");
+      setIsLinkingOidc(false);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     const password = hasPassword ? passwordRef.current?.value : undefined;
@@ -121,6 +144,24 @@ function SettingsPage() {
             </NavigationMenuItemTrailing>
           </NavigationMenuLinkItem>
         )}
+        {oidcEnabled && (
+          <NavigationMenuButtonItem
+            onClick={hasOidcAccount ? undefined : handleLinkOidc}
+            disabled={hasOidcAccount || isLinkingOidc}
+          >
+            <NavigationMenuItemIcon>
+              <LogIn size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>
+              {`Link ${resolveOidcProviderName(authCapabilities)}`}
+            </NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing>
+              <Text size="sm" tone="muted">
+                {hasOidcAccount ? "Linked" : "Not linked"}
+              </Text>
+            </NavigationMenuItemTrailing>
+          </NavigationMenuButtonItem>
+        )}
         <NavigationMenuLinkItem to="/dashboard/settings/api-tokens">
           <NavigationMenuItemIcon>
             <KeySquare size={15} />
@@ -133,6 +174,7 @@ function SettingsPage() {
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
       </NavigationMenu>
+      {oidcLinkError && <Text size="sm" tone="danger">{oidcLinkError}</Text>}
       <NavigationMenu>
         <NavigationMenuToggleItem checked={analyticsConsent} onCheckedChange={handleAnalyticsToggle}>
           <NavigationMenuItemIcon>
