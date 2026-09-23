@@ -10,8 +10,9 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { formatDayHeader, formatTimeRange } from "@/lib/time";
 import { eventDetailAtom } from "@/state/event-detail";
 import type { EventDetailSelection } from "@/state/event-detail";
+import { CalendarColorDot } from "./calendar-color-dot";
 import { EventCardGridBody, EventText } from "./event-card";
-import { EVENT_COLORS } from "./event-card.styles";
+import { resolveEventColor, resolveEventTint } from "./event-card.styles";
 
 const PANEL_WIDTH = 320;
 const FRAME_MARGIN = 8;
@@ -138,6 +139,7 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
   }, [onClose]);
 
   const title = event.title ?? event.calendarName;
+  const tint = resolveEventTint(resolveEventColor(event));
 
   return (
     <m.div
@@ -155,8 +157,9 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
         tabIndex={-1}
         className={cn(
           "overflow-hidden rounded-lg bg-(--event-surface) ring-1 ring-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          EVENT_COLORS.blue,
+          tint.className,
         )}
+        style={tint.style}
         initial={{ ...SHADOW_HIDDEN, width: anchor.width }}
         animate={{ ...SHADOW_VISIBLE, width: PANEL_WIDTH }}
         exit={{ ...SHADOW_HIDDEN, width: anchor.width }}
@@ -191,6 +194,7 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
               </EventText>
               <div className="flex items-center gap-1.5">
                 <ProviderIcon provider={event.calendarProvider} size={13} />
+                <CalendarColorDot color={event.calendarColor} />
                 <EventText as="span" size="xs" muted className="truncate">
                   {event.calendarName}
                 </EventText>

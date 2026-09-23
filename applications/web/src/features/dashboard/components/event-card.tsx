@@ -5,8 +5,7 @@ import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
 import type { CalendarEvent } from "@/hooks/use-events";
-import { EVENT_COLORS } from "./event-card.styles";
-import type { EventColor } from "./event-card.styles";
+import { resolveEventColor, resolveEventTint } from "./event-card.styles";
 import { EVENT_PILL_HEIGHT_PX } from "./event-layout";
 
 type EventCardLayout = "list" | "grid";
@@ -46,7 +45,6 @@ interface EventCardProps {
   past: boolean;
   layout?: EventCardLayout;
   style?: CSSProperties;
-  color?: EventColor;
 }
 
 /** Grid card body, shared with the detail popover's ghost so the morph starts pixel-identical. */
@@ -109,10 +107,11 @@ export const EventCard = memo(function EventCard({
   past,
   layout = "list",
   style,
-  color = "blue",
 }: EventCardProps) {
   const title = event.title ?? event.calendarName;
-  const classes = cn(eventCard({ layout, past }), EVENT_COLORS[color]);
+  const tint = resolveEventTint(resolveEventColor(event));
+  const classes = cn(eventCard({ layout, past }), tint.className);
+  const tintedStyle = { ...style, ...tint.style };
 
   if (layout === "grid") {
     // Clicks are delegated via `data-event-id` in WeekGrid, so the memoised tree never sees a handler.
@@ -125,7 +124,7 @@ export const EventCard = memo(function EventCard({
           classes,
           "cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         )}
-        style={style}
+        style={tintedStyle}
       >
         {/* Size containment sits on an inner span: it's spec-ambiguous on form controls (CSSWG #7947), and it would collapse the content-sized list card. */}
         <span className="block size-full @container-[size]/event-card">
@@ -136,7 +135,7 @@ export const EventCard = memo(function EventCard({
   }
 
   return (
-    <div className={classes} style={style}>
+    <div className={classes} style={tintedStyle}>
       <div className="flex items-center justify-between gap-2">
         <EventText size="sm" muted className="tabular-nums">
           {formatTime(event.startTime)} - {formatTime(event.endTime)}
@@ -160,7 +159,6 @@ export const EventCard = memo(function EventCard({
 interface EventPillProps {
   event: CalendarEvent;
   past: boolean;
-  color?: EventColor;
 }
 
 const eventPill = tv({
@@ -173,9 +171,10 @@ const eventPill = tv({
   },
 });
 
-export const EventPill = memo(function EventPill({ event, past, color = "blue" }: EventPillProps) {
+export const EventPill = memo(function EventPill({ event, past }: EventPillProps) {
+  const tint = resolveEventTint(resolveEventColor(event));
   return (
-    <div className={cn(eventPill({ past }), EVENT_COLORS[color])} style={{ height: EVENT_PILL_HEIGHT_PX }}>
+    <div className={cn(eventPill({ past }), tint.className)} style={{ height: EVENT_PILL_HEIGHT_PX, ...tint.style }}>
       <EventText as="span" size="xs" className="min-w-0 truncate font-medium">
         {event.title ?? event.calendarName}
       </EventText>
