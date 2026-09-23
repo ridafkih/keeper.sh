@@ -8,6 +8,7 @@ import type {
   EventCreateResult,
   PendingInvite,
   ProviderCredentials,
+  ProviderEventReference,
   RsvpStatus,
 } from "@/types";
 import { createCoordinatedRefresher } from "@keeper.sh/calendar";
@@ -226,7 +227,7 @@ const createEventMutation = async (
 
 const dispatchUpdateEvent = async (
   credentials: ProviderCredentials,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   updates: EventUpdateInput,
   deps: MutationDependencies,
 ): Promise<EventActionResult> => {
@@ -239,11 +240,11 @@ const dispatchUpdateEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return updateGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid, updates);
+      return updateGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid, updates);
     }
 
     if (credentials.provider === "outlook") {
-      return updateOutlookEvent(accessToken, sourceEventUid, updates);
+      return updateOutlookEvent(accessToken, reference, updates);
     }
 
     return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
@@ -259,7 +260,7 @@ const dispatchUpdateEvent = async (
         encryptedPassword: credentials.caldav.encryptedPassword,
         encryptionKey: deps.encryptionKey,
       },
-      sourceEventUid,
+      reference.sourceEventUid,
       updates,
     );
   }
@@ -386,7 +387,7 @@ const updateEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, eventSource, sourceEventUid } = resolved;
+  const { credentials, eventSource, sourceEventId, sourceEventUid } = resolved;
 
   if (!sourceEventUid) {
     return { success: false, error: "Event cannot be updated (no source UID)." };
@@ -402,7 +403,7 @@ const updateEventMutation = async (
 
   const providerResult = await dispatchUpdateEvent(
     credentials,
-    sourceEventUid,
+    { sourceEventId, sourceEventUid },
     completedUpdates,
     deps,
   );
@@ -426,7 +427,7 @@ const updateEventMutation = async (
 
 const dispatchDeleteEvent = async (
   credentials: ProviderCredentials,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   deps: MutationDependencies,
 ): Promise<EventActionResult | null> => {
   if (credentials.oauth) {
@@ -438,11 +439,11 @@ const dispatchDeleteEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return deleteGoogleEvent(accessToken, credentials.externalCalendarId, sourceEventUid);
+      return deleteGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid);
     }
 
     if (credentials.provider === "outlook") {
-      return deleteOutlookEvent(accessToken, sourceEventUid);
+      return deleteOutlookEvent(accessToken, reference);
     }
 
     return null;
@@ -458,7 +459,7 @@ const dispatchDeleteEvent = async (
         encryptedPassword: credentials.caldav.encryptedPassword,
         encryptionKey: deps.encryptionKey,
       },
-      sourceEventUid,
+      reference.sourceEventUid,
     );
   }
 
@@ -488,10 +489,10 @@ const deleteEventMutation = async (
     return { success: false, error: "Event not found." };
   }
 
-  const { credentials, eventSource, sourceEventUid } = resolved;
+  const { credentials, eventSource, sourceEventId, sourceEventUid } = resolved;
 
   if (sourceEventUid) {
-    const providerResult = await dispatchDeleteEvent(credentials, sourceEventUid, deps);
+    const providerResult = await dispatchDeleteEvent(credentials, { sourceEventId, sourceEventUid }, deps);
 
     if (providerResult && !providerResult.success) {
       return providerResult;
