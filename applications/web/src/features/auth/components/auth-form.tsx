@@ -16,6 +16,7 @@ import { authClient } from "@/lib/auth-client";
 import {
   getEnabledSocialProviders,
   resolveCredentialField,
+  resolveOidcProviderName,
   type AuthCapabilities,
 } from "@/lib/auth-capabilities";
 import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
@@ -66,15 +67,16 @@ export type AuthScreenCopy = {
 };
 
 type SocialAuthProvider = {
-  id: "google" | "microsoft";
+  id: "google" | "microsoft" | "oidc";
   label: string;
-  to: "/auth/google" | "/auth/outlook";
-  iconSrc: string;
+  to: "/auth/google" | "/auth/outlook" | "/auth/oidc";
+  iconSrc?: string;
 };
 
 const SOCIAL_AUTH_PROVIDERS: readonly SocialAuthProvider[] = [
   { id: "google", label: "Google", to: "/auth/google", iconSrc: "/integrations/icon-google.svg" },
   { id: "microsoft", label: "Outlook", to: "/auth/outlook", iconSrc: "/integrations/icon-outlook.svg" },
+  { id: "oidc", label: "SSO", to: "/auth/oidc" },
 ];
 
 const submitTextVariants: Record<AuthFormStatus, Variants[string]> = {
@@ -107,6 +109,7 @@ export function AuthForm({
   const hasSocialProviders = getEnabledSocialProviders(capabilities).length > 0;
   const switchSearch = resolveSwitchSearch(authorizationSearch);
   const switchHref = resolvePathWithSearch(copy.switchTo, switchSearch);
+  const hideCredentialForm = capabilities.disableLocalAuth;
 
   return (
     <>
@@ -124,24 +127,28 @@ export function AuthForm({
             oauthActionLabel={copy.oauthActionLabel}
             authorizationSearch={authorizationSearch}
           />
-          <Divider>or</Divider>
+          {!hideCredentialForm && <Divider>or</Divider>}
         </>
       )}
-      <CredentialForm
-        capabilities={capabilities}
-        submitLabel={copy.submitLabel}
-        action={copy.action}
-        authorizationSearch={authorizationSearch}
-      />
-      <div className="flex flex-col gap-1.5">
-        <AuthError />
-        <AuthSwitchPrompt>
-          {copy.switchPrompt}{" "}
-          <ExternalTextLink href={switchHref}>
-            {copy.switchCta}
-          </ExternalTextLink>
-        </AuthSwitchPrompt>
-      </div>
+      {!hideCredentialForm && (
+        <CredentialForm
+          capabilities={capabilities}
+          submitLabel={copy.submitLabel}
+          action={copy.action}
+          authorizationSearch={authorizationSearch}
+        />
+      )}
+      {!hideCredentialForm && (
+        <div className="flex flex-col gap-1.5">
+          <AuthError />
+          <AuthSwitchPrompt>
+            {copy.switchPrompt}{" "}
+            <ExternalTextLink href={switchHref}>
+              {copy.switchCta}
+            </ExternalTextLink>
+          </AuthSwitchPrompt>
+        </div>
+      )}
     </>
   );
 }
@@ -227,10 +234,12 @@ function SocialAuthButtons({
           className="w-full justify-center"
           variant="border"
         >
-          <ButtonIcon>
-            <img src={provider.iconSrc} alt="" width={16} height={16} />
-          </ButtonIcon>
-          <ButtonText>{`${oauthActionLabel} with ${provider.label}`}</ButtonText>
+          {provider.iconSrc && (
+            <ButtonIcon>
+              <img src={provider.iconSrc} alt="" width={16} height={16} />
+            </ButtonIcon>
+          )}
+          <ButtonText>{`${oauthActionLabel} with ${provider.id === "oidc" ? resolveOidcProviderName(capabilities) : provider.label}`}</ButtonText>
         </ExternalLinkButton>
       ))}
     </>
