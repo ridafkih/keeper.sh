@@ -52,6 +52,7 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
       readExistingEvents: () => transaction
         .select({
           availability: eventStatesTable.availability,
+          conference: eventStatesTable.conference,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           exceptionDates: eventStatesTable.exceptionDates,

@@ -487,6 +487,7 @@ const createIngestionPersistenceTransaction = (
         ledger.readCount += 1;
         const events = await measureLedgerRead(ledger, () => transaction.select({
           availability: eventStatesTable.availability,
+          conference: eventStatesTable.conference,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           exceptionDates: eventStatesTable.exceptionDates,

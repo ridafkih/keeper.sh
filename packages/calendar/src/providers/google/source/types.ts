@@ -1,4 +1,5 @@
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import type { EventConference } from "../../../core/events/conference";
 
 interface GoogleCalendarListEntry {
   id: string;
@@ -22,7 +23,22 @@ interface GoogleEventDateTime {
   timeZone?: string;
 }
 
+interface GoogleConferenceEntryPoint {
+  entryPointType?: string;
+  label?: string;
+  pin?: string;
+  uri?: string;
+}
+
+interface GoogleConferenceData {
+  conferenceId?: string;
+  conferenceSolution?: { key?: { type?: string }; name?: string };
+  entryPoints?: GoogleConferenceEntryPoint[];
+}
+
 interface GoogleCalendarEvent {
+  conferenceData?: GoogleConferenceData;
+  hangoutLink?: string;
   id?: string;
   iCalUID?: string;
   status?: "confirmed" | "tentative" | "cancelled";
@@ -81,6 +97,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  conference?: EventConference;
 }
 
 export type {
@@ -88,6 +105,8 @@ export type {
   GoogleCalendarListResponse,
   GoogleEventDateTime,
   GoogleCalendarEvent,
+  GoogleConferenceData,
+  GoogleConferenceEntryPoint,
   GoogleEventsListResponse,
   FetchEventsOptions,
   FetchEventsResult,

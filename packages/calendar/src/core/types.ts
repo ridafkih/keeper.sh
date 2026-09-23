@@ -1,5 +1,6 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
+import type { EventConference } from "./events/conference";
 import type { EditableEventContentSnapshot } from "./events/content-hash";
 import type { RefreshLockStore } from "./oauth/refresh-coordinator";
 
@@ -62,6 +63,7 @@ interface SyncableEvent {
   summary: string;
   description?: string;
   location?: string;
+  conference?: EventConference;
   isPrivate?: boolean;
   calendarId: string;
   calendarName: string | null;
@@ -216,6 +218,7 @@ interface SourceEvent {
   title?: string;
   description?: string;
   location?: string;
+  conference?: EventConference;
 }
 
 export type {

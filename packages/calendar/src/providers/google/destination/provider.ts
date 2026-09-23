@@ -18,12 +18,19 @@ import {
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
-import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
+import {
+  GOOGLE_CALENDAR_API,
+  GOOGLE_CALENDAR_MAX_RESULTS,
+  GOOGLE_CONFERENCE_DATA_VERSION,
+  GONE_STATUS,
+} from "../shared/api";
 import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
-import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
+import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "../shared/errors";
+import { isConferenceDataRejection, withoutConferenceData } from "./conference-data";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
+import { stripConferenceRegion } from "./conference-block";
 import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
 import {
@@ -84,7 +91,8 @@ const buildGoogleEchoObservation = (resource: GoogleEvent): PushEchoObservation 
   return {
     content: createEditableEventContentSnapshot({
       availability: parseGoogleAvailability(resource),
-      description: resource.description,
+      /* What we sent had its delimiters stripped; a region Google added back is not ours to match. */
+      description: stripConferenceRegion(resource.description),
       endTime,
       isAllDay: Boolean(resource.start?.date),
       location: resource.location,
@@ -238,6 +246,16 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   };
 
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
+  const importPath = `${eventsPath}/import?conferenceDataVersion=${GOOGLE_CONFERENCE_DATA_VERSION}`;
+
+  const conferenceMetrics = { attached: 0, recovered: 0, rejected: 0 };
+
+  const buildImportRequest = (resource: GoogleEvent): BatchSubRequest => ({
+    method: "POST",
+    path: importPath,
+    headers: { "Content-Type": "application/json" },
+    body: resource,
+  });
 
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
   const buildPushRequest = (
@@ -248,28 +266,96 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     if (!resource) {
       return null;
     }
+    if (resource.conferenceData) {
+      conferenceMetrics.attached += 1;
+    }
     return {
       uid,
       resource,
-      request: {
-        method: "POST",
-        path: `${eventsPath}/import`,
-        headers: { "Content-Type": "application/json" },
-        body: resource,
-      },
+      request: buildImportRequest(resource),
     };
+  };
+
+  interface PendingImport {
+    index: number;
+    uid: string;
+    resource: GoogleEvent;
+    batchIndex: number;
+  }
+
+  const readImportResponse = (
+    entry: PendingImport,
+    response: BatchSubResponse | undefined,
+  ): PushResult => {
+    if (!response) {
+      return {
+        error: "Missing batch response",
+        errorType: "GoogleBatchProtocolError",
+        success: false,
+      };
+    }
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return createImportResult(
+        getImportedEventId(response.body),
+        entry.uid,
+        response.statusCode,
+        compareGoogleImportEcho(entry.resource, response.body),
+      );
+    }
+    return {
+      error: extractBatchErrorMessage(response.body, response.statusCode),
+      errorType: "GoogleCalendarApiError",
+      statusCode: response.statusCode,
+      success: false,
+    };
+  };
+
+  const retryConferenceRejections = async (
+    pending: PendingImport[],
+    responses: BatchSubResponse[],
+    results: PushResult[],
+  ): Promise<void> => {
+    const retries: PendingImport[] = [];
+    const retryRequests: BatchSubRequest[] = [];
+
+    for (const entry of pending) {
+      const response = responses[entry.batchIndex];
+      if (!response || !entry.resource.conferenceData) {
+        continue;
+      }
+      if (!isConferenceDataRejection(
+        response.statusCode,
+        parseGoogleApiErrorFromBody(response.body),
+      )) {
+        continue;
+      }
+      conferenceMetrics.rejected += 1;
+      const resource = withoutConferenceData(entry.resource);
+      retries.push({ ...entry, batchIndex: retryRequests.length, resource });
+      retryRequests.push(buildImportRequest(resource));
+    }
+
+    if (retryRequests.length === 0) {
+      return;
+    }
+
+    const retryResponses = await executeBatchChunked(retryRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+
+    for (const entry of retries) {
+      const result = readImportResponse(entry, retryResponses[entry.batchIndex]);
+      if (!result.success) {
+        continue;
+      }
+      conferenceMetrics.recovered += 1;
+      results[entry.index] = result;
+    }
   };
 
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     await refreshIfNeeded();
 
     const results: PushResult[] = Array.from({ length: events.length });
-    const pending: {
-      index: number;
-      uid: string;
-      resource: GoogleEvent;
-      batchIndex: number;
-    }[] = [];
+    const pending: PendingImport[] = [];
     const requests: BatchSubRequest[] = [];
 
     for (let index = 0; index < events.length; index++) {
@@ -301,30 +387,10 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
 
     for (const entry of pending) {
-      const response = responses[entry.batchIndex];
-      if (!response) {
-        results[entry.index] = {
-          error: "Missing batch response",
-          errorType: "GoogleBatchProtocolError",
-          success: false,
-        };
-      } else if (response.statusCode >= 200 && response.statusCode < 300) {
-        const deleteId = getImportedEventId(response.body);
-        results[entry.index] = createImportResult(
-          deleteId,
-          entry.uid,
-          response.statusCode,
-          compareGoogleImportEcho(entry.resource, response.body),
-        );
-      } else {
-        results[entry.index] = {
-          error: extractBatchErrorMessage(response.body, response.statusCode),
-          errorType: "GoogleCalendarApiError",
-          statusCode: response.statusCode,
-          success: false,
-        };
-      }
+      results[entry.index] = readImportResponse(entry, responses[entry.batchIndex]);
     }
+
+    await retryConferenceRejections(pending, responses, results);
 
     return results;
   };
@@ -561,9 +627,17 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  /* Counts only. A join URL or dial-in PIN identifies a meeting, so none reach a log line. */
+  const getSyncDiagnostics = (): Record<string, number> => ({
+    "conference.attached": conferenceMetrics.attached,
+    "conference.recovered_without_conference": conferenceMetrics.recovered,
+    "conference.rejected": conferenceMetrics.rejected,
+  });
+
   return {
     deleteEvents,
     getRemoteEventsByIds,
+    getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeGoogleEvent,
     pushEvents,

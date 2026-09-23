@@ -63,10 +63,24 @@ type CreateSource = typeof createSourceSchema.infer;
 
 const stringSchema = type("string");
 
+const googleConferenceDataSchema = type({
+  "conferenceId?": "string",
+  "conferenceSolution?": { "key?": { "type?": "string" }, "name?": "string" },
+  "entryPoints?": type({
+    "entryPointType?": "string",
+    "label?": "string",
+    "pin?": "string",
+    "uri?": "string",
+  }).array(),
+});
+type GoogleConferenceData = typeof googleConferenceDataSchema.infer;
+
 const googleEventSchema = type({
+  "conferenceData?": googleConferenceDataSchema,
   "description?": "string",
   "end?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "eventType?": "string",
+  "hangoutLink?": "string",
   "iCalUID?": "string",
   "id?": "string",
   "location?": "string",
@@ -542,6 +556,7 @@ export {
   feedbackRequestSchema,
   createSourceSchema,
   stringSchema,
+  googleConferenceDataSchema,
   googleEventSchema,
   googleEventListSchema,
   googleAttendeeSchema,
@@ -596,6 +611,7 @@ export type {
   BillingPeriod,
   FeedbackRequest,
   CreateSource,
+  GoogleConferenceData,
   GoogleEvent,
   GoogleEventList,
   GoogleAttendee,

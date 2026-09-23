@@ -1,4 +1,6 @@
 import type { SourceEvent } from "../types";
+import type { EventConference } from "../events/conference";
+import { conferenceIdentityValues } from "../events/conference";
 import type { IcsDuration, IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import stringify from "fast-json-stable-stringify";
 import { buildSourceEventInstanceKey } from "./event-instance";
@@ -84,6 +86,7 @@ interface SourceEventIdentityInput {
   recurrenceDuration?: SourceEvent["recurrenceDuration"];
   recurrenceRule?: IcsRecurrenceRule | null;
   startTimeZone?: string | null;
+  conference?: EventConference;
 }
 
 const buildSourceEventIdentityKey = (
@@ -107,6 +110,7 @@ const buildSourceEventIdentityKey = (
     serializeStructuredIdentityValue(input.recurrenceRule),
     serializeStructuredIdentityValue(input.exceptionDates),
     input.recurrenceId?.toISOString() ?? "",
+    ...conferenceIdentityValues(input.conference),
   ]);
 
 const deduplicateIncomingEvents = (incomingEvents: SourceEvent[]): SourceEvent[] => {
@@ -140,6 +144,7 @@ const buildExistingEventIdentitySet = (
       buildSourceEventIdentityKey(
         {
           availability: existingEvent.availability,
+          conference: existingEvent.conference,
           description: existingEvent.description,
           endTime: existingEvent.endTime,
           exceptionDates: existingEvent.exceptionDates,
@@ -180,6 +185,7 @@ const buildSourceEventsToAdd = (
         buildSourceEventIdentityKey(
           {
             availability: incomingEvent.availability,
+            conference: incomingEvent.conference,
             description: incomingEvent.description,
             endTime: incomingEvent.endTime,
             exceptionDates: incomingEvent.exceptionDates,

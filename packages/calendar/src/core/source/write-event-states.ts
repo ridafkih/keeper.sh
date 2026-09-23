@@ -3,6 +3,7 @@ import { isNotNull, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
+import { serializeEventConference } from "../events/conference";
 import { serializeStoredIcsRecurrenceRule } from "../events/stored-recurrence";
 
 const EMPTY_ROW_COUNT = 0;
@@ -24,6 +25,7 @@ const buildEventStateInsertRow = (
 ): EventStateInsertRow => ({
   availability: event.availability,
   calendarId,
+  conference: serializeEventConference(event.conference),
   description: event.description,
   endTime: event.endTime,
   exceptionDates: serializeOptionalJson(event.exceptionDates),
@@ -76,6 +78,7 @@ const excludedColumn = (columnName: string) => sql.raw(`excluded."${columnName}"
 
 const EVENT_STATE_CONFLICT_SET = {
   availability: excludedColumn(eventStatesTable.availability.name),
+  conference: excludedColumn(eventStatesTable.conference.name),
   description: excludedColumn(eventStatesTable.description.name),
   exceptionDates: excludedColumn(eventStatesTable.exceptionDates.name),
   isAllDay: excludedColumn(eventStatesTable.isAllDay.name),

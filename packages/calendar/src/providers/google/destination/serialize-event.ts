@@ -1,6 +1,7 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
 import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
+import { buildGoogleConferenceData } from "./conference-data";
 import { normalizeGoogleEvent } from "./normalize-event";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
@@ -49,6 +50,7 @@ const serializeGoogleEvent = (
     location: event.location,
     start: buildDateField(normalized.startTime, isAllDay, event.startTimeZone, recurrenceRule),
     summary: event.summary,
+    ...(event.conference && { conferenceData: buildGoogleConferenceData(event.conference) }),
     ...(event.availability === "free" && { transparency: "transparent" }),
     ...(event.isPrivate && { visibility: "private" }),
     ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),

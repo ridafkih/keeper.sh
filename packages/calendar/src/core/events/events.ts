@@ -12,6 +12,8 @@ import type {
   SyncableEvent,
 } from "../types";
 import type { SyncWindow } from "../sync/sync-range";
+import { parseStoredEventConference } from "./conference";
+import type { EventConference } from "./conference";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
@@ -66,6 +68,22 @@ const excludeOrAbsent = <TValue>(exclude: boolean, value: TValue | null): TValue
     return;
   }
   return orAbsent(value);
+};
+
+/*
+ * The join link is event content, so it travels under the same consent as the
+ * description: a calendar mirrored as an opaque busy block must not start
+ * handing out a way into the meeting.
+ */
+const resolveConference = (
+  excludeEventDescription: boolean,
+  value: string | null,
+): EventConference | undefined => {
+  if (excludeEventDescription) {
+    return;
+  }
+
+  return parseStoredEventConference(value);
 };
 
 const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
@@ -192,6 +210,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
       markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
       availability: eventStatesTable.availability,
+      conference: eventStatesTable.conference,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,
@@ -270,6 +289,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
       availability: parseAvailability(result.availability),
+      conference: resolveConference(result.excludeEventDescription, result.conference),
       description: excludeOrAbsent(result.excludeEventDescription, result.description),
       endTime: result.endTime,
       eventStateId: result.id,
@@ -347,6 +367,7 @@ const getEventsForDestination = async (
 
 export {
   getEventsForCalendars,
+  resolveConference,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
