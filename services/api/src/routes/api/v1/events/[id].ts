@@ -5,12 +5,19 @@ import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventPatchBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
+import { enqueuePushSync } from "@/utils/enqueue-push-sync";
+import { database, oauthProviders, refreshLockStore, encryptionKey, premiumService } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   oauthTokenRefresher: oauthProviders,
   refreshLockStore,
   encryptionKey,
+  onSourceEventChanged: async (userId) => {
+    const plan = await premiumService.getUserPlan(userId);
+    if (plan) {
+      await enqueuePushSync(userId, plan);
+    }
+  },
 });
 
 const GET = withWideEvent(
