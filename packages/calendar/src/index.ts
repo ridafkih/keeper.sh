@@ -52,6 +52,7 @@ export {
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";
 export {
+  OAUTH_SYNC_TOKEN_REFRESH_MS,
   OAUTH_SYNC_WINDOW_VERSION,
   getDeterministicRefreshOffset,
   getOAuthSyncTokenVersion,
@@ -178,6 +179,13 @@ export {
   type DestinationEventReadDiagnostics,
   type DestinationEventReadResult,
 } from "./core/events/events";
+export {
+  filterNativeDuplicateOccurrences,
+  getNativeOccurrenceIndex,
+  type NativeDuplicateFilterResult,
+  type NativeOccurrenceIndex,
+} from "./core/events/native-duplicates";
+export { type BunSQLClient } from "./core/database-client";
 export {
   findSourceEventsExceedingRecurrenceBudget,
   materializeRecurrenceEvents,
