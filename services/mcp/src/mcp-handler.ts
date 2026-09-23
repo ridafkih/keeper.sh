@@ -152,7 +152,7 @@ const registerToolset = (
     server.registerTool(
       name,
       {
-        annotations: tool.annotations,
+        annotations: { ...tool.annotations, title: tool.title },
         description: tool.description,
         inputSchema: tool.inputSchema,
         title: tool.title,
