@@ -85,9 +85,6 @@ describe("createKeeperMcpToolset", () => {
 
     for (const [, tool] of Object.entries(toolset)) {
       expect(tool.annotations.openWorldHint).toBe(false);
-      if (tool.annotations.readOnlyHint) {
-        continue;
-      }
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
   });
