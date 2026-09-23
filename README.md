@@ -255,6 +255,8 @@ Once this is configured, set the client ID and client secret as the `GOOGLE_CLIE
 
 The clearest non-legacy walkthrough for configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
 
+If people will sign in with work or school (Entra ID) accounts, add the `xms_edov` optional claim to the app registration under **Token configuration → Add optional claim → ID → `xms_edov`**. Entra sets it when the tenant has verified the domain of the account's email, and Keeper.sh uses it to record that email as verified. Without it, a work or school sign-in is recorded as unverified and can't be linked automatically to an existing account with the same email; it can still be linked from settings while signed in. Personal Microsoft accounts don't need the claim.
+
 ## Standalone Container
 
 `keeper-standalone:2` is the recommended starting point for a single-instance deployment. This container contains the `cron`, `worker`, `web`, `api` services as well as a configured `redis`, `database`, and `caddy` instance that puts everything behind the same port. Split the services out later if you need to scale them independently, run your own Postgres and Redis, or place them on separate hosts.
