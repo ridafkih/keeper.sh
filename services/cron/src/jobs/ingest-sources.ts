@@ -1,3 +1,4 @@
+import { createEwsTokenProvider, createEwsSourceFetcher, parseEwsConfig } from "@keeper.sh/calendar/ews";
 import type { CronOptions } from "cronbake";
 import {
   ingestSource,
@@ -54,6 +55,8 @@ import {
   calendarAccountsTable,
   calendarsTable,
   caldavCredentialsTable,
+  ewsCredentialsTable,
+  ewsCalendarStateTable,
   eventStatesTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
@@ -636,10 +639,10 @@ const resolveTokenRefresher = (provider: string) => {
     });
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
+  if (provider === "outlook") {
     return createMicrosoftTokenRefresher({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
+      clientId: env.MICROSOFT_CLIENT_ID ?? "",
+      clientSecret: env.MICROSOFT_CLIENT_SECRET ?? "",
     });
   }
 
@@ -1373,6 +1376,7 @@ const ingestOAuthSources = async (
                 };
                 if (rawRefresher) {
                   const tokenRefresher = createCoordinatedRefresher({
+        microsoft: currentSource.provider === "outlook",
                     database,
                     oauthCredentialId: currentSource.oauthCredentialId,
                     calendarAccountId: currentSource.accountId,
@@ -1735,6 +1739,214 @@ caldavSources.map((source) => source.userId),
   );
 };
 
+const ingestEwsSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
+  if (!env.ENCRYPTION_KEY) {
+    return createEmptyIngestionBatchResult();
+  }
+
+  const encryptionKey = env.ENCRYPTION_KEY;
+
+  const ewsSources = await database
+    .select({
+      accountId: calendarAccountsTable.id,
+      calendarId: calendarsTable.id,
+      externalCalendarId: calendarsTable.externalCalendarId,
+      provider: calendarAccountsTable.provider,
+      reauthenticationSource: calendarAccountsTable.reauthenticationSource,
+
+      encryptedConfig: ewsCredentialsTable.encryptedConfig,
+
+      userId: calendarsTable.userId,
+      ingestFutureRange: calendarsTable.ingestFutureRange,
+      ingestHistoricRange: calendarsTable.ingestHistoricRange,
+      ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+    })
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .innerJoin(ewsCredentialsTable, eq(calendarAccountsTable.id, ewsCredentialsTable.accountId))
+    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
+    .where(
+      and(
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+        eq(calendarsTable.disabled, false),
+      ),
+    )
+    .orderBy(...buildFleetPriorityOrder());
+
+  const settlements = await allSettledGroupedWithConcurrency(
+    ewsSources.map((source) => {
+      const enqueuedAt = Date.now();
+      return () =>
+      withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
+        context(async () => {
+          widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
+          widelog.set("operation.name", "ingest-source");
+          widelog.set("operation.type", "job");
+          widelog.set("sync.direction", "ingest");
+          widelog.set("user.id", source.userId);
+          widelog.set("provider.name", source.provider);
+          widelog.set("provider.account_id", source.accountId);
+          widelog.set("provider.calendar_id", source.calendarId);
+
+          try {
+            const result = await widelog.time.measure("duration_ms", () =>
+              runSourceIngest(lane, source.calendarId, signal, async () => {
+                const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
+                  .select({
+                    accountId: calendarAccountsTable.id,
+                    externalCalendarId: calendarsTable.externalCalendarId,
+                    encryptedConfig: ewsCredentialsTable.encryptedConfig,
+                    lastReadAt: ewsCalendarStateTable.lastReadAt,
+                    failureCount: calendarsTable.ingestFailureCount,
+                    ingestFutureRange: calendarsTable.ingestFutureRange,
+                    ingestHistoricRange: calendarsTable.ingestHistoricRange,
+                    ingestSeq: calendarsTable.ingestSeq,
+                    ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+                    nextAttemptAt: calendarsTable.ingestNextAttemptAt,
+                    provider: calendarAccountsTable.provider,
+
+                    storedEventCount: calendarsTable.storedEventCount,
+                    userId: calendarsTable.userId,
+
+                  })
+                  .from(calendarsTable)
+                  .innerJoin(
+                    calendarAccountsTable,
+                    eq(calendarsTable.accountId, calendarAccountsTable.id),
+                  )
+                  .innerJoin(
+                    ewsCredentialsTable,
+                    eq(calendarAccountsTable.id, ewsCredentialsTable.accountId),
+                  )
+                  .leftJoin(ewsCalendarStateTable, eq(ewsCalendarStateTable.calendarId, calendarsTable.id))
+                  .where(and(
+                    eq(calendarsTable.id, source.calendarId),
+                    eq(calendarsTable.disabled, false),
+                    arrayContains(calendarsTable.capabilities, ["pull"]),
+                  ))
+                  .limit(1));
+                if (currentSource?.lastReadAt) {
+                  const connection = parseEwsConfig(JSON.parse(decryptPassword(currentSource.encryptedConfig, encryptionKey)));
+                  if (Date.now() - currentSource.lastReadAt.getTime() < (connection.syncIntervalSeconds ?? 120) * 1000) { return; }
+                }
+                return currentSource;
+              }, async (currentSource, isCurrent) => {
+                const ranges = await getRequiredSourceRanges(lane, source.calendarId);
+                if (!currentSource.externalCalendarId) { throw new Error("EWS calendar ID is missing"); }
+                const fetcher = createEwsSourceFetcher({
+                  connection: parseEwsConfig(JSON.parse(decryptPassword(currentSource.encryptedConfig, encryptionKey))),
+                  calendarId: currentSource.externalCalendarId,
+                  getAccessToken: createEwsTokenProvider(database, currentSource.accountId, encryptionKey, { safeFetchOptions: { ...safeFetchOptions, signal } }),
+                  safeFetchOptions: { ...safeFetchOptions, signal },
+                  plan: createSourceIngestionPlan(ranges.historicRange, ranges.futureRange),
+                });
+                const reservation = await reserveIngestFlushWeight(
+                  lane,
+                  source.calendarId,
+                  currentSource.ingestWindowRecordedAt !== null,
+                  signal,
+                  currentSource.storedEventCount,
+                );
+                try {
+                  const ingestionResult = await ingestSource({
+                    calendarId: source.calendarId,
+                    fetchEvents: async () => {
+                      const fetchResult = await fetcher.fetchEvents();
+                      recordSkippedResources(
+                        fetchResult.skippedResourceCount ?? 0,
+                        fetchResult.skippedResourceReasons ?? [],
+                      );
+                      return fetchResult;
+                    },
+                    isCurrent,
+                    withPersistenceTransaction: createIngestionPersistenceTransaction(
+                      source.calendarId,
+                      signal,
+                      deadlineAt,
+                      reservation,
+                      currentSource.ingestSeq,
+                    ),
+                    onIngestEvent: recordIngestWideEvent,
+                  });
+                  await database.insert(ewsCalendarStateTable).values({
+                    calendarId: source.calendarId, lastReadAt: new Date(),
+                  }).onConflictDoUpdate({ target: ewsCalendarStateTable.calendarId, set: { lastReadAt: new Date() } });
+                  return {
+                    eventsAdded: ingestionResult.eventsAdded,
+                    eventsRemoved: ingestionResult.eventsRemoved,
+                    firstIngest: currentSource.ingestWindowRecordedAt === null,
+                    reauthentication: {
+                      accountId: source.accountId,
+                      demand: "authenticated" as const,
+                    },
+                    shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
+                      || ingestionResult.eventsAdded > 0
+                      || ingestionResult.eventsRemoved > 0,
+                    userId: currentSource.userId,
+                  };
+                } finally {
+                  reservation.release();
+                }
+              }, (error) =>
+                !shouldTreatAsProviderAuthFailure(error)
+                && !isIngestInfrastructureError(error)),
+            );
+            if (!result) {
+              widelog.set("outcome", "skipped");
+              return createSkippedIngestionResult(source.userId);
+            }
+
+            widelog.set("sync.events_added", result.eventsAdded);
+            widelog.set("sync.events_removed", result.eventsRemoved);
+
+            widelog.set("outcome", "success");
+
+            return result;
+          } catch (error) {
+            if (recordBaselineMovedAbort(error)) {
+              throw error;
+            }
+
+            widelog.set("outcome", "error");
+
+            if (shouldTreatAsProviderAuthFailure(error)) {
+              widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
+
+              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+            }
+
+            const missingCalendarFailure = resolveMissingCalendarFailure(error);
+            if (missingCalendarFailure) {
+              widelog.errorFields(error, missingCalendarFailure);
+            } else {
+              widelog.errorFields(error, {
+                slug: resolveIngestErrorSlug(error),
+                retriable: true,
+              });
+            }
+
+            throw error;
+          } finally {
+            widelog.flush();
+          }
+        }),
+      SOURCE_TIMEOUT_MS);
+    }),
+ewsSources.map((source) => source.userId),
+    { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
+  );
+
+  return summariseIngestionSettlements(
+    lane,
+    settlements,
+    ewsSources.map(({ accountId, reauthenticationSource }) => ({
+      accountId,
+      recordedDemandSource: reauthenticationSource,
+    })),
+    ewsSources.map(({ calendarId }) => calendarId),
+  );
+};
+
 const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
   const icsSources = await database
     .select({
@@ -1932,6 +2144,7 @@ export default withCronWideEvent({
     const settlements = await Promise.allSettled([
       ingestOAuthSources(),
       ingestCalDAVSources(fleetIngestLane),
+      ingestEwsSources(fleetIngestLane),
       ingestIcsSources(fleetIngestLane),
     ]);
     const failures: unknown[] = [];

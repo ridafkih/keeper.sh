@@ -35,6 +35,9 @@ const oauthCredentialsTable = pgTable(
     id: uuid().notNull().primaryKey().defaultRandom(),
     needsReauthentication: boolean().notNull().default(false),
     provider: text().notNull(),
+    microsoftClientId: text(),
+    microsoftTenant: text(),
+    microsoftScope: text(),
     refreshToken: text().notNull(),
     updatedAt: timestamp({ withTimezone: true })
       .notNull()
@@ -103,6 +106,12 @@ const calendarAccountsTable = pgTable(
     ),
   ],
 );
+
+const ewsCredentialsTable = pgTable("ews_credentials", {
+  accountId: uuid().primaryKey().references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
+  encryptedConfig: text().notNull(),
+  updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
 
 const calendarsTable = pgTable(
   "calendars",
@@ -176,6 +185,11 @@ const calendarsTable = pgTable(
     ),
   ],
 );
+
+const ewsCalendarStateTable = pgTable("ews_calendar_state", {
+  calendarId: uuid().primaryKey().references(() => calendarsTable.id, { onDelete: "cascade" }),
+  lastReadAt: timestamp({ withTimezone: true }).notNull(),
+});
 
 const calendarRemovalsTable = pgTable(
   "calendar_removals",
@@ -541,6 +555,8 @@ const icalFeedCalendarsTable = pgTable(
 export {
   apiTokensTable,
   caldavCredentialsTable,
+  ewsCredentialsTable,
+  ewsCalendarStateTable,
   calendarAccountsTable,
   calendarPushChannelsTable,
   calendarRemovalsTable,

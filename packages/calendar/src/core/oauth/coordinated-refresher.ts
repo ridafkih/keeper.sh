@@ -1,3 +1,4 @@
+import { createMicrosoftTokenRefresher } from "./microsoft";
 import type { CredentialRefreshResult, RefreshLockStore } from "./refresh-coordinator";
 import { runWithCredentialRefreshLock } from "./refresh-coordinator";
 import { isOAuthOperatorFaultError, isOAuthReauthRequiredError } from "./error-classification";
@@ -56,6 +57,7 @@ interface CoordinatedRefresherOptions {
   oauthCredentialId: string;
   calendarAccountId: string;
   refreshLockStore: RefreshLockStore | null;
+  microsoft?: boolean;
   rawRefresh: (refreshToken: string) => Promise<{
     access_token: string;
     expires_in: number;
@@ -101,7 +103,17 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
       oauthCredentialId,
       async () => {
         try {
-          const result = await rawRefresh(refreshToken);
+          let refresh = rawRefresh;
+          if (options.microsoft) {
+            const [credential] = await database.select({
+              clientId: oauthCredentialsTable.microsoftClientId,
+              tenant: oauthCredentialsTable.microsoftTenant,
+            }).from(oauthCredentialsTable).where(eq(oauthCredentialsTable.id, oauthCredentialId)).limit(1);
+            if (credential?.clientId) {
+              refresh = createMicrosoftTokenRefresher({ clientId: credential.clientId, clientSecret: "", tenant: credential.tenant ?? "common" });
+            }
+          }
+          const result = await refresh(refreshToken);
 
           const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
           const rotated = typeof result.refresh_token === "string"

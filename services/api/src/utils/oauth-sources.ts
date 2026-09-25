@@ -1,3 +1,4 @@
+import { createOAuthSourceCredential, type CreateOAuthSourceCredentialData } from "./oauth-source-credentials";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -900,22 +901,41 @@ const insertOAuthCalendarsWithDatabase = async (
 };
 
 const importOAuthAccountCalendars = async (
-  options: ImportOAuthAccountOptions,
+  options: Omit<ImportOAuthAccountOptions, "oauthCredentialId"> & { oauthCredentialId?: string },
+  credentials?: CreateOAuthSourceCredentialData,
 ): Promise<string> => {
   const { database, premiumService } = await import("@/context");
 
   const dependencies = createDefaultImportOAuthAccountDependencies();
 
   const plan = await premiumService.getUserPlan(options.userId);
-  const externalCalendars = await dependencies.listCalendars(options.provider, options.accessToken, options.email);
-
-  return database.transaction(async (tx) => {
+  // New credentials must prove calendar access before replacing an existing grant.
+  // Keep the legacy importer behavior for its existing callers.
+  if (credentials && (options.provider !== "outlook" || credentials.provider !== options.provider || credentials.accessToken !== options.accessToken || credentials.email !== options.email)) {
+    throw new Error("Credential import mismatch");
+  }
+  const discover = async (): Promise<ExternalCalendar[]> => {
+    if (credentials) {
+      const calendars = await listOutlookCalendars(options.accessToken, { ownerEmail: options.email });
+      return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+    }
+    return dependencies.listCalendars(options.provider, options.accessToken, options.email);
+  };
+  const externalCalendars = await discover();
+  let shouldTriggerSync = false;
+  const committedAccountId = await database.transaction(async (tx) => {
     await tx.execute(
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${options.userId}))`,
     );
 
-    const importedAccountId = await importOAuthAccountCalendarsWithDependencies(options, {
+    let { oauthCredentialId } = options;
+    if (credentials) {
+      oauthCredentialId = await createOAuthSourceCredential(options.userId, credentials, tx);
+    }
+    if (!oauthCredentialId) { throw new Error("Missing OAuth credential"); }
+    const importedAccountId = await importOAuthAccountCalendarsWithDependencies({ ...options, oauthCredentialId }, {
       ...dependencies,
+      triggerSync: () => { shouldTriggerSync = true; },
       adoptProviderAccountId: (accountOptions) =>
         adoptProviderAccountIdWithDatabase(tx, accountOptions),
       canAddAccount: (_userId, currentCount) =>
@@ -945,6 +965,10 @@ const importOAuthAccountCalendars = async (
 
     return importedAccountId;
   });
+  if (shouldTriggerSync) {
+    dependencies.triggerSync(options.userId, options.provider, committedAccountId);
+  }
+  return committedAccountId;
 };
 
 export {

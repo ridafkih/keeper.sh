@@ -19,6 +19,7 @@ const isRequestTimeoutError = (error: unknown): boolean =>
 interface MicrosoftOAuthCredentials {
   clientId: string;
   clientSecret: string;
+  tenant?: string;
 }
 
 interface AuthorizationUrlOptions {
@@ -42,10 +43,11 @@ const createMicrosoftTokenRefresher = (
   const { clientId, clientSecret } = credentials;
 
   return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
+    if (!clientId) { throw new Error("Microsoft OAuth not configured"); }
+    const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(credentials.tenant ?? "common")}/oauth2/v2.0/token`, {
       body: new URLSearchParams({
         client_id: clientId,
-        client_secret: clientSecret,
+        ...(clientSecret && { client_secret: clientSecret }),
         grant_type: "refresh_token",
         refresh_token: refreshToken,
       }),

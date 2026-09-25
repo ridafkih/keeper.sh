@@ -66,12 +66,12 @@ const ensureValidAccessToken = async (
     return oauth.accessToken;
   }
 
-  if (!deps.oauthTokenRefresher) {
+  if (!deps.oauthTokenRefresher && provider !== "outlook") {
     return oauth.accessToken;
   }
 
-  const oauthProvider = deps.oauthTokenRefresher.getProvider(provider);
-  if (!oauthProvider) {
+  const oauthProvider = deps.oauthTokenRefresher?.getProvider(provider);
+  if (!oauthProvider && provider !== "outlook") {
     return oauth.accessToken;
   }
 
@@ -80,7 +80,11 @@ const ensureValidAccessToken = async (
     oauthCredentialId: oauth.credentialId,
     calendarAccountId: accountId,
     refreshLockStore: deps.refreshLockStore ?? null,
-    rawRefresh: (refreshToken) => oauthProvider.refreshAccessToken(refreshToken),
+    microsoft: provider === "outlook",
+    rawRefresh: (refreshToken) => {
+      if (!oauthProvider) { throw new Error("OAuth provider unavailable"); }
+      return oauthProvider.refreshAccessToken(refreshToken);
+    },
   });
 
   const result = await refresher(oauth.refreshToken);
