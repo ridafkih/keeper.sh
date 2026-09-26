@@ -11,7 +11,8 @@
     "./icloud": "./src/providers/icloud/index.ts",
     "./ics": "./src/ics/index.ts",
     "./safe-fetch": "./src/utils/safe-fetch.ts",
-    "./digest-fetch": "./src/providers/caldav/shared/digest-fetch.ts"
+    "./digest-fetch": "./src/providers/caldav/shared/digest-fetch.ts",
+    "./ews": "./src/providers/ews/index.ts"
   },
   "scripts": {
     "types": "tsc --noEmit",
@@ -33,7 +34,8 @@
     "tldts": "^7.0.27",
     "ts-ics": "^2.4.3",
     "tsdav": "^2.1.8",
-    "widelogger": "^0.7.0"
+    "widelogger": "^0.7.0",
+    "fast-xml-parser": "^5.4.2"
   },
   "devDependencies": {
     "@keeper.sh/fixtures": "workspace:*",

@@ -48,6 +48,10 @@ const getAccountIdentifier = (input: AccountDisplayInput): string => {
     return email;
   }
 
+  if (input.provider === "ews") {
+    return toNonEmptyValue(input.displayName) ?? getProviderName(input.provider);
+  }
+
   const accountId = toNonEmptyValue(input.accountIdentifier);
   if (accountId) {
     return accountId;
