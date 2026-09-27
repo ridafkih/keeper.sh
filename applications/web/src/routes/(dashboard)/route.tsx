@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
-import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
@@ -10,6 +10,7 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
+import { useSettledPathname } from "@/hooks/use-settled-pathname";
 import { isFullScreenPath, isSyncDetailPath, isSyncsListPath, isWideSidebarPath } from "@/lib/sidebar-width";
 import { SyncsListPanel } from "@/features/syncs/components/syncs-list-panel";
 import { cn } from "@/utils/cn";
@@ -97,7 +98,7 @@ function DetailPaneTransition({ pathname, children }: { pathname: string; childr
 }
 
 function DashboardLayout() {
-  const fullScreen = useRouterState({ select: (state) => isFullScreenPath(state.location.pathname) });
+  const fullScreen = isFullScreenPath(useSettledPathname());
   if (fullScreen) return <FullScreenLayout />;
   return <SidebarLayout />;
 }
@@ -113,7 +114,7 @@ function FullScreenLayout() {
 }
 
 function SidebarLayout() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const pathname = useSettledPathname();
   const wide = isWideSidebarPath(pathname);
   const syncDetail = isSyncDetailPath(pathname);
   const syncsList = syncDetail || isSyncsListPath(pathname);
