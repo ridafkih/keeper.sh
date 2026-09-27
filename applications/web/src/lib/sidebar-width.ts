@@ -18,3 +18,9 @@ const FULL_SCREEN_PATHS = new Set(["/dashboard/setup"]);
 
 // Onboarding needs the whole window for the editor and its preview, so it drops the sidebar and calendar.
 export const isFullScreenPath = (pathname: string): boolean => FULL_SCREEN_PATHS.has(normalizePath(pathname));
+
+export const isSyncsListPath = (pathname: string): boolean => normalizePath(pathname) === SYNCS_ROOT;
+
+// Every sync's page keeps the syncs list in the sidebar, so the sidebar only moves when that list comes or goes.
+export const resolveSidebarPagePath = (pathname: string): string =>
+  isSyncDetailPath(pathname) ? SYNCS_ROOT : pathname;

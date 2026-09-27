@@ -3,6 +3,7 @@ import { useLocation, useRouterState } from "@tanstack/react-router";
 import { LazyMotion, useReducedMotion, type Variants } from "motion/react";
 import * as m from "motion/react-m";
 import { loadMotionFeatures } from "@/lib/motion-features";
+import { resolveSidebarPagePath } from "@/lib/sidebar-width";
 import { resolveScrollParent } from "@/lib/scroll-parent";
 import {
   resolveSidebarDirection,
@@ -92,7 +93,7 @@ function ExitingPageLayer({ page, onDone }: { page: ExitingPage; onDone: () => v
 export function SidebarPageTransition({ children }: PropsWithChildren) {
   // Matches swap when the loader resolves, later than `location`; keying on them keeps the outgoing DOM intact.
   const pathname = useRouterState({
-    select: (state) => state.matches[state.matches.length - 1]?.pathname ?? state.location.pathname,
+    select: (state) => resolveSidebarPagePath(state.matches[state.matches.length - 1]?.pathname ?? state.location.pathname),
   });
   const index = useLocation({ select: (location) => location.state.__TSR_index });
   const declared = useLocation({ select: (location) => location.state.sidebarDirection });

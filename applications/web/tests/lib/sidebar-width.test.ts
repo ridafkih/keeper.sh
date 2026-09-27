@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { isFullScreenPath, isSyncDetailPath, isWideSidebarPath } from "../../src/lib/sidebar-width";
+import {
+  isFullScreenPath,
+  isSyncDetailPath,
+  isSyncsListPath,
+  isWideSidebarPath,
+  resolveSidebarPagePath,
+} from "../../src/lib/sidebar-width";
 
 describe("isWideSidebarPath", () => {
   it("widens the new-sync editor and nothing else", () => {
@@ -29,5 +35,16 @@ describe("isFullScreenPath", () => {
     expect(isFullScreenPath("/dashboard/setup/")).toBe(true);
     expect(isFullScreenPath("/dashboard")).toBe(false);
     expect(isFullScreenPath("/dashboard/syncs/new")).toBe(false);
+  });
+});
+
+describe("resolveSidebarPagePath", () => {
+  it("treats every sync's page as the syncs list so the sidebar stays put between them", () => {
+    expect(resolveSidebarPagePath("/dashboard/syncs/sync-1")).toBe("/dashboard/syncs");
+    expect(resolveSidebarPagePath("/dashboard/syncs/sync-2")).toBe("/dashboard/syncs");
+    expect(resolveSidebarPagePath("/dashboard/syncs/new")).toBe("/dashboard/syncs/new");
+    expect(resolveSidebarPagePath("/dashboard")).toBe("/dashboard");
+    expect(isSyncsListPath("/dashboard/syncs/")).toBe(true);
+    expect(isSyncsListPath("/dashboard/syncs/sync-1")).toBe(false);
   });
 });

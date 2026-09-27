@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
-import { AnimatePresence, LazyMotion } from "motion/react";
+import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "@/state/popover-overlay";
@@ -10,7 +10,7 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
-import { isFullScreenPath, isSyncDetailPath, isWideSidebarPath } from "@/lib/sidebar-width";
+import { isFullScreenPath, isSyncDetailPath, isSyncsListPath, isWideSidebarPath } from "@/lib/sidebar-width";
 import { SyncsListPanel } from "@/features/syncs/components/syncs-list-panel";
 import { cn } from "@/utils/cn";
 
@@ -81,6 +81,21 @@ function PopoverOverlay() {
   );
 }
 
+const PANE_ENTER = { opacity: 0, y: 6 };
+const PANE_SHOWN = { opacity: 1, y: 0 };
+const PANE_TRANSITION = { duration: 0.2, ease: [0.2, 0, 0, 1] as const };
+
+function DetailPaneTransition({ pathname, children }: { pathname: string; children: ReactNode }) {
+  const reduceMotion = useReducedMotion() ?? false;
+  return (
+    <LazyMotion features={loadMotionFeatures}>
+      <m.div key={pathname} initial={reduceMotion ? false : PANE_ENTER} animate={PANE_SHOWN} transition={PANE_TRANSITION}>
+        {children}
+      </m.div>
+    </LazyMotion>
+  );
+}
+
 function DashboardLayout() {
   const fullScreen = useRouterState({ select: (state) => isFullScreenPath(state.location.pathname) });
   if (fullScreen) return <FullScreenLayout />;
@@ -101,6 +116,7 @@ function SidebarLayout() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const wide = isWideSidebarPath(pathname);
   const syncDetail = isSyncDetailPath(pathname);
+  const syncsList = syncDetail || isSyncsListPath(pathname);
   const sidebarRef = useRef<HTMLDivElement>(null);
   useSidebarResizing(wide, sidebarRef);
 
@@ -117,18 +133,16 @@ function SidebarLayout() {
         )}
       >
         <SyncProvider />
-        {syncDetail ? (
-          <SyncsListPanel activeSyncId={pathname.split("/").pop()} />
-        ) : (
-          <SidebarPageTransition>
-            <Outlet />
-          </SidebarPageTransition>
-        )}
+        <SidebarPageTransition>
+          {syncsList ? <SyncsListPanel activeSyncId={syncDetail ? pathname.split("/").pop() : undefined} /> : <Outlet />}
+        </SidebarPageTransition>
       </div>
       {syncDetail ? (
         // One mounted page that is the whole column on small screens and takes the calendar's place from lg.
         <div className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]">
-          <Outlet />
+          <DetailPaneTransition pathname={pathname}>
+            <Outlet />
+          </DetailPaneTransition>
         </div>
       ) : (
         // `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10).
