@@ -105,6 +105,7 @@ WHERE EXISTS (
 	SELECT 1 FROM "source_destination_mappings" m
 	WHERE m."sourceCalendarId" = c."id" AND m."syncId" IS NULL
 );--> statement-breakpoint
+CREATE UNIQUE INDEX ON "sync_calendar_settings" ("id");--> statement-breakpoint
 DROP TABLE IF EXISTS "sync_mesh_edges";--> statement-breakpoint
 CREATE TEMP TABLE "sync_mesh_edges" AS
 SELECT m."sourceCalendarId" AS "from", m."destinationCalendarId" AS "to"
@@ -118,6 +119,13 @@ INNER JOIN "sync_calendar_settings" b ON b."id" = m."destinationCalendarId"
 WHERE m."syncId" IS NULL
 	AND (a."shareAs", a."busyTitle", a."markPrivate", a."skipAllDay", a."skipFocusTime", a."skipOutOfOffice")
 		IS NOT DISTINCT FROM (b."shareAs", b."busyTitle", b."markPrivate", b."skipAllDay", b."skipFocusTime", b."skipOutOfOffice");--> statement-breakpoint
+CREATE INDEX ON "sync_mesh_edges" ("from", "to");--> statement-breakpoint
+DROP TABLE IF EXISTS "sync_mesh_degrees";--> statement-breakpoint
+CREATE TEMP TABLE "sync_mesh_degrees" AS
+SELECT "from" AS "node", count(*) AS "degree" FROM "sync_mesh_edges" GROUP BY "from";--> statement-breakpoint
+CREATE UNIQUE INDEX ON "sync_mesh_degrees" ("node");--> statement-breakpoint
+ANALYZE "sync_mesh_edges";--> statement-breakpoint
+ANALYZE "sync_mesh_degrees";--> statement-breakpoint
 DO $$
 DECLARE
 	"seeds" uuid[];
@@ -128,14 +136,14 @@ DECLARE
 	"meshName" text;
 BEGIN
 	"seeds" := ARRAY(
-		SELECT e."from" FROM "sync_mesh_edges" e GROUP BY e."from" ORDER BY count(*) DESC, e."from"::text
+		SELECT d."node" FROM "sync_mesh_degrees" d ORDER BY d."degree" DESC, d."node"::text
 	);
 	FOREACH "seed" IN ARRAY "seeds" LOOP
 		"clique" := ARRAY["seed"];
 		FOR "candidate" IN
 			SELECT e."to"
 			FROM "sync_mesh_edges" e
-			INNER JOIN (SELECT "from", count(*) AS "degree" FROM "sync_mesh_edges" GROUP BY "from") d ON d."from" = e."to"
+			INNER JOIN "sync_mesh_degrees" d ON d."node" = e."to"
 			WHERE e."from" = "seed"
 			ORDER BY d."degree" DESC, e."to"::text
 		LOOP
@@ -171,6 +179,7 @@ BEGIN
 	END LOOP;
 END $$;--> statement-breakpoint
 DROP TABLE "sync_mesh_edges";--> statement-breakpoint
+DROP TABLE "sync_mesh_degrees";--> statement-breakpoint
 DROP TABLE IF EXISTS "sync_backfill";--> statement-breakpoint
 CREATE TEMP TABLE "sync_backfill" AS
 WITH "per_source" AS (
@@ -216,13 +225,74 @@ UNION ALL
 SELECT b."syncId", destination."calendarId", 'destination', destination."ordinal" - 1
 FROM "sync_backfill" b, unnest(b."destinations") WITH ORDINALITY AS destination("calendarId", "ordinal");--> statement-breakpoint
 UPDATE "source_destination_mappings" m
-SET "syncId" = b."syncId"
-FROM "sync_backfill" b
+SET "syncId" = pair."syncId"
+FROM (
+	SELECT b."syncId", source."calendarId" AS "sourceCalendarId", destination."calendarId" AS "destinationCalendarId"
+	FROM "sync_backfill" b, unnest(b."sources") AS source("calendarId"), unnest(b."destinations") AS destination("calendarId")
+) pair
 WHERE m."syncId" IS NULL
-	AND m."sourceCalendarId" = ANY(b."sources")
-	AND m."destinationCalendarId" = ANY(b."destinations");--> statement-breakpoint
+	AND m."sourceCalendarId" = pair."sourceCalendarId"
+	AND m."destinationCalendarId" = pair."destinationCalendarId";--> statement-breakpoint
 DROP TABLE "sync_backfill";--> statement-breakpoint
 DROP TABLE "sync_calendar_settings";--> statement-breakpoint
+-- Writers from before syncs insert pairs without a sync; this files each one under the sync that already covers it.
+CREATE OR REPLACE FUNCTION keeper_fill_source_destination_mapping_sync()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+	"owner" uuid;
+BEGIN
+	SELECT src."syncId" INTO "owner"
+	FROM "sync_calendars" src
+	INNER JOIN "sync_calendars" dst
+		ON dst."syncId" = src."syncId"
+		AND dst."calendarId" = NEW."destinationCalendarId"
+	WHERE src."calendarId" = NEW."sourceCalendarId"
+		AND (
+			(src."role" = 'source' AND dst."role" = 'destination')
+			OR (src."role" = 'member' AND dst."role" = 'member')
+		)
+	ORDER BY src."syncId"
+	LIMIT 1;
+
+	IF "owner" IS NULL THEN
+		"owner" := gen_random_uuid();
+		INSERT INTO "syncs" ("id", "userId", "name", "mode", "shareAs", "busyTitle", "markPrivate", "skipAllDay", "skipFocusTime", "skipOutOfOffice")
+		SELECT
+			"owner",
+			c."userId",
+			CASE WHEN length(c."name" || ' → ' || d."name") > 80 THEN left(c."name" || ' → ' || d."name", 79) || '…' ELSE c."name" || ' → ' || d."name" END,
+			'one_way',
+			CASE
+				WHEN c."excludeEventName" THEN 'busy_only'
+				WHEN c."excludeEventDescription" OR c."excludeEventLocation" THEN 'title_only'
+				ELSE 'full'
+			END,
+			CASE
+				WHEN c."excludeEventName" AND NULLIF(btrim(c."customEventName"), '') IS NOT NULL AND c."customEventName" <> '{{calendar_name}}'
+				THEN c."customEventName"
+			END,
+			c."markEventsAsPrivate",
+			c."excludeAllDayEvents",
+			c."excludeFocusTime",
+			c."excludeOutOfOffice"
+		FROM "calendars" c, "calendars" d
+		WHERE c."id" = NEW."sourceCalendarId" AND d."id" = NEW."destinationCalendarId";
+		INSERT INTO "sync_calendars" ("syncId", "calendarId", "role", "position")
+		VALUES ("owner", NEW."sourceCalendarId", 'source', 0), ("owner", NEW."destinationCalendarId", 'destination', 0);
+	END IF;
+
+	NEW."syncId" := "owner";
+	RETURN NEW;
+END;
+$$;--> statement-breakpoint
+DROP TRIGGER IF EXISTS "source_destination_mappings_sync_fill" ON "source_destination_mappings";--> statement-breakpoint
+CREATE TRIGGER "source_destination_mappings_sync_fill"
+BEFORE INSERT ON "source_destination_mappings"
+FOR EACH ROW
+WHEN (NEW."syncId" IS NULL)
+EXECUTE FUNCTION keeper_fill_source_destination_mapping_sync();--> statement-breakpoint
 ALTER TABLE "source_destination_mappings" ALTER COLUMN "syncId" SET NOT NULL;--> statement-breakpoint
 DO $$ BEGIN
   IF NOT EXISTS (

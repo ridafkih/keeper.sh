@@ -290,6 +290,31 @@ describe("syncs backfill", () => {
     });
   });
 
+  it("files pairs that code from before syncs still inserts under the sync that covers them", async () => {
+    const entry = await findSyncsEntry();
+    const databaseUrl = await createDatabase("keeper_syncs_legacy_writer");
+    await applyReleasedSchemaState(databaseUrl, entry.idx - 1);
+    await withConnection(databaseUrl, seedCalendars);
+    await runMigrationRunner(databaseUrl);
+
+    await withConnection(databaseUrl, async (client) => {
+      await client.query(`DELETE FROM "source_destination_mappings" WHERE "sourceCalendarId" = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'`);
+      await client.query(`
+        INSERT INTO "source_destination_mappings" ("sourceCalendarId", "destinationCalendarId") VALUES
+          ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+          ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd')
+      `);
+
+      expect(await readPairs(client)).toEqual(expect.arrayContaining([
+        { destination: "Personal", source: "Work", sync: "School, Work → Personal" },
+        { destination: "Family", source: "Custom", sync: "Custom → Family" },
+      ]));
+      expect(await readSyncs(client)).toEqual(expect.arrayContaining([
+        { ...busy, calendars: "Custom:source,Family:destination", markPrivate: true, name: "Custom → Family", shareAs: "full", skipAllDay: true },
+      ]));
+    });
+  });
+
   it("changes nothing when replayed over an already migrated database", async () => {
     const entry = await findSyncsEntry();
     const databaseUrl = await createDatabase("keeper_syncs_replay");
