@@ -1,4 +1,4 @@
-import List from "lucide-react/dist/esm/icons/list";
+import CalendarSync from "lucide-react/dist/esm/icons/calendar-sync";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Waypoints from "lucide-react/dist/esm/icons/waypoints";
 import type { SyncSummary } from "@keeper.sh/data-schemas";
@@ -21,7 +21,8 @@ export function SyncsMenu() {
   const { calendarsById, syncs } = useSyncRows();
   const { data: entitlements } = useEntitlements();
   const shown = (syncs ?? []).slice(0, SIDEBAR_SYNC_LIMIT);
-  const hidden = (syncs?.length ?? 0) - shown.length;
+  const hidden = (syncs ?? []).slice(SIDEBAR_SYNC_LIMIT);
+  const hiddenProblems = hidden.filter((sync) => sync.state === "problem").length;
 
   return (
     <NavigationMenu>
@@ -37,14 +38,19 @@ export function SyncsMenu() {
       {shown.map((sync) => (
         <SyncRow key={sync.id} sync={sync} calendarsById={calendarsById} />
       ))}
-      {hidden > 0 && (
+      {hidden.length > 0 && (
         <NavigationMenuLinkItem to="/dashboard/syncs">
           <NavigationMenuItemIcon>
-            <List size={15} />
+            <CalendarSync size={15} />
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>View All Syncs</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
-            <Text size="sm" tone="muted">{hidden} more</Text>
+            {hiddenProblems > 0 && (
+              <Text size="sm" tone="attention" className="shrink-0">
+                {hiddenProblems} {hiddenProblems === 1 ? "needs" : "need"} attention ·
+              </Text>
+            )}
+            <Text size="sm" tone="muted" className="shrink-0">{hidden.length} more</Text>
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
       )}
