@@ -58,6 +58,16 @@ export const roleIn = (sync: SyncCalendars, calendarId: string): string | null =
   return null;
 };
 
+// The first calendar that sends and the first that receives, to name the two sides of a preview.
+export const previewCalendarNames = (sync: SyncCalendars, calendarsById: CalendarsById): { destination: string; source: string } => {
+  const sourceId = sync.sourceCalendarIds[0] ?? sync.memberCalendarIds[0];
+  const destinationId = sync.destinationCalendarIds[0] ?? sync.memberCalendarIds[1];
+  return {
+    destination: (destinationId && calendarsById.get(destinationId)?.name) || "the destination",
+    source: (sourceId && calendarsById.get(sourceId)?.name) || "Your calendar",
+  };
+};
+
 export const STATE_LABELS: Record<SyncState, string> = {
   empty: "Add calendars to start",
   ok: "Up to date",

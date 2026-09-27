@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import type { SyncCalendarRole, SyncCalendars as SyncCalendarsValue, SyncDefinition, SyncSettings, SyncSummary } from "@keeper.sh/data-schemas";
+import type { SyncCalendarRole, SyncDefinition, SyncSettings, SyncSummary } from "@keeper.sh/data-schemas";
 import type { CalendarSource } from "@/types/api";
-import { syncSettingsOf } from "../syncs";
+import { previewCalendarNames, syncSettingsOf } from "../syncs";
 import { AdvancedRules } from "./advanced-rules";
 import { NeverCopySection } from "./never-copy-section";
 import { ShareAsSection } from "./share-as-section";
@@ -13,18 +13,15 @@ interface SyncEditorProps {
   otherSyncs: SyncSummary[];
   locked: boolean;
   notice?: ReactNode;
+  previewClassName?: string;
   onChange: (patch: Partial<SyncDefinition>) => void;
   onConnect?: (role: SyncCalendarRole) => void;
 }
 
-const firstCalendarId = (calendars: SyncCalendarsValue): string | undefined =>
-  calendars.memberCalendarIds[0] ?? calendars.sourceCalendarIds[0];
-
-export function SyncEditor({ value, calendars, otherSyncs, locked, notice, onChange, onConnect }: SyncEditorProps) {
+export function SyncEditor({ value, calendars, otherSyncs, locked, notice, previewClassName, onChange, onConnect }: SyncEditorProps) {
   const calendarsById = new Map(calendars.map((calendar) => [calendar.id, calendar] as const));
   const settings: SyncSettings = syncSettingsOf(value);
-  const sourceId = firstCalendarId(value);
-  const sourceName = (sourceId && calendarsById.get(sourceId)?.name) || "Work";
+  const { source: sourceName } = previewCalendarNames(value, calendarsById);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -36,7 +33,7 @@ export function SyncEditor({ value, calendars, otherSyncs, locked, notice, onCha
         onConnect={onConnect}
       />
       {notice}
-      <ShareAsSection settings={settings} sourceName={sourceName} locked={locked} onChange={onChange} />
+      <ShareAsSection settings={settings} sourceName={sourceName} locked={locked} previewClassName={previewClassName} onChange={onChange} />
       <NeverCopySection settings={settings} locked={locked} onChange={onChange} />
       <div className="pt-3">
         <AdvancedRules

@@ -22,10 +22,11 @@ interface ShareAsSectionProps {
   settings: SyncSettings;
   sourceName: string;
   locked: boolean;
+  previewClassName?: string;
   onChange: (patch: Partial<SyncSettings>) => void;
 }
 
-export function ShareAsSection({ settings, sourceName, locked, onChange }: ShareAsSectionProps) {
+export function ShareAsSection({ settings, sourceName, locked, previewClassName, onChange }: ShareAsSectionProps) {
   return (
     <>
       <DashboardSection title="Share As" description="How copies look in the destination, unless a rule below says otherwise." />
@@ -53,7 +54,7 @@ export function ShareAsSection({ settings, sourceName, locked, onChange }: Share
           </div>
         </NavigationMenuToggleItem>
       </NavigationMenu>
-      <SyncPreviewCard settings={settings} sourceName={sourceName} />
+      <SyncPreviewCard settings={settings} sourceName={sourceName} className={previewClassName} />
     </>
   );
 }
@@ -80,14 +81,14 @@ function ShareAsOption({ option, selected, locked, onSelect }: ShareAsOptionProp
   );
 }
 
-function SyncPreviewCard({ settings, sourceName }: { settings: SyncSettings; sourceName: string }) {
+function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSettings; sourceName: string; className?: string }) {
   const [sampleIndex, setSampleIndex] = useState(0);
   const sample = PREVIEW_EVENTS[sampleIndex] ?? PREVIEW_EVENTS[0];
   if (!sample) return null;
   const preview = previewSync(settings, sample, sourceName);
 
   return (
-    <NavigationMenu>
+    <NavigationMenu className={className}>
       <NavigationMenuItem className="flex-wrap gap-1.5">
         <Text size="xs" tone="muted" className="mr-1">Preview with</Text>
         {PREVIEW_EVENTS.map((event, index) => (
@@ -121,10 +122,10 @@ function SyncPreviewCard({ settings, sourceName }: { settings: SyncSettings; sou
   );
 }
 
-function PreviewEventCard({ label, copy }: { label: string; copy: PreviewCopy | null }) {
+export function PreviewEventCard({ label, copy }: { label?: string; copy: PreviewCopy | null }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <Text size="xs" tone="muted" className="truncate">{label}</Text>
+      {label && <Text size="xs" tone="muted" className="truncate">{label}</Text>}
       {copy ? (
         <div className={cn(EVENT_COLORS.blue, "relative min-w-0 rounded-lg bg-(--event-surface) py-1.5 pr-2 pl-3 text-xs leading-snug text-(--event-ink) before:absolute before:inset-y-1.5 before:left-1 before:w-0.5 before:rounded-full before:bg-(--event-accent)")}>
           <p className="flex items-center gap-1 truncate font-medium">

@@ -10,7 +10,7 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
-import { isWideSidebarPath } from "@/lib/sidebar-width";
+import { isFullScreenPath, isWideSidebarPath } from "@/lib/sidebar-width";
 import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)")({
@@ -61,8 +61,42 @@ function useSidebarResizing(wide: boolean, sidebarRef: RefObject<HTMLDivElement 
   }, [wide, sidebarRef, setResizing]);
 }
 
-function DashboardLayout() {
+function PopoverOverlay() {
   const overlayActive = useAtomValue(popoverOverlayAtom);
+  return (
+    <LazyMotion features={loadMotionFeatures}>
+      <AnimatePresence>
+        {overlayActive && (
+          <m.div
+            className="fixed inset-0 z-10 backdrop-blur-[2px] bg-black/5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+        )}
+      </AnimatePresence>
+    </LazyMotion>
+  );
+}
+
+function DashboardLayout() {
+  const fullScreen = useRouterState({ select: (state) => isFullScreenPath(state.location.pathname) });
+  if (fullScreen) return <FullScreenLayout />;
+  return <SidebarLayout />;
+}
+
+function FullScreenLayout() {
+  return (
+    <div className="relative min-h-dvh w-full px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
+      <PopoverOverlay />
+      <SyncProvider />
+      <Outlet />
+    </div>
+  );
+}
+
+function SidebarLayout() {
   const wide = useRouterState({ select: (state) => isWideSidebarPath(state.location.pathname) });
   const sidebarRef = useRef<HTMLDivElement>(null);
   useSidebarResizing(wide, sidebarRef);
@@ -77,19 +111,7 @@ function DashboardLayout() {
           wide ? "max-w-lg" : "max-w-sm",
         )}
       >
-        <LazyMotion features={loadMotionFeatures}>
-          <AnimatePresence>
-            {overlayActive && (
-              <m.div
-                className="fixed inset-0 z-10 backdrop-blur-[2px] bg-black/5"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              />
-            )}
-          </AnimatePresence>
-        </LazyMotion>
+        <PopoverOverlay />
         <SyncProvider />
         <SidebarPageTransition>
           <Outlet />

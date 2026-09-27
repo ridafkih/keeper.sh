@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isWideSidebarPath } from "../../src/lib/sidebar-width";
+import { isFullScreenPath, isWideSidebarPath } from "../../src/lib/sidebar-width";
 
 describe("isWideSidebarPath", () => {
   it("widens the sync pages and nothing else", () => {
@@ -10,5 +10,14 @@ describe("isWideSidebarPath", () => {
     expect(isWideSidebarPath("/dashboard/syncsets")).toBe(false);
     expect(isWideSidebarPath("/dashboard")).toBe(false);
     expect(isWideSidebarPath("/dashboard/setup")).toBe(false);
+  });
+});
+
+describe("isFullScreenPath", () => {
+  it("gives onboarding the whole window and keeps every other page in the sidebar", () => {
+    expect(isFullScreenPath("/dashboard/setup")).toBe(true);
+    expect(isFullScreenPath("/dashboard/setup/")).toBe(true);
+    expect(isFullScreenPath("/dashboard")).toBe(false);
+    expect(isFullScreenPath("/dashboard/syncs/new")).toBe(false);
   });
 });
