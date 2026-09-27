@@ -32,7 +32,7 @@ import { draftProblem, toCreateBody } from "@/features/syncs/sync-draft";
 import {
   describeConflicts,
   findDraftConflicts,
-  previewCalendarNames,
+  previewDirections,
   summarizeSync,
   syncPagePath,
   syncSettingsOf,
@@ -101,7 +101,6 @@ function SetupPage() {
   const atLimit = !canAddMore(entitlements?.syncs);
   const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
   const summary = summarizeSync(sync, calendarsById).split(" · ")[0] ?? "My sync";
-  const previewNames = previewCalendarNames(sync, calendarsById);
 
   const start = async () => {
     setStarting(true);
@@ -175,8 +174,7 @@ function SetupPage() {
         <div className="sticky top-12">
           <SyncPreviewPanel
             settings={syncSettingsOf(sync)}
-            sourceName={previewNames.source}
-            destinationName={previewNames.destination}
+            directions={previewDirections(sync, calendarsById)}
           />
         </div>
       </aside>

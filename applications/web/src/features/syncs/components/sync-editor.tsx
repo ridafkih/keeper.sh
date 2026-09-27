@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { SyncCalendarRole, SyncDefinition, SyncSettings, SyncSummary } from "@keeper.sh/data-schemas";
 import type { CalendarSource } from "@/types/api";
-import { previewCalendarNames, syncSettingsOf } from "../syncs";
+import { previewDirections, syncSettingsOf } from "../syncs";
 import { AdvancedRules } from "./advanced-rules";
 import { NeverCopySection } from "./never-copy-section";
 import { ShareAsSection } from "./share-as-section";
@@ -21,7 +21,7 @@ interface SyncEditorProps {
 export function SyncEditor({ value, calendars, otherSyncs, locked, notice, previewClassName, onChange, onConnect }: SyncEditorProps) {
   const calendarsById = new Map(calendars.map((calendar) => [calendar.id, calendar] as const));
   const settings: SyncSettings = syncSettingsOf(value);
-  const { source: sourceName } = previewCalendarNames(value, calendarsById);
+  const sourceName = previewDirections(value, calendarsById)[0]?.source ?? "Your calendar";
 
   return (
     <div className="flex flex-col gap-1.5">

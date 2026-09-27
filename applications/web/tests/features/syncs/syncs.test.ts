@@ -8,6 +8,7 @@ import {
   findDraftConflicts,
   newestFirst,
   previewEventsFor,
+  previewDirections,
   previewSync,
   roleIn,
   summarizeSync,
@@ -71,6 +72,30 @@ describe("previewSync", () => {
       decidedBy: "Rule · 1:1s stay vague",
       followsShareAs: false,
     });
+  });
+});
+
+describe("previewDirections", () => {
+  it("lists each calendar that sends with everywhere it copies into", () => {
+    expect(previewDirections(oneWay, names)).toEqual([
+      { destinations: ["Personal"], key: "work", source: "Work" },
+      { destinations: ["Personal"], key: "school", source: "School" },
+    ]);
+    const bothWays = { destinationCalendarIds: [], memberCalendarIds: ["work", "school", "personal"], mode: "both_ways" as const, sourceCalendarIds: [] };
+    expect(previewDirections(bothWays, names).map(({ source, destinations }) => `${source} → ${destinations.join(", ")}`)).toEqual([
+      "Work → School, Personal",
+      "School → Work, Personal",
+      "Personal → Work, School",
+    ]);
+  });
+
+  it("falls back to placeholder names until both sides are picked", () => {
+    expect(previewDirections({ ...oneWay, destinationCalendarIds: [] }, names)).toEqual([
+      { destinations: ["the destination"], key: "work", source: "Work" },
+    ]);
+    expect(previewDirections({ destinationCalendarIds: [], memberCalendarIds: ["work"], mode: "both_ways", sourceCalendarIds: [] }, names)).toEqual([
+      { destinations: ["the others"], key: "work", source: "Work" },
+    ]);
   });
 });
 

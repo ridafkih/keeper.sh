@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type PropsWithChildren } from "react";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
@@ -93,20 +93,9 @@ function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSe
       <NavigationMenuItem className="flex-wrap gap-1.5">
         <Text size="xs" tone="muted" className="mr-1">Preview with</Text>
         {events.map((event, index) => (
-          <button
-            key={event.title}
-            type="button"
-            aria-pressed={index === sampleIndex}
-            onClick={() => setSampleIndex(index)}
-            className={cn(
-              "rounded-lg border px-2 py-0.5 text-xs tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              index === sampleIndex
-                ? "border-foreground bg-foreground text-background"
-                : "border-interactive-border text-foreground hover:bg-background-hover",
-            )}
-          >
+          <PreviewChip key={event.title} pressed={index === sampleIndex} onClick={() => setSampleIndex(index)}>
             {event.title}
-          </button>
+          </PreviewChip>
         ))}
       </NavigationMenuItem>
       <li className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 px-3.5 pb-1 sm:px-3">
@@ -120,6 +109,24 @@ function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSe
         </Text>
       </NavigationMenuItem>
     </NavigationMenu>
+  );
+}
+
+export function PreviewChip({ pressed, onClick, children }: PropsWithChildren<{ pressed: boolean; onClick: () => void }>) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "rounded-lg border px-2 py-0.5 text-xs tracking-tight focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        pressed
+          ? "border-foreground bg-foreground text-background"
+          : "border-interactive-border text-foreground hover:bg-background-hover",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

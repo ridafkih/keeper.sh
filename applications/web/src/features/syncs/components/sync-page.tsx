@@ -35,7 +35,7 @@ import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
 import { formatSyncedAgo } from "@/features/syncs/relative-time";
 import { cn } from "@/utils/cn";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
-import { STATE_LABELS, previewCalendarNames, syncSettingsOf, type CalendarsById } from "@/features/syncs/syncs";
+import { STATE_LABELS, previewDirections, syncSettingsOf, type CalendarsById } from "@/features/syncs/syncs";
 import { deleteSync, patchSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
 
 export type SyncTab = "setup" | "activity";
@@ -101,7 +101,6 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
     }
   };
 
-  const previewNames = previewCalendarNames(sync, calendarsById);
 
   return (
     <div className="@container">
@@ -191,8 +190,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
             <div className="sticky top-0">
               <SyncPreviewPanel
                 settings={syncSettingsOf(sync)}
-                sourceName={previewNames.source}
-                destinationName={previewNames.destination}
+                directions={previewDirections(sync, calendarsById)}
               />
             </div>
           </aside>

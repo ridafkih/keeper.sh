@@ -19,7 +19,7 @@ import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
 import { createSyncDraft, draftProblem, toCreateBody, type NewSyncSearch, type SyncDraft } from "@/features/syncs/sync-draft";
-import { describeConflicts, findDraftConflicts, previewCalendarNames, summarizeSync, syncPagePath, syncSettingsOf } from "@/features/syncs/syncs";
+import { describeConflicts, findDraftConflicts, previewDirections, summarizeSync, syncPagePath, syncSettingsOf } from "@/features/syncs/syncs";
 import type { SyncTemplateKey } from "@/features/syncs/templates";
 import { createSync, useRefreshSyncs, useSyncs } from "@/features/syncs/use-syncs";
 import { cn } from "@/utils/cn";
@@ -94,7 +94,6 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
   const conflicts = findDraftConflicts(draft, syncs ?? []);
   const problem = draftProblem(draft);
   const summary = summarizeSync(draft, calendarsById).split(" · ")[0] ?? "New sync";
-  const previewNames = previewCalendarNames(draft, calendarsById);
 
   const create = async () => {
     if (conflicts.length > 0) {
@@ -119,8 +118,7 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
       aside={
         <SyncPreviewPanel
           settings={syncSettingsOf(draft)}
-          sourceName={previewNames.source}
-          destinationName={previewNames.destination}
+          directions={previewDirections(draft, calendarsById)}
         />
       }
     >

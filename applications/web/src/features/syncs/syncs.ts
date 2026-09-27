@@ -59,14 +59,28 @@ export const roleIn = (sync: SyncCalendars, calendarId: string): string | null =
   return null;
 };
 
-// The first calendar that sends and the first that receives, to name the two sides of a preview.
-export const previewCalendarNames = (sync: SyncCalendars, calendarsById: CalendarsById): { destination: string; source: string } => {
+export interface PreviewDirection {
+  key: string;
+  source: string;
+  destinations: string[];
+}
+
+// One entry per calendar that sends, naming everywhere it copies into; a sync still missing a side gets placeholder names.
+export const previewDirections = (sync: SyncCalendars, calendarsById: CalendarsById): PreviewDirection[] => {
+  const bySource = new Map<string, string[]>();
+  for (const { sourceCalendarId, destinationCalendarId } of deriveSyncPairs(sync)) {
+    bySource.set(sourceCalendarId, [...(bySource.get(sourceCalendarId) ?? []), calendarName(calendarsById, destinationCalendarId)]);
+  }
+  if (bySource.size > 0) {
+    return [...bySource].map(([sourceId, destinations]) => ({ destinations, key: sourceId, source: calendarName(calendarsById, sourceId) }));
+  }
   const sourceId = sync.sourceCalendarIds[0] ?? sync.memberCalendarIds[0];
-  const destinationId = sync.destinationCalendarIds[0] ?? sync.memberCalendarIds[1];
-  return {
-    destination: (destinationId && calendarsById.get(destinationId)?.name) || "the destination",
-    source: (sourceId && calendarsById.get(sourceId)?.name) || "Your calendar",
-  };
+  const destinations = sync.destinationCalendarIds.map((calendarId) => calendarName(calendarsById, calendarId));
+  return [{
+    destinations: destinations.length > 0 ? destinations : [sync.mode === "both_ways" ? "the others" : "the destination"],
+    key: sourceId ?? "",
+    source: sourceId ? calendarName(calendarsById, sourceId) : "Your calendar",
+  }];
 };
 
 export const SIDEBAR_SYNC_LIMIT = 3;
