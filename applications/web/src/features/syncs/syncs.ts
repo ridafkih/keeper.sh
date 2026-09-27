@@ -137,6 +137,8 @@ export interface PreviewCopy {
 export interface SyncPreview {
   copy: PreviewCopy | null;
   decidedBy: string;
+  dropped: string[];
+  followsShareAs: boolean;
 }
 
 const describeDecider = (rule: { id: string; name: string } | null, shareAs: ShareAs): string => {
@@ -157,9 +159,15 @@ export const previewSync = (settings: SyncSettings, event: PreviewEvent, calenda
     location: event.location,
     title: event.title,
   };
-  const decidedBy = describeDecider(findMatchingRule(rules, facts), settings.shareAs);
+  const decider = findMatchingRule(rules, facts);
+  const decidedBy = describeDecider(decider, settings.shareAs);
+  const followsShareAs = !decider || decider.id === "share";
   const evaluation = evaluateRules(rules, facts);
-  if (evaluation.skip) return { copy: null, decidedBy };
+  if (evaluation.skip) return { copy: null, decidedBy, dropped: [], followsShareAs };
+  const dropped = [
+    event.location !== evaluation.location && event.location,
+    event.description !== evaluation.description && event.description,
+  ].filter((detail): detail is string => Boolean(detail));
   return {
     copy: {
       description: evaluation.description,
@@ -169,6 +177,8 @@ export const previewSync = (settings: SyncSettings, event: PreviewEvent, calenda
       title: evaluation.summary,
     },
     decidedBy,
+    dropped,
+    followsShareAs,
   };
 };
 

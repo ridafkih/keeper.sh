@@ -122,7 +122,7 @@ function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSe
   );
 }
 
-export function PreviewEventCard({ label, copy }: { label?: string; copy: PreviewCopy | null }) {
+export function PreviewEventCard({ label, copy, dropped = [] }: { label?: string; copy: PreviewCopy | null; dropped?: string[] }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
       {label && <Text size="xs" tone="muted" className="truncate">{label}</Text>}
@@ -134,6 +134,7 @@ export function PreviewEventCard({ label, copy }: { label?: string; copy: Previe
           </p>
           <p className="truncate opacity-80">{[copy.time, copy.location].filter(Boolean).join(" · ")}</p>
           {copy.description && <p className="truncate opacity-80">{copy.description}</p>}
+          {dropped.map((detail) => <p key={detail} className="truncate line-through opacity-45">{detail}</p>)}
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-interactive-border px-2 py-1.5 text-xs text-foreground-muted">

@@ -47,10 +47,14 @@ describe("previewSync", () => {
     expect(previewSync(DEFAULT_SYNC_SETTINGS, designReview, "Work")).toEqual({
       copy: { description: undefined, isPrivate: undefined, location: undefined, time: designReview.time, title: "Work" },
       decidedBy: "Share As · Busy Only",
+      dropped: [designReview.location, designReview.description],
+      followsShareAs: true,
     });
     expect(previewSync({ ...DEFAULT_SYNC_SETTINGS, skipAllDay: true }, offsite, "Work")).toEqual({
       copy: null,
       decidedBy: "Never Copy · All-day events",
+      dropped: [],
+      followsShareAs: false,
     });
     const rules = [{
       actions: [{ kind: "rename" as const, template: "Meeting" }],
@@ -62,6 +66,7 @@ describe("previewSync", () => {
     expect(previewSync({ ...DEFAULT_SYNC_SETTINGS, markPrivate: true, rules }, oneOnOne, "Work")).toMatchObject({
       copy: { isPrivate: true, title: "Meeting" },
       decidedBy: "Rule · 1:1s stay vague",
+      followsShareAs: false,
     });
   });
 });
