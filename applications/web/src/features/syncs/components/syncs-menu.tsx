@@ -1,4 +1,4 @@
-import CalendarSync from "lucide-react/dist/esm/icons/calendar-sync";
+import List from "lucide-react/dist/esm/icons/list";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Waypoints from "lucide-react/dist/esm/icons/waypoints";
 import type { SyncSummary } from "@keeper.sh/data-schemas";
@@ -41,7 +41,7 @@ export function SyncsMenu() {
       {hidden.length > 0 && (
         <NavigationMenuLinkItem to="/dashboard/syncs">
           <NavigationMenuItemIcon>
-            <CalendarSync size={15} />
+            <List size={15} />
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>View All Syncs</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
