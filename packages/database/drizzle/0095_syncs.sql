@@ -81,33 +81,116 @@ END $$;--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "syncs_user_idx" ON "syncs" USING btree ("userId");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "sync_calendars_calendar_idx" ON "sync_calendars" USING btree ("calendarId");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "sync_activity_sync_created_idx" ON "sync_activity" USING btree ("syncId","createdAt" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint
+DROP TABLE IF EXISTS "sync_calendar_settings";--> statement-breakpoint
+CREATE TEMP TABLE "sync_calendar_settings" AS
+SELECT
+	c."id",
+	c."userId",
+	c."name",
+	CASE
+		WHEN c."excludeEventName" THEN 'busy_only'
+		WHEN c."excludeEventDescription" OR c."excludeEventLocation" THEN 'title_only'
+		ELSE 'full'
+	END AS "shareAs",
+	CASE
+		WHEN c."excludeEventName" AND NULLIF(btrim(c."customEventName"), '') IS NOT NULL AND c."customEventName" <> '{{calendar_name}}'
+		THEN c."customEventName"
+	END AS "busyTitle",
+	c."markEventsAsPrivate" AS "markPrivate",
+	c."excludeAllDayEvents" AS "skipAllDay",
+	c."excludeFocusTime" AS "skipFocusTime",
+	c."excludeOutOfOffice" AS "skipOutOfOffice"
+FROM "calendars" c
+WHERE EXISTS (
+	SELECT 1 FROM "source_destination_mappings" m
+	WHERE m."sourceCalendarId" = c."id" AND m."syncId" IS NULL
+);--> statement-breakpoint
+DROP TABLE IF EXISTS "sync_mesh_edges";--> statement-breakpoint
+CREATE TEMP TABLE "sync_mesh_edges" AS
+SELECT m."sourceCalendarId" AS "from", m."destinationCalendarId" AS "to"
+FROM "source_destination_mappings" m
+INNER JOIN "source_destination_mappings" back
+	ON back."sourceCalendarId" = m."destinationCalendarId"
+	AND back."destinationCalendarId" = m."sourceCalendarId"
+	AND back."syncId" IS NULL
+INNER JOIN "sync_calendar_settings" a ON a."id" = m."sourceCalendarId"
+INNER JOIN "sync_calendar_settings" b ON b."id" = m."destinationCalendarId"
+WHERE m."syncId" IS NULL
+	AND (a."shareAs", a."busyTitle", a."markPrivate", a."skipAllDay", a."skipFocusTime", a."skipOutOfOffice")
+		IS NOT DISTINCT FROM (b."shareAs", b."busyTitle", b."markPrivate", b."skipAllDay", b."skipFocusTime", b."skipOutOfOffice");--> statement-breakpoint
+DO $$
+DECLARE
+	"seeds" uuid[];
+	"seed" uuid;
+	"candidate" uuid;
+	"clique" uuid[];
+	"meshId" uuid;
+	"meshName" text;
+BEGIN
+	"seeds" := ARRAY(
+		SELECT e."from" FROM "sync_mesh_edges" e GROUP BY e."from" ORDER BY count(*) DESC, e."from"::text
+	);
+	FOREACH "seed" IN ARRAY "seeds" LOOP
+		"clique" := ARRAY["seed"];
+		FOR "candidate" IN
+			SELECT e."to"
+			FROM "sync_mesh_edges" e
+			INNER JOIN (SELECT "from", count(*) AS "degree" FROM "sync_mesh_edges" GROUP BY "from") d ON d."from" = e."to"
+			WHERE e."from" = "seed"
+			ORDER BY d."degree" DESC, e."to"::text
+		LOOP
+			EXIT WHEN cardinality("clique") >= 8;
+			IF (SELECT count(*) FROM "sync_mesh_edges" e WHERE e."from" = "candidate" AND e."to" = ANY("clique")) = cardinality("clique") THEN
+				"clique" := "clique" || "candidate";
+			END IF;
+		END LOOP;
+		CONTINUE WHEN cardinality("clique") < 2;
+
+		"meshId" := gen_random_uuid();
+		SELECT string_agg(s."name", ' ↔ ' ORDER BY s."name", s."id") INTO "meshName"
+		FROM "sync_calendar_settings" s WHERE s."id" = ANY("clique");
+		IF length("meshName") > 80 THEN
+			"meshName" := left("meshName", 79) || '…';
+		END IF;
+
+		INSERT INTO "syncs" ("id", "userId", "name", "mode", "shareAs", "busyTitle", "markPrivate", "skipAllDay", "skipFocusTime", "skipOutOfOffice")
+		SELECT "meshId", s."userId", "meshName", 'both_ways', s."shareAs", s."busyTitle", s."markPrivate", s."skipAllDay", s."skipFocusTime", s."skipOutOfOffice"
+		FROM "sync_calendar_settings" s WHERE s."id" = "seed";
+
+		INSERT INTO "sync_calendars" ("syncId", "calendarId", "role", "position")
+		SELECT "meshId", s."id", 'member', row_number() OVER (ORDER BY s."name", s."id") - 1
+		FROM "sync_calendar_settings" s WHERE s."id" = ANY("clique");
+
+		UPDATE "source_destination_mappings" m
+		SET "syncId" = "meshId"
+		WHERE m."syncId" IS NULL
+			AND m."sourceCalendarId" = ANY("clique")
+			AND m."destinationCalendarId" = ANY("clique");
+
+		DELETE FROM "sync_mesh_edges" e WHERE e."from" = ANY("clique") AND e."to" = ANY("clique");
+	END LOOP;
+END $$;--> statement-breakpoint
+DROP TABLE "sync_mesh_edges";--> statement-breakpoint
 DROP TABLE IF EXISTS "sync_backfill";--> statement-breakpoint
 CREATE TEMP TABLE "sync_backfill" AS
 WITH "per_source" AS (
 	SELECT
-		c."userId",
-		c."id" AS "sourceCalendarId",
-		c."name" AS "sourceName",
-		CASE
-			WHEN c."excludeEventName" THEN 'busy_only'
-			WHEN c."excludeEventDescription" OR c."excludeEventLocation" THEN 'title_only'
-			ELSE 'full'
-		END AS "shareAs",
-		CASE
-			WHEN c."excludeEventName" AND NULLIF(btrim(c."customEventName"), '') IS NOT NULL AND c."customEventName" <> '{{calendar_name}}'
-			THEN c."customEventName"
-		END AS "busyTitle",
-		c."markEventsAsPrivate" AS "markPrivate",
-		c."excludeAllDayEvents" AS "skipAllDay",
-		c."excludeFocusTime" AS "skipFocusTime",
-		c."excludeOutOfOffice" AS "skipOutOfOffice",
+		s."userId",
+		s."id" AS "sourceCalendarId",
+		s."name" AS "sourceName",
+		s."shareAs",
+		s."busyTitle",
+		s."markPrivate",
+		s."skipAllDay",
+		s."skipFocusTime",
+		s."skipOutOfOffice",
 		array_agg(m."destinationCalendarId" ORDER BY d."name", m."destinationCalendarId") AS "destinations",
 		string_agg(d."name", ', ' ORDER BY d."name") AS "destinationNames"
 	FROM "source_destination_mappings" m
-	INNER JOIN "calendars" c ON c."id" = m."sourceCalendarId"
+	INNER JOIN "sync_calendar_settings" s ON s."id" = m."sourceCalendarId"
 	INNER JOIN "calendars" d ON d."id" = m."destinationCalendarId"
 	WHERE m."syncId" IS NULL
-	GROUP BY c."id"
+	GROUP BY s."id", s."userId", s."name", s."shareAs", s."busyTitle", s."markPrivate", s."skipAllDay", s."skipFocusTime", s."skipOutOfOffice"
 )
 SELECT
 	gen_random_uuid() AS "syncId",
@@ -139,6 +222,7 @@ WHERE m."syncId" IS NULL
 	AND m."sourceCalendarId" = ANY(b."sources")
 	AND m."destinationCalendarId" = ANY(b."destinations");--> statement-breakpoint
 DROP TABLE "sync_backfill";--> statement-breakpoint
+DROP TABLE "sync_calendar_settings";--> statement-breakpoint
 ALTER TABLE "source_destination_mappings" ALTER COLUMN "syncId" SET NOT NULL;--> statement-breakpoint
 DO $$ BEGIN
   IF NOT EXISTS (

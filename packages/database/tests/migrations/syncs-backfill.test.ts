@@ -142,7 +142,16 @@ const seedCalendars = async (client: Client): Promise<void> => {
       ('bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd', 'mapped-user', '${ACCOUNT_ID}', 'Partial', 'oauth', '{pull,push}', false, '{{calendar_name}}', true, false, false, false, false),
       ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'mapped-user', '${ACCOUNT_ID}', 'Personal', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
       ('cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd', 'mapped-user', '${ACCOUNT_ID}', 'Family', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
-      ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'idle-user', '22222222-2222-4222-8222-222222222222', 'Unmapped', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, true, false)
+      ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'idle-user', '22222222-2222-4222-8222-222222222222', 'Unmapped', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, true, false),
+      ('e1000000-0000-4000-8000-000000000001', 'mapped-user', '${ACCOUNT_ID}', 'MeshA', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('e1000000-0000-4000-8000-000000000002', 'mapped-user', '${ACCOUNT_ID}', 'MeshB', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('e1000000-0000-4000-8000-000000000003', 'mapped-user', '${ACCOUNT_ID}', 'MeshC', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('e1000000-0000-4000-8000-000000000004', 'mapped-user', '${ACCOUNT_ID}', 'Extra', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('f1000000-0000-4000-8000-000000000001', 'mapped-user', '${ACCOUNT_ID}', 'Mine', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('f1000000-0000-4000-8000-000000000002', 'mapped-user', '${ACCOUNT_ID}', 'Theirs', 'oauth', '{pull,push}', false, '{{calendar_name}}', false, false, false, false, false),
+      ('a1000000-0000-4000-8000-000000000001', 'mapped-user', '${ACCOUNT_ID}', 'ChainA', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('a1000000-0000-4000-8000-000000000002', 'mapped-user', '${ACCOUNT_ID}', 'ChainB', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false),
+      ('a1000000-0000-4000-8000-000000000003', 'mapped-user', '${ACCOUNT_ID}', 'ChainC', 'oauth', '{pull,push}', true, '{{calendar_name}}', true, true, false, false, false)
   `);
   await client.query(`
     INSERT INTO "source_destination_mappings" ("sourceCalendarId", "destinationCalendarId") VALUES
@@ -151,7 +160,22 @@ const seedCalendars = async (client: Client): Promise<void> => {
       ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
       ('bcbcbcbc-bcbc-4cbc-8cbc-bcbcbcbcbcbc', 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd'),
       ('bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd', 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd'),
-      ('bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+      ('bdbdbdbd-bdbd-4dbd-8dbd-bdbdbdbdbdbd', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+      ('e1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000002'),
+      ('e1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000003'),
+      ('e1000000-0000-4000-8000-000000000002', 'e1000000-0000-4000-8000-000000000001'),
+      ('e1000000-0000-4000-8000-000000000002', 'e1000000-0000-4000-8000-000000000003'),
+      ('e1000000-0000-4000-8000-000000000003', 'e1000000-0000-4000-8000-000000000001'),
+      ('e1000000-0000-4000-8000-000000000003', 'e1000000-0000-4000-8000-000000000002'),
+      ('e1000000-0000-4000-8000-000000000001', 'cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd'),
+      ('e1000000-0000-4000-8000-000000000001', 'e1000000-0000-4000-8000-000000000004'),
+      ('e1000000-0000-4000-8000-000000000004', 'e1000000-0000-4000-8000-000000000001'),
+      ('f1000000-0000-4000-8000-000000000001', 'f1000000-0000-4000-8000-000000000002'),
+      ('f1000000-0000-4000-8000-000000000002', 'f1000000-0000-4000-8000-000000000001'),
+      ('a1000000-0000-4000-8000-000000000001', 'a1000000-0000-4000-8000-000000000002'),
+      ('a1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000001'),
+      ('a1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000003'),
+      ('a1000000-0000-4000-8000-000000000003', 'a1000000-0000-4000-8000-000000000002')
   `);
 };
 
@@ -171,9 +195,8 @@ const readSyncs = async (client: Client): Promise<SyncRow[]> => {
     INNER JOIN "sync_calendars" sc ON sc."syncId" = s."id"
     INNER JOIN "calendars" c ON c."id" = sc."calendarId"
     GROUP BY s."id"
-    ORDER BY s."name"
   `);
-  return syncs.rows;
+  return syncs.rows.toSorted((left, right) => Number(left.name > right.name) - Number(left.name < right.name));
 };
 
 const readPairs = async (client: Client): Promise<PairRow[]> => {
@@ -208,23 +231,47 @@ const replaySyncsMigration = async (client: Client): Promise<void> => {
 const busy = { busyTitle: null, markPrivate: false, mode: "one_way", shareAs: "busy_only", skipAllDay: false, skipFocusTime: false, skipOutOfOffice: false };
 
 const EXPECTED_SYNCS: SyncRow[] = [
+  { ...busy, calendars: "ChainA:member,ChainB:member", mode: "both_ways", name: "ChainA ↔ ChainB" },
+  { ...busy, calendars: "ChainB:member,ChainC:member", mode: "both_ways", name: "ChainB ↔ ChainC" },
   { ...busy, calendars: "Custom:source,Personal:destination", markPrivate: true, name: "Custom → Personal", shareAs: "full", skipAllDay: true },
+  { ...busy, calendars: "Extra:member,MeshA:member", mode: "both_ways", name: "Extra ↔ MeshA" },
+  { ...busy, calendars: "MeshA:source,Family:destination", name: "MeshA → Family" },
+  { ...busy, calendars: "MeshA:member,MeshB:member,MeshC:member", mode: "both_ways", name: "MeshA ↔ MeshB ↔ MeshC" },
+  { ...busy, calendars: "Mine:source,Theirs:destination", name: "Mine → Theirs" },
   { ...busy, busyTitle: "Taken", calendars: "Named:source,Family:destination", name: "Named → Family", skipFocusTime: true },
   { ...busy, calendars: "Partial:source,Family:destination,Personal:destination", name: "Partial → Family, Personal", shareAs: "title_only" },
   { ...busy, calendars: "School:source,Work:source,Personal:destination", name: "School, Work → Personal" },
+  { ...busy, calendars: "Theirs:source,Mine:destination", name: "Theirs → Mine", shareAs: "full" },
 ];
 
+const MESH = "MeshA ↔ MeshB ↔ MeshC";
+
 const EXPECTED_PAIRS: PairRow[] = [
+  { destination: "ChainB", source: "ChainA", sync: "ChainA ↔ ChainB" },
+  { destination: "ChainA", source: "ChainB", sync: "ChainA ↔ ChainB" },
+  { destination: "ChainC", source: "ChainB", sync: "ChainB ↔ ChainC" },
+  { destination: "ChainB", source: "ChainC", sync: "ChainB ↔ ChainC" },
   { destination: "Personal", source: "Custom", sync: "Custom → Personal" },
+  { destination: "MeshA", source: "Extra", sync: "Extra ↔ MeshA" },
+  { destination: "Extra", source: "MeshA", sync: "Extra ↔ MeshA" },
+  { destination: "Family", source: "MeshA", sync: "MeshA → Family" },
+  { destination: "MeshB", source: "MeshA", sync: MESH },
+  { destination: "MeshC", source: "MeshA", sync: MESH },
+  { destination: "MeshA", source: "MeshB", sync: MESH },
+  { destination: "MeshC", source: "MeshB", sync: MESH },
+  { destination: "MeshA", source: "MeshC", sync: MESH },
+  { destination: "MeshB", source: "MeshC", sync: MESH },
+  { destination: "Theirs", source: "Mine", sync: "Mine → Theirs" },
   { destination: "Family", source: "Named", sync: "Named → Family" },
   { destination: "Family", source: "Partial", sync: "Partial → Family, Personal" },
   { destination: "Personal", source: "Partial", sync: "Partial → Family, Personal" },
   { destination: "Personal", source: "School", sync: "School, Work → Personal" },
+  { destination: "Mine", source: "Theirs", sync: "Theirs → Mine" },
   { destination: "Personal", source: "Work", sync: "School, Work → Personal" },
 ];
 
 describe("syncs backfill", () => {
-  it("groups mapped calendars with matching settings and destinations into syncs", async () => {
+  it("peels calendars that all copy into each other into both-ways syncs and groups the rest one way", async () => {
     const entry = await findSyncsEntry();
     const databaseUrl = await createDatabase("keeper_syncs_backfill");
     await applyReleasedSchemaState(databaseUrl, entry.idx - 1);
