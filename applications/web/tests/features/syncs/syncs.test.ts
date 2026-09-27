@@ -7,6 +7,7 @@ import {
   describeRun,
   findDraftConflicts,
   newestFirst,
+  previewEventsFor,
   previewSync,
   roleIn,
   summarizeSync,
@@ -44,6 +45,8 @@ describe("summarizeSync", () => {
 describe("previewSync", () => {
   it("shows the copy and what decided it", () => {
     if (!designReview || !oneOnOne || !offsite) throw new Error("preview events missing");
+    expect(previewSync({ ...DEFAULT_SYNC_SETTINGS, skipTitleKeywords: ["roadmap", "review"] }, designReview, "Work").decidedBy)
+      .toBe("Never Copy · Titles with “review”");
     expect(previewSync(DEFAULT_SYNC_SETTINGS, designReview, "Work")).toEqual({
       copy: { description: undefined, isPrivate: undefined, location: undefined, time: designReview.time, title: "Work" },
       decidedBy: "Share As · Busy Only",
@@ -68,6 +71,16 @@ describe("previewSync", () => {
       decidedBy: "Rule · 1:1s stay vague",
       followsShareAs: false,
     });
+  });
+});
+
+describe("previewEventsFor", () => {
+  it("adds a sample for each title keyword and out-of-office condition the fixed samples miss", () => {
+    const extras = previewEventsFor({ ...DEFAULT_SYNC_SETTINGS, skipOutOfOffice: true, skipTitleKeywords: ["standup", "standups", "lunch"] })
+      .slice(PREVIEW_EVENTS.length)
+      .map((event) => event.title);
+    expect(extras).toEqual(["Out of Office", "Standups", "Lunch"]);
+    expect(previewEventsFor(DEFAULT_SYNC_SETTINGS)).toEqual(PREVIEW_EVENTS);
   });
 });
 

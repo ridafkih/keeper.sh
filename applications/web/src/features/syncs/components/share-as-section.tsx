@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { cn } from "@/utils/cn";
 import { EVENT_COLORS } from "@/features/dashboard/components/event-card.styles";
-import { PREVIEW_EVENTS, SHARE_AS_OPTIONS, previewSync, type PreviewCopy } from "../syncs";
+import { SHARE_AS_OPTIONS, previewEventsFor, previewSync, type PreviewCopy } from "../syncs";
 
 interface ShareAsSectionProps {
   settings: SyncSettings;
@@ -83,7 +83,8 @@ function ShareAsOption({ option, selected, locked, onSelect }: ShareAsOptionProp
 
 function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSettings; sourceName: string; className?: string }) {
   const [sampleIndex, setSampleIndex] = useState(0);
-  const sample = PREVIEW_EVENTS[sampleIndex] ?? PREVIEW_EVENTS[0];
+  const events = previewEventsFor(settings);
+  const sample = events[sampleIndex] ?? events[0];
   if (!sample) return null;
   const preview = previewSync(settings, sample, sourceName);
 
@@ -91,7 +92,7 @@ function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSe
     <NavigationMenu className={className}>
       <NavigationMenuItem className="flex-wrap gap-1.5">
         <Text size="xs" tone="muted" className="mr-1">Preview with</Text>
-        {PREVIEW_EVENTS.map((event, index) => (
+        {events.map((event, index) => (
           <button
             key={event.title}
             type="button"

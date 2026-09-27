@@ -3,7 +3,7 @@ import type { SyncSettings } from "@keeper.sh/data-schemas";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
 import { NavigationMenu, NavigationMenuItem } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
-import { PREVIEW_EVENTS, previewSync, shareAsLabel } from "../syncs";
+import { previewEventsFor, previewSync, shareAsLabel } from "../syncs";
 import { PreviewEventCard } from "./share-as-section";
 
 interface SyncPreviewPanelProps {
@@ -15,7 +15,7 @@ interface SyncPreviewPanelProps {
 const PREVIEW_ROW = "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2";
 
 export function SyncPreviewPanel({ settings, sourceName, destinationName }: SyncPreviewPanelProps) {
-  const previews = PREVIEW_EVENTS.map((event) => ({ event, preview: previewSync(settings, event, sourceName) }));
+  const previews = previewEventsFor(settings).map((event) => ({ event, preview: previewSync(settings, event, sourceName) }));
   const copied = previews.filter(({ preview }) => preview.copy).length;
   const ruled = previews.some(({ preview }) => preview.copy && !preview.followsShareAs);
 

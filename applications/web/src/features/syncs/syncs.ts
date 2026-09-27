@@ -1,5 +1,6 @@
-import { compileSyncRules, deriveSyncPairs, evaluateRules, findMatchingRule } from "@keeper.sh/data-schemas";
+import { SKIP_KEYWORDS_RULE_ID, compileSyncRules, deriveSyncPairs, evaluateRules, findMatchingRule } from "@keeper.sh/data-schemas";
 import type {
+  CompiledSyncRule,
   ShareAs,
   SyncCalendarRole,
   SyncCalendars,
@@ -126,6 +127,27 @@ export const PREVIEW_EVENTS: PreviewEvent[] = [
   { description: "Daily", location: "Zoom", time: "09:30 – 09:45", title: "Standup" },
 ];
 
+const OUT_OF_OFFICE_SAMPLE: PreviewEvent = { isOutOfOffice: true, time: "13:00 – 17:00", title: "Out of Office" };
+
+const sampleTitle = (keyword: string): string => keyword.charAt(0).toLocaleUpperCase() + keyword.slice(1);
+
+// The fixed samples can't show a title keyword or out-of-office condition they don't happen to trigger, so each gets one of its own.
+export const previewEventsFor = (settings: SyncSettings): PreviewEvent[] => {
+  const events = [...PREVIEW_EVENTS];
+  const titles = new Set(events.map((event) => event.title.toLocaleLowerCase()));
+  for (const condition of compileSyncRules(settings).flatMap((rule) => rule.conditions)) {
+    if (condition.kind === "out_of_office" && !events.some((event) => event.isOutOfOffice)) {
+      events.push(OUT_OF_OFFICE_SAMPLE);
+    }
+    if (condition.kind !== "title_contains") continue;
+    const keyword = condition.value.trim().toLocaleLowerCase();
+    if (!keyword || [...titles].some((title) => title.includes(keyword))) continue;
+    titles.add(keyword);
+    events.push({ time: "12:00 – 12:30", title: sampleTitle(condition.value.trim()) });
+  }
+  return events;
+};
+
 export interface PreviewCopy {
   description?: string;
   isPrivate?: boolean;
@@ -141,8 +163,13 @@ export interface SyncPreview {
   followsShareAs: boolean;
 }
 
-const describeDecider = (rule: { id: string; name: string } | null, shareAs: ShareAs): string => {
+const describeDecider = (rule: CompiledSyncRule | null, shareAs: ShareAs, title: string): string => {
   if (!rule || rule.id === "share") return `Share As · ${shareAsLabel(shareAs)}`;
+  if (rule.id === SKIP_KEYWORDS_RULE_ID) {
+    const keyword = rule.conditions.find((condition) =>
+      condition.kind === "title_contains" && title.toLocaleLowerCase().includes(condition.value.toLocaleLowerCase()));
+    if (keyword?.kind === "title_contains") return `Never Copy · Titles with “${keyword.value}”`;
+  }
   if (rule.id.startsWith("skip:")) return `Never Copy · ${rule.name}`;
   return `Rule · ${rule.name}`;
 };
@@ -160,7 +187,7 @@ export const previewSync = (settings: SyncSettings, event: PreviewEvent, calenda
     title: event.title,
   };
   const decider = findMatchingRule(rules, facts);
-  const decidedBy = describeDecider(decider, settings.shareAs);
+  const decidedBy = describeDecider(decider, settings.shareAs, event.title);
   const followsShareAs = !decider || decider.id === "share";
   const evaluation = evaluateRules(rules, facts);
   if (evaluation.skip) return { copy: null, decidedBy, dropped: [], followsShareAs };
