@@ -23,4 +23,4 @@ export const isSyncsListPath = (pathname: string): boolean => normalizePath(path
 
 // Every sync's page keeps the syncs list in the sidebar, so the sidebar only moves when that list comes or goes.
 export const resolveSidebarPagePath = (pathname: string): string =>
-  isSyncDetailPath(pathname) ? SYNCS_ROOT : pathname;
+  isSyncDetailPath(pathname) ? SYNCS_ROOT : normalizePath(pathname);

@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { useLayoutEffect, useRef, type RefObject } from "react";
+import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
 import { useAtomValue, useSetAtom } from "jotai";
 import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
@@ -13,6 +13,7 @@ import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-p
 import { useSettledPathname } from "@/hooks/use-settled-pathname";
 import { isFullScreenPath, isSyncDetailPath, isSyncsListPath, isWideSidebarPath } from "@/lib/sidebar-width";
 import { SyncsListPanel } from "@/features/syncs/components/syncs-list-panel";
+import { SyncPage, type SyncTab } from "@/features/syncs/components/sync-page";
 import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)")({
@@ -82,17 +83,49 @@ function PopoverOverlay() {
   );
 }
 
-const PANE_ENTER = { opacity: 0, y: 6 };
+const PANE_HIDDEN = { opacity: 0, y: 6 };
 const PANE_SHOWN = { opacity: 1, y: 0 };
+const PANE_LEAVING = { opacity: 0, y: -6 };
 const PANE_TRANSITION = { duration: 0.2, ease: [0.2, 0, 0, 1] as const };
+const PANE_INSTANT = { duration: 0 };
 
-function DetailPaneTransition({ pathname, children }: { pathname: string; children: ReactNode }) {
+const readSyncTab = (search: unknown): SyncTab =>
+  typeof search === "object" && search !== null && "tab" in search && search.tab === "activity" ? "activity" : "setup";
+
+// The sync page is drawn here rather than through the outlet, so the outgoing one keeps its own sync while it fades away.
+function DashboardMainPane({ syncId }: { syncId: string | null }) {
   const reduceMotion = useReducedMotion() ?? false;
+  const tab = useRouterState({ select: (state) => readSyncTab(state.location.search) });
+  const transition = reduceMotion ? PANE_INSTANT : PANE_TRANSITION;
+
   return (
     <LazyMotion features={loadMotionFeatures}>
-      <m.div key={pathname} initial={reduceMotion ? false : PANE_ENTER} animate={PANE_SHOWN} transition={PANE_TRANSITION}>
-        {children}
-      </m.div>
+      <AnimatePresence mode="popLayout" initial={false}>
+        {syncId ? (
+          <m.div
+            key={`sync:${syncId}`}
+            className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]"
+            initial={PANE_HIDDEN}
+            animate={PANE_SHOWN}
+            exit={PANE_LEAVING}
+            transition={transition}
+          >
+            <SyncPage syncId={syncId} tab={tab} />
+          </m.div>
+        ) : (
+          // `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10).
+          <m.div
+            key="calendar"
+            className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={transition}
+          >
+            <CalendarView />
+          </m.div>
+        )}
+      </AnimatePresence>
     </LazyMotion>
   );
 }
@@ -138,19 +171,7 @@ function SidebarLayout() {
           {syncsList ? <SyncsListPanel activeSyncId={syncDetail ? pathname.split("/").pop() : undefined} /> : <Outlet />}
         </SidebarPageTransition>
       </div>
-      {syncDetail ? (
-        // One mounted page that is the whole column on small screens and takes the calendar's place from lg.
-        <div className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]">
-          <DetailPaneTransition pathname={pathname}>
-            <Outlet />
-          </DetailPaneTransition>
-        </div>
-      ) : (
-        // `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10).
-        <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
-          <CalendarView />
-        </div>
-      )}
+      <DashboardMainPane syncId={syncDetail ? pathname.replace(/\/+$/, "").split("/").pop() ?? null : null} />
     </div>
   );
 }
