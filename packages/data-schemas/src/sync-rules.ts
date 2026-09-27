@@ -30,6 +30,9 @@ const ruleActionSchema = type({
 });
 type RuleAction = typeof ruleActionSchema.infer;
 
+const ruleMatchSchema = type("'all' | 'any'");
+type RuleMatch = typeof ruleMatchSchema.infer;
+
 const ruleConditionsSchema = ruleConditionSchema.array().atMostLength(MAX_RULE_CONDITIONS);
 const ruleActionsSchema = ruleActionSchema.array().atMostLength(MAX_RULE_ACTIONS);
 
@@ -130,17 +133,27 @@ const CONDITION_MATCHERS: Record<
 const matchesCondition = (condition: RuleCondition, facts: RuleEventFacts): boolean =>
   CONDITION_MATCHERS[condition.kind](condition, facts);
 
-const findMatchingRule = <TRule extends Pick<SyncRule, "conditions">>(
+interface MatchableRule {
+  conditions: readonly RuleCondition[];
+  match?: RuleMatch;
+}
+
+// An empty condition list matches everything, whether the rule matches any or all.
+const matchesRule = (rule: MatchableRule, facts: RuleEventFacts): boolean => {
+  if (rule.conditions.length === 0) {
+    return true;
+  }
+  const test = (condition: RuleCondition) => matchesCondition(condition, facts);
+  if (rule.match === "any") {
+    return rule.conditions.some(test);
+  }
+  return rule.conditions.every(test);
+};
+
+const findMatchingRule = <TRule extends MatchableRule>(
   rules: readonly TRule[],
   facts: RuleEventFacts,
-): TRule | null => {
-  for (const rule of rules) {
-    if (rule.conditions.every((condition) => matchesCondition(condition, facts))) {
-      return rule;
-    }
-  }
-  return null;
-};
+): TRule | null => rules.find((rule) => matchesRule(rule, facts)) ?? null;
 
 type RuleCopy = Extract<RuleEvaluation, { skip: false }>;
 
@@ -174,7 +187,7 @@ const applyRuleActions = (
   return copy;
 };
 
-const evaluateRules = <TRule extends Pick<SyncRule, "actions" | "conditions">>(
+const evaluateRules = <TRule extends MatchableRule & Pick<SyncRule, "actions">>(
   rules: readonly TRule[],
   facts: RuleEventFacts,
 ): RuleEvaluation => {
@@ -210,10 +223,12 @@ export {
   evaluateRules,
   findMatchingRule,
   matchesCondition,
+  matchesRule,
   patchSyncRuleBodySchema,
   resolveEventNameTemplate,
   ruleActionSchema,
   ruleConditionSchema,
+  ruleMatchSchema,
   syncRuleAssignmentsBodySchema,
   syncRuleNameSchema,
   syncRuleSchema,
@@ -225,6 +240,7 @@ export type {
   RuleCondition,
   RuleEvaluation,
   RuleEventFacts,
+  RuleMatch,
   SyncRule,
   SyncRuleAssignmentsBody,
 };

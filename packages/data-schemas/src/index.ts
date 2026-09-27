@@ -598,10 +598,12 @@ export {
   evaluateRules,
   findMatchingRule,
   matchesCondition,
+  matchesRule,
   patchSyncRuleBodySchema,
   resolveEventNameTemplate,
   ruleActionSchema,
   ruleConditionSchema,
+  ruleMatchSchema,
   syncRuleAssignmentsBodySchema,
   syncRuleNameSchema,
   syncRuleSchema,
@@ -613,9 +615,11 @@ export type {
   RuleCondition,
   RuleEvaluation,
   RuleEventFacts,
+  RuleMatch,
   SyncRule,
   SyncRuleAssignmentsBody,
 } from "./sync-rules";
+export * from "./syncs";
 
 export type {
   ProxyableMethods,

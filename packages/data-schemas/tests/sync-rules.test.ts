@@ -69,6 +69,17 @@ describe("evaluateRules", () => {
     expect(evaluateRules(rules, facts({ title: "Lunch" }))).toMatchObject({ isPrivate: true, summary: "Lunch" });
   });
 
+  it("ors conditions when a rule matches any of them", () => {
+    const anyRule = {
+      ...rule([{ kind: "title_contains", value: "1:1" }, { kind: "all_day" }], [{ kind: "skip" }]),
+      match: "any" as const,
+    };
+    expect(evaluateRules([anyRule], facts({ title: "1:1 with Priya" }))).toEqual({ skip: true });
+    expect(evaluateRules([anyRule], facts({ isAllDay: true }))).toEqual({ skip: true });
+    expect(evaluateRules([anyRule, rule([], [])], facts())).toMatchObject({ skip: false });
+    expect(evaluateRules([{ ...rule([], [{ kind: "skip" }]), match: "any" as const }], facts())).toEqual({ skip: true });
+  });
+
   it("skips events no rule matches", () => {
     expect(evaluateRules([rule([{ kind: "focus_time" }], [])], facts())).toEqual({ skip: true });
     expect(evaluateRules([], facts())).toEqual({ skip: true });
