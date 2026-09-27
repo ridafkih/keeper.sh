@@ -391,7 +391,7 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
           AND index_class.relnamespace = 'public'::regnamespace
           AND index_state.indisvalid
       )
-      AND to_regclass('public.sync_rule_assignments') IS NOT NULL AS ready
+      AND to_regclass('public.syncs') IS NOT NULL AS ready
   `);
   return state.rows[0]?.ready === true;
 };

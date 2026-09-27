@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -18,7 +19,7 @@ import {
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
-import type { RuleAction, RuleCondition } from "@keeper.sh/data-schemas";
+import type { AdvancedRule } from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -411,17 +412,91 @@ const eventMappingsTable = pgTable(
   ],
 );
 
+const syncsTable = pgTable(
+  "syncs",
+  {
+    busyTitle: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    markPrivate: boolean().notNull().default(false),
+    mode: text().notNull().default("one_way"),
+    name: text().notNull(),
+    paused: boolean().notNull().default(false),
+    rules: jsonb().$type<AdvancedRule[]>().notNull().default([]),
+    shareAs: text().notNull().default("busy_only"),
+    skipAllDay: boolean().notNull().default(false),
+    skipFocusTime: boolean().notNull().default(false),
+    skipOutOfOffice: boolean().notNull().default(false),
+    skipTitleKeywords: jsonb().$type<string[]>().notNull().default([]),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("syncs_user_idx").on(table.userId),
+    check("syncs_mode_check", sql`${table.mode} IN ('one_way', 'both_ways')`),
+    check("syncs_share_as_check", sql`${table.shareAs} IN ('busy_only', 'title_only', 'full')`),
+  ],
+);
+
+const syncCalendarsTable = pgTable(
+  "sync_calendars",
+  {
+    calendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    position: integer().notNull(),
+    role: text().notNull(),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.syncId, table.calendarId] }),
+    index("sync_calendars_calendar_idx").on(table.calendarId),
+    check("sync_calendars_role_check", sql`${table.role} IN ('source', 'destination', 'member')`),
+  ],
+);
+
+const syncActivityTable = pgTable(
+  "sync_activity",
+  {
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    kind: text().notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("sync_activity_sync_created_idx").on(table.syncId, table.createdAt.desc(), table.id.desc()),
+    check("sync_activity_kind_check", sql`${table.kind} IN ('change', 'run')`),
+  ],
+);
+
+// Pairs are derived from each sync's calendars; the unique pair index keeps a pair in one sync.
 const sourceDestinationMappingsTable = pgTable(
   "source_destination_mappings",
   {
+    copiedCount: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     destinationCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    lastSyncedAt: timestamp({ withTimezone: true }),
+    skippedCount: integer().notNull().default(0),
     sourceCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("source_destination_mapping_idx").on(
@@ -430,6 +505,7 @@ const sourceDestinationMappingsTable = pgTable(
     ),
     index("source_destination_mappings_source_idx").on(table.sourceCalendarId),
     index("source_destination_mappings_destination_idx").on(table.destinationCalendarId),
+    index("source_destination_mappings_sync_idx").on(table.syncId),
   ],
 );
 
@@ -540,62 +616,6 @@ const icalFeedCalendarsTable = pgTable(
   ],
 );
 
-const syncRulesTable = pgTable(
-  "sync_rules",
-  {
-    actions: jsonb().$type<RuleAction[]>().notNull().default([]),
-    conditions: jsonb().$type<RuleCondition[]>().notNull().default([]),
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    isDefault: boolean().notNull().default(false),
-    name: text().notNull(),
-    updatedAt: timestamp({ withTimezone: true })
-      .notNull()
-      .defaultNow()
-      .$onUpdate(() => new Date()),
-    userId: text()
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-  },
-  (table) => [
-    index("sync_rules_user_idx").on(table.userId),
-    uniqueIndex("sync_rules_user_default_idx")
-      .on(table.userId)
-      .where(eq(table.isDefault, sql`true`)),
-  ],
-);
-
-const syncRuleAssignmentsTable = pgTable(
-  "sync_rule_assignments",
-  {
-    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-    destinationCalendarId: uuid()
-      .notNull()
-      .references(() => calendarsTable.id, { onDelete: "cascade" }),
-    id: uuid().notNull().primaryKey().defaultRandom(),
-    position: integer().notNull(),
-    ruleId: uuid()
-      .notNull()
-      .references(() => syncRulesTable.id, { onDelete: "cascade" }),
-    sourceCalendarId: uuid()
-      .notNull()
-      .references(() => calendarsTable.id, { onDelete: "cascade" }),
-  },
-  (table) => [
-    uniqueIndex("sync_rule_assignments_pair_rule_idx").on(
-      table.sourceCalendarId,
-      table.destinationCalendarId,
-      table.ruleId,
-    ),
-    index("sync_rule_assignments_pair_position_idx").on(
-      table.sourceCalendarId,
-      table.destinationCalendarId,
-      table.position,
-    ),
-    index("sync_rule_assignments_rule_idx").on(table.ruleId),
-  ],
-);
-
 export {
   apiTokensTable,
   caldavCredentialsTable,
@@ -612,9 +632,10 @@ export {
   icalFeedsTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
-  syncRuleAssignmentsTable,
-  syncRulesTable,
+  syncActivityTable,
+  syncCalendarsTable,
   syncStatusTable,
+  syncsTable,
   userSyncRequestsTable,
   userEventsTable,
   userSubscriptionsTable,

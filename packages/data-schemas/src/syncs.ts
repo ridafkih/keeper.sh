@@ -24,6 +24,20 @@ type SyncMode = typeof syncModeSchema.infer;
 const shareAsSchema = type("'busy_only' | 'title_only' | 'full'");
 type ShareAs = typeof shareAsSchema.infer;
 
+const toShareAs = (value: string): ShareAs => {
+  if (value === "title_only" || value === "full") {
+    return value;
+  }
+  return "busy_only";
+};
+
+const toSyncMode = (value: string): SyncMode => {
+  if (value === "both_ways") {
+    return value;
+  }
+  return "one_way";
+};
+
 const syncNameSchema = type(`string <= ${SYNC_NAME_MAX_LENGTH}`).narrow(
   (value) => value.trim().length > 0,
 );
@@ -474,6 +488,8 @@ export {
   syncCalendarIds,
   syncModeSchema,
   syncNameSchema,
+  toShareAs,
+  toSyncMode,
   validateSyncCalendars,
 };
 export type {

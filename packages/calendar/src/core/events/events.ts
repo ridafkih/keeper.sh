@@ -2,11 +2,10 @@ import {
   calendarsTable,
   eventStatesTable,
   sourceDestinationMappingsTable,
-  syncRuleAssignmentsTable,
-  syncRulesTable,
+  syncsTable,
 } from "@keeper.sh/database/schema";
-import { applyRuleActions, findMatchingRule } from "@keeper.sh/data-schemas";
-import type { RuleEventFacts, SyncRule } from "@keeper.sh/data-schemas";
+import { applyRuleActions, compileSyncRules, findMatchingRule, toShareAs } from "@keeper.sh/data-schemas";
+import type { CompiledSyncRule, RuleEventFacts } from "@keeper.sh/data-schemas";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type {
@@ -37,7 +36,7 @@ interface DestinationEventReadDiagnostics {
   unmatchedByRuleCount: number;
 }
 
-type DestinationSyncRule = Pick<SyncRule, "actions" | "conditions" | "id" | "name">;
+type DestinationSyncRule = CompiledSyncRule;
 type RulesBySourceCalendarId = ReadonlyMap<string, DestinationSyncRule[]>;
 
 interface DestinationEventReadOptions {
@@ -154,7 +153,7 @@ interface SyncableEventProjectionRow {
 }
 
 type SyncableEventProjection =
-  | { outcome: "skipped" }
+  | { outcome: "skipped"; ruleId: string }
   | { outcome: "unmatched" }
   | { outcome: "working_location" }
   | {
@@ -190,7 +189,7 @@ const projectSyncableEvent = (
   }
   const evaluation = applyRuleActions(rule.actions, facts);
   if (evaluation.skip) {
-    return { outcome: "skipped" };
+    return { outcome: "skipped", ruleId: rule.id };
   }
   return {
     description: evaluation.description,
@@ -211,33 +210,33 @@ const getSyncRulesForDestination = async (
     return rulesBySourceCalendarId;
   }
 
-  const assignments = await database
+  const pairs = await database
     .select({
-      actions: syncRulesTable.actions,
-      conditions: syncRulesTable.conditions,
-      id: syncRulesTable.id,
-      name: syncRulesTable.name,
-      sourceCalendarId: syncRuleAssignmentsTable.sourceCalendarId,
+      busyTitle: syncsTable.busyTitle,
+      markPrivate: syncsTable.markPrivate,
+      rules: syncsTable.rules,
+      shareAs: syncsTable.shareAs,
+      skipAllDay: syncsTable.skipAllDay,
+      skipFocusTime: syncsTable.skipFocusTime,
+      skipOutOfOffice: syncsTable.skipOutOfOffice,
+      skipTitleKeywords: syncsTable.skipTitleKeywords,
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+      syncId: syncsTable.id,
     })
-    .from(syncRuleAssignmentsTable)
-    .innerJoin(syncRulesTable, eq(syncRuleAssignmentsTable.ruleId, syncRulesTable.id))
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(syncsTable, eq(sourceDestinationMappingsTable.syncId, syncsTable.id))
     .where(
       and(
-        eq(syncRuleAssignmentsTable.destinationCalendarId, destinationCalendarId),
-        inArray(syncRuleAssignmentsTable.sourceCalendarId, sourceCalendarIds),
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        inArray(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarIds),
       ),
-    )
-    .orderBy(asc(syncRuleAssignmentsTable.sourceCalendarId), asc(syncRuleAssignmentsTable.position));
+    );
 
-  for (const assignment of assignments) {
-    const rules = rulesBySourceCalendarId.get(assignment.sourceCalendarId) ?? [];
-    rules.push({
-      actions: assignment.actions,
-      conditions: assignment.conditions,
-      id: assignment.id,
-      name: assignment.name,
-    });
-    rulesBySourceCalendarId.set(assignment.sourceCalendarId, rules);
+  const compiledBySyncId = new Map<string, DestinationSyncRule[]>();
+  for (const pair of pairs) {
+    const compiled = compiledBySyncId.get(pair.syncId) ?? compileSyncRules({ ...pair, shareAs: toShareAs(pair.shareAs) });
+    compiledBySyncId.set(pair.syncId, compiled);
+    rulesBySourceCalendarId.set(pair.sourceCalendarId, compiled);
   }
   return rulesBySourceCalendarId;
 };

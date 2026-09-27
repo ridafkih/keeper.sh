@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RULE, evaluateRules } from "@keeper.sh/data-schemas";
-import type { RuleEventFacts, SyncRule } from "@keeper.sh/data-schemas";
+import { DEFAULT_SYNC_SETTINGS, compileSyncRules, evaluateRules } from "@keeper.sh/data-schemas";
+import type { RuleEventFacts, SyncSettings } from "@keeper.sh/data-schemas";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
 import {
   createEditableEventContentSnapshot,
@@ -31,15 +31,10 @@ const facts: RuleEventFacts = {
   title: "Weekly sync",
 };
 
-const renamedRule: Pick<SyncRule, "actions" | "conditions"> = {
-  actions: [{ kind: "rename", template: "OOO" }, { kind: "drop_description" }],
-  conditions: [],
-};
-
-const localEventUnderRule = (rule: Pick<SyncRule, "actions" | "conditions">): MaterializedSyncableEvent => {
-  const evaluation = evaluateRules([rule], facts);
+const localEventUnder = (overrides: Partial<SyncSettings>): MaterializedSyncableEvent => {
+  const evaluation = evaluateRules(compileSyncRules({ ...DEFAULT_SYNC_SETTINGS, ...overrides }), facts);
   if (evaluation.skip) {
-    throw new Error("rule skipped the fixture event");
+    throw new Error("sync skipped the fixture event");
   }
   return {
     calendarId: "source-calendar-id",
@@ -87,19 +82,21 @@ const computeAfterRuleChange = (
   return computeSyncOperations([localNow], [mapping], [remoteEvent], TEST_RECONCILIATION_SCOPE);
 };
 
-describe("changing the applied rule restales already synced events", () => {
-  const underDefault = localEventUnderRule(DEFAULT_RULE);
-  const underRename = localEventUnderRule(renamedRule);
+describe("changing a sync's sharing restales already synced events", () => {
+  const busyOnly = localEventUnder({});
+  const titleOnly = localEventUnder({ shareAs: "title_only" });
+  const busyPrivate = localEventUnder({ markPrivate: true });
 
-  it("emits operations when a pair switches from the default rule to a rename", () => {
-    expect(computeAfterRuleChange(underDefault, underRename).operations).not.toHaveLength(0);
+  it("emits operations when Share As changes", () => {
+    expect(computeAfterRuleChange(busyOnly, titleOnly).operations).not.toHaveLength(0);
+    expect(computeAfterRuleChange(titleOnly, busyOnly).operations).not.toHaveLength(0);
   });
 
-  it("emits operations when the pair switches back", () => {
-    expect(computeAfterRuleChange(underRename, underDefault).operations).not.toHaveLength(0);
+  it("emits operations when copies become private", () => {
+    expect(computeAfterRuleChange(busyOnly, busyPrivate).operations).not.toHaveLength(0);
   });
 
-  it("emits nothing while the rule stays the same", () => {
-    expect(computeAfterRuleChange(underRename, underRename).operations).toHaveLength(0);
+  it("emits nothing while the sharing stays the same", () => {
+    expect(computeAfterRuleChange(titleOnly, titleOnly).operations).toHaveLength(0);
   });
 });

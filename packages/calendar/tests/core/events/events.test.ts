@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RULE } from "@keeper.sh/data-schemas";
+import { DEFAULT_SYNC_SETTINGS, compileSyncRules } from "@keeper.sh/data-schemas";
 import {
   isEventInDestinationReconciliationWindow,
   projectSyncableEvent,
@@ -145,12 +145,10 @@ describe("destination reconciliation source selection", () => {
   });
 });
 
-const busyOnly = {
-  actions: DEFAULT_RULE.actions,
-  conditions: DEFAULT_RULE.conditions,
-  id: "rule-busy",
-  name: "Busy only",
-};
+const busyOnly = compileSyncRules(DEFAULT_SYNC_SETTINGS).at(-1);
+if (!busyOnly) {
+  throw new Error("compileSyncRules always ends with Share As");
+}
 
 const createRow = (overrides: Partial<Parameters<typeof projectSyncableEvent>[0]> = {}) => ({
   availability: "busy",
@@ -183,17 +181,18 @@ describe("projectSyncableEvent", () => {
 
   it("applies the first matching rule and reports skips", () => {
     const rules = [
-      { actions: [{ kind: "skip" as const }], conditions: [{ kind: "focus_time" as const }], id: "rule-skip", name: "Skip focus time" },
+      { actions: [{ kind: "skip" as const }], conditions: [{ kind: "focus_time" as const }], id: "rule-skip", match: "all" as const, name: "Skip focus time" },
       {
         actions: [{ kind: "rename" as const, template: "OOO" }, { kind: "mark_private" as const }],
         conditions: [{ kind: "title_contains" as const, value: "standup" }],
         id: "rule-ooo",
+        match: "all" as const,
         name: "Standup to OOO",
       },
       busyOnly,
     ];
 
-    expect(projectSyncableEvent(createRow({ sourceEventType: "focusTime" }), rules)).toEqual({ outcome: "skipped" });
+    expect(projectSyncableEvent(createRow({ sourceEventType: "focusTime" }), rules)).toEqual({ outcome: "skipped", ruleId: "rule-skip" });
     expect(projectSyncableEvent(createRow(), rules)).toEqual({
       description: "Agenda",
       isPrivate: true,

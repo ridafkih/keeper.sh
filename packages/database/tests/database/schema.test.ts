@@ -9,8 +9,9 @@ import {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
-  syncRuleAssignmentsTable,
-  syncRulesTable,
+  sourceDestinationMappingsTable,
+  syncActivityTable,
+  syncCalendarsTable,
   userSyncRequestsTable,
 } from "../../src/database/schema";
 
@@ -336,21 +337,18 @@ const ruleIndexColumnNames = (index: ReturnType<typeof findTableIndex>): (string
     return null;
   });
 
-describe("sync rule schema", () => {
-  it("allows one default rule per user", () => {
-    const defaultIndex = findTableIndex(syncRulesTable, "sync_rules_user_default_idx");
-
-    expect(defaultIndex?.config.unique).toBe(true);
-    expect(defaultIndex?.config.where).toBeDefined();
-    expect(ruleIndexColumnNames(defaultIndex)).toEqual(["userId"]);
-  });
-
-  it("applies a rule at most once per calendar pair and removes assignments with their rule or calendars", () => {
-    const pairIndex = findTableIndex(syncRuleAssignmentsTable, "sync_rule_assignments_pair_rule_idx");
-    const foreignKeys = getTableConfig(syncRuleAssignmentsTable).foreignKeys.map((key) => key.onDelete);
+describe("sync schema", () => {
+  it("keeps a calendar pair in one sync and removes pairs with their sync or calendars", () => {
+    const pairIndex = findTableIndex(sourceDestinationMappingsTable, "source_destination_mapping_idx");
+    const foreignKeys = getTableConfig(sourceDestinationMappingsTable).foreignKeys.map((key) => key.onDelete);
 
     expect(pairIndex?.config.unique).toBe(true);
-    expect(ruleIndexColumnNames(pairIndex)).toEqual(["sourceCalendarId", "destinationCalendarId", "ruleId"]);
+    expect(ruleIndexColumnNames(pairIndex)).toEqual(["sourceCalendarId", "destinationCalendarId"]);
     expect(foreignKeys).toEqual(["cascade", "cascade", "cascade"]);
+  });
+
+  it("removes a sync's calendars and activity with the sync", () => {
+    expect(getTableConfig(syncCalendarsTable).foreignKeys.map((key) => key.onDelete)).toEqual(["cascade", "cascade"]);
+    expect(getTableConfig(syncActivityTable).foreignKeys.map((key) => key.onDelete)).toEqual(["cascade"]);
   });
 });
