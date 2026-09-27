@@ -6,6 +6,7 @@ import {
   describeConflicts,
   describeRun,
   findDraftConflicts,
+  newestFirst,
   previewSync,
   roleIn,
   summarizeSync,
@@ -99,5 +100,17 @@ describe("activity descriptions", () => {
     expect(formatSyncedAgo(null, now)).toBe("Not synced yet");
     expect(formatSyncedAgo("2026-09-27T11:58:00.000Z", now)).toBe("2m ago");
     expect(formatSyncedAgo("2026-09-27T09:00:00.000Z", now)).toBe("3h ago");
+  });
+});
+
+describe("newestFirst", () => {
+  it("orders syncs by creation, newest first, breaking ties by id", () => {
+    const syncs = [
+      { createdAt: "2026-09-01T00:00:00.000Z", id: "a" },
+      { createdAt: "2026-09-03T00:00:00.000Z", id: "b" },
+      { createdAt: "2026-09-03T00:00:00.000Z", id: "c" },
+    ];
+    expect(newestFirst(syncs).map((sync) => sync.id)).toEqual(["c", "b", "a"]);
+    expect(syncs.map((sync) => sync.id)).toEqual(["a", "b", "c"]);
   });
 });

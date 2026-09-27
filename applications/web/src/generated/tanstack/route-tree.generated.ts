@@ -60,6 +60,7 @@ import { Route as dashboardDashboardIcalRouteRouteImport } from './../../routes/
 import { Route as dashboardDashboardConnectRouteRouteImport } from './../../routes/(dashboard)/dashboard/connect/route'
 import { Route as dashboardDashboardAccountsRouteRouteImport } from './../../routes/(dashboard)/dashboard/accounts/route'
 import { Route as dashboardDashboardUpgradeIndexRouteImport } from './../../routes/(dashboard)/dashboard/upgrade/index'
+import { Route as dashboardDashboardSyncsIndexRouteImport } from './../../routes/(dashboard)/dashboard/syncs/index'
 import { Route as dashboardDashboardSettingsIndexRouteImport } from './../../routes/(dashboard)/dashboard/settings/index'
 import { Route as dashboardDashboardIntegrationsIndexRouteImport } from './../../routes/(dashboard)/dashboard/integrations/index'
 import { Route as dashboardDashboardIcalIndexRouteImport } from './../../routes/(dashboard)/dashboard/ical/index'
@@ -345,6 +346,12 @@ const dashboardDashboardUpgradeIndexRoute =
     path: '/dashboard/upgrade/',
     getParentRoute: () => dashboardRouteRoute,
   } as any)
+const dashboardDashboardSyncsIndexRoute =
+  dashboardDashboardSyncsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => dashboardDashboardSyncsRouteRoute,
+  } as any)
 const dashboardDashboardSettingsIndexRoute =
   dashboardDashboardSettingsIndexRouteImport.update({
     id: '/',
@@ -543,6 +550,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/ical/': typeof dashboardDashboardIcalIndexRoute
   '/dashboard/integrations/': typeof dashboardDashboardIntegrationsIndexRoute
   '/dashboard/settings/': typeof dashboardDashboardSettingsIndexRoute
+  '/dashboard/syncs/': typeof dashboardDashboardSyncsIndexRoute
   '/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
@@ -566,7 +574,6 @@ export interface FileRoutesByTo {
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
-  '/dashboard/syncs': typeof dashboardDashboardSyncsRouteRouteWithChildren
   '/dashboard/connect': typeof dashboardDashboardConnectIndexRoute
   '/dashboard/feedback': typeof dashboardDashboardFeedbackRoute
   '/dashboard/report': typeof dashboardDashboardReportRoute
@@ -607,6 +614,7 @@ export interface FileRoutesByTo {
   '/dashboard/ical': typeof dashboardDashboardIcalIndexRoute
   '/dashboard/integrations': typeof dashboardDashboardIntegrationsIndexRoute
   '/dashboard/settings': typeof dashboardDashboardSettingsIndexRoute
+  '/dashboard/syncs': typeof dashboardDashboardSyncsIndexRoute
   '/dashboard/upgrade': typeof dashboardDashboardUpgradeIndexRoute
   '/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
@@ -683,6 +691,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/ical/': typeof dashboardDashboardIcalIndexRoute
   '/(dashboard)/dashboard/integrations/': typeof dashboardDashboardIntegrationsIndexRoute
   '/(dashboard)/dashboard/settings/': typeof dashboardDashboardSettingsIndexRoute
+  '/(dashboard)/dashboard/syncs/': typeof dashboardDashboardSyncsIndexRoute
   '/(dashboard)/dashboard/upgrade/': typeof dashboardDashboardUpgradeIndexRoute
   '/(dashboard)/dashboard/accounts/$accountId/$calendarId': typeof dashboardDashboardAccountsAccountIdCalendarIdRoute
   '/(dashboard)/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
@@ -755,6 +764,7 @@ export interface FileRouteTypes {
     | '/dashboard/ical/'
     | '/dashboard/integrations/'
     | '/dashboard/settings/'
+    | '/dashboard/syncs/'
     | '/dashboard/upgrade/'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
@@ -778,7 +788,6 @@ export interface FileRouteTypes {
     | '/terms'
     | '/'
     | '/dashboard/accounts'
-    | '/dashboard/syncs'
     | '/dashboard/connect'
     | '/dashboard/feedback'
     | '/dashboard/report'
@@ -819,6 +828,7 @@ export interface FileRouteTypes {
     | '/dashboard/ical'
     | '/dashboard/integrations'
     | '/dashboard/settings'
+    | '/dashboard/syncs'
     | '/dashboard/upgrade'
     | '/dashboard/accounts/$accountId/$calendarId'
     | '/dashboard/accounts/$accountId/reconnect'
@@ -894,6 +904,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/ical/'
     | '/(dashboard)/dashboard/integrations/'
     | '/(dashboard)/dashboard/settings/'
+    | '/(dashboard)/dashboard/syncs/'
     | '/(dashboard)/dashboard/upgrade/'
     | '/(dashboard)/dashboard/accounts/$accountId/$calendarId'
     | '/(dashboard)/dashboard/accounts/$accountId/reconnect'
@@ -1266,6 +1277,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardUpgradeIndexRouteImport
       parentRoute: typeof dashboardRouteRoute
     }
+    '/(dashboard)/dashboard/syncs/': {
+      id: '/(dashboard)/dashboard/syncs/'
+      path: '/'
+      fullPath: '/dashboard/syncs/'
+      preLoaderRoute: typeof dashboardDashboardSyncsIndexRouteImport
+      parentRoute: typeof dashboardDashboardSyncsRouteRoute
+    }
     '/(dashboard)/dashboard/settings/': {
       id: '/(dashboard)/dashboard/settings/'
       path: '/'
@@ -1522,12 +1540,14 @@ const dashboardDashboardSettingsRouteRouteWithChildren =
 interface dashboardDashboardSyncsRouteRouteChildren {
   dashboardDashboardSyncsSyncIdRoute: typeof dashboardDashboardSyncsSyncIdRoute
   dashboardDashboardSyncsNewRoute: typeof dashboardDashboardSyncsNewRoute
+  dashboardDashboardSyncsIndexRoute: typeof dashboardDashboardSyncsIndexRoute
 }
 
 const dashboardDashboardSyncsRouteRouteChildren: dashboardDashboardSyncsRouteRouteChildren =
   {
     dashboardDashboardSyncsSyncIdRoute: dashboardDashboardSyncsSyncIdRoute,
     dashboardDashboardSyncsNewRoute: dashboardDashboardSyncsNewRoute,
+    dashboardDashboardSyncsIndexRoute: dashboardDashboardSyncsIndexRoute,
   }
 
 const dashboardDashboardSyncsRouteRouteWithChildren =

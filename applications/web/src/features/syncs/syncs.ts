@@ -68,6 +68,11 @@ export const previewCalendarNames = (sync: SyncCalendars, calendarsById: Calenda
   };
 };
 
+export const SIDEBAR_SYNC_LIMIT = 3;
+
+export const newestFirst = <T extends { createdAt: string; id: string }>(syncs: readonly T[]): T[] =>
+  [...syncs].sort((left, right) => right.createdAt.localeCompare(left.createdAt) || right.id.localeCompare(left.id));
+
 export const STATE_LABELS: Record<SyncState, string> = {
   empty: "Add calendars to start",
   ok: "Up to date",

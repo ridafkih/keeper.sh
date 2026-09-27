@@ -5,7 +5,8 @@ import type { CreateSyncBody, PatchSyncBody, SyncActivityEntry, SyncDetail, Sync
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { serializedPatch } from "@/lib/serialized-mutate";
 import { USAGE_CACHE_KEY } from "@/hooks/use-entitlements";
-import { SYNCS_KEY, syncActivityKey, syncKey } from "./syncs";
+import type { CalendarSource } from "@/types/api";
+import { SYNCS_KEY, newestFirst, syncActivityKey, syncKey, type CalendarsById } from "./syncs";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const ACTIVITY_PAGE_SIZE = 30;
@@ -16,6 +17,13 @@ interface SyncActivityPage {
 }
 
 export const useSyncs = () => useSWR<SyncSummary[]>(SYNCS_KEY, fetcher);
+
+export function useSyncRows() {
+  const { data: syncs, error, mutate } = useSyncs();
+  const { data: calendars } = useSWR<CalendarSource[]>("/api/sources", fetcher);
+  const calendarsById: CalendarsById = new Map((calendars ?? []).map((calendar) => [calendar.id, calendar] as const));
+  return { calendarsById, error, mutate, syncs: syncs && newestFirst(syncs) };
+}
 
 export const useSync = (syncId: string) => useSWR<SyncDetail>(syncKey(syncId), fetcher);
 

@@ -1,6 +1,6 @@
+import List from "lucide-react/dist/esm/icons/list";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Waypoints from "lucide-react/dist/esm/icons/waypoints";
-import useSWR from "swr";
 import type { SyncSummary } from "@keeper.sh/data-schemas";
 import { Text } from "@/components/ui/primitives/text";
 import {
@@ -12,18 +12,16 @@ import {
   NavigationMenuLinkItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { canAddMore, useEntitlements } from "@/hooks/use-entitlements";
-import type { CalendarSource } from "@/types/api";
 import { formatSyncedAgo } from "../relative-time";
-import { summarizeSync, syncPagePath } from "../syncs";
-import { useSyncs } from "../use-syncs";
+import { SIDEBAR_SYNC_LIMIT, summarizeSync, syncPagePath, type CalendarsById } from "../syncs";
+import { useSyncRows } from "../use-syncs";
 import { SyncStatusDot } from "./sync-status-dot";
 
 export function SyncsMenu() {
-  const { data: syncs } = useSyncs();
-  const { data: calendars } = useSWR<CalendarSource[]>("/api/sources");
+  const { calendarsById, syncs } = useSyncRows();
   const { data: entitlements } = useEntitlements();
-  const calendarsById = new Map((calendars ?? []).map((calendar) => [calendar.id, calendar] as const));
-  const atLimit = !canAddMore(entitlements?.syncs);
+  const shown = (syncs ?? []).slice(0, SIDEBAR_SYNC_LIMIT);
+  const hidden = (syncs?.length ?? 0) - shown.length;
 
   return (
     <NavigationMenu>
@@ -36,23 +34,40 @@ export function SyncsMenu() {
           {syncs && <Text size="sm" tone="muted">{syncs.length}</Text>}
         </NavigationMenuItemTrailing>
       </NavigationMenuItem>
-      {(syncs ?? []).map((sync) => (
-        <SyncRow key={sync.id} sync={sync} summary={summarizeSync(sync, calendarsById)} />
+      {shown.map((sync) => (
+        <SyncRow key={sync.id} sync={sync} calendarsById={calendarsById} />
       ))}
-      <NavigationMenuLinkItem to="/dashboard/syncs/new">
-        <NavigationMenuItemIcon>
-          <Plus size={15} />
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>New Sync</NavigationMenuItemLabel>
-        <NavigationMenuItemTrailing>
-          {atLimit && <Text size="sm" tone="muted">Pro</Text>}
-        </NavigationMenuItemTrailing>
-      </NavigationMenuLinkItem>
+      {hidden > 0 && (
+        <NavigationMenuLinkItem to="/dashboard/syncs">
+          <NavigationMenuItemIcon>
+            <List size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>View All Syncs</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            <Text size="sm" tone="muted">{hidden} more</Text>
+          </NavigationMenuItemTrailing>
+        </NavigationMenuLinkItem>
+      )}
+      <NewSyncRow atLimit={!canAddMore(entitlements?.syncs)} />
     </NavigationMenu>
   );
 }
 
-function SyncRow({ sync, summary }: { sync: SyncSummary; summary: string }) {
+export function NewSyncRow({ atLimit }: { atLimit: boolean }) {
+  return (
+    <NavigationMenuLinkItem to="/dashboard/syncs/new">
+      <NavigationMenuItemIcon>
+        <Plus size={15} />
+      </NavigationMenuItemIcon>
+      <NavigationMenuItemLabel>New Sync</NavigationMenuItemLabel>
+      <NavigationMenuItemTrailing>
+        {atLimit && <Text size="sm" tone="muted">Pro</Text>}
+      </NavigationMenuItemTrailing>
+    </NavigationMenuLinkItem>
+  );
+}
+
+export function SyncRow({ sync, calendarsById }: { sync: SyncSummary; calendarsById: CalendarsById }) {
   const trailing = sync.state === "problem"
     ? <Text size="sm" tone="attention">Needs attention</Text>
     : <Text size="sm" tone="muted">{sync.state === "paused" ? "Paused" : formatSyncedAgo(sync.lastSyncedAt)}</Text>;
@@ -62,7 +77,7 @@ function SyncRow({ sync, summary }: { sync: SyncSummary; summary: string }) {
       <SyncStatusDot state={sync.state} className="ml-1" />
       <div className="flex min-w-0 flex-col">
         <NavigationMenuItemLabel tone="default">{sync.name}</NavigationMenuItemLabel>
-        <Text size="xs" tone="muted" className="truncate">{summary}</Text>
+        <Text size="xs" tone="muted" className="truncate">{summarizeSync(sync, calendarsById)}</Text>
       </div>
       <NavigationMenuItemTrailing className="ml-auto shrink-0 grow-0" indicator={trailing} />
     </NavigationMenuLinkItem>
