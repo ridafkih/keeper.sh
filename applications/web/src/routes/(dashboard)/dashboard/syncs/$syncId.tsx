@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import Pause from "lucide-react/dist/esm/icons/pause";
@@ -9,7 +9,6 @@ import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
-import { PageBody } from "@/components/ui/primitives/page-body";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Text } from "@/components/ui/primitives/text";
@@ -55,6 +54,23 @@ const PATCH_KEYS = [
 const toPatchBody = (patch: Partial<SyncDefinition>): PatchSyncBody =>
   Object.fromEntries(PATCH_KEYS.filter((key) => key in patch).map((key) => [key, patch[key]])) as PatchSyncBody;
 
+const STICKY_GAP = 12;
+
+// The pane scrolls as a whole, so the pinned preview sits just below wherever the sticky header ends.
+function useStickyOffset(rootRef: RefObject<HTMLDivElement | null>, ready: boolean): number {
+  const [offset, setOffset] = useState(STICKY_GAP);
+  useLayoutEffect(() => {
+    const header = rootRef.current?.querySelector<HTMLElement>("[data-scrolled]");
+    if (!ready || !header) return;
+    const update = () => setOffset(header.offsetHeight + (Number.parseFloat(getComputedStyle(header).top) || 0) + STICKY_GAP);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [rootRef, ready]);
+  return offset;
+}
+
 function SyncPage() {
   const { syncId } = Route.useParams();
   const { tab = "setup" } = Route.useSearch();
@@ -67,6 +83,8 @@ function SyncPage() {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stickyTop = useStickyOffset(rootRef, Boolean(sync && calendars));
 
   if (error) return <RouteShell backFallback="/dashboard/syncs" status="error" onRetry={() => { void mutate(); }} />;
   if (!sync || !calendars) return <RouteShell backFallback="/dashboard/syncs" status="loading" />;
@@ -113,10 +131,10 @@ function SyncPage() {
   const previewNames = previewCalendarNames(sync, calendarsById);
 
   return (
-    <div className="@container flex flex-col gap-1.5 lg:h-full">
+    <div ref={rootRef} className="@container flex flex-col gap-1.5">
       <StickyPageHeader className="gap-1.5">
         <div className="lg:hidden">
-          <BackButton fallback="/dashboard/syncs" />
+          <BackButton to="/dashboard" />
         </div>
         <div className="flex flex-col gap-1 px-0.5 pt-4">
           <DashboardHeading1 className="select-none">{sync.name}</DashboardHeading1>
@@ -137,7 +155,7 @@ function SyncPage() {
           />
         </div>
       </StickyPageHeader>
-      <PageBody className="gap-1.5">
+      <div className="flex flex-col gap-1.5">
         {mutationError && <Text size="sm" tone="danger" className="px-0.5">{mutationError}</Text>}
         {tab === "setup" ? (
           <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
@@ -187,7 +205,7 @@ function SyncPage() {
               />
             </div>
             <aside className="hidden @3xl:block">
-              <div className="sticky top-4">
+              <div className="sticky" style={{ top: stickyTop }}>
                 <SyncPreviewPanel
                   settings={syncSettingsOf(sync)}
                   sourceName={previewNames.source}
@@ -199,7 +217,7 @@ function SyncPage() {
         ) : (
           <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
         )}
-      </PageBody>
+      </div>
     </div>
   );
 }

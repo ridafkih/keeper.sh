@@ -21,7 +21,7 @@ export function SyncsListPanel({ activeSyncId }: { activeSyncId?: string }) {
   return (
     <div className="flex flex-col gap-1.5 lg:h-full">
       <StickyPageHeader className="gap-1.5">
-        <BackButton fallback="/dashboard" />
+        <BackButton to="/dashboard" />
         <DashboardSection
           title="Syncs"
           description={`${syncs.length === 1 ? "1 sync" : `${syncs.length} syncs`}, newest first. Each one decides which calendars copy into which, and how.`}
