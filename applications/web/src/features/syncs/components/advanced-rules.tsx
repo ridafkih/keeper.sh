@@ -9,6 +9,7 @@ import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import X from "lucide-react/dist/esm/icons/x";
 import { MAX_ADVANCED_RULES, syncRuleNameSchema } from "@keeper.sh/data-schemas";
 import type { AdvancedRule, RuleAction, RuleCondition, ShareAs, SyncSummary } from "@keeper.sh/data-schemas";
+import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import { PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { Text } from "@/components/ui/primitives/text";
@@ -82,8 +83,8 @@ export function AdvancedRules({ rules, shareAs, locked, otherSyncs, onChange }: 
           </NavigationMenuItemTrailing>
         </NavigationMenuButtonItem>
       </NavigationMenu>
-      {open && (
-        <div className="flex flex-col gap-1.5">
+      <AnimatedReveal show={open} skipInitial>
+        <div className="flex flex-col gap-1.5 pt-1.5">
           <Text size="sm" tone="muted" className="px-0.5">
             Checked after Never Copy; first match wins. Anything no rule matches is shared as {shareAsLabel(shareAs)}.
           </Text>
@@ -138,7 +139,7 @@ export function AdvancedRules({ rules, shareAs, locked, otherSyncs, onChange }: 
             </div>
           </PremiumGate>
         </div>
-      )}
+      </AnimatedReveal>
     </>
   );
 }
