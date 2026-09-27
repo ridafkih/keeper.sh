@@ -1,11 +1,17 @@
-const WIDE_SIDEBAR_ROOT = "/dashboard/syncs";
+const WIDE_SIDEBAR_PATHS = new Set(["/dashboard/syncs/new"]);
+const SYNCS_ROOT = "/dashboard/syncs";
 
 const normalizePath = (pathname: string): string => pathname.replace(/\/+$/, "") || "/";
 
-// Sync pages carry sentences of calendar names, so they get a wider sidebar at the calendar's expense.
-export const isWideSidebarPath = (pathname: string): boolean => {
+// The new-sync editor carries sentences of calendar names, so it gets a wider sidebar at the calendar's expense.
+export const isWideSidebarPath = (pathname: string): boolean => WIDE_SIDEBAR_PATHS.has(normalizePath(pathname));
+
+// A sync's page opens in place of the calendar, with the list of syncs kept in the sidebar.
+export const isSyncDetailPath = (pathname: string): boolean => {
   const path = normalizePath(pathname);
-  return path === WIDE_SIDEBAR_ROOT || path.startsWith(`${WIDE_SIDEBAR_ROOT}/`);
+  if (!path.startsWith(`${SYNCS_ROOT}/`)) return false;
+  const rest = path.slice(SYNCS_ROOT.length + 1);
+  return rest !== "" && rest !== "new" && !rest.includes("/");
 };
 
 const FULL_SCREEN_PATHS = new Set(["/dashboard/setup"]);

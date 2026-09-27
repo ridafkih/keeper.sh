@@ -31,10 +31,11 @@ import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import type { CalendarSource } from "@/types/api";
 import { ActivityList } from "@/features/syncs/components/activity-list";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
+import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
 import { formatSyncedAgo } from "@/features/syncs/relative-time";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
-import { STATE_LABELS, type CalendarsById } from "@/features/syncs/syncs";
+import { STATE_LABELS, previewCalendarNames, syncSettingsOf, type CalendarsById } from "@/features/syncs/syncs";
 import { deleteSync, patchSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
 
 type SyncTab = "setup" | "activity";
@@ -67,8 +68,8 @@ function SyncPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  if (error) return <RouteShell backFallback="/dashboard" status="error" onRetry={() => { void mutate(); }} />;
-  if (!sync || !calendars) return <RouteShell backFallback="/dashboard" status="loading" />;
+  if (error) return <RouteShell backFallback="/dashboard/syncs" status="error" onRetry={() => { void mutate(); }} />;
+  if (!sync || !calendars) return <RouteShell backFallback="/dashboard/syncs" status="loading" />;
 
   const calendarsById: CalendarsById = new Map(calendars.map((calendar) => [calendar.id, calendar] as const));
   const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
@@ -109,10 +110,14 @@ function SyncPage() {
     }
   };
 
+  const previewNames = previewCalendarNames(sync, calendarsById);
+
   return (
-    <div className="flex flex-col gap-1.5 lg:h-full">
+    <div className="@container flex flex-col gap-1.5 lg:h-full">
       <StickyPageHeader className="gap-1.5">
-        <BackButton fallback="/dashboard" />
+        <div className="lg:hidden">
+          <BackButton fallback="/dashboard/syncs" />
+        </div>
         <div className="flex flex-col gap-1 px-0.5 pt-4">
           <DashboardHeading1 className="select-none">{sync.name}</DashboardHeading1>
           <Text size="sm" tone="muted" className="flex items-center gap-2">
@@ -135,50 +140,62 @@ function SyncPage() {
       <PageBody className="gap-1.5">
         {mutationError && <Text size="sm" tone="danger" className="px-0.5">{mutationError}</Text>}
         {tab === "setup" ? (
-          <>
-            <NavigationMenu>
-              <NavigationMenuEditableItem
-                label="Name"
-                value={sync.name}
-                onCommit={(name) => {
-                  if (syncNameSchema.allows(name)) change({ name });
-                  else setMutationError("Sync name can't be empty.");
-                }}
-              />
-              <NavigationMenuToggleItem checked={sync.paused} onCheckedChange={setPaused}>
-                <NavigationMenuItemIcon>
-                  <Pause size={15} />
-                </NavigationMenuItemIcon>
-                <NavigationMenuItemLabel>Pause This Sync</NavigationMenuItemLabel>
-              </NavigationMenuToggleItem>
-            </NavigationMenu>
-            {sync.paused && <MenuHint tone="attention">Paused. Copies stay as they are, and new events wait until you resume.</MenuHint>}
-            <SyncEditor
-              value={sync}
-              calendars={calendars}
-              otherSyncs={(syncs ?? []).filter((other) => other.id !== sync.id)}
-              locked={locked}
-              onChange={change}
-            />
-            <div className="pt-3">
+          <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+            <div className="flex min-w-0 flex-col gap-1.5">
               <NavigationMenu>
-                <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
+                <NavigationMenuEditableItem
+                  label="Name"
+                  value={sync.name}
+                  onCommit={(name) => {
+                    if (syncNameSchema.allows(name)) change({ name });
+                    else setMutationError("Sync name can't be empty.");
+                  }}
+                />
+                <NavigationMenuToggleItem checked={sync.paused} onCheckedChange={setPaused}>
                   <NavigationMenuItemIcon>
-                    <Trash2 size={15} className="text-destructive" />
+                    <Pause size={15} />
                   </NavigationMenuItemIcon>
-                  <Text size="sm" tone="danger">Delete Sync</Text>
-                </NavigationMenuButtonItem>
+                  <NavigationMenuItemLabel>Pause This Sync</NavigationMenuItemLabel>
+                </NavigationMenuToggleItem>
               </NavigationMenu>
+              {sync.paused && <MenuHint tone="attention">Paused. Copies stay as they are, and new events wait until you resume.</MenuHint>}
+              <SyncEditor
+                value={sync}
+                calendars={calendars}
+                otherSyncs={(syncs ?? []).filter((other) => other.id !== sync.id)}
+                locked={locked}
+                previewClassName="@3xl:hidden"
+                onChange={change}
+              />
+              <div className="pt-3">
+                <NavigationMenu>
+                  <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
+                    <NavigationMenuItemIcon>
+                      <Trash2 size={15} className="text-destructive" />
+                    </NavigationMenuItemIcon>
+                    <Text size="sm" tone="danger">Delete Sync</Text>
+                  </NavigationMenuButtonItem>
+                </NavigationMenu>
+              </div>
+              <DeleteConfirmation
+                title="Delete this sync?"
+                description={`Its copies are removed from ${destinationNames(sync, calendarsById) || "its destinations"}. The original events aren't touched.`}
+                open={deleteOpen}
+                onOpenChange={setDeleteOpen}
+                deleting={deleting}
+                onConfirm={() => void handleDelete()}
+              />
             </div>
-            <DeleteConfirmation
-              title="Delete this sync?"
-              description={`Its copies are removed from ${destinationNames(sync, calendarsById) || "its destinations"}. The original events aren't touched.`}
-              open={deleteOpen}
-              onOpenChange={setDeleteOpen}
-              deleting={deleting}
-              onConfirm={() => void handleDelete()}
-            />
-          </>
+            <aside className="hidden @3xl:block">
+              <div className="sticky top-4">
+                <SyncPreviewPanel
+                  settings={syncSettingsOf(sync)}
+                  sourceName={previewNames.source}
+                  destinationName={previewNames.destination}
+                />
+              </div>
+            </aside>
+          </div>
         ) : (
           <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
         )}

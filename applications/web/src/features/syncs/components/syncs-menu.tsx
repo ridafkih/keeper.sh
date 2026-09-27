@@ -73,13 +73,13 @@ export function NewSyncRow({ atLimit }: { atLimit: boolean }) {
   );
 }
 
-export function SyncRow({ sync, calendarsById }: { sync: SyncSummary; calendarsById: CalendarsById }) {
+export function SyncRow({ sync, calendarsById, active }: { sync: SyncSummary; calendarsById: CalendarsById; active?: boolean }) {
   const trailing = sync.state === "problem"
     ? <Text size="sm" tone="attention">Needs attention</Text>
     : <Text size="sm" tone="muted">{sync.state === "paused" ? "Paused" : formatSyncedAgo(sync.lastSyncedAt)}</Text>;
 
   return (
-    <NavigationMenuLinkItem to={syncPagePath(sync.id)}>
+    <NavigationMenuLinkItem to={syncPagePath(sync.id)} className={active ? "bg-background-hover" : undefined}>
       <SyncStatusDot state={sync.state} className="ml-1" />
       <div className="flex min-w-0 flex-col">
         <NavigationMenuItemLabel tone="default">{sync.name}</NavigationMenuItemLabel>

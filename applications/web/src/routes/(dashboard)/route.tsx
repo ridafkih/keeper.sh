@@ -10,7 +10,8 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
-import { isFullScreenPath, isWideSidebarPath } from "@/lib/sidebar-width";
+import { isFullScreenPath, isSyncDetailPath, isWideSidebarPath } from "@/lib/sidebar-width";
+import { SyncsListPanel } from "@/features/syncs/components/syncs-list-panel";
 import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)")({
@@ -97,30 +98,44 @@ function FullScreenLayout() {
 }
 
 function SidebarLayout() {
-  const wide = useRouterState({ select: (state) => isWideSidebarPath(state.location.pathname) });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const wide = isWideSidebarPath(pathname);
+  const syncDetail = isSyncDetailPath(pathname);
   const sidebarRef = useRef<HTMLDivElement>(null);
   useSidebarResizing(wide, sidebarRef);
 
   return (
     <div className="relative flex min-h-dvh justify-center lg:justify-start lg:gap-4 lg:p-4">
+      <PopoverOverlay />
       <div
         ref={sidebarRef}
         className={cn(
           "relative flex w-full shrink-0 flex-col gap-3 px-4 pb-(--sidebar-pad-b) pt-4 [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t)",
+          syncDetail && "hidden lg:flex",
           "transition-[max-width] duration-300 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
           wide ? "max-w-lg" : "max-w-sm",
         )}
       >
-        <PopoverOverlay />
         <SyncProvider />
-        <SidebarPageTransition>
+        {syncDetail ? (
+          <SyncsListPanel activeSyncId={pathname.split("/").pop()} />
+        ) : (
+          <SidebarPageTransition>
+            <Outlet />
+          </SidebarPageTransition>
+        )}
+      </div>
+      {syncDetail ? (
+        // One mounted page that is the whole column on small screens and takes the calendar's place from lg.
+        <div className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]">
           <Outlet />
-        </SidebarPageTransition>
-      </div>
-      {/* `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10). */}
-      <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
-        <CalendarView />
-      </div>
+        </div>
+      ) : (
+        // `isolate` keeps the calendar's sticky z-indices under the popover blur overlay (z-10).
+        <div className="hidden lg:flex lg:h-[calc(100dvh-2rem)] lg:min-w-0 lg:flex-1 lg:isolate">
+          <CalendarView />
+        </div>
+      )}
     </div>
   );
 }
