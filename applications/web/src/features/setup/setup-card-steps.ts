@@ -1,4 +1,4 @@
-export type SetupStepKey = "connect" | "second" | "rules";
+export type SetupStepKey = "connect" | "second" | "sync";
 
 export interface SetupStep {
   key: SetupStepKey;
@@ -13,16 +13,16 @@ export interface SetupSteps {
 export const resolveSetupSteps = ({
   sourceCount,
   accountCount,
-  mappingCount,
+  syncCount,
 }: {
   sourceCount: number;
   accountCount: number;
-  mappingCount: number;
+  syncCount: number;
 }): SetupSteps => ({
-  show: mappingCount === 0,
+  show: syncCount === 0,
   steps: [
     { done: sourceCount > 0, key: "connect" },
     { done: accountCount > 1, key: "second" },
-    { done: mappingCount > 0, key: "rules" },
+    { done: syncCount > 0, key: "sync" },
   ],
 });

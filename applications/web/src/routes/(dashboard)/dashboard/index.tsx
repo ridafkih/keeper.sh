@@ -5,7 +5,6 @@ import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
-import Waypoints from "lucide-react/dist/esm/icons/waypoints";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import LogOut from "lucide-react/dist/esm/icons/log-out";
@@ -53,6 +52,7 @@ import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subs
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { openCustomerPortal } from "@/utils/checkout";
 import { SetupCard } from "@/features/setup/components/setup-card";
+import { SyncsMenu } from "@/features/syncs/components/syncs-menu";
 import { resolveSetupSteps } from "@/features/setup/setup-card-steps";
 
 async function loadSubscription(context: {
@@ -93,6 +93,7 @@ function DashboardPage() {
         <DashboardReauthNotice />
         <DashboardSetupCard />
         <CalendarSourcesMenu />
+        <DashboardSyncsMenu />
         <CalendarsMenu />
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
@@ -139,14 +140,20 @@ function DashboardSetupCard() {
   const ready = Boolean(sources && entitlements);
   const sourceCount = sources?.length ?? 0;
   const accountCount = new Set(sources?.map((source) => source.accountId)).size;
-  const mappingCount = entitlements?.mappings.current ?? 0;
-  const { show } = resolveSetupSteps({ accountCount, mappingCount, sourceCount });
+  const syncCount = entitlements?.syncs.current ?? 0;
+  const { show } = resolveSetupSteps({ accountCount, sourceCount, syncCount });
 
   return (
     <AnimatedReveal show={ready && show} skipInitial={!shouldAnimate}>
-      <SetupCard sourceCount={sourceCount} accountCount={accountCount} mappingCount={mappingCount} />
+      <SetupCard sourceCount={sourceCount} accountCount={accountCount} syncCount={syncCount} />
     </AnimatedReveal>
   );
+}
+
+function DashboardSyncsMenu() {
+  const { data: entitlements } = useEntitlements();
+  if (!entitlements || entitlements.syncs.current === 0) return null;
+  return <SyncsMenu />;
 }
 
 function PlanMenu() {
@@ -264,8 +271,6 @@ function CalendarsMenu() {
 
   const { data: eventCountData, error: eventCountError } = useSWR<{ count: number }>("/api/events/count");
   const eventCount = eventCountError ? undefined : eventCountData?.count;
-  const { data: entitlements } = useEntitlements();
-  const ruleCount = entitlements?.rules.current;
 
   return (
     <NavigationMenu>
@@ -344,15 +349,6 @@ function CalendarsMenu() {
           <NavigationMenuItemLabel>View Events</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
             {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuLinkItem>
-        <NavigationMenuLinkItem to="/dashboard/rules">
-          <NavigationMenuItemIcon>
-            <Waypoints size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>Rules</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {ruleCount != null && <Text size="sm" tone="muted">{pluralize(ruleCount, "rule")}</Text>}
           </NavigationMenuItemTrailing>
         </NavigationMenuLinkItem>
         <NavigationMenuLinkItem to="/dashboard/ical">

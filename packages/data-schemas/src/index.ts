@@ -590,34 +590,23 @@ export {
 };
 
 export {
-  DEFAULT_RULE,
   applyRuleActions,
-  areRuleActionsEqual,
-  areRuleConditionsEqual,
-  createSyncRuleBodySchema,
   evaluateRules,
   findMatchingRule,
   matchesCondition,
   matchesRule,
-  patchSyncRuleBodySchema,
   resolveEventNameTemplate,
   ruleActionSchema,
   ruleConditionSchema,
   ruleMatchSchema,
-  syncRuleAssignmentsBodySchema,
   syncRuleNameSchema,
-  syncRuleSchema,
 } from "./sync-rules";
 export type {
-  CreateSyncRuleBody,
-  PatchSyncRuleBody,
   RuleAction,
   RuleCondition,
   RuleEvaluation,
   RuleEventFacts,
   RuleMatch,
-  SyncRule,
-  SyncRuleAssignmentsBody,
 } from "./sync-rules";
 export * from "./syncs";
 

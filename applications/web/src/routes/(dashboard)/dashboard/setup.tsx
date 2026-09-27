@@ -1,66 +1,39 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { useSWRConfig } from "swr";
-import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
-import * as m from "motion/react-m";
-import { loadMotionFeatures } from "@/lib/motion-features";
+import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
+import { Button, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { heading } from "@/components/ui/primitives/heading.styles";
+import { MenuHint, PremiumHint } from "@/components/ui/primitives/menu-hint";
 import { Text } from "@/components/ui/primitives/text";
 import { RouteShell } from "@/components/ui/shells/route-shell";
+import { NavigationMenu } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { canAddMore, useEntitlements } from "@/hooks/use-entitlements";
 import type { AppJsonFetcher } from "@/lib/router-context";
 import type { CalendarSource } from "@/types/api";
 import {
-  addReverseRule,
-  addRule,
-  canReverse,
-  clearPending,
-  completeRules,
   markPending,
-  pruneStaleIds,
-  removeDestination,
-  removeRule,
+  reconcileSources,
   resolveConnectedAccount,
-  setBlank,
-  setRuleChoice,
-  takenIds,
-  type SetupBlank,
-  type SetupDraft,
-  type SetupRule,
+  seedFirstConnect,
+  withSync,
 } from "@/features/setup/setup-draft";
-import { buildDestinationPuts, countNewMappings, exceedsMappingLimit } from "@/features/setup/setup-commit";
 import { useSetupDraft } from "@/features/setup/use-setup-draft";
-import { useCommitRules } from "@/features/setup/use-commit-rules";
 import { useLoginImport } from "@/features/setup/use-login-import";
-import { DEFAULT_RULE } from "@keeper.sh/data-schemas";
-import type { SyncRule } from "@keeper.sh/data-schemas";
-import { resolveDefaultRule } from "@/features/rules/rules";
-import { useRules } from "@/features/rules/use-rules";
-import { CreateRuleModal } from "@/features/rules/components/create-rule-modal";
-import { RuleOptions } from "@/features/rules/components/rule-options";
-import { CalendarOptions } from "@/features/setup/components/calendar-options";
-import { SentencePanel } from "@/features/setup/components/sentence-panel";
-import { SetupActions } from "@/features/setup/components/setup-actions";
-import { SetupSentence } from "@/features/setup/components/setup-sentence";
-import { sameSlot, type SentenceSlot } from "@/features/setup/sentence-slot";
+import { SyncEditor } from "@/features/syncs/components/sync-editor";
+import { resolveSyncError } from "@/features/syncs/sync-errors";
+import { draftProblem, toCreateBody } from "@/features/syncs/sync-draft";
+import { describeConflicts, findDraftConflicts, summarizeSync, syncPagePath } from "@/features/syncs/syncs";
+import { createSync, useRefreshSyncs, useSyncs } from "@/features/syncs/use-syncs";
 
 interface SetupSearch {
   accountId?: string;
 }
-
-interface OpenSlot {
-  ruleId: string;
-  slot: SentenceSlot;
-}
-
-const RULE_HIDDEN = { height: 0, opacity: 0, filter: "blur(4px)" };
-const RULE_VISIBLE = { height: "fit-content", opacity: 1, filter: "blur(0)" };
-const RULE_CLIP = { overflow: "clip" as const, overflowClipMargin: 4 };
-const RULE_TRANSITION = { duration: 0.3, ease: [0.4, 0, 0.2, 1] as const };
-const INSTANT = { duration: 0 };
 
 async function loadSources(fetchApi: AppJsonFetcher): Promise<CalendarSource[] | null> {
   try {
@@ -78,16 +51,6 @@ export const Route = createFileRoute("/(dashboard)/dashboard/setup")({
   component: SetupPage,
 });
 
-const isBlank = (slot: SentenceSlot): slot is SetupBlank => slot.kind !== "rule";
-
-const ruleLabelFor = (rule: SetupRule, rules: SyncRule[] | undefined): string => {
-  const chosen = rule.syncRuleId ? rules?.find((candidate) => candidate.id === rule.syncRuleId) : undefined;
-  return (chosen ?? resolveDefaultRule(rules))?.name ?? DEFAULT_RULE.name;
-};
-
-const selectedFor = (rule: { fromId: string | null; toIds: string[] }, blank: SetupBlank): string | null =>
-  blank.kind === "from" ? rule.fromId : rule.toIds[blank.index] ?? null;
-
 function SetupPage() {
   const { accountId } = Route.useSearch();
   const { sources: preloaded } = Route.useLoaderData();
@@ -97,15 +60,11 @@ function SetupPage() {
   const { data: sources, error, mutate } = useSWR<CalendarSource[]>("/api/sources", {
     fallbackData: preloaded ?? undefined,
   });
-  const { data: syncRules } = useRules();
-  const [open, setOpen] = useState<OpenSlot | null>(null);
-  // The sentence panel closes when the modal takes the pointer, so the sentence being edited is kept aside.
-  const [createFor, setCreateFor] = useState<string | null>(null);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const anchorRef = useRef<HTMLDivElement>(null);
-  const reduceMotion = useReducedMotion() ?? false;
+  const { data: syncs } = useSyncs();
+  const refresh = useRefreshSyncs();
   const { mutate: globalMutate } = useSWRConfig();
-  const { commit, status } = useCommitRules({ clear, draft, entitlements, update });
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const hydrated = draft !== null;
 
   const onImported = useCallback(async (importedAccountId: string) => {
@@ -115,142 +74,91 @@ function SetupPage() {
   useLoginImport(hydrated && !accountId && sources?.length === 0, onImported);
 
   useEffect(() => {
-    if (!hydrated || !sources) return;
+    if (!hydrated || !sources || !syncs) return;
     if (accountId) {
-      update((current) => resolveConnectedAccount(pruneStaleIds(current, sources), sources, accountId));
+      update((current) => seedFirstConnect(resolveConnectedAccount(current, sources, accountId), sources, syncs.length));
       navigate({ replace: true, search: {}, to: "/dashboard/setup" });
       return;
     }
-    update((current) => clearPending(pruneStaleIds(current, sources)));
-  }, [hydrated, sources, accountId, update, navigate]);
-
-  const calendarsById = useMemo(
-    () => new Map((sources ?? []).map((source) => [source.id, source] as const)),
-    [sources],
-  );
-
-  const close = useCallback(() => setOpen(null), []);
+    update((current) => seedFirstConnect(reconcileSources(current, sources), sources, syncs.length));
+  }, [hydrated, sources, syncs, accountId, update, navigate]);
 
   if (error) return <RouteShell backFallback="/dashboard" status="error" onRetry={() => mutate()} />;
   if (!draft || !sources) return <RouteShell backFallback="/dashboard" status="loading" />;
 
-  const openRule = open ? draft.rules.find((rule) => rule.id === open.ruleId) : undefined;
-  const reversible = draft.rules.find((rule) => canReverse(draft, rule.id, calendarsById));
-  const rules = completeRules(draft);
-  const puts = buildDestinationPuts(rules, {});
-  const projected = (entitlements?.mappings.current ?? 0) + countNewMappings(puts, {});
-  const limit = entitlements?.mappings.limit ?? null;
-  const defaultRule = resolveDefaultRule(syncRules);
+  const calendarsById = new Map(sources.map((source) => [source.id, source] as const));
+  const sync = draft.sync;
+  const conflicts = findDraftConflicts(sync, syncs ?? []);
+  const problem = draftProblem(sync);
+  const atLimit = !canAddMore(entitlements?.syncs);
+  const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
+  const summary = summarizeSync(sync, calendarsById).split(" · ")[0] ?? "My sync";
 
-  const toggle = (ruleId: string, slot: SentenceSlot) => {
-    setOpen((current) => (current?.ruleId === ruleId && sameSlot(current.slot, slot) ? null : { ruleId, slot }));
-  };
-
-  const select = (ruleId: string, blank: SetupBlank, calendarId: string, selectedId: string | null) => {
-    track(ANALYTICS_EVENTS.setup_blank_selected, { blank: blank.kind, source: "calendar" });
-    update((current) => (
-      calendarId === selectedId && blank.kind === "to"
-        ? removeDestination(current, ruleId, calendarId)
-        : setBlank(current, ruleId, blank, calendarId)
-    ));
-    close();
-  };
-
-  const connect = (ruleId: string, blank: SetupBlank) => {
-    track(ANALYTICS_EVENTS.setup_blank_selected, { blank: blank.kind, source: "connect" });
-    update((current) => markPending(current, ruleId, blank));
-  };
-
-  const applyDraft = (event: string, updater: (current: SetupDraft) => SetupDraft) => {
-    track(event);
-    update(updater);
-    close();
-  };
-
-  const chooseRule = (ruleId: string, syncRuleId: string, source: "existing" | "new") => {
-    track(ANALYTICS_EVENTS.setup_rule_selected, { source });
-    update((current) => setRuleChoice(current, ruleId, syncRuleId));
-    close();
+  const start = async () => {
+    setStarting(true);
+    setStartError(null);
+    try {
+      const created = await createSync(toCreateBody(sync, summary));
+      track(ANALYTICS_EVENTS.setup_completed, { first_connect: draft.firstConnect, mode: created.mode });
+      track(ANALYTICS_EVENTS.sync_created, { mode: created.mode, share_as: created.shareAs, template: sync.template ?? "scratch" });
+      clear();
+      await refresh();
+      await navigate({ to: syncPagePath(created.id) });
+    } catch (startFailure) {
+      setStartError(resolveSyncError(startFailure, "Failed to start syncing.", calendarsById));
+      setStarting(false);
+    }
   };
 
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton fallback="/dashboard" />
-      <DashboardSection
-        title="Tell Keeper What to Do"
-        description="Fill in the blanks, read it back, then start syncing."
+      {draft.firstConnect ? (
+        <div className="flex flex-col gap-1 px-0.5 pt-4">
+          <h1 className={heading({ level: 2 })}>Your First Sync Is Ready</h1>
+          <Text size="sm" tone="muted">We set it up with the usual choices. Read it back, change anything, then start.</Text>
+        </div>
+      ) : (
+        <DashboardSection title="Tell Keeper What to Do" description="Fill in the blanks, read it back, then start syncing." />
+      )}
+      <NavigationMenu>
+        <NavigationMenuEditableItem
+          label="Name"
+          value={sync.name || summary}
+          onCommit={(name) => update((current) => withSync(current, { ...current.sync, name }))}
+        />
+      </NavigationMenu>
+      <SyncEditor
+        value={sync}
+        calendars={sources}
+        otherSyncs={syncs ?? []}
+        locked={locked}
+        notice={conflicts.length > 0 && <MenuHint tone="attention">{describeConflicts(conflicts, calendarsById)}</MenuHint>}
+        onChange={(patch) => {
+          track(ANALYTICS_EVENTS.setup_blank_selected, { field: Object.keys(patch).join(",") });
+          update((current) => withSync(current, { ...current.sync, ...patch }));
+        }}
+        onConnect={(role) => update((current) => markPending(current, role))}
       />
-      <div ref={anchorRef} className="relative z-20 flex flex-col gap-1.5">
-        <LazyMotion features={loadMotionFeatures}>
-          <div className="flex flex-col px-0.5 py-2">
-            <AnimatePresence initial={false}>
-              {draft.rules.map((rule) => (
-                <m.div
-                  key={rule.id}
-                  style={RULE_CLIP}
-                  initial={RULE_HIDDEN}
-                  animate={RULE_VISIBLE}
-                  exit={RULE_HIDDEN}
-                  transition={reduceMotion ? INSTANT : RULE_TRANSITION}
-                >
-                  <div className="py-1.5">
-                    <SetupSentence
-                      rule={rule}
-                      ruleLabel={ruleLabelFor(rule, syncRules)}
-                      calendarsById={calendarsById}
-                      openSlot={open?.ruleId === rule.id ? open.slot : null}
-                      onOpen={(slot) => toggle(rule.id, slot)}
-                      onRemove={draft.rules.length > 1 ? () => applyDraft(ANALYTICS_EVENTS.setup_rule_removed, (current) => removeRule(current, rule.id)) : undefined}
-                    />
-                  </div>
-                </m.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        </LazyMotion>
-        <SentencePanel open={open !== null} anchorRef={anchorRef} onClose={close}>
-          {open && openRule && isBlank(open.slot) && (
-            <CalendarOptions
-              blank={open.slot}
-              calendars={sources}
-              excludeIds={takenIds(openRule, open.slot)}
-              selectedId={selectedFor(openRule, open.slot)}
-              onSelect={(calendarId) => select(openRule.id, open.slot as SetupBlank, calendarId, selectedFor(openRule, open.slot as SetupBlank))}
-              onConnect={() => connect(openRule.id, open.slot as SetupBlank)}
-            />
-          )}
-          {open && openRule && open.slot.kind === "rule" && (
-            <RuleOptions
-              rules={syncRules ?? []}
-              selectedId={openRule.syncRuleId ?? defaultRule?.id ?? null}
-              canCreate={canAddMore(entitlements?.rules)}
-              onSelect={(syncRuleId) => chooseRule(openRule.id, syncRuleId, "existing")}
-              onCreate={() => setCreateFor(openRule.id)}
-            />
-          )}
-        </SentencePanel>
+      <div className="flex flex-col gap-1.5 pt-3">
+        {atLimit && <PremiumHint>Free plans include one sync.</PremiumHint>}
+        {problem && <Text size="sm" tone="muted" align="center">{problem}</Text>}
+        <Button
+          className="w-full justify-center"
+          disabled={starting || atLimit || problem !== null || conflicts.length > 0}
+          onClick={() => void start()}
+        >
+          {starting && <LoaderCircle size={16} className="animate-spin" />}
+          <ButtonText>Start Syncing</ButtonText>
+        </Button>
+        <LinkButton to="/dashboard/syncs/new" variant="elevated" className="w-full justify-center">
+          <ButtonText>Pick a Different Profile</ButtonText>
+        </LinkButton>
+        <LinkButton to="/dashboard" variant="ghost" className="w-full justify-center" onClick={() => track(ANALYTICS_EVENTS.setup_skipped)}>
+          <ButtonText>Skip for Now</ButtonText>
+        </LinkButton>
+        {startError && <Text size="sm" tone="danger" align="center">{startError}</Text>}
       </div>
-      {createError && <Text size="sm" tone="danger" className="px-0.5">{createError}</Text>}
-      <CreateRuleModal
-        open={createFor !== null}
-        onOpenChange={(nextOpen) => { if (!nextOpen) setCreateFor(null); }}
-        onError={setCreateError}
-        onCreated={(created) => { if (createFor) chooseRule(createFor, created.id, "new"); }}
-      />
-      <SetupActions
-        canReverse={Boolean(reversible)}
-        onReverse={() => reversible && applyDraft(ANALYTICS_EVENTS.setup_reverse_added, (current) => addReverseRule(current, reversible.id, calendarsById))}
-        onAddRule={() => applyDraft(ANALYTICS_EVENTS.setup_rule_added, addRule)}
-        canStart={rules.length > 0}
-        starting={status.kind === "committing"}
-        onStart={() => void commit()}
-        startLabel="Start Syncing"
-        onSkip={() => track(ANALYTICS_EVENTS.setup_skipped)}
-        projected={projected}
-        limit={limit}
-        overLimit={status.kind === "limit" || exceedsMappingLimit(projected, limit)}
-        error={status.kind === "error" ? status.message : null}
-      />
     </div>
   );
 }

@@ -11,18 +11,18 @@ import { resolveSetupSteps, type SetupStepKey } from "../setup-card-steps";
 
 const STEP_LABELS: Record<SetupStepKey, string> = {
   connect: "Connect a Calendar",
-  rules: "Choose What Syncs Where",
   second: "Connect a Second Calendar",
+  sync: "Choose What Syncs Where",
 };
 
 interface SetupCardProps {
   sourceCount: number;
   accountCount: number;
-  mappingCount: number;
+  syncCount: number;
 }
 
-export function SetupCard({ sourceCount, accountCount, mappingCount }: SetupCardProps) {
-  const { show, steps } = resolveSetupSteps({ accountCount, mappingCount, sourceCount });
+export function SetupCard({ sourceCount, accountCount, syncCount }: SetupCardProps) {
+  const { show, steps } = resolveSetupSteps({ accountCount, sourceCount, syncCount });
   if (!show) return null;
 
   return (

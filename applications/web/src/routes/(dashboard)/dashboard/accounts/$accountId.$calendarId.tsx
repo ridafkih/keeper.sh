@@ -1,16 +1,15 @@
-import { use, useEffect, useMemo, useState, useTransition } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { use, useEffect, useState, useTransition } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
-import Waypoints from "lucide-react/dist/esm/icons/waypoints";
 import { useAtomValue, useStore } from "jotai";
 import type { SyncRange } from "@keeper.sh/data-schemas";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
-import { MenuHint, PremiumHint, PremiumGate } from "@/components/ui/primitives/menu-hint";
+import { MenuHint, PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
@@ -19,8 +18,8 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { serializedPatch, serializedCall } from "@/lib/serialized-mutate";
-import { pairPagePath } from "@/features/rules/rules";
+import { serializedPatch } from "@/lib/serialized-mutate";
+import { InSyncsSection } from "@/features/syncs/components/in-syncs-section";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { formatDate } from "@/lib/time";
 import { resolveErrorMessage } from "@/utils/errors";
@@ -29,7 +28,6 @@ import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/ap
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
-  NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuLinkItem,
   NavigationMenuItemLabel,
@@ -42,8 +40,6 @@ import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
   navigationMenuItemStyle,
-  navigationMenuCheckbox,
-  navigationMenuCheckboxIcon,
   navigationMenuToggleTrack,
   navigationMenuToggleThumb,
 } from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
@@ -59,10 +55,6 @@ import {
   calendarTypeAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
-import {
-  destinationIdsAtom,
-  selectDestinationInclusion,
-} from "@/state/destination-ids";
 import {
   getSyncRangeLabel,
   SYNC_RANGE_OPTIONS,
@@ -144,15 +136,7 @@ function CalendarDetailPage() {
         <ReauthNotice account={account} />
         <ProviderMissingNotice />
         <RenameSection calendarId={calendarId} />
-        {isPullCapable && (
-          <>
-            <DashboardSection
-              title="Send Events to Calendars"
-              description="Select which calendars should receive events from this calendar. Tap the rules icon on a selected calendar to choose which rules apply."
-            />
-            <DestinationsSection calendarId={calendarId} />
-          </>
-        )}
+        <InSyncsSection calendarId={calendarId} calendarName={calendar.name} />
         {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
         {isPullCapable && calendar.calendarType === "ical" && <AllDayEventsSection calendarId={calendarId} />}
         <CalendarInfoSection account={account} accountId={accountId} />
@@ -444,172 +428,13 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
       {deleteError && <Text size="sm" tone="danger" className="px-0.5">{deleteError}</Text>}
       <DeleteConfirmation
         title="Delete this calendar?"
-        description="This removes the calendar and its sync history from Keeper.sh. Any sync profiles using it will be affected."
+        description="This removes the calendar and its sync history from Keeper.sh. Any syncs using it stop copying to and from it."
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         deleting={isDeleting}
         onConfirm={handleConfirmDelete}
       />
     </>
-  );
-}
-
-function DestinationsSeed({ calendarId }: { calendarId: string }) {
-  const { data } = useSWR<{ destinationIds: string[] }>(
-    `/api/sources/${calendarId}/destinations`,
-  );
-  const store = useStore();
-
-  useEffect(() => {
-    store.set(destinationIdsAtom, new Set(data?.destinationIds));
-  }, [calendarId, data, store]);
-
-  return null;
-}
-
-function DestinationsSection({ calendarId }: { calendarId: string }) {
-  const { data: allCalendars } = useSWR<CalendarSource[]>("/api/sources");
-  const { data: entitlements } = useEntitlements();
-  const atLimit = !canAddMore(entitlements?.mappings);
-
-  const pushCalendars = useMemo(
-    () => (allCalendars ?? []).filter((calendar) => canPush(calendar) && calendar.id !== calendarId),
-    [allCalendars, calendarId],
-  );
-
-  return (
-    <>
-      <DestinationsSeed calendarId={calendarId} />
-      <NavigationMenu>
-        {pushCalendars.length === 0 ? (
-          <NavigationMenuEmptyItem>No destination calendars available</NavigationMenuEmptyItem>
-        ) : (
-          pushCalendars.map((calendar) => (
-            <DestinationCheckboxItem
-              key={calendar.id}
-              calendarId={calendarId}
-              destinationId={calendar.id}
-              name={calendar.name}
-              provider={calendar.provider}
-              calendarType={calendar.calendarType}
-            />
-          ))
-        )}
-      </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
-    </>
-  );
-}
-
-function DestinationCheckboxItem({
-  calendarId,
-  destinationId,
-  name,
-  provider,
-  calendarType,
-}: {
-  calendarId: string;
-  destinationId: string;
-  name: string;
-  provider: string;
-  calendarType: string;
-}) {
-  const store = useStore();
-  const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
-  const { data: entitlements } = useEntitlements();
-  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
-
-  const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
-  const checked = useAtomValue(checkedAtom);
-  const atLimit = !canAddMore(entitlements?.mappings);
-  const disabled = atLimit && !checked;
-
-  const handleClick = () => {
-    if (disabled) return;
-
-    const currentIds = store.get(destinationIdsAtom);
-    const willCheck = !currentIds.has(destinationId);
-    track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
-    const updatedSet = new Set(currentIds);
-
-    if (willCheck) {
-      updatedSet.add(destinationId);
-      adjustMappingCount(1);
-    } else {
-      updatedSet.delete(destinationId);
-      adjustMappingCount(-1);
-    }
-
-    store.set(destinationIdsAtom, updatedSet);
-
-    const swrKey = `/api/sources/${calendarId}/destinations`;
-    serializedCall(swrKey, () => {
-      const latestIds = Array.from(store.get(destinationIdsAtom));
-      return mutate(
-        swrKey,
-        async () => {
-          await apiFetch(swrKey, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: latestIds }),
-          });
-          return { destinationIds: latestIds };
-        },
-        {
-          optimisticData: { destinationIds: latestIds },
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      ).catch(() => {
-        void mutate(swrKey);
-      }).finally(() => {
-        void revalidateEntitlements();
-      });
-    });
-  };
-
-  return (
-    <li className="flex items-center">
-      <ItemDisabledContext value={disabled}>
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={checked}
-          disabled={disabled}
-          onClick={handleClick}
-          className={navigationMenuItemStyle({ variant, interactive: !disabled, className: "min-w-0 flex-1" })}
-        >
-          <NavigationMenuItemIcon>
-            <ProviderIcon provider={provider} calendarType={calendarType} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
-          <DestinationCheckboxIndicator destinationId={destinationId} />
-        </button>
-      </ItemDisabledContext>
-      {checked && (
-        <Link
-          to={pairPagePath(calendarId, destinationId)}
-          draggable="false"
-          aria-label={`Rules for ${name}`}
-          className="mr-2 shrink-0 rounded-lg p-1.5 text-foreground-muted hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Waypoints size={14} />
-        </Link>
-      )}
-    </li>
-  );
-}
-
-function DestinationCheckboxIndicator({ destinationId }: { destinationId: string }) {
-  const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
-  const checked = useAtomValue(checkedAtom);
-  const variant = use(MenuVariantContext);
-
-  return (
-    <div className={navigationMenuCheckbox({ variant, checked, className: "ml-auto" })}>
-      {checked && <CheckIcon size={12} className={navigationMenuCheckboxIcon({ variant })} />}
-    </div>
   );
 }
 

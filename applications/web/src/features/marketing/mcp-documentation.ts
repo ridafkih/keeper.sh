@@ -138,7 +138,7 @@ export const MCP_OAUTH_SCOPES: OauthScope[] = [
   { scope: "keeper.events.read", description: "Reading events and invitations." },
   { scope: "keeper.sources.read", description: "Reading the calendars events are copied from." },
   { scope: "keeper.destinations.read", description: "Reading the calendars events are copied into." },
-  { scope: "keeper.mappings.read", description: "Reading which calendar is copied into which." },
+  { scope: "keeper.mappings.read", description: "Reading your syncs: which calendars copy into which." },
   { scope: "keeper.sync-status.read", description: "Reading sync state and triggering a sync." },
 ];
 

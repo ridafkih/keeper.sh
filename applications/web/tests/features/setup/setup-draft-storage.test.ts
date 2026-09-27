@@ -34,7 +34,7 @@ describe("setup draft storage", () => {
     expect(readSetupDraft(storage)).toBeNull();
     storage.setItem(SETUP_DRAFT_KEY, JSON.stringify({ ...createEmptyDraft(), version: 1 }));
     expect(readSetupDraft(storage)).toBeNull();
-    const legacy = { pending: null, rules: [{ detail: "busy", fromId: null, id: "r", toIds: [] }], version: 2 };
+    const legacy = { pending: null, rules: [{ fromId: null, id: "r", syncRuleId: null, toIds: [] }], version: 3 };
     storage.setItem(SETUP_DRAFT_KEY, JSON.stringify(legacy));
     expect(readSetupDraft(storage)).toBeNull();
   });

@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_RULE,
   applyRuleActions,
-  areRuleActionsEqual,
-  createSyncRuleBodySchema,
   evaluateRules,
-  patchSyncRuleBodySchema,
   resolveEventNameTemplate,
   ruleActionSchema,
   ruleConditionSchema,
+  shareAsActions,
   syncRuleNameSchema,
+  type RuleAction,
+  type RuleCondition,
   type RuleEventFacts,
-  type SyncRule,
 } from "../src/index";
 
 const facts = (overrides: Partial<RuleEventFacts> = {}): RuleEventFacts => ({
@@ -26,9 +24,9 @@ const facts = (overrides: Partial<RuleEventFacts> = {}): RuleEventFacts => ({
 });
 
 const rule = (
-  conditions: SyncRule["conditions"],
-  actions: SyncRule["actions"],
-): Pick<SyncRule, "actions" | "conditions"> => ({ actions, conditions });
+  conditions: RuleCondition[],
+  actions: RuleAction[],
+): { actions: RuleAction[]; conditions: RuleCondition[] } => ({ actions, conditions });
 
 describe("rule schemas", () => {
   it("rejects unknown keys and empty title conditions", () => {
@@ -41,11 +39,7 @@ describe("rule schemas", () => {
     expect(ruleActionSchema.allows({ kind: "skip", template: "x" })).toBe(false);
   });
 
-  it("validates bodies and names", () => {
-    expect(createSyncRuleBodySchema.allows({ name: "Standup to OOO" })).toBe(true);
-    expect(createSyncRuleBodySchema.allows({ name: "x", extra: true })).toBe(false);
-    expect(patchSyncRuleBodySchema.allows({ conditions: [{ kind: "timed" }] })).toBe(true);
-    expect(patchSyncRuleBodySchema.allows({})).toBe(true);
+  it("validates rule names", () => {
     expect(syncRuleNameSchema.allows("   ")).toBe(false);
     expect(syncRuleNameSchema.allows("a".repeat(81))).toBe(false);
     expect(syncRuleNameSchema.allows("Busy only")).toBe(true);
@@ -89,8 +83,8 @@ describe("evaluateRules", () => {
     expect(applyRuleActions([{ kind: "rename", template: "x" }, { kind: "skip" }], facts())).toEqual({ skip: true });
   });
 
-  it("reproduces the legacy default projection", () => {
-    expect(evaluateRules([DEFAULT_RULE], facts())).toEqual({ skip: false, summary: "Work" });
+  it("reproduces the legacy default projection with Busy Only", () => {
+    expect(evaluateRules([rule([], shareAsActions("busy_only", null))], facts())).toEqual({ skip: false, summary: "Work" });
   });
 
   it("falls back from an empty template to the calendar name and then to Busy", () => {
@@ -98,10 +92,5 @@ describe("evaluateRules", () => {
     expect(resolveEventNameTemplate("  ", { calendar_name: "", event_name: "x" })).toBe("Busy");
     expect(resolveEventNameTemplate("{{event_name}} ({{calendar_name}})", { calendar_name: "Work", event_name: "Standup" })).toBe("Standup (Work)");
     expect(resolveEventNameTemplate("{{unknown}}", { calendar_name: "Work", event_name: "x" })).toBe("{{unknown}}");
-  });
-
-  it("compares actions ignoring template whitespace", () => {
-    expect(areRuleActionsEqual([{ kind: "rename", template: " OOO " }], [{ kind: "rename", template: "OOO" }])).toBe(true);
-    expect(areRuleActionsEqual([{ kind: "skip" }], [{ kind: "drop_location" }])).toBe(false);
   });
 });

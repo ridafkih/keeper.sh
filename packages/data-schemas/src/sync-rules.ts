@@ -2,8 +2,6 @@ import { type } from "arktype";
 
 const RULE_NAME_MAX_LENGTH = 80;
 const RULE_TEMPLATE_MAX_LENGTH = 200;
-const MAX_RULE_CONDITIONS = 10;
-const MAX_RULE_ACTIONS = 5;
 const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";
 
@@ -33,57 +31,11 @@ type RuleAction = typeof ruleActionSchema.infer;
 const ruleMatchSchema = type("'all' | 'any'");
 type RuleMatch = typeof ruleMatchSchema.infer;
 
-const ruleConditionsSchema = ruleConditionSchema.array().atMostLength(MAX_RULE_CONDITIONS);
-const ruleActionsSchema = ruleActionSchema.array().atMostLength(MAX_RULE_ACTIONS);
-
 /* A rule name is shown to the user and must survive a round trip, so an
  * all-whitespace name is rejected rather than silently stored. */
 const syncRuleNameSchema = type(`string <= ${RULE_NAME_MAX_LENGTH}`).narrow(
   (value) => value.trim().length > 0,
 );
-
-const syncRuleSchema = type({
-  actions: ruleActionsSchema,
-  conditions: ruleConditionsSchema,
-  createdAt: "string",
-  id: "string",
-  isDefault: "boolean",
-  name: "string",
-  updatedAt: "string",
-});
-type SyncRule = typeof syncRuleSchema.infer;
-
-const createSyncRuleBodySchema = type({
-  name: "string",
-  "conditions?": ruleConditionsSchema,
-  "actions?": ruleActionsSchema,
-  "+": "reject",
-});
-type CreateSyncRuleBody = typeof createSyncRuleBodySchema.infer;
-
-const patchSyncRuleBodySchema = type({
-  "name?": "string",
-  "conditions?": ruleConditionsSchema,
-  "actions?": ruleActionsSchema,
-  "+": "reject",
-});
-type PatchSyncRuleBody = typeof patchSyncRuleBodySchema.infer;
-
-const syncRuleAssignmentsBodySchema = type({
-  ruleIds: "string[]",
-  "+": "reject",
-});
-type SyncRuleAssignmentsBody = typeof syncRuleAssignmentsBodySchema.infer;
-
-const DEFAULT_RULE = {
-  actions: [
-    { kind: "rename", template: "{{calendar_name}}" },
-    { kind: "drop_description" },
-    { kind: "drop_location" },
-  ],
-  conditions: [],
-  name: "Busy only",
-} as const satisfies Pick<SyncRule, "actions" | "conditions" | "name">;
 
 interface RuleEventFacts {
   calendarName: string | null;
@@ -187,7 +139,7 @@ const applyRuleActions = (
   return copy;
 };
 
-const evaluateRules = <TRule extends MatchableRule & Pick<SyncRule, "actions">>(
+const evaluateRules = <TRule extends MatchableRule & { actions: readonly RuleAction[] }>(
   rules: readonly TRule[],
   facts: RuleEventFacts,
 ): RuleEvaluation => {
@@ -198,49 +150,22 @@ const evaluateRules = <TRule extends MatchableRule & Pick<SyncRule, "actions">>(
   return applyRuleActions(rule.actions, facts);
 };
 
-const normalizeAction = (action: RuleAction): RuleAction => {
-  if (action.kind === "rename") {
-    return { kind: "rename", template: action.template.trim() };
-  }
-  return action;
-};
-
-const areRuleActionsEqual = (left: readonly RuleAction[], right: readonly RuleAction[]): boolean =>
-  JSON.stringify(left.map((action) => normalizeAction(action)))
-  === JSON.stringify(right.map((action) => normalizeAction(action)));
-
-const areRuleConditionsEqual = (
-  left: readonly RuleCondition[],
-  right: readonly RuleCondition[],
-): boolean => JSON.stringify(left) === JSON.stringify(right);
-
 export {
-  DEFAULT_RULE,
   applyRuleActions,
-  areRuleActionsEqual,
-  areRuleConditionsEqual,
-  createSyncRuleBodySchema,
   evaluateRules,
   findMatchingRule,
   matchesCondition,
   matchesRule,
-  patchSyncRuleBodySchema,
   resolveEventNameTemplate,
   ruleActionSchema,
   ruleConditionSchema,
   ruleMatchSchema,
-  syncRuleAssignmentsBodySchema,
   syncRuleNameSchema,
-  syncRuleSchema,
 };
 export type {
-  CreateSyncRuleBody,
-  PatchSyncRuleBody,
   RuleAction,
   RuleCondition,
   RuleEvaluation,
   RuleEventFacts,
   RuleMatch,
-  SyncRule,
-  SyncRuleAssignmentsBody,
 };

@@ -8,7 +8,7 @@ vi.mock("@tanstack/react-router", () => ({
 
 describe("SetupCard", () => {
   it("lists the three steps for a new user", () => {
-    const markup = renderToStaticMarkup(<SetupCard sourceCount={1} accountCount={1} mappingCount={0} />);
+    const markup = renderToStaticMarkup(<SetupCard sourceCount={1} accountCount={1} syncCount={0} />);
 
     expect(markup).toContain("Get Set Up");
     expect(markup).toContain("Connect a Calendar");
@@ -18,6 +18,6 @@ describe("SetupCard", () => {
   });
 
   it("disappears once the first mapping exists", () => {
-    expect(renderToStaticMarkup(<SetupCard sourceCount={2} accountCount={2} mappingCount={1} />)).toBe("");
+    expect(renderToStaticMarkup(<SetupCard sourceCount={2} accountCount={2} syncCount={1} />)).toBe("");
   });
 });

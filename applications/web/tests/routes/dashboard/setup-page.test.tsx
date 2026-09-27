@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SetupDraft } from "../../../src/features/setup/setup-draft";
+import { createEmptyDraft, type SetupDraft } from "../../../src/features/setup/setup-draft";
+import { buildFirstConnectDraft } from "../../../src/features/syncs/sync-draft";
 import { makeSource } from "../../features/setup/fixtures";
 import "../../../src/routes/(dashboard)/dashboard/setup";
 
@@ -69,9 +70,10 @@ vi.mock("../../../src/lib/motion-features", () => ({
 }));
 
 vi.mock("../../../src/hooks/use-entitlements", () => ({
+  USAGE_CACHE_KEY: "/api/entitlements",
   canAddMore: () => true,
-  useEntitlements: () => ({ data: { accounts: { current: 1, limit: 2 }, canUseEventFilters: false, mappings: { current: 0, limit: 3 } } }),
-  useMutateEntitlements: () => ({ adjustMappingCount: () => null, revalidateEntitlements: () => Promise.resolve(undefined) }),
+  useEntitlements: () => ({ data: { accounts: { current: 1, limit: 2 }, canUseEventFilters: false, syncs: { current: 0, limit: 1 } } }),
+  useMutateEntitlements: () => ({ revalidateEntitlements: () => Promise.resolve(undefined) }),
 }));
 
 vi.mock("../../../src/hooks/use-popover-overlay", () => ({
@@ -99,57 +101,37 @@ const sources = [
 const renderPage = (draft: SetupDraft): string => {
   swrData.clear();
   swrData.set("/api/sources", sources);
-  swrData.set("/api/rules", [busyOnly]);
+  swrData.set("/api/syncs", []);
   draftState.draft = draft;
   const Page = captured.component;
   if (!Page) throw new Error("Setup route did not register a component");
   return renderToStaticMarkup(<Page />);
 };
 
-const busyOnly = {
-  actions: [{ kind: "rename", template: "{{calendar_name}}" }, { kind: "drop_description" }, { kind: "drop_location" }],
-  assignmentCount: 0,
-  conditions: [],
-  createdAt: "2026-01-01T00:00:00.000Z",
-  id: "rule-busy",
-  isDefault: true,
-  name: "Busy only",
-  updatedAt: "2026-01-01T00:00:00.000Z",
-};
-
-const emptyDraft: SetupDraft = {
-  pending: null,
-  rules: [{ fromId: null, id: "rule-1", syncRuleId: null, toIds: [] }],
-  version: 3,
-};
-
-const completeDraft: SetupDraft = {
-  pending: null,
-  rules: [{ fromId: "work", id: "rule-1", syncRuleId: null, toIds: ["personal", "family"] }],
-  version: 3,
-};
-
 const START_DISABLED = /<button[^>]* disabled=""[^>]*><span[^>]*>Start Syncing/;
 
 describe("setup page", () => {
   it("renders an empty sentence with both blanks and no way to start yet", () => {
-    const markup = renderPage(emptyDraft);
+    const markup = renderPage(createEmptyDraft());
 
+    expect(markup).toContain("Tell Keeper What to Do");
     expect(markup).toContain("Copy events from");
     expect(markup).toContain("a calendar");
     expect(markup).toContain("another calendar");
-    expect(markup).toContain("using");
-    expect(markup).toContain("Busy only");
+    expect(markup).toContain("Share As");
+    expect(markup).toContain("Never Copy");
     expect(markup).toMatch(START_DISABLED);
   });
 
-  it("fills the blanks from the draft and lets a complete rule start", () => {
-    const markup = renderPage(completeDraft);
+  it("introduces the first-connect Block My Time draft and lets it start", () => {
+    const sync = buildFirstConnectDraft(sources);
+    if (!sync) throw new Error("expected a first-connect draft");
+    const markup = renderPage({ ...createEmptyDraft(), firstConnect: true, sync });
 
+    expect(markup).toContain("Your First Sync Is Ready");
+    expect(markup).toContain("in step, each blocking the others.");
     expect(markup).toContain("Work");
-    expect(markup).toMatch(/Personal[\s\S]{0,600},<\/span> [\s\S]{0,700}Family/);
-    expect(markup).toContain('aria-label="Add another destination"');
-    expect(markup).toContain("2 of 3 syncs on the free plan.");
+    expect(markup).toContain("Personal");
     expect(markup).not.toMatch(START_DISABLED);
   });
 });
