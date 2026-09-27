@@ -2,11 +2,21 @@ import { DEFAULT_SYNC_SETTINGS, MAX_BOTH_WAYS_MEMBERS, SYNC_NAME_MAX_LENGTH, val
 import type { CreateSyncBody, SyncCalendarRole, SyncCalendars, SyncDefinition, SyncMode } from "@keeper.sh/data-schemas";
 import type { CalendarSource } from "@/types/api";
 import { canPull, canPush } from "@/utils/calendars";
-import { SYNC_TEMPLATES, type SyncTemplateKey } from "./templates";
+import { SYNC_TEMPLATES, isSyncTemplateKey, type SyncTemplateKey } from "./templates";
 
 export interface SyncDraft extends SyncDefinition {
   template: SyncTemplateKey | null;
 }
+
+export interface NewSyncSearch {
+  from?: string;
+  profile?: SyncTemplateKey;
+}
+
+export const readNewSyncSearch = (search: Record<string, unknown>): NewSyncSearch => ({
+  from: typeof search.from === "string" ? search.from : undefined,
+  profile: isSyncTemplateKey(search.profile) ? search.profile : undefined,
+});
 
 type CalendarList = "destinationCalendarIds" | "memberCalendarIds" | "sourceCalendarIds";
 

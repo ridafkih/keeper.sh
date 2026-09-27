@@ -59,9 +59,9 @@ export function SyncsMenu() {
   );
 }
 
-export function NewSyncRow({ atLimit }: { atLimit: boolean }) {
+export function NewSyncRow({ atLimit, active }: { atLimit: boolean; active?: boolean }) {
   return (
-    <NavigationMenuLinkItem to="/dashboard/syncs/new">
+    <NavigationMenuLinkItem to="/dashboard/syncs/new" className={active ? "bg-background-hover" : undefined}>
       <NavigationMenuItemIcon>
         <Plus size={15} />
       </NavigationMenuItemIcon>

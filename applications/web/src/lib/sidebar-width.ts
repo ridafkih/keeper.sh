@@ -1,17 +1,16 @@
-const WIDE_SIDEBAR_PATHS = new Set(["/dashboard/syncs/new"]);
 const SYNCS_ROOT = "/dashboard/syncs";
 
 const normalizePath = (pathname: string): string => pathname.replace(/\/+$/, "") || "/";
 
-// The new-sync editor carries sentences of calendar names, so it gets a wider sidebar at the calendar's expense.
-export const isWideSidebarPath = (pathname: string): boolean => WIDE_SIDEBAR_PATHS.has(normalizePath(pathname));
+export type SyncPane = { kind: "new" } | { kind: "sync"; syncId: string };
 
-// A sync's page opens in place of the calendar, with the list of syncs kept in the sidebar.
-export const isSyncDetailPath = (pathname: string): boolean => {
+// A sync's page and the new-sync editor open in place of the calendar, with the list of syncs kept in the sidebar.
+export const resolveSyncPane = (pathname: string): SyncPane | null => {
   const path = normalizePath(pathname);
-  if (!path.startsWith(`${SYNCS_ROOT}/`)) return false;
+  if (!path.startsWith(`${SYNCS_ROOT}/`)) return null;
   const rest = path.slice(SYNCS_ROOT.length + 1);
-  return rest !== "" && rest !== "new" && !rest.includes("/");
+  if (rest === "" || rest.includes("/")) return null;
+  return rest === "new" ? { kind: "new" } : { kind: "sync", syncId: rest };
 };
 
 const FULL_SCREEN_PATHS = new Set(["/dashboard/setup"]);
@@ -21,6 +20,6 @@ export const isFullScreenPath = (pathname: string): boolean => FULL_SCREEN_PATHS
 
 export const isSyncsListPath = (pathname: string): boolean => normalizePath(pathname) === SYNCS_ROOT;
 
-// Every sync's page keeps the syncs list in the sidebar, so the sidebar only moves when that list comes or goes.
+// Every sync pane keeps the syncs list in the sidebar, so the sidebar only moves when that list comes or goes.
 export const resolveSidebarPagePath = (pathname: string): string =>
-  isSyncDetailPath(pathname) ? SYNCS_ROOT : normalizePath(pathname);
+  resolveSyncPane(pathname) ? SYNCS_ROOT : normalizePath(pathname);

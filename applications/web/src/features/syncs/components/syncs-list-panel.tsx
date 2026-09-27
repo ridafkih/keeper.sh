@@ -6,10 +6,11 @@ import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header"
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { NavigationMenu, NavigationMenuEmptyItem } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { canAddMore, useEntitlements } from "@/hooks/use-entitlements";
+import type { SyncPane } from "@/lib/sidebar-width";
 import { useSyncRows } from "../use-syncs";
 import { NewSyncRow, SyncRow } from "./syncs-menu";
 
-export function SyncsListPanel({ activeSyncId }: { activeSyncId?: string }) {
+export function SyncsListPanel({ active = null }: { active?: SyncPane | null }) {
   const { calendarsById, error, mutate, syncs } = useSyncRows();
   const { data: entitlements } = useEntitlements();
 
@@ -31,9 +32,9 @@ export function SyncsListPanel({ activeSyncId }: { activeSyncId?: string }) {
         <NavigationMenu>
           {syncs.length === 0 && <NavigationMenuEmptyItem>No syncs yet</NavigationMenuEmptyItem>}
           {syncs.map((sync) => (
-            <SyncRow key={sync.id} sync={sync} calendarsById={calendarsById} active={sync.id === activeSyncId} />
+            <SyncRow key={sync.id} sync={sync} calendarsById={calendarsById} active={active?.kind === "sync" && sync.id === active.syncId} />
           ))}
-          <NewSyncRow atLimit={atLimit} />
+          <NewSyncRow atLimit={atLimit} active={active?.kind === "new"} />
         </NavigationMenu>
         {atLimit && <PremiumHint>Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
       </PageBody>
