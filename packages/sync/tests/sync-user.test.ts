@@ -150,6 +150,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
     overBudgetSourceEventStateIds: [],
     overBudgetSourceEventUids: ["pathological-series"],
     skippedByRuleCount: 0,
+    sourceOutcomes: {},
     syncableEventCount: 4,
     unmatchedByRuleCount: 0,
   };
@@ -180,7 +181,9 @@ describe("createDestinationReconciliationWideEventFields", () => {
       "local_event_states.outside_reconciliation_window_count": 1,
       "local_event_states.over_budget_series_count": 1,
       "local_event_states.over_budget_series_uids": "pathological-series",
+      "local_event_states.skipped_by_rule_count": 0,
       "local_event_states.syncable_count": 4,
+      "local_event_states.unmatched_by_rule_count": 0,
       "reconciliation.local_read.duration_ms": 12.5,
       "reconciliation.remote_read.duration_ms": 42.25,
       "reconciliation.source_calendars.at_local_read_count": 2,
@@ -282,6 +285,7 @@ describe("createDestinationReconciliationScope", () => {
     overBudgetSourceEventStateIds: [] as string[],
     overBudgetSourceEventUids: [] as string[],
     skippedByRuleCount: 0,
+    sourceOutcomes: {},
     syncableEventCount: 0,
     unmatchedByRuleCount: 0,
   };
@@ -292,6 +296,7 @@ describe("createDestinationReconciliationScope", () => {
       authoritativeSourceWindows: new Map([[SOURCE_CALENDAR_ID, WINDOW]]),
       authoritativeWindow: WINDOW,
       eventReadDiagnostics: { ...baseDiagnostics, overBudgetSourceEventStateIds },
+      pausedSourceCalendarIds: new Set<string>(),
       requestedWindow: WINDOW,
       sourceCalendarIdsAtLocalRead: [SOURCE_CALENDAR_ID],
     });

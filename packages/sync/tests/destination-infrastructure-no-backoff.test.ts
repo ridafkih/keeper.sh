@@ -11,6 +11,10 @@ const isCalendarInvalidatedMock = vi.fn(
 const handleIsCurrentMock = vi.fn(() => Promise.resolve(true));
 const acquireMock = vi.fn();
 
+vi.mock("../src/sync-run-recording", () => ({
+  recordSyncRun: () => Promise.resolve(),
+}));
+
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
   return {
@@ -32,6 +36,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: [],
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([]),
+    getPausedSourceCalendarIds: () => Promise.resolve(new Set<string>()),
     syncCalendar: (options: unknown) => syncCalendarMock(options),
     withSourceIngestLocks: (
       database: unknown,

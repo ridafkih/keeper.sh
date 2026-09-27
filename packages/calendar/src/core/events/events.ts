@@ -21,6 +21,12 @@ import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./ti
 
 const EMPTY_SOURCES_COUNT = 0;
 
+interface SourceProjectionOutcome {
+  copied: number;
+  skipped: number;
+  skippedBy: Record<string, { count: number; name: string }>;
+}
+
 interface DestinationEventReadDiagnostics {
   candidateEventStateCount: number;
   emptyTimeRangeCount: number;
@@ -32,6 +38,7 @@ interface DestinationEventReadDiagnostics {
   overBudgetSourceEventStateIds: string[];
   overBudgetSourceEventUids: string[];
   skippedByRuleCount: number;
+  sourceOutcomes: Record<string, SourceProjectionOutcome>;
   syncableEventCount: number;
   unmatchedByRuleCount: number;
 }
@@ -60,6 +67,7 @@ const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics 
   overBudgetSourceEventStateIds: [],
   overBudgetSourceEventUids: [],
   skippedByRuleCount: 0,
+  sourceOutcomes: {},
   syncableEventCount: 0,
   unmatchedByRuleCount: 0,
 };
@@ -241,6 +249,51 @@ const getSyncRulesForDestination = async (
   return rulesBySourceCalendarId;
 };
 
+const getPausedSourceCalendarIds = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+): Promise<Set<string>> => {
+  const pairs = await database
+    .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(syncsTable, eq(sourceDestinationMappingsTable.syncId, syncsTable.id))
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        eq(syncsTable.paused, true),
+      ),
+    );
+  return new Set(pairs.map((pair) => pair.sourceCalendarId));
+};
+
+const createSourceOutcome = (): SourceProjectionOutcome => ({ copied: 0, skipped: 0, skippedBy: {} });
+
+const recordSkip = (
+  outcomes: Record<string, SourceProjectionOutcome>,
+  sourceCalendarId: string,
+  rule: Pick<DestinationSyncRule, "id" | "name"> | undefined,
+): void => {
+  const outcome = outcomes[sourceCalendarId] ?? createSourceOutcome();
+  outcome.skipped += 1;
+  if (rule) {
+    const tally = outcome.skippedBy[rule.id] ?? { count: 0, name: rule.name };
+    tally.count += 1;
+    outcome.skippedBy[rule.id] = tally;
+  }
+  outcomes[sourceCalendarId] = outcome;
+};
+
+const recordCopies = (
+  outcomes: Record<string, SourceProjectionOutcome>,
+  events: readonly Pick<MaterializedSyncableEvent, "calendarId">[],
+): void => {
+  for (const event of events) {
+    const outcome = outcomes[event.calendarId] ?? createSourceOutcome();
+    outcome.copied += 1;
+    outcomes[event.calendarId] = outcome;
+  }
+};
+
 const resolveRulesBySourceCalendarId = (
   database: BunSQLClient,
   calendarIds: string[],
@@ -323,16 +376,15 @@ const getEventsForCalendarsWithDiagnostics = async (
   let outsideReconciliationWindowCount = 0;
   let skippedByRuleCount = 0;
   let unmatchedByRuleCount = 0;
+  const sourceOutcomes: Record<string, SourceProjectionOutcome> = {};
 
   for (const result of results) {
     if (result.sourceEventUid === null) {
       missingSourceEventUidCount += 1;
       continue;
     }
-    const projection = projectSyncableEvent(
-      result,
-      rulesBySourceCalendarId.get(result.calendarId) ?? [],
-    );
+    const sourceRules = rulesBySourceCalendarId.get(result.calendarId) ?? [];
+    const projection = projectSyncableEvent(result, sourceRules);
     if (projection.outcome === "working_location") {
       excludedBySyncPolicyCount += 1;
       continue;
@@ -343,6 +395,7 @@ const getEventsForCalendarsWithDiagnostics = async (
     }
     if (projection.outcome === "skipped") {
       skippedByRuleCount += 1;
+      recordSkip(sourceOutcomes, result.calendarId, sourceRules.find((rule) => rule.id === projection.ruleId));
       continue;
     }
 
@@ -399,6 +452,7 @@ const getEventsForCalendarsWithDiagnostics = async (
     },
   });
 
+  recordCopies(sourceOutcomes, events);
   const emptyTimeRangeCount = events.filter((event) => isEmptyTimeRange(event)).length;
   const invertedTimeRangeCount = events.filter((event) => isInvertedTimeRange(event)).length;
 
@@ -414,6 +468,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       overBudgetSourceEventStateIds,
       overBudgetSourceEventUids,
       skippedByRuleCount,
+      sourceOutcomes,
       syncableEventCount: syncableEvents.length,
       unmatchedByRuleCount,
     },
@@ -445,6 +500,7 @@ export {
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
+  getPausedSourceCalendarIds,
   getSyncRulesForDestination,
   isEventInDestinationReconciliationWindow,
   projectSyncableEvent,
@@ -456,5 +512,6 @@ export type {
   DestinationEventReadResult,
   DestinationSyncRule,
   RulesBySourceCalendarId,
+  SourceProjectionOutcome,
   SyncableEventProjection,
 };

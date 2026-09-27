@@ -446,6 +446,7 @@ interface SyncRunRecord {
   destinationCalendarId: string;
   failed: number;
   removed: number;
+  sharedDestination: boolean;
   skipped: number;
   skippedBy: { count: number; name: string; ruleId: string }[];
 }

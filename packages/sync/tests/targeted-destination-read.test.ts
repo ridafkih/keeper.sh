@@ -31,6 +31,7 @@ const EVENT_READ_DIAGNOSTICS = {
   overBudgetSourceEventStateIds: [] as string[],
   overBudgetSourceEventUids: [] as string[],
   skippedByRuleCount: 0,
+  sourceOutcomes: {},
   syncableEventCount: 0,
   unmatchedByRuleCount: 0,
 };
@@ -111,6 +112,7 @@ const createScope = (authoritativeMappingIds: ReadonlySet<string> | null) =>
     authoritativeSourceWindows: new Map([[SOURCE_CALENDAR_ID, REQUESTED_WINDOW]]),
     authoritativeWindow: REQUESTED_WINDOW,
     eventReadDiagnostics: EVENT_READ_DIAGNOSTICS,
+    pausedSourceCalendarIds: new Set<string>(),
     requestedWindow: REQUESTED_WINDOW,
     sourceCalendarIdsAtLocalRead: [SOURCE_CALENDAR_ID],
   });
