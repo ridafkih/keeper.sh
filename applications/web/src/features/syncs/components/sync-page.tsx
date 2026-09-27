@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import Pause from "lucide-react/dist/esm/icons/pause";
@@ -33,6 +33,7 @@ import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
 import { formatSyncedAgo } from "@/features/syncs/relative-time";
+import { cn } from "@/utils/cn";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
 import { STATE_LABELS, previewCalendarNames, syncSettingsOf, type CalendarsById } from "@/features/syncs/syncs";
 import { deleteSync, patchSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
@@ -47,23 +48,6 @@ const PATCH_KEYS = [
 const toPatchBody = (patch: Partial<SyncDefinition>): PatchSyncBody =>
   Object.fromEntries(PATCH_KEYS.filter((key) => key in patch).map((key) => [key, patch[key]])) as PatchSyncBody;
 
-const STICKY_GAP = 12;
-
-// The pane scrolls as a whole, so the pinned preview sits just below wherever the sticky header ends.
-function useStickyOffset(rootRef: RefObject<HTMLDivElement | null>, ready: boolean): number {
-  const [offset, setOffset] = useState(STICKY_GAP);
-  useLayoutEffect(() => {
-    const header = rootRef.current?.querySelector<HTMLElement>("[data-scrolled]");
-    if (!ready || !header) return;
-    const update = () => setOffset(header.offsetHeight + (Number.parseFloat(getComputedStyle(header).top) || 0) + STICKY_GAP);
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, [rootRef, ready]);
-  return offset;
-}
-
 export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
   const navigate = useNavigate();
   const { data: sync, error, mutate } = useSync(syncId);
@@ -74,8 +58,6 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const stickyTop = useStickyOffset(rootRef, Boolean(sync && calendars));
 
   if (error) return <RouteShell backFallback="/dashboard/syncs" status="error" onRetry={() => { void mutate(); }} />;
   if (!sync || !calendars) return <RouteShell backFallback="/dashboard/syncs" status="loading" />;
@@ -122,40 +104,40 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
   const previewNames = previewCalendarNames(sync, calendarsById);
 
   return (
-    <div ref={rootRef} className="@container flex flex-col gap-1.5">
-      <StickyPageHeader className="gap-1.5">
-        <div className="lg:hidden">
-          <BackButton to="/dashboard" />
-        </div>
-        <div className="flex flex-col gap-1 px-0.5 pt-4">
-          <DashboardHeading1 className="select-none">{sync.name}</DashboardHeading1>
-          <Text size="sm" tone="muted" className="flex items-center gap-2">
-            <SyncStatusDot state={sync.state} />
-            {statusLine(sync)}
-          </Text>
-        </div>
-        <div className="px-0.5 pt-2">
-          <SegmentedControl
-            label="Sync sections"
-            value={tab}
-            options={[{ label: "Setup", value: "setup" }, { label: "Activity", value: "activity" }]}
-            onChange={(next) => {
-              if (next === "activity") track(ANALYTICS_EVENTS.sync_activity_viewed);
-              void navigate({
-                params: { syncId },
-                replace: true,
-                search: { tab: next === "activity" ? "activity" : undefined },
-                to: "/dashboard/syncs/$syncId",
-              });
-            }}
-          />
-        </div>
-      </StickyPageHeader>
-      <div className="flex flex-col gap-1.5">
-        {mutationError && <Text size="sm" tone="danger" className="px-0.5">{mutationError}</Text>}
-        {tab === "setup" ? (
-          <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
-            <div className="flex min-w-0 flex-col gap-1.5">
+    <div className="@container">
+      <div className={cn("grid grid-cols-1 gap-x-8", tab === "setup" && "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]")}>
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <StickyPageHeader className="gap-1.5">
+            <div className="lg:hidden">
+              <BackButton to="/dashboard" />
+            </div>
+            <div className="flex flex-col gap-1 px-0.5 pt-4">
+              <DashboardHeading1 className="select-none">{sync.name}</DashboardHeading1>
+              <Text size="sm" tone="muted" className="flex items-center gap-2">
+                <SyncStatusDot state={sync.state} />
+                {statusLine(sync)}
+              </Text>
+            </div>
+            <div className="px-0.5 pt-2">
+              <SegmentedControl
+                label="Sync sections"
+                value={tab}
+                options={[{ label: "Setup", value: "setup" }, { label: "Activity", value: "activity" }]}
+                onChange={(next) => {
+                  if (next === "activity") track(ANALYTICS_EVENTS.sync_activity_viewed);
+                  void navigate({
+                    params: { syncId },
+                    replace: true,
+                    search: { tab: next === "activity" ? "activity" : undefined },
+                    to: "/dashboard/syncs/$syncId",
+                  });
+                }}
+              />
+            </div>
+          </StickyPageHeader>
+          {mutationError && <Text size="sm" tone="danger" className="px-0.5">{mutationError}</Text>}
+          {tab === "setup" ? (
+            <>
               <NavigationMenu>
                 <NavigationMenuEditableItem
                   label="Name"
@@ -199,19 +181,21 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
                 deleting={deleting}
                 onConfirm={() => void handleDelete()}
               />
+            </>
+          ) : (
+            <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
+          )}
+        </div>
+        {tab === "setup" && (
+          <aside className="hidden @3xl:block">
+            <div className="sticky top-0">
+              <SyncPreviewPanel
+                settings={syncSettingsOf(sync)}
+                sourceName={previewNames.source}
+                destinationName={previewNames.destination}
+              />
             </div>
-            <aside className="hidden @3xl:block">
-              <div className="sticky" style={{ top: stickyTop }}>
-                <SyncPreviewPanel
-                  settings={syncSettingsOf(sync)}
-                  sourceName={previewNames.source}
-                  destinationName={previewNames.destination}
-                />
-              </div>
-            </aside>
-          </div>
-        ) : (
-          <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
+          </aside>
         )}
       </div>
     </div>
