@@ -1,6 +1,7 @@
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
+import { withWideEvent } from "@/utils/middleware";
 import { database } from "@/context";
 import env from "@/env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
@@ -73,7 +74,25 @@ const handleSubscriptionCanceled = async (
   return new Response(null, { status: HTTP_OK });
 };
 
-const POST = async (request: Request): Promise<Response> => {
+interface ObservedSubscription {
+  status: string;
+  cancelAtPeriodEnd: boolean;
+  currentPeriodEnd: Date | null;
+  endedAt: Date | null;
+}
+
+const observeSubscription = (subscription: ObservedSubscription): void => {
+  widelog.set("webhook.subscription_status", subscription.status);
+  widelog.set("webhook.cancel_at_period_end", subscription.cancelAtPeriodEnd);
+  if (subscription.currentPeriodEnd) {
+    widelog.set("webhook.current_period_end", subscription.currentPeriodEnd.toISOString());
+  }
+  if (subscription.endedAt) {
+    widelog.set("webhook.ended_at", subscription.endedAt.toISOString());
+  }
+};
+
+const POST = withWideEvent(async ({ request }) => {
   const webhookSecret = env.POLAR_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
@@ -90,10 +109,12 @@ const POST = async (request: Request): Promise<Response> => {
     const event = validateEvent(body, headers, webhookSecret);
 
     widelog.set("operation.type", "webhook");
+    widelog.set("webhook.provider", "polar");
     widelog.set("webhook.event_type", event.type);
     widelog.set("webhook.subscription_id", event.data.id);
 
     if (event.type === "subscription.created") {
+      observeSubscription(event.data);
       const createdUserId = event.data.customer.externalId ?? null;
       if (createdUserId) {
         widelog.set("user.id", createdUserId);
@@ -105,6 +126,7 @@ const POST = async (request: Request): Promise<Response> => {
     }
 
     if (event.type === "subscription.updated") {
+      observeSubscription(event.data);
       const updatedUserId = event.data.customer.externalId ?? null;
       if (updatedUserId) {
         widelog.set("user.id", updatedUserId);
@@ -119,6 +141,7 @@ const POST = async (request: Request): Promise<Response> => {
     }
 
     if (event.type === "subscription.canceled") {
+      observeSubscription(event.data);
       const canceledUserId = event.data.customer.externalId ?? null;
       if (canceledUserId) {
         widelog.set("user.id", canceledUserId);
@@ -137,6 +160,6 @@ const POST = async (request: Request): Promise<Response> => {
     }
     throw error;
   }
-};
+});
 
 export { POST };
