@@ -2,7 +2,7 @@ import { useState } from "react";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import type { SyncSettings } from "@keeper.sh/data-schemas";
-import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
 import { Tooltip } from "@/components/ui/primitives/tooltip";
 import {
@@ -35,9 +35,12 @@ export function SyncPreviewPanel({ settings, directions }: SyncPreviewPanelProps
   const ruled = previews.some(({ preview }) => preview.copy && !preview.followsShareAs);
 
   return (
-    <div className="flex flex-col gap-1.5 *:transition-[filter] [&:has([data-popover-open])>:first-child]:blur-[2px]">
-      <DashboardSection title="Preview" description="Sample events, and what their copies would look like." />
-      <NavigationMenu className="*:transition-[filter] [&>[data-popover-open]~*]:blur-[2px]">
+    <div className="-mx-1 flex flex-col gap-1 rounded-[1.25rem] border border-border-elevated p-1 *:transition-[filter] [&:has([data-popover-open])>:not(:has([data-popover-open]))]:blur-[2px]">
+      <div className="flex flex-col px-4 pt-2.5 sm:px-3.5">
+        <DashboardHeading2>Preview</DashboardHeading2>
+        <Text size="sm">Sample events, and what their copies would look like.</Text>
+      </div>
+      <ul className="flex flex-col p-0.5 *:transition-[filter] [&>[data-popover-open]~*]:blur-[2px]">
         {directions.length > 1 && (
           <NavigationMenuPopover
             trigger={(
@@ -71,8 +74,10 @@ export function SyncPreviewPanel({ settings, directions }: SyncPreviewPanelProps
             <Text size="xs" tone="muted" className="shrink-0 tabular-nums">{copied} of {previews.length} copied</Text>
           </div>
         </NavigationMenuItem>
+      </ul>
+      <NavigationMenu>
         {previews.map(({ event, preview }) => (
-          <li key={event.title} className="flex flex-col gap-1.5 border-t border-dashed border-interactive-border px-3.5 py-2.5 sm:px-3">
+          <li key={event.title} className="flex flex-col gap-1.5 border-dashed border-interactive-border px-3.5 py-2.5 not-first:border-t sm:px-3">
             <div className={PREVIEW_ROW}>
               <PreviewEventCard copy={event} />
               <ArrowRight size={14} className="self-center text-foreground-muted" />
@@ -92,13 +97,11 @@ export function SyncPreviewPanel({ settings, directions }: SyncPreviewPanelProps
             )}
           </li>
         ))}
-        <li className="border-t border-interactive-border px-3.5 py-2.5 sm:px-3">
-          <Text size="xs" tone="muted">
-            {ruled ? "Other copies follow" : "Copies follow"}{" "}
-            <span className="text-foreground">Share As · {shareAsLabel(settings.shareAs)}</span>
-          </Text>
-        </li>
       </NavigationMenu>
+      <Text size="xs" tone="muted" className="px-4 pt-1.5 pb-2.5 sm:px-3.5">
+        {ruled ? "Other copies follow" : "Copies follow"}{" "}
+        <span className="text-foreground">Share As · {shareAsLabel(settings.shareAs)}</span>
+      </Text>
     </div>
   );
 }
