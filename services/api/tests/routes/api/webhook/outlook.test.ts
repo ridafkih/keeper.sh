@@ -100,7 +100,7 @@ const makeRequest = (
 
 const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   claimDelivery: vi.fn(() => Promise.resolve(true)),
-  claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) =>
+  claimPushAdmission: vi.fn((_provider: string) =>
     Promise.resolve(true)),
   findChannel: vi.fn((_provider: string, channelKey: string) =>
     Promise.resolve(channelsByKey.get(channelKey) ?? null)),
@@ -307,25 +307,6 @@ describe("handleOutlookPushWebhook batches", () => {
     expect(response.status).toBe(202);
     expect(dependencies.recordVerified).toHaveBeenCalledOnce();
     expect(dependencies.recordNotificationReceived).toHaveBeenCalledOnce();
-  });
-
-  it("never builds an admission key from an unbounded subscription id", async () => {
-    const dependencies = makeDependencies();
-    const oversizedSubscriptionId = "s".repeat(4096);
-
-    const response = await handleOutlookPushWebhook(
-      {
-        request: makeRequest({
-          value: [changeEntry(oversizedSubscriptionId, "secret-1")],
-        }),
-      },
-      dependencies,
-    );
-
-    expect(response.status).toBe(401);
-    for (const [input] of dependencies.claimPushAdmission.mock.calls) {
-      expect((input as { channelKey: string | null }).channelKey).toBeNull();
-    }
   });
 
   it("still verifies every element even when they share a subscription", async () => {

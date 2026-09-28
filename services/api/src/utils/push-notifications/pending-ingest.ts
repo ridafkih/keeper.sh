@@ -64,7 +64,7 @@ const createPushWebhookDependencies = async (
       );
       return claimed !== null;
     },
-    claimPushAdmission: (input) => claimPushAdmission(redis, input),
+    claimPushAdmission: (admittedProvider) => claimPushAdmission(redis, admittedProvider),
     findChannel: (_provider, channelKey) => readChannel(channelKey),
     generateCorrelationId: () => crypto.randomUUID(),
     isUnknownChannelCached: async (cachedProvider, channelKey) =>

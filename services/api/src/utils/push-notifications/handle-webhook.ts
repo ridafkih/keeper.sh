@@ -30,9 +30,7 @@ interface PushWebhookRouteContext {
 
 interface PushWebhookDependencies {
   claimDelivery: (deliveryKey: string) => Promise<boolean>;
-  claimPushAdmission: (
-    input: { channelKey: string | null; provider: string },
-  ) => Promise<boolean>;
+  claimPushAdmission: (provider: string) => Promise<boolean>;
   findChannel: (provider: string, channelKey: string) => Promise<StoredPushChannel | null>;
   generateCorrelationId: () => string;
   isUnknownChannelCached: (provider: string, channelKey: string) => Promise<boolean>;
@@ -96,13 +94,6 @@ const hasBoundedChannelKey = (channelKey: string): boolean =>
 
 const hasUsableChannelKey = (claim: PushClaim): boolean =>
   hasBoundedChannelKey(claim.channelKey) && claim.presentedSecret.length > 0;
-
-const resolveAdmissionChannelKey = (claim: PushClaim | undefined): string | null => {
-  if (!claim || !hasBoundedChannelKey(claim.channelKey)) {
-    return null;
-  }
-  return claim.channelKey;
-};
 
 interface ChannelLookup {
   channel: StoredPushChannel | null;
@@ -394,10 +385,7 @@ const readAdmittedBody = async (
     return { response: new Response(null, { status: PAYLOAD_TOO_LARGE_STATUS }) };
   }
 
-  const admitted = await dependencies.claimPushAdmission({
-    channelKey: null,
-    provider: options.provider,
-  });
+  const admitted = await dependencies.claimPushAdmission(options.provider);
   if (!admitted) {
     dependencies.observe({ "webhook.reject_reason": "admission_throttled" });
     return { response: new Response(null, { status: HTTP_STATUS.SERVICE_UNAVAILABLE }) };
@@ -518,18 +506,6 @@ const runPushWebhook = async (
     "webhook.event_type": firstClaim?.kind ?? "empty",
     "webhook.notification_count": claims.length,
   });
-
-  const admissionChannelKey = resolveAdmissionChannelKey(firstClaim);
-  if (admissionChannelKey !== null) {
-    const admitted = await dependencies.claimPushAdmission({
-      channelKey: admissionChannelKey,
-      provider: options.provider,
-    });
-    if (!admitted) {
-      dependencies.observe({ "webhook.reject_reason": "admission_throttled" });
-      return new Response(null, { status: HTTP_STATUS.SERVICE_UNAVAILABLE });
-    }
-  }
 
   const rejectedCount = await processClaims(claims, correlationId, dependencies, options);
 
