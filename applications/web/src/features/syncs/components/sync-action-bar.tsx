@@ -37,7 +37,7 @@ export function SyncActionBar({ show = true, label, message, busy, secondary, pr
       <AnimatePresence initial={false}>
         {show && (
           <m.div
-            className="pointer-events-none sticky bottom-4 pt-3 lg:bottom-0 @3xl:h-0 @3xl:pt-0"
+            className="pointer-events-none sticky bottom-4 z-[6] pt-3 lg:bottom-0 @3xl:h-0 @3xl:pt-0"
             initial={HIDDEN}
             animate={SHOWN}
             exit={HIDDEN}

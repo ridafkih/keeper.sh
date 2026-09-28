@@ -77,7 +77,7 @@ function DashboardMainPane({ pane }: { pane: SyncPane | null }) {
         {pane ? (
           <m.div
             key={pane.kind === "new" ? "sync:new" : `sync:${pane.syncId}`}
-            className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]"
+            className="relative flex w-full max-w-lg min-w-0 flex-col px-4 pt-4 pb-(--sidebar-pad-b) [--sidebar-pad-b:3rem] [--sidebar-pad-t:1.5rem] [--sidebar-pad-x:0.25rem] xs:pt-[min(6rem,25vh)] lg:h-[calc(100dvh-2rem)] lg:max-w-none lg:flex-1 lg:overflow-y-auto lg:overscroll-y-none lg:rounded-2xl lg:border lg:border-border-elevated lg:bg-background lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t) lg:shadow-xs lg:[--sidebar-pad-t:1.25rem] lg:[--sidebar-pad-x:2rem]"
             initial={PANE_HIDDEN}
             animate={PANE_SHOWN}
             exit={PANE_LEAVING}

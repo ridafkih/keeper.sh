@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardHeading1 } from "@/components/ui/primitives/dashboard-heading";
 import { MenuHint, PremiumHint } from "@/components/ui/primitives/menu-hint";
+import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Text } from "@/components/ui/primitives/text";
 import { RouteShell } from "@/components/ui/shells/route-shell";
@@ -43,14 +44,24 @@ function NewSyncHeader({ description }: { description: string }) {
   );
 }
 
-function NewSyncColumns({ children, aside, footer }: { children: ReactNode; aside?: ReactNode; footer?: ReactNode }) {
+interface NewSyncColumnsProps {
+  header: ReactNode;
+  children: ReactNode;
+  aside?: ReactNode;
+  footer?: ReactNode;
+}
+
+function NewSyncColumns({ header, children, aside, footer }: NewSyncColumnsProps) {
   return (
-    <div className="@container">
-      <div className={cn("grid grid-cols-1 gap-x-8", aside && SYNC_PANE_COLUMNS)}>
-        <div className="flex min-w-0 flex-col gap-1.5">{children}</div>
+    <div className="@container flex flex-col lg:h-full">
+      <div className={cn("grid grid-cols-1 gap-x-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]", aside && SYNC_PANE_COLUMNS)}>
+        <div className={cn("flex min-w-0 flex-col gap-1.5 lg:min-h-0", aside && "@3xl:[--page-body-bleed-end:1rem]")}>
+          {header}
+          <PageBody className="gap-1.5">{children}</PageBody>
+        </div>
         {aside && (
           <aside className="hidden @3xl:block">
-            <div className="sticky top-0 has-[[data-popover-open]]:z-20">{aside}</div>
+            <div className="sticky top-0 z-[6] has-[[data-popover-open]]:z-20">{aside}</div>
           </aside>
         )}
       </div>
@@ -83,8 +94,7 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
 
   if (!draft) {
     return (
-      <NewSyncColumns>
-        <NewSyncHeader description="Start from a profile. It only fills in the form, and you can change everything after." />
+      <NewSyncColumns header={<NewSyncHeader description="Start from a profile. It only fills in the form, and you can change everything after." />}>
         {atLimit && <PremiumHint>Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
         <ProfileGallery disabled={atLimit} onPick={pick} />
       </NewSyncColumns>
@@ -115,6 +125,7 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
 
   return (
     <NewSyncColumns
+      header={<NewSyncHeader description="Nothing syncs until you create it." />}
       aside={
         <SyncPreviewPanel
           settings={syncSettingsOf(draft)}
@@ -131,7 +142,6 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
         />
       }
     >
-      <NewSyncHeader description="Nothing syncs until you create it." />
       <NavigationMenu>
         <NavigationMenuEditableItem
           label="Name"
