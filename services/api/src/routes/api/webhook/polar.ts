@@ -1,23 +1,20 @@
+import { Polar } from "@polar-sh/sdk";
+import { ResourceNotFound } from "@polar-sh/sdk/models/errors/resourcenotfound";
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
+import type { Plan } from "@keeper.sh/data-schemas";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
 import { withWideEvent } from "@/utils/middleware";
+import { syncPolarSubscription } from "@/utils/polar-subscription-sync";
 import { database } from "@/context";
 import env from "@/env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
 
 const HTTP_OK = 200;
 
-const getPlanFromActiveStatus = (active: boolean): "pro" | "free" => {
-  if (active) {
-    return "pro";
-  }
-  return "free";
-};
-
 const upsertSubscription = async (
   userId: string,
-  plan: "free" | "pro",
+  plan: Plan,
   polarSubscriptionId: string,
 ): Promise<void> => {
   await database
@@ -36,42 +33,31 @@ const upsertSubscription = async (
     });
 };
 
-const handleSubscriptionCreated = async (
-  userId: string | null,
-  subscriptionId: string,
-): Promise<Response> => {
-  if (!userId) {
-    return new Response(null, { status: HTTP_OK });
+const buildPolarClient = (): Polar | null => {
+  if (!env.POLAR_ACCESS_TOKEN || !env.POLAR_MODE) {
+    return null;
   }
-
-  await upsertSubscription(userId, "pro", subscriptionId);
-  return new Response(null, { status: HTTP_OK });
+  return new Polar({
+    accessToken: env.POLAR_ACCESS_TOKEN,
+    server: env.POLAR_MODE,
+  });
 };
 
-const handleSubscriptionUpdated = async (
-  userId: string | null,
-  subscriptionId: string,
-  isActive: boolean,
-): Promise<Response> => {
-  if (!userId) {
-    return new Response(null, { status: HTTP_OK });
+const polarClient = buildPolarClient();
+
+const fetchActiveSubscriptionIds = async (
+  client: Polar,
+  externalCustomerId: string,
+): Promise<string[]> => {
+  try {
+    const state = await client.customers.getStateExternal({ externalId: externalCustomerId });
+    return state.activeSubscriptions.map((subscription) => subscription.id);
+  } catch (error) {
+    if (error instanceof ResourceNotFound) {
+      return [];
+    }
+    throw error;
   }
-
-  const plan = getPlanFromActiveStatus(isActive);
-  await upsertSubscription(userId, plan, subscriptionId);
-  return new Response(null, { status: HTTP_OK });
-};
-
-const handleSubscriptionCanceled = async (
-  userId: string | null,
-  subscriptionId: string,
-): Promise<Response> => {
-  if (!userId) {
-    return new Response(null, { status: HTTP_OK });
-  }
-
-  await upsertSubscription(userId, "free", subscriptionId);
-  return new Response(null, { status: HTTP_OK });
 };
 
 interface ObservedSubscription {
@@ -95,7 +81,7 @@ const observeSubscription = (subscription: ObservedSubscription): void => {
 const POST = withWideEvent(async ({ request }) => {
   const webhookSecret = env.POLAR_WEBHOOK_SECRET;
 
-  if (!webhookSecret) {
+  if (!webhookSecret || !polarClient) {
     return ErrorResponse.notImplemented().toResponse();
   }
 
@@ -113,44 +99,36 @@ const POST = withWideEvent(async ({ request }) => {
     widelog.set("webhook.event_type", event.type);
     widelog.set("webhook.subscription_id", event.data.id);
 
-    if (event.type === "subscription.created") {
-      observeSubscription(event.data);
-      const createdUserId = event.data.customer.externalId ?? null;
-      if (createdUserId) {
-        widelog.set("user.id", createdUserId);
-      }
-      return handleSubscriptionCreated(
-        createdUserId,
-        event.data.id,
-      );
+    if (!event.type.startsWith("subscription.") || !("customer" in event.data)) {
+      return new Response(null, { status: HTTP_OK });
     }
 
-    if (event.type === "subscription.updated") {
+    if ("cancelAtPeriodEnd" in event.data) {
       observeSubscription(event.data);
-      const updatedUserId = event.data.customer.externalId ?? null;
-      if (updatedUserId) {
-        widelog.set("user.id", updatedUserId);
-      }
-      const plan = getPlanFromActiveStatus(event.data.status === "active");
-      widelog.set("webhook.resulting_plan", plan);
-      return handleSubscriptionUpdated(
-        updatedUserId,
-        event.data.id,
-        event.data.status === "active",
-      );
     }
 
-    if (event.type === "subscription.canceled") {
-      observeSubscription(event.data);
-      const canceledUserId = event.data.customer.externalId ?? null;
-      if (canceledUserId) {
-        widelog.set("user.id", canceledUserId);
-      }
-      return handleSubscriptionCanceled(
-        canceledUserId,
-        event.data.id,
-      );
+    const externalCustomerId = event.data.customer.externalId ?? null;
+    if (externalCustomerId) {
+      widelog.set("user.id", externalCustomerId);
     }
+
+    await syncPolarSubscription(
+      {
+        externalCustomerId,
+        subscriptionId: event.data.id,
+        type: event.type,
+      },
+      {
+        fetchActiveSubscriptionIds: (customerId) =>
+          fetchActiveSubscriptionIds(polarClient, customerId),
+        observe: (fields) => {
+          for (const [key, value] of Object.entries(fields)) {
+            widelog.set(key, value);
+          }
+        },
+        upsertSubscription,
+      },
+    );
 
     return new Response(null, { status: HTTP_OK });
   } catch (error) {
