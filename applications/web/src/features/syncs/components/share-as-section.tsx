@@ -112,7 +112,7 @@ function SyncPreviewCard({ settings, sourceName, className }: { settings: SyncSe
   );
 }
 
-export function PreviewChip({ pressed, onClick, children }: PropsWithChildren<{ pressed: boolean; onClick: () => void }>) {
+function PreviewChip({ pressed, onClick, children }: PropsWithChildren<{ pressed: boolean; onClick: () => void }>) {
   return (
     <button
       type="button"

@@ -51,7 +51,7 @@ function NewSyncColumns({ children, aside }: { children: ReactNode; aside?: Reac
         <div className="flex min-w-0 flex-col gap-1.5">{children}</div>
         {aside && (
           <aside className="hidden @3xl:block">
-            <div className="sticky top-0">{aside}</div>
+            <div className="sticky top-0 has-[[data-popover-open]]:z-20">{aside}</div>
           </aside>
         )}
       </div>

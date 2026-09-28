@@ -254,7 +254,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
         </div>
         {tab === "setup" && (
           <aside className="hidden @3xl:block">
-            <div className="sticky top-0">
+            <div className="sticky top-0 has-[[data-popover-open]]:z-20">
               <SyncPreviewPanel
                 settings={syncSettingsOf(draft)}
                 directions={previewDirections(draft, calendarsById)}

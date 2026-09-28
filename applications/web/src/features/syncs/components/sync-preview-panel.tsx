@@ -1,11 +1,21 @@
 import { useState } from "react";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
+import CheckIcon from "lucide-react/dist/esm/icons/check";
 import type { SyncSettings } from "@keeper.sh/data-schemas";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
-import { NavigationMenu, NavigationMenuItem } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { Tooltip } from "@/components/ui/primitives/tooltip";
+import {
+  NavigationMenu,
+  NavigationMenuButtonItem,
+  NavigationMenuItem,
+  NavigationMenuItemLabel,
+  NavigationMenuItemTrailing,
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
+import { usePopover } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import { previewEventsFor, previewSync, shareAsLabel, type PreviewDirection } from "../syncs";
-import { PreviewChip, PreviewEventCard } from "./share-as-section";
+import { PreviewEventCard } from "./share-as-section";
 
 interface SyncPreviewPanelProps {
   settings: SyncSettings;
@@ -14,39 +24,50 @@ interface SyncPreviewPanelProps {
 
 const PREVIEW_ROW = "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2";
 
-const listNames = (names: string[]): string =>
-  names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
-
 export function SyncPreviewPanel({ settings, directions }: SyncPreviewPanelProps) {
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const direction = directions.find((candidate) => candidate.key === pickedKey) ?? directions[0];
   if (!direction) return null;
   const { source: sourceName, destinations } = direction;
-  const [firstDestination] = destinations;
-  const destinationName = destinations.length > 1 ? `${firstDestination} +${destinations.length - 1}` : firstDestination;
+  const [firstDestination, ...otherDestinations] = destinations;
   const previews = previewEventsFor(settings).map((event) => ({ event, preview: previewSync(settings, event, sourceName) }));
   const copied = previews.filter(({ preview }) => preview.copy).length;
   const ruled = previews.some(({ preview }) => preview.copy && !preview.followsShareAs);
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <DashboardSection title="Preview" description={`Typical events from ${sourceName}, and how they'd land in ${listNames(destinations)}.`} />
-      <NavigationMenu>
+    <div className="flex flex-col gap-1.5 *:transition-[filter] [&:has([data-popover-open])>:first-child]:blur-[2px]">
+      <DashboardSection title="Preview" description="Sample events, and what their copies would look like." />
+      <NavigationMenu className="*:transition-[filter] [&>[data-popover-open]~*]:blur-[2px]">
         {directions.length > 1 && (
-          <NavigationMenuItem className="flex-wrap gap-1.5">
-            <Text size="xs" tone="muted" className="mr-1">Events from</Text>
+          <NavigationMenuPopover
+            trigger={(
+              <NavigationMenuItemLabel tone="muted">
+                Events from <span className="text-foreground">{sourceName}</span>
+              </NavigationMenuItemLabel>
+            )}
+          >
             {directions.map((candidate) => (
-              <PreviewChip key={candidate.key} pressed={candidate === direction} onClick={() => setPickedKey(candidate.key)}>
-                {candidate.source}
-              </PreviewChip>
+              <PreviewSourceOption
+                key={candidate.key}
+                direction={candidate}
+                picked={candidate === direction}
+                onPick={() => setPickedKey(candidate.key)}
+              />
             ))}
-          </NavigationMenuItem>
+          </NavigationMenuPopover>
         )}
         <NavigationMenuItem className={PREVIEW_ROW}>
           <Text size="xs" tone="muted" className="truncate">In {sourceName}</Text>
           <span className="w-3.5" />
           <div className="flex min-w-0 justify-between gap-2">
-            <Text size="xs" tone="muted" className="truncate">In {destinationName}</Text>
+            <div className="flex min-w-0 items-baseline gap-1">
+              <Text size="xs" tone="muted" className="truncate">In {firstDestination}</Text>
+              {otherDestinations.length > 0 && (
+                <Tooltip content={otherDestinations.join(", ")}>
+                  <Text as="span" size="xs" tone="muted" className="shrink-0 tabular-nums">+{otherDestinations.length}</Text>
+                </Tooltip>
+              )}
+            </div>
             <Text size="xs" tone="muted" className="shrink-0 tabular-nums">{copied} of {previews.length} copied</Text>
           </div>
         </NavigationMenuItem>
@@ -79,5 +100,18 @@ export function SyncPreviewPanel({ settings, directions }: SyncPreviewPanelProps
         </li>
       </NavigationMenu>
     </div>
+  );
+}
+
+function PreviewSourceOption({ direction, picked, onPick }: { direction: PreviewDirection; picked: boolean; onPick: () => void }) {
+  const { close } = usePopover();
+  return (
+    <NavigationMenuButtonItem onClick={() => { onPick(); close(); }}>
+      <NavigationMenuItemLabel>{direction.source}</NavigationMenuItemLabel>
+      <NavigationMenuItemTrailing indicator={null} className="ml-auto shrink-0 grow-0 max-w-[55%]">
+        <Text size="sm" tone="muted" align="right" className="min-w-0 truncate">To {direction.destinations.join(", ")}</Text>
+        {picked && <CheckIcon size={14} className="shrink-0 text-foreground" />}
+      </NavigationMenuItemTrailing>
+    </NavigationMenuButtonItem>
   );
 }

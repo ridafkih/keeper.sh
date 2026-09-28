@@ -125,10 +125,12 @@ export function NavigationMenuPopover({
     };
   }, [expanded, close]);
 
+  // A sticky ancestor traps this row's z-20 under the blur overlay; the attribute lets it lift itself with has-[[data-popover-open]]:z-20.
   return (
     <PopoverContext value={{ expanded, toggle, close, triggerContent: trigger }}>
       <li
         ref={containerRef}
+        data-popover-open={present || undefined}
         className={cn(
           "relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1",
           present ? "z-20" : "z-0",

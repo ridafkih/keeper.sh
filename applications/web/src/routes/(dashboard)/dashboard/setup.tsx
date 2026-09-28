@@ -171,7 +171,7 @@ function SetupPage() {
         </div>
       </div>
       <aside className="hidden lg:block">
-        <div className="sticky top-12">
+        <div className="sticky top-12 has-[[data-popover-open]]:z-20">
           <SyncPreviewPanel
             settings={syncSettingsOf(sync)}
             directions={previewDirections(sync, calendarsById)}
