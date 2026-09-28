@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { diffSyncChanges } from "@keeper.sh/data-schemas";
 import {
   addConnectedCalendar,
   buildFirstConnectDraft,
   createSyncDraft,
   draftProblem,
+  isRiskySave,
   pruneStaleIds,
   switchMode,
   toCreateBody,
@@ -102,5 +104,25 @@ describe("draft checks", () => {
     const draft = createSyncDraft(null, { destinationCalendarIds: ["personal"], sourceCalendarIds: ["work"] });
     expect(draftProblem(draft)).toBeNull();
     expect(toCreateBody(draft, "Work → Personal")).toMatchObject({ mode: "one_way", name: "Work → Personal" });
+  });
+});
+
+describe("isRiskySave", () => {
+  const saved = createSyncDraft(null, { destinationCalendarIds: ["personal", "family"], sourceCalendarIds: ["work"] });
+  const risky = (edits: Parameters<typeof createSyncDraft>[1]) => isRiskySave(diffSyncChanges(saved, { ...saved, ...edits }));
+
+  it("asks before dropping a calendar or flipping direction", () => {
+    expect(risky({ destinationCalendarIds: ["personal"] })).toBe(true);
+    expect(risky(switchMode(saved, "both_ways", calendarsById))).toBe(true);
+  });
+
+  it("saves additions and setting changes without asking", () => {
+    expect(risky({ destinationCalendarIds: ["personal", "family", "feed"] })).toBe(false);
+    expect(risky({ shareAs: "full" })).toBe(false);
+  });
+
+  it("finds nothing to save once an edit is put back", () => {
+    const edits = [{ skipAllDay: !saved.skipAllDay }, { skipAllDay: saved.skipAllDay }].reduce((current, patch) => ({ ...current, ...patch }), {});
+    expect(diffSyncChanges(saved, { ...saved, ...edits })).toEqual([]);
   });
 });

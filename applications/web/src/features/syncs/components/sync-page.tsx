@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useBlocker, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import Pause from "lucide-react/dist/esm/icons/pause";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
-import { syncNameSchema } from "@keeper.sh/data-schemas";
+import { diffSyncChanges, syncNameSchema } from "@keeper.sh/data-schemas";
 import type { PatchSyncBody, SyncDefinition, SyncDetail } from "@keeper.sh/data-schemas";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
@@ -31,14 +31,27 @@ import type { CalendarSource } from "@/types/api";
 import { ActivityList } from "@/features/syncs/components/activity-list";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
+import { DiscardChangesConfirmation, SaveSyncConfirmation } from "@/features/syncs/components/sync-save-dialogs";
 import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
 import { formatSyncedAgo } from "@/features/syncs/relative-time";
+import { UnsavedChangesBar } from "@/features/syncs/components/unsaved-changes-bar";
 import { cn } from "@/utils/cn";
+import { draftProblem, isRiskySave } from "@/features/syncs/sync-draft";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
-import { STATE_LABELS, previewDirections, syncSettingsOf, type CalendarsById } from "@/features/syncs/syncs";
-import { deleteSync, patchSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
+import {
+  STATE_LABELS,
+  describeChange,
+  describeConflicts,
+  findDraftConflicts,
+  previewDirections,
+  syncSettingsOf,
+  type CalendarsById,
+} from "@/features/syncs/syncs";
+import { deleteSync, patchSync, updateSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
 
 export type SyncTab = "setup" | "activity";
+
+const PREVIEW_COLUMNS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]";
 
 const PATCH_KEYS = [
   "busyTitle", "destinationCalendarIds", "markPrivate", "memberCalendarIds", "mode", "name", "paused",
@@ -58,14 +71,32 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [edits, setEdits] = useState<Partial<SyncDefinition>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+
+  const draft = sync && { ...sync, ...edits };
+  const changes = sync && draft ? diffSyncChanges(sync, draft) : [];
+  const dirty = changes.length > 0;
+
+  // Switching between Setup and Activity only changes the search, so the draft carries across.
+  const blocker = useBlocker({
+    shouldBlockFn: ({ current, next }) => dirty && next.pathname !== current.pathname,
+    enableBeforeUnload: () => dirty,
+    withResolver: true,
+  });
 
   if (error) return <RouteShell backFallback="/dashboard/syncs" status="error" onRetry={() => { void mutate(); }} />;
-  if (!sync || !calendars) return <RouteShell backFallback="/dashboard/syncs" status="loading" />;
+  if (!sync || !draft || !calendars) return <RouteShell backFallback="/dashboard/syncs" status="loading" />;
 
   const calendarsById: CalendarsById = new Map(calendars.map((calendar) => [calendar.id, calendar] as const));
   const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
+  const otherSyncs = (syncs ?? []).filter((other) => other.id !== sync.id);
+  const conflicts = findDraftConflicts(draft, otherSyncs);
+  const problem = draftProblem(draft);
 
-  const change = (patch: Partial<SyncDefinition>) => {
+  const applyNow = (patch: Partial<SyncDefinition>) => {
     const body = toPatchBody(patch);
     if (Object.keys(body).length === 0) return;
     track(ANALYTICS_EVENTS.sync_updated, { field: Object.keys(body).join(",") });
@@ -84,7 +115,35 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
 
   const setPaused = (paused: boolean) => {
     track(paused ? ANALYTICS_EVENTS.sync_paused : ANALYTICS_EVENTS.sync_resumed);
-    change({ paused });
+    applyNow({ paused });
+  };
+
+  const save = async () => {
+    const body = toPatchBody(edits);
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const updated = await updateSync(syncId, body);
+      track(ANALYTICS_EVENTS.sync_updated, { field: Object.keys(body).join(",") });
+      await mutate(updated, { revalidate: false });
+      setEdits({});
+      void refresh(syncId);
+    } catch (saveFailure) {
+      setSaveError(resolveSyncError(saveFailure, "Failed to save this sync.", calendarsById));
+    } finally {
+      setSaving(false);
+      setReviewOpen(false);
+    }
+  };
+
+  const requestSave = () => {
+    if (isRiskySave(changes)) setReviewOpen(true);
+    else void save();
+  };
+
+  const discard = () => {
+    setEdits({});
+    setSaveError(null);
   };
 
   const handleDelete = async () => {
@@ -93,7 +152,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
       await deleteSync(syncId);
       track(ANALYTICS_EVENTS.sync_deleted);
       await refresh();
-      await navigate({ to: "/dashboard" });
+      await navigate({ ignoreBlocker: true, to: "/dashboard" });
     } catch (deleteError) {
       setMutationError(resolveSyncError(deleteError, "Failed to delete this sync.", calendarsById));
       setDeleting(false);
@@ -104,7 +163,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
 
   return (
     <div className="@container">
-      <div className={cn("grid grid-cols-1 gap-x-8", tab === "setup" && "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]")}>
+      <div className={cn("grid grid-cols-1 gap-x-8", tab === "setup" && PREVIEW_COLUMNS)}>
         <div className="flex min-w-0 flex-col gap-1.5">
           <StickyPageHeader className="gap-1.5">
             <div className="lg:hidden">
@@ -142,7 +201,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
                   label="Name"
                   value={sync.name}
                   onCommit={(name) => {
-                    if (syncNameSchema.allows(name)) change({ name });
+                    if (syncNameSchema.allows(name)) applyNow({ name });
                     else setMutationError("Sync name can't be empty.");
                   }}
                 />
@@ -155,12 +214,13 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
               </NavigationMenu>
               {sync.paused && <MenuHint tone="attention">Paused. Copies stay as they are, and new events wait until you resume.</MenuHint>}
               <SyncEditor
-                value={sync}
+                value={draft}
                 calendars={calendars}
-                otherSyncs={(syncs ?? []).filter((other) => other.id !== sync.id)}
+                otherSyncs={otherSyncs}
                 locked={locked}
                 previewClassName="@3xl:hidden"
-                onChange={change}
+                notice={conflicts.length > 0 && <MenuHint tone="attention">{describeConflicts(conflicts, calendarsById)}</MenuHint>}
+                onChange={(patch) => setEdits((current) => ({ ...current, ...patch }))}
               />
               <div className="pt-3">
                 <NavigationMenu>
@@ -180,6 +240,13 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
                 deleting={deleting}
                 onConfirm={() => void handleDelete()}
               />
+              <SaveSyncConfirmation
+                changes={[...new Set(changes.map((change) => describeChange(change, calendarsById)))]}
+                open={reviewOpen}
+                saving={saving}
+                onOpenChange={setReviewOpen}
+                onConfirm={() => void save()}
+              />
             </>
           ) : (
             <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
@@ -189,13 +256,28 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
           <aside className="hidden @3xl:block">
             <div className="sticky top-0">
               <SyncPreviewPanel
-                settings={syncSettingsOf(sync)}
-                directions={previewDirections(sync, calendarsById)}
+                settings={syncSettingsOf(draft)}
+                directions={previewDirections(draft, calendarsById)}
               />
             </div>
           </aside>
         )}
       </div>
+      <UnsavedChangesBar
+        columns={PREVIEW_COLUMNS}
+        show={dirty}
+        saving={saving}
+        canSave={problem === null && conflicts.length === 0}
+        problem={problem}
+        error={saveError}
+        onDiscard={discard}
+        onSave={requestSave}
+      />
+      <DiscardChangesConfirmation
+        open={blocker.status === "blocked"}
+        onKeepEditing={() => blocker.reset?.()}
+        onDiscard={() => blocker.proceed?.()}
+      />
     </div>
   );
 }

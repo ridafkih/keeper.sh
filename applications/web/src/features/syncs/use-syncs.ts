@@ -49,6 +49,11 @@ export const createSync = async (body: CreateSyncBody): Promise<SyncDetail> => {
   return response.json();
 };
 
+export const updateSync = async (syncId: string, body: PatchSyncBody): Promise<SyncDetail> => {
+  const response = await apiFetch(syncKey(syncId), { body: JSON.stringify(body), headers: JSON_HEADERS, method: "PATCH" });
+  return response.json();
+};
+
 export const deleteSync = async (syncId: string): Promise<void> => {
   await apiFetch(syncKey(syncId), { method: "DELETE" });
 };
