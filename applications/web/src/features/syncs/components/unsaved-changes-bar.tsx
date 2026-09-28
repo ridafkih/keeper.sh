@@ -2,6 +2,7 @@ import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import * as m from "motion/react-m";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { MenuGate } from "@/components/ui/primitives/menu-hint";
 import { Text } from "@/components/ui/primitives/text";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import { cn } from "@/utils/cn";
@@ -24,6 +25,7 @@ interface UnsavedChangesBarProps {
 
 export function UnsavedChangesBar({ columns, show, saving, canSave, problem, error, onDiscard, onSave }: UnsavedChangesBarProps) {
   const reduceMotion = useReducedMotion() ?? false;
+  const message = error ?? problem;
 
   return (
     <LazyMotion features={loadMotionFeatures}>
@@ -37,19 +39,19 @@ export function UnsavedChangesBar({ columns, show, saving, canSave, problem, err
             transition={reduceMotion ? INSTANT : TRANSITION}
           >
             <div className={cn("absolute inset-x-0 bottom-0 grid grid-cols-1 gap-x-8 lg:-bottom-[calc(var(--sidebar-pad-b)-var(--sidebar-pad-x))]", columns)}>
-              <div role="status" className="pointer-events-auto col-end-[-1] flex flex-col gap-1 rounded-2xl border border-border-elevated bg-background-elevated p-1 pl-3 shadow-xs">
-                <div className="flex items-center gap-1">
-                  <Text size="xs" tone="muted" className="min-w-0 flex-1 truncate">Unsaved changes</Text>
-                  <Button size="compact" variant="elevated" disabled={saving} onClick={onDiscard}>
-                    <ButtonText>Discard</ButtonText>
-                  </Button>
-                  <Button size="compact" disabled={saving || !canSave} onClick={onSave}>
-                    {saving && <LoaderCircle size={14} className="animate-spin" />}
-                    <ButtonText>Save</ButtonText>
-                  </Button>
-                </div>
-                {problem && <Text size="xs" className="pr-2 pb-1">{problem}</Text>}
-                {error && <Text size="xs" tone="danger" className="pr-2 pb-1">{error}</Text>}
+              <div role="status" className="pointer-events-auto col-end-[-1]">
+                <MenuGate active={message !== null} hint={message ?? ""} className="bg-background">
+                  <div className="flex items-center gap-1 rounded-2xl border border-border-elevated bg-background-elevated p-1 pl-3 shadow-xs">
+                    <Text size="xs" tone="muted" className="min-w-0 flex-1 truncate">Unsaved changes</Text>
+                    <Button size="compact" variant="elevated" disabled={saving} onClick={onDiscard}>
+                      <ButtonText>Discard</ButtonText>
+                    </Button>
+                    <Button size="compact" disabled={saving || !canSave} onClick={onSave}>
+                      {saving && <LoaderCircle size={14} className="animate-spin" />}
+                      <ButtonText>Save</ButtonText>
+                    </Button>
+                  </div>
+                </MenuGate>
               </div>
             </div>
           </m.div>

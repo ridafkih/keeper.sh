@@ -1,6 +1,7 @@
 import type { CSSProperties, ComponentPropsWithoutRef, PropsWithChildren, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { getCommercialMode } from "@/config/commercial";
+import { cn } from "@/utils/cn";
 import { Text } from "./text";
 
 type GateTone = "muted" | "attention";
@@ -78,6 +79,7 @@ interface MenuGateProps {
   action?: GateAction;
   /** Locked gates disable what they wrap; an advisory gate leaves it usable. */
   disableChildren?: boolean;
+  className?: string;
   children: ReactNode;
 }
 
@@ -88,12 +90,13 @@ function MenuGate({
   hint,
   action,
   disableChildren = false,
+  className,
   children,
 }: MenuGateProps) {
   if (!active) return <>{children}</>;
 
   return (
-    <div className={GATE_CLASS[tone]} style={STRIPE_STYLE[tone]}>
+    <div className={cn(GATE_CLASS[tone], className)} style={STRIPE_STYLE[tone]}>
       {disableChildren ? (
         <div className="pointer-events-none" aria-disabled="true">
           {children}
