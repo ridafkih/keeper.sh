@@ -14,6 +14,8 @@ import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import User from "lucide-react/dist/esm/icons/user";
 import { ErrorState } from "@/components/ui/primitives/error-state";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { signOut } from "@/lib/auth";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { apiFetch, fetcher } from "@/lib/fetcher";
@@ -86,45 +88,49 @@ function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col">
-      <SyncStatus />
-      <EventGraph />
-      <div className="flex flex-col gap-1.5">
-        <DashboardReauthNotice />
-        <DashboardSetupCard />
-        <CalendarSourcesMenu />
-        <DashboardSyncsMenu />
-        <CalendarsMenu />
-        <NavigationMenu>
-          <NavigationMenuLinkItem to="/dashboard/feedback">
-            <NavigationMenuItemIcon>
-              <MessageSquare size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Submit Feedback</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-          <NavigationMenuLinkItem to="/dashboard/report">
-            <NavigationMenuItemIcon>
-              <Bug size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Report a Problem</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
-        <PlanMenu />
-        <AccountsMenu />
-        <NavigationMenu>
-          <NavigationMenuButtonItem onClick={handleLogout}>
-            <NavigationMenuItemIcon>
-              <LogOut size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Logout</NavigationMenuItemLabel>
-          </NavigationMenuButtonItem>
-        </NavigationMenu>
-      </div>
-      <div className="pt-8 flex justify-center">
-        <KeeperLogo className="size-8 text-border-elevated self-center" />
-      </div>
+    <div className="flex flex-col lg:h-full">
+      <StickyPageHeader>
+        <SyncStatus />
+        <EventGraph />
+      </StickyPageHeader>
+      <PageBody>
+        <div className="flex flex-col gap-1.5">
+          <DashboardReauthNotice />
+          <DashboardSetupCard />
+          <CalendarSourcesMenu />
+          <DashboardSyncsMenu />
+          <CalendarsMenu />
+          <NavigationMenu>
+            <NavigationMenuLinkItem to="/dashboard/feedback">
+              <NavigationMenuItemIcon>
+                <MessageSquare size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Submit Feedback</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+            <NavigationMenuLinkItem to="/dashboard/report">
+              <NavigationMenuItemIcon>
+                <Bug size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Report a Problem</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+          </NavigationMenu>
+          <PlanMenu />
+          <AccountsMenu />
+          <NavigationMenu>
+            <NavigationMenuButtonItem onClick={handleLogout}>
+              <NavigationMenuItemIcon>
+                <LogOut size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Logout</NavigationMenuItemLabel>
+            </NavigationMenuButtonItem>
+          </NavigationMenu>
+        </div>
+        <div className="pt-8 flex justify-center">
+          <KeeperLogo className="size-8 text-border-elevated self-center" />
+        </div>
+      </PageBody>
     </div>
   );
 }

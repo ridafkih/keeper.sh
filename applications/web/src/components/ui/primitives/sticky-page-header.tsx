@@ -16,7 +16,8 @@ export function StickyPageHeader({ children, className }: PropsWithChildren<{ cl
       const element = ref.current;
       if (!element) return;
       const parent = resolveScrollParent(element);
-      const offset = parent ? parent.scrollTop : window.scrollY;
+      const body = element.parentElement?.querySelector<HTMLElement>("[data-page-scroller]");
+      const offset = (parent ? parent.scrollTop : window.scrollY) + (body?.scrollTop ?? 0);
       element.dataset.scrolled = offset > 0 ? "true" : "false";
     };
 
