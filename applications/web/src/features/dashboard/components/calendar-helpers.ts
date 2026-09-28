@@ -112,11 +112,6 @@ export function resolveColumnLayout(scrollerWidth: number, gutter: number): Colu
   return { column, gutter: Math.max(scrollerWidth - column * WEEK_VIEW_DAYS, 1) };
 }
 
-// While the frame is mid-tween, fractional columns move with it smoothly; they snap to whole pixels once it settles.
-export function resolveTweeningColumnLayout(scrollerWidth: number, gutter: number): ColumnLayout {
-  return { column: Math.max((scrollerWidth - gutter) / WEEK_VIEW_DAYS, 1), gutter };
-}
-
 export const sameColumnLayout = (left: ColumnLayout, right: ColumnLayout): boolean =>
   left.column === right.column && left.gutter === right.gutter;
 

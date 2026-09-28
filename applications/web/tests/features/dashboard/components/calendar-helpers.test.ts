@@ -5,7 +5,6 @@ import {
   getMonthGridDays,
   getWeekFetchRange,
   resolveColumnLayout,
-  resolveTweeningColumnLayout,
   sameColumnLayout,
   startOfVisibleWeek,
   WEEK_STARTS_ON,
@@ -66,9 +65,7 @@ describe("resolveColumnLayout", () => {
     expect(resolveColumnLayout(40, 52)).toEqual({ column: 1, gutter: 33 });
   });
 
-  it("keeps fractional columns and the nominal gutter while the frame is tweening", () => {
-    expect(resolveTweeningColumnLayout(1006, 52)).toEqual({ column: 954 / 7, gutter: 52 });
-    expect(resolveTweeningColumnLayout(40, 52)).toEqual({ column: 1, gutter: 52 });
+  it("tells whether two layouts match", () => {
     expect(sameColumnLayout({ column: 136, gutter: 54 }, { column: 136, gutter: 54 })).toBe(true);
     expect(sameColumnLayout({ column: 136, gutter: 54 }, { column: 136, gutter: 53 })).toBe(false);
   });

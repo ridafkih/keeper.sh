@@ -2,11 +2,10 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { flushSync } from "react-dom";
-import { atom, useAtomValue, useSetAtom, useStore } from "jotai";
+import { atom, useAtomValue, useSetAtom } from "jotai";
 import { cn } from "@/utils/cn";
 import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
-import { sidebarResizingAtom } from "@/state/sidebar-resizing";
 import {
   EVENT_GRAPH_DAYS_BEFORE,
   calendarHighlightSlotAtom,
@@ -42,7 +41,6 @@ import {
   HOURS,
   isSameDay,
   resolveColumnLayout,
-  resolveTweeningColumnLayout,
   sameColumnLayout,
   startOfDay,
   startOfVisibleWeek,
@@ -226,8 +224,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [visibleCenterOffset],
   );
   const highlightVisible = useAtomValue(highlightVisibleAtom);
-  const sidebarResizing = useAtomValue(sidebarResizingAtom);
-  const store = useStore();
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
@@ -291,9 +287,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     if (!el) return;
     const measure = (sync: boolean) => {
       if (el.clientWidth === 0) return;
-      const next = store.get(sidebarResizingAtom)
-        ? resolveTweeningColumnLayout(el.getBoundingClientRect().width, GUTTER_WIDTH)
-        : resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
+      const next = resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
       const apply = () => setColumns((current) => (sameColumnLayout(current, next) ? current : next));
       if (sync) flushSync(apply);
       else apply();
@@ -303,7 +297,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     const observer = new ResizeObserver(() => measure(true));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [store, sidebarResizing]);
+  }, []);
 
   // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day once the new widths are laid out.
   useLayoutEffect(() => {
@@ -420,10 +414,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className={cn(
-          "min-h-0 flex-1 overflow-auto overscroll-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          sidebarResizing ? "snap-none" : "snap-x snap-mandatory",
-        )}
+        className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto overscroll-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ scrollPaddingLeft: gutter }}
       >
         <div className="sticky top-0 z-40 flex w-max">
