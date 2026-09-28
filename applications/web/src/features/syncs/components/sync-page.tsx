@@ -34,7 +34,7 @@ import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel
 import { DiscardChangesConfirmation, SaveSyncConfirmation } from "@/features/syncs/components/sync-save-dialogs";
 import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
 import { formatSyncedAgo } from "@/features/syncs/relative-time";
-import { UnsavedChangesBar } from "@/features/syncs/components/unsaved-changes-bar";
+import { SYNC_PANE_COLUMNS, SyncActionBar } from "@/features/syncs/components/sync-action-bar";
 import { cn } from "@/utils/cn";
 import { draftProblem, isRiskySave } from "@/features/syncs/sync-draft";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
@@ -50,8 +50,6 @@ import {
 import { deleteSync, patchSync, updateSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
 
 export type SyncTab = "setup" | "activity";
-
-const PREVIEW_COLUMNS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]";
 
 const PATCH_KEYS = [
   "busyTitle", "destinationCalendarIds", "markPrivate", "memberCalendarIds", "mode", "name", "paused",
@@ -163,7 +161,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
 
   return (
     <div className="@container">
-      <div className={cn("grid grid-cols-1 gap-x-8", tab === "setup" && PREVIEW_COLUMNS)}>
+      <div className={cn("grid grid-cols-1 gap-x-8", tab === "setup" && SYNC_PANE_COLUMNS)}>
         <div className="flex min-w-0 flex-col gap-1.5">
           <StickyPageHeader className="gap-1.5">
             <div className="lg:hidden">
@@ -263,15 +261,13 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
           </aside>
         )}
       </div>
-      <UnsavedChangesBar
-        columns={PREVIEW_COLUMNS}
+      <SyncActionBar
         show={dirty}
-        saving={saving}
-        canSave={problem === null && conflicts.length === 0}
-        problem={problem}
-        error={saveError}
-        onDiscard={discard}
-        onSave={requestSave}
+        label="Unsaved changes"
+        message={saveError ?? problem}
+        busy={saving}
+        secondary={{ label: "Discard", onClick: discard }}
+        primary={{ label: "Save", onClick: requestSave, disabled: problem !== null || conflicts.length > 0 }}
       />
       <DiscardChangesConfirmation
         open={blocker.status === "blocked"}

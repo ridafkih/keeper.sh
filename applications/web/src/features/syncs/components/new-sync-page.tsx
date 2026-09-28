@@ -1,9 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
-import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { DashboardHeading1 } from "@/components/ui/primitives/dashboard-heading";
 import { MenuHint, PremiumHint } from "@/components/ui/primitives/menu-hint";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
@@ -15,6 +13,7 @@ import { canAddMore, useEntitlements } from "@/hooks/use-entitlements";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import type { CalendarSource } from "@/types/api";
 import { ProfileGallery } from "@/features/syncs/components/profile-gallery";
+import { SYNC_PANE_COLUMNS, SyncActionBar } from "@/features/syncs/components/sync-action-bar";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
@@ -44,10 +43,10 @@ function NewSyncHeader({ description }: { description: string }) {
   );
 }
 
-function NewSyncColumns({ children, aside }: { children: ReactNode; aside?: ReactNode }) {
+function NewSyncColumns({ children, aside, footer }: { children: ReactNode; aside?: ReactNode; footer?: ReactNode }) {
   return (
     <div className="@container">
-      <div className={cn("grid grid-cols-1 gap-x-8", aside && "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]")}>
+      <div className={cn("grid grid-cols-1 gap-x-8", aside && SYNC_PANE_COLUMNS)}>
         <div className="flex min-w-0 flex-col gap-1.5">{children}</div>
         {aside && (
           <aside className="hidden @3xl:block">
@@ -55,6 +54,7 @@ function NewSyncColumns({ children, aside }: { children: ReactNode; aside?: Reac
           </aside>
         )}
       </div>
+      {footer}
     </div>
   );
 }
@@ -121,6 +121,15 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
           directions={previewDirections(draft, calendarsById)}
         />
       }
+      footer={
+        <SyncActionBar
+          label="Not created yet"
+          message={createError ?? problem}
+          busy={creating}
+          secondary={{ label: "Change Profile", onClick: () => setDraft(null) }}
+          primary={{ label: "Create Sync", onClick: () => void create(), disabled: atLimit || problem !== null || conflicts.length > 0 }}
+        />
+      }
     >
       <NewSyncHeader description="Nothing syncs until you create it." />
       <NavigationMenu>
@@ -139,22 +148,7 @@ export function NewSyncPage({ search }: { search: NewSyncSearch }) {
         notice={conflicts.length > 0 && <MenuHint tone="attention">{describeConflicts(conflicts, calendarsById)}</MenuHint>}
         onChange={(patch) => setDraft({ ...draft, ...patch })}
       />
-      <div className="flex flex-col gap-1.5 pt-3">
-        {atLimit && <PremiumHint>Free plans include one sync.</PremiumHint>}
-        {problem && <Text size="sm" tone="muted" align="center">{problem}</Text>}
-        <Button
-          className="w-full justify-center"
-          disabled={creating || atLimit || problem !== null || conflicts.length > 0}
-          onClick={() => void create()}
-        >
-          {creating && <LoaderCircle size={16} className="animate-spin" />}
-          <ButtonText>Create Sync</ButtonText>
-        </Button>
-        <Button variant="elevated" className="w-full justify-center" onClick={() => setDraft(null)}>
-          <ButtonText>Pick a Different Profile</ButtonText>
-        </Button>
-        {createError && <Text size="sm" tone="danger" align="center">{createError}</Text>}
-      </div>
+      {atLimit && <div className="pt-3"><PremiumHint>Free plans include one sync.</PremiumHint></div>}
     </NewSyncColumns>
   );
 }
