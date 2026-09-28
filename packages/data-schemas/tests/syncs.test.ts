@@ -78,7 +78,7 @@ describe("sync bodies", () => {
 describe("validateSyncCalendars", () => {
   it("needs both ends of a one-way sync, without overlap", () => {
     expect(validateSyncCalendars(oneWay(["a"], ["b"]))).toBeNull();
-    expect(validateSyncCalendars(oneWay([], ["b"]))).toMatch(/at least one/);
+    expect(validateSyncCalendars(oneWay([], ["b"]))).toBe("Pick calendars to copy from and to.");
     expect(validateSyncCalendars(oneWay(["a"], ["a", "b"]))).toMatch(/itself/);
     expect(validateSyncCalendars(oneWay(["a", "a"], ["b"]))).toMatch(/once/);
   });

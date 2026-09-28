@@ -152,21 +152,21 @@ const normalizeSyncCalendars = (calendars: SyncCalendars): SyncCalendars => {
 const validateSyncCalendars = (calendars: SyncCalendars): string | null => {
   if (calendars.mode === "both_ways") {
     if (hasDuplicates(calendars.memberCalendarIds)) {
-      return "A calendar can only appear once in a sync.";
+      return "Each calendar can only appear once.";
     }
     if (calendars.memberCalendarIds.length < 2) {
-      return "Add at least two calendars to keep in step.";
+      return "Add at least two calendars.";
     }
     if (calendars.memberCalendarIds.length > MAX_BOTH_WAYS_MEMBERS) {
-      return `A both-ways sync can hold up to ${MAX_BOTH_WAYS_MEMBERS} calendars.`;
+      return `Both ways fits up to ${MAX_BOTH_WAYS_MEMBERS} calendars.`;
     }
     return null;
   }
   if (hasDuplicates(calendars.sourceCalendarIds) || hasDuplicates(calendars.destinationCalendarIds)) {
-    return "A calendar can only appear once in a sync.";
+    return "Each calendar can only appear once.";
   }
   if (calendars.sourceCalendarIds.length === 0 || calendars.destinationCalendarIds.length === 0) {
-    return "Pick at least one calendar to copy from and one to copy to.";
+    return "Pick calendars to copy from and to.";
   }
   const sources = new Set(calendars.sourceCalendarIds);
   if (calendars.destinationCalendarIds.some((calendarId) => sources.has(calendarId))) {

@@ -100,7 +100,7 @@ describe("pruneStaleIds", () => {
 
 describe("draft checks", () => {
   it("explains what's missing and builds a create body with a fallback name", () => {
-    expect(draftProblem(createSyncDraft())).toMatch(/at least one/);
+    expect(draftProblem(createSyncDraft())).toBe("Pick calendars to copy from and to.");
     const draft = createSyncDraft(null, { destinationCalendarIds: ["personal"], sourceCalendarIds: ["work"] });
     expect(draftProblem(draft)).toBeNull();
     expect(toCreateBody(draft, "Work → Personal")).toMatchObject({ mode: "one_way", name: "Work → Personal" });
