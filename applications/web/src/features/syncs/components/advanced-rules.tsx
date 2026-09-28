@@ -195,79 +195,85 @@ function RuleCard({ rule, isFirst, isLast, onChange, onMove, onRemove }: RuleCar
   };
 
   return (
-    <NavigationMenu>
-      <NavigationMenuEditableItem
-        value={rule.name}
-        onCommit={rename}
-        trailing={(
-          <div className="mr-2 flex shrink-0 items-center">
-            <RowIconButton label="Move rule up" disabled={isFirst} onClick={() => onMove(-1)}>
-              <ArrowUp size={14} />
-            </RowIconButton>
-            <RowIconButton label="Move rule down" disabled={isLast} onClick={() => onMove(1)}>
-              <ArrowDown size={14} />
-            </RowIconButton>
-            <RowIconButton label={`Remove ${rule.name}`} onClick={onRemove}>
-              <X size={14} />
-            </RowIconButton>
-          </div>
+    <div className="-mx-1 flex flex-col gap-1 rounded-[1.25rem] border border-border-elevated p-1">
+      <ul className="flex flex-col p-0.5">
+        <NavigationMenuEditableItem
+          value={rule.name}
+          onCommit={rename}
+          trailing={(
+            <div className="mr-2 flex shrink-0 items-center">
+              <RowIconButton label="Move rule up" disabled={isFirst} onClick={() => onMove(-1)}>
+                <ArrowUp size={14} />
+              </RowIconButton>
+              <RowIconButton label="Move rule down" disabled={isLast} onClick={() => onMove(1)}>
+                <ArrowDown size={14} />
+              </RowIconButton>
+              <RowIconButton label={`Remove ${rule.name}`} onClick={onRemove}>
+                <X size={14} />
+              </RowIconButton>
+            </div>
+          )}
+        />
+      </ul>
+      <NavigationMenu>
+        <NavigationMenuItem className="flex-wrap gap-2">
+          <Text size="sm" tone="muted">When an event matches</Text>
+          <SegmentedControl
+            label="Match"
+            value={rule.match}
+            options={[{ label: "All", value: "all" }, { label: "Any", value: "any" }]}
+            onChange={(match) => onChange({ ...rule, match })}
+          />
+          <Text size="sm" tone="muted">of these</Text>
+        </NavigationMenuItem>
+        {rule.conditions.map((condition, index) => (
+          <ConditionRow
+            key={`${condition.kind}-${index}`}
+            condition={condition}
+            onChange={(next) => setConditions(replaceAt(rule.conditions, index, next))}
+            onRemove={() => setConditions(removeAt(rule.conditions, index))}
+          />
+        ))}
+        {pending?.kind === "condition" && (
+          <ConditionRow
+            condition={pending.item}
+            onChange={(next) => { setPending(null); setConditions([...rule.conditions, next]); }}
+            onRemove={() => setPending(null)}
+          />
         )}
-      />
-      <NavigationMenuItem className="flex-wrap gap-2">
-        <Text size="sm" tone="muted">When an event matches</Text>
-        <SegmentedControl
-          label="Match"
-          value={rule.match}
-          options={[{ label: "All", value: "all" }, { label: "Any", value: "any" }]}
-          onChange={(match) => onChange({ ...rule, match })}
+        <AddRuleItem
+          label="Add a Condition"
+          options={availableConditionKinds(rule).map((kind) => ({ kind, label: CONDITION_LABELS[kind] }))}
+          disabled={pending !== null}
+          onAdd={addCondition}
         />
-        <Text size="sm" tone="muted">of these</Text>
-      </NavigationMenuItem>
-      {rule.conditions.map((condition, index) => (
-        <ConditionRow
-          key={`${condition.kind}-${index}`}
-          condition={condition}
-          onChange={(next) => setConditions(replaceAt(rule.conditions, index, next))}
-          onRemove={() => setConditions(removeAt(rule.conditions, index))}
+      </NavigationMenu>
+      <NavigationMenu>
+        <NavigationMenuItem>
+          <Text size="sm" tone="muted">Then</Text>
+        </NavigationMenuItem>
+        {rule.actions.map((action, index) => (
+          <ActionRow
+            key={`${action.kind}-${index}`}
+            action={action}
+            onChange={(next) => setActions(replaceAt(rule.actions, index, next))}
+            onRemove={() => setActions(removeAt(rule.actions, index))}
+          />
+        ))}
+        {pending?.kind === "action" && (
+          <ActionRow
+            action={pending.item}
+            onChange={(next) => { setPending(null); setActions([...rule.actions, next]); }}
+            onRemove={() => setPending(null)}
+          />
+        )}
+        <AddRuleItem
+          label="Add an Action"
+          options={availableActionKinds(rule.actions).map((kind) => ({ kind, label: ACTION_LABELS[kind] }))}
+          disabled={pending !== null}
+          onAdd={addAction}
         />
-      ))}
-      {pending?.kind === "condition" && (
-        <ConditionRow
-          condition={pending.item}
-          onChange={(next) => { setPending(null); setConditions([...rule.conditions, next]); }}
-          onRemove={() => setPending(null)}
-        />
-      )}
-      <AddRuleItem
-        label="Add a Condition"
-        options={availableConditionKinds(rule).map((kind) => ({ kind, label: CONDITION_LABELS[kind] }))}
-        disabled={pending !== null}
-        onAdd={addCondition}
-      />
-      <NavigationMenuItem>
-        <Text size="sm" tone="muted">Then</Text>
-      </NavigationMenuItem>
-      {rule.actions.map((action, index) => (
-        <ActionRow
-          key={`${action.kind}-${index}`}
-          action={action}
-          onChange={(next) => setActions(replaceAt(rule.actions, index, next))}
-          onRemove={() => setActions(removeAt(rule.actions, index))}
-        />
-      ))}
-      {pending?.kind === "action" && (
-        <ActionRow
-          action={pending.item}
-          onChange={(next) => { setPending(null); setActions([...rule.actions, next]); }}
-          onRemove={() => setPending(null)}
-        />
-      )}
-      <AddRuleItem
-        label="Add an Action"
-        options={availableActionKinds(rule.actions).map((kind) => ({ kind, label: ACTION_LABELS[kind] }))}
-        disabled={pending !== null}
-        onAdd={addAction}
-      />
-    </NavigationMenu>
+      </NavigationMenu>
+    </div>
   );
 }
