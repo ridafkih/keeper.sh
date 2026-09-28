@@ -55,8 +55,8 @@ interface AdvancedRulesProps {
 }
 
 const createRule = (): AdvancedRule => ({
-  actions: [{ kind: "skip" }],
-  conditions: [{ kind: "all_day" }],
+  actions: [],
+  conditions: [],
   id: crypto.randomUUID(),
   match: "all",
   name: "New rule",
