@@ -1,7 +1,10 @@
 import { ErrorResponse } from "@/utils/responses";
 import { calendarIdsBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
-import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
+import {
+  MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingMutationBusyError,
+} from "@/utils/source-destination-mappings";
 
 interface MappingRouteContext {
   params: Record<string, string>;
@@ -55,6 +58,10 @@ const mapMappingDomainError = (
 ): Response | null => {
   if (!(error instanceof Error)) {
     return null;
+  }
+
+  if (error instanceof MappingMutationBusyError) {
+    return ErrorResponse.conflict(error.message).toResponse();
   }
 
   if (error.message === missingCalendarMessage) {

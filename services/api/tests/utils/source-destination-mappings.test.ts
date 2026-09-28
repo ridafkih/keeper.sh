@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  MappingMutationBusyError,
   type MappingMutationSyncLock,
   runSetDestinationsForSource,
   runSetSourcesForDestination,
@@ -191,6 +192,123 @@ describe("runWithMappingMutationLocks", () => {
       "destination-a",
       "mapping-mutation:user-1",
     ]);
+  });
+});
+
+const createHandle = () => ({
+  isCurrent: () => Promise.resolve(true),
+  isHeld: () => Promise.resolve(true),
+  release: () => Promise.resolve(),
+});
+
+const createLatestWinsSyncLock = (): MappingMutationSyncLock => {
+  const holders = new Set<string>();
+  const waiters = new Map<string, symbol>();
+  const releases = new Map<string, (() => void)[]>();
+
+  const waitForRelease = (lockId: string): Promise<void> =>
+    new Promise((resolve) => {
+      releases.set(lockId, [...releases.get(lockId) ?? [], resolve]);
+    });
+
+  const release = (lockId: string): void => {
+    holders.delete(lockId);
+    const pending = releases.get(lockId) ?? [];
+    releases.delete(lockId);
+    for (const resolve of pending) {
+      resolve();
+    }
+  };
+
+  return {
+    acquire: async (lockId) => {
+      if (!holders.has(lockId)) {
+        holders.add(lockId);
+        return {
+          acquired: true,
+          handle: { ...createHandle(), release: () => Promise.resolve(release(lockId)) },
+        };
+      }
+      const token = Symbol(lockId);
+      waiters.set(lockId, token);
+      while (holders.has(lockId)) {
+        await waitForRelease(lockId);
+      }
+      if (waiters.get(lockId) !== token) {
+        return { acquired: false };
+      }
+      waiters.delete(lockId);
+      holders.add(lockId);
+      return {
+        acquired: true,
+        handle: { ...createHandle(), release: () => Promise.resolve(release(lockId)) },
+      };
+    },
+  };
+};
+
+describe("runWithMappingMutationLocks contention", () => {
+  it("queues a superseded mutation instead of failing it", async () => {
+    let attempts = 0;
+    const syncLock: MappingMutationSyncLock = {
+      acquire: (calendarId) => {
+        if (calendarId === "mapping-mutation:user-1") {
+          attempts += 1;
+          if (attempts < 3) {
+            return Promise.resolve({ acquired: false });
+          }
+        }
+        return Promise.resolve({ acquired: true, handle: createHandle() });
+      },
+    };
+
+    await expect(runWithMappingMutationLocks(
+      syncLock,
+      "user-1",
+      () => Promise.resolve(["destination-a"]),
+      () => Promise.resolve("done"),
+    )).resolves.toEqual({ destinationCalendarIds: ["destination-a"], result: "done" });
+    expect(attempts).toBe(3);
+  });
+
+  it("applies every overlapping mutation when a newer waiter supersedes an older one", async () => {
+    const syncLock = createLatestWinsSyncLock();
+    const applied: string[] = [];
+    const mutate = (label: string) => () =>
+      runWithMappingMutationLocks(
+        syncLock,
+        "user-1",
+        () => Promise.resolve([`destination-${label}`]),
+        async () => {
+          await Promise.resolve();
+          applied.push(label);
+          return label;
+        },
+      );
+
+    const results = await Promise.all(["a", "b", "c"].map((label) => mutate(label)()));
+
+    expect(results.map(({ result }) => result)).toEqual(["a", "b", "c"]);
+    expect(applied.toSorted()).toEqual(["a", "b", "c"]);
+  });
+
+  it("reports the user lock as busy once the acquire deadline passes", async () => {
+    let mutateCalled = false;
+    const syncLock: MappingMutationSyncLock = {
+      acquire: () => Promise.resolve({ acquired: false }),
+    };
+
+    await expect(runWithMappingMutationLocks(
+      syncLock,
+      "user-1",
+      () => Promise.resolve([]),
+      () => {
+        mutateCalled = true;
+        return Promise.resolve();
+      },
+      250,
+    )).rejects.toBeInstanceOf(MappingMutationBusyError);
+    expect(mutateCalled).toBe(false);
   });
 });
 
