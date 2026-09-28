@@ -167,11 +167,10 @@ interface RuleCardProps {
   onRemove: () => void;
 }
 
-// A rule always keeps at least one condition and one action, so removing the last one is refused.
 function RuleCard({ rule, isFirst, isLast, onChange, onMove, onRemove }: RuleCardProps) {
   const [pending, setPending] = useState<Pending>(null);
-  const setConditions = (conditions: RuleCondition[]) => conditions.length > 0 && onChange({ ...rule, conditions });
-  const setActions = (actions: RuleAction[]) => actions.length > 0 && onChange({ ...rule, actions: normalizeActions(actions) });
+  const setConditions = (conditions: RuleCondition[]) => onChange({ ...rule, conditions });
+  const setActions = (actions: RuleAction[]) => onChange({ ...rule, actions: normalizeActions(actions) });
 
   const addCondition = (kind: ConditionKind) => {
     const condition = createCondition(kind);

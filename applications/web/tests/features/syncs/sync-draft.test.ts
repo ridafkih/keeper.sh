@@ -105,6 +105,14 @@ describe("draft checks", () => {
     expect(draftProblem(draft)).toBeNull();
     expect(toCreateBody(draft, "Work → Personal")).toMatchObject({ mode: "one_way", name: "Work → Personal" });
   });
+
+  it("holds back a rule that's missing a condition or an action", () => {
+    const rule = { actions: [{ kind: "skip" as const }], conditions: [{ kind: "all_day" as const }], id: "r1", match: "all" as const, name: "Lunches" };
+    const draft = createSyncDraft(null, { destinationCalendarIds: ["personal"], sourceCalendarIds: ["work"] });
+    expect(draftProblem({ ...draft, rules: [rule] })).toBeNull();
+    expect(draftProblem({ ...draft, rules: [{ ...rule, conditions: [] }] })).toBe("Lunches needs a condition.");
+    expect(draftProblem({ ...draft, rules: [{ ...rule, actions: [] }] })).toBe("Lunches needs an action.");
+  });
 });
 
 describe("isRiskySave", () => {

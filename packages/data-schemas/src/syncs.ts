@@ -279,7 +279,7 @@ const compileSyncRules = (settings: SyncSettings): CompiledSyncRule[] => {
     });
   }
   for (const rule of settings.rules) {
-    if (rule.conditions.length > 0) {
+    if (rule.conditions.length > 0 && rule.actions.length > 0) {
       rules.push({ ...rule, actions: withPrivacy(rule.actions, settings.markPrivate) });
     }
   }

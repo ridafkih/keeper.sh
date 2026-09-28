@@ -139,6 +139,11 @@ describe("compileSyncRules", () => {
     expect(evaluateRules(compiled, facts({ title: "1:1 with Priya" }))).toMatchObject({ summary: "Meeting" });
   });
 
+  it("leaves out advanced rules that are still missing a condition or an action", () => {
+    const compiled = compileSyncRules(settings({ rules: [{ ...oneOnOnes, actions: [] }, { ...oneOnOnes, conditions: [] }] }));
+    expect(compiled.map((rule) => rule.id)).toEqual(["share"]);
+  });
+
   it("marks every copy private, including ones an advanced rule reshapes", () => {
     const compiled = compileSyncRules(settings({ markPrivate: true, rules: [oneOnOnes] }));
     expect(evaluateRules(compiled, facts({ title: "1:1 with Priya" }))).toMatchObject({ isPrivate: true });

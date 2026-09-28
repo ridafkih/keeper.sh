@@ -1,5 +1,5 @@
 import { DEFAULT_SYNC_SETTINGS, MAX_BOTH_WAYS_MEMBERS, SYNC_NAME_MAX_LENGTH, validateSyncCalendars } from "@keeper.sh/data-schemas";
-import type { CreateSyncBody, SyncCalendarRole, SyncCalendars, SyncChange, SyncDefinition, SyncMode } from "@keeper.sh/data-schemas";
+import type { AdvancedRule, CreateSyncBody, SyncCalendarRole, SyncCalendars, SyncChange, SyncDefinition, SyncMode } from "@keeper.sh/data-schemas";
 import type { CalendarSource } from "@/types/api";
 import { canPull, canPush } from "@/utils/calendars";
 import { SYNC_TEMPLATES, isSyncTemplateKey, type SyncTemplateKey } from "./templates";
@@ -138,7 +138,16 @@ export const pruneStaleIds = (draft: SyncDraft, calendars: CalendarSource[]): Sy
   return unchanged ? draft : next;
 };
 
-export const draftProblem = (draft: SyncCalendars): string | null => validateSyncCalendars(draft);
+const rulesProblem = (rules: readonly AdvancedRule[]): string | null => {
+  for (const rule of rules) {
+    if (rule.conditions.length === 0) return `${rule.name} needs a condition.`;
+    if (rule.actions.length === 0) return `${rule.name} needs an action.`;
+  }
+  return null;
+};
+
+export const draftProblem = (draft: SyncCalendars & Pick<SyncDefinition, "rules">): string | null =>
+  validateSyncCalendars(draft) ?? rulesProblem(draft.rules);
 
 // Dropping a calendar or flipping direction deletes or rewrites copies, so saving it asks first.
 export const isRiskySave = (changes: readonly SyncChange[]): boolean =>
