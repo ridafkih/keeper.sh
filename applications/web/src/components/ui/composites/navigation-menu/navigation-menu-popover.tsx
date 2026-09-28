@@ -1,10 +1,11 @@
-import { use, useCallback, useEffect, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
-import { AnimatePresence, LazyMotion } from "motion/react";
+import { use, useCallback, useEffect, useLayoutEffect, useRef, useState, type PropsWithChildren, type ReactNode } from "react";
+import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import { cn } from "@/utils/cn";
 import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
+import { resolveScrollParent } from "@/lib/scroll-parent";
 import {
   InsidePopoverContext,
   ItemDisabledContext,
@@ -30,6 +31,33 @@ const CONTENT_INITIAL = { height: 0, filter: "blur(0)", opacity: 0 };
 const CONTENT_ANIMATE = { height: "fit-content" as const, filter: "blur(0)", opacity: 1 };
 const CONTENT_EXIT = { height: 0, filter: "blur(4px)", opacity: 0 };
 const POPOVER_CONTENT_STYLE = { maxHeight: "16rem" } as const;
+const REVEAL_MARGIN_PX = 8;
+
+interface PanelParts {
+  anchor: HTMLElement;
+  panel: HTMLElement;
+  trigger: HTMLElement;
+  content: HTMLElement;
+  list: HTMLElement;
+}
+
+// The panel grows out from the trigger's centre, so its settled box is known before the animation starts.
+function revealPanel({ anchor, panel, trigger, content, list }: PanelParts, smooth: boolean): void {
+  const height = panel.offsetHeight - trigger.offsetHeight - content.offsetHeight + list.offsetHeight;
+  const anchorBox = anchor.getBoundingClientRect();
+  const top = anchorBox.top + anchorBox.height / 2 - height / 2;
+  const bottom = top + height;
+
+  const scroller = resolveScrollParent(anchor);
+  const visibleTop = (scroller ? scroller.getBoundingClientRect().top : 0) + REVEAL_MARGIN_PX;
+  const visibleBottom = visibleTop + (scroller ? scroller.clientHeight : window.innerHeight) - REVEAL_MARGIN_PX * 2;
+
+  const overTop = top - visibleTop;
+  const overBottom = bottom - visibleBottom;
+  const delta = overTop < 0 ? overTop : Math.max(0, Math.min(overBottom, overTop));
+  if (delta === 0) return;
+  (scroller ?? window).scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
+}
 
 type NavigationMenuPopoverProps = {
   trigger: ReactNode;
@@ -139,15 +167,30 @@ export function NavigationMenuPopover({
 }
 
 function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
-  const { triggerContent } = usePopover();
+  const { expanded, triggerContent } = usePopover();
   const variant = use(MenuVariantContext);
+  const reduceMotion = useReducedMotion() ?? false;
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const [anchor, panel, trigger, content, list] = [anchorRef, panelRef, triggerRef, contentRef, listRef].map((ref) => ref.current);
+    if (!anchor || !panel || !trigger || !content || !list) return;
+    revealPanel({ anchor, panel, trigger, content, list }, !reduceMotion);
+  }, [expanded, reduceMotion]);
 
   return (
     <m.div
+      ref={anchorRef}
       className="absolute grid place-items-center -inset-0.75 pointer-events-none z-20"
       initial={POPOVER_INITIAL}
     >
       <m.div
+        ref={panelRef}
         className={navigationMenuStyle({
           variant,
           className: "w-full overflow-hidden pointer-events-auto",
@@ -157,6 +200,7 @@ function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
         exit={SHADOW_HIDDEN}
       >
         <m.div
+          ref={triggerRef}
           className="flex flex-col justify-end"
           initial={TRIGGER_INITIAL}
           animate={TRIGGER_ANIMATE}
@@ -171,13 +215,14 @@ function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
           </div>
         </m.div>
         <m.div
+          ref={contentRef}
           className="overflow-hidden"
           initial={CONTENT_INITIAL}
           animate={CONTENT_ANIMATE}
           exit={CONTENT_EXIT}
         >
           <InsidePopoverContext value>
-            <div className="overflow-y-auto" style={POPOVER_CONTENT_STYLE}>
+            <div ref={listRef} className="overflow-y-auto" style={POPOVER_CONTENT_STYLE}>
               {children}
             </div>
           </InsidePopoverContext>
