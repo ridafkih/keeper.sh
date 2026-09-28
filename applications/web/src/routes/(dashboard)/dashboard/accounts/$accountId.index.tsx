@@ -12,7 +12,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { MenuGate } from "@/components/ui/primitives/menu-hint";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
-import { fetcher, apiFetch } from "@/lib/fetcher";
+import { fetcher, apiFetch, HttpError } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { formatDate } from "@/lib/time";
 import { invalidateAccountsAndSources } from "@/lib/swr";
@@ -63,15 +63,19 @@ function CalendarList({ calendars, accountId }: { calendars: CalendarSource[]; a
   ));
 }
 
+const ACCOUNT_REAUTH_REQUIRED_STATUS = 409;
+
 function RefreshCalendarsItem({ accountId }: { accountId: string }) {
   const { mutate: globalMutate } = useSWRConfig();
   const [isRefreshing, startRefreshTransition] = useTransition();
   const [result, setResult] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [requiresReconnect, setRequiresReconnect] = useState(false);
 
   const handleRefresh = () => {
     setResult(null);
     setRefreshError(null);
+    setRequiresReconnect(false);
 
     startRefreshTransition(async () => {
       try {
@@ -90,6 +94,10 @@ function RefreshCalendarsItem({ accountId }: { accountId: string }) {
         await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
       } catch (err) {
         setRefreshError(resolveErrorMessage(err, "Failed to refresh calendars."));
+        if (err instanceof HttpError && err.status === ACCOUNT_REAUTH_REQUIRED_STATUS) {
+          setRequiresReconnect(true);
+          await invalidateAccountsAndSources(globalMutate, `/api/accounts/${accountId}`);
+        }
       }
     });
   };
@@ -101,6 +109,11 @@ function RefreshCalendarsItem({ accountId }: { accountId: string }) {
       </NavigationMenuButtonItem>
       {result && <Text size="sm" tone="muted" className="px-0.5">{result}</Text>}
       {refreshError && <Text size="sm" tone="danger" className="px-0.5">{refreshError}</Text>}
+      {requiresReconnect && (
+        <NavigationMenuLinkItem to={`/dashboard/accounts/${accountId}/reconnect`}>
+          <NavigationMenuItemLabel>Reconnect Account</NavigationMenuItemLabel>
+        </NavigationMenuLinkItem>
+      )}
     </>
   );
 }

@@ -76,6 +76,37 @@ describe("listUserCalendars", () => {
       status: 401,
     });
   });
+
+  it("requires reauthentication when the grant lacks calendar list permission", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(Response.json({
+      error: {
+        code: 403,
+        errors: [{ reason: "insufficientPermissions" }],
+        message: "Request had insufficient authentication scopes.",
+        status: "PERMISSION_DENIED",
+      },
+    }, { status: 403 }))));
+
+    await expect(listUserCalendars("access-token")).rejects.toMatchObject({
+      authRequired: true,
+      status: 403,
+    });
+  });
+
+  it("does not treat a rate-limited listing as an authentication failure", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(Response.json({
+      error: {
+        code: 403,
+        errors: [{ reason: "userRateLimitExceeded" }],
+        message: "Rate Limit Exceeded",
+      },
+    }, { status: 403 }))));
+
+    await expect(listUserCalendars("access-token")).rejects.toMatchObject({
+      authRequired: false,
+      status: 403,
+    });
+  });
 });
 
 const originalFetch = globalThis.fetch;
