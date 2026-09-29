@@ -340,6 +340,12 @@ docker compose up -d
 
 With all said and done, you can access Keeper.sh at http://localhost/. You can use a reverse-proxy like Nginx or Caddy to put Keeper.sh behind a domain on your network.
 
+### Run `keeper-standalone` with Easypanel
+
+[Easypanel](https://easypanel.io) is a self-hosted Docker deployment platform, and it maintains a one-click deployment template for Keeper.sh (`keeper-standalone`), with the Postgres volume and auth secrets wired up automatically.
+
+[![Deploy on Easypanel](https://easypanel.io/img/deploy-on-easypanel-40.svg)](https://easypanel.io/templates/keeper)
+
 ## Collective Services Image
 
 If you'd like to bring your own Redis and PostgreSQL, you can use the `keeper-services` image. This contains the `cron`, `worker`, `web` and `api` services in one.
