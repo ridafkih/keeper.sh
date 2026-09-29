@@ -32,6 +32,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   unzip \
   && rm -rf /var/lib/apt/lists/*
 
+RUN curl --version | grep -qw NTLM
+
 RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:${PATH}"
 

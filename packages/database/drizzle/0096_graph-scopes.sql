@@ -1,0 +1,1 @@
+ALTER TABLE "oauth_credentials" ADD COLUMN "microsoftScope" text;

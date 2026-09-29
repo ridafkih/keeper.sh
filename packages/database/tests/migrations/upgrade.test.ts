@@ -215,6 +215,29 @@ describe("migration runner against postgres", () => {
     await expect(isRuntimeReady(databaseUrl)).resolves.toBe(true);
   });
 
+  it("upgrades the pre-connector schema without losing credentials and preserves new configuration on rerun", async () => {
+    const databaseUrl = await createDatabase("keeper_migration_connectors");
+    await applyReleasedSchemaState(databaseUrl, 93);
+    await withConnection(databaseUrl, async (client) => {
+      await client.query(`INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt") VALUES ('connector-user', 'Migration test', 'migration@example.test', true, now(), now())`);
+      await client.query(`INSERT INTO oauth_credentials ("userId", provider, email, "accessToken", "refreshToken", "expiresAt") VALUES ('connector-user', 'outlook', 'migration@example.test', 'fixture-access', 'fixture-refresh', now() + interval '1 hour')`);
+    });
+    await runMigrationRunner(databaseUrl);
+    await withConnection(databaseUrl, async (client) => {
+      const result = await client.query(`SELECT "accessToken", "refreshToken", "microsoftClientId", "microsoftTenant", "microsoftScope" FROM oauth_credentials`);
+      expect(result.rows).toEqual([{ accessToken: "fixture-access", refreshToken: "fixture-refresh", microsoftClientId: null, microsoftTenant: null, microsoftScope: null }]);
+      const tables = await client.query(`SELECT to_regclass('ews_credentials')::text AS credentials, to_regclass('ews_calendar_state')::text AS state`);
+      expect(tables.rows[0]).toEqual({ credentials: "ews_credentials", state: "ews_calendar_state" });
+      await client.query(`UPDATE oauth_credentials SET "microsoftClientId"='11111111-1111-4111-8111-111111111111', "microsoftTenant"='organizations', "microsoftScope"='openid profile offline_access'`);
+    });
+    await runMigrationRunner(databaseUrl);
+    await withConnection(databaseUrl, async (client) => {
+      const result = await client.query(`SELECT "accessToken", "refreshToken", "microsoftClientId", "microsoftTenant", "microsoftScope" FROM oauth_credentials`);
+      expect(result.rows[0]).toEqual({ accessToken: "fixture-access", refreshToken: "fixture-refresh", microsoftClientId: "11111111-1111-4111-8111-111111111111", microsoftTenant: "organizations", microsoftScope: "openid profile offline_access" });
+    });
+    await expect(isRuntimeReady(databaseUrl)).resolves.toBe(true);
+  });
+
   it("is a no-op when re-run over an already migrated database", async () => {
     const databaseUrl = await createDatabase("keeper_migration_rerun");
     await runMigrationRunner(databaseUrl);

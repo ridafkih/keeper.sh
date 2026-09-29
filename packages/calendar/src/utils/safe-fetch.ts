@@ -515,5 +515,5 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     }
   };
 
-export { createSafeFetch, getWithheldCredentials, UrlSafetyError, validateUrlSafety };
+export { resolveConnection, createSafeFetch, getWithheldCredentials, UrlSafetyError, validateUrlSafety };
 export type { SafeFetchOptions, WithheldCredentials };

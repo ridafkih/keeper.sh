@@ -43,10 +43,10 @@ const resolveTokenRefresher = (provider: string, config: RegistrarContextConfig)
     });
   }
 
-  if (provider === "outlook" && config.microsoftClientId && config.microsoftClientSecret) {
+  if (provider === "outlook") {
     return createMicrosoftTokenRefresher({
-      clientId: config.microsoftClientId,
-      clientSecret: config.microsoftClientSecret,
+      clientId: config.microsoftClientId ?? "",
+      clientSecret: config.microsoftClientSecret ?? "",
     });
   }
 
@@ -103,6 +103,7 @@ const resolveFreshAccessToken = async (
   const rawRefresh = resolveTokenRefresher(provider, config);
   if (rawRefresh) {
     await ensureValidToken(tokenState, createCoordinatedRefresher({
+        microsoft: provider === "outlook",
       calendarAccountId: credentials.calendarAccountId,
       database: config.database,
       oauthCredentialId: credentials.oauthCredentialId,
