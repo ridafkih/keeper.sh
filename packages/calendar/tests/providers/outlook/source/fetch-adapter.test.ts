@@ -5,6 +5,7 @@ import {
   resolveSyncTokenForWindow,
 } from "../../../../src/core/oauth/sync-token";
 import { createOutlookSourceFetcher } from "../../../../src/providers/outlook/source/fetch-adapter";
+import { clearMasterCategoryColorsCache } from "../../../../src/providers/outlook/source/utils/fetch-master-categories";
 import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
 
 const CALENDAR_ID = "calendar-id";
@@ -39,6 +40,7 @@ fetchOutlookDeltaWithoutSuccessor.preconnect = originalFetch.preconnect;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+  clearMasterCategoryColorsCache();
 });
 
 describe("createOutlookSourceFetcher", () => {
@@ -68,6 +70,46 @@ describe("createOutlookSourceFetcher", () => {
       requiresBackfill: false,
       syncToken: rawDeltaLink,
     });
+  });
+
+  it.each([
+    { categoriesResponse: () => Response.json({}, { status: 403 }), color: globalThis.undefined, unresolved: true },
+    {
+      categoriesResponse: () => Response.json({ value: [{ color: "preset7", displayName: "Work" }] }),
+      color: "#5ca9e5",
+      unresolved: globalThis.undefined,
+    },
+  ])("flags event colors as unresolved only when the category lookup fails", async (scenario) => {
+    const start = new Date(Date.now() + 86_400_000);
+    const end = new Date(start.getTime() + 3_600_000);
+    const queuedFetch = (input: Request | URL | string): Promise<Response> => {
+      if (String(input).includes("masterCategories")) {
+        return Promise.resolve(scenario.categoriesResponse());
+      }
+      return Promise.resolve(Response.json({
+        "@odata.deltaLink": "https://graph.microsoft.com/delta?$deltatoken=next",
+        value: [{
+          categories: ["Work"],
+          end: { dateTime: end.toISOString(), timeZone: "UTC" },
+          iCalUId: "external-uid-1",
+          id: "outlook-event-id-1",
+          start: { dateTime: start.toISOString(), timeZone: "UTC" },
+        }],
+      }));
+    };
+    queuedFetch.preconnect = originalFetch.preconnect;
+    globalThis.fetch = queuedFetch;
+
+    const result = await createOutlookSourceFetcher({
+      accessToken: "test-token",
+      calendarId: CALENDAR_ID,
+      plan: TEST_PLAN,
+      externalCalendarId: "calendar-id",
+      syncToken: null,
+    }).fetchEvents();
+
+    expect(result.eventColorsUnresolved).toBe(scenario.unresolved);
+    expect(result.events[0]?.color).toBe(scenario.color);
   });
 
   it("reports changed provider IDs without storing delta events outside the sync window", async () => {

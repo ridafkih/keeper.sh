@@ -50,6 +50,7 @@ const readExistingCalendars = async (
   const rows = await transaction
     .select({
       calendarUrl: calendarsTable.calendarUrl,
+      color: calendarsTable.color,
       createdAt: calendarsTable.createdAt,
       externalCalendarId: calendarsTable.externalCalendarId,
       id: calendarsTable.id,
@@ -155,6 +156,7 @@ const buildInsertRow = (
   accountId: input.accountId,
   calendarType: input.calendarType,
   capabilities: resolveCapabilities(calendar.writable),
+  color: calendar.color,
   name: calendar.name,
   originalName: calendar.name,
   userId: input.userId,
@@ -221,6 +223,13 @@ const applyCalendarRediscoveryPlan = (
         .update(calendarsTable)
         .set({ calendarUrl: retarget.calendarUrl })
         .where(eq(calendarsTable.id, retarget.id));
+    }
+
+    for (const recolor of plan.toSetColor) {
+      await transaction
+        .update(calendarsTable)
+        .set({ color: recolor.color })
+        .where(eq(calendarsTable.id, recolor.id));
     }
 
     await transaction

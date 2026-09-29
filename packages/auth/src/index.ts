@@ -259,7 +259,7 @@ const createAuth = (config: AuthConfig) => {
         return {};
       },
       prompt: "consent",
-      scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
+      scope: ["offline_access", "User.Read", "Calendars.ReadWrite", "MailboxSettings.Read"],
     };
   }
 

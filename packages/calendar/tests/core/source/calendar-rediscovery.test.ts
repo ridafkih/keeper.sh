@@ -15,11 +15,13 @@ const PLAN_KEYS = [
   "toMarkUnavailable",
   "toRetargetUrl",
   "toRevive",
+  "toSetColor",
   "unchangedCount",
 ];
 
 const discovered = (overrides: Partial<DiscoveredCalendar> = {}): DiscoveredCalendar => ({
   calendarUrl: null,
+  color: null,
   externalCalendarId: "external-1",
   identityKey: "external-1",
   name: "Work",
@@ -29,6 +31,7 @@ const discovered = (overrides: Partial<DiscoveredCalendar> = {}): DiscoveredCale
 
 const existing = (overrides: Partial<ExistingCalendar> = {}): ExistingCalendar => ({
   calendarUrl: null,
+  color: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   id: "calendar-1",
   identityKey: "external-1",
@@ -100,6 +103,34 @@ describe("planCalendarRediscovery", () => {
     expect(touched.length).toBe(new Set(touched).size);
   });
 
+  it("recolors a matched calendar whose provider color changed", () => {
+    const plan = planCalendarRediscovery({
+      discovered: [discovered({ color: "#33b679" })],
+      existing: [existing({ color: "#d50000" })],
+    });
+
+    expect(plan.toSetColor).toEqual([{ color: "#33b679", id: "calendar-1" }]);
+  });
+
+  it("clears a stored color the provider no longer reports and skips unchanged ones", () => {
+    const plan = planCalendarRediscovery({
+      discovered: [
+        discovered({ color: null, identityKey: "external-1" }),
+        discovered({
+          color: "#9fe1e7",
+          externalCalendarId: "external-2",
+          identityKey: "external-2",
+        }),
+      ],
+      existing: [
+        existing({ color: "#d50000", id: "calendar-1", identityKey: "external-1" }),
+        existing({ color: "#9fe1e7", id: "calendar-2", identityKey: "external-2" }),
+      ],
+    });
+
+    expect(plan.toSetColor).toEqual([{ color: null, id: "calendar-1" }]);
+  });
+
   it("leaves a provider-side rename alone so a user rename survives", () => {
     const plan = planCalendarRediscovery({
       discovered: [discovered({ name: "Renamed On The Server" })],
@@ -138,6 +169,7 @@ describe("planCalendarRediscovery", () => {
       discovered: [caldavDiscovered("https://cloud.example.com/dav/bob/My%20Work")],
       existing: [{
         calendarUrl: "https://cloud.example.com/dav/bob/My Work",
+        color: null,
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
         id: "calendar-1",
         identityKey: "/dav/bob/My Work",

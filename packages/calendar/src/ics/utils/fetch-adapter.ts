@@ -2,6 +2,7 @@ import type { SourceEvent } from "../../core/types";
 import type { FetchEventsResult } from "../../core/sync-engine/ingest";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
 import { coerceCompliantDate } from "../patches/coerce-compliant-date";
+import { resolveIcsColor } from "../../core/colors/normalize";
 import { parseIcsCalendarLenient } from "./lenient-parser";
 import { parseIcsEventsWithDiagnostics } from "./parse-ics-events";
 import { pullRemoteCalendar } from "./pull-remote-calendar";
@@ -337,7 +338,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     }
     const recurrenceDateUids = collectRecurrenceDateEventUids(ical);
     const snapshotResult = await prepareCalendarSnapshot(config.database, config.calendarId, ical);
-    const { calendarTimeZone, normalized, parsed, recurrenceTimeZones } = measureSyncSegment(
+    const { calendarColor, calendarTimeZone, normalized, parsed, recurrenceTimeZones } = measureSyncSegment(
       "work.transform_ms",
       () => {
         const initialCalendar = parseIcsCalendarLenient({
@@ -355,6 +356,9 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         }
         const diagnosed = parseIcsEventsWithDiagnostics(calendar);
         return {
+          calendarColor: resolveIcsColor(initialCalendar.nonStandard?.appleCalendarColor)
+            ?? resolveIcsColor(initialCalendar.nonStandard?.color)
+            ?? null,
           calendarTimeZone: timeZone,
           normalized: normalizedIcal,
           parsed: diagnosed,
@@ -367,6 +371,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
     );
     let events: SourceEvent[] = recurrenceTimeZones.events.map((event) => ({
       availability: event.availability,
+      color: event.color,
       description: event.description,
       endTime: event.endTime,
       exceptionDates: event.exceptionDates,
@@ -411,6 +416,7 @@ const createIcsSourceFetcher = (config: IcsSourceFetcherConfig): IcsSourceFetche
         unrepresentable: parsed.unrepresentableCount,
       },
       selfAuthoredEventCount: parsed.selfAuthoredCount,
+      calendarColor,
       syncWindow,
       coverage: {
         futureRange,

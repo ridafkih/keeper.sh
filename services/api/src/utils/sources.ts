@@ -52,6 +52,7 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
       readExistingEvents: () => transaction
         .select({
           availability: eventStatesTable.availability,
+          color: eventStatesTable.color,
           description: eventStatesTable.description,
           endTime: eventStatesTable.endTime,
           exceptionDates: eventStatesTable.exceptionDates,
@@ -92,16 +93,20 @@ const createIngestionPersistenceTransaction = (calendarId: string) =>
           await persistCalendarSnapshot(transaction, calendarId, changes.snapshot);
         }
 
-        if (changes.coverage) {
+        const calendarUpdate = {
+          ...(changes.calendarColor !== globalThis.undefined && { color: changes.calendarColor }),
+          ...(changes.coverage && {
+            ingestFutureRange: changes.coverage.futureRange,
+            ingestHistoricRange: changes.coverage.historicRange,
+            ingestWindowEnd: changes.coverage.window.timeMax,
+            ingestWindowRecordedAt: new Date(),
+            ingestWindowStart: changes.coverage.window.timeMin,
+          }),
+        };
+        if (Object.keys(calendarUpdate).length > 0) {
           await transaction
             .update(calendarsTable)
-            .set({
-              ingestFutureRange: changes.coverage.futureRange,
-              ingestHistoricRange: changes.coverage.historicRange,
-              ingestWindowEnd: changes.coverage.window.timeMax,
-              ingestWindowRecordedAt: new Date(),
-              ingestWindowStart: changes.coverage.window.timeMin,
-            })
+            .set(calendarUpdate)
             .where(eq(calendarsTable.id, calendarId));
         }
       },

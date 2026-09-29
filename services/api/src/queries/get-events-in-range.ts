@@ -56,6 +56,7 @@ const getSourcesForUser = async (
 
   const sources = await database
     .select({
+      calendarColor: calendarsTable.color,
       id: calendarsTable.id,
       name: calendarsTable.name,
       provider: calendarAccountsTable.provider,
@@ -70,7 +71,13 @@ const getSourcesForUser = async (
   const sourceMap = new Map(
     sources.map((source) => [
       source.id,
-      { name: source.name, provider: source.provider, url: source.url, userId: source.userId },
+      {
+        calendarColor: source.calendarColor,
+        name: source.name,
+        provider: source.provider,
+        url: source.url,
+        userId: source.userId,
+      },
     ]),
   );
 
@@ -178,6 +185,7 @@ const getEventsInRange = async (
     .select({
       availability: eventStatesTable.availability,
       calendarId: eventStatesTable.calendarId,
+      color: eventStatesTable.color,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
       exceptionDates: eventStatesTable.exceptionDates,
