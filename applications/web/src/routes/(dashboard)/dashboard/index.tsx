@@ -26,6 +26,7 @@ import {
   refreshCalendarsResponseSchema,
 } from "@/features/dashboard/components/refresh-summary";
 import KeeperLogo from "@/assets/keeper.svg?react";
+import { CalendarColorDot } from "@/features/dashboard/components/calendar-color-dot";
 import { EventGraph } from "@/features/dashboard/components/event-graph";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import type { CalendarAccount, CalendarSource } from "@/types/api";
@@ -287,12 +288,12 @@ function CalendarsMenu() {
             <NavigationMenuItemIcon>
               <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel
-              className="shrink-0"
-              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
-            >
-              {calendar.name}
-            </NavigationMenuItemLabel>
+            <span className="flex shrink-0 items-center gap-2">
+              <CalendarColorDot color={calendar.color} className={calendar.unavailableSince ? "opacity-40" : undefined} />
+              <NavigationMenuItemLabel tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}>
+                {calendar.name}
+              </NavigationMenuItemLabel>
+            </span>
             <NavigationMenuItemTrailing
               className="overflow-hidden"
               indicator={
