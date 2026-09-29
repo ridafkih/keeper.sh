@@ -1,4 +1,6 @@
 import { useState, type PropsWithChildren } from "react";
+import Check from "lucide-react/dist/esm/icons/check";
+import Funnel from "lucide-react/dist/esm/icons/funnel";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
@@ -15,6 +17,8 @@ import {
   NavigationMenuItemTrailing,
   NavigationMenuLinkItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
+import { usePopover } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import type { CalendarSource } from "@/types/api";
 import { cn } from "@/utils/cn";
 import {
@@ -58,6 +62,8 @@ export function SyncActivity({ sync, calendars }: SyncActivityProps) {
     .filter((destination) => destination.problem === "reauth")
     .map((destination) => calendarName(calendarsById, destination.calendarId));
   const days = groupActivity(entries, filter);
+  const pickCalendar = (calendarId: string | null) => setFilter((current) => ({ ...current, calendarId }));
+  const pickFromLog = destinationIds.length > 1 ? pickCalendar : undefined;
 
   return (
     <>
@@ -84,7 +90,7 @@ export function SyncActivity({ sync, calendars }: SyncActivityProps) {
         </div>
       )}
       {/* The day headings stick at top-12, right under this bar, so it keeps to one row. */}
-      <div className="relative z-[4] -mx-0.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 bg-background px-0.5 pt-2.5 pb-2 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-background after:to-transparent lg:sticky lg:top-0 lg:-mx-(--sidebar-pad-x) lg:h-12 lg:flex-nowrap lg:px-[calc(var(--sidebar-pad-x)+0.125rem)] lg:pt-2">
+      <div className="relative z-[4] -mx-0.5 flex flex-wrap has-[[data-popover-open]]:z-20 items-center justify-between gap-x-3 gap-y-2 bg-background px-0.5 pt-2.5 pb-2 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-3 after:bg-linear-to-b after:from-background after:to-transparent lg:sticky lg:top-0 lg:-mx-(--sidebar-pad-x) lg:h-12 lg:flex-nowrap lg:px-[calc(var(--sidebar-pad-x)+0.125rem)] lg:pt-2">
         <div className="shrink-0">
           <SegmentedControl
             label="Show"
@@ -94,24 +100,14 @@ export function SyncActivity({ sync, calendars }: SyncActivityProps) {
           />
         </div>
         {destinationIds.length > 1 && (
-          <div className={cn("flex min-w-0 max-w-full items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", filter.kind === "changes" && "pointer-events-none opacity-40")}>
-            <FilterChip pressed={filter.calendarId === null} onClick={() => setFilter((current) => ({ ...current, calendarId: null }))}>
-              All Calendars
-            </FilterChip>
-            {destinationIds.map((calendarId) => {
-              const calendar = calendarsById.get(calendarId);
-              return (
-                <FilterChip
-                  key={calendarId}
-                  pressed={filter.calendarId === calendarId}
-                  onClick={() => setFilter((current) => ({ ...current, calendarId }))}
-                >
-                  {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={12} />}
-                  {calendarName(calendarsById, calendarId)}
-                </FilterChip>
-              );
-            })}
-          </div>
+          <CalendarFilterMenu
+            calendarIds={destinationIds}
+            calendarsById={calendarsById}
+            problems={new Set(problems.map((destination) => destination.calendarId))}
+            value={filter.calendarId}
+            disabled={filter.kind === "changes"}
+            onChange={pickCalendar}
+          />
         )}
       </div>
       {data && entries.length === 0 && !hasMore && (
@@ -124,7 +120,7 @@ export function SyncActivity({ sync, calendars }: SyncActivityProps) {
           {hasMore ? "Nothing matches in what's loaded so far." : "Nothing matches these filters."}
         </Text>
       )}
-      {days.map((day) => <ActivityDaySection key={day.key} day={day} calendarsById={calendarsById} />)}
+      {days.map((day) => <ActivityDaySection key={day.key} day={day} calendarsById={calendarsById} onPickCalendar={pickFromLog} />)}
       {hasMore && (
         <div className="pt-3">
           <NavigationMenu>
@@ -204,7 +200,7 @@ function ActivityDigest({ summary, calendarNames, waitingOn }: { summary: SyncAc
   );
 }
 
-function ActivityDaySection({ day, calendarsById }: { day: ActivityDay; calendarsById: SourcesById }) {
+function ActivityDaySection({ day, calendarsById, onPickCalendar }: { day: ActivityDay; calendarsById: SourcesById; onPickCalendar?: (calendarId: string) => void }) {
   const totals = [day.added > 0 && `+${day.added} new`, day.removed > 0 && `−${day.removed} removed`].filter(Boolean).join(" · ");
 
   return (
@@ -230,7 +226,7 @@ function ActivityDaySection({ day, calendarsById }: { day: ActivityDay; calendar
                 <PassNode runs={item.runs} />
                 <TimelineTime date={item.at} />
                 <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  {item.runs.map((run) => <RunRow key={run.destinationCalendarId} run={run} calendarsById={calendarsById} />)}
+                  {item.runs.map((run) => <RunRow key={run.destinationCalendarId} run={run} calendarsById={calendarsById} onPick={onPickCalendar} />)}
                 </div>
               </>
             )}
@@ -260,16 +256,31 @@ function TimelineTime({ date }: { date: Date }) {
   return <Text size="xs" tone="muted" className="w-14 shrink-0 pt-0.5 tabular-nums">{formatActivityClock(date)}</Text>;
 }
 
-function RunRow({ run, calendarsById }: { run: SyncRunRecord; calendarsById: SourcesById }) {
+function RunRow({ run, calendarsById, onPick }: { run: SyncRunRecord; calendarsById: SourcesById; onPick?: (calendarId: string) => void }) {
   const calendar = calendarsById.get(run.destinationCalendarId);
   const quiet = run.added === 0 && run.removed === 0 && run.failed === 0;
+  const name = (
+    <>
+      {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
+      <span className="min-w-0 truncate">{calendarName(calendarsById, run.destinationCalendarId)}</span>
+    </>
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      <Text size="sm" tone="default" className="flex items-center gap-1.5">
-        {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
-        {calendarName(calendarsById, run.destinationCalendarId)}
-      </Text>
+      {onPick ? (
+        <button
+          type="button"
+          title="Show only this calendar"
+          onClick={() => onPick(run.destinationCalendarId)}
+          className="group -mx-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 text-sm tracking-tight text-foreground hover:bg-background-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {name}
+          <Funnel size={11} className="shrink-0 text-foreground-muted opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+        </button>
+      ) : (
+        <Text size="sm" tone="default" className="flex min-w-0 items-center gap-1.5">{name}</Text>
+      )}
       {run.added > 0 && <Delta className="bg-emerald-400/15">+{run.added} new</Delta>}
       {run.removed > 0 && <Delta className="bg-background-hover">−{run.removed} removed</Delta>}
       {run.failed > 0 && (
@@ -287,18 +298,58 @@ function Delta({ className, children }: PropsWithChildren<{ className: string }>
   return <span className={cn("inline-flex items-center gap-1 rounded-md px-1.5 text-xs tracking-tight whitespace-nowrap text-foreground tabular-nums", className)}>{children}</span>;
 }
 
-function FilterChip({ pressed, onClick, children }: PropsWithChildren<{ pressed: boolean; onClick: () => void }>) {
+interface CalendarFilterMenuProps {
+  calendarIds: string[];
+  calendarsById: SourcesById;
+  problems: ReadonlySet<string>;
+  value: string | null;
+  disabled: boolean;
+  onChange: (calendarId: string | null) => void;
+}
+
+// A track like the tabs beside it, holding the shared dropdown at its compact size; the width gives long names room in the list.
+function CalendarFilterMenu({ calendarIds, calendarsById, problems, value, disabled, onChange }: CalendarFilterMenuProps) {
+  const picked = value ? calendarsById.get(value) : undefined;
+
   return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-lg border px-2 py-0.5 text-xs tracking-tight whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        pressed ? "border-foreground bg-foreground text-background" : "border-interactive-border text-foreground hover:bg-background-hover",
-      )}
-    >
+    <ul className={cn("flex w-64 max-w-full min-w-0 rounded-lg bg-background-hover p-0.5", disabled && "pointer-events-none opacity-40")}>
+      <NavigationMenuPopover
+        size="compact"
+        disabled={disabled}
+        className="min-w-0 flex-1"
+        trigger={(
+          <>
+            {picked && <ProviderIcon provider={picked.provider} calendarType={picked.calendarType} size={12} />}
+            <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground">
+              {value ? calendarName(calendarsById, value) : "All Calendars"}
+            </span>
+          </>
+        )}
+      >
+        <CalendarFilterOption picked={value === null} onPick={() => onChange(null)}>
+          <NavigationMenuItemLabel>All Calendars</NavigationMenuItemLabel>
+        </CalendarFilterOption>
+        {calendarIds.map((calendarId) => {
+          const calendar = calendarsById.get(calendarId);
+          return (
+            <CalendarFilterOption key={calendarId} picked={value === calendarId} onPick={() => onChange(calendarId)}>
+              {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
+              <NavigationMenuItemLabel>{calendarName(calendarsById, calendarId)}</NavigationMenuItemLabel>
+              {problems.has(calendarId) && <Text size="xs" tone="attention" className="shrink-0">Needs attention</Text>}
+            </CalendarFilterOption>
+          );
+        })}
+      </NavigationMenuPopover>
+    </ul>
+  );
+}
+
+function CalendarFilterOption({ picked, onPick, children }: PropsWithChildren<{ picked: boolean; onPick: () => void }>) {
+  const { close } = usePopover();
+  return (
+    <NavigationMenuButtonItem onClick={() => { onPick(); close(); }}>
       {children}
-    </button>
+      <NavigationMenuItemTrailing indicator={picked ? <Check size={15} className="shrink-0 text-foreground" /> : null} />
+    </NavigationMenuButtonItem>
   );
 }
