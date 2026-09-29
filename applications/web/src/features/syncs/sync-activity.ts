@@ -78,7 +78,7 @@ export const formatActivityDay = (date: Date, nowMs = Date.now()): string => {
 export const formatActivityClock = (date: Date): string =>
   date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 
-export const listNames = (names: readonly string[]): string => {
+const listNames = (names: readonly string[]): string => {
   if (names.length <= 1) return names.join("");
   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 };

@@ -28,7 +28,6 @@ import { cn } from "@/utils/cn";
 import {
   describeActivitySummary,
   formatActivityClock,
-  listNames,
   formatActivityDay,
   groupActivity,
   type ActivityDay,
@@ -46,7 +45,7 @@ const KIND_OPTIONS: { label: string; value: ActivityKind }[] = [
 
 const REASON_COLORS = ["bg-emerald-400", "bg-blue-400", "bg-violet-400", "bg-pink-400", "bg-amber-400"];
 
-const PROBLEM_TEXT = { disabled: ["is turned off", "are turned off"], failing: ["keeps failing, retrying", "keep failing, retrying"], reauth: ["needs reconnecting", "need reconnecting"] } as const;
+const PROBLEM_TEXT = { disabled: "is turned off", failing: "keeps failing, retrying", reauth: "needs reconnecting" } as const;
 
 type SourcesById = ReadonlyMap<string, CalendarSource>;
 
@@ -144,27 +143,17 @@ interface ProblemRow {
   to?: string;
 }
 
-// Calendars sharing an account reconnect together, so they share one row.
-const reconnectRows = (problems: SyncDetail["destinations"], calendarsById: SourcesById): ProblemRow[] => {
-  const groups = new Map<string, { names: string[]; problem: keyof typeof PROBLEM_TEXT; to?: string }>();
-  for (const destination of problems) {
-    if (!destination.problem) continue;
+// One row per calendar, each leading to its account's reconnect page, which is also how a failing calendar recovers.
+const reconnectRows = (problems: SyncDetail["destinations"], calendarsById: SourcesById): ProblemRow[] =>
+  problems.flatMap((destination) => {
+    if (!destination.problem) return [];
     const accountId = calendarsById.get(destination.calendarId)?.accountId;
-    const key = destination.problem === "reauth" && accountId ? `reauth:${accountId}` : `${destination.problem}:${destination.calendarId}`;
-    const group = groups.get(key) ?? {
-      names: [],
-      problem: destination.problem,
-      to: destination.problem === "reauth" && accountId ? `/dashboard/accounts/${accountId}/reconnect` : undefined,
-    };
-    group.names.push(calendarName(calendarsById, destination.calendarId));
-    groups.set(key, group);
-  }
-  return [...groups].map(([key, group]) => ({
-    key,
-    label: `${listNames(group.names)} ${PROBLEM_TEXT[group.problem][group.names.length === 1 ? 0 : 1]}`,
-    to: group.to,
-  }));
-};
+    return [{
+      key: destination.calendarId,
+      label: `${calendarName(calendarsById, destination.calendarId)} ${PROBLEM_TEXT[destination.problem]}`,
+      to: accountId ? `/dashboard/accounts/${accountId}/reconnect` : undefined,
+    }];
+  });
 
 function ActivityDigest({ summary, calendarNames, waitingOn }: { summary: SyncActivitySummary; calendarNames: string[]; waitingOn: string[] }) {
   const sentence = describeActivitySummary(summary, calendarNames, waitingOn);
