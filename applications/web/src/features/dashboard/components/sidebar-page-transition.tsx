@@ -128,7 +128,8 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
     detachedRef.current = null;
     if (!detached || !container || !tracked.direction) return;
     if (tracked.direction === "forward") scrollToTop(container);
-    if (reduceMotion) return;
+    // On phones the sidebar hides behind a sync pane, so its page left nothing on screen to animate out.
+    if (reduceMotion || detached.box.width === 0 || detached.box.height === 0) return;
     const { pathname: to, index: at } = tracked.location;
     setExiting({ ...detached, key: `${to}:${at}`, direction: tracked.direction });
   }, [tracked, reduceMotion]);
