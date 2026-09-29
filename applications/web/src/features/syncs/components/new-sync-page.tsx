@@ -2,11 +2,8 @@ import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { DashboardHeading1 } from "@/components/ui/primitives/dashboard-heading";
 import { MenuHint, PremiumHint } from "@/components/ui/primitives/menu-hint";
 import { PageBody } from "@/components/ui/primitives/page-body";
-import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
-import { Text } from "@/components/ui/primitives/text";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { NavigationMenu } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
@@ -16,6 +13,7 @@ import type { CalendarSource } from "@/types/api";
 import { ProfileGallery } from "@/features/syncs/components/profile-gallery";
 import { SYNC_PANE_COLUMNS, SyncActionBar } from "@/features/syncs/components/sync-action-bar";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
+import { SyncPageHeader } from "@/features/syncs/components/sync-page-header";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
 import { createSyncDraft, draftProblem, toCreateBody, type NewSyncSearch, type SyncDraft } from "@/features/syncs/sync-draft";
@@ -31,17 +29,7 @@ const initialDraft = ({ from, profile }: NewSyncSearch): SyncDraft | null => {
 };
 
 function NewSyncHeader({ description }: { description: string }) {
-  return (
-    <StickyPageHeader className="gap-1.5">
-      <div className="lg:hidden">
-        <BackButton fallback="/dashboard" />
-      </div>
-      <div className="flex flex-col gap-1 px-0.5 pt-4">
-        <DashboardHeading1 className="select-none">New Sync</DashboardHeading1>
-        <Text size="sm" tone="muted">{description}</Text>
-      </div>
-    </StickyPageHeader>
-  );
+  return <SyncPageHeader back={<BackButton fallback="/dashboard" />} title="New Sync" subtitle={description} />;
 }
 
 interface NewSyncColumnsProps {
@@ -53,10 +41,10 @@ interface NewSyncColumnsProps {
 
 function NewSyncColumns({ header, children, aside, footer }: NewSyncColumnsProps) {
   return (
-    <div className="@container flex flex-col lg:h-full">
+    <div className="@container flex flex-col gap-1.5 lg:h-full">
+      {header}
       <div className={cn("grid grid-cols-1 gap-x-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]", aside && SYNC_PANE_COLUMNS)}>
-        <div className={cn("flex min-w-0 flex-col gap-1.5 lg:min-h-0", aside && "@3xl:[--page-body-bleed-end:1rem]")}>
-          {header}
+        <div className={cn("flex min-w-0 flex-col lg:min-h-0", aside && "@3xl:[--page-body-bleed-end:1rem]")}>
           <PageBody className="gap-1.5">{children}</PageBody>
         </div>
         {aside && (

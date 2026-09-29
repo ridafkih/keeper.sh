@@ -6,12 +6,11 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { diffSyncChanges, syncNameSchema } from "@keeper.sh/data-schemas";
 import type { PatchSyncBody, SyncDefinition, SyncDetail } from "@keeper.sh/data-schemas";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { PageBody } from "@/components/ui/primitives/page-body";
-import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Text } from "@/components/ui/primitives/text";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
@@ -31,6 +30,7 @@ import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import type { CalendarSource } from "@/types/api";
 import { ActivityList } from "@/features/syncs/components/activity-list";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
+import { SyncPageHeader } from "@/features/syncs/components/sync-page-header";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { DiscardChangesConfirmation, SaveSyncConfirmation } from "@/features/syncs/components/sync-save-dialogs";
 import { SyncStatusDot } from "@/features/syncs/components/sync-status-dot";
@@ -162,19 +162,11 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
 
   return (
     <div className="@container flex flex-col gap-1.5 lg:h-full">
-      {/* At lg this mirrors the calendar toolbar: a solid strip, then the same fill dissolving behind the status line. */}
-      <StickyPageHeader className="gap-1.5 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-x-3 lg:gap-y-0 lg:pt-0!">
-        <div className="lg:hidden">
-          <BackButton to="/dashboard" />
-        </div>
-        <div aria-hidden className="pointer-events-none col-span-full row-start-1 -mx-(--sidebar-pad-x) hidden self-stretch rounded-t-[calc(var(--radius-2xl)-1px)] bg-background-elevated lg:block" />
-        <div aria-hidden className="pointer-events-none col-span-full row-start-2 -mx-(--sidebar-pad-x) hidden self-stretch bg-background-elevated mask-b-from-0% lg:block" />
-        <DashboardHeading1 className="select-none px-0.5 pt-4 lg:relative lg:col-start-1 lg:row-start-1 lg:pt-0 lg:text-xl">{sync.name}</DashboardHeading1>
-        <Text size="sm" tone="muted" className="-mt-0.5 flex items-center gap-2 px-0.5 lg:relative lg:col-span-full lg:row-start-2 lg:mt-0 lg:pt-2 lg:pb-3">
-          <SyncStatusDot state={sync.state} />
-          {statusLine(sync)}
-        </Text>
-        <div className="px-0.5 pt-2 lg:relative lg:col-start-2 lg:row-start-1 lg:py-3">
+      <SyncPageHeader
+        back={<BackButton to="/dashboard" />}
+        title={sync.name}
+        subtitle={<><SyncStatusDot state={sync.state} />{statusLine(sync)}</>}
+        trailing={(
           <SegmentedControl
             label="Sync sections"
             value={tab}
@@ -189,8 +181,8 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
               });
             }}
           />
-        </div>
-      </StickyPageHeader>
+        )}
+      />
       <div className={cn("grid grid-cols-1 gap-x-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]", tab === "setup" && SYNC_PANE_COLUMNS)}>
         <div className={cn("flex min-w-0 flex-col lg:min-h-0", tab === "setup" && "@3xl:[--page-body-bleed-end:1rem]")}>
           <PageBody className="gap-1.5">
