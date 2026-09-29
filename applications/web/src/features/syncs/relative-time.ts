@@ -10,9 +10,3 @@ export const formatSyncedAgo = (value: string | null, nowMs = Date.now()): strin
   if (elapsed < DAY_MS) return `${Math.floor(elapsed / HOUR_MS)}h ago`;
   return `${Math.floor(elapsed / DAY_MS)}d ago`;
 };
-
-export const formatActivityTime = (value: string, nowMs = Date.now()): string => {
-  const date = new Date(value);
-  if (nowMs - date.getTime() < DAY_MS) return formatSyncedAgo(value, nowMs);
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short" });
-};
