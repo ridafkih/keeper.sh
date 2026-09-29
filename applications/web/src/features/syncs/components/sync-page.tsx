@@ -161,37 +161,38 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
 
 
   return (
-    <div className="@container flex flex-col lg:h-full">
+    <div className="@container flex flex-col gap-1.5 lg:h-full">
+      {/* At lg this mirrors the calendar toolbar: a solid strip, then the same fill dissolving behind the status line. */}
+      <StickyPageHeader className="gap-1.5 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-x-3 lg:gap-y-0 lg:pt-0!">
+        <div className="lg:hidden">
+          <BackButton to="/dashboard" />
+        </div>
+        <div aria-hidden className="pointer-events-none col-span-full row-start-1 -mx-(--sidebar-pad-x) hidden self-stretch rounded-t-[calc(var(--radius-2xl)-1px)] bg-background-elevated lg:block" />
+        <div aria-hidden className="pointer-events-none col-span-full row-start-2 -mx-(--sidebar-pad-x) hidden self-stretch bg-background-elevated mask-b-from-0% lg:block" />
+        <DashboardHeading1 className="select-none px-0.5 pt-4 lg:relative lg:col-start-1 lg:row-start-1 lg:pt-0 lg:text-xl">{sync.name}</DashboardHeading1>
+        <Text size="sm" tone="muted" className="-mt-0.5 flex items-center gap-2 px-0.5 lg:relative lg:col-span-full lg:row-start-2 lg:mt-0 lg:pt-2 lg:pb-3">
+          <SyncStatusDot state={sync.state} />
+          {statusLine(sync)}
+        </Text>
+        <div className="px-0.5 pt-2 lg:relative lg:col-start-2 lg:row-start-1 lg:py-3">
+          <SegmentedControl
+            label="Sync sections"
+            value={tab}
+            options={[{ label: "Setup", value: "setup" }, { label: "Activity", value: "activity" }]}
+            onChange={(next) => {
+              if (next === "activity") track(ANALYTICS_EVENTS.sync_activity_viewed);
+              void navigate({
+                params: { syncId },
+                replace: true,
+                search: { tab: next === "activity" ? "activity" : undefined },
+                to: "/dashboard/syncs/$syncId",
+              });
+            }}
+          />
+        </div>
+      </StickyPageHeader>
       <div className={cn("grid grid-cols-1 gap-x-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)]", tab === "setup" && SYNC_PANE_COLUMNS)}>
-        <div className={cn("flex min-w-0 flex-col gap-1.5 lg:min-h-0", tab === "setup" && "@3xl:[--page-body-bleed-end:1rem]")}>
-          <StickyPageHeader className="gap-1.5">
-            <div className="lg:hidden">
-              <BackButton to="/dashboard" />
-            </div>
-            <div className="flex flex-col gap-1 px-0.5 pt-4">
-              <DashboardHeading1 className="select-none">{sync.name}</DashboardHeading1>
-              <Text size="sm" tone="muted" className="flex items-center gap-2">
-                <SyncStatusDot state={sync.state} />
-                {statusLine(sync)}
-              </Text>
-            </div>
-            <div className="px-0.5 pt-2">
-              <SegmentedControl
-                label="Sync sections"
-                value={tab}
-                options={[{ label: "Setup", value: "setup" }, { label: "Activity", value: "activity" }]}
-                onChange={(next) => {
-                  if (next === "activity") track(ANALYTICS_EVENTS.sync_activity_viewed);
-                  void navigate({
-                    params: { syncId },
-                    replace: true,
-                    search: { tab: next === "activity" ? "activity" : undefined },
-                    to: "/dashboard/syncs/$syncId",
-                  });
-                }}
-              />
-            </div>
-          </StickyPageHeader>
+        <div className={cn("flex min-w-0 flex-col lg:min-h-0", tab === "setup" && "@3xl:[--page-body-bleed-end:1rem]")}>
           <PageBody className="gap-1.5">
             {mutationError && <Text size="sm" tone="danger" className="px-0.5">{mutationError}</Text>}
             {tab === "setup" ? (
