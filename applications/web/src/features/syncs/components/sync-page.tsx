@@ -165,7 +165,10 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
           <SegmentedControl
             label="Sync sections"
             value={tab}
-            options={[{ label: "Setup", value: "setup" }, { label: "Activity", value: "activity" }]}
+            options={[
+              { label: "Setup", value: "setup" },
+              { label: <ActivityTabLabel attention={sync.destinations.some((destination) => destination.problem !== null)} />, value: "activity" },
+            ]}
             onChange={(next) => {
               if (next === "activity") track(ANALYTICS_EVENTS.sync_activity_viewed);
               void navigate({
@@ -278,3 +281,14 @@ const statusLine = (sync: SyncDetail): string => {
 
 const destinationNames = (sync: SyncDetail, calendarsById: CalendarsById): string =>
   sync.destinations.map((destination) => calendarsById.get(destination.calendarId)?.name).filter(Boolean).join(", ");
+
+function ActivityTabLabel({ attention }: { attention: boolean }) {
+  if (!attention) return "Activity";
+  return (
+    <span className="flex items-center gap-1.5">
+      Activity
+      <SyncStatusDot state="problem" className="size-1.5" />
+      <span className="sr-only">, needs attention</span>
+    </span>
+  );
+}

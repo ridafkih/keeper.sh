@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { cn } from "@/utils/cn";
 
 interface SegmentedControlProps<TValue extends string> {
   label: string;
-  options: { label: string; value: TValue }[];
+  options: { label: ReactNode; value: TValue }[];
   value: TValue;
   onChange: (value: TValue) => void;
   disabled?: boolean;
