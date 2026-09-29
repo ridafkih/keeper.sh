@@ -77,7 +77,7 @@ const streamingRequest = (callLog: string[], payload: string): Request => new Re
 
 const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   claimDelivery: vi.fn((_deliveryKey: string) => Promise.resolve(true)),
-  claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) =>
+  claimPushAdmission: vi.fn((_provider: string) =>
     Promise.resolve(true)),
   findChannel: vi.fn(() => Promise.resolve(makeChannel())),
   generateCorrelationId: vi.fn(() => CORRELATION_ID),
@@ -381,7 +381,7 @@ describe("handleGooglePushWebhook failure handling", () => {
   it("admits the delivery before the request body is read", async () => {
     const callLog: string[] = [];
     const dependencies = makeDependencies({
-      claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) => {
+      claimPushAdmission: vi.fn((_provider: string) => {
         callLog.push("admission");
         return Promise.resolve(true);
       }),

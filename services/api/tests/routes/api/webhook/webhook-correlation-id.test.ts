@@ -78,7 +78,7 @@ const outlookRequest = (): Request => new Request(
 
 const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   claimDelivery: vi.fn((_deliveryKey: string) => Promise.resolve(true)),
-  claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) =>
+  claimPushAdmission: vi.fn((_provider: string) =>
     Promise.resolve(true)),
   findChannel: vi.fn(() => Promise.resolve(makeChannel())),
   generateCorrelationId: vi.fn(() => MINTED_CORRELATION_ID),
