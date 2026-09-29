@@ -7,6 +7,13 @@ import { Text } from "@/components/ui/primitives/text";
 import { loadMotionFeatures } from "@/lib/motion-features";
 
 export const SYNC_PANE_COLUMNS = "@3xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]";
+export const SYNC_SETUP_COLUMNS = "lg:grid-cols-[minmax(0,40rem)_minmax(0,26rem)] lg:justify-center";
+
+// Where the form and preview sit side by side, the bar floats under the preview instead of taking its own row.
+const LAYOUTS = {
+  pane: { bar: "@3xl:h-0 @3xl:pt-0", columns: `gap-x-8 @3xl:absolute @3xl:inset-x-0 ${SYNC_PANE_COLUMNS}` },
+  setup: { bar: "lg:h-0 lg:pt-0", columns: `gap-x-12 lg:absolute lg:inset-x-0 ${SYNC_SETUP_COLUMNS}` },
+};
 
 const HIDDEN = { opacity: 0, y: 12 };
 const SHOWN = { opacity: 1, y: 0 };
@@ -20,6 +27,7 @@ interface SyncAction {
 }
 
 interface SyncActionBarProps {
+  layout?: keyof typeof LAYOUTS;
   show?: boolean;
   label: string;
   message: string | null;
@@ -28,8 +36,8 @@ interface SyncActionBarProps {
   primary: SyncAction;
 }
 
-// Beside the form it floats under the preview; alone it keeps its own space at the end so it never covers the last row.
-export function SyncActionBar({ show = true, label, message, busy, secondary, primary }: SyncActionBarProps) {
+// Alone it keeps its own space at the end, so it never covers the last row.
+export function SyncActionBar({ layout = "pane", show = true, label, message, busy, secondary, primary }: SyncActionBarProps) {
   const reduceMotion = useReducedMotion() ?? false;
 
   return (
@@ -37,13 +45,13 @@ export function SyncActionBar({ show = true, label, message, busy, secondary, pr
       <AnimatePresence initial={false}>
         {show && (
           <m.div
-            className="pointer-events-none sticky bottom-4 z-[6] pt-3 lg:bottom-0 @3xl:h-0 @3xl:pt-0"
+            className={`pointer-events-none sticky bottom-4 z-[6] pt-3 lg:bottom-0 ${LAYOUTS[layout].bar}`}
             initial={HIDDEN}
             animate={SHOWN}
             exit={HIDDEN}
             transition={reduceMotion ? INSTANT : TRANSITION}
           >
-            <div className={`relative bottom-0 grid grid-cols-1 gap-x-8 lg:-bottom-[calc(var(--sidebar-pad-b)-var(--sidebar-pad-x))] @3xl:absolute @3xl:inset-x-0 ${SYNC_PANE_COLUMNS}`}>
+            <div className={`relative bottom-0 grid grid-cols-1 lg:-bottom-[calc(var(--sidebar-pad-b)-var(--sidebar-pad-x))] ${LAYOUTS[layout].columns}`}>
               <div role="status" className="pointer-events-auto col-end-[-1]">
                 <MenuGate active={message !== null} hint={message ?? ""} className="bg-background">
                   <div className="flex items-center gap-1 rounded-2xl border border-border-elevated bg-background-elevated p-1 pl-3 shadow-xs">
