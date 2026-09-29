@@ -12,11 +12,10 @@ import { WeekGrid } from "./week-grid";
 import { bucketEventsByDay } from "./event-layout";
 import {
   addDays,
-  addMonths,
+  addMonthsClamped,
   formatMonthTitle,
   formatWeekTitle,
   getMonthFetchRange,
-  getMonthGridDays,
   getWeekFetchRange,
 } from "./calendar-helpers";
 
@@ -42,8 +41,6 @@ export function CalendarView() {
       }),
     [store],
   );
-
-  const monthDays = useMemo(() => getMonthGridDays(anchor), [anchor]);
 
   const fetchRange = view === "month" ? getMonthFetchRange(anchor) : getWeekFetchRange(anchor);
   const { events } = useEventsInRange(fetchRange.start, fetchRange.end);
@@ -71,7 +68,7 @@ export function CalendarView() {
 
   const step = (direction: 1 | -1) => {
     setAnchor((current) =>
-      view === "month" ? addMonths(current, direction) : addDays(current, direction * 7),
+      view === "month" ? addMonthsClamped(current, direction) : addDays(current, direction * 7),
     );
   };
 
@@ -123,7 +120,12 @@ export function CalendarView() {
   );
 
   return view === "month" ? (
-    <MonthGrid anchor={anchor} days={monthDays} eventsByDay={eventsByDay} toolbar={toolbar} />
+    <MonthGrid
+      anchor={anchor}
+      eventsByDay={eventsByDay}
+      onAnchorChange={setAnchor}
+      toolbar={toolbar}
+    />
   ) : (
     <WeekGrid
       anchor={anchor}

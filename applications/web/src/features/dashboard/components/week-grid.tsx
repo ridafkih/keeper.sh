@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
-import { useRouter } from "@tanstack/react-router";
 import { atom, useAtomValue, useSetAtom } from "jotai";
 import { scroll } from "motion";
 import { animate } from "motion/mini";
@@ -41,10 +40,12 @@ import {
   HOUR_HEIGHT,
   HOURS,
   isSameDay,
+  MS_PER_DAY,
   startOfDay,
   startOfVisibleWeek,
   WEEK_VIEW_DAYS,
 } from "./calendar-helpers";
+import { useStripRealign } from "./use-strip-realign";
 
 const GUTTER_WIDTH = 52;
 const HEADER_HEIGHT = 64;
@@ -54,8 +55,6 @@ const VISIBLE_COLUMNS = WEEK_VIEW_DAYS;
 const CENTER_OFFSET = Math.floor(VISIBLE_COLUMNS / 2);
 /** Weeks buffered on each side of the entry range, so the strip scrolls without recentering logic. */
 const BUFFER_WEEKS = 26;
-
-const MS_PER_DAY = 86_400_000;
 
 // One stable identity, so the memoised columns don't see a fresh [] each render.
 const NO_EVENTS: CalendarEvent[] = [];
@@ -176,7 +175,6 @@ interface WeekGridProps {
 
 export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: WeekGridProps) {
   const today = useStartOfToday();
-  const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -274,36 +272,15 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     };
   }, [stripDays]);
 
-  // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
-  useEffect(
-    () =>
-      router.subscribe("onRendered", () => {
-        const el = scrollerRef.current;
-        const alignedCenterMs = alignedCenterMsRef.current;
-        if (!el || alignedCenterMs === null) return;
-        el.scrollTop = scrollTopRef.current;
-        scrollToCenter(new Date(alignedCenterMs), "auto");
-      }),
-    [router, scrollToCenter],
-  );
-
-  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day.
-  useEffect(() => {
+  const realign = useCallback(() => {
     const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const width = el.clientWidth;
-      if (width === 0 || width === alignedWidthRef.current) return;
-      const alignedCenterMs = alignedCenterMsRef.current;
-      if (alignedCenterMs === null) {
-        alignedWidthRef.current = width;
-        return;
-      }
-      scrollToCenter(new Date(alignedCenterMs), "auto");
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
+    const alignedCenterMs = alignedCenterMsRef.current;
+    if (!el || alignedCenterMs === null) return false;
+    el.scrollTop = scrollTopRef.current;
+    scrollToCenter(new Date(alignedCenterMs), "auto");
+    return true;
   }, [scrollToCenter]);
+  useStripRealign({ scrollerRef, alignedSizeRef: alignedWidthRef, axis: "x", realign });
 
   // Write-only: subscribing would reconcile all 742 memoised day cells on every open/close.
   const setDetail = useSetAtom(eventDetailAtom);
