@@ -21,9 +21,22 @@ function resolveViewportLeft(element: HTMLElement): number {
   return left;
 }
 
+// The ancestor walk covers the page's own scroll too, since the document element is one of them.
+function resolveViewportTop(element: HTMLElement): number {
+  let top = 0;
+  for (let node: HTMLElement | null = element; node; node = node.offsetParent as HTMLElement | null) {
+    top += node.offsetTop + (node.offsetParent?.clientTop ?? 0);
+  }
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    top -= node.scrollTop;
+  }
+  return top;
+}
+
+// Measured through offsets like the left edge, so a pane still sliding in doesn't park the band over its bottom border.
 function resolveScrollportBottom(element: HTMLElement): number {
   const parent = resolveScrollParent(element);
-  return parent ? parent.getBoundingClientRect().bottom : window.innerHeight;
+  return parent ? resolveViewportTop(parent) + parent.clientTop + parent.clientHeight : window.innerHeight;
 }
 
 export function ScrollFader({ children }: PropsWithChildren) {
