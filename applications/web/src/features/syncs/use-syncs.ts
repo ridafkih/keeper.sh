@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
-import type { CreateSyncBody, PatchSyncBody, SyncActivityEntry, SyncDetail, SyncSummary } from "@keeper.sh/data-schemas";
+import type { CreateSyncBody, PatchSyncBody, SyncActivityPage, SyncDetail, SyncSummary } from "@keeper.sh/data-schemas";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { serializedPatch } from "@/lib/serialized-mutate";
 import { USAGE_CACHE_KEY } from "@/hooks/use-entitlements";
@@ -10,11 +10,6 @@ import { SYNCS_KEY, newestFirst, syncActivityKey, syncKey, type CalendarsById } 
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const ACTIVITY_PAGE_SIZE = 30;
-
-interface SyncActivityPage {
-  entries: SyncActivityEntry[];
-  nextCursor: string | null;
-}
 
 export const useSyncs = () => useSWR<SyncSummary[]>(SYNCS_KEY, fetcher);
 
@@ -41,6 +36,7 @@ export const useSyncActivity = (syncId: string) => {
     ...result,
     entries: pages.flatMap((page) => page.entries),
     hasMore: Boolean(pages[pages.length - 1]?.nextCursor),
+    summary: pages[0]?.summary ?? null,
   };
 };
 

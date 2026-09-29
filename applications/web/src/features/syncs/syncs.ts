@@ -36,7 +36,7 @@ export const SKIP_LABELS: Record<SyncSkip, string> = {
   out_of_office: "Out of office",
 };
 
-const calendarName = (calendarsById: CalendarsById, calendarId: string): string =>
+export const calendarName = (calendarsById: CalendarsById, calendarId: string): string =>
   calendarsById.get(calendarId)?.name ?? "a removed calendar";
 
 const calendarNames = (calendarsById: CalendarsById, calendarIds: readonly string[]): string =>

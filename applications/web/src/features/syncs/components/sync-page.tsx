@@ -6,29 +6,24 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { diffSyncChanges, syncNameSchema } from "@keeper.sh/data-schemas";
 import type { PatchSyncBody, SyncDefinition, SyncDetail } from "@keeper.sh/data-schemas";
 import { BackButton } from "@/components/ui/primitives/back-button";
-import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { Text } from "@/components/ui/primitives/text";
-import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
-  NavigationMenuEmptyItem,
-  NavigationMenuItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
-  NavigationMenuItemTrailing,
   NavigationMenuToggleItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import type { CalendarSource } from "@/types/api";
-import { ActivityList } from "@/features/syncs/components/activity-list";
+import { SyncActivity } from "@/features/syncs/components/sync-activity";
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPageHeader } from "@/features/syncs/components/sync-page-header";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
@@ -48,7 +43,7 @@ import {
   syncSettingsOf,
   type CalendarsById,
 } from "@/features/syncs/syncs";
-import { deleteSync, patchSync, updateSync, useRefreshSyncs, useSync, useSyncActivity, useSyncs } from "@/features/syncs/use-syncs";
+import { deleteSync, patchSync, updateSync, useRefreshSyncs, useSync, useSyncs } from "@/features/syncs/use-syncs";
 
 export type SyncTab = "setup" | "activity";
 
@@ -242,7 +237,7 @@ export function SyncPage({ syncId, tab }: { syncId: string; tab: SyncTab }) {
                 />
               </>
             ) : (
-              <SyncActivity sync={sync} calendars={calendars} calendarsById={calendarsById} />
+              <SyncActivity sync={sync} calendars={calendars} />
             )}
           </PageBody>
         </div>
@@ -283,60 +278,3 @@ const statusLine = (sync: SyncDetail): string => {
 
 const destinationNames = (sync: SyncDetail, calendarsById: CalendarsById): string =>
   sync.destinations.map((destination) => calendarsById.get(destination.calendarId)?.name).filter(Boolean).join(", ");
-
-const PROBLEM_LABELS = { disabled: "Disabled", failing: "Retrying", reauth: "Needs reconnecting" } as const;
-
-function SyncActivity({ sync, calendars, calendarsById }: { sync: SyncDetail; calendars: CalendarSource[]; calendarsById: CalendarsById }) {
-  const { entries, hasMore, isValidating, setSize, size } = useSyncActivity(sync.id);
-  const problems = sync.destinations.filter((destination) => destination.problem !== null).length;
-  const metrics = [
-    { label: "Copied", value: sync.copiedCount },
-    { label: "Skipped", value: sync.skippedCount },
-    { label: "Problems", value: problems },
-  ];
-
-  return (
-    <>
-      <div className="grid grid-cols-3 gap-1.5 pt-2">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="flex flex-col rounded-2xl border border-interactive-border bg-background px-3.5 py-3 shadow-xs">
-            <Text size="xs" tone="muted">{metric.label}</Text>
-            <span className="text-xl font-medium tracking-tight tabular-nums text-foreground">{metric.value}</span>
-          </div>
-        ))}
-      </div>
-      <DashboardSection title="Destinations" description="Where this sync writes, and how each one is doing." />
-      <NavigationMenu>
-        {sync.destinations.length === 0 && <NavigationMenuEmptyItem>No destinations yet</NavigationMenuEmptyItem>}
-        {sync.destinations.map((destination) => {
-          const calendar = calendars.find((candidate) => candidate.id === destination.calendarId);
-          return (
-            <NavigationMenuItem key={destination.calendarId}>
-              {calendar && (
-                <NavigationMenuItemIcon>
-                  <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
-                </NavigationMenuItemIcon>
-              )}
-              <NavigationMenuItemLabel>{calendar?.name ?? "Removed calendar"}</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing>
-                <Text size="sm" tone={destination.problem ? "attention" : "muted"}>
-                  {destination.problem
-                    ? PROBLEM_LABELS[destination.problem]
-                    : `${destination.copiedCount} copies · ${formatSyncedAgo(destination.lastSyncedAt).toLowerCase()}`}
-                </Text>
-              </NavigationMenuItemTrailing>
-            </NavigationMenuItem>
-          );
-        })}
-      </NavigationMenu>
-      <DashboardSection title="Activity" description="Sync runs and the changes you make, newest first." />
-      <ActivityList
-        entries={entries}
-        calendarsById={calendarsById}
-        hasMore={hasMore}
-        loadingMore={isValidating && size > 1}
-        onLoadMore={() => { void setSize(size + 1); }}
-      />
-    </>
-  );
-}
