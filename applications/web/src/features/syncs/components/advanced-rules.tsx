@@ -9,7 +9,7 @@ import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import X from "lucide-react/dist/esm/icons/x";
 import { MAX_ADVANCED_RULES, syncRuleNameSchema } from "@keeper.sh/data-schemas";
 import type { AdvancedRule, RuleAction, RuleCondition, ShareAs, SyncSummary } from "@keeper.sh/data-schemas";
-import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
+import { AnimatedReveal, RevealGroup, RevealItem } from "@/components/ui/primitives/animated-reveal";
 import { PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { Text } from "@/components/ui/primitives/text";
@@ -89,53 +89,61 @@ export function AdvancedRules({ rules, shareAs, locked, otherSyncs, onChange }: 
             Checked after Never Copy; first match wins. Anything no rule matches is shared as {shareAsLabel(shareAs)}.
           </Text>
           <PremiumGate locked={locked} hint="Advanced rules are a Pro feature.">
-            <div className="flex flex-col gap-1.5">
-              {rules.map((rule, index) => (
-                <RuleCard
-                  key={rule.id}
-                  rule={rule}
-                  isFirst={index === 0}
-                  isLast={index === rules.length - 1}
-                  onChange={(next) => onChange(replaceAt(rules, index, next))}
-                  onMove={(offset) => onChange(moveItem(rules, index, index + offset))}
-                  onRemove={() => onChange(removeAt(rules, index))}
-                />
-              ))}
-              <NavigationMenu className="border-dashed shadow-none">
-                <NavigationMenuItem>
-                  <NavigationMenuItemIcon>
-                    <LockIcon size={15} />
-                  </NavigationMenuItemIcon>
-                  <NavigationMenuItemLabel>Everything Else</NavigationMenuItemLabel>
-                  <NavigationMenuItemTrailing indicator={null}>
-                    <Text size="sm" tone="muted">Share As {shareAsLabel(shareAs)}</Text>
-                  </NavigationMenuItemTrailing>
-                </NavigationMenuItem>
-              </NavigationMenu>
-              <NavigationMenu>
-                <NavigationMenuButtonItem disabled={rules.length >= MAX_ADVANCED_RULES} onClick={() => onChange([...rules, createRule()])}>
-                  <NavigationMenuItemIcon>
-                    <Plus size={15} />
-                  </NavigationMenuItemIcon>
-                  <NavigationMenuItemLabel>Add a Rule</NavigationMenuItemLabel>
-                </NavigationMenuButtonItem>
-                {donors.length > 0 && (
-                  <NavigationMenuPopover
-                    trigger={(
-                      <>
-                        <NavigationMenuItemIcon>
-                          <Copy size={15} />
-                        </NavigationMenuItemIcon>
-                        <NavigationMenuItemLabel>Copy Rules From…</NavigationMenuItemLabel>
-                      </>
-                    )}
-                  >
-                    {donors.map((sync) => (
-                      <CopyRulesOption key={sync.id} sync={sync} onCopy={copyFrom} />
-                    ))}
-                  </NavigationMenuPopover>
-                )}
-              </NavigationMenu>
+            <div className="flex flex-col">
+              {/* Spacing sits inside each card rather than in a gap, so a card collapsing away takes it along. */}
+              <RevealGroup>
+                {rules.map((rule, index) => (
+                  <RevealItem key={rule.id}>
+                    <div className="pb-1.5">
+                      <RuleCard
+                        rule={rule}
+                        isFirst={index === 0}
+                        isLast={index === rules.length - 1}
+                        onChange={(next) => onChange(replaceAt(rules, index, next))}
+                        onMove={(offset) => onChange(moveItem(rules, index, index + offset))}
+                        onRemove={() => onChange(removeAt(rules, index))}
+                      />
+                    </div>
+                  </RevealItem>
+                ))}
+              </RevealGroup>
+              <div className="flex flex-col gap-1.5">
+                <NavigationMenu className="border-dashed shadow-none">
+                  <NavigationMenuItem>
+                    <NavigationMenuItemIcon>
+                      <LockIcon size={15} />
+                    </NavigationMenuItemIcon>
+                    <NavigationMenuItemLabel>Everything Else</NavigationMenuItemLabel>
+                    <NavigationMenuItemTrailing indicator={null}>
+                      <Text size="sm" tone="muted">Share As {shareAsLabel(shareAs)}</Text>
+                    </NavigationMenuItemTrailing>
+                  </NavigationMenuItem>
+                </NavigationMenu>
+                <NavigationMenu>
+                  <NavigationMenuButtonItem disabled={rules.length >= MAX_ADVANCED_RULES} onClick={() => onChange([...rules, createRule()])}>
+                    <NavigationMenuItemIcon>
+                      <Plus size={15} />
+                    </NavigationMenuItemIcon>
+                    <NavigationMenuItemLabel>Add a Rule</NavigationMenuItemLabel>
+                  </NavigationMenuButtonItem>
+                  {donors.length > 0 && (
+                    <NavigationMenuPopover
+                      trigger={(
+                        <>
+                          <NavigationMenuItemIcon>
+                            <Copy size={15} />
+                          </NavigationMenuItemIcon>
+                          <NavigationMenuItemLabel>Copy Rules From…</NavigationMenuItemLabel>
+                        </>
+                      )}
+                    >
+                      {donors.map((sync) => (
+                        <CopyRulesOption key={sync.id} sync={sync} onCopy={copyFrom} />
+                      ))}
+                    </NavigationMenuPopover>
+                  )}
+                </NavigationMenu>
+              </div>
             </div>
           </PremiumGate>
         </div>

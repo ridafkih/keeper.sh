@@ -19,17 +19,25 @@ export function AnimatedReveal({ show, skipInitial, children }: AnimatedRevealPr
   return (
     <LazyMotion features={loadMotionFeatures}>
       <AnimatePresence initial={!skipInitial}>
-        {show && (
-          <m.div
-            style={CLIP_STYLE}
-            initial={HIDDEN}
-            animate={VISIBLE}
-            exit={LEAVING}
-          >
-            {children}
-          </m.div>
-        )}
+        {show && <RevealItem>{children}</RevealItem>}
       </AnimatePresence>
     </LazyMotion>
+  );
+}
+
+// For a keyed list: only items added or removed after mount animate.
+export function RevealGroup({ children }: { children: ReactNode }) {
+  return (
+    <LazyMotion features={loadMotionFeatures}>
+      <AnimatePresence initial={false}>{children}</AnimatePresence>
+    </LazyMotion>
+  );
+}
+
+export function RevealItem({ children }: { children: ReactNode }) {
+  return (
+    <m.div style={CLIP_STYLE} initial={HIDDEN} animate={VISIBLE} exit={LEAVING}>
+      {children}
+    </m.div>
   );
 }
