@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 import { signJWT } from "better-auth/crypto";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { jwt as jwtPlugin } from "better-auth/plugins";
+import { genericOAuth as genericOAuthPlugin, jwt as jwtPlugin } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { oauthProviderResourceClient } from "@better-auth/oauth-provider/resource-client";
 import { passkey as passkeyPlugin } from "@better-auth/passkey";
@@ -58,6 +58,12 @@ interface AuthConfig {
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  oidcIssuerUrl?: string;
+  oidcClientId?: string;
+  oidcClientSecret?: string;
+  oidcProviderName?: string;
+  oidcScopes?: string[];
+  disableLocalAuth?: boolean;
   resendApiKey?: string;
   passkeyRpId?: string;
   passkeyRpName?: string;
@@ -83,6 +89,51 @@ interface KeeperMcpAuthApi {
  * This type predicate verifies the methods exist so we can call them
  * without type assertions.
  */
+interface OidcCredentials {
+  issuerUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[];
+}
+
+const buildOidcPlugin = (
+  input: OidcCredentials,
+): BetterAuthPlugin | null => {
+  if (!input.issuerUrl || !input.clientId || !input.clientSecret) {
+    return null;
+  }
+
+  // Generic OIDC (SSO) support, gated on env vars so it is opt-in and existing deployments are unaffected.
+  return genericOAuthPlugin({
+    config: [
+      {
+        providerId: "oidc",
+        discoveryUrl: new URL(
+          "/.well-known/openid-configuration",
+          input.issuerUrl,
+        ).toString(),
+        issuer: input.issuerUrl.replace(/\/+$/, ""),
+        clientId: input.clientId,
+        clientSecret: input.clientSecret,
+        scopes: input.scopes ?? ["openid", "profile", "email"],
+        pkce: true,
+        mapProfileToUser: (profile) => {
+          const raw = profile as Record<string, unknown>;
+          const username =
+            (raw.preferred_username as string | undefined) ??
+            (raw.email as string | undefined)?.split("@")[0];
+
+          // Better-auth merges the mapped user into the base record, so `username` reaches the user-creation path once it is registered as an additional user field (see `user.additionalFields`). The type only admits core user fields, so cast the extra field through.
+          if (!username) {
+            return Promise.resolve({});
+          }
+          return Promise.resolve({ username } as Partial<User>);
+        },
+      },
+    ],
+  });
+};
+
 interface OAuthProviderAuthApi {
   getOAuthServerConfig: (input: { headers: Headers }) => Promise<unknown>;
   getOpenIdConfig: (input: { headers: Headers }) => Promise<unknown>;
@@ -147,6 +198,12 @@ const createAuth = (config: AuthConfig) => {
     googleClientSecret,
     microsoftClientId,
     microsoftClientSecret,
+    oidcIssuerUrl,
+    oidcClientId,
+    oidcClientSecret,
+    oidcProviderName,
+    oidcScopes,
+    disableLocalAuth,
     resendApiKey,
     passkeyRpId,
     passkeyRpName,
@@ -170,6 +227,11 @@ const createAuth = (config: AuthConfig) => {
     googleClientSecret,
     microsoftClientId,
     microsoftClientSecret,
+    oidcIssuerUrl,
+    oidcClientId,
+    oidcClientSecret,
+    oidcProviderName,
+    disableLocalAuth,
     passkeyOrigin,
     passkeyRpId,
   });
@@ -292,6 +354,15 @@ const createAuth = (config: AuthConfig) => {
       user,
     });
   };
+  const oidcPlugin = buildOidcPlugin({
+    issuerUrl: oidcIssuerUrl,
+    clientId: oidcClientId,
+    clientSecret: oidcClientSecret,
+    scopes: oidcScopes,
+  });
+  if (oidcPlugin) {
+    plugins.push(oidcPlugin);
+  }
 
   const auth = betterAuth({
     account: {
@@ -385,6 +456,14 @@ const createAuth = (config: AuthConfig) => {
     socialProviders,
     trustedOrigins,
     user: {
+      additionalFields: {
+        username: {
+          input: true,
+          required: true,
+          type: "string",
+          unique: true,
+        },
+      },
       deleteUser: {
         afterDelete: async (user) => {
           if (!polarClient) {

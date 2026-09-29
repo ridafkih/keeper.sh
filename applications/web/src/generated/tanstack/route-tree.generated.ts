@@ -40,6 +40,7 @@ import { Route as marketingBlogIndexRouteImport } from './../../routes/(marketin
 import { Route as dashboardDashboardIndexRouteImport } from './../../routes/(dashboard)/dashboard/index'
 import { Route as oauthOauthConsentRouteImport } from './../../routes/(oauth)/oauth/consent'
 import { Route as oauthAuthOutlookRouteImport } from './../../routes/(oauth)/auth/outlook'
+import { Route as oauthAuthOidcRouteImport } from './../../routes/(oauth)/auth/oidc'
 import { Route as oauthAuthGoogleRouteImport } from './../../routes/(oauth)/auth/google'
 import { Route as marketingToolsIcsViewerRouteImport } from './../../routes/(marketing)/tools/ics-viewer'
 import { Route as marketingToolsIcsGeneratorRouteImport } from './../../routes/(marketing)/tools/ics-generator'
@@ -230,6 +231,11 @@ const oauthOauthConsentRoute = oauthOauthConsentRouteImport.update({
 const oauthAuthOutlookRoute = oauthAuthOutlookRouteImport.update({
   id: '/outlook',
   path: '/outlook',
+  getParentRoute: () => oauthAuthRouteRoute,
+} as any)
+const oauthAuthOidcRoute = oauthAuthOidcRouteImport.update({
+  id: '/oidc',
+  path: '/oidc',
   getParentRoute: () => oauthAuthRouteRoute,
 } as any)
 const oauthAuthGoogleRoute = oauthAuthGoogleRouteImport.update({
@@ -493,6 +499,7 @@ export interface FileRoutesByFullPath {
   '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
   '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
+  '/auth/oidc': typeof oauthAuthOidcRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/dashboard/': typeof dashboardDashboardIndexRoute
@@ -556,6 +563,7 @@ export interface FileRoutesByTo {
   '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
   '/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/auth/google': typeof oauthAuthGoogleRoute
+  '/auth/oidc': typeof oauthAuthOidcRoute
   '/auth/outlook': typeof oauthAuthOutlookRoute
   '/oauth/consent': typeof oauthOauthConsentRoute
   '/blog': typeof marketingBlogIndexRoute
@@ -627,6 +635,7 @@ export interface FileRoutesById {
   '/(marketing)/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
   '/(marketing)/tools/ics-viewer': typeof marketingToolsIcsViewerRoute
   '/(oauth)/auth/google': typeof oauthAuthGoogleRoute
+  '/(oauth)/auth/oidc': typeof oauthAuthOidcRoute
   '/(oauth)/auth/outlook': typeof oauthAuthOutlookRoute
   '/(oauth)/oauth/consent': typeof oauthOauthConsentRoute
   '/(dashboard)/dashboard/': typeof dashboardDashboardIndexRoute
@@ -696,6 +705,7 @@ export interface FileRouteTypes {
     | '/tools/ics-generator'
     | '/tools/ics-viewer'
     | '/auth/google'
+    | '/auth/oidc'
     | '/auth/outlook'
     | '/oauth/consent'
     | '/dashboard/'
@@ -759,6 +769,7 @@ export interface FileRouteTypes {
     | '/tools/ics-generator'
     | '/tools/ics-viewer'
     | '/auth/google'
+    | '/auth/oidc'
     | '/auth/outlook'
     | '/oauth/consent'
     | '/blog'
@@ -829,6 +840,7 @@ export interface FileRouteTypes {
     | '/(marketing)/tools/ics-generator'
     | '/(marketing)/tools/ics-viewer'
     | '/(oauth)/auth/google'
+    | '/(oauth)/auth/oidc'
     | '/(oauth)/auth/outlook'
     | '/(oauth)/oauth/consent'
     | '/(dashboard)/dashboard/'
@@ -1086,6 +1098,13 @@ declare module '@tanstack/react-router' {
       path: '/outlook'
       fullPath: '/auth/outlook'
       preLoaderRoute: typeof oauthAuthOutlookRouteImport
+      parentRoute: typeof oauthAuthRouteRoute
+    }
+    '/(oauth)/auth/oidc': {
+      id: '/(oauth)/auth/oidc'
+      path: '/oidc'
+      fullPath: '/auth/oidc'
+      preLoaderRoute: typeof oauthAuthOidcRouteImport
       parentRoute: typeof oauthAuthRouteRoute
     }
     '/(oauth)/auth/google': {
@@ -1581,11 +1600,13 @@ const marketingRouteRouteWithChildren = marketingRouteRoute._addFileChildren(
 
 interface oauthAuthRouteRouteChildren {
   oauthAuthGoogleRoute: typeof oauthAuthGoogleRoute
+  oauthAuthOidcRoute: typeof oauthAuthOidcRoute
   oauthAuthOutlookRoute: typeof oauthAuthOutlookRoute
 }
 
 const oauthAuthRouteRouteChildren: oauthAuthRouteRouteChildren = {
   oauthAuthGoogleRoute: oauthAuthGoogleRoute,
+  oauthAuthOidcRoute: oauthAuthOidcRoute,
   oauthAuthOutlookRoute: oauthAuthOutlookRoute,
 }
 
