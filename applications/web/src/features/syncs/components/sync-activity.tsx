@@ -175,7 +175,7 @@ function ActivityDigest({ summary, calendarNames, waitingOn }: { summary: SyncAc
   ];
 
   return (
-    <div className="-mx-1 flex flex-col gap-3.5 rounded-[1.25rem] border border-border-elevated bg-background-elevated px-4 pt-3.5 pb-4">
+    <div className="flex flex-col gap-3.5 rounded-[1.25rem] border border-border-elevated bg-background-elevated px-4 pt-3.5 pb-4">
       <p className="text-lg leading-snug font-medium tracking-tight text-pretty text-foreground">
         <span className="text-foreground-muted">{sentence.period}</span> {sentence.headline}
         {sentence.detail && <span className="text-foreground-muted"> {sentence.detail}</span>}
