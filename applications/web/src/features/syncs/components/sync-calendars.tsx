@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import type { SyncCalendarRole, SyncCalendars, SyncMode } from "@keeper.sh/data-schemas";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
 import { Text } from "@/components/ui/primitives/text";
@@ -16,6 +16,8 @@ interface SyncCalendarsProps {
   calendarsById: ReadonlyMap<string, CalendarSource>;
   onChange: (calendars: SyncCalendars) => void;
   onConnect?: (role: SyncCalendarRole) => void;
+  // Inside the lifted block so it stays sharp over the overlay and answers each pick as it's made.
+  notice?: ReactNode;
 }
 
 const MODE_OPTIONS: { label: string; value: SyncMode }[] = [
@@ -25,7 +27,7 @@ const MODE_OPTIONS: { label: string; value: SyncMode }[] = [
 
 const OTHER_END: Partial<Record<SyncCalendarRole, SyncCalendarRole>> = { destination: "source", source: "destination" };
 
-export function SyncCalendars({ value, calendars, calendarsById, onChange, onConnect }: SyncCalendarsProps) {
+export function SyncCalendars({ value, calendars, calendarsById, onChange, onConnect, notice }: SyncCalendarsProps) {
   const [openRole, setOpenRole] = useState<SyncCalendarRole | null>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpenRole(null), []);
@@ -63,6 +65,7 @@ export function SyncCalendars({ value, calendars, calendarsById, onChange, onCon
           />
         )}
       </SentencePanel>
+      {notice}
     </div>
   );
 }

@@ -31,8 +31,8 @@ export function SyncEditor({ value, calendars, otherSyncs, locked, notice, previ
         calendarsById={calendarsById}
         onChange={(next) => onChange(next)}
         onConnect={onConnect}
+        notice={notice}
       />
-      {notice}
       <ShareAsSection settings={settings} sourceName={sourceName} locked={locked} previewClassName={previewClassName} onChange={onChange} />
       <NeverCopySection settings={settings} locked={locked} onChange={onChange} />
       <div className="pt-3">
