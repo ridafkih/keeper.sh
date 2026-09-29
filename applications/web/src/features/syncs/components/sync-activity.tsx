@@ -1,9 +1,12 @@
-import { useState, type PropsWithChildren } from "react";
+import { useLayoutEffect, useRef, useState, type PropsWithChildren } from "react";
+import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
+import * as m from "motion/react-m";
 import Check from "lucide-react/dist/esm/icons/check";
 import Funnel from "lucide-react/dist/esm/icons/funnel";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
+import X from "lucide-react/dist/esm/icons/x";
 import type { SyncActivitySummary, SyncDetail, SyncRunRecord } from "@keeper.sh/data-schemas";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { SegmentedControl } from "@/components/ui/primitives/segmented-control";
@@ -19,6 +22,7 @@ import {
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
 import { usePopover } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
+import { loadMotionFeatures } from "@/lib/motion-features";
 import type { CalendarSource } from "@/types/api";
 import { cn } from "@/utils/cn";
 import {
@@ -307,47 +311,118 @@ interface CalendarFilterMenuProps {
   onChange: (calendarId: string | null) => void;
 }
 
-// A track like the tabs beside it, holding the shared dropdown at its compact size; the width gives long names room in the list.
+const EASE = [0.2, 0, 0, 1] as const;
+const WIDTH_TRANSITION = { duration: 0.2, ease: EASE };
+const POP_TRANSITION = { duration: 0.15, ease: EASE };
+const INSTANT = { duration: 0 };
+const POPPED_OUT = { opacity: 0, scale: 0.5 };
+const POPPED_IN = { opacity: 1, scale: 1 };
+
+// A track like the tabs beside it, holding the shared dropdown at its compact size. The track fits its name,
+// the list opens wider so long names fit, and a picked calendar fills the segment and adds a clear button.
 function CalendarFilterMenu({ calendarIds, calendarsById, problems, value, disabled, onChange }: CalendarFilterMenuProps) {
   const picked = value ? calendarsById.get(value) : undefined;
+  const reduceMotion = useReducedMotion() ?? false;
+  const pop = reduceMotion ? INSTANT : POP_TRANSITION;
 
   return (
-    <ul className={cn("flex w-64 max-w-full min-w-0 rounded-lg bg-background-hover p-0.5", disabled && "pointer-events-none opacity-40")}>
-      <NavigationMenuPopover
-        size="compact"
-        disabled={disabled}
-        className="min-w-0 flex-1"
-        trigger={(
-          <>
-            {picked && <ProviderIcon provider={picked.provider} calendarType={picked.calendarType} size={12} />}
-            <span className="min-w-0 truncate text-sm font-medium tracking-tight text-foreground">
-              {value ? calendarName(calendarsById, value) : "All Calendars"}
-            </span>
-          </>
-        )}
-      >
-        <CalendarFilterOption picked={value === null} onPick={() => onChange(null)}>
-          <NavigationMenuItemLabel>All Calendars</NavigationMenuItemLabel>
-        </CalendarFilterOption>
-        {calendarIds.map((calendarId) => {
-          const calendar = calendarsById.get(calendarId);
-          return (
-            <CalendarFilterOption key={calendarId} picked={value === calendarId} onPick={() => onChange(calendarId)}>
-              {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
-              <NavigationMenuItemLabel>{calendarName(calendarsById, calendarId)}</NavigationMenuItemLabel>
-              {problems.has(calendarId) && <Text size="xs" tone="attention" className="shrink-0">Needs attention</Text>}
+    <LazyMotion features={loadMotionFeatures}>
+      <AnimatedWidth className={cn("rounded-lg bg-background-hover p-0.5", disabled && "pointer-events-none opacity-40")}>
+        <ul
+          className={cn(
+            "flex max-w-[15.75rem] min-w-0 items-center rounded-md shadow-xs transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+            value ? "bg-foreground text-background" : "bg-background-elevated text-foreground",
+          )}
+        >
+          <NavigationMenuPopover
+            size="compact"
+            disabled={disabled}
+            className="min-w-0 flex-1"
+            panelClassName="-inset-y-0.75 -right-0.75 w-[calc(16rem+0.375rem)] justify-items-end"
+            triggerClassName={cn("bg-transparent hover:bg-transparent! [&>svg]:text-current [&>svg]:opacity-60", value && "pr-1")}
+            trigger={(
+              <>
+                <AnimatePresence initial={false}>
+                  {picked && (
+                    <m.span key={picked.id} className="flex shrink-0" initial={POPPED_OUT} animate={POPPED_IN} transition={pop}>
+                      <ProviderIcon provider={picked.provider} calendarType={picked.calendarType} size={12} />
+                    </m.span>
+                  )}
+                </AnimatePresence>
+                <span className="min-w-0 truncate text-sm font-medium tracking-tight">
+                  {value ? calendarName(calendarsById, value) : "All Calendars"}
+                </span>
+              </>
+            )}
+          >
+            <CalendarFilterOption picked={value === null} onPick={() => onChange(null)}>
+              <NavigationMenuItemLabel>All Calendars</NavigationMenuItemLabel>
             </CalendarFilterOption>
-          );
-        })}
-      </NavigationMenuPopover>
-    </ul>
+            {calendarIds.map((calendarId) => {
+              const calendar = calendarsById.get(calendarId);
+              return (
+                <CalendarFilterOption key={calendarId} picked={value === calendarId} onPick={() => onChange(calendarId)}>
+                  {calendar && <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} size={14} />}
+                  <NavigationMenuItemLabel>{calendarName(calendarsById, calendarId)}</NavigationMenuItemLabel>
+                  {problems.has(calendarId) && <Text size="xs" tone="attention" className="shrink-0">Needs attention</Text>}
+                </CalendarFilterOption>
+              );
+            })}
+          </NavigationMenuPopover>
+          <AnimatePresence initial={false}>
+            {value && (
+              <m.li key="clear" className="flex shrink-0" initial={POPPED_OUT} animate={POPPED_IN} exit={POPPED_OUT} transition={pop}>
+                <button
+                  type="button"
+                  aria-label="Show all calendars"
+                  onClick={() => onChange(null)}
+                  className="mr-1 grid size-4 place-items-center rounded-sm bg-current/15 hover:bg-current/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X size={10} strokeWidth={2.5} />
+                </button>
+              </m.li>
+            )}
+          </AnimatePresence>
+        </ul>
+      </AnimatedWidth>
+    </LazyMotion>
   );
 }
 
-function CalendarFilterOption({ picked, onPick, children }: PropsWithChildren<{ picked: boolean; onPick: () => void }>) {
-  const { close } = usePopover();
+// Width can't transition to auto, so this measures what its content wants and animates to that.
+// It clips only while nothing inside has a popover out, since the list opens past its edges.
+function AnimatedWidth({ className, children }: PropsWithChildren<{ className?: string }>) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  const reduceMotion = useReducedMotion() ?? false;
+
+  useLayoutEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
+    const measure = () => setWidth(inner.offsetWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+
   return (
-    <NavigationMenuButtonItem onClick={() => { onPick(); close(); }}>
+    <m.div
+      className={cn("box-content min-w-0 not-has-[[data-popover-open]]:overflow-clip", className)}
+      initial={false}
+      animate={width === null ? undefined : { width }}
+      transition={reduceMotion ? INSTANT : WIDTH_TRANSITION}
+    >
+      <div ref={innerRef} className="w-max">{children}</div>
+    </m.div>
+  );
+}
+
+// The button only changes once the list has folded back into it, so the two never move at once.
+function CalendarFilterOption({ picked, onPick, children }: PropsWithChildren<{ picked: boolean; onPick: () => void }>) {
+  const { closeThen } = usePopover();
+  return (
+    <NavigationMenuButtonItem onClick={() => closeThen(onPick)}>
       {children}
       <NavigationMenuItemTrailing indicator={picked ? <Check size={15} className="shrink-0 text-foreground" /> : null} />
     </NavigationMenuButtonItem>
