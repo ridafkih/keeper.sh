@@ -32,6 +32,8 @@ const CONTENT_INITIAL = { height: 0, filter: "blur(0)", opacity: 0 };
 const CONTENT_ANIMATE = { height: "fit-content" as const, filter: "blur(0)", opacity: 1 };
 const CONTENT_EXIT = { height: 0, filter: "blur(4px)", opacity: 0 };
 const POPOVER_CONTENT_STYLE = { maxHeight: "16rem" } as const;
+// The default panel sits 0.75 (3px) past the trigger on each side.
+const PANEL_BLEED_PX = 6;
 const REVEAL_MARGIN_PX = 8;
 
 interface PanelParts {
@@ -80,6 +82,11 @@ type NavigationMenuPopoverProps = {
   disabled?: boolean;
   size?: MenuItemSize;
   className?: string;
+  // Replaces the panel's placement and alignment over the trigger, so a narrow trigger can open a wider list,
+  // which then grows out from the trigger's width instead of appearing at its own.
+  panelClassName?: string;
+  // Replaces the trigger's surface, e.g. the compact raised look, for a caller that paints its own.
+  triggerClassName?: string;
 };
 
 // A compact trigger is raised like the selected segment of the tabs it sits beside.
@@ -91,10 +98,14 @@ export function NavigationMenuPopover({
   disabled,
   size = "default",
   className,
+  panelClassName,
+  triggerClassName,
 }: NavigationMenuPopoverProps) {
   const [expanded, setExpanded] = useState(false);
   const [present, setPresent] = useState(false);
+  const [triggerWidth, setTriggerWidth] = useState(0);
   const containerRef = useRef<HTMLLIElement>(null);
+  const afterCloseRef = useRef<(() => void) | null>(null);
   const setOverlay = useSetPopoverOverlay();
   const variant = use(MenuVariantContext);
 
@@ -103,7 +114,13 @@ export function NavigationMenuPopover({
     setOverlay(false);
   }, [setOverlay]);
 
+  const closeThen = useCallback((callback: () => void) => {
+    afterCloseRef.current = callback;
+    close();
+  }, [close]);
+
   const open = useCallback(() => {
+    setTriggerWidth(containerRef.current?.offsetWidth ?? 0);
     setExpanded(true);
     setPresent(true);
     setOverlay(true);
@@ -149,7 +166,7 @@ export function NavigationMenuPopover({
 
   // A sticky ancestor traps this row's z-20 under the blur overlay; the attribute lets it lift itself with has-[[data-popover-open]]:z-20.
   return (
-    <PopoverContext value={{ expanded, toggle, close, triggerContent: trigger }}>
+    <PopoverContext value={{ expanded, toggle, close, closeThen, triggerContent: trigger }}>
       <li
         ref={containerRef}
         data-popover-open={present || undefined}
@@ -168,7 +185,7 @@ export function NavigationMenuPopover({
               variant,
               interactive: !disabled,
               size,
-              className: cn("relative z-10", size === "compact" && COMPACT_TRIGGER),
+              className: cn("relative z-10", triggerClassName ?? (size === "compact" && COMPACT_TRIGGER)),
             })}
           >
             {trigger}
@@ -183,8 +200,18 @@ export function NavigationMenuPopover({
           </button>
         </ItemDisabledContext>
         <LazyMotion features={loadMotionFeatures}>
-          <AnimatePresence onExitComplete={() => setPresent(false)}>
-            {expanded && <NavigationMenuPopoverPanel size={size}>{children}</NavigationMenuPopoverPanel>}
+          <AnimatePresence
+            onExitComplete={() => {
+              setPresent(false);
+              afterCloseRef.current?.();
+              afterCloseRef.current = null;
+            }}
+          >
+            {expanded && (
+              <NavigationMenuPopoverPanel size={size} className={panelClassName} startWidth={panelClassName ? triggerWidth + PANEL_BLEED_PX : undefined}>
+                {children}
+              </NavigationMenuPopoverPanel>
+            )}
           </AnimatePresence>
         </LazyMotion>
       </li>
@@ -192,7 +219,13 @@ export function NavigationMenuPopover({
   );
 }
 
-function NavigationMenuPopoverPanel({ children, size }: PropsWithChildren<{ size: MenuItemSize }>) {
+interface PopoverPanelProps {
+  size: MenuItemSize;
+  className?: string;
+  startWidth?: number;
+}
+
+function NavigationMenuPopoverPanel({ children, size, className, startWidth }: PropsWithChildren<PopoverPanelProps>) {
   const { expanded, triggerContent } = usePopover();
   const variant = use(MenuVariantContext);
   const reduceMotion = useReducedMotion() ?? false;
@@ -213,7 +246,7 @@ function NavigationMenuPopoverPanel({ children, size }: PropsWithChildren<{ size
   return (
     <m.div
       ref={anchorRef}
-      className={cn("absolute grid justify-items-center -inset-0.75 pointer-events-none z-20", PANEL_ALIGN_CLASS[align])}
+      className={cn("absolute grid pointer-events-none z-20", className ?? "-inset-0.75 justify-items-center", PANEL_ALIGN_CLASS[align])}
       initial={POPOVER_INITIAL}
     >
       <m.div
@@ -222,9 +255,9 @@ function NavigationMenuPopoverPanel({ children, size }: PropsWithChildren<{ size
           variant,
           className: "w-full overflow-hidden pointer-events-auto",
         })}
-        initial={SHADOW_HIDDEN}
-        animate={SHADOW_VISIBLE}
-        exit={SHADOW_HIDDEN}
+        initial={startWidth === undefined ? SHADOW_HIDDEN : { ...SHADOW_HIDDEN, width: startWidth }}
+        animate={startWidth === undefined ? SHADOW_VISIBLE : { ...SHADOW_VISIBLE, width: "100%" }}
+        exit={startWidth === undefined ? SHADOW_HIDDEN : { ...SHADOW_HIDDEN, width: startWidth }}
       >
         <m.div
           ref={triggerRef}
