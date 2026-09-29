@@ -41,22 +41,36 @@ interface PanelParts {
   list: HTMLElement;
 }
 
+type PanelAlign = "start" | "center" | "end";
+
+const PANEL_ALIGN_CLASS: Record<PanelAlign, string> = { center: "items-center", end: "items-end", start: "items-start" };
+
 // The panel grows out from the trigger's centre, so its settled box is known before the animation starts.
-function revealPanel({ anchor, panel, trigger, content, list }: PanelParts, smooth: boolean): void {
+// Near an edge the scroller can't move far enough, so it grows away from that edge instead of being clipped.
+function revealPanel({ anchor, panel, trigger, content, list }: PanelParts, smooth: boolean): PanelAlign {
   const height = panel.offsetHeight - trigger.offsetHeight - content.offsetHeight + list.offsetHeight;
   const anchorBox = anchor.getBoundingClientRect();
-  const top = anchorBox.top + anchorBox.height / 2 - height / 2;
-  const bottom = top + height;
 
   const scroller = resolveScrollParent(anchor);
   const visibleTop = (scroller ? scroller.getBoundingClientRect().top : 0) + REVEAL_MARGIN_PX;
   const visibleBottom = visibleTop + (scroller ? scroller.clientHeight : window.innerHeight) - REVEAL_MARGIN_PX * 2;
+  const scrolled = scroller ? scroller.scrollTop : window.scrollY;
+  const scrollable = scroller ? scroller.scrollHeight - scroller.clientHeight : document.documentElement.scrollHeight - window.innerHeight;
 
-  const overTop = top - visibleTop;
-  const overBottom = bottom - visibleBottom;
-  const delta = overTop < 0 ? overTop : Math.max(0, Math.min(overBottom, overTop));
-  if (delta === 0) return;
-  (scroller ?? window).scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
+  const scrollNeeded = (top: number): number => {
+    const overTop = top - visibleTop;
+    const overBottom = top + height - visibleBottom;
+    return overTop < 0 ? overTop : Math.max(0, Math.min(overBottom, overTop));
+  };
+
+  const centred = scrollNeeded(anchorBox.top + anchorBox.height / 2 - height / 2);
+  const reachable = centred >= -scrolled && centred <= scrollable - scrolled;
+  const align: PanelAlign = reachable ? "center" : centred < 0 ? "start" : "end";
+  const needed = align === "center" ? centred : scrollNeeded(align === "start" ? anchorBox.top : anchorBox.bottom - height);
+  const delta = Math.min(Math.max(needed, -scrolled), scrollable - scrolled);
+
+  if (delta !== 0) (scroller ?? window).scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
+  return align;
 }
 
 type NavigationMenuPopoverProps = {
@@ -177,18 +191,19 @@ function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
   const triggerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const [align, setAlign] = useState<PanelAlign>("center");
 
   useLayoutEffect(() => {
     if (!expanded) return;
     const [anchor, panel, trigger, content, list] = [anchorRef, panelRef, triggerRef, contentRef, listRef].map((ref) => ref.current);
     if (!anchor || !panel || !trigger || !content || !list) return;
-    revealPanel({ anchor, panel, trigger, content, list }, !reduceMotion);
+    setAlign(revealPanel({ anchor, panel, trigger, content, list }, !reduceMotion));
   }, [expanded, reduceMotion]);
 
   return (
     <m.div
       ref={anchorRef}
-      className="absolute grid place-items-center -inset-0.75 pointer-events-none z-20"
+      className={cn("absolute grid justify-items-center -inset-0.75 pointer-events-none z-20", PANEL_ALIGN_CLASS[align])}
       initial={POPOVER_INITIAL}
     >
       <m.div
