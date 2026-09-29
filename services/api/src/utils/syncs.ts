@@ -25,6 +25,8 @@ import type {
   CreateSyncBody,
   PatchSyncBody,
   SyncActivityEntry,
+  SyncActivityPage,
+  SyncActivitySummary,
   SyncCalendarRole,
   SyncCalendars,
   SyncChange,
@@ -53,6 +55,7 @@ const SYNC_CALENDARS_NOT_FOUND_ERROR_MESSAGE = "Some calendars were not found.";
 const SYNC_CONFLICT_ERROR_MESSAGE = "Some calendars already copy into each other through another sync.";
 const DEFAULT_ACTIVITY_PAGE_SIZE = 50;
 const MAX_ACTIVITY_PAGE_SIZE = 100;
+const ACTIVITY_SUMMARY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type DatabaseClient = typeof databaseInstance;
 type DatabaseTransactionCallback = Parameters<DatabaseClient["transaction"]>[0];
@@ -735,10 +738,49 @@ const toActivityEntry = (row: typeof syncActivityTable.$inferSelect): SyncActivi
   return { change: row.payload as unknown as SyncChange, createdAt, id: row.id, kind: "change" };
 };
 
-interface SyncActivityPage {
-  entries: SyncActivityEntry[];
-  nextCursor: string | null;
+interface SyncRunRow {
+  createdAt: Date;
+  run: SyncRunRecord;
 }
+
+// Rows arrive newest first, so the first run seen for a destination is its latest.
+const summarizeSyncRuns = (rows: readonly SyncRunRow[], since: Date): SyncActivitySummary => {
+  const latestByDestination = new Map<string, SyncRunRecord>();
+  let added = 0;
+  let removed = 0;
+  for (const { createdAt, run } of rows) {
+    if (createdAt >= since) {
+      added += run.added;
+      removed += run.removed;
+    }
+    if (!latestByDestination.has(run.destinationCalendarId)) {
+      latestByDestination.set(run.destinationCalendarId, run);
+    }
+  }
+
+  const reasons = new Map<string, SyncRunRecord["skippedBy"][number]>();
+  let skipped = 0;
+  for (const run of latestByDestination.values()) {
+    skipped += run.skipped;
+    for (const reason of run.skippedBy) {
+      const current = reasons.get(reason.ruleId) ?? { count: 0, name: reason.name, ruleId: reason.ruleId };
+      current.count += reason.count;
+      reasons.set(reason.ruleId, current);
+    }
+  }
+  const skippedBy = [...reasons.values()].toSorted((first, second) => second.count - first.count);
+  return { added, removed, skipped, skippedBy };
+};
+
+const summarizeSyncActivity = async (client: ReadClient, syncId: string, now: Date): Promise<SyncActivitySummary> => {
+  const rows = await client
+    .select({ createdAt: syncActivityTable.createdAt, payload: syncActivityTable.payload })
+    .from(syncActivityTable)
+    .where(and(eq(syncActivityTable.syncId, syncId), eq(syncActivityTable.kind, "run")))
+    .orderBy(desc(syncActivityTable.createdAt), desc(syncActivityTable.id));
+  const runs = rows.map((row) => ({ createdAt: row.createdAt, run: row.payload as unknown as SyncRunRecord }));
+  return summarizeSyncRuns(runs, new Date(now.getTime() - ACTIVITY_SUMMARY_WINDOW_MS));
+};
 
 const listSyncActivity = async (
   client: ReadClient,
@@ -769,7 +811,11 @@ const listSyncActivity = async (
   if (rows.length > limit && last) {
     nextCursor = encodeActivityCursor(last);
   }
-  return { entries: page.map((row) => toActivityEntry(row)), nextCursor };
+  let summary: SyncActivitySummary | null = null;
+  if (!cursor) {
+    summary = await summarizeSyncActivity(client, syncId, new Date());
+  }
+  return { entries: page.map((row) => toActivityEntry(row)), nextCursor, summary };
 };
 
 export {
@@ -789,6 +835,7 @@ export {
   findSyncForUser,
   listSyncActivity,
   listSyncs,
+  summarizeSyncRuns,
   mergeSyncDefinition,
   runCreateSync,
   runUpdateSync,

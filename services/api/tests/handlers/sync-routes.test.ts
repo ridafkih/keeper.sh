@@ -125,7 +125,7 @@ describe("handleSyncActivityRoute", () => {
     const reads: unknown[] = [];
     const listActivity = (_syncId: string, options: unknown) => {
       reads.push(options);
-      return Promise.resolve({ entries: [], nextCursor: null });
+      return Promise.resolve({ entries: [], nextCursor: null, summary: null });
     };
     const hidden = await handleSyncActivityRoute(
       { params: { id: "sync-9" }, searchParams: new URLSearchParams(), userId: USER_ID },

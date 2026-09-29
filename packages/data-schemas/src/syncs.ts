@@ -455,6 +455,21 @@ type SyncActivityEntry =
   | { change: SyncChange; createdAt: string; id: string; kind: "change" }
   | { createdAt: string; id: string; kind: "run"; run: SyncRunRecord };
 
+// Added and removed count the window's runs; skipped is where each destination's latest run left things.
+interface SyncActivitySummary {
+  added: number;
+  removed: number;
+  skipped: number;
+  skippedBy: SyncRunRecord["skippedBy"];
+}
+
+interface SyncActivityPage {
+  entries: SyncActivityEntry[];
+  nextCursor: string | null;
+  // Only on the first page, so paging back doesn't recount the window.
+  summary: SyncActivitySummary | null;
+}
+
 interface SyncConflict {
   destinationCalendarId: string;
   sourceCalendarId: string;
@@ -501,6 +516,8 @@ export type {
   PatchSyncBody,
   ShareAs,
   SyncActivityEntry,
+  SyncActivityPage,
+  SyncActivitySummary,
   SyncCalendarRole,
   SyncCalendars,
   SyncChange,
