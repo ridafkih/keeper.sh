@@ -17,6 +17,7 @@ import {
   navigationMenuItemIconStyle,
   navigationMenuItemStyle,
   navigationMenuStyle,
+  type MenuItemSize,
 } from "./navigation-menu.styles";
 
 const POPOVER_INITIAL = { opacity: 1 } as const;
@@ -77,12 +78,19 @@ type NavigationMenuPopoverProps = {
   trigger: ReactNode;
   children: ReactNode;
   disabled?: boolean;
+  size?: MenuItemSize;
+  className?: string;
 };
+
+// A compact trigger is raised like the selected segment of the tabs it sits beside.
+const COMPACT_TRIGGER = "bg-background-elevated shadow-xs";
 
 export function NavigationMenuPopover({
   trigger,
   children,
   disabled,
+  size = "default",
+  className,
 }: NavigationMenuPopoverProps) {
   const [expanded, setExpanded] = useState(false);
   const [present, setPresent] = useState(false);
@@ -148,6 +156,7 @@ export function NavigationMenuPopover({
         className={cn(
           "relative grid grid-cols-1 grid-rows-1 *:row-start-1 *:col-start-1",
           present ? "z-20" : "z-0",
+          className,
         )}
       >
         <ItemDisabledContext value={Boolean(disabled)}>
@@ -158,12 +167,13 @@ export function NavigationMenuPopover({
             className={navigationMenuItemStyle({
               variant,
               interactive: !disabled,
-              className: "relative z-10",
+              size,
+              className: cn("relative z-10", size === "compact" && COMPACT_TRIGGER),
             })}
           >
             {trigger}
             <ChevronsUpDown
-              size={15}
+              size={size === "compact" ? 14 : 15}
               className={navigationMenuItemIconStyle({
                 variant,
                 disabled,
@@ -174,7 +184,7 @@ export function NavigationMenuPopover({
         </ItemDisabledContext>
         <LazyMotion features={loadMotionFeatures}>
           <AnimatePresence onExitComplete={() => setPresent(false)}>
-            {expanded && <NavigationMenuPopoverPanel>{children}</NavigationMenuPopoverPanel>}
+            {expanded && <NavigationMenuPopoverPanel size={size}>{children}</NavigationMenuPopoverPanel>}
           </AnimatePresence>
         </LazyMotion>
       </li>
@@ -182,7 +192,7 @@ export function NavigationMenuPopover({
   );
 }
 
-function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
+function NavigationMenuPopoverPanel({ children, size }: PropsWithChildren<{ size: MenuItemSize }>) {
   const { expanded, triggerContent } = usePopover();
   const variant = use(MenuVariantContext);
   const reduceMotion = useReducedMotion() ?? false;
@@ -223,10 +233,10 @@ function NavigationMenuPopoverPanel({ children }: PropsWithChildren) {
           animate={TRIGGER_ANIMATE}
           exit={TRIGGER_EXIT}
         >
-          <div className={navigationMenuItemStyle({ variant, interactive: false })}>
+          <div className={navigationMenuItemStyle({ variant, interactive: false, size })}>
             {triggerContent}
             <ChevronsUpDown
-              size={15}
+              size={size === "compact" ? 14 : 15}
               className={navigationMenuItemIconStyle({ variant, className: "ml-auto shrink-0" })}
             />
           </div>

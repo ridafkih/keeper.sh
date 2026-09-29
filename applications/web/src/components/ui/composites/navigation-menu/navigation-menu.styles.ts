@@ -17,8 +17,13 @@ export const navigationMenuStyle = tv({
 export type MenuVariant = VariantProps<typeof navigationMenuStyle>["variant"];
 
 export const navigationMenuItemStyle = tv({
-  base: "rounded-[0.875rem] flex items-center gap-3 p-3.5 sm:p-3 w-full",
+  base: "flex items-center w-full",
   variants: {
+    // Compact matches a SegmentedControl segment, for a menu that sits beside one.
+    size: {
+      default: "rounded-[0.875rem] gap-3 p-3.5 sm:p-3",
+      compact: "rounded-md gap-1.5 px-2.5 py-1",
+    },
     variant: {
       default: "",
       highlight: "bg-linear-to-t dark:to-blue-600 dark:from-blue-700 to-blue-500 from-blue-600",
@@ -37,8 +42,11 @@ export const navigationMenuItemStyle = tv({
   defaultVariants: {
     variant: "default",
     interactive: true,
+    size: "default",
   },
 });
+
+export type MenuItemSize = VariantProps<typeof navigationMenuItemStyle>["size"];
 
 export const navigationMenuItemIconStyle = tv({
   base: "shrink-0",
