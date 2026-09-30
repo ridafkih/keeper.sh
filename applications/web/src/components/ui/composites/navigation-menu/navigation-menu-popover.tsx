@@ -120,6 +120,8 @@ export function NavigationMenuPopover({
   }, [close]);
 
   const open = useCallback(() => {
+    // Reopening interrupts the exit, so a callback queued by closeThen would otherwise fire on some later close.
+    afterCloseRef.current = null;
     setTriggerWidth(containerRef.current?.offsetWidth ?? 0);
     setExpanded(true);
     setPresent(true);

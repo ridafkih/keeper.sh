@@ -85,7 +85,7 @@ export function SyncActivity({ sync, calendars }: SyncActivityProps) {
           )}
           {summary && (
             <ActivityDigest
-              summary={summary}
+              summary={{ ...summary, skipped: sync.skippedCount }}
               calendarNames={destinationIds.map((calendarId) => calendarName(calendarsById, calendarId))}
               waitingOn={waitingOn}
             />
@@ -143,7 +143,8 @@ interface ProblemRow {
   to?: string;
 }
 
-// One row per calendar, each leading to its account's reconnect page, which is also how a failing calendar recovers.
+// One row per calendar, each leading to its account's reconnect page, which is also how a failing calendar recovers;
+// a turned-off calendar was paused, which reconnecting can't undo.
 const reconnectRows = (problems: SyncDetail["destinations"], calendarsById: SourcesById): ProblemRow[] =>
   problems.flatMap((destination) => {
     if (!destination.problem) return [];
@@ -151,7 +152,7 @@ const reconnectRows = (problems: SyncDetail["destinations"], calendarsById: Sour
     return [{
       key: destination.calendarId,
       label: `${calendarName(calendarsById, destination.calendarId)} ${PROBLEM_TEXT[destination.problem]}`,
-      to: accountId ? `/dashboard/accounts/${accountId}/reconnect` : undefined,
+      to: accountId && destination.problem !== "disabled" ? `/dashboard/accounts/${accountId}/reconnect` : undefined,
     }];
   });
 
@@ -319,7 +320,7 @@ function CalendarFilterMenu({ calendarIds, calendarsById, problems, value, disab
       <AnimatedWidth className={cn("rounded-lg bg-background-hover p-0.5", disabled && "pointer-events-none opacity-40")}>
         <ul
           className={cn(
-            "flex max-w-[15.75rem] min-w-0 items-center rounded-md shadow-xs transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
+            "relative flex max-w-[15.75rem] min-w-0 items-center rounded-md shadow-xs transition-colors duration-200 ease-[cubic-bezier(0.2,0,0,1)] motion-reduce:transition-none",
             value ? "bg-foreground text-background" : "bg-background-elevated text-foreground",
           )}
         >
@@ -328,7 +329,7 @@ function CalendarFilterMenu({ calendarIds, calendarsById, problems, value, disab
             disabled={disabled}
             className="min-w-0 flex-1"
             panelClassName="-inset-y-0.75 -right-0.75 w-[calc(16rem+0.375rem)] justify-items-end"
-            triggerClassName={cn("bg-transparent hover:bg-transparent! [&>svg]:text-current [&>svg]:opacity-60", value && "pr-1")}
+            triggerClassName={cn("bg-transparent hover:bg-transparent! [&>svg]:text-current [&>svg]:opacity-60", value && "pr-6")}
             trigger={(
               <>
                 <AnimatePresence initial={false}>
@@ -360,12 +361,13 @@ function CalendarFilterMenu({ calendarIds, calendarsById, problems, value, disab
           </NavigationMenuPopover>
           <AnimatePresence initial={false}>
             {value && (
-              <m.li key="clear" className="flex shrink-0" initial={POPPED_OUT} animate={POPPED_IN} exit={POPPED_OUT} transition={pop}>
+              // Laid over the trigger's padding rather than beside it, so the dropdown spans the whole segment and its list lines up with the edge.
+              <m.li key="clear" className="absolute top-1/2 right-1 z-[15] flex -translate-y-1/2" initial={POPPED_OUT} animate={POPPED_IN} exit={POPPED_OUT} transition={pop}>
                 <button
                   type="button"
                   aria-label="Show all calendars"
                   onClick={() => onChange(null)}
-                  className="mr-1 grid size-4 place-items-center rounded-sm bg-current/15 hover:bg-current/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="grid size-4 place-items-center rounded-sm bg-current/15 hover:bg-current/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X size={10} strokeWidth={2.5} />
                 </button>
