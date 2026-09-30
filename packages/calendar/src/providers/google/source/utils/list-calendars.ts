@@ -4,7 +4,7 @@ import {
 } from "@keeper.sh/data-schemas";
 import type { GoogleCalendarListEntry } from "../types";
 import { GOOGLE_CALENDAR_LIST_URL } from "../../shared/api";
-import { isSimpleAuthError } from "../../shared/errors";
+import { isRateLimitApiError, isSimpleAuthError, parseGoogleApiError } from "../../shared/errors";
 
 class CalendarListError extends Error {
   public readonly status: number;
@@ -56,7 +56,9 @@ const fetchCalendarPage = async (
   });
 
   if (!response.ok) {
-    const authRequired = isSimpleAuthError(response.status);
+    const apiError = parseGoogleApiError(await response.text());
+    const authRequired = isSimpleAuthError(response.status)
+      && !isRateLimitApiError(response.status, apiError);
     throw new CalendarListError(
       `Failed to list calendars: ${response.status}`,
       response.status,
