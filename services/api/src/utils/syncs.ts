@@ -749,7 +749,8 @@ const summarizeSyncRuns = (rows: readonly SyncRunRow[], since: Date): SyncActivi
   let added = 0;
   let removed = 0;
   for (const { createdAt, run } of rows) {
-    if (createdAt >= since) {
+    // A shared destination's run carries every sync's copies, so it can't be credited to this one.
+    if (createdAt >= since && !run.sharedDestination) {
       added += run.added;
       removed += run.removed;
     }
@@ -782,6 +783,14 @@ const summarizeSyncActivity = async (client: ReadClient, syncId: string, now: Da
   return summarizeSyncRuns(runs, new Date(now.getTime() - ACTIVITY_SUMMARY_WINDOW_MS));
 };
 
+// Only the first page carries the summary, so paging back doesn't recount the window.
+const readFirstPageSummary = (client: ReadClient, syncId: string, cursor: ActivityCursor | null): Promise<SyncActivitySummary | null> => {
+  if (cursor) {
+    return Promise.resolve(null);
+  }
+  return summarizeSyncActivity(client, syncId, new Date());
+};
+
 const listSyncActivity = async (
   client: ReadClient,
   syncId: string,
@@ -799,21 +808,20 @@ const listSyncActivity = async (
       conditions.push(olderThanCursor);
     }
   }
-  const rows = await client
-    .select()
-    .from(syncActivityTable)
-    .where(and(...conditions))
-    .orderBy(desc(syncActivityTable.createdAt), desc(syncActivityTable.id))
-    .limit(limit + 1);
+  const [rows, summary] = await Promise.all([
+    client
+      .select()
+      .from(syncActivityTable)
+      .where(and(...conditions))
+      .orderBy(desc(syncActivityTable.createdAt), desc(syncActivityTable.id))
+      .limit(limit + 1),
+    readFirstPageSummary(client, syncId, cursor),
+  ]);
   const page = rows.slice(0, limit);
   const last = page.at(-1);
   let nextCursor: string | null = null;
   if (rows.length > limit && last) {
     nextCursor = encodeActivityCursor(last);
-  }
-  let summary: SyncActivitySummary | null = null;
-  if (!cursor) {
-    summary = await summarizeSyncActivity(client, syncId, new Date());
   }
   return { entries: page.map((row) => toActivityEntry(row)), nextCursor, summary };
 };

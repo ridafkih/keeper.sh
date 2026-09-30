@@ -32,6 +32,16 @@ describe("summarizeSyncRuns", () => {
     expect(summary.removed).toBe(1);
   });
 
+  it("leaves out runs on a destination shared with other syncs, whose copies can't be credited to this one", () => {
+    const summary = summarizeSyncRuns([
+      { createdAt: RECENT, run: run("work", { added: 2 }) },
+      { createdAt: RECENT, run: run("family", { added: 10, removed: 4, sharedDestination: true }) },
+    ], SINCE);
+
+    expect(summary.added).toBe(2);
+    expect(summary.removed).toBe(0);
+  });
+
   it("takes what is skipped from each destination's latest run, merging reasons across destinations", () => {
     const summary = summarizeSyncRuns([
       { createdAt: RECENT, run: run("work", { skipped: 5, skippedBy: [{ count: 4, name: "Focus Time", ruleId: "focus" }] }) },

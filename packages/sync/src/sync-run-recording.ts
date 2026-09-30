@@ -1,7 +1,7 @@
 import type { SourceProjectionOutcome } from "@keeper.sh/calendar";
 import type { SyncRunRecord } from "@keeper.sh/data-schemas";
 import { sourceDestinationMappingsTable, syncActivityTable } from "@keeper.sh/database/schema";
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const SYNC_ACTIVITY_RETENTION = 200;
@@ -85,14 +85,16 @@ const findPreviousRun = async (
   syncId: string,
   destinationCalendarId: string,
 ): Promise<SyncRunRecord | null> => {
-  const runs = await database
+  const [previous] = await database
     .select({ payload: syncActivityTable.payload })
     .from(syncActivityTable)
-    .where(and(eq(syncActivityTable.syncId, syncId), eq(syncActivityTable.kind, "run")))
+    .where(and(
+      eq(syncActivityTable.syncId, syncId),
+      eq(syncActivityTable.kind, "run"),
+      sql`${syncActivityTable.payload}->>'destinationCalendarId' = ${destinationCalendarId}`,
+    ))
     .orderBy(desc(syncActivityTable.createdAt), desc(syncActivityTable.id))
-    .limit(SYNC_ACTIVITY_RETENTION);
-  const previous = runs.find(({ payload }) =>
-    isSyncRunRecord(payload) && payload.destinationCalendarId === destinationCalendarId);
+    .limit(1);
   if (previous && isSyncRunRecord(previous.payload)) {
     return previous.payload;
   }
