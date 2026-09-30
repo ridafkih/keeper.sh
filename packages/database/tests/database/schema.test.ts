@@ -9,6 +9,9 @@ import {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
+  sourceDestinationMappingsTable,
+  syncActivityTable,
+  syncCalendarsTable,
   userSyncRequestsTable,
 } from "../../src/database/schema";
 
@@ -320,5 +323,32 @@ describe("calendar rediscovery schema", () => {
     expect(indexedColumnNames(calendarAccountsTable)).not.toContain("calendarsRefreshedAt");
     expect(indexedColumnNames(calendarAccountsTable))
       .not.toContain("calendarsRefreshAttemptedAt");
+  });
+});
+
+const findTableIndex = (table: Parameters<typeof getTableConfig>[0], name: string) =>
+  getTableConfig(table).indexes.find((index) => index.config.name === name);
+
+const ruleIndexColumnNames = (index: ReturnType<typeof findTableIndex>): (string | null)[] =>
+  (index?.config.columns ?? []).map((column) => {
+    if ("name" in column && typeof column.name === "string") {
+      return column.name;
+    }
+    return null;
+  });
+
+describe("sync schema", () => {
+  it("keeps a calendar pair in one sync and removes pairs with their sync or calendars", () => {
+    const pairIndex = findTableIndex(sourceDestinationMappingsTable, "source_destination_mapping_idx");
+    const foreignKeys = getTableConfig(sourceDestinationMappingsTable).foreignKeys.map((key) => key.onDelete);
+
+    expect(pairIndex?.config.unique).toBe(true);
+    expect(ruleIndexColumnNames(pairIndex)).toEqual(["sourceCalendarId", "destinationCalendarId"]);
+    expect(foreignKeys).toEqual(["cascade", "cascade", "cascade"]);
+  });
+
+  it("removes a sync's calendars and activity with the sync", () => {
+    expect(getTableConfig(syncCalendarsTable).foreignKeys.map((key) => key.onDelete)).toEqual(["cascade", "cascade"]);
+    expect(getTableConfig(syncActivityTable).foreignKeys.map((key) => key.onDelete)).toEqual(["cascade"]);
   });
 });

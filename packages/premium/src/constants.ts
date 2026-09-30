@@ -1,8 +1,8 @@
 const FREE_ACCOUNT_LIMIT = 2;
 const PRO_ACCOUNT_LIMIT = Infinity;
 
-const FREE_MAPPING_LIMIT = 3;
-const PRO_MAPPING_LIMIT = Infinity;
+const FREE_SYNC_LIMIT = 1;
+const PRO_SYNC_LIMIT = Infinity;
 
 const FREE_FEED_LIMIT = 1;
 const PRO_FEED_LIMIT = Infinity;
@@ -10,8 +10,8 @@ const PRO_FEED_LIMIT = Infinity;
 export {
   FREE_ACCOUNT_LIMIT,
   PRO_ACCOUNT_LIMIT,
-  FREE_MAPPING_LIMIT,
-  PRO_MAPPING_LIMIT,
+  FREE_SYNC_LIMIT,
+  PRO_SYNC_LIMIT,
   FREE_FEED_LIMIT,
   PRO_FEED_LIMIT,
 };

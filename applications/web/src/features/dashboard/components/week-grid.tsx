@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
+import { flushSync } from "react-dom";
 import { atom, useAtomValue, useSetAtom } from "jotai";
-import { scroll } from "motion";
-import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
@@ -41,12 +40,16 @@ import {
   HOUR_HEIGHT,
   HOURS,
   isSameDay,
+  resolveColumnLayout,
+  sameColumnLayout,
   startOfDay,
   startOfVisibleWeek,
   WEEK_VIEW_DAYS,
 } from "./calendar-helpers";
+import type { ColumnLayout } from "./calendar-helpers";
 
 const GUTTER_WIDTH = 52;
+const FALLBACK_COLUMNS: ColumnLayout = { column: 136, gutter: GUTTER_WIDTH };
 const HEADER_HEIGHT = 64;
 const ALL_DAY_MAX_ROWS = 2;
 const ALL_DAY_BAND_PADDING_BOTTOM = 4;
@@ -113,7 +116,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
 
   return (
     <div
-      className="relative flex flex-col overflow-x-clip"
+      className="relative flex flex-col overflow-x-clip bg-background"
       onPointerEnter={(event) => {
         if (event.pointerType === "mouse") setGraphHoverIndex(resolveGraphSlotIndex(dayOffset));
       }}
@@ -121,10 +124,11 @@ const DayHeaderCell = memo(function DayHeaderCell({
         if (event.pointerType === "mouse") setGraphHoverIndex(null);
       }}
     >
-      {/* Ramps upward as the header fill evaporates downward, and runs on under the grid so a vertical overscroll bounce can't part it from the column rule. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-background-elevated mask-b-from-0%" />
+      {/* Ramps upward as the header fill evaporates downward; the grid draws its own rule from the seam down. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute top-0 -bottom-40 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
+        className="pointer-events-none absolute inset-y-0 left-0 w-px bg-border-elevated mask-t-from-[calc(100%-2.625rem)]"
       />
       <div
         className={periodWash({
@@ -178,7 +182,7 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const today = useStartOfToday();
   const router = useRouter();
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const rowRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
   const mountedRef = useRef(false);
   /** Vertical offset as last scrolled; put back after the router replays a cached one. */
@@ -194,7 +198,12 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       addDays(start, index),
     );
   });
-  const columnsTemplate = `repeat(${stripDays.length}, minmax(0, 1fr))`;
+  /** Whole-pixel column and gutter widths; the fallback only shapes the strip until the first measurement lands. */
+  const [columns, setColumns] = useState<ColumnLayout>(FALLBACK_COLUMNS);
+  const alignedColumnsRef = useRef<ColumnLayout | null>(null);
+  const { gutter } = columns;
+  const columnsTemplate = `repeat(${stripDays.length}, ${columns.column}px)`;
+  const stripWidth = stripDays.length * columns.column;
 
   const now = useNowMinute();
   const nowLayout = now && resolveNowLayout(stripDays, now);
@@ -218,11 +227,14 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
   const setGraphHoverIndex = useSetAtom(eventGraphHoverIndexAtom);
   useEffect(() => () => setGraphHoverIndex(null), [setGraphHoverIndex]);
 
-  const columnWidth = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return 1;
-    return Math.max((el.clientWidth - GUTTER_WIDTH) / VISIBLE_COLUMNS, 1);
-  }, []);
+  const columnWidth = useCallback(() => columns.column, [columns]);
+
+  const columnOffset = useCallback((index: number) => {
+    const grid = gridRef.current;
+    const column = grid?.children[index];
+    if (!grid || !column) return index * columnWidth();
+    return column.getBoundingClientRect().left - grid.getBoundingClientRect().left;
+  }, [columnWidth]);
 
   const scrollToCenter = useCallback(
     (centerDay: Date, behavior: ScrollBehavior) => {
@@ -233,9 +245,9 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       const clamped = Math.max(0, Math.min(index, stripDays.length - VISIBLE_COLUMNS));
       alignedCenterMsRef.current = centerDay.getTime();
       alignedWidthRef.current = el.clientWidth;
-      el.scrollTo({ left: clamped * columnWidth(), behavior });
+      el.scrollTo({ left: columnOffset(clamped), behavior });
     },
-    [columnWidth, stripDays],
+    [columnOffset, stripDays],
   );
 
   // Mount: centre the anchor and jump to business hours; afterwards, smooth-scroll on anchor moves.
@@ -256,24 +268,6 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     }
   }, [anchor, scrollToCenter]);
 
-  // The day row follows the grid via Motion's ScrollTimeline — a scrollLeft mirror trails compositor scrolling by a frame.
-  useEffect(() => {
-    const scroller = scrollerRef.current;
-    const row = rowRef.current;
-    if (!scroller || !row) return;
-    const travel = (-100 * (stripDays.length - VISIBLE_COLUMNS)) / stripDays.length;
-    const animation = animate(
-      row,
-      { transform: ["translateX(0%)", `translateX(${travel}%)`] },
-      { ease: "linear" },
-    );
-    const cancel = scroll(animation, { container: scroller, axis: "x" });
-    return () => {
-      cancel();
-      animation.cancel();
-    };
-  }, [stripDays]);
-
   // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
   useEffect(
     () =>
@@ -287,23 +281,36 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [router, scrollToCenter],
   );
 
-  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day.
-  useEffect(() => {
+  // A resize is applied synchronously, inside the observer, so the columns and the frame edge move in the same frame.
+  useLayoutEffect(() => {
     const el = scrollerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const width = el.clientWidth;
-      if (width === 0 || width === alignedWidthRef.current) return;
-      const alignedCenterMs = alignedCenterMsRef.current;
-      if (alignedCenterMs === null) {
-        alignedWidthRef.current = width;
-        return;
-      }
-      scrollToCenter(new Date(alignedCenterMs), "auto");
-    });
+    if (!el) return;
+    const measure = (sync: boolean) => {
+      if (el.clientWidth === 0) return;
+      const next = resolveColumnLayout(el.clientWidth, GUTTER_WIDTH);
+      const apply = () => setColumns((current) => (sameColumnLayout(current, next) ? current : next));
+      if (sync) flushSync(apply);
+      else apply();
+    };
+    measure(false);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => measure(true));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [scrollToCenter]);
+  }, []);
+
+  // Column widths follow the scroller's width, so a resize would drift the strip; re-snap to the centred day once the new widths are laid out.
+  useLayoutEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || alignedColumnsRef.current === columns) return;
+    alignedColumnsRef.current = columns;
+    const alignedCenterMs = alignedCenterMsRef.current;
+    if (alignedCenterMs === null) {
+      alignedWidthRef.current = el.clientWidth;
+      return;
+    }
+    scrollToCenter(new Date(alignedCenterMs), "instant");
+  }, [columns, scrollToCenter]);
 
   // Write-only: subscribing would reconcile all 742 memoised day cells on every open/close.
   const setDetail = useSetAtom(eventDetailAtom);
@@ -334,6 +341,15 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     });
   }, [eventsByDay, setDetail]);
 
+  const visibleStart = startOfVisibleWeek(anchor);
+  let mostAllDay = 0;
+  for (let index = 0; index < VISIBLE_COLUMNS; index++) {
+    const allDayCount = eventsByDay.get(addDays(visibleStart, index).getTime())?.allDay.length ?? 0;
+    mostAllDay = Math.max(mostAllDay, allDayCount);
+  }
+  const bandRows = Math.min(mostAllDay, ALL_DAY_MAX_ROWS);
+  const headerHeight = HEADER_HEIGHT + resolveBandHeight(bandRows);
+
   const handleEventClick = (clickEvent: ReactMouseEvent) => {
     const target = (clickEvent.target as Element).closest<HTMLElement>("[data-event-id]");
     const scroller = scrollerRef.current;
@@ -352,8 +368,8 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
       trigger: target,
       anchor: rect,
       frame: {
-        top: frameRect.top,
-        left: frameRect.left + GUTTER_WIDTH,
+        top: frameRect.top + headerHeight,
+        left: frameRect.left + gutter,
         right: frameRect.right,
         bottom: frameRect.bottom,
       },
@@ -390,92 +406,78 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     [],
   );
 
-  const visibleStart = startOfVisibleWeek(anchor);
-  let mostAllDay = 0;
-  for (let index = 0; index < VISIBLE_COLUMNS; index++) {
-    const allDayCount = eventsByDay.get(addDays(visibleStart, index).getTime())?.allDay.length ?? 0;
-    mostAllDay = Math.max(mostAllDay, allDayCount);
-  }
-  const bandRows = Math.min(mostAllDay, ALL_DAY_MAX_ROWS);
-
-  const dayRow = (
-    <div className="flex">
-      <div className="shrink-0" style={{ width: GUTTER_WIDTH }} />
-      <div className="relative min-w-0 flex-1 overflow-x-clip">
-        <div
-          ref={rowRef}
-          className="group relative grid"
-          data-highlighting={resolveDataAttr(highlightVisible)}
-          style={{
-            gridTemplateColumns: columnsTemplate,
-            width: `calc(${stripDays.length} * 100% / ${VISIBLE_COLUMNS})`,
-          }}
-        >
-          {stripDays.map((day) => (
-            <DayHeaderCell
-              key={day.getTime()}
-              day={day}
-              dayOffset={resolveDayOffset(day)}
-              timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
-              allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
-              bandRows={bandRows}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   return (
-    <CalendarFrame
-      toolbar={toolbar}
-      columnHeader={dayRow}
-      gridMaxHeight={HOUR_HEIGHT * HOURS.length}
-    >
+    <CalendarFrame toolbar={toolbar} gridMaxHeight={HOUR_HEIGHT * HOURS.length + headerHeight}>
+      {/* One scroller carries the day row and the hours, so both ride the same scroll; the row sticks to the top and the gutters to the left. */}
       {/* Bottom only: a horizontal fade would dim the gutter labels and the outermost column, and a top one would wash out the band the header dissolves into. */}
       <div
         ref={scrollerRef}
         onScroll={handleScroll}
-        className="flex min-h-0 flex-1 items-start snap-x snap-mandatory overflow-auto overscroll-x-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        style={{ scrollPaddingLeft: GUTTER_WIDTH }}
+        className="min-h-0 flex-1 snap-x snap-mandatory overflow-auto overscroll-none mask-b-from-[calc(100%-24px)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ scrollPaddingLeft: gutter }}
       >
-        <div
-          className="sticky left-0 z-30 shrink-0 bg-background"
-          style={{ width: GUTTER_WIDTH, height: HOUR_HEIGHT * HOURS.length }}
-        >
-          {HOURS.slice(1).map((hour) => (
-            <span
-              key={hour}
-              className={cn(
-                "absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted",
-                hour === nowLayout?.coveredHour && "invisible",
-              )}
-              style={{ top: hour * HOUR_HEIGHT }}
-            >
-              {formatHourLabel(hour)}
-            </span>
-          ))}
-          {nowLayout && <NowPill layout={nowLayout} />}
+        <div className="sticky top-0 z-40 flex w-max">
+          <div className="sticky left-0 z-10 shrink-0 bg-background" style={{ width: gutter }}>
+            <div aria-hidden className="pointer-events-none absolute inset-0 bg-background-elevated mask-b-from-0%" />
+          </div>
+          <div
+            className="group relative grid shrink-0"
+            data-highlighting={resolveDataAttr(highlightVisible)}
+            style={{ gridTemplateColumns: columnsTemplate, width: stripWidth }}
+          >
+            {stripDays.map((day) => (
+              <DayHeaderCell
+                key={day.getTime()}
+                day={day}
+                dayOffset={resolveDayOffset(day)}
+                timedCount={eventsByDay.get(day.getTime())?.timed.length ?? 0}
+                allDay={eventsByDay.get(day.getTime())?.allDay ?? NO_EVENTS}
+                bandRows={bandRows}
+              />
+            ))}
+          </div>
         </div>
-        <div
-          onClick={handleEventClick}
-          className="relative grid shrink-0"
-          style={{
-            gridTemplateColumns: columnsTemplate,
-            width: `calc(${stripDays.length} * (100% - ${GUTTER_WIDTH}px) / ${VISIBLE_COLUMNS})`,
-            height: HOUR_HEIGHT * HOURS.length,
-          }}
-        >
-          {stripDays.map((day) => (
-            <DayColumn
-              key={day.getTime()}
-              day={day}
-              dayOffset={resolveDayOffset(day)}
-              now={isSameDay(day, today) ? now : null}
-              events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
-            />
-          ))}
-          {nowLayout && <NowIndicator layout={nowLayout} />}
+        <div className="flex w-max items-start">
+          <div
+            className="sticky left-0 z-30 shrink-0 bg-background"
+            style={{ width: gutter, height: HOUR_HEIGHT * HOURS.length }}
+          >
+            {HOURS.slice(1).map((hour) => (
+              <span
+                key={hour}
+                className={cn(
+                  "absolute right-1.5 -translate-y-1/2 text-[10px] tabular-nums text-foreground-muted",
+                  hour === nowLayout?.coveredHour && "invisible",
+                )}
+                style={{ top: hour * HOUR_HEIGHT }}
+              >
+                {formatHourLabel(hour)}
+              </span>
+            ))}
+            {nowLayout && <NowPill layout={nowLayout} />}
+          </div>
+          <div
+            ref={gridRef}
+            onClick={handleEventClick}
+            className="relative grid shrink-0"
+            style={{
+              gridTemplateColumns: columnsTemplate,
+              width: stripWidth,
+              height: HOUR_HEIGHT * HOURS.length,
+            }}
+          >
+            {stripDays.map((day) => (
+              <DayColumn
+                key={day.getTime()}
+                day={day}
+                dayOffset={resolveDayOffset(day)}
+                now={isSameDay(day, today) ? now : null}
+                events={eventsByDay.get(day.getTime())?.timed ?? NO_EVENTS}
+              />
+            ))}
+            {nowLayout && <NowIndicator layout={nowLayout} />}
+          </div>
         </div>
       </div>
       <EventDetailPopover onClose={closeDetail} />

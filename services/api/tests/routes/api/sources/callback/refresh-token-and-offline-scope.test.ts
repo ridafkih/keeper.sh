@@ -143,6 +143,7 @@ describe("microsoft connect rejects a token response without a refresh token", (
       { refreshToken: "refresh-token-1", userId: "user-1" },
     ]);
     expect(importedAccounts).toEqual(["credential-1"]);
-    expect(new URL(location).pathname).toBe("/dashboard/accounts/account-1/setup");
+    expect(new URL(location).pathname).toBe("/dashboard/setup");
+    expect(new URL(location).searchParams.get("accountId")).toBe("account-1");
   });
 });

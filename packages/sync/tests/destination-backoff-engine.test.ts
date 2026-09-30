@@ -21,6 +21,10 @@ const USER_ID = "user-1";
 const CALENDAR_ID = "destination-1";
 const SOURCE_ID = "source-1";
 
+vi.mock("../src/sync-run-recording", () => ({
+  recordSyncRun: () => Promise.resolve(),
+}));
+
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
   return {
@@ -42,6 +46,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: localEventsMock(),
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+    getPausedSourceCalendarIds: () => Promise.resolve(new Set<string>()),
     withSourceIngestLocks: (
       database: unknown,
       _ids: string[],

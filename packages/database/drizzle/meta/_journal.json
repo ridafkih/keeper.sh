@@ -659,6 +659,13 @@
       "when": 1788012241237,
       "tag": "0093_verify_existing_microsoft_registrations",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1790485089000,
+      "tag": "0095_syncs",
+      "breakpoints": true
     }
   ]
 }

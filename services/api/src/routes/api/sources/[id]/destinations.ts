@@ -4,11 +4,9 @@ import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database } from "@/context";
 import {
   getDestinationsForSource,
-  setDestinationsForSource,
 } from "@/utils/source-destination-mappings";
 import {
   handleGetSourceDestinationsRoute,
-  handlePutSourceDestinationsRoute,
 } from "./mapping-routes";
 
 const GET = withWideEvent(
@@ -36,14 +34,4 @@ const GET = withWideEvent(
   ),
 );
 
-const PUT = withWideEvent(
-  withAuth(async ({ request, params, userId }) => {
-    const payload = await request.json();
-    return handlePutSourceDestinationsRoute(
-      { body: payload, params, userId },
-      { setDestinationsForSource },
-    );
-  }),
-);
-
-export { GET, PUT };
+export { GET };

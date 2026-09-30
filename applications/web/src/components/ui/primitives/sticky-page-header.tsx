@@ -2,7 +2,8 @@ import { useEffect, useRef, type PropsWithChildren } from "react";
 import { cn } from "@/utils/cn";
 import { resolveScrollParent } from "@/lib/scroll-parent";
 
-// Sits under the popover blur overlay (z-10) but above page content, and reaches up over the column's top padding at lg.
+// Sits under the popover blur overlay (z-10) but above page content, and reaches up over the column's top padding
+// (1rem on phones, all of it at lg) so it keeps that breathing room once stuck to the top.
 export function StickyPageHeader({ children, className }: PropsWithChildren<{ className?: string }>) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -16,7 +17,8 @@ export function StickyPageHeader({ children, className }: PropsWithChildren<{ cl
       const element = ref.current;
       if (!element) return;
       const parent = resolveScrollParent(element);
-      const offset = parent ? parent.scrollTop : window.scrollY;
+      const body = element.parentElement?.querySelector<HTMLElement>("[data-page-scroller]");
+      const offset = (parent ? parent.scrollTop : window.scrollY) + (body?.scrollTop ?? 0);
       element.dataset.scrolled = offset > 0 ? "true" : "false";
     };
 
@@ -40,7 +42,7 @@ export function StickyPageHeader({ children, className }: PropsWithChildren<{ cl
       ref={ref}
       data-scrolled="false"
       className={cn(
-        "sticky top-0 z-[5] flex flex-col bg-background pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent after:opacity-0 after:transition-opacity data-[scrolled=true]:after:opacity-100 lg:-top-(--sidebar-pad-t) lg:-mx-(--sidebar-pad-x) lg:-mt-(--sidebar-pad-t) lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t)",
+        "sticky top-0 z-[5] -mt-4 flex flex-col bg-background pt-4 pb-1 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-6 after:bg-linear-to-b after:from-background after:to-transparent after:opacity-0 after:transition-opacity data-[scrolled=true]:after:opacity-100 lg:-top-(--sidebar-pad-t) lg:-mx-(--sidebar-pad-x) lg:-mt-(--sidebar-pad-t) lg:px-(--sidebar-pad-x) lg:pt-(--sidebar-pad-t)",
         className,
       )}
     >

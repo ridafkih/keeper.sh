@@ -589,6 +589,27 @@ export {
   pushChannelStateSchema,
 };
 
+export {
+  applyRuleActions,
+  evaluateRules,
+  findMatchingRule,
+  matchesCondition,
+  matchesRule,
+  resolveEventNameTemplate,
+  ruleActionSchema,
+  ruleConditionSchema,
+  ruleMatchSchema,
+  syncRuleNameSchema,
+} from "./sync-rules";
+export type {
+  RuleAction,
+  RuleCondition,
+  RuleEvaluation,
+  RuleEventFacts,
+  RuleMatch,
+} from "./sync-rules";
+export * from "./syncs";
+
 export type {
   ProxyableMethods,
   Plan,

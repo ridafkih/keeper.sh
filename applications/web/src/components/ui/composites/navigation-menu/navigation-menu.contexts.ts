@@ -10,6 +10,8 @@ type PopoverContextValue = {
   expanded: boolean;
   toggle: () => void;
   close: () => void;
+  // Closes, then runs the callback once the panel has folded away, for changes that would otherwise move under it.
+  closeThen: (callback: () => void) => void;
   triggerContent: ReactNode;
 };
 

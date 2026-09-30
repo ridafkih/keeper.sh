@@ -9,6 +9,7 @@ import {
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
   getMappedSourceCalendarIds,
+  getPausedSourceCalendarIds,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
@@ -47,6 +48,8 @@ import {
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
 import { resolveSyncProvider } from "./resolve-provider";
+import { recordSyncRun } from "./sync-run-recording";
+import type { SyncRunRecordingInput } from "./sync-run-recording";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
@@ -353,6 +356,7 @@ interface DestinationReconciliationScopeContext {
   authoritativeSourceWindows: ReadonlyMap<string, SyncWindow>;
   authoritativeWindow: SyncWindow | null;
   eventReadDiagnostics: DestinationEventReadDiagnostics;
+  pausedSourceCalendarIds: ReadonlySet<string>;
   requestedWindow: SyncWindow;
   sourceCalendarIdsAtLocalRead: string[];
 }
@@ -372,6 +376,7 @@ const createDestinationReconciliationScope = (
   authoritativeSourceWindows: context.authoritativeSourceWindows,
   authoritativeWindow: context.authoritativeWindow,
   configuredSourceCalendarIds: new Set(context.sourceCalendarIdsAtLocalRead),
+  frozenSourceCalendarIds: context.pausedSourceCalendarIds,
   requestedWindow: context.requestedWindow,
   withheldSourceEventStateIds: new Set(
     context.eventReadDiagnostics.overBudgetSourceEventStateIds,
@@ -392,7 +397,9 @@ const createDestinationReconciliationWideEventFields = (
   "local_event_states.over_budget_series_uids": context.eventReadDiagnostics.overBudgetSourceEventUids
     .slice(0, OVER_BUDGET_SERIES_UID_SAMPLE_SIZE)
     .join(","),
+  "local_event_states.skipped_by_rule_count": context.eventReadDiagnostics.skippedByRuleCount,
   "local_event_states.syncable_count": context.eventReadDiagnostics.syncableEventCount,
+  "local_event_states.unmatched_by_rule_count": context.eventReadDiagnostics.unmatchedByRuleCount,
   "reconciliation.local_read.duration_ms": context.localReadDurationMs,
   "reconciliation.remote_read.duration_ms": context.remoteReadDurationMs,
   "reconciliation.source_calendars.at_local_read_count": context.sourceCalendarIdsAtLocalRead.length,
@@ -772,6 +779,18 @@ const recordDestinationAttemptFailure = async (
   return [getErrorMessage(error)];
 };
 
+const recordSyncRunSafely = async (
+  database: BunSQLDatabase,
+  input: SyncRunRecordingInput,
+): Promise<string[]> => {
+  try {
+    await recordSyncRun(database, input);
+    return [];
+  } catch (error) {
+    return [`Failed to record sync activity: ${getErrorMessage(error)}`];
+  }
+};
+
 const countMappedSources = async (
   database: Pick<BunSQLDatabase, "select">,
   destinationCalendarId: string,
@@ -917,8 +936,12 @@ const syncDestinationsForUser = async (
           overBudgetSourceEventStateIds: [],
           overBudgetSourceEventUids: [],
           outsideReconciliationWindowCount: 0,
+          skippedByRuleCount: 0,
+          sourceOutcomes: {},
           syncableEventCount: 0,
+          unmatchedByRuleCount: 0,
         };
+        let pausedSourceCalendarIds: ReadonlySet<string> = new Set();
         let localReadDurationMs = 0;
         let remoteReadDurationMs = 0;
         let sourceCalendarIdsAtLocalRead = sourceCalendarIds;
@@ -948,6 +971,10 @@ const syncDestinationsForUser = async (
                 sourceCalendarIds,
                 async (lockedDatabase) => {
                   sourceCalendarIdsAtLocalRead = await getMappedSourceCalendarIds(
+                    lockedDatabase,
+                    destination.calendarId,
+                  );
+                  pausedSourceCalendarIds = await getPausedSourceCalendarIds(
                     lockedDatabase,
                     destination.calendarId,
                   );
@@ -993,8 +1020,11 @@ const syncDestinationsForUser = async (
                   if (localReadWindow) {
                     const eventRead = await getEventsForCalendarsWithDiagnostics(
                       lockedDatabase,
-                      [...authoritativeSourceWindows.keys()],
+                      [...authoritativeSourceWindows.keys()].filter(
+                        (sourceCalendarId) => !pausedSourceCalendarIds.has(sourceCalendarId),
+                      ),
                       localReadWindow,
+                      { destinationCalendarId: destination.calendarId },
                     );
                     eventReadDiagnostics = eventRead.diagnostics;
                     localEvents.push(...eventRead.events);
@@ -1066,6 +1096,7 @@ const syncDestinationsForUser = async (
             authoritativeSourceWindows,
             authoritativeWindow,
             eventReadDiagnostics,
+            pausedSourceCalendarIds,
             requestedWindow,
             sourceCalendarIdsAtLocalRead,
           }),
@@ -1094,6 +1125,14 @@ const syncDestinationsForUser = async (
         });
         if (!stillOwned) {
           return;
+        }
+        if (!calendarAttempt.superseded) {
+          errors.push(...await recordSyncRunSafely(database, {
+            destinationCalendarId: destination.calendarId,
+            pausedSourceCalendarIds,
+            result,
+            sourceOutcomes: eventReadDiagnostics.sourceOutcomes,
+          }));
         }
 
         added += result.added;

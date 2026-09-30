@@ -137,12 +137,6 @@ beforeAll(async () => {
         }
         return 0;
       },
-      getMappingLimit: () => {
-        if (canAddAccountResult) {
-          return Number.MAX_SAFE_INTEGER;
-        }
-        return 0;
-      },
     },
   }));
 

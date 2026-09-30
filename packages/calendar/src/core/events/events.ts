@@ -2,7 +2,10 @@ import {
   calendarsTable,
   eventStatesTable,
   sourceDestinationMappingsTable,
+  syncsTable,
 } from "@keeper.sh/database/schema";
+import { applyRuleActions, compileSyncRules, findMatchingRule, toShareAs } from "@keeper.sh/data-schemas";
+import type { CompiledSyncRule, RuleEventFacts } from "@keeper.sh/data-schemas";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type {
@@ -18,6 +21,12 @@ import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./ti
 
 const EMPTY_SOURCES_COUNT = 0;
 
+interface SourceProjectionOutcome {
+  copied: number;
+  skipped: number;
+  skippedBy: Record<string, { count: number; name: string }>;
+}
+
 interface DestinationEventReadDiagnostics {
   candidateEventStateCount: number;
   emptyTimeRangeCount: number;
@@ -28,7 +37,18 @@ interface DestinationEventReadDiagnostics {
   outsideReconciliationWindowCount: number;
   overBudgetSourceEventStateIds: string[];
   overBudgetSourceEventUids: string[];
+  skippedByRuleCount: number;
+  sourceOutcomes: Record<string, SourceProjectionOutcome>;
   syncableEventCount: number;
+  unmatchedByRuleCount: number;
+}
+
+type DestinationSyncRule = CompiledSyncRule;
+type RulesBySourceCalendarId = ReadonlyMap<string, DestinationSyncRule[]>;
+
+interface DestinationEventReadOptions {
+  destinationCalendarId?: string;
+  rulesBySourceCalendarId?: RulesBySourceCalendarId;
 }
 
 interface DestinationEventReadResult {
@@ -46,7 +66,10 @@ const EMPTY_DESTINATION_EVENT_READ_DIAGNOSTICS: DestinationEventReadDiagnostics 
   outsideReconciliationWindowCount: 0,
   overBudgetSourceEventStateIds: [],
   overBudgetSourceEventUids: [],
+  skippedByRuleCount: 0,
+  sourceOutcomes: {},
   syncableEventCount: 0,
+  unmatchedByRuleCount: 0,
 };
 
 const isEventInDestinationReconciliationWindow = (
@@ -61,25 +84,11 @@ const orAbsent = <TValue>(value: TValue | null): TValue | undefined => {
   return value;
 };
 
-const excludeOrAbsent = <TValue>(exclude: boolean, value: TValue | null): TValue | undefined => {
-  if (exclude) {
-    return;
-  }
-  return orAbsent(value);
-};
-
 const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
   if (value === null) {
     return;
   }
   return value;
-};
-
-const trueOrAbsent = (value: boolean): true | undefined => {
-  if (!value) {
-    return;
-  }
-  return true;
 };
 
 const isEventAvailability = (value: string | null): value is EventAvailability =>
@@ -139,19 +148,164 @@ const shouldExcludeSyncEvent = (event: {
 
   return false;
 };
-const TEMPLATE_TOKEN_PATTERN = /\{\{(\w+)\}\}/g;
 const DEFAULT_EVENT_NAME = "Busy";
-const DEFAULT_EVENT_NAME_TEMPLATE = "{{calendar_name}}";
-const resolveEventNameTemplate = (
-  template: string,
-  variables: Record<string, string>,
-): string => {
-  const resolved = template.replace(
-    TEMPLATE_TOKEN_PATTERN,
-    (token, variableName) => variables[variableName] ?? token,
-  ).trim();
 
-  return resolved || variables.calendar_name || DEFAULT_EVENT_NAME;
+interface SyncableEventProjectionRow {
+  availability: string | null;
+  calendarName: string | null;
+  description: string | null;
+  isAllDay: boolean | null;
+  location: string | null;
+  sourceEventType: string | null;
+  title: string | null;
+}
+
+type SyncableEventProjection =
+  | { outcome: "skipped"; ruleId: string }
+  | { outcome: "unmatched" }
+  | { outcome: "working_location" }
+  | {
+    outcome: "copy";
+    description?: string;
+    isPrivate?: true;
+    location?: string;
+    summary: string;
+  };
+
+// Working-location events never copy, before any rule is consulted, as they never did.
+const projectSyncableEvent = (
+  row: SyncableEventProjectionRow,
+  rules: readonly DestinationSyncRule[],
+): SyncableEventProjection => {
+  const sourceEventType = parseSourceEventType(row.sourceEventType, row.availability);
+  if (sourceEventType === "workingLocation") {
+    return { outcome: "working_location" };
+  }
+
+  const facts: RuleEventFacts = {
+    calendarName: row.calendarName,
+    description: orAbsent(row.description),
+    isAllDay: row.isAllDay === true,
+    isFocusTime: sourceEventType === "focusTime",
+    isOutOfOffice: sourceEventType === "outOfOffice",
+    location: orAbsent(row.location),
+    title: row.title ?? DEFAULT_EVENT_NAME,
+  };
+  const rule = findMatchingRule(rules, facts);
+  if (!rule) {
+    return { outcome: "unmatched" };
+  }
+  const evaluation = applyRuleActions(rule.actions, facts);
+  if (evaluation.skip) {
+    return { outcome: "skipped", ruleId: rule.id };
+  }
+  return {
+    description: evaluation.description,
+    isPrivate: evaluation.isPrivate,
+    location: evaluation.location,
+    outcome: "copy",
+    summary: evaluation.summary,
+  };
+};
+
+const getSyncRulesForDestination = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+  sourceCalendarIds: string[],
+): Promise<Map<string, DestinationSyncRule[]>> => {
+  const rulesBySourceCalendarId = new Map<string, DestinationSyncRule[]>();
+  if (sourceCalendarIds.length === EMPTY_SOURCES_COUNT) {
+    return rulesBySourceCalendarId;
+  }
+
+  const pairs = await database
+    .select({
+      busyTitle: syncsTable.busyTitle,
+      markPrivate: syncsTable.markPrivate,
+      rules: syncsTable.rules,
+      shareAs: syncsTable.shareAs,
+      skipAllDay: syncsTable.skipAllDay,
+      skipFocusTime: syncsTable.skipFocusTime,
+      skipOutOfOffice: syncsTable.skipOutOfOffice,
+      skipTitleKeywords: syncsTable.skipTitleKeywords,
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+      syncId: syncsTable.id,
+    })
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(syncsTable, eq(sourceDestinationMappingsTable.syncId, syncsTable.id))
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        inArray(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarIds),
+      ),
+    );
+
+  const compiledBySyncId = new Map<string, DestinationSyncRule[]>();
+  for (const pair of pairs) {
+    const compiled = compiledBySyncId.get(pair.syncId) ?? compileSyncRules({ ...pair, shareAs: toShareAs(pair.shareAs) });
+    compiledBySyncId.set(pair.syncId, compiled);
+    rulesBySourceCalendarId.set(pair.sourceCalendarId, compiled);
+  }
+  return rulesBySourceCalendarId;
+};
+
+const getPausedSourceCalendarIds = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+): Promise<Set<string>> => {
+  const pairs = await database
+    .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
+    .from(sourceDestinationMappingsTable)
+    .innerJoin(syncsTable, eq(sourceDestinationMappingsTable.syncId, syncsTable.id))
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        eq(syncsTable.paused, true),
+      ),
+    );
+  return new Set(pairs.map((pair) => pair.sourceCalendarId));
+};
+
+const createSourceOutcome = (): SourceProjectionOutcome => ({ copied: 0, skipped: 0, skippedBy: {} });
+
+const recordSkip = (
+  outcomes: Record<string, SourceProjectionOutcome>,
+  sourceCalendarId: string,
+  rule: Pick<DestinationSyncRule, "id" | "name"> | undefined,
+): void => {
+  const outcome = outcomes[sourceCalendarId] ?? createSourceOutcome();
+  outcome.skipped += 1;
+  if (rule) {
+    const tally = outcome.skippedBy[rule.id] ?? { count: 0, name: rule.name };
+    tally.count += 1;
+    outcome.skippedBy[rule.id] = tally;
+  }
+  outcomes[sourceCalendarId] = outcome;
+};
+
+const recordCopies = (
+  outcomes: Record<string, SourceProjectionOutcome>,
+  events: readonly Pick<MaterializedSyncableEvent, "calendarId">[],
+): void => {
+  for (const event of events) {
+    const outcome = outcomes[event.calendarId] ?? createSourceOutcome();
+    outcome.copied += 1;
+    outcomes[event.calendarId] = outcome;
+  }
+};
+
+const resolveRulesBySourceCalendarId = (
+  database: BunSQLClient,
+  calendarIds: string[],
+  options: DestinationEventReadOptions,
+): Promise<RulesBySourceCalendarId> => {
+  if (options.rulesBySourceCalendarId) {
+    return Promise.resolve(options.rulesBySourceCalendarId);
+  }
+  if (options.destinationCalendarId) {
+    return getSyncRulesForDestination(database, options.destinationCalendarId, calendarIds);
+  }
+  return Promise.resolve(new Map());
 };
 
 const getMappedSourceCalendarIds = async (
@@ -170,6 +324,7 @@ const getEventsForCalendarsWithDiagnostics = async (
   database: BunSQLClient,
   calendarIds: string[],
   syncWindow: SyncWindow,
+  options: DestinationEventReadOptions = {},
 ): Promise<DestinationEventReadResult> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
     return {
@@ -178,19 +333,12 @@ const getEventsForCalendarsWithDiagnostics = async (
     };
   }
 
+  const rulesBySourceCalendarId = await resolveRulesBySourceCalendarId(database, calendarIds, options);
   const results = await database
     .select({
       calendarId: eventStatesTable.calendarId,
       calendarName: calendarsTable.name,
       calendarUrl: calendarsTable.url,
-      customEventName: calendarsTable.customEventName,
-      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
-      excludeEventDescription: calendarsTable.excludeEventDescription,
-      excludeEventLocation: calendarsTable.excludeEventLocation,
-      excludeEventName: calendarsTable.excludeEventName,
-      excludeFocusTime: calendarsTable.excludeFocusTime,
-      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-      markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,
@@ -226,14 +374,28 @@ const getEventsForCalendarsWithDiagnostics = async (
   let excludedBySyncPolicyCount = 0;
   let missingSourceEventUidCount = 0;
   let outsideReconciliationWindowCount = 0;
+  let skippedByRuleCount = 0;
+  let unmatchedByRuleCount = 0;
+  const sourceOutcomes: Record<string, SourceProjectionOutcome> = {};
 
   for (const result of results) {
     if (result.sourceEventUid === null) {
       missingSourceEventUidCount += 1;
       continue;
     }
-    if (shouldExcludeSyncEvent(result)) {
+    const sourceRules = rulesBySourceCalendarId.get(result.calendarId) ?? [];
+    const projection = projectSyncableEvent(result, sourceRules);
+    if (projection.outcome === "working_location") {
       excludedBySyncPolicyCount += 1;
+      continue;
+    }
+    if (projection.outcome === "unmatched") {
+      unmatchedByRuleCount += 1;
+      continue;
+    }
+    if (projection.outcome === "skipped") {
+      skippedByRuleCount += 1;
+      recordSkip(sourceOutcomes, result.calendarId, sourceRules.find((rule) => rule.id === projection.ruleId));
       continue;
     }
 
@@ -253,35 +415,23 @@ const getEventsForCalendarsWithDiagnostics = async (
       continue;
     }
 
-    const eventName = result.title ?? DEFAULT_EVENT_NAME;
-    const {calendarName} = result;
-    const template = result.customEventName || DEFAULT_EVENT_NAME_TEMPLATE;
-
-    let summary = eventName;
-    if (result.excludeEventName) {
-      summary = resolveEventNameTemplate(template, {
-        calendar_name: calendarName,
-        event_name: eventName,
-      });
-    }
-
     syncableEvents.push({
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
       availability: parseAvailability(result.availability),
-      description: excludeOrAbsent(result.excludeEventDescription, result.description),
+      description: projection.description,
       endTime: result.endTime,
       eventStateId: result.id,
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
-      isPrivate: trueOrAbsent(result.markEventsAsPrivate),
-      location: excludeOrAbsent(result.excludeEventLocation, result.location),
+      isPrivate: projection.isPrivate,
+      location: projection.location,
       ...recurrence,
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
       startTimeZone: orAbsent(result.startTimeZone),
-      summary,
+      summary: projection.summary,
     });
   }
 
@@ -302,6 +452,7 @@ const getEventsForCalendarsWithDiagnostics = async (
     },
   });
 
+  recordCopies(sourceOutcomes, events);
   const emptyTimeRangeCount = events.filter((event) => isEmptyTimeRange(event)).length;
   const invertedTimeRangeCount = events.filter((event) => isInvertedTimeRange(event)).length;
 
@@ -316,19 +467,13 @@ const getEventsForCalendarsWithDiagnostics = async (
       outsideReconciliationWindowCount,
       overBudgetSourceEventStateIds,
       overBudgetSourceEventUids,
+      skippedByRuleCount,
+      sourceOutcomes,
       syncableEventCount: syncableEvents.length,
+      unmatchedByRuleCount,
     },
     events,
   };
-};
-
-const getEventsForCalendars = async (
-  database: BunSQLClient,
-  calendarIds: string[],
-  syncWindow: SyncWindow,
-): Promise<MaterializedSyncableEvent[]> => {
-  const result = await getEventsForCalendarsWithDiagnostics(database, calendarIds, syncWindow);
-  return result.events;
 };
 
 const getEventsForDestination = async (
@@ -342,15 +487,31 @@ const getEventsForDestination = async (
     return [];
   }
 
-  return getEventsForCalendars(database, sourceCalendarIds, syncWindow);
+  const result = await getEventsForCalendarsWithDiagnostics(
+    database,
+    sourceCalendarIds,
+    syncWindow,
+    { destinationCalendarId },
+  );
+  return result.events;
 };
 
 export {
-  getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
+  getPausedSourceCalendarIds,
+  getSyncRulesForDestination,
   isEventInDestinationReconciliationWindow,
+  projectSyncableEvent,
   shouldExcludeSyncEvent,
 };
-export type { DestinationEventReadDiagnostics, DestinationEventReadResult };
+export type {
+  DestinationEventReadDiagnostics,
+  DestinationEventReadOptions,
+  DestinationEventReadResult,
+  DestinationSyncRule,
+  RulesBySourceCalendarId,
+  SourceProjectionOutcome,
+  SyncableEventProjection,
+};

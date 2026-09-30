@@ -7,6 +7,7 @@ import { withSignupMarker } from "@/lib/signup-marker";
 import {
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
+  SIGNUP_POST_AUTH_PATH,
   type StringSearchParams,
 } from "@/lib/mcp-auth-flow";
 import { BackButton } from "@/components/ui/primitives/back-button";
@@ -107,10 +108,11 @@ export function AuthOAuthPreamble({
     if (!socialProvider) return;
 
     const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
+    const signupURL = resolveClientPostAuthRedirect(authorizationSearch, SIGNUP_POST_AUTH_PATH);
 
     await authClient.signIn.social({
       callbackURL,
-      newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
+      newUserCallbackURL: withSignupMarker(signupURL, globalThis.location.origin),
       provider: socialProvider,
     });
   };

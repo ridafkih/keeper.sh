@@ -4,6 +4,7 @@ type SearchParams = Record<string, unknown>;
 type StringSearchParams = Record<string, string>;
 
 const DEFAULT_POST_AUTH_PATH = "/dashboard";
+const SIGNUP_POST_AUTH_PATH = "/dashboard/setup";
 
 const mcpAuthorizationSearchSchema = type({
   client_id: "string > 0",
@@ -108,6 +109,7 @@ const resolveClientPostAuthRedirect = (
 };
 
 export {
+  SIGNUP_POST_AUTH_PATH,
   getMcpAuthorizationSearch,
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,

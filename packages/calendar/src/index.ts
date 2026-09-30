@@ -170,13 +170,19 @@ export {
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
 export {
-  getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
   getMappedSourceCalendarIds,
+  getPausedSourceCalendarIds,
+  getSyncRulesForDestination,
+  projectSyncableEvent,
   shouldExcludeSyncEvent,
   type DestinationEventReadDiagnostics,
+  type SourceProjectionOutcome,
+  type DestinationEventReadOptions,
   type DestinationEventReadResult,
+  type DestinationSyncRule,
+  type RulesBySourceCalendarId,
 } from "./core/events/events";
 export {
   findSourceEventsExceedingRecurrenceBudget,

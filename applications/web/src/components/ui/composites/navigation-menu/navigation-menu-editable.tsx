@@ -13,8 +13,12 @@ import { Text } from "@/components/ui/primitives/text";
 
 type NavigationMenuEditableItemProps = {
   onCommit: (value: string) => Promise<void> | void;
+  /** Called when editing ends without a commit, so a freshly added row can be discarded. */
+  onCancel?: () => void;
   label?: string;
   children?: ReactNode;
+  /** Sits beside the row, outside its click target, for a control such as a remove button. */
+  trailing?: ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
   className?: string;
@@ -23,8 +27,10 @@ type NavigationMenuEditableItemProps = {
 export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProps) {
   const {
     onCommit,
+    onCancel,
     label,
     children,
+    trailing,
     defaultEditing,
     disabled,
     className,
@@ -36,18 +42,23 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
 
   const startEditing = () => setEditing(true);
   const stopEditing = () => setEditing(false);
+  const cancelEditing = () => {
+    stopEditing();
+    onCancel?.();
+  };
 
   if (editing) {
     return (
       <EditableItemInput
         value={resolveValue()}
         label={label}
+        trailing={trailing}
         className={className}
         onCommit={async (trimmed) => {
           await onCommit(trimmed);
           stopEditing();
         }}
-        onCancel={stopEditing}
+        onCancel={cancelEditing}
       />
     );
   }
@@ -55,6 +66,7 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
   return (
     <EditableItemDisplay
       label={label}
+      trailing={trailing}
       disabled={disabled}
       className={className}
       onStartEditing={startEditing}
@@ -66,9 +78,11 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
 
 type NavigationMenuEditableTemplateItemProps = {
   onCommit: (value: string) => Promise<void> | void;
+  onCancel?: () => void;
   label?: string;
   valueContent?: ReactNode;
   children?: ReactNode;
+  trailing?: ReactNode;
   renderInput: (value: string) => ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
@@ -78,9 +92,11 @@ type NavigationMenuEditableTemplateItemProps = {
 export function NavigationMenuEditableTemplateItem(props: NavigationMenuEditableTemplateItemProps) {
   const {
     onCommit,
+    onCancel,
     label,
     valueContent,
     children,
+    trailing,
     renderInput,
     defaultEditing,
     disabled,
@@ -93,19 +109,24 @@ export function NavigationMenuEditableTemplateItem(props: NavigationMenuEditable
 
   const startEditing = () => setEditing(true);
   const stopEditing = () => setEditing(false);
+  const cancelEditing = () => {
+    stopEditing();
+    onCancel?.();
+  };
 
   if (editing) {
     return (
       <EditableTemplateItemInput
         value={resolveValue()}
         label={label}
+        trailing={trailing}
         renderInput={renderInput}
         className={className}
         onCommit={async (trimmed) => {
           await onCommit(trimmed);
           stopEditing();
         }}
-        onCancel={stopEditing}
+        onCancel={cancelEditing}
       />
     );
   }
@@ -113,6 +134,7 @@ export function NavigationMenuEditableTemplateItem(props: NavigationMenuEditable
   return (
     <EditableItemDisplay
       label={label}
+      trailing={trailing}
       disabled={disabled}
       className={className}
       onStartEditing={startEditing}
@@ -173,15 +195,26 @@ function useEditableCommit(
   return { inputProps };
 }
 
+function EditableRow({ trailing, className, children }: { trailing?: ReactNode; className?: string; children: ReactNode }) {
+  return (
+    <li className={cn(className, trailing && "flex items-center")}>
+      {children}
+      {trailing}
+    </li>
+  );
+}
+
 function EditableItemInput({
   value,
   label,
+  trailing,
   className,
   onCommit,
   onCancel,
 }: {
   value: string;
   label?: string;
+  trailing?: ReactNode;
   className?: string;
   onCommit: (value: string) => Promise<void> | void;
   onCancel: () => void;
@@ -194,18 +227,19 @@ function EditableItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
-      <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
+    <EditableRow trailing={trailing} className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
+      <div className={navigationMenuItemStyle({ variant, interactive: false, className: cn("min-w-0 flex-1", className) })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
         <input {...inputProps} className={cn(inputClass, "text-foreground-muted")} />
       </div>
-    </li>
+    </EditableRow>
   );
 }
 
 function EditableTemplateItemInput({
   value,
   label,
+  trailing,
   className,
   renderInput,
   onCommit,
@@ -213,6 +247,7 @@ function EditableTemplateItemInput({
 }: {
   value: string;
   label?: string;
+  trailing?: ReactNode;
   className?: string;
   renderInput: (value: string) => ReactNode;
   onCommit: (value: string) => Promise<void> | void;
@@ -226,8 +261,8 @@ function EditableTemplateItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
-      <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
+    <EditableRow trailing={trailing} className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
+      <div className={navigationMenuItemStyle({ variant, interactive: false, className: cn("min-w-0 flex-1", className) })}>
         {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
         <div className={cn(inputClass, "grid items-center")}>
           <input
@@ -245,7 +280,7 @@ function EditableTemplateItemInput({
           />
         </div>
       </div>
-    </li>
+    </EditableRow>
   );
 }
 
@@ -311,12 +346,14 @@ function EditableItemDefaultValue({ value, label }: { value: ReactNode; label?: 
 function EditableItemDisplay({
   label,
   children,
+  trailing,
   disabled: disabledProp,
   className,
   onStartEditing,
 }: {
   label?: string;
   children?: ReactNode;
+  trailing?: ReactNode;
   disabled?: boolean;
   className?: string;
   onStartEditing: () => void;
@@ -326,13 +363,13 @@ function EditableItemDisplay({
   const disabled = disabledProp || disabledFromContext;
 
   return (
-    <li>
+    <EditableRow trailing={trailing}>
       <ItemDisabledContext value={disabled}>
         <button
           type="button"
           onClick={() => !disabled && onStartEditing()}
           disabled={disabled}
-          className={navigationMenuItemStyle({ variant, interactive: !disabled, className })}
+          className={navigationMenuItemStyle({ variant, interactive: !disabled, className: cn("min-w-0 flex-1", className) })}
         >
           {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
           {children}
@@ -346,6 +383,6 @@ function EditableItemDisplay({
           />
         </button>
       </ItemDisabledContext>
-    </li>
+    </EditableRow>
   );
 }

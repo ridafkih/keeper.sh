@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SYNC_SETTINGS, compileSyncRules } from "@keeper.sh/data-schemas";
 import {
   isEventInDestinationReconciliationWindow,
+  projectSyncableEvent,
   shouldExcludeSyncEvent,
 } from "../../../src/core/events/events";
 
@@ -140,5 +142,64 @@ describe("destination reconciliation source selection", () => {
 
     expect(source).toContain("getMappedSourceCalendarIds");
     expect(source).not.toContain("unavailableSince");
+  });
+});
+
+const busyOnly = compileSyncRules(DEFAULT_SYNC_SETTINGS).at(-1);
+if (!busyOnly) {
+  throw new Error("compileSyncRules always ends with Share As");
+}
+
+const createRow = (overrides: Partial<Parameters<typeof projectSyncableEvent>[0]> = {}) => ({
+  availability: "busy",
+  calendarName: "Work",
+  description: "Agenda",
+  isAllDay: false,
+  location: "Room 4",
+  sourceEventType: "default",
+  title: "Daily Standup",
+  ...overrides,
+});
+
+describe("projectSyncableEvent", () => {
+
+  it("copies nothing when no rule is assigned to the source", () => {
+    expect(projectSyncableEvent(createRow(), [])).toEqual({ outcome: "unmatched" });
+  });
+
+  it("still drops working location events before consulting rules", () => {
+    expect(projectSyncableEvent(createRow({ sourceEventType: "workingLocation" }), [busyOnly]))
+      .toEqual({ outcome: "working_location" });
+  });
+
+  it("reproduces the legacy default projection with the default rule", () => {
+    expect(projectSyncableEvent(createRow(), [busyOnly])).toEqual({
+      outcome: "copy",
+      summary: "Work",
+    });
+  });
+
+  it("applies the first matching rule and reports skips", () => {
+    const rules = [
+      { actions: [{ kind: "skip" as const }], conditions: [{ kind: "focus_time" as const }], id: "rule-skip", match: "all" as const, name: "Skip focus time" },
+      {
+        actions: [{ kind: "rename" as const, template: "OOO" }, { kind: "mark_private" as const }],
+        conditions: [{ kind: "title_contains" as const, value: "standup" }],
+        id: "rule-ooo",
+        match: "all" as const,
+        name: "Standup to OOO",
+      },
+      busyOnly,
+    ];
+
+    expect(projectSyncableEvent(createRow({ sourceEventType: "focusTime" }), rules)).toEqual({ outcome: "skipped", ruleId: "rule-skip" });
+    expect(projectSyncableEvent(createRow(), rules)).toEqual({
+      description: "Agenda",
+      isPrivate: true,
+      location: "Room 4",
+      outcome: "copy",
+      summary: "OOO",
+    });
+    expect(projectSyncableEvent(createRow({ title: "Lunch" }), rules)).toEqual({ outcome: "copy", summary: "Work" });
   });
 });

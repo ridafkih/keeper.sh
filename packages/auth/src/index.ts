@@ -244,7 +244,10 @@ const createAuth = (config: AuthConfig) => {
       clientId: googleClientId,
       clientSecret: googleClientSecret,
       prompt: "consent",
-      scope: ["https://www.googleapis.com/auth/calendar.events"],
+      scope: [
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+      ],
     };
   }
 

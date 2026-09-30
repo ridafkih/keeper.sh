@@ -38,6 +38,7 @@ import {
   getMcpAuthorizationSearch,
   resolvePathWithSearch,
   resolveClientPostAuthRedirect,
+  SIGNUP_POST_AUTH_PATH,
   type StringSearchParams,
 } from "@/lib/mcp-auth-flow";
 import { AuthSwitchPrompt } from "./auth-switch-prompt";
@@ -146,12 +147,19 @@ export function AuthForm({
   );
 }
 
-function redirectAfterAuth(authorizationSearch?: StringSearchParams) {
+function resolveActionRedirect(action: "signIn" | "signUp", authorizationSearch?: StringSearchParams): string {
+  return resolveClientPostAuthRedirect(
+    authorizationSearch,
+    action === "signUp" ? SIGNUP_POST_AUTH_PATH : undefined,
+  );
+}
+
+function redirectAfterAuth(authorizationSearch?: StringSearchParams, action: "signIn" | "signUp" = "signIn") {
   if (typeof window === "undefined" || !window.location) {
     return;
   }
 
-  const redirectTarget = resolveClientPostAuthRedirect(authorizationSearch);
+  const redirectTarget = resolveActionRedirect(action, authorizationSearch);
   const nextUrl = new URL(redirectTarget, window.location.origin).toString();
   window.location.assign(nextUrl);
 }
@@ -319,7 +327,7 @@ function CredentialForm({
     if (!password) return;
 
     setStatus("loading");
-    const redirectTarget = resolveClientPostAuthRedirect(authorizationSearch);
+    const redirectTarget = resolveActionRedirect(action, authorizationSearch);
 
     const authActions: Record<string, () => Promise<void>> = {
       signIn: () => signInWithCredential(credential, password, capabilities),
@@ -351,7 +359,7 @@ function CredentialForm({
       return;
     }
 
-    redirectAfterAuth(authorizationSearch);
+    redirectAfterAuth(authorizationSearch, action);
   };
 
   const handleBack = () => {

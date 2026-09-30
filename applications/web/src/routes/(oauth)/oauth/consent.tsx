@@ -22,7 +22,7 @@ const SCOPE_LABELS: Record<string, string> = {
   "keeper.read": "Read your Keeper data",
   "keeper.sources.read": "View your calendar sources",
   "keeper.destinations.read": "View your sync destinations",
-  "keeper.mappings.read": "View your source-destination mappings",
+  "keeper.mappings.read": "View your syncs",
   "keeper.events.read": "View your calendar events",
   "keeper.sync-status.read": "View sync status",
   "offline_access": "Stay connected when you're away",
