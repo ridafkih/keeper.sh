@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import useSWR, { useSWRConfig } from "swr";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
@@ -48,10 +48,16 @@ export function ConnectStep({ accountId, error, onContinue, onImported }: Connec
   const accounts = groupConnectedAccounts(sources ?? []);
   const atLimit = !canAddMore(entitlements?.accounts);
 
+  // The parent passes a fresh callback each render; reading it through a ref keeps the import effect from
+  // re-running, since its cleanup would discard an import that is still in flight.
+  const onImportedRef = useRef(onImported);
+  useEffect(() => {
+    onImportedRef.current = onImported;
+  }, [onImported]);
   const imported = useCallback(async (importedAccountId: string) => {
     await invalidateAccountsAndSources(globalMutate);
-    onImported(importedAccountId);
-  }, [globalMutate, onImported]);
+    onImportedRef.current(importedAccountId);
+  }, [globalMutate]);
   useLoginImport(sources?.length === 0 && !accountId, imported);
 
   const connect = (provider: ConnectProvider) => {

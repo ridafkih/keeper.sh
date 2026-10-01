@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
+import { ErrorState } from "@/components/ui/primitives/error-state";
 import { heading } from "@/components/ui/primitives/heading.styles";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
 import { PageBody } from "@/components/ui/primitives/page-body";
@@ -34,13 +35,14 @@ interface FirstSyncStepProps {
 
 export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps) {
   const { draft, update, clear } = useSetupDraft();
-  const { data: entitlements } = useEntitlements();
-  const { data: sources } = useSWR<CalendarSource[]>("/api/sources");
+  const { data: entitlements, error: entitlementsError } = useEntitlements();
+  const { data: sources, error: sourcesError, mutate: retrySources } = useSWR<CalendarSource[]>("/api/sources");
   const { data: syncs } = useSyncs();
   const refresh = useRefreshSyncs();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const canUseEventFilters = entitlements?.canUseEventFilters;
+  // Without the plan, start from what every plan can save rather than never filling the sentence in.
+  const canUseEventFilters = entitlementsError ? false : entitlements?.canUseEventFilters;
   const hydrated = draft !== null;
 
   // Seeded here rather than on the way back from connecting, so every calendar connected so far is in the pool.
@@ -49,6 +51,7 @@ export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps)
     update((current) => seedFirstConnect(reconcileSources(current, sources), sources, syncs.length, canUseEventFilters));
   }, [hydrated, sources, syncs, canUseEventFilters, update]);
 
+  if (sourcesError) return <ErrorState onRetry={() => void retrySources()} />;
   if (!draft || !sources) return null;
 
   const calendarsById = new Map(sources.map((source) => [source.id, source] as const));

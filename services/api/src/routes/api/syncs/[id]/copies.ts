@@ -3,11 +3,9 @@ import { eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema
 import type { SyncDefinition } from "@keeper.sh/data-schemas";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { findSyncForUser } from "@/utils/syncs";
+import { clampPageSize, findSyncForUser } from "@/utils/syncs";
+import { readLimit } from "@/handlers/sync-routes";
 import { database } from "@/context";
-
-const DEFAULT_LIMIT = 30;
-const MAX_LIMIT = 100;
 
 interface SyncCopy {
   destinationCalendarId: string;
@@ -23,14 +21,6 @@ interface SyncCopiesDependencies {
   findSync: (userId: string, syncId: string) => Promise<SyncDefinition | null>;
   listCopies: (destinationIds: string[], sourceIds: string[], limit: number) => Promise<SyncCopy[]>;
 }
-
-const readLimit = (value: string | null): number => {
-  const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return DEFAULT_LIMIT;
-  }
-  return Math.min(parsed, MAX_LIMIT);
-};
 
 // The copies a sync has made most recently, for watching its first run land.
 const handleSyncCopiesRoute = async (
@@ -53,7 +43,7 @@ const handleSyncCopiesRoute = async (
   if (destinationIds.length === 0 || sourceIds.length === 0) {
     return Response.json({ copies: [] });
   }
-  const copies = await dependencies.listCopies(destinationIds, sourceIds, readLimit(limit));
+  const copies = await dependencies.listCopies(destinationIds, sourceIds, clampPageSize(readLimit(limit)));
   return Response.json({ copies: copies.filter((copy) => copy.sourceCalendarId !== copy.destinationCalendarId) });
 };
 

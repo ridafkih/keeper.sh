@@ -58,11 +58,14 @@ const hasSessionTokenCleared = (response: Response): boolean => {
   );
 };
 
-// The onboarding cookie belongs to whoever was signed in, so any session change makes the web app ask again.
-const withCompanionCookie = (response: Response, cookie: string): Response => {
+// The onboarding cookie belongs to whoever was signed in, so signing in or out makes the web app ask again.
+// get-session only refreshes the same person's token, so it leaves the cookie alone.
+const withCompanionCookie = (response: Response, cookie: string, clearOnboarding: boolean): Response => {
   const headers = new Headers(response.headers);
   headers.append("Set-Cookie", cookie);
-  headers.append("Set-Cookie", ONBOARDING_COOKIE_CLEAR);
+  if (clearOnboarding) {
+    headers.append("Set-Cookie", ONBOARDING_COOKIE_CLEAR);
+  }
   return new Response(response.body, {
     headers,
     status: response.status,
@@ -72,11 +75,11 @@ const withCompanionCookie = (response: Response, cookie: string): Response => {
 
 const processAuthResponse = async (pathname: string, response: Response): Promise<Response> => {
   if (hasSessionTokenSet(response)) {
-    return withCompanionCookie(response, COMPANION_COOKIE_SET);
+    return withCompanionCookie(response, COMPANION_COOKIE_SET, pathname !== "/api/auth/get-session");
   }
 
   if (hasSessionTokenCleared(response)) {
-    return withCompanionCookie(response, COMPANION_COOKIE_CLEAR);
+    return withCompanionCookie(response, COMPANION_COOKIE_CLEAR, true);
   }
 
   if (pathname !== "/api/auth/get-session") {

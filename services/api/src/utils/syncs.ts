@@ -1039,6 +1039,7 @@ export {
   SyncValidationError,
   assertSyncContentAllowed,
   buildSyncDetail,
+  clampPageSize,
   createSync,
   createSyncWriteTransaction,
   decodeActivityCursor,

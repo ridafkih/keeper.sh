@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Button, ButtonIcon, ButtonText } from "@/components/ui/primitives/button";
 import { Text } from "@/components/ui/primitives/text";
@@ -24,6 +24,24 @@ export function OnboardingHeader({ step, skipping, onBack, onSkip }: OnboardingH
   const current = ONBOARDING_STEPS.indexOf(step);
   const back = previousOnboardingStep(step);
   useScrolledFlag(ref);
+
+  // Publishes how far the header and the layout's uneven top and bottom padding push content down, so the
+  // short steps can balance it below and sit on the window's centre line at every breakpoint.
+  useEffect(() => {
+    const element = ref.current;
+    const page = element?.parentElement;
+    const layout = page?.parentElement;
+    if (!element || !page || !layout) return;
+    const observer = new ResizeObserver(() => {
+      const layoutStyle = getComputedStyle(layout);
+      const unevenPadding = Number.parseFloat(layoutStyle.paddingTop) - Number.parseFloat(layoutStyle.paddingBottom);
+      const offset = element.offsetHeight + Number.parseFloat(getComputedStyle(element).marginTop) + unevenPadding;
+      page.style.setProperty("--onboarding-header-offset", `${offset}px`);
+    });
+    observer.observe(layout);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   // Spans the layout's side padding so its background covers content scrolling beneath it at any width.
   return (

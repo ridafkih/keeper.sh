@@ -43,7 +43,7 @@ describe("GET /api/onboarding", () => {
     const response = await handleGetOnboardingRoute({ userId: "user-1" }, dependencies);
 
     expect(await response.json()).toEqual({ status: "pending" });
-    expect(onboardingCookie(response)).toBe("keeper.onboarding=pending; Path=/; SameSite=Lax");
+    expect(onboardingCookie(response)).toBe("keeper.onboarding=pending; Path=/; Max-Age=31536000; SameSite=Lax");
     expect(writes).toEqual([]);
   });
 
@@ -52,7 +52,7 @@ describe("GET /api/onboarding", () => {
     const response = await handleGetOnboardingRoute({ userId: "user-1" }, dependencies);
 
     expect(await response.json()).toEqual({ status: "completed" });
-    expect(onboardingCookie(response)).toBe("keeper.onboarding=done; Path=/; SameSite=Lax");
+    expect(onboardingCookie(response)).toBe("keeper.onboarding=done; Path=/; Max-Age=31536000; SameSite=Lax");
     expect(writes).toEqual(["completed"]);
   });
 

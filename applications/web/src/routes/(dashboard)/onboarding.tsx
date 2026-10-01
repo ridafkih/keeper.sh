@@ -7,7 +7,10 @@ export const Route = createFileRoute("/(dashboard)/onboarding")({
   beforeLoad: async ({ context, search }) => {
     // The live first run stays on screen even though starting the sync already finished onboarding.
     if (search.step === "done" && search.syncId) return;
-    const onboarding = context.auth.onboarding() ?? await fetchOnboardingCookie(context.fetchApi);
+    let onboarding = context.auth.onboarding();
+    if (onboarding !== "done") {
+      onboarding = await fetchOnboardingCookie(context.fetchApi);
+    }
     if (onboarding === "done") {
       throw redirect({ to: "/dashboard" });
     }

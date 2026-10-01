@@ -55,7 +55,9 @@ export const resolveOnboardingRedirect = (
   return ONBOARDING_PATH;
 };
 
+// Only "done" is trusted as stored: a pending cookie may be stale once onboarding finished elsewhere,
+// and asking lets the API record a finish whose own write failed.
 export const needsOnboardingLookup = (
   onboarding: OnboardingCookie | null,
   pathname: string,
-): boolean => onboarding === null && !isOnboardingPath(pathname);
+): boolean => onboarding !== "done" && !isOnboardingPath(pathname);

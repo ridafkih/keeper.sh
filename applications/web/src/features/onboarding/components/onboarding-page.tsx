@@ -81,14 +81,14 @@ export function OnboardingPage({ search }: { search: OnboardingSearch }) {
     // First Sync fills the window at lg so its column can scroll on its own; 6rem is the full-screen layout's padding.
     <div ref={rootRef} className={cn("relative flex flex-1 flex-col gap-7", step === "sync" && "lg:h-[calc(100dvh-6rem)] lg:flex-none")}>
       <OnboardingHeader step={step} skipping={skipping} onBack={(back) => void goTo(back)} onSkip={() => void skip()} />
-      {/* A short step's bottom padding matches the header above, so it sits on the window's centre line. */}
+      {/* A short step's bottom padding matches the header and gap above, so it sits on the window's centre line. */}
       <LazyMotion features={loadMotionFeatures}>
         <AnimatePresence mode="popLayout" initial={false} custom={tracked.direction}>
           <m.div
             key={step}
             className={cn(
               "flex flex-col",
-              step === "sync" ? "lg:min-h-0 lg:flex-1" : "flex-1 justify-center pb-[5.5rem] sm:pb-19",
+              step === "sync" ? "lg:min-h-0 lg:flex-1" : "flex-1 justify-center pb-[calc(var(--onboarding-header-offset,0px)+1.75rem)]",
             )}
             custom={tracked.direction}
             variants={pageVariants}

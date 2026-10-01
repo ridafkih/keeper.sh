@@ -24,8 +24,9 @@ describe("onboarding redirect", () => {
     expect(resolveOnboardingRedirect("pending", "/onboarding/")).toBeNull();
   });
 
-  it("asks the API only when the cookie is missing", () => {
+  it("trusts only a stored done, and asks the API otherwise", () => {
     expect(needsOnboardingLookup(null, "/dashboard")).toBe(true);
+    expect(needsOnboardingLookup("pending", "/dashboard")).toBe(true);
     expect(needsOnboardingLookup("done", "/dashboard")).toBe(false);
     expect(needsOnboardingLookup(null, "/onboarding")).toBe(false);
   });
@@ -109,6 +110,14 @@ describe("first run progress", () => {
   it("finishes only when every destination has synced", () => {
     expect(resolveFirstRunProgress(sync(["2026-10-01T12:00:00Z", null]), aggregate({})).kind).toBe("counting");
     expect(resolveFirstRunProgress(sync(["2026-10-01T12:00:00Z", "2026-10-01T12:01:00Z"]), aggregate({})))
-      .toEqual({ copied: 570, kind: "finished" });
+      .toEqual({ copied: 570, kind: "finished", problem: false });
+  });
+
+  it("settles when a destination has a problem instead of waiting on it forever", () => {
+    const stuck = sync(["2026-10-01T12:00:00Z", null]);
+    const destinations = stuck.destinations.map((destination, index) =>
+      index === 1 ? { ...destination, problem: "reauth" } : destination);
+    expect(resolveFirstRunProgress({ ...stuck, destinations } as unknown as SyncDetail, aggregate({})))
+      .toEqual({ copied: 570, kind: "finished", problem: true });
   });
 });

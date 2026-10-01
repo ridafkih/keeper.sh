@@ -4,6 +4,7 @@ import useSWR from "swr";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import List from "lucide-react/dist/esm/icons/list";
+import { DEFAULT_BUSY_TITLE, resolveEventNameTemplate } from "@keeper.sh/data-schemas";
 import type { SyncDetail } from "@keeper.sh/data-schemas";
 import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { Heading2 } from "@/components/ui/primitives/heading";
@@ -48,16 +49,31 @@ const describeWhen = (copy: SyncCopy): string => {
   return `${dayFormat.format(start)} · ${timeFormat.format(start)} – ${timeFormat.format(new Date(copy.endTime))}`;
 };
 
-// Mirrors what the copy is called in the destination: busy blocks carry the busy title or the source calendar's name.
+// Mirrors what the copy is called in the destination: busy blocks resolve the busy title the way the sync engine does.
 const describeCopy = (copy: SyncCopy, sync: SyncDetail, calendarsById: ReadonlyMap<string, CalendarSource>): string => {
-  if (sync.shareAs === "busy_only") return sync.busyTitle ?? calendarsById.get(copy.sourceCalendarId)?.name ?? "Busy";
-  return copy.title ?? "Untitled";
+  if (sync.shareAs !== "busy_only") return copy.title ?? "Untitled";
+  return resolveEventNameTemplate(sync.busyTitle ?? DEFAULT_BUSY_TITLE, {
+    calendar_name: calendarsById.get(copy.sourceCalendarId)?.name ?? "",
+    event_name: copy.title ?? "",
+  });
 };
 
-const STATUS_LABELS: Record<FirstRunProgress["kind"], string> = {
-  copying: "Copying your events",
-  counting: "Copying your events",
-  finished: "Up to Date",
+const statusLabel = (progress: FirstRunProgress): string => {
+  if (progress.kind !== "finished") return "Copying your events";
+  if (progress.problem) return "Needs Attention";
+  return "Up to Date";
+};
+
+const heading = (progress: FirstRunProgress): string => {
+  if (progress.kind !== "finished") return "Your First Sync Is Running";
+  if (progress.problem) return "Your First Sync Needs Attention";
+  return "You're All Set";
+};
+
+const description = (progress: FirstRunProgress): string => {
+  if (progress.kind !== "finished") return "You can leave this page. Keeper keeps going and nothing here needs watching.";
+  if (progress.problem) return "One of your calendars can't take copies right now. Open the sync from your dashboard to see what needs fixing.";
+  return "Everything in your sync window is copied. New events follow within minutes.";
 };
 
 const progressCount = (progress: FirstRunProgress): string => {
@@ -91,19 +107,15 @@ export function DoneStep({ syncId }: { syncId: string }) {
       <div className="flex items-center gap-2 px-0.5 pb-2">
         <SyncProgressCircle percent={progressPercent(progress)} />
         {finished ? (
-          <Text size="sm" tone="default">{STATUS_LABELS[progress.kind]}</Text>
+          <Text size="sm" tone="default">{statusLabel(progress)}</Text>
         ) : (
-          <ShimmerText className="text-sm tracking-tight">{STATUS_LABELS[progress.kind]}</ShimmerText>
+          <ShimmerText className="text-sm tracking-tight">{statusLabel(progress)}</ShimmerText>
         )}
         <Text size="sm" tone="muted" className="ml-auto tabular-nums">{progressCount(progress)}</Text>
       </div>
       <div className="flex flex-col gap-1 px-0.5 pb-3">
-        <Heading2 as="h1">{finished ? "You're All Set" : "Your First Sync Is Running"}</Heading2>
-        <Text size="sm" tone="muted">
-          {finished
-            ? "Everything in your sync window is copied. New events follow within minutes."
-            : "You can leave this page. Keeper keeps going and nothing here needs watching."}
-        </Text>
+        <Heading2 as="h1">{heading(progress)}</Heading2>
+        <Text size="sm" tone="muted">{description(progress)}</Text>
       </div>
       {sync && (
         <NavigationMenu>

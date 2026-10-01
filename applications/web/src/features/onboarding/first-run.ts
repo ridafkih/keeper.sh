@@ -4,18 +4,23 @@ import type { CompositeSyncState } from "@/state/sync";
 export type FirstRunProgress =
   | { kind: "counting"; percent: number }
   | { kind: "copying"; percent: number; processed: number; total: number }
-  | { kind: "finished"; copied: number };
+  | { kind: "finished"; copied: number; problem: boolean };
 
-// Every destination reports its first run once it has written its copies, which is the only reliable end.
+// Every destination reports its first run once it has written its copies, which is the only reliable end;
+// one with a problem (reconnect, disabled or failing) won't report until it's fixed, so it counts as settled.
 export const isFirstRunFinished = (sync: SyncDetail | undefined): boolean =>
-  Boolean(sync && sync.destinations.length > 0 && sync.destinations.every((destination) => destination.lastSyncedAt));
+  Boolean(sync && sync.destinations.length > 0 && sync.destinations.every(
+    (destination) => destination.lastSyncedAt || destination.problem,
+  ));
 
 /*
  * The live count is the account's WebSocket progress, which during onboarding is this one sync.
  * Each calendar only reports its total after fetching, so the total grows for a moment before it settles.
  */
 export const resolveFirstRunProgress = (sync: SyncDetail | undefined, aggregate: CompositeSyncState): FirstRunProgress => {
-  if (sync && isFirstRunFinished(sync)) return { copied: sync.copiedCount, kind: "finished" };
+  if (sync && isFirstRunFinished(sync)) {
+    return { copied: sync.copiedCount, kind: "finished", problem: sync.destinations.some((destination) => destination.problem) };
+  }
   if (aggregate.state !== "syncing") return { kind: "counting", percent: 0 };
   if (aggregate.syncEventsTotal === 0) return { kind: "counting", percent: aggregate.progressPercent };
   return {

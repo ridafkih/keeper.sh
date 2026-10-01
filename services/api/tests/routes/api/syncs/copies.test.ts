@@ -13,7 +13,10 @@ vi.mock("../../../../src/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
 vi.mock("../../../../src/context", () => ({ database: {} }));
-vi.mock("../../../../src/utils/syncs", () => ({ findSyncForUser: () => Promise.resolve(null) }));
+vi.mock("../../../../src/utils/syncs", () => ({
+  clampPageSize: (value: number | null) => value ?? 50,
+  findSyncForUser: () => Promise.resolve(null),
+}));
 
 beforeAll(async () => {
   ({ handleSyncCopiesRoute } = await import("../../../../src/routes/api/syncs/[id]/copies"));
