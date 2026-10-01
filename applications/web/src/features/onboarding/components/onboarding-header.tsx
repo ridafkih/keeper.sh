@@ -23,14 +23,22 @@ export function OnboardingHeader({ step, skipping, onBack, onSkip }: OnboardingH
 
   return (
     <div className="mx-auto grid w-full max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,24rem)_minmax(0,1fr)]">
+      {/* Both buttons keep their space when a step has no use for them, so moving between steps never shifts the bar. */}
       <div>
-        {back && (
-          <Button variant="border" size="compact" className="aspect-square" aria-label="Back" onClick={() => onBack(back)}>
-            <ButtonIcon>
-              <ArrowLeft size={16} />
-            </ButtonIcon>
-          </Button>
-        )}
+        <Button
+          variant="border"
+          size="compact"
+          className={cn("aspect-square", !back && "invisible")}
+          aria-label="Back"
+          aria-hidden={!back}
+          tabIndex={back ? undefined : -1}
+          disabled={!back}
+          onClick={() => back && onBack(back)}
+        >
+          <ButtonIcon>
+            <ArrowLeft size={16} />
+          </ButtonIcon>
+        </Button>
       </div>
       <ol className="flex w-full gap-1.5" aria-label={`Step ${current + 1} of ${ONBOARDING_STEPS.length}`}>
         {ONBOARDING_STEPS.map((candidate, index) => (
@@ -43,11 +51,17 @@ export function OnboardingHeader({ step, skipping, onBack, onSkip }: OnboardingH
         ))}
       </ol>
       <div className="flex justify-end">
-        {canSkipOnboardingAt(step) && (
-          <Button variant="ghost" size="compact" disabled={skipping} onClick={onSkip}>
-            <ButtonText>Skip for Now</ButtonText>
-          </Button>
-        )}
+        <Button
+          variant="ghost"
+          size="compact"
+          className={cn(!canSkipOnboardingAt(step) && "invisible")}
+          aria-hidden={!canSkipOnboardingAt(step)}
+          tabIndex={canSkipOnboardingAt(step) ? undefined : -1}
+          disabled={skipping || !canSkipOnboardingAt(step)}
+          onClick={onSkip}
+        >
+          <ButtonText>Skip for Now</ButtonText>
+        </Button>
       </div>
     </div>
   );
