@@ -26,6 +26,7 @@ import { summarizeSync, syncKey } from "@/features/syncs/syncs";
 import { resolveFirstRunProgress, type FirstRunProgress } from "../first-run";
 
 const POLL_MS = 3000;
+const COPIES_SHOWN = 10;
 
 interface SyncCopy {
   destinationCalendarId: string;
@@ -38,7 +39,7 @@ interface SyncCopy {
 }
 
 const dayFormat = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", weekday: "short" });
-const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
 
 const describeWhen = (copy: SyncCopy): string => {
   const start = new Date(copy.startTime);
@@ -77,7 +78,7 @@ export function DoneStep({ syncId }: { syncId: string }) {
   const progress = resolveFirstRunProgress(sync, aggregate);
   const finished = progress.kind === "finished";
   const { data: copies } = useSWR<{ copies: SyncCopy[] }>(
-    showActivity ? `${syncKey(syncId)}/copies?limit=30` : null,
+    showActivity ? `${syncKey(syncId)}/copies?limit=${COPIES_SHOWN}` : null,
     fetcher,
     { refreshInterval: finished ? 0 : POLL_MS },
   );
@@ -124,32 +125,6 @@ export function DoneStep({ syncId }: { syncId: string }) {
               />
             </div>
           </li>
-          <NavigationMenuButtonItem onClick={() => setShowActivity((open) => !open)}>
-            <NavigationMenuItemIcon>
-              <List size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>{showActivity ? "Hide Activity" : "Show Activity"}</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing indicator={showActivity ? <ChevronUp size={15} /> : <ChevronDown size={15} />} />
-          </NavigationMenuButtonItem>
-          {showActivity && (
-            <li className="max-h-72 overflow-y-auto">
-              {(copies?.copies ?? []).length === 0 ? (
-                <Text size="sm" tone="muted" className="px-3.5 py-2.5 sm:px-3">Waiting for the first copy.</Text>
-              ) : (
-                <ul>
-                  {copies?.copies.map((copy) => (
-                    <li key={copy.id} className="flex items-center gap-2.5 border-t border-dashed border-interactive-border px-3.5 py-2.5 sm:px-3">
-                      <ProviderIcon provider={calendarsById.get(copy.destinationCalendarId)?.provider} />
-                      <Text size="sm" tone="muted" className="min-w-0 flex-1 truncate">
-                        {describeCopy(copy, sync, calendarsById)} → {calendarsById.get(copy.destinationCalendarId)?.name ?? "Calendar"}
-                      </Text>
-                      <Text size="xs" tone="muted" className="shrink-0 tabular-nums">{describeWhen(copy)}</Text>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          )}
         </NavigationMenu>
       )}
       <div className="flex flex-col gap-1.5 pt-3">
@@ -161,6 +136,45 @@ export function DoneStep({ syncId }: { syncId: string }) {
           {atSyncLimit && <Text as="span" size="xs" tone="muted" className="ml-1.5">Pro</Text>}
         </LinkButton>
       </div>
+      {sync && (
+        // The list hangs below the step instead of growing it, so opening it doesn't move the centred content.
+        <div className="relative pt-1.5">
+          <NavigationMenu>
+            <NavigationMenuButtonItem onClick={() => setShowActivity((open) => !open)}>
+              <NavigationMenuItemIcon>
+                <List size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>{showActivity ? "Hide Activity" : "Show Activity"}</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing indicator={showActivity ? <ChevronUp size={15} /> : <ChevronDown size={15} />} />
+            </NavigationMenuButtonItem>
+          </NavigationMenu>
+          {showActivity && (
+            <div className="absolute inset-x-0 top-full pt-1.5 pb-12">
+              <NavigationMenu>
+                {(copies?.copies ?? []).length === 0 ? (
+                  <NavigationMenuItem>
+                    <Text size="sm" tone="muted">Waiting for the first copy.</Text>
+                  </NavigationMenuItem>
+                ) : (
+                  copies?.copies.map((copy) => (
+                    <NavigationMenuItem key={copy.id}>
+                      <NavigationMenuItemIcon>
+                        <ProviderIcon provider={calendarsById.get(copy.destinationCalendarId)?.provider} />
+                      </NavigationMenuItemIcon>
+                      <div className="flex min-w-0 flex-col">
+                        <Text size="sm" tone="default" className="truncate">
+                          {describeCopy(copy, sync, calendarsById)} → {calendarsById.get(copy.destinationCalendarId)?.name ?? "Calendar"}
+                        </Text>
+                        <Text size="xs" tone="muted" className="truncate tabular-nums">{describeWhen(copy)}</Text>
+                      </div>
+                    </NavigationMenuItem>
+                  ))
+                )}
+              </NavigationMenu>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
