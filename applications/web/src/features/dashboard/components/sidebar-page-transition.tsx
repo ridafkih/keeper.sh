@@ -1,27 +1,19 @@
 import { useCallback, useLayoutEffect, useRef, useState, type PropsWithChildren } from "react";
 import { useLocation, useRouterState } from "@tanstack/react-router";
-import { LazyMotion, useReducedMotion, type Variants } from "motion/react";
+import { LazyMotion, useReducedMotion } from "motion/react";
 import * as m from "motion/react-m";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import { resolveSidebarPagePath } from "@/lib/sidebar-width";
 import { settledPathnameOf } from "@/hooks/use-settled-pathname";
 import { resolveScrollParent } from "@/lib/scroll-parent";
+import { INSTANT_TRANSITION, PAGE_TRANSITION, pageVariants } from "@/lib/page-transition";
 import {
   resolveSidebarDirection,
   type SidebarDirection,
   type SidebarLocation,
 } from "@/lib/sidebar-transition";
 
-const NUDGE = 32;
-const TRANSITION = { duration: 0.22, ease: [0.2, 0, 0, 1] as const };
-const INSTANT = { duration: 0 };
 const PAGE_SCROLLER_SELECTOR = "[data-page-scroller]";
-
-const pageVariants: Variants = {
-  enter: (direction: SidebarDirection) => ({ x: direction === "forward" ? NUDGE : -NUDGE, opacity: 0 }),
-  center: { x: 0, opacity: 1 },
-  exit: (direction: SidebarDirection) => ({ x: direction === "forward" ? -NUDGE : NUDGE, opacity: 0 }),
-};
 
 interface TrackedLocation {
   location: SidebarLocation;
@@ -83,7 +75,7 @@ function ExitingPageLayer({ page, onDone }: { page: ExitingPage; onDone: () => v
         variants={pageVariants}
         initial="center"
         animate="exit"
-        transition={TRANSITION}
+        transition={PAGE_TRANSITION}
         onAnimationComplete={onDone}
         ref={attach}
       />
@@ -147,7 +139,7 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
           variants={pageVariants}
           initial={tracked.direction ? "enter" : false}
           animate="center"
-          transition={reduceMotion ? INSTANT : TRANSITION}
+          transition={reduceMotion ? INSTANT_TRANSITION : PAGE_TRANSITION}
           ref={capturePage}
         >
           {children}
