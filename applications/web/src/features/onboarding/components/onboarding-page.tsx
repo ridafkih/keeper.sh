@@ -42,7 +42,7 @@ export function OnboardingPage({ search }: { search: OnboardingSearch }) {
         />
       ) : (
         // The bottom padding matches the header above, so a short step sits on the window's centre line.
-        <div className="flex flex-1 flex-col justify-center pb-19">
+        <div className="flex flex-1 flex-col justify-center pb-[5.5rem] sm:pb-19">
           <ScrollFader>
             {step === "welcome" && <WelcomeStep onStart={() => void goTo("connect")} />}
             {step === "connect" && (
