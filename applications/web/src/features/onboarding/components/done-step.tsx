@@ -8,6 +8,7 @@ import type { SyncDetail } from "@keeper.sh/data-schemas";
 import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import { ShimmerText } from "@/components/ui/primitives/shimmer-text";
 import { Text } from "@/components/ui/primitives/text";
 import {
   NavigationMenu,
@@ -89,7 +90,11 @@ export function DoneStep({ syncId }: { syncId: string }) {
     <div className="mx-auto flex w-full max-w-sm flex-col gap-1.5">
       <div className="flex items-center gap-2 px-0.5 pb-2">
         <SyncProgressCircle percent={progressPercent(progress)} />
-        <Text size="sm" tone="default">{STATUS_LABELS[progress.kind]}</Text>
+        {finished ? (
+          <Text size="sm" tone="default">{STATUS_LABELS[progress.kind]}</Text>
+        ) : (
+          <ShimmerText className="text-sm tracking-tight">{STATUS_LABELS[progress.kind]}</ShimmerText>
+        )}
         <Text size="sm" tone="muted" className="ml-auto tabular-nums">{progressCount(progress)}</Text>
       </div>
       <div className="flex flex-col gap-1 px-0.5 pb-3">
