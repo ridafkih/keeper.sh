@@ -4,6 +4,8 @@ import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { heading } from "@/components/ui/primitives/heading.styles";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Text } from "@/components/ui/primitives/text";
 import { NavigationMenu } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
@@ -122,33 +124,38 @@ export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps)
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col">
-      <div className={`grid grid-cols-1 gap-8 lg:gap-12 ${SYNC_SETUP_COLUMNS}`}>
-        <div className="flex min-w-0 flex-col gap-1.5">
-          {draft.firstConnect ? (
-            <div className="flex flex-col gap-1 px-0.5 pb-3">
-              <h1 className={heading({ level: 2 })}>Your First Sync Is Ready</h1>
-              <Text size="sm" tone="muted">We set it up with the usual choices. Read it back, change anything, then start.</Text>
-            </div>
-          ) : (
-            <DashboardSection title="Tell Keeper What to Do" description="Fill in the blanks, read it back, then start syncing." />
-          )}
-          <NavigationMenu>
-            <NavigationMenuEditableItem
-              label="Name"
-              value={sync.name || summary}
-              onCommit={(name) => update((current) => withSync(current, { ...current.sync, name }))}
+    // Laid out like the setup page: at lg the column scrolls under its header while the preview and the bar stay put.
+    <div className="mx-auto flex w-full max-w-6xl flex-col [--sidebar-pad-b:3rem] [--sidebar-pad-t:2.5rem] [--sidebar-pad-x:1.5rem] lg:min-h-0 lg:flex-1">
+      <div className={`grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:gap-12 ${SYNC_SETUP_COLUMNS}`}>
+        <div className="flex min-w-0 flex-col gap-1.5 lg:min-h-0">
+          <StickyPageHeader className="gap-1.5">
+            {draft.firstConnect ? (
+              <div className="flex flex-col gap-1 px-0.5">
+                <h1 className={heading({ level: 2 })}>Your First Sync Is Ready</h1>
+                <Text size="sm" tone="muted">We set it up with the usual choices. Read it back, change anything, then start.</Text>
+              </div>
+            ) : (
+              <DashboardSection title="Tell Keeper What to Do" description="Fill in the blanks, read it back, then start syncing." />
+            )}
+          </StickyPageHeader>
+          <PageBody className="gap-1.5">
+            <NavigationMenu>
+              <NavigationMenuEditableItem
+                label="Name"
+                value={sync.name || summary}
+                onCommit={(name) => update((current) => withSync(current, { ...current.sync, name }))}
+              />
+            </NavigationMenu>
+            <SyncEditor
+              value={sync}
+              calendars={sources}
+              otherSyncs={syncs ?? []}
+              locked={locked}
+              previewClassName="lg:hidden"
+              notice={conflicts.length > 0 && <MenuHint tone="attention">{describeConflicts(conflicts, calendarsById)}</MenuHint>}
+              onChange={(patch) => update((current) => withSync(current, { ...current.sync, ...patch }))}
             />
-          </NavigationMenu>
-          <SyncEditor
-            value={sync}
-            calendars={sources}
-            otherSyncs={syncs ?? []}
-            locked={locked}
-            previewClassName="lg:hidden"
-            notice={conflicts.length > 0 && <MenuHint tone="attention">{describeConflicts(conflicts, calendarsById)}</MenuHint>}
-            onChange={(patch) => update((current) => withSync(current, { ...current.sync, ...patch }))}
-          />
+          </PageBody>
         </div>
         <aside className="hidden lg:block">
           <div className="relative z-[6] has-[[data-popover-open]]:z-20">

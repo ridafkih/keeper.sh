@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ANALYTICS_EVENTS, track } from "@/lib/analytics";
+import { cn } from "@/utils/cn";
 import { recordOnboarding } from "../record-onboarding";
 import type { OnboardingSearch, OnboardingStep } from "../onboarding-steps";
 import { OnboardingHeader } from "./onboarding-header";
@@ -30,7 +31,8 @@ export function OnboardingPage({ search }: { search: OnboardingSearch }) {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-10">
+    // First Sync fills the window at lg so its column can scroll on its own; 6rem is the full-screen layout's padding.
+    <div className={cn("flex flex-1 flex-col gap-10", step === "sync" && "lg:h-[calc(100dvh-6rem)] lg:flex-none")}>
       <OnboardingHeader step={step} skipping={skipping} onBack={(back) => void goTo(back)} onSkip={() => void skip()} />
       {step === "sync" ? (
         <FirstSyncStep
