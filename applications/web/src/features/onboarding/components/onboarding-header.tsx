@@ -22,7 +22,7 @@ export function OnboardingHeader({ step, skipping, onBack, onSkip }: OnboardingH
   const back = previousOnboardingStep(step);
 
   return (
-    <div className="mx-auto grid w-full max-w-6xl grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-4">
+    <div className="mx-auto grid w-full max-w-6xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,24rem)_minmax(0,1fr)]">
       <div>
         {back && (
           <Button variant="border" size="compact" className="aspect-square" aria-label="Back" onClick={() => onBack(back)}>
@@ -32,7 +32,7 @@ export function OnboardingHeader({ step, skipping, onBack, onSkip }: OnboardingH
           </Button>
         )}
       </div>
-      <ol className="mx-auto flex w-full max-w-sm gap-1.5" aria-label={`Step ${current + 1} of ${ONBOARDING_STEPS.length}`}>
+      <ol className="flex w-full gap-1.5" aria-label={`Step ${current + 1} of ${ONBOARDING_STEPS.length}`}>
         {ONBOARDING_STEPS.map((candidate, index) => (
           <li key={candidate} className="flex min-w-0 flex-1 flex-col gap-1.5" aria-current={index === current ? "step" : undefined}>
             <span className={cn("h-0.75 rounded-full", index <= current ? "bg-foreground" : "bg-interactive-border")} />
