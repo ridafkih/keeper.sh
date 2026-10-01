@@ -642,6 +642,7 @@ export type {
   RuleMatch,
 } from "./rules";
 export * from "./syncs";
+export * from "./onboarding";
 
 export type {
   IcsFeedFailureReason,
