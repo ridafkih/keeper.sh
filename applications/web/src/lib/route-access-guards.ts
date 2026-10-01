@@ -1,3 +1,5 @@
+import type { OnboardingCookie } from "./onboarding-cookie";
+
 export type RedirectTarget = "/dashboard" | "/login";
 
 export type SubscriptionPlan = "free" | "pro";
@@ -36,3 +38,24 @@ export const resolveUpgradeRedirect = (
 
   return null;
 };
+
+export const ONBOARDING_PATH = "/onboarding";
+
+const isOnboardingPath = (pathname: string): boolean =>
+  (pathname.replace(/\/+$/, "") || "/") === ONBOARDING_PATH;
+
+export const resolveOnboardingRedirect = (
+  onboarding: OnboardingCookie | null,
+  pathname: string,
+): typeof ONBOARDING_PATH | null => {
+  if (onboarding !== "pending" || isOnboardingPath(pathname)) {
+    return null;
+  }
+
+  return ONBOARDING_PATH;
+};
+
+export const needsOnboardingLookup = (
+  onboarding: OnboardingCookie | null,
+  pathname: string,
+): boolean => onboarding === null && !isOnboardingPath(pathname);

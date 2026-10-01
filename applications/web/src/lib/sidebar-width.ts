@@ -13,7 +13,7 @@ export const resolveSyncPane = (pathname: string): SyncPane | null => {
   return rest === "new" ? { kind: "new" } : { kind: "sync", syncId: rest };
 };
 
-const FULL_SCREEN_PATHS = new Set(["/dashboard/setup"]);
+const FULL_SCREEN_PATHS = new Set(["/dashboard/setup", "/onboarding"]);
 
 // Onboarding needs the whole window for the editor and its preview, so it drops the sidebar and calendar.
 export const isFullScreenPath = (pathname: string): boolean => FULL_SCREEN_PATHS.has(normalizePath(pathname));

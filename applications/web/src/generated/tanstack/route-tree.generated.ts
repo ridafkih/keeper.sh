@@ -22,6 +22,7 @@ import { Route as marketingPricingRouteImport } from './../../routes/(marketing)
 import { Route as marketingFeaturesRouteImport } from './../../routes/(marketing)/features'
 import { Route as marketingAboutRouteImport } from './../../routes/(marketing)/about'
 import { Route as marketingSplatRouteImport } from './../../routes/(marketing)/$'
+import { Route as dashboardOnboardingRouteImport } from './../../routes/(dashboard)/onboarding'
 import { Route as authVerifyEmailRouteImport } from './../../routes/(auth)/verify-email'
 import { Route as authVerifyAuthenticationRouteImport } from './../../routes/(auth)/verify-authentication'
 import { Route as authResetPasswordRouteImport } from './../../routes/(auth)/reset-password'
@@ -143,6 +144,11 @@ const marketingSplatRoute = marketingSplatRouteImport.update({
   id: '/$',
   path: '/$',
   getParentRoute: () => marketingRouteRoute,
+} as any)
+const dashboardOnboardingRoute = dashboardOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => dashboardRouteRoute,
 } as any)
 const authVerifyEmailRoute = authVerifyEmailRouteImport.update({
   id: '/verify-email',
@@ -489,6 +495,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof authResetPasswordRoute
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
+  '/onboarding': typeof dashboardOnboardingRoute
   '/$': typeof marketingSplatRoute
   '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
@@ -558,6 +565,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof authResetPasswordRoute
   '/verify-authentication': typeof authVerifyAuthenticationRoute
   '/verify-email': typeof authVerifyEmailRoute
+  '/onboarding': typeof dashboardOnboardingRoute
   '/$': typeof marketingSplatRoute
   '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
@@ -630,6 +638,7 @@ export interface FileRoutesById {
   '/(auth)/reset-password': typeof authResetPasswordRoute
   '/(auth)/verify-authentication': typeof authVerifyAuthenticationRoute
   '/(auth)/verify-email': typeof authVerifyEmailRoute
+  '/(dashboard)/onboarding': typeof dashboardOnboardingRoute
   '/(marketing)/$': typeof marketingSplatRoute
   '/(marketing)/about': typeof marketingAboutRoute
   '/(marketing)/features': typeof marketingFeaturesRoute
@@ -703,6 +712,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-authentication'
     | '/verify-email'
+    | '/onboarding'
     | '/$'
     | '/about'
     | '/features'
@@ -772,6 +782,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/verify-authentication'
     | '/verify-email'
+    | '/onboarding'
     | '/$'
     | '/about'
     | '/features'
@@ -843,6 +854,7 @@ export interface FileRouteTypes {
     | '/(auth)/reset-password'
     | '/(auth)/verify-authentication'
     | '/(auth)/verify-email'
+    | '/(dashboard)/onboarding'
     | '/(marketing)/$'
     | '/(marketing)/about'
     | '/(marketing)/features'
@@ -1004,6 +1016,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$'
       preLoaderRoute: typeof marketingSplatRouteImport
       parentRoute: typeof marketingRouteRoute
+    }
+    '/(dashboard)/onboarding': {
+      id: '/(dashboard)/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof dashboardOnboardingRouteImport
+      parentRoute: typeof dashboardRouteRoute
     }
     '/(auth)/verify-email': {
       id: '/(auth)/verify-email'
@@ -1567,6 +1586,7 @@ const dashboardDashboardSyncsRouteRouteWithChildren =
   )
 
 interface dashboardRouteRouteChildren {
+  dashboardOnboardingRoute: typeof dashboardOnboardingRoute
   dashboardDashboardAccountsRouteRoute: typeof dashboardDashboardAccountsRouteRouteWithChildren
   dashboardDashboardConnectRouteRoute: typeof dashboardDashboardConnectRouteRouteWithChildren
   dashboardDashboardIcalRouteRoute: typeof dashboardDashboardIcalRouteRouteWithChildren
@@ -1582,6 +1602,7 @@ interface dashboardRouteRouteChildren {
 }
 
 const dashboardRouteRouteChildren: dashboardRouteRouteChildren = {
+  dashboardOnboardingRoute: dashboardOnboardingRoute,
   dashboardDashboardAccountsRouteRoute:
     dashboardDashboardAccountsRouteRouteWithChildren,
   dashboardDashboardConnectRouteRoute:

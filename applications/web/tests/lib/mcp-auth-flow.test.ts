@@ -95,8 +95,8 @@ describe("getMcpAuthorizationSearch", () => {
 });
 
 describe("SIGNUP_POST_AUTH_PATH", () => {
-  it("sends new signups to setup unless an MCP authorization is pending", () => {
-    expect(resolveClientPostAuthRedirect(undefined, SIGNUP_POST_AUTH_PATH)).toBe("/dashboard/setup");
+  it("sends new signups to onboarding unless an MCP authorization is pending", () => {
+    expect(resolveClientPostAuthRedirect(undefined, SIGNUP_POST_AUTH_PATH)).toBe("/onboarding");
     expect(
       resolvePostAuthRedirect({
         apiOrigin: "https://api.keeper.sh",
