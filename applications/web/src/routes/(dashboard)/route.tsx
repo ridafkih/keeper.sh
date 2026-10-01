@@ -123,7 +123,7 @@ function DashboardLayout() {
 
 function FullScreenLayout() {
   return (
-    <div className="relative min-h-dvh w-full px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
+    <div className="relative flex min-h-dvh w-full flex-col px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
       <PopoverOverlay />
       <SyncProvider />
       <Outlet />

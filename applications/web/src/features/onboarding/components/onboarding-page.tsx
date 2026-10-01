@@ -30,24 +30,28 @@ export function OnboardingPage({ search }: { search: OnboardingSearch }) {
   };
 
   return (
-    <div className="flex flex-col gap-10">
+    <div className="flex flex-1 flex-col gap-10">
       <OnboardingHeader step={step} skipping={skipping} onBack={(back) => void goTo(back)} onSkip={() => void skip()} />
-      {step === "welcome" && <WelcomeStep onStart={() => void goTo("connect")} />}
-      {step === "connect" && (
-        <ConnectStep
-          accountId={search.accountId}
-          error={search.error}
-          onContinue={() => void goTo("sync")}
-          onImported={(accountId) => void goTo("connect", { accountId })}
-        />
-      )}
-      {step === "sync" && (
+      {step === "sync" ? (
         <FirstSyncStep
           onAddCalendars={() => void goTo("connect")}
           onStarted={(syncId) => void goTo("done", { syncId })}
         />
+      ) : (
+        // The bottom padding matches the header above, so a short step sits on the window's centre line.
+        <div className="flex flex-1 flex-col justify-center pb-19">
+          {step === "welcome" && <WelcomeStep onStart={() => void goTo("connect")} />}
+          {step === "connect" && (
+            <ConnectStep
+              accountId={search.accountId}
+              error={search.error}
+              onContinue={() => void goTo("sync")}
+              onImported={(accountId) => void goTo("connect", { accountId })}
+            />
+          )}
+          {step === "done" && search.syncId && <DoneStep syncId={search.syncId} />}
+        </div>
       )}
-      {step === "done" && search.syncId && <DoneStep syncId={search.syncId} />}
     </div>
   );
 }
