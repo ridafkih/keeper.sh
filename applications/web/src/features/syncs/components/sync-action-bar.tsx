@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import * as m from "motion/react-m";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
@@ -31,8 +30,6 @@ interface SyncActionBarProps {
   layout?: keyof typeof LAYOUTS;
   show?: boolean;
   label: string;
-  /** What starting will do, shown above the buttons. */
-  summary?: ReactNode;
   message: string | null;
   busy: boolean;
   secondary: SyncAction;
@@ -40,7 +37,7 @@ interface SyncActionBarProps {
 }
 
 // Alone it keeps its own space at the end, so it never covers the last row.
-export function SyncActionBar({ layout = "pane", show = true, label, summary, message, busy, secondary, primary }: SyncActionBarProps) {
+export function SyncActionBar({ layout = "pane", show = true, label, message, busy, secondary, primary }: SyncActionBarProps) {
   const reduceMotion = useReducedMotion() ?? false;
 
   return (
@@ -57,18 +54,15 @@ export function SyncActionBar({ layout = "pane", show = true, label, summary, me
             <div className={`relative bottom-0 grid grid-cols-1 lg:-bottom-[calc(var(--sidebar-pad-b)-var(--sidebar-pad-x))] ${LAYOUTS[layout].columns}`}>
               <div role="status" className="pointer-events-auto col-end-[-1]">
                 <MenuGate active={message !== null} hint={message ?? ""} className="bg-background">
-                  <div className="flex flex-col rounded-2xl border border-border-elevated bg-background-elevated shadow-xs">
-                    {summary && <div className="px-3 pt-3 pb-1">{summary}</div>}
-                    <div className="flex items-center gap-1 p-1 pl-3">
-                      <Text size="xs" tone="muted" className="min-w-0 flex-1 truncate">{label}</Text>
-                      <Button size="compact" variant="elevated" disabled={busy || secondary.disabled} onClick={secondary.onClick}>
-                        <ButtonText>{secondary.label}</ButtonText>
-                      </Button>
-                      <Button size="compact" disabled={busy || primary.disabled} onClick={primary.onClick}>
-                        {busy && <LoaderCircle size={14} className="animate-spin" />}
-                        <ButtonText>{primary.label}</ButtonText>
-                      </Button>
-                    </div>
+                  <div className="flex items-center gap-1 rounded-2xl border border-border-elevated bg-background-elevated p-1 pl-3 shadow-xs">
+                    <Text size="xs" tone="muted" className="min-w-0 flex-1 truncate">{label}</Text>
+                    <Button size="compact" variant="elevated" disabled={busy || secondary.disabled} onClick={secondary.onClick}>
+                      <ButtonText>{secondary.label}</ButtonText>
+                    </Button>
+                    <Button size="compact" disabled={busy || primary.disabled} onClick={primary.onClick}>
+                      {busy && <LoaderCircle size={14} className="animate-spin" />}
+                      <ButtonText>{primary.label}</ButtonText>
+                    </Button>
                   </div>
                 </MenuGate>
               </div>

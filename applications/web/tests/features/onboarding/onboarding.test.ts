@@ -7,7 +7,6 @@ import type { CompositeSyncState } from "../../../src/state/sync";
 import { canStartFirstSync, connectLabel, groupConnectedAccounts } from "../../../src/features/onboarding/onboarding-accounts";
 import { resolveFirstRunProgress } from "../../../src/features/onboarding/first-run";
 import { readOnboardingSearch } from "../../../src/features/onboarding/onboarding-steps";
-import { describeCopies, describeWindow, joinNames } from "../../../src/features/onboarding/sync-estimate";
 import { makeSource } from "../setup/fixtures";
 
 const google = CONNECT_PROVIDERS.find((provider) => provider.id === "google");
@@ -66,25 +65,6 @@ describe("connect step", () => {
     expect(canStartFirstSync([work])).toBe(false);
     expect(canStartFirstSync([work, feed])).toBe(true);
     expect(canStartFirstSync([feed, { ...feed, id: "gym-2" }])).toBe(false);
-  });
-});
-
-describe("estimate copy", () => {
-  it("names the copies the way the sync makes them", () => {
-    expect(describeCopies(1, "busy_only")).toBe("1 busy block");
-    expect(describeCopies(1200, "title_only")).toBe(`${(1200).toLocaleString()} event copies`);
-  });
-
-  it("describes the window when every destination shares it", () => {
-    const total = { count: 570, futureRange: "2_years", historicRange: "1_month" } as const;
-    expect(describeWindow({ nearTerm: { count: 21, days: 28 }, total })).toBe("from 1 month back to 2 years ahead");
-    expect(describeWindow({ nearTerm: { count: 21, days: 28 }, total: { ...total, futureRange: null } }))
-      .toBe("across each calendar's sync window");
-  });
-
-  it("joins calendar names into a sentence", () => {
-    expect(joinNames(["Work"])).toBe("Work");
-    expect(joinNames(["Work", "Personal", "Family"])).toBe("Work, Personal and Family");
   });
 });
 

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
-import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { heading } from "@/components/ui/primitives/heading.styles";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
@@ -18,7 +17,7 @@ import { SYNC_SETUP_COLUMNS, SyncActionBar } from "@/features/syncs/components/s
 import { SyncEditor } from "@/features/syncs/components/sync-editor";
 import { SyncPreviewPanel } from "@/features/syncs/components/sync-preview-panel";
 import { resolveSyncError } from "@/features/syncs/sync-errors";
-import { draftProblem, toCreateBody, type SyncDraft } from "@/features/syncs/sync-draft";
+import { draftProblem, toCreateBody } from "@/features/syncs/sync-draft";
 import {
   describeConflicts,
   findDraftConflicts,
@@ -28,54 +27,10 @@ import {
 } from "@/features/syncs/syncs";
 import { createSync, useRefreshSyncs, useSyncs } from "@/features/syncs/use-syncs";
 import { recordOnboarding } from "../record-onboarding";
-import { describeCopies, describeWindow, joinNames, useSyncEstimate } from "../sync-estimate";
 
 interface FirstSyncStepProps {
   onAddCalendars: () => void;
   onStarted: (syncId: string) => void;
-}
-
-const destinationIds = (sync: SyncDraft): string[] =>
-  sync.mode === "both_ways" ? sync.memberCalendarIds : sync.destinationCalendarIds;
-
-function EstimateSummary({ sync, body, calendarsById }: {
-  sync: SyncDraft;
-  body: ReturnType<typeof toCreateBody> | null;
-  calendarsById: ReadonlyMap<string, CalendarSource>;
-}) {
-  const { data: estimate, error } = useSyncEstimate(body);
-  const destinations = joinNames(destinationIds(sync).flatMap((id) => {
-    const calendar = calendarsById.get(id);
-    if (!calendar) return [];
-    return [`${calendar.name} (${calendar.email ?? calendar.accountLabel})`];
-  }));
-  const reassurance = "Your own events are never edited or deleted, and you can remove the copies any time.";
-
-  let lead = <Text as="span" size="sm" tone="muted">Working out what this will copy. </Text>;
-  if (error || !body) {
-    lead = <></>;
-  } else if (estimate) {
-    lead = (
-      <>
-        <Text as="span" size="sm" tone="default" className="font-medium">
-          Adds about {describeCopies(estimate.nearTerm.count, sync.shareAs)} over the next 4 weeks
-        </Text>
-        <Text as="span" size="sm" tone="muted">
-          {" "}to {destinations}, and about {estimate.total.count.toLocaleString()} in all, {describeWindow(estimate)}.{" "}
-        </Text>
-      </>
-    );
-  }
-
-  return (
-    <div className="flex items-start gap-2.5">
-      <CircleCheck size={16} className="mt-0.5 shrink-0 text-foreground-muted" />
-      <p className="leading-relaxed">
-        {lead}
-        <Text as="span" size="sm" tone="muted">{reassurance}</Text>
-      </p>
-    </div>
-  );
 }
 
 export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps) {
@@ -166,7 +121,6 @@ export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps)
       <SyncActionBar
         layout="setup"
         label="Not started yet"
-        summary={<EstimateSummary sync={sync} body={body} calendarsById={calendarsById} />}
         message={startError ?? problem}
         busy={starting}
         secondary={{ label: "Add Calendars", onClick: onAddCalendars }}
