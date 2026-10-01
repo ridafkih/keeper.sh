@@ -4,7 +4,6 @@ import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { heading } from "@/components/ui/primitives/heading.styles";
 import { MenuHint } from "@/components/ui/primitives/menu-hint";
 import { PageBody } from "@/components/ui/primitives/page-body";
-import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { Text } from "@/components/ui/primitives/text";
 import { NavigationMenu } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
@@ -79,11 +78,11 @@ export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps)
   };
 
   return (
-    // Laid out like the setup page: at lg the column scrolls under its header while the preview and the bar stay put.
+    // Laid out like the setup page: at lg the column scrolls under its heading while the preview and the bar stay put.
     <div className="mx-auto flex w-full max-w-6xl flex-col [--sidebar-pad-b:3rem] [--sidebar-pad-t:2.5rem] [--sidebar-pad-x:1.5rem] lg:min-h-0 lg:flex-1">
       <div className={`grid grid-cols-1 gap-8 lg:min-h-0 lg:flex-1 lg:grid-rows-[minmax(0,1fr)] lg:gap-12 ${SYNC_SETUP_COLUMNS}`}>
         <div className="flex min-w-0 flex-col gap-1.5 lg:min-h-0">
-          <StickyPageHeader className="gap-1.5">
+          <div className="flex flex-col gap-1.5 pb-1">
             {draft.firstConnect ? (
               <div className="flex flex-col gap-1 px-0.5">
                 <h1 className={heading({ level: 2 })}>Your First Sync Is Ready</h1>
@@ -92,7 +91,7 @@ export function FirstSyncStep({ onAddCalendars, onStarted }: FirstSyncStepProps)
             ) : (
               <DashboardSection title="Tell Keeper What to Do" description="Fill in the blanks, read it back, then start syncing." />
             )}
-          </StickyPageHeader>
+          </div>
           <PageBody className="gap-1.5">
             <NavigationMenu>
               <NavigationMenuEditableItem
