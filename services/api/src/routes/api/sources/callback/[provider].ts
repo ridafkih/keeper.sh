@@ -22,6 +22,7 @@ import { baseUrl } from "@/context";
 import env from "@/env";
 import { buildMicrosoftAdminConsentUrl } from "@/utils/microsoft-admin-consent";
 import type { OAuthConnectFailureReason } from "@keeper.sh/data-schemas";
+import type { OAuthReturnTo } from "@keeper.sh/calendar";
 
 const MS_PER_SECOND = 1000;
 const MISSING_MAILBOX_ERROR_CODES = new Set(["MailboxNotEnabledForRESTAPI", "ResourceNotFound"]);
@@ -106,9 +107,8 @@ const redirectAsFailure = (stage: CallbackFailureStage, redirectUrl: URL): Respo
 const rejectCallback = (
   stage: CallbackFailureStage,
   message: string,
-  reason: OAuthConnectFailureReason = "unknown",
+  errorUrl: URL = buildErrorUrl("unknown"),
 ): Response => {
-  const errorUrl = buildErrorUrl(reason);
   widelog.errorFields(new OAuthError(message, errorUrl), { slug: "oauth-callback-failed" });
   return redirectAsFailure(stage, errorUrl);
 };
@@ -154,6 +154,15 @@ const importAccount = async (
   }
 };
 
+const RETURN_TO_PATHS: Record<OAuthReturnTo, { path: string; params: Record<string, string> }> = {
+  onboarding: { params: { step: "connect" }, path: "/onboarding" },
+};
+
+const returnToUrl = (returnTo: OAuthReturnTo, params: Record<string, string>): URL => {
+  const target = RETURN_TO_PATHS[returnTo];
+  return buildRedirectUrl(target.path, baseUrl, { ...target.params, ...params });
+};
+
 const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {
     return ErrorResponse.notFound().toResponse();
@@ -182,20 +191,33 @@ const GET = withWideEvent(async ({ request, params }) => {
     widelog.set("oauth.is_reconnect", Boolean(validatedState.sourceCredentialId));
   }
 
+  // The state is read before the provider's error, so someone who cancels still lands where they started.
+  const failureUrlFor = (fallback: URL): URL => {
+    if (validatedState?.returnTo) {
+      return returnToUrl(validatedState.returnTo, { error: "connect_failed" });
+    }
+    return fallback;
+  };
+
   if (url.searchParams.has("error")) {
     const reason = recordProviderError(url.searchParams);
-    return rejectCallback("provider", "OAuth error from provider", reason);
+    const errorUrl = buildErrorUrl(reason);
+    // Admin approval needs the instructions on the integrations page.
+    if (reason === "admin-approval-required") {
+      return rejectCallback("provider", "OAuth error from provider", errorUrl);
+    }
+    return rejectCallback("provider", "OAuth error from provider", failureUrlFor(errorUrl));
   }
 
   if (!code || !state) {
-    return rejectCallback("query", "Missing code or state");
+    return rejectCallback("query", "Missing code or state", failureUrlFor(buildErrorUrl("unknown")));
   }
 
   if (!validatedState) {
-    return rejectCallback("state", "Invalid or expired state", "expired");
+    return rejectCallback("state", "Invalid or expired state", buildErrorUrl("expired"));
   }
 
-  const { userId, sourceCredentialId } = validatedState;
+  const { userId, sourceCredentialId, returnTo } = validatedState;
   let stage: CallbackFailureStage = "token_exchange";
 
   try {
@@ -209,12 +231,14 @@ const GET = withWideEvent(async ({ request, params }) => {
     let successUrl = buildRedirectUrl("/dashboard/setup", baseUrl, { accountId });
     if (sourceCredentialId) {
       successUrl = buildRedirectUrl(`/dashboard/accounts/${accountId}`, baseUrl);
+    } else if (returnTo) {
+      successUrl = returnToUrl(returnTo, { accountId });
     }
     return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
       widelog.errorFields(error, { slug: "oauth-callback-failed" });
-      return redirectAsFailure(stage, error.redirectUrl);
+      return redirectAsFailure(stage, failureUrlFor(error.redirectUrl));
     }
 
     const providerErrorCode = readProviderErrorCode(error);
@@ -223,7 +247,7 @@ const GET = withWideEvent(async ({ request, params }) => {
     }
 
     labelFailure(error, { slug: "unclassified" });
-    return redirectAsFailure(stage, buildErrorUrl(resolveImportFailureReason(providerErrorCode)));
+    return redirectAsFailure(stage, failureUrlFor(buildErrorUrl(resolveImportFailureReason(providerErrorCode))));
   }
 });
 

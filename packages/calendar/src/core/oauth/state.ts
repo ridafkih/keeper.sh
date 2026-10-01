@@ -4,10 +4,14 @@ const STATE_EXPIRY_MINUTES = 10;
 const STATE_PREFIX = "oauth:state:";
 const MS_PER_SECOND = 1000;
 
+// Where the web app sends someone after the callback; kept server side, so it can only name a known page.
+type OAuthReturnTo = "onboarding";
+
 interface PendingState {
   userId: string;
   destinationId: string | null;
   sourceCredentialId: string | null;
+  returnTo?: OAuthReturnTo | null;
   expiresAt: number;
 }
 
@@ -15,11 +19,13 @@ interface ValidatedState {
   userId: string;
   destinationId: string | null;
   sourceCredentialId: string | null;
+  returnTo: OAuthReturnTo | null;
 }
 
 interface GenerateStateOptions {
   destinationId?: string;
   sourceCredentialId?: string;
+  returnTo?: OAuthReturnTo;
 }
 
 interface OAuthStateStore {
@@ -40,6 +46,7 @@ const generateState = async (
   const pendingState: PendingState = {
     destinationId: options?.destinationId ?? null,
     expiresAt: Date.now() + STATE_EXPIRY_MINUTES * MS_PER_MINUTE,
+    returnTo: options?.returnTo ?? null,
     sourceCredentialId: options?.sourceCredentialId ?? null,
     userId,
   };
@@ -65,10 +72,11 @@ const validateState = async (
 
   return {
     destinationId: entry.destinationId,
+    returnTo: entry.returnTo ?? null,
     sourceCredentialId: entry.sourceCredentialId,
     userId: entry.userId,
   };
 };
 
 export { generateState, validateState };
-export type { ValidatedState, GenerateStateOptions, OAuthStateStore };
+export type { ValidatedState, GenerateStateOptions, OAuthReturnTo, OAuthStateStore };

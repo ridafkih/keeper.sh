@@ -11,12 +11,14 @@ import {
 } from "./microsoft";
 import type { MicrosoftOAuthCredentials } from "./microsoft";
 import { validateState } from "./state";
+import type { OAuthReturnTo } from "./state";
 
 interface AuthorizationUrlOptions {
   callbackUrl: string;
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  returnTo?: OAuthReturnTo;
   /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
   loginHint?: string;
 }
