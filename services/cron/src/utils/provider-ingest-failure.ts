@@ -68,7 +68,8 @@ const shouldTreatAsProviderAuthFailure = (error: unknown): boolean => {
   if (isTimeoutError(error) || hasOwnSlug(error) || isDatabaseError(error)) {
     return false;
   }
-  return isCalDAVAuthenticationError(error);
+  return isCalDAVAuthenticationError(error)
+    || (error instanceof Error && "authRequired" in error && error.authRequired === true);
 };
 
 export { resolveMissingCalendarFailure, shouldTreatAsProviderAuthFailure };

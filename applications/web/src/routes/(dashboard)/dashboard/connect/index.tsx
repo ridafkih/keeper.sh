@@ -84,6 +84,11 @@ function ConnectPage() {
           </div>
         </NavigationMenu>
         <NavigationMenu>
+          <NavigationMenuLinkItem to="/dashboard/connect/ews" disabled={atLimit}>
+            <NavigationMenuItemIcon><Calendar size={15} /></NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>Connect Exchange EWS</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuLinkItem>
           <div data-visitors-event={ANALYTICS_EVENTS.calendar_connect_started} data-visitors-provider="caldav">
             <NavigationMenuLinkItem to="/dashboard/connect/caldav" disabled={atLimit}>
               <NavigationMenuItemIcon>

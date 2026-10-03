@@ -94,7 +94,16 @@ const icsDefinition = {
   name: "ICS Feed",
 } as const satisfies ProviderDefinition;
 
+const ewsDefinition = {
+  authType: "ews",
+  icon: "/integrations/icon-outlook.svg",
+  capabilities: { canRead: true, canWrite: true },
+  id: "ews",
+  name: "Exchange EWS",
+} as const satisfies ProviderDefinition;
+
 const PROVIDER_DEFINITIONS = [
+  ewsDefinition,
   googleCalendarDefinition,
   outlookDefinition,
   fastmailDefinition,

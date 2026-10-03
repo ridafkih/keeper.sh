@@ -1,3 +1,4 @@
+import { createEwsTokenProvider, EwsClient, parseEwsConfig, toDiscoveredEwsCalendars } from "@keeper.sh/calendar/ews";
 import type { CronOptions } from "cronbake";
 import type { Plan } from "@keeper.sh/data-schemas";
 import {
@@ -28,6 +29,7 @@ import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/o
 import { buildImportedCalendarExists, decryptPassword } from "@keeper.sh/database";
 import {
   caldavCredentialsTable,
+  ewsCredentialsTable,
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
@@ -60,6 +62,7 @@ const FREE_STALENESS_MS = 24 * HOUR_MS;
 
 interface RediscoveryAccount extends RediscoveryCandidate {
   hasImportedCalendar: boolean;
+  encryptedConfig: string | null;
   accessToken: string | null;
   authMethod: string | null;
   encryptedPassword: string | null;
@@ -94,6 +97,7 @@ const loadRediscoveryCandidates = (): Promise<RediscoveryAccount[]> =>
       calendarsRefreshAttemptedAt: calendarAccountsTable.calendarsRefreshAttemptedAt,
       calendarsRefreshedAt: calendarAccountsTable.calendarsRefreshedAt,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
+      encryptedConfig: ewsCredentialsTable.encryptedConfig,
       expiresAt: oauthCredentialsTable.expiresAt,
       hasImportedCalendar: buildImportedCalendarExists(),
       oauthCredentialId: oauthCredentialsTable.id,
@@ -112,9 +116,10 @@ const loadRediscoveryCandidates = (): Promise<RediscoveryAccount[]> =>
       caldavCredentialsTable,
       eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
     )
+    .leftJoin(ewsCredentialsTable, eq(calendarAccountsTable.id, ewsCredentialsTable.accountId))
     .where(and(
       eq(calendarAccountsTable.needsReauthentication, false),
-      inArray(calendarAccountsTable.authType, ["oauth", "caldav"]),
+      inArray(calendarAccountsTable.authType, ["oauth", "caldav", "ews"]),
     ));
 
 const resolveTokenRefresher = (provider: string) => {
@@ -207,6 +212,12 @@ const discoverAccountCalendars = (
   account: RediscoveryAccount,
   signal: AbortSignal,
 ): Promise<DiscoveredCalendar[]> => {
+  if (account.authType === "ews") {
+    if (!env.ENCRYPTION_KEY || !account.encryptedConfig) { throw new Error("EWS credentials unavailable"); }
+    const config = parseEwsConfig(JSON.parse(decryptPassword(account.encryptedConfig, env.ENCRYPTION_KEY)));
+    return new EwsClient(config, { safeFetchOptions: { ...safeFetchOptions, signal }, getAccessToken: createEwsTokenProvider(database, account.accountId, env.ENCRYPTION_KEY, { safeFetchOptions: { ...safeFetchOptions, signal } }) })
+      .discoverCalendars().then(toDiscoveredEwsCalendars);
+  }
   if (account.authType === "caldav") {
     if (!env.ENCRYPTION_KEY) {
       throw new Error(

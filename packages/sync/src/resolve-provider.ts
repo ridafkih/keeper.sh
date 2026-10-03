@@ -1,3 +1,4 @@
+import { createEwsTokenProvider, createEwsSyncProvider, parseEwsConfig } from "@keeper.sh/calendar/ews";
 import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
 import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
@@ -16,6 +17,7 @@ import {
   calendarAccountsTable,
   calendarsTable,
   caldavCredentialsTable,
+  ewsCredentialsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
 import { eq } from "drizzle-orm";
@@ -173,7 +175,23 @@ interface ResolveProviderOptions {
   signal?: AbortSignal;
 }
 
-const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
+const resolveSyncProvider = async (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
+  if (options.provider === "ews" && options.encryptionKey) {
+    const [row] = await options.database.select({
+      accountId: ewsCredentialsTable.accountId,
+      encryptedConfig: ewsCredentialsTable.encryptedConfig,
+      externalCalendarId: calendarsTable.externalCalendarId,
+    }).from(calendarsTable)
+      .innerJoin(ewsCredentialsTable, eq(ewsCredentialsTable.accountId, calendarsTable.accountId))
+      .where(eq(calendarsTable.id, options.calendarId)).limit(1);
+    if (!row?.externalCalendarId) { return null; }
+    return createEwsSyncProvider({
+      connection: parseEwsConfig(JSON.parse(decryptPassword(row.encryptedConfig, options.encryptionKey))),
+      calendarId: row.externalCalendarId,
+      getAccessToken: createEwsTokenProvider(options.database, row.accountId, options.encryptionKey, { safeFetchOptions: { ...options.safeFetchOptions, signal: options.signal } }),
+      safeFetchOptions: { blockPrivateResolution: true, ...options.safeFetchOptions, signal: options.signal },
+    });
+  }
   if (OAUTH_PROVIDERS.has(options.provider)) {
     return resolveOAuthProvider(
       options.database,
@@ -198,7 +216,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
     );
   }
 
-  return Promise.resolve(null);
+  return null;
 };
 
 export { resolveSyncProvider };

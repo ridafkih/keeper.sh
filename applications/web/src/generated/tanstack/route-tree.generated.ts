@@ -69,6 +69,7 @@ import { Route as oauthDashboardConnectIcsFileRouteImport } from './../../routes
 import { Route as oauthDashboardConnectIcalLinkRouteImport } from './../../routes/(oauth)/dashboard/connect/ical-link'
 import { Route as oauthDashboardConnectGoogleRouteImport } from './../../routes/(oauth)/dashboard/connect/google'
 import { Route as oauthDashboardConnectFastmailRouteImport } from './../../routes/(oauth)/dashboard/connect/fastmail'
+import { Route as oauthDashboardConnectEwsRouteImport } from './../../routes/(oauth)/dashboard/connect/ews'
 import { Route as oauthDashboardConnectCaldavRouteImport } from './../../routes/(oauth)/dashboard/connect/caldav'
 import { Route as oauthDashboardConnectAppleRouteImport } from './../../routes/(oauth)/dashboard/connect/apple'
 import { Route as dashboardDashboardSettingsPasskeysRouteImport } from './../../routes/(dashboard)/dashboard/settings/passkeys'
@@ -397,6 +398,12 @@ const oauthDashboardConnectFastmailRoute =
     path: '/fastmail',
     getParentRoute: () => oauthDashboardConnectRouteRoute,
   } as any)
+const oauthDashboardConnectEwsRoute =
+  oauthDashboardConnectEwsRouteImport.update({
+    id: '/ews',
+    path: '/ews',
+    getParentRoute: () => oauthDashboardConnectRouteRoute,
+  } as any)
 const oauthDashboardConnectCaldavRoute =
   oauthDashboardConnectCaldavRouteImport.update({
     id: '/caldav',
@@ -508,6 +515,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
   '/dashboard/connect/caldav': typeof oauthDashboardConnectCaldavRoute
+  '/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
   '/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
@@ -570,6 +578,7 @@ export interface FileRoutesByTo {
   '/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
   '/dashboard/connect/caldav': typeof oauthDashboardConnectCaldavRoute
+  '/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
   '/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
@@ -642,6 +651,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/settings/passkeys': typeof dashboardDashboardSettingsPasskeysRoute
   '/(oauth)/dashboard/connect/apple': typeof oauthDashboardConnectAppleRoute
   '/(oauth)/dashboard/connect/caldav': typeof oauthDashboardConnectCaldavRoute
+  '/(oauth)/dashboard/connect/ews': typeof oauthDashboardConnectEwsRoute
   '/(oauth)/dashboard/connect/fastmail': typeof oauthDashboardConnectFastmailRoute
   '/(oauth)/dashboard/connect/google': typeof oauthDashboardConnectGoogleRoute
   '/(oauth)/dashboard/connect/ical-link': typeof oauthDashboardConnectIcalLinkRoute
@@ -711,6 +721,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
     | '/dashboard/connect/caldav'
+    | '/dashboard/connect/ews'
     | '/dashboard/connect/fastmail'
     | '/dashboard/connect/google'
     | '/dashboard/connect/ical-link'
@@ -773,6 +784,7 @@ export interface FileRouteTypes {
     | '/dashboard/settings/passkeys'
     | '/dashboard/connect/apple'
     | '/dashboard/connect/caldav'
+    | '/dashboard/connect/ews'
     | '/dashboard/connect/fastmail'
     | '/dashboard/connect/google'
     | '/dashboard/connect/ical-link'
@@ -844,6 +856,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/settings/passkeys'
     | '/(oauth)/dashboard/connect/apple'
     | '/(oauth)/dashboard/connect/caldav'
+    | '/(oauth)/dashboard/connect/ews'
     | '/(oauth)/dashboard/connect/fastmail'
     | '/(oauth)/dashboard/connect/google'
     | '/(oauth)/dashboard/connect/ical-link'
@@ -1291,6 +1304,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof oauthDashboardConnectFastmailRouteImport
       parentRoute: typeof oauthDashboardConnectRouteRoute
     }
+    '/(oauth)/dashboard/connect/ews': {
+      id: '/(oauth)/dashboard/connect/ews'
+      path: '/ews'
+      fullPath: '/dashboard/connect/ews'
+      preLoaderRoute: typeof oauthDashboardConnectEwsRouteImport
+      parentRoute: typeof oauthDashboardConnectRouteRoute
+    }
     '/(oauth)/dashboard/connect/caldav': {
       id: '/(oauth)/dashboard/connect/caldav'
       path: '/caldav'
@@ -1596,6 +1616,7 @@ const oauthAuthRouteRouteWithChildren = oauthAuthRouteRoute._addFileChildren(
 interface oauthDashboardConnectRouteRouteChildren {
   oauthDashboardConnectAppleRoute: typeof oauthDashboardConnectAppleRoute
   oauthDashboardConnectCaldavRoute: typeof oauthDashboardConnectCaldavRoute
+  oauthDashboardConnectEwsRoute: typeof oauthDashboardConnectEwsRoute
   oauthDashboardConnectFastmailRoute: typeof oauthDashboardConnectFastmailRoute
   oauthDashboardConnectGoogleRoute: typeof oauthDashboardConnectGoogleRoute
   oauthDashboardConnectIcalLinkRoute: typeof oauthDashboardConnectIcalLinkRoute
@@ -1608,6 +1629,7 @@ const oauthDashboardConnectRouteRouteChildren: oauthDashboardConnectRouteRouteCh
   {
     oauthDashboardConnectAppleRoute: oauthDashboardConnectAppleRoute,
     oauthDashboardConnectCaldavRoute: oauthDashboardConnectCaldavRoute,
+    oauthDashboardConnectEwsRoute: oauthDashboardConnectEwsRoute,
     oauthDashboardConnectFastmailRoute: oauthDashboardConnectFastmailRoute,
     oauthDashboardConnectGoogleRoute: oauthDashboardConnectGoogleRoute,
     oauthDashboardConnectIcalLinkRoute: oauthDashboardConnectIcalLinkRoute,
