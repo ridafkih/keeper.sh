@@ -95,6 +95,7 @@ const SYNC_SETTINGS: SyncSetting[] = [
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
+  { field: "excludeFreeEvents", label: "Exclude Events Marked Free", matchesField: true },
 ];
 
 const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [

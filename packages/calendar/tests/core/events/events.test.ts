@@ -7,6 +7,7 @@ import {
 const createEvent = (overrides: Partial<{
   excludeAllDayEvents: boolean;
   excludeFocusTime: boolean;
+  excludeFreeEvents: boolean;
   excludeOutOfOffice: boolean;
   availability: string | null;
   isAllDay: boolean | null;
@@ -15,6 +16,7 @@ const createEvent = (overrides: Partial<{
   availability: "busy",
   excludeAllDayEvents: false,
   excludeFocusTime: false,
+  excludeFreeEvents: false,
   excludeOutOfOffice: false,
   isAllDay: false,
   sourceEventType: "default",
@@ -63,6 +65,25 @@ describe("shouldExcludeSyncEvent", () => {
         }),
       ),
     ).toBe(true);
+  });
+
+  it("excludes events marked free when configured", () => {
+    expect(
+      shouldExcludeSyncEvent(
+        createEvent({
+          availability: "free",
+          excludeFreeEvents: true,
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps events marked free in sync by default", () => {
+    expect(shouldExcludeSyncEvent(createEvent({ availability: "free" }))).toBe(false);
+  });
+
+  it("keeps busy events in sync when excluding free events", () => {
+    expect(shouldExcludeSyncEvent(createEvent({ excludeFreeEvents: true }))).toBe(false);
   });
 
   it("keeps default events in sync", () => {

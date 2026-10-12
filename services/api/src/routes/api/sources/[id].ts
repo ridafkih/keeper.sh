@@ -40,6 +40,7 @@ const GET = withWideEvent(
         excludeEventLocation: calendarsTable.excludeEventLocation,
         excludeEventName: calendarsTable.excludeEventName,
         excludeFocusTime: calendarsTable.excludeFocusTime,
+        excludeFreeEvents: calendarsTable.excludeFreeEvents,
         excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
         syncFutureRange: calendarsTable.syncFutureRange,
         syncHistoricRange: calendarsTable.syncHistoricRange,
@@ -153,7 +154,7 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
-            if (updated && "markEventsAsPrivate" in updates) {
+            if (updated && ("markEventsAsPrivate" in updates || "excludeFreeEvents" in updates)) {
               await requestUserSync(transaction, userIdToUpdate);
             }
             await applyFeedMembership(transaction, updated ?? null);

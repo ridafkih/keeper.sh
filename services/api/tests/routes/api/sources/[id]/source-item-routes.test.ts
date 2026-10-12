@@ -181,4 +181,41 @@ describe("handlePatchSourceRoute", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("returns 403 when free users try to set excludeFreeEvents", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { excludeFreeEvents: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("passes excludeFreeEvents through when a pro user sets it", async () => {
+    let receivedUpdates: Record<string, unknown> = {};
+    const response = await handlePatchSourceRoute(
+      {
+        body: { excludeFreeEvents: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        updateSource: (_userId, _sourceId, updates) => {
+          receivedUpdates = updates;
+          return Promise.resolve({ id: "source-1", ...updates });
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedUpdates).toEqual({ excludeFreeEvents: true });
+  });
 });

@@ -56,6 +56,7 @@ export interface CalendarDetail {
   excludeEventLocation: boolean;
   excludeEventName: boolean;
   excludeFocusTime: boolean;
+  excludeFreeEvents: boolean;
   excludeOutOfOffice: boolean;
   treatFullDayTimedEventsAsAllDay: boolean;
   syncFutureRange: SyncRange;

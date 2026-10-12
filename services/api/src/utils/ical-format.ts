@@ -231,6 +231,7 @@ const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boole
   return !shouldExcludeSyncEvent({
     excludeAllDayEvents: false,
     excludeFocusTime: settings.excludeFocusTime,
+    excludeFreeEvents: false,
     excludeOutOfOffice: settings.excludeOutOfOffice,
     availability: event.availability,
     isAllDay: event.isAllDay,

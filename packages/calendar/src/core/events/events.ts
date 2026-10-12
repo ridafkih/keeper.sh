@@ -117,6 +117,7 @@ const parseSourceEventType = (
 const shouldExcludeSyncEvent = (event: {
   excludeAllDayEvents: boolean;
   excludeFocusTime: boolean;
+  excludeFreeEvents: boolean;
   excludeOutOfOffice: boolean;
   availability: string | null;
   isAllDay: boolean | null;
@@ -134,6 +135,9 @@ const shouldExcludeSyncEvent = (event: {
     return true;
   }
   if (event.excludeOutOfOffice && sourceEventType === "outOfOffice") {
+    return true;
+  }
+  if (event.excludeFreeEvents && event.availability === "free") {
     return true;
   }
 
@@ -189,6 +193,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       excludeEventLocation: calendarsTable.excludeEventLocation,
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeFreeEvents: calendarsTable.excludeFreeEvents,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
       markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
       availability: eventStatesTable.availability,

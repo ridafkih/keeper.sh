@@ -9,6 +9,7 @@ const EVENT_FILTER_FIELDS = [
   "excludeEventLocation",
   "excludeEventName",
   "excludeFocusTime",
+  "excludeFreeEvents",
   "excludeOutOfOffice",
   "markEventsAsPrivate",
 ] as const;

@@ -536,6 +536,7 @@ describe("a run whose only push was accepted without a remote id", () => {
       availability: "workingElsewhere",
       excludeAllDayEvents: false,
       excludeFocusTime: false,
+      excludeFreeEvents: false,
       excludeOutOfOffice: false,
       isAllDay: false,
       sourceEventType: null,

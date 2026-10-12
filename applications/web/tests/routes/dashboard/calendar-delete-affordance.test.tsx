@@ -77,6 +77,7 @@ const makeCalendar = (capabilities: string[]): CalendarDetail => ({
   excludeEventLocation: false,
   excludeEventName: false,
   excludeFocusTime: false,
+  excludeFreeEvents: false,
   excludeOutOfOffice: false,
   id: CALENDAR_ID,
   ingestFailureCount: 0,

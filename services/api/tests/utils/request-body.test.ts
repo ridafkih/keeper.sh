@@ -71,6 +71,11 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts excludeFreeEvents as boolean", () => {
+    const result = sourcePatchBodySchema({ excludeFreeEvents: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
 
   it("rejects extra properties", () => {
     const result = sourcePatchBodySchema({ name: "ok", hacker: true });

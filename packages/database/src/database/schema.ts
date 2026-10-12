@@ -118,6 +118,7 @@ const calendarsTable = pgTable(
     excludeEventLocation: boolean().notNull().default(true),
     excludeEventName: boolean().notNull().default(true),
     excludeFocusTime: boolean().notNull().default(false),
+    excludeFreeEvents: boolean().notNull().default(false),
     excludeOutOfOffice: boolean().notNull().default(false),
     includeInIcalFeed: boolean().notNull().default(false),
     treatFullDayTimedEventsAsAllDay: boolean().notNull().default(false),

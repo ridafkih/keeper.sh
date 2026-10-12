@@ -84,6 +84,7 @@ create table calendars (
   "excludeEventLocation" boolean not null default true,
   "excludeEventName" boolean not null default true,
   "excludeFocusTime" boolean not null default false,
+  "excludeFreeEvents" boolean not null default false,
   "excludeOutOfOffice" boolean not null default false,
   "externalCalendarId" text,
   "failureCount" integer not null default 0,
