@@ -8,7 +8,9 @@ import {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
+  KEEPER_API_WRITE_SCOPE,
 } from "@keeper.sh/constants";
+import { resolveMcpAccessTokenClaims } from "./mcp-token-version";
 
 const KEEPER_MCP_OAUTH_SCOPES = [
   "openid",
@@ -35,6 +37,7 @@ interface ResolvedMcpAuthOptions {
     clientRegistrationAllowedScopes: string[];
     clientRegistrationDefaultScopes: string[];
     consentPage: string;
+    customAccessTokenClaims: typeof resolveMcpAccessTokenClaims;
     loginPage: string;
     scopes: string[];
     silenceWarnings: {
@@ -82,6 +85,7 @@ const resolveMcpAuthOptions = (
       clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
       clientRegistrationDefaultScopes: KEEPER_MCP_OAUTH_SCOPES,
       consentPage: resolveAbsoluteUrl("/oauth/consent", input.webBaseUrl),
+      customAccessTokenClaims: resolveMcpAccessTokenClaims,
       loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),
       scopes: KEEPER_MCP_OAUTH_SCOPES,
       silenceWarnings: {
@@ -106,6 +110,7 @@ export {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
+  KEEPER_API_WRITE_SCOPE,
   KEEPER_MCP_OAUTH_SCOPES,
   resolveMcpAuthOptions,
   resolveMcpJwksUrl,

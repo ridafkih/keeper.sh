@@ -135,11 +135,12 @@ export const MCP_TOOL_GROUPS: McpToolGroup[] = [
 
 export const MCP_OAUTH_SCOPES: OauthScope[] = [
   { scope: "keeper.read", description: "Required by every tool call. Without it the server answers 403." },
+  { scope: "keeper.write", description: "Creating, editing, deleting and responding to events, and triggering or pausing a sync." },
   { scope: "keeper.events.read", description: "Reading events and invitations." },
   { scope: "keeper.sources.read", description: "Reading the calendars events are copied from." },
   { scope: "keeper.destinations.read", description: "Reading the calendars events are copied into." },
   { scope: "keeper.mappings.read", description: "Reading which calendar is copied into which." },
-  { scope: "keeper.sync-status.read", description: "Reading sync state and triggering a sync." },
+  { scope: "keeper.sync-status.read", description: "Reading sync state." },
 ];
 
 export const REST_ENDPOINTS: RestEndpoint[] = [

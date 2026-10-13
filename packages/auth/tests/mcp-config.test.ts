@@ -4,10 +4,12 @@ import {
   KEEPER_API_READ_SCOPE,
   KEEPER_API_RESOURCE_SCOPES,
   KEEPER_API_SCOPES,
+  KEEPER_API_WRITE_SCOPE,
   KEEPER_MCP_OAUTH_SCOPES,
   resolveMcpAuthOptions,
   resolveMcpJwksUrl,
 } from "../src/mcp-config";
+import { resolveMcpAccessTokenClaims } from "../src/mcp-token-version";
 
 describe("resolveMcpAuthOptions", () => {
   it("builds Keeper OAuth provider settings from the Keeper web and MCP URLs", () => {
@@ -25,6 +27,7 @@ describe("resolveMcpAuthOptions", () => {
         clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
         clientRegistrationDefaultScopes: KEEPER_MCP_OAUTH_SCOPES,
         consentPage: "https://app.keeper.sh/oauth/consent",
+        customAccessTokenClaims: resolveMcpAccessTokenClaims,
         loginPage: "https://app.keeper.sh/login",
         scopes: KEEPER_MCP_OAUTH_SCOPES,
         silenceWarnings: {
@@ -57,6 +60,12 @@ describe("resolveMcpAuthOptions", () => {
     expect(KEEPER_API_SCOPES).toContain(KEEPER_API_READ_SCOPE);
     expect(KEEPER_API_DEFAULT_SCOPE.split(" ")).toContain(KEEPER_API_READ_SCOPE);
     expect(KEEPER_API_RESOURCE_SCOPES).toContain(KEEPER_API_READ_SCOPE);
+  });
+
+  it("offers keeper.write to clients and grants it by default", () => {
+    expect(KEEPER_API_RESOURCE_SCOPES).toContain(KEEPER_API_WRITE_SCOPE);
+    expect(KEEPER_MCP_OAUTH_SCOPES).toContain(KEEPER_API_WRITE_SCOPE);
+    expect(KEEPER_API_DEFAULT_SCOPE.split(" ")).toContain(KEEPER_API_WRITE_SCOPE);
   });
 
   it("supports offline_access for refresh tokens without advertising it as a resource scope", () => {

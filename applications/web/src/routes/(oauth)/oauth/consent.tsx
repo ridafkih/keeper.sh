@@ -20,6 +20,7 @@ type SearchParams = Record<string, string>;
 
 const SCOPE_LABELS: Record<string, string> = {
   "keeper.read": "Read your Keeper data",
+  "keeper.write": "Create, edit and delete your events, and pause or trigger syncing",
   "keeper.sources.read": "View your calendar sources",
   "keeper.destinations.read": "View your sync destinations",
   "keeper.mappings.read": "View your source-destination mappings",

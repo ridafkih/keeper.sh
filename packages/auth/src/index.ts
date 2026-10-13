@@ -15,6 +15,8 @@ import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
+import { readMcpTokenVersion } from "./mcp-token-version";
+import type { McpTokenVersion } from "./mcp-token-version";
 import {
   createUnverifiedRegistrationReclaim,
   readSignUpBody,
@@ -76,6 +78,7 @@ interface AuthConfig {
 
 interface KeeperMcpAuthSession {
   scopes: string;
+  tokenVersion: McpTokenVersion;
   userId: string | null;
 }
 
@@ -114,6 +117,7 @@ const hasOAuthProviderApi = (
 };
 
 const mcpJwtClaimsSchema = type({
+  "keeper_token_version?": "number",
   scope: "string",
   sub: "string",
   "+": "delete",
@@ -499,6 +503,7 @@ const createAuth = (config: AuthConfig) => {
 
         return {
           scopes: claims.scope,
+          tokenVersion: readMcpTokenVersion(claims.keeper_token_version),
           userId: claims.sub,
         };
       },
@@ -545,11 +550,18 @@ export {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
+  KEEPER_API_WRITE_SCOPE,
 } from "./mcp-config";
+export {
+  CURRENT_MCP_TOKEN_VERSION,
+  LEGACY_MCP_TOKEN_VERSION,
+  resolveMissingMcpScope,
+} from "./mcp-token-version";
 export type {
   AuthConfig,
   AuthResult,
   KeeperMcpAuthApi,
   KeeperMcpAuthSession,
   KeeperMcpEnabledAuth,
+  McpTokenVersion,
 };

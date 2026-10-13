@@ -1,5 +1,5 @@
 import type { MaybePromise } from "bun";
-import { isKeeperMcpEnabledAuth } from "@keeper.sh/auth";
+import { isKeeperMcpEnabledAuth, resolveMissingMcpScope } from "@keeper.sh/auth";
 import { ErrorResponse } from "./responses";
 import { apiTokensTable } from "@keeper.sh/database/schema";
 import { isApiToken, hashApiToken } from "./api-tokens";
@@ -215,6 +215,19 @@ const withV1Auth =
 
         if (!mcpSession?.userId) {
           return ErrorResponse.unauthorized().toResponse();
+        }
+
+        widelog.set("auth.mcp_token_version", mcpSession.tokenVersion);
+
+        const missingScope = resolveMissingMcpScope({
+          method: request.method,
+          scopes: mcpSession.scopes,
+          tokenVersion: mcpSession.tokenVersion,
+        });
+
+        if (missingScope) {
+          widelog.set("auth.missing_scope", missingScope);
+          return ErrorResponse.forbidden(`This token is missing the ${missingScope} scope.`).toResponse();
         }
 
         const { plan } = await enrichWithUserContext(mcpSession.userId);

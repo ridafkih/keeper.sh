@@ -666,6 +666,13 @@
       "when": 1791822336241,
       "tag": "0094_rapid_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791906001909,
+      "tag": "0095_mark_existing_oauth_clients_legacy",
+      "breakpoints": true
     }
   ]
 }
