@@ -6,8 +6,11 @@ import { parseHTML } from "linkedom";
 import type { AuthCapabilities } from "@/lib/auth-capabilities";
 import type { AuthScreenCopy } from "../../../../src/features/auth/components/auth-form";
 
-const { passkeySignInMock, omitMotionProps } = vi.hoisted(() => {
+const { passkeySignInMock, oauth2SignInMock, omitMotionProps } = vi.hoisted(() => {
   const passkeySignInMock = vi.fn(() => Promise.resolve({ error: null }));
+  const oauth2SignInMock = vi.fn<(options: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>>(
+    () => Promise.resolve({ error: null }),
+  );
 
   const omitMotionProps = <T extends Record<string, unknown>>(props: T) => {
     const domProps = { ...props };
@@ -20,7 +23,7 @@ const { passkeySignInMock, omitMotionProps } = vi.hoisted(() => {
     return domProps;
   };
 
-  return { passkeySignInMock, omitMotionProps };
+  return { passkeySignInMock, oauth2SignInMock, omitMotionProps };
 });
 
 vi.mock("@tanstack/react-router", () => ({
@@ -49,6 +52,7 @@ vi.mock("../../../../src/lib/motion-features", () => ({
 vi.mock("../../../../src/lib/auth-client", () => ({
   authClient: {
     signIn: {
+      oauth2: oauth2SignInMock,
       passkey: passkeySignInMock,
     },
   },
@@ -125,6 +129,85 @@ const copy: AuthScreenCopy = {
   action: "signIn",
 };
 
+const renderInDom = async (
+  element: React.ReactElement,
+  run: (container: HTMLElement) => Promise<void>,
+) => {
+  const { document, window } = parseHTML("<html><body><div id='app'></div></body></html>");
+  const previousGlobals = {
+    Event: globalThis.Event,
+    FocusEvent: globalThis.FocusEvent,
+    HTMLElement: globalThis.HTMLElement,
+    Node: globalThis.Node,
+    PublicKeyCredential: globalThis.PublicKeyCredential,
+    document: globalThis.document,
+    location: globalThis.location,
+    navigator: globalThis.navigator,
+    requestAnimationFrame: globalThis.requestAnimationFrame,
+    window: globalThis.window,
+  };
+
+  class FakePublicKeyCredential {}
+  Object.assign(FakePublicKeyCredential, {
+    isConditionalMediationAvailable: vi.fn(() => Promise.resolve(true)),
+  });
+
+  Object.assign(globalThis, {
+    Event: window.Event,
+    FocusEvent: window.FocusEvent ?? window.Event,
+    HTMLElement: window.HTMLElement,
+    IS_REACT_ACT_ENVIRONMENT: true,
+    Node: window.Node,
+    PublicKeyCredential: FakePublicKeyCredential,
+    document,
+    requestAnimationFrame: (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    },
+    window,
+  });
+  Object.defineProperty(globalThis, "navigator", { value: window.navigator, configurable: true, writable: true });
+  Object.defineProperty(globalThis, "location", {
+    value: { assign: vi.fn(), origin: "http://localhost:3000" },
+    configurable: true,
+    writable: true,
+  });
+
+  const container = document.getElementById("app");
+  if (!container) throw new Error("Expected app container");
+
+  if (!(container instanceof HTMLElement)) {
+    throw Error("container must be Element")
+  }
+
+  const root = createRoot(container);
+
+  try {
+    await act(async () => {
+      root.render(element);
+    });
+
+    await run(container);
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    Object.defineProperty(globalThis, "navigator", { value: previousGlobals.navigator, configurable: true, writable: true });
+    Object.defineProperty(globalThis, "location", { value: previousGlobals.location, configurable: true, writable: true });
+    Object.assign(globalThis, previousGlobals);
+  }
+};
+
+const clickButtonWithText = async (container: HTMLElement, text: string) => {
+  const button = [...container.querySelectorAll("button")].find((candidate) =>
+    candidate.textContent?.includes(text));
+  if (!button) throw new Error(`Expected a button containing "${text}"`);
+
+  await act(async () => {
+    button.dispatchEvent(new globalThis.window.Event("click", { bubbles: true }));
+  });
+};
+
 describe("AuthForm", () => {
   it("uses username webauthn autocomplete for passkey sign-in", () => {
     const markup = renderToStaticMarkup(<AuthForm capabilities={capabilities} copy={copy} />);
@@ -145,8 +228,9 @@ describe("AuthForm", () => {
       />,
     );
 
-    expect(markup).toContain('href="/auth/oidc"');
+    expect(markup).toContain('<button type="button"');
     expect(markup).toContain("Sign in with Pocket ID");
+    expect(markup).not.toContain("/auth/oidc");
   });
 
   it("hides the credential form when local auth is disabled", () => {
@@ -163,7 +247,8 @@ describe("AuthForm", () => {
 
     expect(markup).not.toContain('name="email"');
     expect(markup).not.toContain("<div>or</div>");
-    expect(markup).toContain('href="/auth/oidc"');
+    expect(markup).toContain("Sign in with SSO");
+    expect(markup).not.toContain("Register");
   });
 
   it("keeps email autofill semantics for registration", () => {
@@ -196,61 +281,49 @@ describe("AuthForm", () => {
   it("starts passive passkey sign-in on render when conditional mediation is available", async () => {
     passkeySignInMock.mockClear();
 
-    const { document, window } = parseHTML("<html><body><div id='app'></div></body></html>");
-    const previousGlobals = {
-      Event: globalThis.Event,
-      FocusEvent: globalThis.FocusEvent,
-      HTMLElement: globalThis.HTMLElement,
-      Node: globalThis.Node,
-      PublicKeyCredential: globalThis.PublicKeyCredential,
-      document: globalThis.document,
-      navigator: globalThis.navigator,
-      requestAnimationFrame: globalThis.requestAnimationFrame,
-      window: globalThis.window,
-    };
-
-    class FakePublicKeyCredential {}
-    Object.assign(FakePublicKeyCredential, {
-      isConditionalMediationAvailable: vi.fn(() => Promise.resolve(true)),
-    });
-
-    Object.assign(globalThis, {
-      Event: window.Event,
-      FocusEvent: window.FocusEvent ?? window.Event,
-      HTMLElement: window.HTMLElement,
-      IS_REACT_ACT_ENVIRONMENT: true,
-      Node: window.Node,
-      PublicKeyCredential: FakePublicKeyCredential,
-      document,
-      requestAnimationFrame: (callback: FrameRequestCallback) => {
-        callback(0);
-        return 1;
-      },
-      window,
-    });
-    Object.defineProperty(globalThis, "navigator", { value: window.navigator, configurable: true, writable: true });
-
-    const container = document.getElementById("app");
-    if (!container) throw new Error("Expected app container");
-
-    if (!(container instanceof HTMLElement)) {
-      throw Error("container must be Element")
-    }
-
-    const root = createRoot(container);
-
-    try {
-      await act(async () => {
-        root.render(<AuthForm capabilities={capabilities} copy={copy} />);
-      });
-
+    await renderInDom(<AuthForm capabilities={capabilities} copy={copy} />, async () => {
       expect(passkeySignInMock).toHaveBeenCalledTimes(1);
-    } finally {
-      await act(async () => {
-        root.unmount();
-      });
-      Object.defineProperty(globalThis, "navigator", { value: previousGlobals.navigator, configurable: true, writable: true });
-      Object.assign(globalThis, previousGlobals);
-    }
+    });
+  });
+
+  it("starts the OIDC redirect straight from the sign-in button", async () => {
+    oauth2SignInMock.mockClear();
+
+    await renderInDom(
+      <AuthForm
+        capabilities={{ ...capabilities, socialProviders: { google: false, microsoft: false, oidc: true } }}
+        copy={copy}
+      />,
+      async (container) => {
+        await clickButtonWithText(container, "Sign in with SSO");
+
+        expect(oauth2SignInMock).toHaveBeenCalledWith({
+          callbackURL: "/dashboard",
+          newUserCallbackURL: "/dashboard?keeper_signup=1",
+          providerId: "oidc",
+        });
+      },
+    );
+  });
+
+  it("shows a failed OIDC redirect on the form when local auth is disabled", async () => {
+    oauth2SignInMock.mockClear();
+    oauth2SignInMock.mockResolvedValueOnce({ error: { message: "Discovery failed" } });
+
+    await renderInDom(
+      <AuthForm
+        capabilities={{
+          ...capabilities,
+          disableLocalAuth: true,
+          socialProviders: { google: false, microsoft: false, oidc: true },
+        }}
+        copy={copy}
+      />,
+      async (container) => {
+        await clickButtonWithText(container, "Sign in with SSO");
+
+        expect(container.textContent).toContain("Discovery failed");
+      },
+    );
   });
 });
