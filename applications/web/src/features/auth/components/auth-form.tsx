@@ -265,20 +265,30 @@ function OidcSignInButton({
   const setStatus = useSetAtom(authFormStatusAtom);
   const setError = useSetAtom(authFormErrorAtom);
 
+  const showError = (message: string) => {
+    setStatus("idle");
+    setError({ message, active: true });
+  };
+
   const handleClick = async () => {
     setError(null);
     setStatus("loading");
 
     const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
-    const { error } = await authClient.signIn.oauth2({
-      callbackURL,
-      newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
-      providerId: "oidc",
-    });
+    const fallbackMessage = `Couldn't reach ${providerName}.`;
 
-    if (error) {
-      setStatus("idle");
-      setError({ message: error.message ?? `Couldn't reach ${providerName}.`, active: true });
+    try {
+      const { error } = await authClient.signIn.oauth2({
+        callbackURL,
+        newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
+        providerId: "oidc",
+      });
+
+      if (error) {
+        showError(error.message ?? fallbackMessage);
+      }
+    } catch (error) {
+      showError(resolveErrorMessage(error, fallbackMessage));
     }
   };
 

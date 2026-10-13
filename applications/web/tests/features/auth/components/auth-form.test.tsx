@@ -306,6 +306,26 @@ describe("AuthForm", () => {
     );
   });
 
+  it("recovers the form when the OIDC redirect request throws", async () => {
+    oauth2SignInMock.mockClear();
+    oauth2SignInMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    await renderInDom(
+      <AuthForm
+        capabilities={{ ...capabilities, socialProviders: { google: false, microsoft: false, oidc: true } }}
+        copy={copy}
+      />,
+      async (container) => {
+        await clickButtonWithText(container, "Sign in with SSO");
+
+        const button = [...container.querySelectorAll("button")].find((candidate) =>
+          candidate.textContent?.includes("Sign in with SSO"));
+        expect(button?.hasAttribute("disabled")).toBe(false);
+        expect(container.textContent).toContain("Failed to fetch");
+      },
+    );
+  });
+
   it("shows a failed OIDC redirect on the form when local auth is disabled", async () => {
     oauth2SignInMock.mockClear();
     oauth2SignInMock.mockResolvedValueOnce({ error: { message: "Discovery failed" } });
