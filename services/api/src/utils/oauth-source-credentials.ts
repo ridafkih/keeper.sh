@@ -1,8 +1,9 @@
 import { oauthCredentialsTable } from "@keeper.sh/database/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
+const USER_ACCOUNT_LOCK_NAMESPACE = 9002;
 
 interface CreateOAuthSourceCredentialData {
   provider: string;
@@ -12,11 +13,13 @@ interface CreateOAuthSourceCredentialData {
   expiresAt: Date;
 }
 
-const createOAuthSourceCredential = async (
+// Two connects of one account can overlap, so the lookup and insert hold the user's account lock.
+const createOAuthSourceCredential = (
   userId: string,
   data: CreateOAuthSourceCredentialData,
-): Promise<string> => {
-  const [existing] = await database
+): Promise<string> => database.transaction(async (client) => {
+  await client.execute(sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${userId}))`);
+  const [existing] = await client
     .select({ id: oauthCredentialsTable.id })
     .from(oauthCredentialsTable)
     .where(
@@ -29,7 +32,7 @@ const createOAuthSourceCredential = async (
     .limit(FIRST_RESULT_LIMIT);
 
   if (existing) {
-    await database
+    await client
       .update(oauthCredentialsTable)
       .set({
         accessToken: data.accessToken,
@@ -42,7 +45,7 @@ const createOAuthSourceCredential = async (
     return existing.id;
   }
 
-  const [credential] = await database
+  const [credential] = await client
     .insert(oauthCredentialsTable)
     .values({
       accessToken: data.accessToken,
@@ -59,6 +62,6 @@ const createOAuthSourceCredential = async (
   }
 
   return credential.id;
-};
+});
 
 export { createOAuthSourceCredential };

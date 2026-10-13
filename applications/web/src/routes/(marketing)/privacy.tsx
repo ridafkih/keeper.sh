@@ -13,7 +13,7 @@ export const Route = createFileRoute("/(marketing)/privacy")({
   head: () => seoHead({
     title: "Privacy Policy",
     description:
-      "How Keeper.sh collects, uses, and protects your calendar data. Per-calendar controls over what event details are shared, and minimal data retention.",
+      "How Keeper.sh collects, uses, and protects your calendar data. Per-sync controls over what event details are shared, and minimal data retention.",
     path: "/privacy",
     scripts: [
       jsonLdScript(webPageSchema("Privacy Policy", "Privacy policy for Keeper.sh, the calendar sync service that stops your calendars double-booking each other.", "/privacy")),

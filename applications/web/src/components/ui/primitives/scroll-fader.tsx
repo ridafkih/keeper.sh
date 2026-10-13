@@ -13,17 +13,26 @@ const isClient = () => true;
 const isServer = () => false;
 
 // Offsets ignore transforms, so a page still sliding in through the sidebar transition measures at rest.
-function resolveViewportLeft(element: HTMLElement): number {
-  let left = -window.scrollX;
+// Scroll is subtracted for every ancestor up to a fixed one, which sits still however the page above it scrolls.
+function resolveViewportOffset(element: HTMLElement): { left: number; top: number } {
+  let left = 0;
+  let top = 0;
   for (let node: HTMLElement | null = element; node; node = node.offsetParent as HTMLElement | null) {
     left += node.offsetLeft + (node.offsetParent?.clientLeft ?? 0);
+    top += node.offsetTop + (node.offsetParent?.clientTop ?? 0);
   }
-  return left;
+  for (let node = element.parentElement; node; node = node.parentElement) {
+    left -= node.scrollLeft;
+    top -= node.scrollTop;
+    if (getComputedStyle(node).position === "fixed") break;
+  }
+  return { left, top };
 }
 
+// Measured through offsets, so a pane still sliding in doesn't park the band over its bottom border.
 function resolveScrollportBottom(element: HTMLElement): number {
   const parent = resolveScrollParent(element);
-  return parent ? parent.getBoundingClientRect().bottom : window.innerHeight;
+  return parent ? resolveViewportOffset(parent).top + parent.clientTop + parent.clientHeight : window.innerHeight;
 }
 
 export function ScrollFader({ children }: PropsWithChildren) {
@@ -45,7 +54,7 @@ export function ScrollFader({ children }: PropsWithChildren) {
       if (!wrapper || !anchor || !sentinel || !band) return;
       const remaining = sentinel.getBoundingClientRect().top - anchor.getBoundingClientRect().top;
       band.style.opacity = String(clamp01(remaining / FADE_DISTANCE_PX));
-      band.style.left = `${resolveViewportLeft(wrapper) - BLEED_PX}px`;
+      band.style.left = `${resolveViewportOffset(wrapper).left - BLEED_PX}px`;
       band.style.width = `${wrapper.offsetWidth + BLEED_PX * 2}px`;
       band.style.top = `${resolveScrollportBottom(wrapper) - BAND_HEIGHT_PX}px`;
     };

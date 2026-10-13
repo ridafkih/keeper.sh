@@ -1,9 +1,12 @@
 import {
   boolean,
   check,
+  date,
   index,
   integer,
+  jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -17,6 +20,7 @@ import {
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
+import type { AdvancedRule, SyncAvailability, SyncRunRecord } from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
@@ -112,6 +116,7 @@ const calendarsTable = pgTable(
       .references(() => calendarAccountsTable.id, { onDelete: "cascade" }),
     calendarType: text().notNull(),
     calendarUrl: text(),
+    color: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     excludeAllDayEvents: boolean().notNull().default(false),
     excludeAvailabilities: text().array().notNull().default([]),
@@ -266,6 +271,7 @@ const eventStatesTable = pgTable(
     calendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    color: text(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     description: text(),
     endTime: timestamp({ withTimezone: true }).notNull(),
@@ -411,17 +417,109 @@ const eventMappingsTable = pgTable(
   ],
 );
 
+const syncsTable = pgTable(
+  "syncs",
+  {
+    busyTitle: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    markPrivate: boolean().notNull().default(false),
+    mode: text().notNull().default("one_way"),
+    name: text().notNull(),
+    paused: boolean().notNull().default(false),
+    rules: jsonb().$type<AdvancedRule[]>().notNull().default([]),
+    shareAs: text().notNull().default("busy_only"),
+    skipAllDay: boolean().notNull().default(false),
+    skipAvailabilities: jsonb().$type<SyncAvailability[]>().notNull().default([]),
+    skipFocusTime: boolean().notNull().default(false),
+    skipOutOfOffice: boolean().notNull().default(false),
+    skipTitleKeywords: jsonb().$type<string[]>().notNull().default([]),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("syncs_user_idx").on(table.userId),
+    check("syncs_mode_check", sql`${table.mode} IN ('one_way', 'both_ways')`),
+    check("syncs_share_as_check", sql`${table.shareAs} IN ('busy_only', 'title_only', 'full')`),
+  ],
+);
+
+const syncCalendarsTable = pgTable(
+  "sync_calendars",
+  {
+    calendarId: uuid()
+      .notNull()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    position: integer().notNull(),
+    role: text().notNull(),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.syncId, table.calendarId] }),
+    index("sync_calendars_calendar_idx").on(table.calendarId),
+    check("sync_calendars_role_check", sql`${table.role} IN ('source', 'destination', 'member')`),
+  ],
+);
+
+const syncActivityTable = pgTable(
+  "sync_activity",
+  {
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    kind: text().notNull(),
+    payload: jsonb().$type<Record<string, unknown>>().notNull(),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("sync_activity_sync_created_idx").on(table.syncId, table.createdAt.desc(), table.id.desc()),
+    check("sync_activity_kind_check", sql`${table.kind} IN ('change', 'run')`),
+  ],
+);
+
+// One row per sync per UTC day, so the weekly digest reads totals instead of every run.
+const syncActivityDaysTable = pgTable(
+  "sync_activity_days",
+  {
+    added: integer().notNull().default(0),
+    day: date({ mode: "string" }).notNull(),
+    removed: integer().notNull().default(0),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
+  },
+  (table) => [primaryKey({ columns: [table.syncId, table.day] })],
+);
+
+// Pairs are derived from each sync's calendars; the unique pair index keeps a pair in one sync.
 const sourceDestinationMappingsTable = pgTable(
   "source_destination_mappings",
   {
+    copiedCount: integer().notNull().default(0),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     destinationCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    failedCount: integer().notNull().default(0),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    lastErrorAt: timestamp({ withTimezone: true }),
+    lastSyncedAt: timestamp({ withTimezone: true }),
+    skippedBy: jsonb().$type<SyncRunRecord["skippedBy"]>().notNull().default([]),
+    skippedCount: integer().notNull().default(0),
     sourceCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    syncId: uuid()
+      .notNull()
+      .references(() => syncsTable.id, { onDelete: "cascade" }),
   },
   (table) => [
     uniqueIndex("source_destination_mapping_idx").on(
@@ -430,6 +528,7 @@ const sourceDestinationMappingsTable = pgTable(
     ),
     index("source_destination_mappings_source_idx").on(table.sourceCalendarId),
     index("source_destination_mappings_destination_idx").on(table.destinationCalendarId),
+    index("source_destination_mappings_sync_idx").on(table.syncId),
   ],
 );
 
@@ -556,7 +655,11 @@ export {
   icalFeedsTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  syncActivityDaysTable,
+  syncActivityTable,
+  syncCalendarsTable,
   syncStatusTable,
+  syncsTable,
   userSyncRequestsTable,
   userEventsTable,
   userSubscriptionsTable,

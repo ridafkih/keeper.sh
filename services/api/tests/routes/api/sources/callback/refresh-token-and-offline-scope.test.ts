@@ -8,6 +8,7 @@ const MS_PER_SECOND = 1000;
 const storedCredentials: { userId: string; refreshToken: string }[] = [];
 const importedAccounts: string[] = [];
 let tokenResponse: Record<string, unknown> = {};
+let validatedState: { userId: string; sourceCredentialId?: string } = { userId: "user-1" };
 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
@@ -34,7 +35,7 @@ vi.mock("@/utils/destinations", () => ({
   exchangeCodeForTokens: () => Promise.resolve(tokenResponse),
   fetchUserInfo: () =>
     Promise.resolve({ email: "person@tenant.test.invalid", id: "graph-object-id-1" }),
-  validateState: () => Promise.resolve({ userId: "user-1" }),
+  validateState: () => Promise.resolve(validatedState),
 }));
 
 vi.mock("@/utils/oauth-source-credentials", () => ({
@@ -110,6 +111,7 @@ describe("microsoft connect keeps requesting offline access", () => {
 
 describe("microsoft connect rejects a token response without a refresh token", () => {
   beforeEach(() => {
+    validatedState = { userId: "user-1" };
     storedCredentials.length = 0;
     importedAccounts.length = 0;
     tokenResponse = {
@@ -143,6 +145,27 @@ describe("microsoft connect rejects a token response without a refresh token", (
       { refreshToken: "refresh-token-1", userId: "user-1" },
     ]);
     expect(importedAccounts).toEqual(["credential-1"]);
-    expect(new URL(location).pathname).toBe("/dashboard/accounts/account-1/setup");
+    expect(new URL(location).pathname).toBe("/dashboard/setup");
+    expect(new URL(location).searchParams.get("accountId")).toBe("account-1");
+  });
+});
+
+describe("a reconnect returns to the account it fixed", () => {
+  beforeEach(() => {
+    validatedState = { sourceCredentialId: "credential-0", userId: "user-1" };
+    tokenResponse = {
+      access_token: "access-token-1",
+      expires_in: TOKEN_LIFETIME_SECONDS,
+      refresh_token: "refresh-token-1",
+      scope: "Calendars.ReadWrite User.Read offline_access",
+    };
+  });
+
+  it("goes to the account page instead of the setup sentence", async () => {
+    const response = await runCallback();
+    const location = new URL(response.headers.get("location") ?? "");
+
+    expect(location.pathname).toBe("/dashboard/accounts/account-1");
+    expect(location.searchParams.get("accountId")).toBeNull();
   });
 });

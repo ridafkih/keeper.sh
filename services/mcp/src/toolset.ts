@@ -24,6 +24,7 @@ interface KeeperToolContext {
 interface KeeperMcpToolAnnotations {
   readOnlyHint: boolean;
   destructiveHint: boolean;
+  idempotentHint?: boolean;
   openWorldHint: boolean;
 }
 
@@ -102,7 +103,7 @@ interface KeeperMcpToolset {
   get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
   find_free_time: KeeperMcpToolDefinition<KeeperFreeTime>;
   trigger_sync: KeeperMcpToolDefinition<KeeperSyncTrigger>;
-  pause_sync: KeeperMcpToolDefinition<KeeperCalendarPause>;
+  pause_calendar: KeeperMcpToolDefinition<KeeperCalendarPause>;
 }
 
 const isErrorResponse = (value: unknown): value is { error: string } =>
@@ -512,14 +513,14 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     execute: (context) =>
       apiFetch(context, "/api/v1/sync", keeperSyncTriggerSchema, { method: "POST" }),
   },
-  pause_sync: {
-    title: "Pause or resume calendar sync",
-    annotations: DESTRUCTIVE,
+  pause_calendar: {
+    title: "Pause or resume a calendar",
+    annotations: { ...DESTRUCTIVE, idempotentHint: true },
     description:
-      "Pause or resume syncing for a single calendar without disconnecting it. A paused calendar is neither polled for new events nor pushed to, in both directions, and its stored events are kept. Set paused to false to resume.",
+      "Pause or resume one calendar without disconnecting it. This pauses the calendar itself, not a single sync: while paused it is neither polled for new events nor pushed to, in every sync it belongs to, and its stored events are kept. A sync can't be paused on its own here; the user does that from the Keeper.sh dashboard. Set paused to false to resume.",
     inputSchema: {
       calendarId: z.string().uuid().describe("The calendar ID returned by list_calendars"),
-      paused: z.boolean().describe("True to pause syncing, false to resume"),
+      paused: z.boolean().describe("True to pause the calendar in every sync it belongs to, false to resume it"),
     },
     execute: (context, input) => {
       if (!input?.calendarId || typeof input.calendarId !== "string") {

@@ -12,7 +12,9 @@ interface Entitlements {
   plan: "free" | "pro";
   accounts: EntitlementLimit;
   feeds: EntitlementLimit;
-  mappings: EntitlementLimit;
+  syncs: EntitlementLimit;
+  // How many calendars each side of a sync may hold; null means no plan limit.
+  syncCalendars: { limit: number | null };
   canCustomizeIcalFeed: boolean;
   canUseEventFilters: boolean;
   realtimeSync: boolean;
@@ -25,7 +27,8 @@ function buildOptimisticProEntitlements(): Entitlements {
     plan: "pro",
     accounts: { current: 0, limit: null },
     feeds: { current: 0, limit: null },
-    mappings: { current: 0, limit: null },
+    syncs: { current: 0, limit: null },
+    syncCalendars: { limit: null },
     canCustomizeIcalFeed: true,
     canUseEventFilters: true,
     realtimeSync: false,
@@ -59,33 +62,11 @@ function useEntitlements() {
 function useMutateEntitlements() {
   const { mutate } = useSWRConfig();
 
-  const adjustMappingCount = useCallback(
-    (delta: number) => {
-      mutate<Entitlements>(
-        USAGE_CACHE_KEY,
-        (current) => {
-          if (!current) return current;
-
-          const nextCount = Math.max(0, current.mappings.current + delta);
-          return {
-            ...current,
-            mappings: {
-              ...current.mappings,
-              current: nextCount,
-            },
-          };
-        },
-        { revalidate: false },
-      );
-    },
-    [mutate],
-  );
-
   const revalidateEntitlements = useCallback(() => {
     return mutate(USAGE_CACHE_KEY);
   }, [mutate]);
 
-  return { adjustMappingCount, revalidateEntitlements };
+  return { revalidateEntitlements };
 }
 
 function canAddMore(entitlement: EntitlementLimit | undefined): boolean {

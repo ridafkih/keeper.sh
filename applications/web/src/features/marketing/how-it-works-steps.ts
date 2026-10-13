@@ -5,14 +5,14 @@ export type HowItWorksStep = {
 };
 
 // Shared by the homepage and /features so the two never drift apart on what
-// setting a connection up actually involves.
+// setting a sync up actually involves.
 export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   {
-    title: "Connect a calendar, then say where it copies to",
-    body: "Connecting takes a sign-in or a pasted link. You then point that calendar at the one you want its events to land in.",
+    title: "Connect your calendars, then set up a sync",
+    body: "Connecting takes a sign-in or a pasted link. A sync then says which calendars copy into which, one way or both ways.",
   },
   {
-    title: "Choose what each calendar shows",
+    title: "Choose what each sync shares",
     body: "Copies start as a busy block named after the source calendar. Pro lets you turn the title, description and location back on, and adds filters to skip events.",
   },
   {

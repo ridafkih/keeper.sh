@@ -124,9 +124,9 @@ export const MCP_TOOL_GROUPS: McpToolGroup[] = [
         arguments: "No arguments",
       },
       {
-        name: "pause_sync",
+        name: "pause_calendar",
         summary:
-          "Pauses or resumes one calendar without disconnecting it. Nothing is read from it or written to it while paused, and its stored events are kept.",
+          "Pauses or resumes one calendar without disconnecting it, in every sync it belongs to. Nothing is read from it or written to it while paused, and its stored events are kept. A single sync is paused from the dashboard.",
         arguments: "calendarId, paused",
       },
     ],
@@ -139,7 +139,7 @@ export const MCP_OAUTH_SCOPES: OauthScope[] = [
   { scope: "keeper.events.read", description: "Reading events and invitations." },
   { scope: "keeper.sources.read", description: "Reading the calendars events are copied from." },
   { scope: "keeper.destinations.read", description: "Reading the calendars events are copied into." },
-  { scope: "keeper.mappings.read", description: "Reading which calendar is copied into which." },
+  { scope: "keeper.mappings.read", description: "Reading which calendar is copied into which. No tool or endpoint reads it yet." },
   { scope: "keeper.sync-status.read", description: "Reading sync state." },
 ];
 
@@ -152,7 +152,7 @@ export const REST_ENDPOINTS: RestEndpoint[] = [
   {
     method: "PATCH",
     path: "/api/v1/calendars/{calendarId}",
-    description: "Pause or resume syncing for a calendar without disconnecting it.",
+    description: "Pause or resume a calendar in every sync it belongs to, without disconnecting it.",
   },
   {
     method: "GET",

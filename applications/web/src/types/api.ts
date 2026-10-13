@@ -1,4 +1,4 @@
-import type { ExcludableAvailability, SyncRange } from "@keeper.sh/data-schemas";
+import type { SyncRange } from "@keeper.sh/data-schemas";
 
 export interface CalendarAccount {
   id: string;
@@ -50,25 +50,13 @@ export interface CalendarDetail {
   providerIcon: string | null;
   url: string | null;
   calendarUrl: string | null;
-  customEventName: string;
-  excludeAllDayEvents: boolean;
-  excludeAvailabilities: ExcludableAvailability[];
-  excludeEventDescription: boolean;
-  excludeEventLocation: boolean;
-  excludeEventName: boolean;
-  excludeFocusTime: boolean;
-  excludeOutOfOffice: boolean;
-  excludeTitleKeywords: string[];
   treatFullDayTimedEventsAsAllDay: boolean;
   syncFutureRange: SyncRange;
   syncHistoricRange: SyncRange;
   disabled: boolean;
   ingestFailureCount: number;
   ingestLastFailureAt: string | null;
-  markEventsAsPrivate: boolean;
   providerMissingSince: string | null;
-  destinationIds: string[];
-  sourceIds: string[];
   unavailableSince: string | null;
   createdAt: string;
   updatedAt: string;

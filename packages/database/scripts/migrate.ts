@@ -390,7 +390,8 @@ const isPostMigrationRuntimeReady = async (): Promise<boolean> => {
         WHERE index_class.relname = 'event_mappings_source_calendar_idx'
           AND index_class.relnamespace = 'public'::regnamespace
           AND index_state.indisvalid
-      ) AS ready
+      )
+      AND to_regclass('public.syncs') IS NOT NULL AS ready
   `);
   return state.rows[0]?.ready === true;
 };
@@ -475,6 +476,10 @@ try {
     await ensureSourceCalendarIndex();
     await installEventMappingConstraints();
     await validateEventMappingConstraints();
+  }
+
+  if (!(await isPostMigrationRuntimeReady())) {
+    throw new Error("Migrations finished but the database is not ready: a journal entry may have been skipped");
   }
 } finally {
   // PostgreSQL releases the session-level migration lock when this client closes.

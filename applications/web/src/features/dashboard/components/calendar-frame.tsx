@@ -3,7 +3,8 @@ import { CalendarReauthStrip } from "./reauth/calendar-reauth-notice";
 
 interface CalendarFrameProps {
   toolbar: ReactNode;
-  columnHeader: ReactNode;
+  /** A header row that stays put; a grid that scrolls its own header keeps this empty. */
+  columnHeader?: ReactNode;
   gridMaxHeight?: CSSProperties["maxHeight"];
   children: ReactNode;
 }
@@ -22,14 +23,16 @@ export function CalendarFrame({
           {toolbar}
         </div>
         <CalendarReauthStrip />
-        <div className="relative [view-transition-name:calendar-column-header]">
-          {/* Scoped to the column header rather than the whole header, so the fill starts dissolving right below the toolbar in both views. */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-background-elevated mask-b-from-0%"
-          />
-          <div className="relative">{columnHeader}</div>
-        </div>
+        {columnHeader && (
+          <div className="relative [view-transition-name:calendar-column-header]">
+            {/* Scoped to the column header rather than the whole header, so the fill starts dissolving right below the toolbar in both views. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-background-elevated mask-b-from-0%"
+            />
+            <div className="relative">{columnHeader}</div>
+          </div>
+        )}
       </header>
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-b-[calc(var(--radius-2xl)-1px)] [view-transition-name:calendar-grid]"

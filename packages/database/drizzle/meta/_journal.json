@@ -687,6 +687,20 @@
       "when": 1791915616003,
       "tag": "0097_tough_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791922782826,
+      "tag": "0098_add_calendar_and_event_colors",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791923047679,
+      "tag": "0099_syncs",
+      "breakpoints": true
     }
   ]
 }
