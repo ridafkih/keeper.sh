@@ -13,6 +13,7 @@ const sourceMap = new Map([
   [
     "calendar-1",
     {
+      calendarColor: null,
       name: "Source",
       provider: "ics",
       url: null,
@@ -25,6 +26,7 @@ const rows = [
   {
     availability: "busy",
     calendarId: "calendar-1",
+    color: null,
     description: null,
     endTime: new Date("2026-03-02T11:00:00.000Z"),
     exceptionDates: null,
@@ -41,6 +43,7 @@ const rows = [
   {
     availability: "free",
     calendarId: "calendar-1",
+    color: null,
     description: null,
     endTime: new Date("2026-03-10T13:00:00.000Z"),
     exceptionDates: null,
@@ -66,6 +69,24 @@ const flatten = (filters?: { availability?: string[]; isAllDay?: boolean }) =>
   );
 
 describe("flattenSyncedEvents", () => {
+  it("carries the stored color onto every materialized occurrence", () => {
+    const [master] = rows;
+    if (!master) {
+      throw new Error("Expected a master fixture");
+    }
+    const coloredMaster = { ...master, color: "#33b679" };
+
+    const occurrences = flattenSyncedEvents(
+      [coloredMaster],
+      sourceMap,
+      new Date("2026-03-01T00:00:00.000Z"),
+      new Date("2026-03-31T23:59:59.999Z"),
+    );
+
+    expect(occurrences.length).toBeGreaterThan(1);
+    expect(occurrences.every((occurrence) => occurrence.color === "#33b679")).toBe(true);
+  });
+
   it("treats missing ICS transparency as the RFC-default busy availability", () => {
     const [master] = rows;
     if (!master) {

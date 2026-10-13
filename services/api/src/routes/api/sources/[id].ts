@@ -29,6 +29,7 @@ const GET = withWideEvent(
         id: calendarsTable.id,
         name: calendarsTable.name,
         originalName: calendarsTable.originalName,
+        color: calendarsTable.color,
         calendarType: calendarsTable.calendarType,
         capabilities: calendarsTable.capabilities,
         provider: calendarAccountsTable.provider,

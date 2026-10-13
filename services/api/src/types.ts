@@ -17,6 +17,7 @@ interface KeeperEventFilters {
 interface KeeperSource {
   id: string;
   name: string;
+  color: string | null;
   calendarType: string;
   capabilities: string[];
   accountId: string;
@@ -45,6 +46,9 @@ interface KeeperEvent {
   title: string | null;
   description: string | null;
   location: string | null;
+  /** Resolved provider hex for this event; null means it inherits calendarColor. */
+  color: string | null;
+  calendarColor: string | null;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;

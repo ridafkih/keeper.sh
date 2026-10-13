@@ -134,6 +134,15 @@ export {
   encodeStoredSyncToken,
   resolveSyncTokenForWindow,
 } from "./core/oauth/sync-token";
+export {
+  normalizeHexColor,
+  resolveCalDAVCalendarColor,
+  resolveGoogleCalendarColor,
+  resolveGoogleEventColor,
+  resolveIcsColor,
+  resolveOutlookCalendarColor,
+  resolveOutlookCategoryColor,
+} from "./core/colors/normalize";
 export { generateDeterministicEventUid, isKeeperEvent } from "./core/events/identity";
 export { inferAllDayEvent, resolveIsAllDayEvent } from "./core/events/all-day";
 export {
