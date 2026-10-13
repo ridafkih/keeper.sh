@@ -187,7 +187,7 @@ There are seven images currently available: two designed for convenience, and fi
 | OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
 | OIDC_PROVIDER_NAME             | `api`         | Optional. Display name shown on the SSO login button. Defaults to `SSO`.<br><br>e.g. `Pocket ID`                                                                      |
 | OIDC_SCOPES                    | `api`         | Optional. Comma-separated scopes to request from the OIDC issuer. Defaults to `openid,profile,email`.<br><br>e.g. `openid,profile,email,groups`                                                                                    |
-| DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up, so the OIDC provider is the only way in. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
+| DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up. Google and Microsoft sign-in stay available while their client credentials are set. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
@@ -285,15 +285,15 @@ Then pass the client to the container running the API (`keeper-standalone`, `kee
 
 `OIDC_ISSUER_URL` must match the `issuer` your provider publishes, including any path, such as `https://auth.example.com/realms/keeper` for Keycloak or `https://authentik.example.com/application/o/keeper/` for Authentik. `OIDC_PROVIDER_NAME` labels the sign-in button and defaults to `SSO`. `OIDC_SCOPES` is a comma-separated list that defaults to `openid,profile,email`.
 
-Signing in with the provider for the first time creates a new Keeper.sh account. It is never merged into an existing account automatically, even when the email addresses match. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+Signing in with the provider for the first time creates a new Keeper.sh account. It is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
 
-Once everyone who needs one has linked their account, you can make the provider the only way in:
+Once everyone who needs one has linked their account, you can turn off username and password sign-in:
 
 ```yaml
       DISABLE_LOCAL_AUTH: "true"
 ```
 
-This turns off username and password sign-in and sign-up on the server, not just in the interface. It only takes effect when the OIDC client is fully configured, so setting it alone can't lock you out.
+This turns off username and password sign-in and sign-up on the server, not just in the interface. Google and Microsoft sign-in aren't affected: they stay available while `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET` are set, which calendar sync with those providers also needs. It only takes effect when the OIDC client is fully configured, so setting it alone can't lock you out.
 
 ## Standalone Container
 
