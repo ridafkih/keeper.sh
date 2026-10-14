@@ -1,7 +1,7 @@
 import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
-import type { ValidatedState, OAuthStateStore } from "./state";
+import type { OAuthReturnTo, ValidatedState, OAuthStateStore } from "./state";
 
 const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
@@ -26,6 +26,7 @@ interface AuthorizationUrlOptions {
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  returnTo?: OAuthReturnTo;
   /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
   loginHint?: string;
 }
@@ -79,6 +80,7 @@ const createMicrosoftOAuthService = (
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
     const state = await generateState(stateStore, userId, {
       destinationId: options.destinationId,
+      returnTo: options.returnTo,
       sourceCredentialId: options.sourceCredentialId,
     });
     const scopes = options.scopes ?? [

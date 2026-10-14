@@ -102,9 +102,13 @@ const GET = withWideEvent(
       callbackUrl: string;
       sourceCredentialId?: string;
       loginHint?: string;
+      returnTo?: "onboarding";
     } = {
       callbackUrl: callbackUrl.toString(),
     };
+    if (query.returnTo === "onboarding") {
+      authorizationOptions.returnTo = query.returnTo;
+    }
     if (credentialId) {
       authorizationOptions.sourceCredentialId = credentialId;
     }

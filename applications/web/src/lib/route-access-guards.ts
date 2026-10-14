@@ -1,3 +1,5 @@
+import type { OnboardingCookie } from "./onboarding-cookie";
+
 export type RedirectTarget = "/dashboard" | "/login";
 
 export type SubscriptionPlan = "free" | "pro";
@@ -36,3 +38,26 @@ export const resolveUpgradeRedirect = (
 
   return null;
 };
+
+export const ONBOARDING_PATH = "/onboarding";
+
+const isOnboardingPath = (pathname: string): boolean =>
+  (pathname.replace(/\/+$/, "") || "/") === ONBOARDING_PATH;
+
+export const resolveOnboardingRedirect = (
+  onboarding: OnboardingCookie | null,
+  pathname: string,
+): typeof ONBOARDING_PATH | null => {
+  if (onboarding !== "pending" || isOnboardingPath(pathname)) {
+    return null;
+  }
+
+  return ONBOARDING_PATH;
+};
+
+// Only "done" is trusted as stored: a pending cookie may be stale once onboarding finished elsewhere,
+// and asking lets the API record a finish whose own write failed.
+export const needsOnboardingLookup = (
+  onboarding: OnboardingCookie | null,
+  pathname: string,
+): boolean => onboarding !== "done" && !isOnboardingPath(pathname);

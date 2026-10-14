@@ -3,6 +3,7 @@ import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { authClient } from "@/lib/auth-client";
+import { useConnectReturnTo } from "@/lib/connect-return";
 import { withSignupMarker } from "@/lib/signup-marker";
 import {
   resolvePathWithSearch,
@@ -131,10 +132,12 @@ interface LinkOAuthPreambleProps {
 }
 
 export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
+  const returnTo = useConnectReturnTo();
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const apiProvider = PROVIDER_API_MAP[provider];
-    window.location.href = `/api/sources/authorize?provider=${apiProvider}`;
+    const query = new URLSearchParams({ provider: PROVIDER_API_MAP[provider] });
+    if (returnTo) query.set("returnTo", returnTo);
+    window.location.href = `/api/sources/authorize?${query.toString()}`;
   };
 
   return (

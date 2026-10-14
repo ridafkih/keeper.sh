@@ -12,8 +12,18 @@ import {
 import { createOAuthSourceCredential } from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
 import { baseUrl } from "@/context";
+import type { OAuthReturnTo } from "@keeper.sh/calendar";
 
 const MS_PER_SECOND = 1000;
+
+const RETURN_TO_PATHS: Record<OAuthReturnTo, { path: string; params: Record<string, string> }> = {
+  onboarding: { params: { step: "connect" }, path: "/onboarding" },
+};
+
+const returnToUrl = (returnTo: OAuthReturnTo, params: Record<string, string>): URL => {
+  const target = RETURN_TO_PATHS[returnTo];
+  return buildRedirectUrl(target.path, baseUrl, { ...target.params, ...params });
+};
 
 const GET = withWideEvent(async ({ request, params }) => {
   if (!params.provider || !providerParamSchema.allows(params)) {
@@ -24,7 +34,7 @@ const GET = withWideEvent(async ({ request, params }) => {
 
   const { provider } = params;
 
-  const errorUrl = buildRedirectUrl("/dashboard/integrations", baseUrl, {
+  let errorUrl = buildRedirectUrl("/dashboard/integrations", baseUrl, {
     error: "Failed to connect source",
     source: "error",
   });
@@ -40,20 +50,24 @@ const GET = withWideEvent(async ({ request, params }) => {
       throw new OAuthError("Invalid callback query parameters", errorUrl);
     }
 
+    // The state is read before the provider's error, so someone who cancels still lands where they started.
+    let validatedState: Awaited<ReturnType<typeof validateState>> = null;
+    if (state) {
+      validatedState = await validateState(state);
+    }
+    if (validatedState?.returnTo) {
+      errorUrl = returnToUrl(validatedState.returnTo, { error: "connect_failed" });
+    }
+
     if (error) {
       throw new OAuthError("OAuth error from provider", errorUrl);
     }
 
-    if (!code || !state) {
-      throw new OAuthError("Missing code or state", errorUrl);
+    if (!code || !validatedState) {
+      throw new OAuthError("Missing code or invalid state", errorUrl);
     }
 
-    const validatedState = await validateState(state);
-    if (!validatedState) {
-      throw new OAuthError("Invalid or expired state", errorUrl);
-    }
-
-    const { userId, sourceCredentialId } = validatedState;
+    const { userId, sourceCredentialId, returnTo } = validatedState;
 
     const callbackUrl = new URL(`/api/sources/callback/${provider}`, baseUrl);
     const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
@@ -87,6 +101,8 @@ const GET = withWideEvent(async ({ request, params }) => {
     let successUrl = buildRedirectUrl("/dashboard/setup", baseUrl, { accountId });
     if (sourceCredentialId) {
       successUrl = buildRedirectUrl(`/dashboard/accounts/${accountId}`, baseUrl);
+    } else if (returnTo) {
+      successUrl = returnToUrl(returnTo, { accountId });
     }
     return Response.redirect(successUrl.toString());
   } catch (error) {

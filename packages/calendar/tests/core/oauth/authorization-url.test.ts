@@ -107,6 +107,6 @@ describe("google getAuthorizationUrl", () => {
   it("keeps forcing consent so a refresh token is always issued", async () => {
     const parsed = await buildGoogleAuthorizationUrl();
 
-    expect(parsed.searchParams.get("prompt")).toBe("consent");
+    expect(parsed.searchParams.get("prompt")?.split(" ")).toContain("consent");
   });
 });

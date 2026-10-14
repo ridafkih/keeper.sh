@@ -5,7 +5,8 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "@/state/popover-overlay";
 import { SyncProvider } from "@/providers/sync-provider";
-import { resolveDashboardRedirect } from "@/lib/route-access-guards";
+import { needsOnboardingLookup, resolveDashboardRedirect, resolveOnboardingRedirect } from "@/lib/route-access-guards";
+import { fetchOnboardingCookie } from "@/lib/onboarding-cookie";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
 import { useSettledPathname } from "@/hooks/use-settled-pathname";
@@ -17,10 +18,18 @@ import { readNewSyncSearch } from "@/features/syncs/sync-draft";
 import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)")({
-  beforeLoad: ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     const redirectTarget = resolveDashboardRedirect(context.auth.hasSession());
     if (redirectTarget) {
       throw redirect({ to: redirectTarget });
+    }
+    let onboarding = context.auth.onboarding();
+    if (needsOnboardingLookup(onboarding, location.pathname)) {
+      onboarding = await fetchOnboardingCookie(context.fetchApi);
+    }
+    const onboardingTarget = resolveOnboardingRedirect(onboarding, location.pathname);
+    if (onboardingTarget) {
+      throw redirect({ to: onboardingTarget });
     }
   },
   component: DashboardLayout,
@@ -113,7 +122,7 @@ function DashboardLayout() {
 
 function FullScreenLayout() {
   return (
-    <div className="relative min-h-dvh w-full px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
+    <div className="relative flex min-h-dvh w-full flex-col px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
       <PopoverOverlay />
       <SyncProvider />
       <Outlet />

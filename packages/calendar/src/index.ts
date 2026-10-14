@@ -317,6 +317,7 @@ export {
   generateState,
   validateState,
 } from "./core/oauth/state";
+export type { OAuthReturnTo } from "./core/oauth/state";
 export type {
   AuthType,
   CalDAVProviderConfig,

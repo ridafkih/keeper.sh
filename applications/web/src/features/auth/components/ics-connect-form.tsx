@@ -1,6 +1,6 @@
 import { useState, useTransition, type SubmitEvent } from "react";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigateAfterConnect } from "@/lib/connect-return";
 import { useSWRConfig } from "swr";
 import { apiFetch } from "@/lib/fetcher";
 import { invalidateAccountsAndSources } from "@/lib/swr";
@@ -17,7 +17,7 @@ function resolveSubmitLabel(pending: boolean): string {
 }
 
 export function ICSFeedForm() {
-  const navigate = useNavigate();
+  const navigateAfterConnect = useNavigateAfterConnect();
   const { mutate: globalMutate } = useSWRConfig();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export function ICSFeedForm() {
 
       await invalidateAccountsAndSources(globalMutate);
 
-      navigate({ to: "/dashboard/setup", search: accountId ? { accountId } : {} });
+      await navigateAfterConnect(accountId);
     });
   };
 
