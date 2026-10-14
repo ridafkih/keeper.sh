@@ -17,7 +17,9 @@ type OnboardingCookie = "pending" | "done";
 
 // The web guard only needs to know whether to redirect, so skipped and completed both read as done.
 const toOnboardingCookie = (status: OnboardingStatus): OnboardingCookie => {
-  if (status === "pending") return "pending";
+  if (status === "pending") {
+    return "pending";
+  }
   return "done";
 };
 

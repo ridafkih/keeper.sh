@@ -59,7 +59,7 @@ const hasSessionTokenCleared = (response: Response): boolean => {
 };
 
 // The onboarding cookie belongs to whoever was signed in, so signing in or out makes the web app ask again.
-// get-session only refreshes the same person's token, so it leaves the cookie alone.
+// Refreshing a session through get-session keeps the same person, so it leaves the cookie alone.
 const withCompanionCookie = (response: Response, cookie: string, clearOnboarding: boolean): Response => {
   const headers = new Headers(response.headers);
   headers.append("Set-Cookie", cookie);

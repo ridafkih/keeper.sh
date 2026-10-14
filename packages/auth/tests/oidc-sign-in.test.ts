@@ -19,6 +19,7 @@ create table "user" (
   "emailVerified" boolean not null default false,
   "image" text,
   "name" text not null,
+  "onboardingStatus" text not null default 'pending',
   "updatedAt" timestamptz not null default now(),
   "username" text unique
 );
