@@ -3,8 +3,8 @@ import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-
 import { generateState, validateState } from "./state";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
-const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const MICROSOFT_AUTHORITY_URL = "https://login.microsoftonline.com";
+const MICROSOFT_DEFAULT_TENANT_ID = "common";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 
 const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
@@ -19,7 +19,16 @@ const isRequestTimeoutError = (error: unknown): boolean =>
 interface MicrosoftOAuthCredentials {
   clientId: string;
   clientSecret: string;
+  tenantId?: string;
 }
+
+const resolveMicrosoftEndpoint = (
+  tenantId: string | undefined,
+  endpoint: "authorize" | "token",
+): string => {
+  const tenant = encodeURIComponent(tenantId || MICROSOFT_DEFAULT_TENANT_ID);
+  return `${MICROSOFT_AUTHORITY_URL}/${tenant}/oauth2/v2.0/${endpoint}`;
+};
 
 interface AuthorizationUrlOptions {
   callbackUrl: string;
@@ -40,9 +49,10 @@ const createMicrosoftTokenRefresher = (
   credentials: MicrosoftOAuthCredentials,
 ) => {
   const { clientId, clientSecret } = credentials;
+  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenantId, "token");
 
   return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
+    const response = await fetch(tokenUrl, {
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -75,6 +85,8 @@ const createMicrosoftOAuthService = (
   stateStore: OAuthStateStore,
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
+  const authorizationUrl = resolveMicrosoftEndpoint(credentials.tenantId, "authorize");
+  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenantId, "token");
 
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
     const state = await generateState(stateStore, userId, {
@@ -87,7 +99,7 @@ const createMicrosoftOAuthService = (
       MICROSOFT_OFFLINE_SCOPE,
     ];
 
-    const url = new URL(MICROSOFT_AUTH_URL);
+    const url = new URL(authorizationUrl);
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", options.callbackUrl);
     url.searchParams.set("response_type", "code");
@@ -109,7 +121,7 @@ const createMicrosoftOAuthService = (
     code: string,
     callbackUrl: string,
   ): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
+    const response = await fetch(tokenUrl, {
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,

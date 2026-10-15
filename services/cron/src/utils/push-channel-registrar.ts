@@ -8,6 +8,7 @@ const createRegistrarContext = createRegistrarContextFactory({
   googleClientSecret: env.GOOGLE_CLIENT_SECRET,
   microsoftClientId: env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+  microsoftTenantId: env.MICROSOFT_TENANT_ID,
   rateLimiterRedis: refreshLockRedis,
   refreshLockStore,
   webhookConfig,

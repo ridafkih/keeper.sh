@@ -26,7 +26,7 @@ const encodeSegment = (value: object) =>
 const buildIdToken = (claims: Record<string, unknown>) =>
   `${encodeSegment({ alg: "RS256", kid: "test-kid", typ: "JWT" })}.${encodeSegment(claims)}.signature`;
 
-const createHostedAuth = async () => {
+const createHostedAuth = async (microsoftTenantId?: string) => {
   const client = new PGlite();
   await client.exec(AUTH_DDL);
 
@@ -39,6 +39,7 @@ const createHostedAuth = async () => {
     googleClientSecret: "test-google-client-secret",
     microsoftClientId: "test-microsoft-client-id",
     microsoftClientSecret: "test-microsoft-client-secret",
+    microsoftTenantId,
     secret: SECRET,
   });
 
@@ -98,6 +99,26 @@ afterEach(() => {
 });
 
 describe("an Outlook sign-in", () => {
+  it("uses the configured tenant authority for Microsoft sign-in", async () => {
+    const auth = await createHostedAuth("tenant-guid");
+    const context = await auth.$context;
+    const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
+
+    if (!provider) {
+      throw new TypeError("Microsoft social provider is not configured");
+    }
+
+    const authorizationUrl = await provider.createAuthorizationURL({
+      codeVerifier: "test-code-verifier",
+      redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
+      state: "test-state",
+    });
+
+    expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
+      "https://login.microsoftonline.com/tenant-guid/oauth2/v2.0/authorize",
+    );
+  });
+
   it("records a personal Microsoft account's email as verified when Entra omits the email_verified claim", async () => {
     stubGraphPhotoFetch();
 

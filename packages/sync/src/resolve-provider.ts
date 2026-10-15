@@ -29,6 +29,7 @@ interface OAuthConfig {
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  microsoftTenantId?: string;
 }
 
 const resolveOAuthProvider = async (
@@ -94,6 +95,7 @@ const resolveOAuthProvider = async (
     const refreshMicrosoftToken = createMicrosoftTokenRefresher({
       clientId: oauthConfig.microsoftClientId,
       clientSecret: oauthConfig.microsoftClientSecret,
+      tenantId: oauthConfig.microsoftTenantId,
     });
     return createOutlookSyncProvider({
       accessToken: oauthCred.accessToken,

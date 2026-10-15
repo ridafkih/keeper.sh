@@ -90,6 +90,7 @@ const resolveTokenRefresher = (
     googleClientSecret?: string;
     microsoftClientId?: string;
     microsoftClientSecret?: string;
+    microsoftTenantId?: string;
   },
 ) => {
   if (
@@ -111,6 +112,7 @@ const resolveTokenRefresher = (
     return createMicrosoftTokenRefresher({
       clientId: clientCredentials.microsoftClientId,
       clientSecret: clientCredentials.microsoftClientSecret,
+      tenantId: clientCredentials.microsoftTenantId,
     });
   }
 
@@ -174,6 +176,7 @@ const deregisterPushChannelsWithin = async (
         googleClientSecret: env.GOOGLE_CLIENT_SECRET,
         microsoftClientId: env.MICROSOFT_CLIENT_ID,
         microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+        microsoftTenantId: env.MICROSOFT_TENANT_ID,
       });
       if (rawRefresh) {
         await ensureValidToken(tokenState, createCoordinatedRefresher({

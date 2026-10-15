@@ -30,6 +30,7 @@ interface RegistrarContextConfig {
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  microsoftTenantId?: string;
   rateLimiterRedis: Parameters<typeof createRedisRateLimiter>[0];
   refreshLockStore: RefreshLockStore;
   webhookConfig: WebhookCallbackUrls | null;
@@ -47,6 +48,7 @@ const resolveTokenRefresher = (provider: string, config: RegistrarContextConfig)
     return createMicrosoftTokenRefresher({
       clientId: config.microsoftClientId,
       clientSecret: config.microsoftClientSecret,
+      tenantId: config.microsoftTenantId,
     });
   }
 
