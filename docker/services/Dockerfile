@@ -29,11 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   xz-utils \
-  unzip \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
+COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 
 RUN case "${TARGETARCH}" in \
   amd64) S6_ARCH="x86_64" ;; \
