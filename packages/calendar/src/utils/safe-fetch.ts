@@ -373,70 +373,16 @@ const fetchPinned = async (
   throw lastError;
 };
 
-const DECODABLE_ENCODINGS = new Map<string, "deflate" | "gzip">([
-  ["deflate", "deflate"],
-  ["gzip", "gzip"],
-  ["x-gzip", "gzip"],
-]);
-
-const ACCEPTED_ENCODINGS = [...new Set(DECODABLE_ENCODINGS.values())].join(", ");
-
-type UndecodedFetchRequestInit = BunFetchRequestInit & { decompress: false };
-
-const withAcceptedEncodings = (headers: Record<string, string>): Record<string, string> => {
-  if (Object.keys(headers).some((key) => key.toLowerCase() === "accept-encoding")) {
-    return headers;
-  }
-  return { ...headers, "accept-encoding": ACCEPTED_ENCODINGS };
-};
-
-const contentEncoding = (response: Response): string | null => {
-  const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
-  if (!encoding || encoding === "identity") {
-    return null;
-  }
-  return encoding;
-};
-
-const decodeBody = (response: Response): Response => {
-  const encoding = contentEncoding(response);
-  if (!encoding) {
-    return response;
-  }
-
-  const format = DECODABLE_ENCODINGS.get(encoding);
-  if (!format) {
-    throw new UrlSafetyError(`The response uses content encoding "${encoding}", which is not supported.`);
-  }
-
-  if (!response.body) {
-    return response;
-  }
-
-  const headers = new Headers(response.headers);
-  headers.delete("content-encoding");
-  headers.delete("content-length");
-
-  return new Response(response.body.pipeThrough(new DecompressionStream(format)), {
-    headers,
-    status: response.status,
-    statusText: response.statusText,
-  });
-};
-
-const performFetch = async (
+const performFetch = (
   input: string | Request | URL,
   init: BunFetchRequestInit,
   headers: Record<string, string>,
   connection: PinnedConnection | null,
 ): Promise<Response> => {
-  const negotiated = withAcceptedEncodings(headers);
-  const undecoded: UndecodedFetchRequestInit = { ...init, decompress: false };
-
   if (!connection) {
-    return decodeBody(await fetchWithStaleSocketRetry(input, { ...undecoded, headers: negotiated }));
+    return fetchWithStaleSocketRetry(input, init);
   }
-  return decodeBody(await fetchPinned(input, undecoded, negotiated, connection));
+  return fetchPinned(input, init, headers, connection);
 };
 
 const followRedirects = async (

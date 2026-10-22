@@ -43,8 +43,7 @@ RUN curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmo
 RUN apt-get update && apt-get install -y --no-install-recommends redis-server \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://caddyserver.com/api/download?os=linux\&arch=${TARGETARCH} -o /usr/bin/caddy \
-  && chmod +x /usr/bin/caddy
+COPY --from=caddy:2 /usr/bin/caddy /usr/bin/caddy
 
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 
