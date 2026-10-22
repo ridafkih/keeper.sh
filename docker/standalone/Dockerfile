@@ -46,6 +46,7 @@ RUN curl -fsSL https://caddyserver.com/api/download?os=linux\&arch=${TARGETARCH}
   && chmod +x /usr/bin/caddy
 
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+RUN mkdir -p /root/.bun/bin && ln -sf /usr/local/bin/bun /root/.bun/bin/bun
 
 RUN case "${TARGETARCH}" in \
   amd64) S6_ARCH="x86_64" ;; \

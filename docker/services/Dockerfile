@@ -32,6 +32,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
+# s6 scripts still invoke /root/.bun/bin/bun (installer path); keep that working
+# after switching away from curl|bash install (#1045).
+RUN mkdir -p /root/.bun/bin && ln -sf /usr/local/bin/bun /root/.bun/bin/bun
 
 RUN case "${TARGETARCH}" in \
   amd64) S6_ARCH="x86_64" ;; \
