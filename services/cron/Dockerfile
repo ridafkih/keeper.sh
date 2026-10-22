@@ -16,6 +16,7 @@ COPY --from=prune /app/out/full/ .
 RUN bun run --cwd services/cron build
 
 FROM base AS runtime
+ADD --chmod=644 --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=prune /app/out/full/packages/otelemetry ./packages/otelemetry

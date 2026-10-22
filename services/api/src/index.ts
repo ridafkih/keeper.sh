@@ -7,6 +7,7 @@ import { websocketHandler } from "./handlers/websocket";
 import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
@@ -28,6 +29,7 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.API_PORT,
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       websocket: websocketHandler,
       fetch: withCors(async (request) => {
         const url = new URL(request.url);

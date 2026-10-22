@@ -1,3 +1,4 @@
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "./env";
@@ -25,6 +26,7 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.MCP_PORT,
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       fetch: async (request) => {
         const match = router.match(request);
 

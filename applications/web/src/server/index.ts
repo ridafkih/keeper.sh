@@ -1,3 +1,4 @@
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { entry } from "entrykit";
 import { createServerConfig, envSchema } from "./config";
 import { handleApplicationRequest } from "./http-handler";
@@ -24,6 +25,7 @@ await entry({
     const runtime = await createRuntime(config);
 
     const server = Bun.serve<SocketProxyData>({
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       fetch: (request, httpServer) => {
         const upgraded = upgradeSocketProxy(request, httpServer, config);
         if (upgraded) {

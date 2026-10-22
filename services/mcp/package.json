@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@keeper.sh/auth": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/otelemetry": "workspace:*",
     "@modelcontextprotocol/sdk": "1.27.1",

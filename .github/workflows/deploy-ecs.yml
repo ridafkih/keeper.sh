@@ -1,0 +1,109 @@
+name: Deploy to ECS
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy
+        required: true
+        type: choice
+        options: [staging, production]
+      version:
+        description: Published image version, without the leading v (e.g. 2.14.3)
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-ecs-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      CLUSTER: keeper-${{ inputs.environment }}
+      VERSION: ${{ inputs.version }}
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Resolve image digests
+        run: |
+          set -euo pipefail
+          for package in api cron worker mcp web; do
+            digest=$(docker buildx imagetools inspect "$REGISTRY/keeper-$package:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
+            echo "IMAGE_${package^^}=$REGISTRY/keeper-$package@$digest" >> "$GITHUB_ENV"
+          done
+
+      - name: Run migrations
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition --task-definition "$CLUSTER-migrate" --query taskDefinition \
+            | jq --arg image "$IMAGE_API" '.containerDefinitions[0].image = $image
+                | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, requiresCompatibilities, cpu, memory, runtimePlatform}' \
+            > migrate.json
+          task_definition=$(aws ecs register-task-definition --cli-input-json file://migrate.json \
+            --query taskDefinition.taskDefinitionArn --output text)
+
+          network=$(aws ecs describe-services --cluster "$CLUSTER" --services "$CLUSTER-api" \
+            --query 'services[0].networkConfiguration' --output json)
+
+          task=$(aws ecs run-task --cluster "$CLUSTER" --launch-type FARGATE \
+            --task-definition "$task_definition" --network-configuration "$network" \
+            --query 'tasks[0].taskArn' --output text)
+
+          aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task"
+
+          exit_code=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task" \
+            --query 'tasks[0].containers[0].exitCode' --output text)
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::Migration task exited with $exit_code; services were not updated."
+            exit 1
+          fi
+
+      - name: Roll services
+        run: |
+          set -euo pipefail
+          for package in api mcp worker cron web; do
+            image_variable="IMAGE_${package^^}"
+            service="$CLUSTER-$package"
+            aws ecs describe-task-definition --task-definition "$service" --query taskDefinition \
+              | jq --arg image "${!image_variable}" '.containerDefinitions[0].image = $image
+                  | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, requiresCompatibilities, cpu, memory, runtimePlatform}' \
+              > "$package.json"
+            task_definition=$(aws ecs register-task-definition --cli-input-json "file://$package.json" \
+              --query taskDefinition.taskDefinitionArn --output text)
+            echo "$service=$task_definition" >> rolled.env
+            aws ecs update-service --cluster "$CLUSTER" --service "$service" \
+              --task-definition "$task_definition" --query 'service.serviceName' --output text
+          done
+
+      - name: Wait for every rollout to complete
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          while IFS='=' read -r service task_definition; do
+            while true; do
+              read -r state current < <(aws ecs describe-services --cluster "$CLUSTER" --services "$service" \
+                --query "services[0].deployments[?status=='PRIMARY'] | [0].[rolloutState, taskDefinition]" --output text)
+              if [ "$current" != "$task_definition" ]; then
+                echo "::error::$service rolled back to $current; $task_definition did not deploy."
+                exit 1
+              fi
+              case "$state" in
+                COMPLETED) echo "$service deployed"; break ;;
+                FAILED) echo "::error::$service deployment failed."; exit 1 ;;
+                *) sleep 15 ;;
+              esac
+            done
+          done < rolled.env
