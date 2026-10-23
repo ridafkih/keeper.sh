@@ -30,6 +30,8 @@ const timedEvent = (id: string, startTime: Date, endTime: Date): CalendarEvent =
   startTime,
   endTime,
   isAllDay: false,
+  color: null,
+  calendarColor: null,
   calendarId: "calendar",
   calendarName: "Calendar",
   calendarProvider: "google",

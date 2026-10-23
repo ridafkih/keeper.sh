@@ -62,6 +62,7 @@ interface SyncableEvent {
   summary: string;
   description?: string;
   location?: string;
+  color?: string;
   isPrivate?: boolean;
   calendarId: string;
   calendarName: string | null;
@@ -216,6 +217,7 @@ interface SourceEvent {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
 }
 
 export type {

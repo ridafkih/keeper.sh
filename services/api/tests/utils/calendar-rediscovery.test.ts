@@ -34,6 +34,7 @@ const caldavAccount: RefreshableAccount = {
 
 const workCalendar: DiscoveredCalendar = {
   calendarUrl: null,
+  color: null,
   externalCalendarId: "external-1",
   identityKey: "external-1",
   name: "Work",
@@ -50,6 +51,7 @@ const emptyPlan = {
   toMarkUnavailable: [] as string[],
   toRetargetUrl: [] as { id: string; calendarUrl: string }[],
   toRevive: [] as string[],
+  toSetColor: [] as { id: string; color: string | null }[],
   unchangedCount: 0,
 };
 
@@ -242,6 +244,7 @@ describe("runAccountCalendarRefresh", () => {
   it("hands a successful enumeration to the applier exactly once", async () => {
     const discovered = [{
       calendarUrl: null,
+      color: null,
       externalCalendarId: "external-1",
       identityKey: "external-1",
       name: "Work",
@@ -275,6 +278,7 @@ describe("runAccountCalendarRefresh", () => {
     const discovered = [
       {
         calendarUrl: "https://cloud.example.com/dav/bob/work",
+        color: null,
         externalCalendarId: null,
         identityKey: "/dav/bob/work",
         name: "Work",
@@ -282,6 +286,7 @@ describe("runAccountCalendarRefresh", () => {
       },
       {
         calendarUrl: "https://cloud.example.com/dav/bob/shared",
+        color: null,
         externalCalendarId: null,
         identityKey: "/dav/bob/shared",
         name: "Shared",
@@ -309,6 +314,7 @@ describe("runAccountCalendarRefresh", () => {
       }),
       discoverCalendars: () => Promise.resolve([{
         calendarUrl: null,
+        color: null,
         externalCalendarId: "external-1",
         identityKey: "external-1",
         name: "Work",

@@ -9,6 +9,7 @@ import {
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseOutlookEventsWithDiagnostics } from "./utils/fetch-events";
+import { getMasterCategoryColors } from "./utils/fetch-master-categories";
 
 const OUTLOOK_ADAPTER_VERSION = 2;
 const OUTLOOK_PRE_TENTATIVE_ADAPTER_VERSION = 1;
@@ -79,7 +80,14 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       return { events: [], fullSyncRequired: true, syncWindow };
     }
 
-    const parsed = parseOutlookEventsWithDiagnostics(result.events);
+    const hasCategorizedEvents = result.events.some(
+      (event) => (event.categories?.length ?? 0) > 0,
+    );
+    let categoryColors: ReadonlyMap<string, string> | null = null;
+    if (hasCategorizedEvents) {
+      categoryColors = await getMasterCategoryColors(config.accessToken, config.signal);
+    }
+    const parsed = parseOutlookEventsWithDiagnostics(result.events, { categoryColors });
     const { events, filteredCount } = filterSourceEventsToSyncWindow(parsed.events, syncWindow);
 
     return {
@@ -93,6 +101,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
         unrepresentable: parsed.unrepresentableCount,
       },
       selfAuthoredEventCount: parsed.selfAuthoredCount,
+      ...(hasCategorizedEvents && !categoryColors && { eventColorsUnresolved: true }),
       changedEventIds: result.changedEventIds,
       cancelledEventIds: result.cancelledEventIds,
       isDeltaSync: result.isDeltaSync,

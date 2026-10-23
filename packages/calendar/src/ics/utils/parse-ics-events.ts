@@ -5,6 +5,7 @@ import type {
   IcsExceptionDates,
 } from "ts-ics";
 import type { EventTimeSlot } from "./types";
+import { resolveIcsColor } from "../../core/colors/normalize";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { normalizeTimezone } from "./normalize-timezone";
 import { addIcsDuration } from "./recurrence-duration";
@@ -365,6 +366,11 @@ const convertCanonicalEvent = (
 
   const startTime = event.start.date;
   const availability = getEventAvailability(event);
+  const rawColor = (event.nonStandard as { color?: unknown } | undefined)?.color;
+  let color: string | undefined = globalThis.undefined;
+  if (typeof rawColor === "string") {
+    color = resolveIcsColor(rawColor);
+  }
   const recurrenceDuration = getRecurrenceDuration(event);
   let { exceptionDates } = event;
   if (event.recurrenceRule) {
@@ -376,6 +382,7 @@ const convertCanonicalEvent = (
 
   return {
     ...availability && { availability },
+    ...(color && { color }),
     description: event.description,
     endTime: getEventEndTime(event, startTime),
     exceptionDates,

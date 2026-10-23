@@ -612,8 +612,32 @@ interface ParsedOutlookEventDiagnostics {
   unrepresentableCount: number;
 }
 
+interface ParseOutlookEventsOptions {
+  categoryColors?: ReadonlyMap<string, string> | null;
+}
+
+const resolveFirstCategoryColor = (
+  categories: string[] | undefined,
+  categoryColors: ReadonlyMap<string, string> | null | undefined,
+): string | undefined => {
+  if (!categories || !categoryColors) {
+    return;
+  }
+  for (const category of categories) {
+    const color = categoryColors.get(category.toLowerCase());
+    if (color) {
+      return color;
+    }
+  }
+  return globalThis.undefined;
+};
+
+const isSelfAuthoredEvent = (iCalUId: string, categories: string[] | undefined): boolean =>
+  isKeeperEvent(iCalUId) || Boolean(categories?.includes(KEEPER_CATEGORY));
+
 const parseOutlookEventsWithDiagnostics = (
   events: OutlookCalendarEvent[],
+  options: ParseOutlookEventsOptions = {},
 ): ParsedOutlookEventDiagnostics => {
   const result: EventTimeSlot[] = [];
   let selfAuthoredCount = 0;
@@ -630,11 +654,7 @@ const parseOutlookEventsWithDiagnostics = (
       unrepresentableCount += 1;
       continue;
     }
-    if (isKeeperEvent(event.iCalUId)) {
-      selfAuthoredCount += 1;
-      continue;
-    }
-    if (event.categories?.includes(KEEPER_CATEGORY)) {
+    if (isSelfAuthoredEvent(event.iCalUId, event.categories)) {
       selfAuthoredCount += 1;
       continue;
     }
@@ -657,8 +677,10 @@ const parseOutlookEventsWithDiagnostics = (
       continue;
     }
 
+    const color = resolveFirstCategoryColor(event.categories, options.categoryColors);
     result.push({
       ...availability && { availability },
+      ...(color && { color }),
       description: event.body?.content,
       endTime: instant.endTime,
       isAllDay: event.isAllDay ?? false,
