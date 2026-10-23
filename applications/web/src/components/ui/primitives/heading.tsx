@@ -1,16 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { tv } from "tailwind-variants/lite";
-
-const heading = tv({
-  base: "font-lora font-medium leading-tight -tracking-[0.075em] text-foreground",
-  variants: {
-    level: {
-      1: "text-4xl",
-      2: "text-2xl",
-      3: "text-xl",
-    },
-  },
-});
+import { heading } from "./heading.styles";
 
 type HeadingLevel = 1 | 2 | 3;
 type HeadingTag = "h1" | "h2" | "h3" | "span" | "p";

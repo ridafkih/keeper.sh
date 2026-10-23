@@ -170,11 +170,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
 
       await invalidateAccountsAndSources(globalMutate);
 
-      if (accountId) {
-        navigate({ to: "/dashboard/accounts/$accountId/setup", params: { accountId } });
-      } else {
-        navigate({ to: "/dashboard" });
-      }
+      navigate({ to: "/dashboard/setup", search: accountId ? { accountId } : {} });
     });
   };
 

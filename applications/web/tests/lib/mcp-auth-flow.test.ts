@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   getMcpAuthorizationSearch,
+  resolveClientPostAuthRedirect,
   resolvePostAuthRedirect,
+  SIGNUP_POST_AUTH_PATH,
 } from "../../src/lib/mcp-auth-flow";
 
 describe("getMcpAuthorizationSearch", () => {
@@ -89,5 +91,26 @@ describe("getMcpAuthorizationSearch", () => {
       scope: "offline_access keeper.read",
       state: "opaque-state",
     });
+  });
+});
+
+describe("SIGNUP_POST_AUTH_PATH", () => {
+  it("sends new signups to setup unless an MCP authorization is pending", () => {
+    expect(resolveClientPostAuthRedirect(undefined, SIGNUP_POST_AUTH_PATH)).toBe("/dashboard/setup");
+    expect(
+      resolvePostAuthRedirect({
+        apiOrigin: "https://api.keeper.sh",
+        defaultPath: SIGNUP_POST_AUTH_PATH,
+        search: {
+          client_id: "keeper-client",
+          code_challenge: "challenge",
+          code_challenge_method: "S256",
+          redirect_uri: "https://claude.ai/callback",
+          response_type: "code",
+          scope: "openid",
+          state: "opaque-state",
+        },
+      }),
+    ).toContain("https://api.keeper.sh/api/auth/oauth2/authorize?");
   });
 });

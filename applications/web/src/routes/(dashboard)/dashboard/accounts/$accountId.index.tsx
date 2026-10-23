@@ -11,6 +11,8 @@ import { RouteShell } from "@/components/ui/shells/route-shell";
 import { Text } from "@/components/ui/primitives/text";
 import { MenuGate } from "@/components/ui/primitives/menu-hint";
 import { MetadataRow } from "@/features/dashboard/components/metadata-row";
+import { describeAccountRemoval } from "@/features/dashboard/components/account-removal";
+import { useSyncs } from "@/features/syncs/use-syncs";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { fetcher, apiFetch } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
@@ -117,6 +119,7 @@ function AccountDetailPage() {
     "/api/sources",
   );
 
+  const { data: syncs } = useSyncs();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -212,7 +215,7 @@ function AccountDetailPage() {
         {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
         <DeleteConfirmation
           title="Delete calendar account?"
-          description="This will remove the account and all its calendars. Any sync profiles using these calendars will be affected."
+          description={describeAccountRemoval(syncs, calendars.map((calendar) => calendar.id))}
           open={deleteOpen}
           onOpenChange={setDeleteOpen}
           deleting={isDeleting}

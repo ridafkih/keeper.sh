@@ -4,10 +4,12 @@ import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
   FREE_ACCOUNT_LIMIT,
   FREE_FEED_LIMIT,
-  FREE_MAPPING_LIMIT,
+  FREE_SYNC_CALENDAR_LIMIT,
+  FREE_SYNC_LIMIT,
   PRO_ACCOUNT_LIMIT,
   PRO_FEED_LIMIT,
-  PRO_MAPPING_LIMIT,
+  PRO_SYNC_CALENDAR_LIMIT,
+  PRO_SYNC_LIMIT,
 } from "./constants";
 import { planSchema } from "@keeper.sh/data-schemas";
 import type { Plan } from "@keeper.sh/data-schemas";
@@ -27,10 +29,12 @@ interface PremiumService {
   getUserPlan: (userId: string) => Promise<Plan>;
   getUserSubscription: (userId: string) => Promise<UserSubscription>;
   getAccountLimit: (plan: Plan) => number;
-  getMappingLimit: (plan: Plan) => number;
+  getSyncLimit: (plan: Plan) => number;
+  getSyncCalendarLimit: (plan: Plan) => number;
   getFeedLimit: (plan: Plan) => number;
   canAddAccount: (userId: string, currentCount: number) => Promise<boolean>;
-  canAddMapping: (userId: string, currentCount: number) => Promise<boolean>;
+  canAddSync: (userId: string, currentCount: number) => Promise<boolean>;
+  getUserSyncCalendarLimit: (userId: string) => Promise<number>;
   canAddFeed: (userId: string, currentCount: number) => Promise<boolean>;
   canUseEventFilters: (userId: string) => Promise<boolean>;
   canCustomizeIcalFeed: (userId: string) => Promise<boolean>;
@@ -72,11 +76,18 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     return FREE_ACCOUNT_LIMIT;
   };
 
-  const getMappingLimit = (plan: Plan): number => {
+  const getSyncLimit = (plan: Plan): number => {
     if (plan === "pro") {
-      return PRO_MAPPING_LIMIT;
+      return PRO_SYNC_LIMIT;
     }
-    return FREE_MAPPING_LIMIT;
+    return FREE_SYNC_LIMIT;
+  };
+
+  const getSyncCalendarLimit = (plan: Plan): number => {
+    if (plan === "pro") {
+      return PRO_SYNC_CALENDAR_LIMIT;
+    }
+    return FREE_SYNC_CALENDAR_LIMIT;
   };
 
   const getFeedLimit = (plan: Plan): number => {
@@ -92,10 +103,15 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
     return currentCount < limit;
   };
 
-  const canAddMapping = async (userId: string, currentCount: number): Promise<boolean> => {
+  const canAddSync = async (userId: string, currentCount: number): Promise<boolean> => {
     const subscription = await getUserSubscription(userId);
-    const limit = getMappingLimit(subscription.plan);
+    const limit = getSyncLimit(subscription.plan);
     return currentCount < limit;
+  };
+
+  const getUserSyncCalendarLimit = async (userId: string): Promise<number> => {
+    const subscription = await getUserSubscription(userId);
+    return getSyncCalendarLimit(subscription.plan);
   };
 
   const canAddFeed = async (userId: string, currentCount: number): Promise<boolean> => {
@@ -117,14 +133,16 @@ const createPremiumService = (config: PremiumConfig): PremiumService => {
   return {
     canAddAccount,
     canAddFeed,
-    canAddMapping,
+    canAddSync,
     canCustomizeIcalFeed,
     canUseEventFilters,
     getAccountLimit,
     getFeedLimit,
-    getMappingLimit,
+    getSyncCalendarLimit,
+    getSyncLimit,
     getUserPlan,
     getUserSubscription,
+    getUserSyncCalendarLimit,
   };
 };
 

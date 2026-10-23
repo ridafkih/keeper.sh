@@ -57,7 +57,8 @@ const createMigrationReadinessDatabase = (
           WHERE index_class.relname = 'event_mappings_source_calendar_idx'
             AND index_class.relnamespace = 'public'::regnamespace
             AND index_state.indisvalid
-        ) AS ready
+        )
+        AND to_regclass('public.syncs') IS NOT NULL AS ready
     `);
     const [state] = result as unknown as { ready: boolean }[];
     return state?.ready === true;

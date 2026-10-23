@@ -15,12 +15,12 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
     id: "free",
     name: "Free",
-    description: "Enough for two calendar accounts and three connections.",
+    description: "Enough for two calendar accounts and one sync.",
     monthlyPrice: 0,
     yearlyPrice: 0,
     features: [
       "Up to 2 calendar accounts",
-      "Up to 3 connections",
+      "1 sync, with up to 3 calendars on each side",
       "1 shareable calendar link",
       "Changes land every 30 minutes",
       "25 API calls a day",
@@ -35,7 +35,7 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
     features: [
       "Changes land every minute",
       "Unlimited calendar accounts",
-      "Unlimited connections",
+      "Unlimited syncs",
       "Unlimited shareable links, each with its own filters",
       "Unlimited API and AI agent access",
       "Priority support",

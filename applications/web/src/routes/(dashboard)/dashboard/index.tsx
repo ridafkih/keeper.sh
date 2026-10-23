@@ -14,6 +14,8 @@ import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import User from "lucide-react/dist/esm/icons/user";
 import { ErrorState } from "@/components/ui/primitives/error-state";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { signOut } from "@/lib/auth";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { apiFetch, fetcher } from "@/lib/fetcher";
@@ -49,7 +51,12 @@ import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/re
 import CreditCard from "lucide-react/dist/esm/icons/credit-card";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
+import { useIcalFeeds } from "@/hooks/use-ical-feeds";
 import { openCustomerPortal } from "@/utils/checkout";
+import { SetupCard } from "@/features/setup/components/setup-card";
+import { SyncsMenu } from "@/features/syncs/components/syncs-menu";
+import { canFormSync, resolveSetupSteps } from "@/features/setup/setup-card-steps";
+import { useSyncs } from "@/features/syncs/use-syncs";
 
 async function loadSubscription(context: {
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -82,43 +89,49 @@ function DashboardPage() {
   };
 
   return (
-    <div className="flex flex-col">
-      <SyncStatus />
-      <EventGraph />
-      <div className="flex flex-col gap-1.5">
-        <DashboardReauthNotice />
-        <CalendarSourcesMenu />
-        <CalendarsMenu />
-        <NavigationMenu>
-          <NavigationMenuLinkItem to="/dashboard/feedback">
-            <NavigationMenuItemIcon>
-              <MessageSquare size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Submit Feedback</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-          <NavigationMenuLinkItem to="/dashboard/report">
-            <NavigationMenuItemIcon>
-              <Bug size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Report a Problem</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
-        <PlanMenu />
-        <AccountsMenu />
-        <NavigationMenu>
-          <NavigationMenuButtonItem onClick={handleLogout}>
-            <NavigationMenuItemIcon>
-              <LogOut size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Logout</NavigationMenuItemLabel>
-          </NavigationMenuButtonItem>
-        </NavigationMenu>
-      </div>
-      <div className="pt-8 flex justify-center">
-        <KeeperLogo className="size-8 text-border-elevated self-center" />
-      </div>
+    <div className="flex flex-col lg:h-full">
+      <StickyPageHeader stickyFrom="lg">
+        <SyncStatus />
+        <EventGraph />
+      </StickyPageHeader>
+      <PageBody>
+        <div className="flex flex-col gap-1.5">
+          <DashboardReauthNotice />
+          <DashboardSetupCard />
+          <CalendarSourcesMenu />
+          <DashboardSyncsMenu />
+          <CalendarsMenu />
+          <NavigationMenu>
+            <NavigationMenuLinkItem to="/dashboard/feedback">
+              <NavigationMenuItemIcon>
+                <MessageSquare size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Submit Feedback</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+            <NavigationMenuLinkItem to="/dashboard/report">
+              <NavigationMenuItemIcon>
+                <Bug size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Report a Problem</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+          </NavigationMenu>
+          <PlanMenu />
+          <AccountsMenu />
+          <NavigationMenu>
+            <NavigationMenuButtonItem onClick={handleLogout}>
+              <NavigationMenuItemIcon>
+                <LogOut size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Logout</NavigationMenuItemLabel>
+            </NavigationMenuButtonItem>
+          </NavigationMenu>
+        </div>
+        <div className="pt-8 flex justify-center">
+          <KeeperLogo className="size-8 text-border-elevated self-center" />
+        </div>
+      </PageBody>
     </div>
   );
 }
@@ -126,6 +139,31 @@ function DashboardPage() {
 interface RefreshStatus {
   message: string;
   tone: "muted" | "danger";
+}
+
+// Counts come from the lists themselves: entitlements can be an optimistic stand-in whose counts are all zero.
+function DashboardSetupCard() {
+  const { data: sources, shouldAnimate } = useAnimatedSWR<CalendarSource[]>("/api/sources");
+  const { data: syncs } = useSyncs();
+  const { data: feeds, error: feedsError } = useIcalFeeds();
+  const ready = Boolean(sources && syncs && (feeds || feedsError));
+  const sourceCount = sources?.length ?? 0;
+  const syncCount = syncs?.length ?? 0;
+  const pairable = canFormSync(sources ?? []);
+  const usesFeeds = (feeds ?? []).some((feed) => (feed.calendarCount ?? 0) > 0);
+  const { show } = resolveSetupSteps({ pairable, sourceCount, syncCount, usesFeeds });
+
+  return (
+    <AnimatedReveal show={ready && show} skipInitial={!shouldAnimate}>
+      <SetupCard sourceCount={sourceCount} pairable={pairable} syncCount={syncCount} usesFeeds={usesFeeds} />
+    </AnimatedReveal>
+  );
+}
+
+function DashboardSyncsMenu() {
+  const { data: syncs } = useSyncs();
+  if (!syncs || syncs.length === 0) return null;
+  return <SyncsMenu />;
 }
 
 function PlanMenu() {
