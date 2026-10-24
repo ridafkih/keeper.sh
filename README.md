@@ -182,6 +182,7 @@ There are seven images currently available: two designed for convenience, and fi
 | GOOGLE_CLIENT_SECRET           | `api`, `cron`, `worker` | Optional. Required for Google Calendar integration.                                                                                                                 |
 | MICROSOFT_CLIENT_ID            | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
+| MICROSOFT_TENANT_ID            | `api`, `cron`, `worker` | Optional. Microsoft Entra tenant ID for Microsoft sign-in, Outlook OAuth, and token refresh. Defaults to `common`; set a tenant GUID to use a single-tenant app registration. |
 | OIDC_ISSUER_URL                | `api`         | Optional. Issuer URL of an OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, ...), exactly as the provider publishes it. Discovery is read from `<issuer>/.well-known/openid-configuration`. Requires `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`.<br><br>e.g. `https://id.example.com` or `https://auth.example.com/realms/keeper`                                                                              |
 | OIDC_CLIENT_ID                 | `api`         | Optional. OAuth client ID registered with the OIDC issuer.                                                                                                           |
 | OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
@@ -263,6 +264,8 @@ The clearest non-legacy walkthrough for configuring OAuth is this [community thr
 
 If people will sign in with work or school (Entra ID) accounts, add the `xms_edov` optional claim to the app registration under **Token configuration → Add optional claim → ID → `xms_edov`**. Entra sets it when the tenant has verified the domain of the account's email, and Keeper.sh uses it to record that email as verified. Without it, a work or school sign-in is recorded as unverified and can't be linked automatically to an existing account with the same email; it can still be linked from settings while signed in. Personal Microsoft accounts don't need the claim.
 
+For a single-tenant app registration, set `MICROSOFT_TENANT_ID` to the Entra directory (tenant) ID. Keeper uses that tenant for Microsoft sign-in and Outlook authorization/token requests; when unset, it keeps using the `common` authority. The same tenant ID must be available to the `api`, `cron`, and `worker` services so token refreshes continue to use the tenant that issued the token.
+
 ### OIDC / SSO
 
 Self-hosters can delegate sign-in to any OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, Zitadel, ...). Nothing changes until the variables below are set.
@@ -330,6 +333,7 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=
 EOF
 ```
 
@@ -365,6 +369,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
 
 volumes:
   keeper-data:
@@ -397,6 +402,7 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=
 EOF
 ```
 
@@ -443,6 +449,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
     ports:
       - "3000:3000"
     depends_on:
@@ -483,6 +490,7 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
+MICROSOFT_TENANT_ID=
 EOF
 ```
 
@@ -528,6 +536,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -545,6 +554,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -561,6 +571,7 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
     depends_on:
       postgres:
         condition: service_healthy

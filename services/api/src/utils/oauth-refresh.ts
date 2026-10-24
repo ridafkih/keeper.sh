@@ -65,6 +65,7 @@ const refreshMicrosoftAccessToken = async (
   const refreshMicrosoftToken = createMicrosoftTokenRefresher({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    tenantId: env.MICROSOFT_TENANT_ID,
   });
 
   const tokenData = await refreshMicrosoftToken(refreshToken);
@@ -135,6 +136,7 @@ const refreshMicrosoftSourceAccessToken = async (
   const refreshMicrosoftToken = createMicrosoftTokenRefresher({
     clientId: env.MICROSOFT_CLIENT_ID,
     clientSecret: env.MICROSOFT_CLIENT_SECRET,
+    tenantId: env.MICROSOFT_TENANT_ID,
   });
 
   const tokenData = await refreshMicrosoftToken(refreshToken);

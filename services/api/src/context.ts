@@ -86,6 +86,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   googleClientSecret: env.GOOGLE_CLIENT_SECRET,
   microsoftClientId: env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+  microsoftTenantId: env.MICROSOFT_TENANT_ID,
   oidcIssuerUrl: env.OIDC_ISSUER_URL,
   oidcClientId: env.OIDC_CLIENT_ID,
   oidcClientSecret: env.OIDC_CLIENT_SECRET,

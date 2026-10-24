@@ -9,6 +9,7 @@ const schema = {
   GOOGLE_CLIENT_SECRET: "string?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
+  MICROSOFT_TENANT_ID: "string?",
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   REDIS_URL: "string.url",
   WORKER_CONCURRENCY: "string?",

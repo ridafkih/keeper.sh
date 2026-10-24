@@ -13,6 +13,7 @@ const schema = {
   GOOGLE_CLIENT_SECRET: "string?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
+  MICROSOFT_TENANT_ID: "string?",
   POLAR_ACCESS_TOKEN: "string?",
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
   PUSH_REDUCED_POLLING: "boolean?",

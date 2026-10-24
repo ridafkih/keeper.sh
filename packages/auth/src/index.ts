@@ -61,6 +61,7 @@ interface AuthConfig {
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  microsoftTenantId?: string;
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcClientSecret?: string;
@@ -158,6 +159,7 @@ const createAuth = (config: AuthConfig) => {
     googleClientSecret,
     microsoftClientId,
     microsoftClientSecret,
+    microsoftTenantId,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -282,6 +284,7 @@ const createAuth = (config: AuthConfig) => {
       },
       prompt: "consent",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
+      ...(microsoftTenantId && { tenantId: microsoftTenantId }),
     };
   }
 
