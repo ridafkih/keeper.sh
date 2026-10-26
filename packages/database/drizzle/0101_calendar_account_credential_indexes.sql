@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "calendar_accounts_oauth_credential_idx" ON "calendar_accounts" USING btree ("oauthCredentialId");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "calendar_accounts_caldav_credential_idx" ON "calendar_accounts" USING btree ("caldavCredentialId");

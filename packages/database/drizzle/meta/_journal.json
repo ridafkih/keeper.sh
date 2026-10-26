@@ -708,6 +708,13 @@
       "when": 1793046269910,
       "tag": "0100_session_user_index",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793054228574,
+      "tag": "0101_calendar_account_credential_indexes",
+      "breakpoints": true
     }
   ]
 }
