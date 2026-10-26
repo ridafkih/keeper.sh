@@ -5,6 +5,7 @@ import {
   completeIngests,
   hasSiblingReadSinceLastSuccess,
   readIngestScheduleHealth,
+  releaseIngests,
   wakeIngests,
   wakeUserIngests,
 } from "../../src/database/ingest-schedule";
@@ -53,6 +54,7 @@ const runMigrations = async (databaseName: string): Promise<void> => {
 interface Scratch {
   client: Client;
   database: DatabaseInstance;
+  url: string;
 }
 
 const withScratch = async (label: string, run: (scratch: Scratch) => Promise<void>): Promise<void> => {
@@ -66,7 +68,7 @@ const withScratch = async (label: string, run: (scratch: Scratch) => Promise<voi
   await client.connect();
   const database = await createDatabase(buildDatabaseUrl(name), { maxConnections: 4 });
   try {
-    await run({ client, database });
+    await run({ client, database, url: buildDatabaseUrl(name) });
   } finally {
     closeDatabase(database, { graceSeconds: 1 });
     await client.end();
@@ -955,6 +957,191 @@ describe.skipIf(!administrativeUrl)("source ingest schedule", () => {
         wakeBacklog: 0,
       });
       expect(health.oldestDueLagMs).toBeGreaterThanOrEqual(10 * MINUTE_MS - 1000);
+    });
+  });
+  describe("multi-row writes lock schedule rows in calendar order", () => {
+    const LOW_ID = "00000000-0000-4000-8000-000000000001";
+    const HIGH_ID = "ffffffff-ffff-4fff-bfff-fffffffffffe";
+
+    interface OrderedPair {
+      accountId: string;
+      credentialId: string;
+    }
+
+    const seedOrderedPair = async (client: Client): Promise<OrderedPair> => {
+      await seedUser(client, "user-a");
+      const credentialId = await seedCredential(client, "user-a");
+      const accountId = await seedAccount(client, "user-a", credentialId);
+      for (const calendarId of [HIGH_ID, LOW_ID]) {
+        await client.query(
+          `INSERT INTO "calendars" ("id", "accountId", "calendarType", "name", "userId", "capabilities")
+           VALUES ($1, $2, 'oauth', 'Fixture', 'user-a', ARRAY['pull', 'push'])`,
+          [calendarId, accountId],
+        );
+      }
+      return { accountId, credentialId };
+    };
+
+    const waitForLockWait = async (client: Client): Promise<void> => {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const result = await client.query<{ waiting: number }>(
+          `SELECT count(*)::int AS "waiting" FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        if ((result.rows[0]?.waiting ?? 0) > 0) {
+          return;
+        }
+        await sleep(20);
+      }
+      throw new Error("the write under test never waited on the held row");
+    };
+
+    const isHighRowFree = async (client: Client): Promise<boolean> => {
+      try {
+        await client.query(
+          `SELECT 1 FROM "source_ingest_schedule" WHERE "calendarId" = $1 FOR NO KEY UPDATE NOWAIT`,
+          [HIGH_ID],
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const expectCalendarOrder = async (url: string, write: () => Promise<unknown>): Promise<void> => {
+      const holder = new Client({ connectionString: url });
+      const prober = new Client({ connectionString: url });
+      await holder.connect();
+      await prober.connect();
+      try {
+        await holder.query("BEGIN");
+        await holder.query(
+          `SELECT 1 FROM "source_ingest_schedule" WHERE "calendarId" = $1 FOR NO KEY UPDATE`,
+          [LOW_ID],
+        );
+        const pending = write();
+        await waitForLockWait(prober);
+        const highRowFree = await isHighRowFree(prober);
+        await holder.query("COMMIT");
+        await pending;
+
+        expect(highRowFree).toBe(true);
+      } finally {
+        await holder.end();
+        await prober.end();
+      }
+    };
+
+    const failBoth = (client: Client): Promise<unknown> => client.query(
+      `UPDATE "source_ingest_schedule" SET "failureCount" = 1, "parkedReason" = 'credential-rejected'`,
+    );
+
+    it("completes a batch", async () => {
+      await withScratch("order_complete", async ({ client, database, url }) => {
+        await seedOrderedPair(client);
+        const claimed = await claimFleet(database, 2);
+        const byId = new Map(claimed.map((claim) => [claim.calendarId, claim]));
+        const ordered = [HIGH_ID, LOW_ID].map((calendarId) => {
+          const claim = byId.get(calendarId);
+          if (!claim) {
+            throw new Error(`calendar ${calendarId} was not claimed`);
+          }
+          return completion(claim);
+        });
+
+        await expectCalendarOrder(url, () => completeIngests(database, ordered));
+      });
+    });
+
+    it("releases a batch", async () => {
+      await withScratch("order_release", async ({ client, database, url }) => {
+        await seedOrderedPair(client);
+        const claimed = await claimFleet(database, 2);
+        const released = claimed
+          .map(({ calendarId, leaseToken }) => ({ calendarId, leaseToken }))
+          .toSorted((left, right) => right.calendarId.localeCompare(left.calendarId));
+
+        await expectCalendarOrder(url, () => releaseIngests(database, released));
+      });
+    });
+
+    it("wakes a list of calendars", async () => {
+      await withScratch("order_wake", async ({ client, database, url }) => {
+        await seedOrderedPair(client);
+
+        await expectCalendarOrder(url, () =>
+          wakeIngests(database, [HIGH_ID, LOW_ID], { correlationId: "order", debounceMs: 0 }));
+      });
+    });
+
+    it("wakes a user's calendars", async () => {
+      await withScratch("order_wake_user", async ({ client, database, url }) => {
+        await seedOrderedPair(client);
+
+        await expectCalendarOrder(url, () =>
+          wakeUserIngests(database, "user-a", { correlationId: "order", debounceMs: 0 }));
+      });
+    });
+
+    it("wakes a user's calendars on sign-in", async () => {
+      await withScratch("order_sign_in", async ({ client, url }) => {
+        await seedOrderedPair(client);
+
+        await expectCalendarOrder(url, () => client.query(
+          `INSERT INTO "session" ("id", "userId", "token", "expiresAt")
+           VALUES ('session-order', 'user-a', 'token-order', now() + interval '1 day')`,
+        ));
+      });
+    });
+
+    it("releases an account's calendars on re-authentication", async () => {
+      await withScratch("order_reauth", async ({ client, url }) => {
+        const { accountId } = await seedOrderedPair(client);
+        await client.query(
+          `UPDATE "calendar_accounts" SET "needsReauthentication" = true WHERE "id" = $1`,
+          [accountId],
+        );
+        await failBoth(client);
+
+        await expectCalendarOrder(url, () => client.query(
+          `UPDATE "calendar_accounts" SET "needsReauthentication" = false WHERE "id" = $1`,
+          [accountId],
+        ));
+      });
+    });
+
+    it("releases a credential's calendars when its refresh token changes", async () => {
+      await withScratch("order_refresh", async ({ client, url }) => {
+        const { credentialId } = await seedOrderedPair(client);
+        await failBoth(client);
+
+        await expectCalendarOrder(url, () => client.query(
+          `UPDATE "oauth_credentials" SET "refreshToken" = 'refresh-2' WHERE "id" = $1`,
+          [credentialId],
+        ));
+      });
+    });
+
+    it("releases a CalDAV credential's calendars when it changes", async () => {
+      await withScratch("order_caldav", async ({ client, url }) => {
+        const { accountId } = await seedOrderedPair(client);
+        const credential = await client.query<{ id: string }>(
+          `INSERT INTO "caldav_credentials" ("serverUrl", "username", "encryptedPassword")
+           VALUES ('https://dav.example.com', 'fixture', 'secret-1') RETURNING "id"`,
+        );
+        const caldavCredentialId = credential.rows[0]?.id ?? "";
+        await client.query(
+          `UPDATE "calendar_accounts" SET "caldavCredentialId" = $2 WHERE "id" = $1`,
+          [accountId, caldavCredentialId],
+        );
+        await failBoth(client);
+
+        await expectCalendarOrder(url, () => client.query(
+          `UPDATE "caldav_credentials" SET "encryptedPassword" = 'secret-2' WHERE "id" = $1`,
+          [caldavCredentialId],
+        ));
+      });
     });
   });
 });

@@ -164,6 +164,19 @@ const claimIngests = async (
   }));
 };
 
+const lockInCalendarOrder = (calendarIds: SQL): SQL => sql`
+  "locked" AS MATERIALIZED (
+    SELECT "calendarId"
+    FROM "source_ingest_schedule"
+    WHERE "calendarId" IN (${calendarIds})
+    ORDER BY "calendarId"
+    FOR NO KEY UPDATE
+  )
+`;
+
+const listCalendarIds = (calendarIds: string[]): SQL =>
+  sql.join(calendarIds.map((calendarId) => sql`${calendarId}::uuid`), sql`, `);
+
 const buildCompletionValues = (completions: IngestCompletion[]): SQL =>
   sql.join(
     completions.map((completion) => sql`(
@@ -192,6 +205,7 @@ const completeIngests = async (
   const released = sql`schedule."releaseSeq" <> completion."claimedReleaseSeq"`;
   const nextDue = sql`now() + (completion."nextDueInMs" * interval '1 millisecond')`;
   const result = await database.execute(sql`
+    WITH ${lockInCalendarOrder(listCalendarIds(completions.map(({ calendarId }) => calendarId)))}
     UPDATE "source_ingest_schedule" AS schedule
     SET
       "dueAt" = CASE
@@ -217,7 +231,7 @@ const completeIngests = async (
       "wakeReceivedAt" = CASE WHEN ${consumesWake} THEN NULL ELSE schedule."wakeReceivedAt" END,
       "wakeCorrelationId" = CASE WHEN ${consumesWake} THEN NULL ELSE schedule."wakeCorrelationId" END,
       "updatedAt" = now()
-    FROM (VALUES ${buildCompletionValues(completions)}) AS completion(
+    FROM "locked", (VALUES ${buildCompletionValues(completions)}) AS completion(
       "calendarId",
       "leaseToken",
       "claimedReleaseSeq",
@@ -229,7 +243,8 @@ const completeIngests = async (
       "succeeded",
       "failed"
     )
-    WHERE schedule."calendarId" = completion."calendarId"
+    WHERE schedule."calendarId" = "locked"."calendarId"
+      AND schedule."calendarId" = completion."calendarId"
       AND schedule."leaseToken" = completion."leaseToken"
     RETURNING schedule."calendarId" AS "calendarId"
   `);
@@ -264,11 +279,13 @@ const wakeIngests = async (
     return [];
   }
   const result = await database.execute(sql`
-    UPDATE "source_ingest_schedule"
+    WITH ${lockInCalendarOrder(listCalendarIds(calendarIds))}
+    UPDATE "source_ingest_schedule" AS schedule
     SET ${buildWakeAssignments(input)}
-    WHERE "calendarId" IN (${sql.join(calendarIds.map((calendarId) => sql`${calendarId}::uuid`), sql`, `)})
-      AND "dueAt" IS NOT NULL
-    RETURNING "calendarId"
+    FROM "locked"
+    WHERE schedule."calendarId" = "locked"."calendarId"
+      AND schedule."dueAt" IS NOT NULL
+    RETURNING schedule."calendarId" AS "calendarId"
   `);
   return toRows<{ calendarId: string }>(result).map(({ calendarId }) => calendarId);
 };
@@ -279,11 +296,13 @@ const wakeUserIngests = async (
   input: WakeIngestsInput,
 ): Promise<string[]> => {
   const result = await database.execute(sql`
-    UPDATE "source_ingest_schedule"
+    WITH ${lockInCalendarOrder(sql`SELECT "id" FROM "calendars" WHERE "userId" = ${userId}`)}
+    UPDATE "source_ingest_schedule" AS schedule
     SET ${buildWakeAssignments(input)}
-    WHERE "calendarId" IN (SELECT "id" FROM "calendars" WHERE "userId" = ${userId})
-      AND "dueAt" IS NOT NULL
-    RETURNING "calendarId"
+    FROM "locked"
+    WHERE schedule."calendarId" = "locked"."calendarId"
+      AND schedule."dueAt" IS NOT NULL
+    RETURNING schedule."calendarId" AS "calendarId"
   `);
   return toRows<{ calendarId: string }>(result).map(({ calendarId }) => calendarId);
 };
@@ -301,17 +320,19 @@ const releaseIngests = async (
     return [];
   }
   const result = await database.execute(sql`
+    WITH ${lockInCalendarOrder(listCalendarIds(claims.map(({ calendarId }) => calendarId)))}
     UPDATE "source_ingest_schedule" AS schedule
     SET
       "dueAt" = CASE WHEN schedule."parkedReason" = 'ineligible' THEN NULL ELSE now() END,
       "leasedUntil" = NULL,
       "leaseToken" = NULL,
       "updatedAt" = now()
-    FROM (VALUES ${sql.join(
+    FROM "locked", (VALUES ${sql.join(
       claims.map((claim) => sql`(${claim.calendarId}::uuid, ${claim.leaseToken}::uuid)`),
       sql`, `,
     )}) AS released("calendarId", "leaseToken")
-    WHERE schedule."calendarId" = released."calendarId"
+    WHERE schedule."calendarId" = "locked"."calendarId"
+      AND schedule."calendarId" = released."calendarId"
       AND schedule."leaseToken" = released."leaseToken"
     RETURNING schedule."calendarId" AS "calendarId"
   `);
