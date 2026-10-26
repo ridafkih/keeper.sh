@@ -16,6 +16,7 @@ import {
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
+  withGoogleProjectBudget,
 } from "@keeper.sh/calendar";
 import type { DiscoveredCalendar, TokenState } from "@keeper.sh/calendar";
 import {
@@ -166,10 +167,14 @@ const discoverOAuthCalendars = async (
   signal.throwIfAborted();
 
   if (account.provider === "google") {
-    const rateLimiter = createRedisRateLimiter(
+    const rateLimiter = withGoogleProjectBudget(
       refreshLockRedis,
-      `ratelimit:${account.userId}:google`,
-      { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+      createRedisRateLimiter(
+        refreshLockRedis,
+        `ratelimit:${account.userId}:google`,
+        { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+      ),
+      env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
     );
     await rateLimiter.acquire(GOOGLE_CALENDAR_LIST_REQUEST_SLOTS, signal);
     return toDiscoveredGoogleCalendars(

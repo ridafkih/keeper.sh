@@ -21,6 +21,8 @@ type ResolveRateLimiter = (
   source: RateLimiterSourceContext,
 ) => FakeLimiter | undefined;
 
+const redisEval = vi.hoisted(() => vi.fn((..._evalArgs: unknown[]) => Promise.resolve([0, 0])));
+
 const factorySpies = vi.hoisted(() => ({
   caldavAccount: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
   google: vi.fn((..._factoryArgs: unknown[]) => ({ acquire: () => Promise.resolve() })),
@@ -48,7 +50,7 @@ vi.mock("../../src/context", () => ({
   flushDrainRegistry: { register: (): null => null },
   database: { select: () => ({}), update: () => ({}) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
-  refreshLockRedis: { eval: () => Promise.resolve([0, 0]), get: () => Promise.resolve(null) },
+  refreshLockRedis: { eval: redisEval, get: () => Promise.resolve(null) },
   refreshLockStore: { release: () => Promise.resolve(), tryAcquire: () => Promise.resolve(true) },
 }));
 vi.mock("../../src/utils/logging", () => ({
@@ -85,6 +87,7 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
+  redisEval.mockClear();
   factorySpies.caldavAccount.mockClear();
   factorySpies.google.mockClear();
   factorySpies.host.mockClear();
@@ -101,6 +104,18 @@ describe("resolveRateLimiter", () => {
     expect(factorySpies.google).toHaveBeenCalledTimes(1);
     expect(factorySpies.google.mock.calls[0]?.[1]).toBe("user-1");
     expect(factorySpies.google.mock.calls[0]?.[2]).toBe("ingest");
+  });
+
+  it("spends google ingest from the project budget every google caller shares", async () => {
+    const limiter = resolveRateLimiter("google", sourceContext);
+
+    await limiter?.acquire(3);
+
+    const projectCall = redisEval.mock.calls.find(
+      (call) => call.at(2) === "ratelimit:google:project",
+    );
+    expect(projectCall?.at(5)).toBe("3");
+    expect(projectCall?.at(6)).toBe("10000");
   });
 
   it("returns a limiter-shaped adapter over the outlook semaphore keyed by accountId", () => {

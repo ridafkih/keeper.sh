@@ -1,10 +1,6 @@
 import { DEFAULT_INGEST_INTERVAL_DIALS } from "@keeper.sh/calendar";
 import type { IngestIntervalDials } from "@keeper.sh/calendar";
-import {
-  GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
-  INGEST_SOURCE_TIMEOUT_MS,
-  OUTLOOK_APP_REQUESTS_PER_MINUTE,
-} from "@keeper.sh/constants";
+import { INGEST_SOURCE_TIMEOUT_MS } from "@keeper.sh/constants";
 
 const SECOND_MS = 1000;
 const DAY_MS = 24 * 60 * 60 * SECOND_MS;
@@ -21,15 +17,11 @@ interface IngestDials {
   intervals: IngestIntervalDials;
   leaseMs: number;
   loopEnabled: boolean;
-  providerRequestsPerMinute: {
-    google: number | null;
-    outlook: number | null;
-  };
+  outlookRequestsPerMinute: number | null;
   wake: IngestLaneDials;
 }
 
 interface IngestDialEnvironment {
-  GOOGLE_INGEST_REQUESTS_PER_MINUTE?: number;
   INGEST_CLAIM_BATCH?: number;
   INGEST_DORMANT_AFTER_DAYS?: number;
   INGEST_DORMANT_POLL_SECONDS?: number;
@@ -53,13 +45,6 @@ const DEFAULT_FLEET_IDLE_MS = 2000;
 const DEFAULT_WAKE_IDLE_MS = 1000;
 const DEFAULT_DORMANT_AFTER_DAYS = 30;
 const DEFAULT_LEASE_MS = 2 * INGEST_SOURCE_TIMEOUT_MS;
-const INGEST_SHARE_OF_PROVIDER_QUOTA = 0.8;
-const DEFAULT_GOOGLE_INGEST_REQUESTS_PER_MINUTE = Math.floor(
-  GOOGLE_PROJECT_REQUESTS_PER_MINUTE * INGEST_SHARE_OF_PROVIDER_QUOTA,
-);
-const DEFAULT_OUTLOOK_INGEST_REQUESTS_PER_MINUTE = Math.floor(
-  OUTLOOK_APP_REQUESTS_PER_MINUTE * INGEST_SHARE_OF_PROVIDER_QUOTA,
-);
 
 const isPositive = (value: number | undefined): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -85,11 +70,11 @@ const resolveDormantAfterMs = (days: number | undefined): number | null => {
   return positive(days, DEFAULT_DORMANT_AFTER_DAYS) * DAY_MS;
 };
 
-const resolveProviderLimit = (value: number | undefined, fallback: number): number | null => {
-  if (value === 0) {
+const resolveProviderLimit = (value: number | undefined): number | null => {
+  if (!isPositive(value)) {
     return null;
   }
-  return positive(value, fallback);
+  return value;
 };
 
 const resolveIngestDials = (environment: IngestDialEnvironment): IngestDials => {
@@ -116,16 +101,7 @@ const resolveIngestDials = (environment: IngestDialEnvironment): IngestDials => 
     },
     leaseMs: secondsOr(environment.INGEST_LEASE_SECONDS, DEFAULT_LEASE_MS),
     loopEnabled: environment.INGEST_LOOP_ENABLED !== false,
-    providerRequestsPerMinute: {
-      google: resolveProviderLimit(
-        environment.GOOGLE_INGEST_REQUESTS_PER_MINUTE,
-        DEFAULT_GOOGLE_INGEST_REQUESTS_PER_MINUTE,
-      ),
-      outlook: resolveProviderLimit(
-        environment.OUTLOOK_INGEST_REQUESTS_PER_MINUTE,
-        DEFAULT_OUTLOOK_INGEST_REQUESTS_PER_MINUTE,
-      ),
-    },
+    outlookRequestsPerMinute: resolveProviderLimit(environment.OUTLOOK_INGEST_REQUESTS_PER_MINUTE),
     wake: {
       batchSize,
       capacity: Math.floor(positive(environment.INGEST_WAKE_CONCURRENCY, DEFAULT_WAKE_CONCURRENCY)),

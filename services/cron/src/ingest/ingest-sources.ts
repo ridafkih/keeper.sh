@@ -7,6 +7,7 @@ import {
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
   createGoogleUserRateLimiter,
+  withGoogleProjectBudget,
   createRedisRateLimiter,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
@@ -611,15 +612,14 @@ const resolveTargetHost = (target: string | null): string | null => {
   }
 };
 
-const { providerRequestsPerMinute } = resolveIngestDials(env);
+const { outlookRequestsPerMinute } = resolveIngestDials(env);
 
-const resolveProviderLimiter = (provider: "google" | "outlook"): RedisRateLimiter | null => {
-  const requestsPerMinute = providerRequestsPerMinute[provider];
-  if (requestsPerMinute === null) {
+const resolveOutlookLimiter = (): RedisRateLimiter | null => {
+  if (outlookRequestsPerMinute === null) {
     return null;
   }
-  return createRedisRateLimiter(refreshLockRedis, `ratelimit:provider:${provider}:ingest`, {
-    requestsPerMinute,
+  return createRedisRateLimiter(refreshLockRedis, "ratelimit:provider:outlook:ingest", {
+    requestsPerMinute: outlookRequestsPerMinute,
   });
 };
 
@@ -628,9 +628,10 @@ const resolveRateLimiter = (
   source: RateLimiterSourceContext,
 ): RedisRateLimiter | undefined => {
   if (provider === "google") {
-    return withProviderRateLimit(
-      resolveProviderLimiter("google"),
+    return withGoogleProjectBudget(
+      refreshLockRedis,
       createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest"),
+      env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
     );
   }
 
@@ -639,7 +640,7 @@ const resolveRateLimiter = (
       return;
     }
     return withProviderRateLimit(
-      resolveProviderLimiter("outlook"),
+      resolveOutlookLimiter(),
       createOutlookRequestLimiter(
         createOutlookAccountSemaphore(leaseLockRedis, source.accountId),
         source.accountId,

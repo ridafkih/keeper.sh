@@ -12,7 +12,7 @@ const schema = {
   ENCRYPTION_KEY: "string?",
   GOOGLE_CLIENT_ID: "string?",
   GOOGLE_CLIENT_SECRET: "string?",
-  GOOGLE_INGEST_REQUESTS_PER_MINUTE: "number?",
+  GOOGLE_PROJECT_REQUESTS_PER_MINUTE: "number?",
   INGEST_CLAIM_BATCH: "number?",
   INGEST_DORMANT_AFTER_DAYS: "number?",
   INGEST_DORMANT_POLL_SECONDS: "number?",

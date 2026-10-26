@@ -44,6 +44,7 @@ const RATE_LIMITER_SCRIPT_MARKER = "ZREMRANGEBYSCORE";
 let sourceCount = 1;
 let gatedReadMs = 0;
 let limiterWaitCount = 0;
+let limiterWaitKey = "ratelimit:user-1:google";
 const limiterWaitsServed = new Map<string, number>();
 
 const STORED_INGEST_SEQ = 0;
@@ -144,7 +145,7 @@ const runTransaction = async (
 
 const decideRateLimiterAcquire = (key: string): [number, number] => {
   const served = limiterWaitsServed.get(key) ?? 0;
-  if (served >= limiterWaitCount) {
+  if (key !== limiterWaitKey || served >= limiterWaitCount) {
     return [0, 1];
   }
   limiterWaitsServed.set(key, served + 1);
@@ -247,6 +248,7 @@ beforeEach(() => {
   sourceCount = 1;
   gatedReadMs = 0;
   limiterWaitCount = 0;
+  limiterWaitKey = "ratelimit:user-1:google";
   limiterWaitsServed.clear();
   process.stdout.write = ((chunk: unknown) => {
     for (const line of String(chunk).split("\n")) {
@@ -310,6 +312,16 @@ describe("rate limiter attribution", () => {
 
     expect(event.wait?.rate_limiter_ms).toBeGreaterThanOrEqual(LIMITER_WAIT_MS - TIMER_SLACK_MS);
     expect(event.wait?.rate_limiter_key).toBe("ratelimit:user-1:google");
+  });
+
+  it("records the project budget as the key when Google's project quota held the ingest", async () => {
+    limiterWaitCount = 1;
+    limiterWaitKey = "ratelimit:google:project";
+
+    const event = await firstEvent();
+
+    expect(event.wait?.rate_limiter_ms).toBeGreaterThanOrEqual(LIMITER_WAIT_MS - TIMER_SLACK_MS);
+    expect(event.wait?.rate_limiter_key).toBe("ratelimit:google:project");
   });
 
   it("records no limiter key when the ingest never waited", async () => {

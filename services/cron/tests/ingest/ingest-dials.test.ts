@@ -13,7 +13,7 @@ describe("resolveIngestDials", () => {
       intervals: DEFAULT_INGEST_INTERVAL_DIALS,
       leaseMs: 2 * INGEST_SOURCE_TIMEOUT_MS,
       loopEnabled: true,
-      providerRequestsPerMinute: { google: 8000, outlook: 624_000 },
+      outlookRequestsPerMinute: null,
       wake: { batchSize: 50, capacity: 16, idleMs: 1000 },
     });
   });
@@ -73,21 +73,10 @@ describe("resolveIngestDials", () => {
     expect(resolveIngestDials({ INGEST_LOOP_ENABLED: true }).loopEnabled).toBe(true);
   });
 
-  it("reads a provider-wide limit and lifts it at zero", () => {
-    const dials = resolveIngestDials({
-      GOOGLE_INGEST_REQUESTS_PER_MINUTE: 6000,
-      OUTLOOK_INGEST_REQUESTS_PER_MINUTE: 0,
-    });
-
-    expect(dials.providerRequestsPerMinute).toEqual({ google: 6000, outlook: null });
-  });
-
-  it("keeps the default provider-wide limit for a negative rate", () => {
-    const dials = resolveIngestDials({
-      GOOGLE_INGEST_REQUESTS_PER_MINUTE: -1,
-      OUTLOOK_INGEST_REQUESTS_PER_MINUTE: Number.NaN,
-    });
-
-    expect(dials.providerRequestsPerMinute).toEqual({ google: 8000, outlook: 624_000 });
+  it("enables the Outlook-wide limit only for a positive rate", () => {
+    expect(resolveIngestDials({ OUTLOOK_INGEST_REQUESTS_PER_MINUTE: 6000 }).outlookRequestsPerMinute)
+      .toBe(6000);
+    expect(resolveIngestDials({ OUTLOOK_INGEST_REQUESTS_PER_MINUTE: 0 }).outlookRequestsPerMinute)
+      .toBeNull();
   });
 });

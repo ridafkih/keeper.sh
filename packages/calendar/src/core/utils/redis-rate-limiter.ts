@@ -1,5 +1,6 @@
 import {
   FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
   ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
@@ -279,6 +280,38 @@ const createGoogleUserRateLimiter = (
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
 
+const GOOGLE_PROJECT_RATE_LIMIT_KEY = "ratelimit:google:project";
+
+const resolveGoogleProjectRequestsPerMinute = (configured?: number): number | null => {
+  if (configured === 0) {
+    return null;
+  }
+  if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
+    return configured;
+  }
+  return GOOGLE_PROJECT_REQUESTS_PER_MINUTE;
+};
+
+const withGoogleProjectBudget = (
+  redis: RedisScriptClient,
+  userLimiter: RedisRateLimiter,
+  configuredRequestsPerMinute?: number,
+): RedisRateLimiter => {
+  const requestsPerMinute = resolveGoogleProjectRequestsPerMinute(configuredRequestsPerMinute);
+  if (requestsPerMinute === null) {
+    return userLimiter;
+  }
+  const projectLimiter = createRedisRateLimiter(redis, GOOGLE_PROJECT_RATE_LIMIT_KEY, {
+    requestsPerMinute,
+  });
+  return {
+    acquire: async (count, signal) => {
+      await userLimiter.acquire(count, signal);
+      await projectLimiter.acquire(count, signal);
+    },
+  };
+};
+
 const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 
 const createCalDAVAccountRateLimiter = (
@@ -444,6 +477,8 @@ export {
   createOutlookAccountSemaphore,
   createOutlookRequestLimiter,
   createRedisRateLimiter,
+  resolveGoogleProjectRequestsPerMinute,
+  withGoogleProjectBudget,
 };
 export type {
   GoogleRateLimitLane,

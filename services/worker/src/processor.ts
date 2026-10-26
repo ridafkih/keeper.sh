@@ -253,6 +253,7 @@ const processJob = (
         deadlineMs,
         abortSignal,
         encryptionKey: env.ENCRYPTION_KEY,
+        googleProjectRequestsPerMinute: env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
         safeFetchOptions,
         oauthConfig: {
           googleClientId: env.GOOGLE_CLIENT_ID,

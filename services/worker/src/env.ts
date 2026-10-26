@@ -7,6 +7,7 @@ const schema = {
   ENCRYPTION_KEY: "string?",
   GOOGLE_CLIENT_ID: "string?",
   GOOGLE_CLIENT_SECRET: "string?",
+  GOOGLE_PROJECT_REQUESTS_PER_MINUTE: "number?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
   PRIVATE_RESOLUTION_WHITELIST: "string?",
