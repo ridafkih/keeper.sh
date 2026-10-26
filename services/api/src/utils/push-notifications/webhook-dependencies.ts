@@ -1,16 +1,15 @@
-import { and, arrayContains, eq } from "drizzle-orm";
+import { and, arrayContains, eq, inArray } from "drizzle-orm";
 import { calendarPushChannelsTable, calendarsTable } from "@keeper.sh/database/schema";
+import { wakeIngests } from "@keeper.sh/database";
 import {
   buildUnknownChannelKey,
-  PENDING_CORRELATION_KEY,
-  PENDING_INGEST_KEY,
-  PENDING_REWAKE_KEY,
-  signalPendingCalendars,
   resolveAffectedCalendarIds,
   resolvePushRegistrar,
   toPushChannelState,
   verifyPushSecret,
 } from "@keeper.sh/calendar";
+import type { IngestPlan } from "@keeper.sh/calendar";
+import { groupWakesByDebounce } from "./wake-debounce";
 import type { StoredPushChannel, WebhookConfig } from "@keeper.sh/calendar";
 import { spawnBackgroundJob } from "@/utils/background-task";
 import { claimPushAdmission } from "@/utils/push-admission";
@@ -32,7 +31,29 @@ const resolveConfiguredPublicUrl = (
 const createPushWebhookDependencies = async (
   provider: string,
 ): Promise<PushWebhookDependencies> => {
-  const { database, env, redis, webhookConfig } = await import("@/context");
+  const { database, env, premiumService, redis, webhookConfig } = await import("@/context");
+
+  const wakeIngest = async (calendarIds: string[], correlationId: string): Promise<void> => {
+    const owners = await database
+      .select({ calendarId: calendarsTable.id, userId: calendarsTable.userId })
+      .from(calendarsTable)
+      .where(inArray(calendarsTable.id, calendarIds));
+    const userIds = [...new Set(owners.map(({ userId }) => userId))];
+    const plans = await Promise.allSettled(userIds.map((userId) => premiumService.getUserPlan(userId)));
+    const planByUserId = new Map(userIds.flatMap((userId, index): [string, IngestPlan][] => {
+      const settlement = plans[index];
+      if (settlement?.status !== "fulfilled") {
+        return [];
+      }
+      return [[userId, settlement.value]];
+    }));
+    await Promise.all([...groupWakesByDebounce(owners, planByUserId)].map(
+      ([debounceMs, wokenCalendarIds]) => wakeIngests(database, wokenCalendarIds, {
+        correlationId,
+        debounceMs,
+      }),
+    ));
+  };
 
   const readChannel = async (
     channelKey: string,
@@ -74,21 +95,6 @@ const createPushWebhookDependencies = async (
         .update(calendarPushChannelsTable)
         .set({ state: "removed" })
         .where(eq(calendarPushChannelsTable.id, channelId));
-    },
-    markPendingIngest: async (calendarIds, correlationId) => {
-      // The id lands first so the drain never sees a member without one.
-      await redis.hset(
-        PENDING_CORRELATION_KEY,
-        ...calendarIds.flatMap((calendarId) => [calendarId, correlationId]),
-      );
-      await Promise.all(calendarIds.map((calendarId) =>
-        redis.hincrby(PENDING_REWAKE_KEY, calendarId, 1)));
-      const now = Date.now();
-      await redis.zadd(
-        PENDING_INGEST_KEY,
-        "LT",
-        ...calendarIds.flatMap((calendarId) => [now, calendarId]),
-      );
     },
     markReauthorizeRequested: async (channelId) => {
       await database
@@ -148,8 +154,8 @@ const createPushWebhookDependencies = async (
           )),
       });
     },
-    signalPendingIngest: (calendarIds) => signalPendingCalendars(redis, calendarIds),
     verifySecret: verifyPushSecret,
+    wakeIngest,
     webhookPublicUrl: resolveConfiguredPublicUrl(webhookConfig, env.WEBHOOK_PUBLIC_URL),
   };
 };

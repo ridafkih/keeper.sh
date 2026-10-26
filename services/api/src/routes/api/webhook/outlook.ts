@@ -6,7 +6,7 @@ import {
   type PushWebhookDependencies,
   type PushWebhookRouteContext,
 } from "@/utils/push-notifications/handle-webhook";
-import { createPushWebhookDependencies } from "@/utils/push-notifications/pending-ingest";
+import { createPushWebhookDependencies } from "@/utils/push-notifications/webhook-dependencies";
 
 const OUTLOOK_PUSH_PROVIDER = "outlook";
 

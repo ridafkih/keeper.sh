@@ -1,5 +1,9 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  sourceIngestScheduleTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq, sql } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
@@ -48,8 +52,8 @@ const GET = withWideEvent(
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         unavailableSince: calendarsTable.unavailableSince,
         disabled: calendarsTable.disabled,
-        ingestFailureCount: calendarsTable.ingestFailureCount,
-        ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
+        ingestFailureCount: sql<number>`coalesce(${sourceIngestScheduleTable.failureCount}, 0)`,
+        ingestLastFailureAt: sourceIngestScheduleTable.lastFailureAt,
         markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
         providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
@@ -57,6 +61,10 @@ const GET = withWideEvent(
       })
       .from(calendarsTable)
       .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+      .leftJoin(
+        sourceIngestScheduleTable,
+        eq(sourceIngestScheduleTable.calendarId, calendarsTable.id),
+      )
       .where(
         and(
           eq(calendarsTable.id, id),
