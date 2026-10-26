@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const harness = vi.hoisted(() => {
   interface GateLike {
@@ -295,11 +295,11 @@ const families = [
   },
 ];
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -313,34 +313,38 @@ beforeEach(() => {
 });
 
 describe.each(families)(
-  "$name backoff gate",
+  "$name claimed calendar fetch",
   ({ calendarRow, fetches, listing, listingRow }) => {
-    it("performs no provider fetch while the next attempt is in the future", async () => {
+    it("reads a claimed calendar even when the retired backoff column still says to wait", async () => {
       listing().push(listingRow);
       harness.state.calendarRow = {
         ...calendarRow,
         nextAttemptAt: new Date(Date.now() + BACKOFF_WINDOW_MS),
       };
 
-      await job?.callback();
+      const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+      const result = ingestion?.result;
 
-      expect(fetches()).toHaveLength(0);
+      expect(fetches()).toHaveLength(1);
+      expect(result?.outcomes.map(({ outcome }) => outcome.kind)).toEqual(["ingested"]);
     });
 
-    it("performs no provider fetch when the calendar row is gone", async () => {
+    it("performs no provider fetch and reports the calendar unresolvable when its row is gone", async () => {
       listing().push(listingRow);
       harness.state.calendarRow = null;
 
-      await job?.callback();
+      const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+      const result = ingestion?.result;
 
       expect(fetches()).toHaveLength(0);
+      expect(result?.outcomes.map(({ outcome }) => outcome.kind)).toEqual(["unresolvable"]);
     });
 
-    it("performs the provider fetch once the calendar is out of backoff", async () => {
+    it("performs the provider fetch for a claimed calendar", async () => {
       listing().push(listingRow);
       harness.state.calendarRow = calendarRow;
 
-      await job?.callback();
+      await ingestSourceCalendars?.(["calendar-under-test"]);
 
       expect(fetches()).toHaveLength(1);
     });

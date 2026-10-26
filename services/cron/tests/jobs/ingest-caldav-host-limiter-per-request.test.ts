@@ -1,6 +1,6 @@
 import { encryptPassword } from "@keeper.sh/database";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const CALENDAR_URL = "https://caldav.example.net/calendars/user-1/personal/";
 
@@ -297,13 +297,13 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
   enqueueDestinationSyncsForUsers: () => Promise.resolve(0),
 }));
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 let originalFetch: typeof globalThis.fetch = globalThis.fetch;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 afterEach(() => {
@@ -340,7 +340,7 @@ describe("CalDAV limiter consumption", () => {
       userId: "user-1",
     });
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.accountFactoryIds).toEqual(["account-caldav-1"]);
     expect(harness.state.hostFactoryHosts).toEqual([]);
@@ -375,7 +375,7 @@ describe("CalDAV limiter consumption", () => {
       userId: "user-1",
     });
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.hostFactoryHosts).toEqual(["caldav.example.net"]);
     expect(harness.state.accountFactoryIds).toEqual([]);

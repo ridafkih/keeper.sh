@@ -233,8 +233,11 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   };
 });
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const emitted: EmittedEvent[] = [];
 const originalWrite = process.stdout.write.bind(process.stdout);
@@ -260,7 +263,7 @@ afterEach(() => {
 });
 
 const runTick = async (): Promise<EmittedEvent[]> => {
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
   const events = emitted.filter((candidate) => candidate.operation?.name === "ingest-source");
   if (events.length === 0) {
     throw new Error("no ingest-source wide event was emitted");

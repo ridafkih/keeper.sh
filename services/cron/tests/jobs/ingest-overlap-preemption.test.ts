@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * Cron passes take the per-calendar lock in the default preempting class, and a
@@ -311,11 +311,11 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
   enqueueDestinationSyncsForUsers: () => Promise.resolve(0),
 }));
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -344,12 +344,12 @@ describe("overlapping cron passes on one calendar", () => {
     const secondFetchGate = Promise.withResolvers<null>();
     harness.state.fetchGates.push(firstFetchGate.promise, secondFetchGate.promise);
 
-    const firstPass = Promise.resolve(job?.callback()).catch(() => null);
+    const firstPass = Promise.resolve(ingestSourceCalendars?.(["calendar-under-test"])).catch(() => null);
     await vi.waitFor(() => {
       expect(harness.state.fetchStarts).toHaveLength(1);
     }, { timeout: 5000 });
 
-    const secondPass = Promise.resolve(job?.callback()).catch(() => null);
+    const secondPass = Promise.resolve(ingestSourceCalendars?.(["calendar-under-test"])).catch(() => null);
     await vi.waitFor(() => {
       expect(harness.state.lockAcquireAttempts).toBeGreaterThanOrEqual(2);
     }, { timeout: 5000 });

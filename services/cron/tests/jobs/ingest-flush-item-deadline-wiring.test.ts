@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * Every thunk handed to reservation.submit must carry a finite deadlineAt: the
@@ -256,11 +256,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -273,7 +273,7 @@ describe("ingest flush item-carried deadline wiring", () => {
   it("attaches a finite deadlineAt to every thunk submitted to the flush writer", async () => {
     harness.state.icsRows.push(createIcsRow("calendar-alpha", "user-alpha"));
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.submittedItems.length).toBeGreaterThan(0);
 

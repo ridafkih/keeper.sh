@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import { NEVER_INGESTED_WEIGHT, WEIGHT_BUDGET } from "../../src/utils/ingest-weight";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * Every source must take its weighted reservation before its provider fetch
@@ -354,11 +354,11 @@ const createIcsRow = (
 /* Enough stored events that the estimated weight clamps to the whole budget. */
 const WHALE_EVENT_COUNT = 1_000_000;
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -399,7 +399,7 @@ describe("reserve-before-fetch wiring", () => {
     const gate = Promise.withResolvers<null>();
     harness.state.flushGates.push(gate.promise);
 
-    const jobRun = job?.callback() ?? Promise.resolve();
+    const jobRun = ingestSourceCalendars?.(["calendar-under-test"]) ?? Promise.resolve();
     const settled = jobRun.catch(() => null);
     try {
       await vi.waitFor(() => {
@@ -430,19 +430,16 @@ describe("reserve-before-fetch wiring", () => {
     harness.state.failingFetchCalendarIds.add("calendar-doomed");
 
     // Both sources reserve the whole budget, so without the release this never settles.
-    await expect(job?.callback()).rejects.toThrow(
-      "Calendar source ingestion completed with failures",
-    );
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
     expect(harness.state.fetchStarts).toContain("calendar-doomed");
     expect(harness.state.fetchStarts).toContain("calendar-healthy");
     expect(harness.state.reserveRequests).toEqual([WEIGHT_BUDGET, WEIGHT_BUDGET]);
     expect(harness.state.transactionCounts.flush).toBe(1);
     expect(harness.state.releaseCallCount).toBeGreaterThanOrEqual(1);
-
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);
-    const [affectedUserIds] = harness.enqueueDestinationSyncsForUsers.mock.calls[0] ?? [];
-    expect([...affectedUserIds ?? []]).toEqual(["user-healthy"]);
+    expect(result?.errors).toBe(1);
+    expect(result?.affectedUserIds).toEqual(["user-healthy"]);
   });
 
   it("reserves the heavy default weight for a never-ingested source", async () => {
@@ -452,7 +449,7 @@ describe("reserve-before-fetch wiring", () => {
     // A stale stored count must not shrink a first ingest's reservation.
     harness.state.storedEventCounts.set("calendar-fresh", 1);
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.reserveRequests).toEqual([NEVER_INGESTED_WEIGHT]);
     expect(harness.state.transactionCounts.flush).toBe(1);

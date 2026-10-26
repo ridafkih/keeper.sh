@@ -200,14 +200,22 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ingestSource: () => Promise.resolve({ eventsAdded: 1, eventsRemoved: 0 }),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const runTick = async (): Promise<unknown> => {
   emitted.length = 0;
   updateAttempts = 0;
-  return await Promise.resolve(ingestSourcesJob.callback())
-    .then(() => null)
+  return await Promise.resolve(runIngestPass())
+    .then((result) => {
+      if (result.affectedUserIds.length > 0) {
+        enqueuedUserIds.push([...result.affectedUserIds]);
+      }
+      return null;
+    })
     .catch((error: unknown) => error);
 };
 

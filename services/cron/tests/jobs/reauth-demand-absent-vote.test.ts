@@ -216,8 +216,11 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
     }),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const resolveLockedCalendarIds = (outcome: RevokedOutcome): Set<string> => {
   if (outcome === "locked") {
@@ -233,7 +236,7 @@ const runTick = async (outcome: RevokedOutcome): Promise<void> => {
   emitted.length = 0;
   revokedOutcome = outcome;
   lockedCalendarIds = resolveLockedCalendarIds(outcome);
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
 };
 
 describe("an account whose rejecting calendar cannot always cast a vote", () => {

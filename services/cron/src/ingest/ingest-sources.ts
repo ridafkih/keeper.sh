@@ -1,4 +1,3 @@
-import type { CronOptions } from "cronbake";
 import {
   ingestSource,
   allSettledGroupedWithConcurrency,
@@ -8,6 +7,7 @@ import {
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
   createGoogleUserRateLimiter,
+  createRedisRateLimiter,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
@@ -17,10 +17,8 @@ import {
   getCalDAVAccountRequestsPerMinute,
   ensureValidToken,
   isTimeoutError,
-  buildCalendarBackoffState,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
-  PENDING_INGEST_KEY,
   SOURCE_INGEST_LOCK_NAMESPACE,
   createRequiredSourceRanges,
   createSourceIngestionPlan,
@@ -34,8 +32,7 @@ import {
   PROVIDER_INGEST_REQUEST_TIMEOUT_MS,
   REAUTHENTICATION_SOURCE_INGEST,
 } from "@keeper.sh/constants";
-import type { IngestionResult } from "@keeper.sh/calendar";
-import type { CalendarBackoffState, IngestWideEventFields, IngestionFetchEventsResult, IngestionPersistenceWork, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
+import type { IngestOutcome, IngestWideEventFields, IngestionResult, IngestionFetchEventsResult, IngestionPersistenceWork, RedisLeaseClient, RedisRateLimiter, RequiredSourceRanges, TokenState } from "@keeper.sh/calendar";
 import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
@@ -49,7 +46,11 @@ import {
   createCalDAVSourceFetcher,
   createCalendarDiscoveryCache,
 } from "@keeper.sh/calendar/caldav";
-import { decryptPassword, resolveDatabaseErrorClassification } from "@keeper.sh/database";
+import {
+  decryptPassword,
+  hasSiblingReadSinceLastSuccess,
+  resolveDatabaseErrorClassification,
+} from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -57,11 +58,8 @@ import {
   eventStatesTable,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
-  userSubscriptionsTable,
-  userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
-import { and, arrayContains, asc, count, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
-import { withCronWideEvent } from "@/utils/with-wide-event";
+import { and, arrayContains, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { context, widelog } from "@/utils/logging";
 import {
   database,
@@ -88,12 +86,13 @@ import {
 } from "@/utils/ingest-baseline";
 import { withAbortTimeout } from "@/utils/with-abort-timeout";
 import { createSyncLock } from "@keeper.sh/sync";
-import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { deleteEventStatesInChunks } from "@/utils/delete-event-states";
 import { selectIngestWideEventFields } from "@/utils/ingest-wide-event";
 import { estimateIngestWeight } from "@/utils/ingest-weight";
 import { measureDatabaseRead, measureDatabaseWrite } from "@/utils/measured-database";
-import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
+import { fleetIngestLane } from "@/utils/ingest-lanes";
+import { resolveIngestDials } from "./ingest-dials";
+import { withProviderRateLimit } from "./provider-rate-limit";
 import type { IngestFlushReservation, IngestLane } from "@/utils/ingest-lanes";
 
 const SOURCE_TIMEOUT_MS = INGEST_SOURCE_TIMEOUT_MS;
@@ -151,78 +150,33 @@ const leaseLockRedis: RedisLeaseClient = {
     refreshLockRedis.call("set", key, value, ...options) as Promise<string | null>,
 };
 
-const resetIngestBackoff = async (lane: IngestLane, calendarId: string): Promise<void> => {
-  await measureDatabaseWrite(lane.pooledQueryGate,() => database
-    .update(calendarsTable)
-    .set({
-      ingestFailureCount: 0,
-      ingestLastFailureAt: null,
-      ingestNextAttemptAt: null,
-    })
-    .where(eq(calendarsTable.id, calendarId)));
-};
+type SourceIngestRun<TResult> =
+  | { result: TResult; status: "completed" }
+  | { status: "lock-held" }
+  | { status: "missing" };
 
-const applyIngestBackoff = async (
-  lane: IngestLane,
-  calendarId: string,
-  currentFailureCount: number,
-): Promise<CalendarBackoffState> => {
-  const state = buildCalendarBackoffState(currentFailureCount);
-  await measureDatabaseWrite(lane.pooledQueryGate,() => database
-    .update(calendarsTable)
-    .set({
-      ingestFailureCount: state.failureCount,
-      ingestLastFailureAt: state.lastFailureAt,
-      ingestNextAttemptAt: state.nextAttemptAt,
-    })
-    .where(eq(calendarsTable.id, calendarId)));
-  return state;
-};
+const backoffDecisions = new WeakMap<object, boolean>();
 
-const logIngestBackoff = (state: CalendarBackoffState): void => {
-  widelog.set("retry.failure_count", state.failureCount);
-  if (state.nextAttemptAt) {
-    widelog.set("retry.next_attempt_at", state.nextAttemptAt.toISOString());
+const recordBackoffDecision = (error: unknown, backoff: boolean): void => {
+  if (typeof error === "object" && error !== null) {
+    backoffDecisions.set(error, backoff);
   }
 };
 
-/*
- * Runs after the work has committed, so a Redis blip in the probe or a failed write must
- * never clobber the committed result with a rejection, nor feed the backoff escalator.
- */
-const resetIngestBackoffIfCurrent = async (
-  lane: IngestLane,
-  calendarId: string,
-  isCurrent: () => Promise<boolean>,
-): Promise<void> => {
-  try {
-    if (await isCurrent()) {
-      await resetIngestBackoff(lane, calendarId);
-    }
-  } catch (error) {
-    widelog.errorFields(error, {
-      slug: "ingest-backoff-reset-failed",
-      retriable: true,
-    });
+const resolveBackoffDecision = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) {
+    return false;
   }
+  return backoffDecisions.get(error) ?? false;
 };
 
-interface SourceIngestAttempt {
-  failureCount: number;
-  nextAttemptAt: Date | null;
-}
-
-const isIngestBackoffActive = (attempt: SourceIngestAttempt): boolean =>
-  attempt.nextAttemptAt !== null && attempt.nextAttemptAt > new Date();
-
-const runSourceIngest = async <TSource extends SourceIngestAttempt, TResult>(
-  lane: IngestLane,
+const runSourceIngest = async <TSource, TResult>(
   calendarId: string,
   signal: AbortSignal,
   readSource: () => Promise<TSource | undefined>,
   work: (source: TSource, isCurrent: () => Promise<boolean>) => Promise<TResult>,
   shouldApplyBackoff: (error: unknown) => boolean,
-): Promise<TResult | null> => {
+): Promise<SourceIngestRun<TResult>> => {
   const lockResult = await measureSegment("wait.source_lock_ms", () => sourceIngestLock.acquire(
     `${SOURCE_INGEST_LOCK_KEY_PREFIX}${calendarId}`,
     signal,
@@ -230,27 +184,20 @@ const runSourceIngest = async <TSource extends SourceIngestAttempt, TResult>(
   widelog.set("ingest.lock_acquired", lockResult.acquired);
   if (!lockResult.acquired) {
     signal.throwIfAborted();
-    return null;
+    return { status: "lock-held" };
   }
   try {
     const source = await readSource();
-    if (!source || isIngestBackoffActive(source)) {
-      return null;
+    if (!source) {
+      return { status: "missing" };
     }
     try {
-      const result = await work(source, lockResult.handle.isCurrent);
-      if (source.failureCount > 0) {
-        await resetIngestBackoffIfCurrent(lane, calendarId, lockResult.handle.isCurrent);
-      }
-      return result;
+      return { result: await work(source, lockResult.handle.isCurrent), status: "completed" };
     } catch (error) {
-      if (shouldApplyBackoff(error) && !isIngestBaselineMovedError(error)) {
-        logIngestBackoff(await applyIngestBackoff(lane, calendarId, source.failureCount));
-      }
+      recordBackoffDecision(error, shouldApplyBackoff(error) && !isIngestBaselineMovedError(error));
       throw error;
     }
   } finally {
-    /* The lock TTL already reclaims the hold, so a failed release must not reject. */
     await lockResult.handle.release().catch((error: unknown) => {
       widelog.errorFields(error, {
         slug: "source-lock-release-failed",
@@ -664,21 +611,39 @@ const resolveTargetHost = (target: string | null): string | null => {
   }
 };
 
+const { providerRequestsPerMinute } = resolveIngestDials(env);
+
+const resolveProviderLimiter = (provider: "google" | "outlook"): RedisRateLimiter | null => {
+  const requestsPerMinute = providerRequestsPerMinute[provider];
+  if (requestsPerMinute === null) {
+    return null;
+  }
+  return createRedisRateLimiter(refreshLockRedis, `ratelimit:provider:${provider}:ingest`, {
+    requestsPerMinute,
+  });
+};
+
 const resolveRateLimiter = (
   provider: string,
   source: RateLimiterSourceContext,
 ): RedisRateLimiter | undefined => {
   if (provider === "google") {
-    return createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest");
+    return withProviderRateLimit(
+      resolveProviderLimiter("google"),
+      createGoogleUserRateLimiter(refreshLockRedis, source.userId, "ingest"),
+    );
   }
 
   if (provider === "outlook") {
     if (!source.accountId) {
       return;
     }
-    return createOutlookRequestLimiter(
-      createOutlookAccountSemaphore(leaseLockRedis, source.accountId),
-      source.accountId,
+    return withProviderRateLimit(
+      resolveProviderLimiter("outlook"),
+      createOutlookRequestLimiter(
+        createOutlookAccountSemaphore(leaseLockRedis, source.accountId),
+        source.accountId,
+      ),
     );
   }
 
@@ -813,6 +778,7 @@ interface IngestionSourceResult {
   eventsAdded: number;
   eventsRemoved: number;
   firstIngest: boolean;
+  outcome: IngestOutcome;
   reauthentication: ReauthenticationDemandRecord | null;
   shouldPush: boolean;
   userId: string;
@@ -955,23 +921,40 @@ const applyReauthenticationDemands = async (
   }
 };
 
+interface IngestedCalendarOutcome {
+  calendarId: string;
+  outcome: IngestOutcome;
+}
+
 interface IngestionBatchResult {
   abortedCalendarIds: string[];
   added: number;
   affectedUserIds: string[];
   errors: number;
   firstIngestUserIds: string[];
+  outcomes: IngestedCalendarOutcome[];
   removed: number;
 }
 
-const createSkippedIngestionResult = (userId: string): IngestionSourceResult => ({
+const createSkippedIngestionResult = (
+  userId: string,
+  outcome: IngestOutcome,
+): IngestionSourceResult => ({
   eventsAdded: 0,
   eventsRemoved: 0,
   firstIngest: false,
+  outcome,
   reauthentication: null,
   shouldPush: false,
   userId,
 });
+
+const resolveSkippedOutcome = (run: { status: "lock-held" | "missing" }): IngestOutcome => {
+  if (run.status === "lock-held") {
+    return { kind: "lock-held" };
+  }
+  return { kind: "unresolvable" };
+};
 
 const recordBaselineMovedAbort = (error: unknown): boolean => {
   if (!isIngestBaselineMovedError(error)) {
@@ -996,9 +979,57 @@ const createRejectedIngestionResult = (
   accountId: string,
   demand: AuthenticationRejection,
 ): IngestionSourceResult => ({
-  ...createSkippedIngestionResult(userId),
+  ...createSkippedIngestionResult(userId, { kind: demand }),
   reauthentication: { accountId, demand },
 });
+
+const isSiblingStillReading = async (lane: IngestLane, calendarId: string): Promise<boolean> => {
+  try {
+    return await measureDatabaseRead(
+      lane.pooledQueryGate,
+      () => hasSiblingReadSinceLastSuccess(database, calendarId),
+    );
+  } catch {
+    widelog.set("reauth.sibling_check_failed", true);
+    return false;
+  }
+};
+
+const createRequestRejectedIngestionResult = async (
+  lane: IngestLane,
+  source: { accountId: string; calendarId: string; userId: string },
+): Promise<IngestionSourceResult> => {
+  if (!await isSiblingStillReading(lane, source.calendarId)) {
+    return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+  }
+  widelog.set("reauth.sibling_reading", true);
+  return {
+    ...createSkippedIngestionResult(source.userId, { kind: "request-rejected" }),
+    reauthentication: { accountId: source.accountId, demand: "abstain" },
+  };
+};
+
+const resolveRejectedOutcome = (reason: unknown): IngestOutcome => {
+  if (isIngestBaselineMovedError(reason)) {
+    return { kind: "baseline-moved" };
+  }
+  return { backoff: resolveBackoffDecision(reason), kind: "failed" };
+};
+
+const collectOutcomes = (
+  settlements: PromiseSettledResult<IngestionSourceResult>[],
+  calendarIds: string[],
+): IngestedCalendarOutcome[] =>
+  settlements.flatMap((settlement, index): IngestedCalendarOutcome[] => {
+    const calendarId = calendarIds[index];
+    if (!calendarId) {
+      return [];
+    }
+    if (settlement.status === "fulfilled") {
+      return [{ calendarId, outcome: settlement.value.outcome }];
+    }
+    return [{ calendarId, outcome: resolveRejectedOutcome(settlement.reason) }];
+  });
 
 const collectReauthenticationDemands = (
   settlements: PromiseSettledResult<IngestionSourceResult>[],
@@ -1069,6 +1100,7 @@ const summariseIngestionSettlements = async (
     firstIngestUserIds: [
       ...new Set(results.filter(({ firstIngest }) => firstIngest).map(({ userId }) => userId)),
     ],
+    outcomes: collectOutcomes(settlements, calendarIds),
     removed: results.reduce((total, { eventsRemoved }) => total + eventsRemoved, 0),
   };
 };
@@ -1079,168 +1111,46 @@ const createEmptyIngestionBatchResult = (): IngestionBatchResult => ({
   affectedUserIds: [],
   errors: 0,
   firstIngestUserIds: [],
+  outcomes: [],
   removed: 0,
 });
 
-const buildOAuthSourceIdFilter = (calendarIds: string[] | undefined) => {
-  if (!calendarIds) {
-    return [];
-  }
-  return [inArray(calendarsTable.id, calendarIds)];
-};
+type IngestTrigger = "cron" | "push";
 
-const resolveIngestTrigger = (calendarIds: string[] | undefined): string => {
-  if (calendarIds) {
-    return "push";
-  }
-  return "cron";
-};
-
-/*
- * A drain names the calendars a webhook woke, so its ingest runs in the push lane and
- * cannot be parked behind a fleet pass that has fanned out over every source.
- */
-const resolveIngestLane = (calendarIds: string[] | undefined): IngestLane => {
-  if (calendarIds) {
-    return pushIngestLane;
-  }
-  return fleetIngestLane;
-};
-
-/*
- * The drain ticks every 10s, so an entry older than this is no longer evidence that anyone is
- * about to read the calendar. Without the bound a wedged drain would hold the fleet off its
- * own calendars indefinitely, and the calendar would silently stop syncing altogether.
- */
-const PENDING_INGEST_YIELD_BOUND_MS = 60_000;
-
-const isRecentPendingScore = (score: string | null, receivedAfter: number): boolean => {
-  if (score === null) {
-    return false;
-  }
-  return Number(score) >= receivedAfter;
-};
-
-/*
- * The webhook drain is about to ingest whatever it holds a fresh receipt for, so the fleet
- * hands those calendars over rather than duplicating the read behind the same lock. Yielding
- * is safe because the fleet is the reconciliation pass: a missed webhook leaves the calendar
- * out of the pending set, so the next fleet pass takes it.
- */
-const resolveFleetYieldedCalendarIds = async (
-  sourceCalendarIds: string[],
-): Promise<Set<string>> => {
-  if (sourceCalendarIds.length === 0) {
-    return new Set<string>();
-  }
-  try {
-    const scores = await refreshLockRedis.zmscore(PENDING_INGEST_KEY, ...sourceCalendarIds);
-    const receivedAfter = Date.now() - PENDING_INGEST_YIELD_BOUND_MS;
-    return new Set(sourceCalendarIds.filter((_calendarId, index) =>
-      isRecentPendingScore(scores[index] ?? null, receivedAfter)));
-  } catch (error) {
-    /* Yielding is an optimisation, so an unreadable pending set costs the pass nothing. */
-    widelog.errorFields(error, {
-      retriable: true,
-      slug: "pending-ingest-yield-lookup-failed",
-    });
-    return new Set<string>();
-  }
-};
-
-const FLEET_PASS_SOURCE_BOUND = 250;
-
-const FLEET_PASS_PRO_HEAD_START = "10 minutes";
-
-const buildFleetPriorityOrder = () => [
-  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '${sql.raw(FLEET_PASS_PRO_HEAD_START)}' else interval '0' end asc`,
-  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
-  desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-  asc(calendarsTable.id),
-];
-
-interface FleetPassWindow<TSource> {
-  scanned: number;
-  taken: TSource[];
+interface IngestClaimTelemetry {
+  lagMs: number;
+  lane: string;
+  woken: boolean;
 }
 
-const takeFleetPassWindow = <TSource extends { calendarId: string }>(
-  windowSources: TSource[],
-  yieldedCalendarIds: Set<string>,
-): FleetPassWindow<TSource> => {
-  const taken: TSource[] = [];
-  let scanned = 0;
-  for (const source of windowSources) {
-    if (taken.length >= FLEET_PASS_SOURCE_BOUND) {
-      break;
-    }
-    scanned += 1;
-    if (!yieldedCalendarIds.has(source.calendarId)) {
-      taken.push(source);
-    }
+interface IngestRunOptions {
+  claimByCalendarId?: Record<string, IngestClaimTelemetry>;
+  correlationIdByCalendarId?: Record<string, string>;
+  lane?: IngestLane;
+  trigger?: IngestTrigger;
+}
+
+const resolveCalendarTrigger = (options: IngestRunOptions, calendarId: string): IngestTrigger => {
+  if (options.claimByCalendarId?.[calendarId]?.woken) {
+    return "push";
   }
-  return { scanned, taken };
+  return options.trigger ?? "cron";
 };
 
-const resolveYieldedCalendarIds = (
-  calendarIds: string[] | undefined,
-  sourceCalendarIds: string[],
-): Promise<Set<string>> => {
-  /* The webhook path owns the calendars it names, so it never yields one. */
-  if (calendarIds) {
-    return Promise.resolve(new Set<string>());
+const recordClaimTelemetry = (options: IngestRunOptions, calendarId: string): void => {
+  widelog.set("ingest.trigger", resolveCalendarTrigger(options, calendarId));
+  const inboundCorrelationId = options.correlationIdByCalendarId?.[calendarId] ?? "";
+  if (inboundCorrelationId.length > 0) {
+    widelog.set("correlation.id", inboundCorrelationId);
   }
-  return resolveFleetYieldedCalendarIds(sourceCalendarIds);
-};
-
-const hasFreshPendingReceipt = async (calendarId: string): Promise<boolean> => {
-  try {
-    const score = await refreshLockRedis.zscore(PENDING_INGEST_KEY, calendarId);
-    return isRecentPendingScore(score, Date.now() - PENDING_INGEST_YIELD_BOUND_MS);
-  } catch (error) {
-    widelog.errorFields(error, {
-      retriable: true,
-      slug: "pending-ingest-yield-lookup-failed",
-    });
-    return false;
+  const claim = options.claimByCalendarId?.[calendarId];
+  if (claim) {
+    widelog.set("schedule.lane", claim.lane);
+    widelog.set("schedule.lag_ms", claim.lagMs);
   }
 };
 
-const shouldYieldSource = (
-  calendarIds: string[] | undefined,
-  calendarId: string,
-): Promise<boolean> => {
-  if (calendarIds) {
-    return Promise.resolve(false);
-  }
-  return hasFreshPendingReceipt(calendarId);
-};
-
-const recordYieldedCount = (
-  calendarIds: string[] | undefined,
-  yieldedCalendarIds: Set<string>,
-): void => {
-  if (calendarIds) {
-    return;
-  }
-  widelog.set("ingest.yielded_count", yieldedCalendarIds.size);
-};
-
-const resolveSelectedSources = <TSource extends { calendarId: string }>(
-  calendarIds: string[] | undefined,
-  windowSources: TSource[],
-  yieldedCalendarIds: Set<string>,
-): TSource[] => {
-  if (calendarIds) {
-    return windowSources.filter(({ calendarId }) => !yieldedCalendarIds.has(calendarId));
-  }
-  const { scanned, taken } = takeFleetPassWindow(windowSources, yieldedCalendarIds);
-  widelog.set("ingest.taken_count", taken.length);
-  widelog.set("ingest.deferred_count", windowSources.length - scanned);
-  return taken;
-};
-
-const buildOAuthSourceQuery = (calendarIds: string[] | undefined) =>
+const buildOAuthSourceQuery = (calendarIds: string[]) =>
   database
     .select({
       accountId: calendarAccountsTable.id,
@@ -1263,53 +1173,34 @@ const buildOAuthSourceQuery = (calendarIds: string[] | undefined) =>
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(oauthCredentialsTable, eq(calendarAccountsTable.oauthCredentialId, oauthCredentialsTable.id))
-    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
-        ...buildOAuthSourceIdFilter(calendarIds),
+        inArray(calendarsTable.id, calendarIds),
       ),
     )
-    .orderBy(...buildFleetPriorityOrder());
+    .orderBy(asc(calendarsTable.id));
 
 const ingestOAuthSources = async (
-  calendarIds?: string[],
-  correlationIdByCalendarId: Record<string, string> = {},
+  calendarIds: string[],
+  options: IngestRunOptions = {},
 ): Promise<IngestionBatchResult> => {
-  if (calendarIds && calendarIds.length === 0) {
+  if (calendarIds.length === 0) {
     return createEmptyIngestionBatchResult();
   }
-  const lane = resolveIngestLane(calendarIds);
+  const lane = options.lane ?? fleetIngestLane;
 
-  const oauthSources = await buildOAuthSourceQuery(calendarIds);
-
-  const yieldedCalendarIds = await resolveYieldedCalendarIds(
-    calendarIds,
-    oauthSources.map(({ calendarId }) => calendarId),
-  );
-  const selectedSources = resolveSelectedSources(
-    calendarIds,
-    oauthSources,
-    yieldedCalendarIds,
-  );
+  const selectedSources = await buildOAuthSourceQuery(calendarIds);
 
   const settlements = await allSettledGroupedWithConcurrency(
     selectedSources.map((source) => {
       const enqueuedAt = Date.now();
-      return async (): Promise<IngestionSourceResult> => {
-        if (await shouldYieldSource(calendarIds, source.calendarId)) {
-          yieldedCalendarIds.add(source.calendarId);
-          return createSkippedIngestionResult(source.userId);
-        }
-        return withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
+      return (): Promise<IngestionSourceResult> =>
+        withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
-          widelog.set("ingest.trigger", resolveIngestTrigger(calendarIds));
-          const inboundCorrelationId = correlationIdByCalendarId[source.calendarId] ?? "";
-          if (inboundCorrelationId.length > 0) {
-            widelog.set("correlation.id", inboundCorrelationId);
-          }
+          recordClaimTelemetry(options, source.calendarId);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1322,8 +1213,8 @@ const ingestOAuthSources = async (
           }
 
           try {
-            const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async () => {
+            const run = await widelog.time.measure("duration_ms", () =>
+              runSourceIngest(source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1364,7 +1255,7 @@ const ingestOAuthSources = async (
                 return currentSource;
               }, async (currentSource, isCurrent) => {
                 if (!currentSource.externalCalendarId) {
-                  return createSkippedIngestionResult(source.userId);
+                  return createSkippedIngestionResult(source.userId, { kind: "unresolvable" });
                 }
 
                 const rawRefresher = resolveTokenRefresher(currentSource.provider);
@@ -1418,7 +1309,7 @@ const ingestOAuthSources = async (
                   ),
                 });
                 if (!fetcher) {
-                  return createSkippedIngestionResult(currentSource.userId);
+                  return createSkippedIngestionResult(currentSource.userId, { kind: "unresolvable" });
                 }
                 const reservation = await reserveIngestFlushWeight(
                   lane,
@@ -1445,6 +1336,7 @@ const ingestOAuthSources = async (
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
                     firstIngest: currentSource.ingestWindowRecordedAt === null,
+                    outcome: { kind: "ingested" } as const,
                     reauthentication: {
                       accountId: currentSource.accountId,
                       demand: "authenticated" as const,
@@ -1459,9 +1351,14 @@ const ingestOAuthSources = async (
                 }
               }, shouldApplyOAuthIngestBackoff),
             );
-            if (!result) {
+            if (run.status !== "completed") {
               widelog.set("outcome", "skipped");
-              return createSkippedIngestionResult(source.userId);
+              return createSkippedIngestionResult(source.userId, resolveSkippedOutcome(run));
+            }
+            const { result } = run;
+            if (result.outcome.kind !== "ingested") {
+              widelog.set("outcome", "skipped");
+              return result;
             }
 
             widelog.set("sync.events_added", result.eventsAdded);
@@ -1480,7 +1377,7 @@ const ingestOAuthSources = async (
             if (hasErrorFlag(error, "authRequired")) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+              return await createRequestRejectedIngestionResult(lane, source);
             }
 
             if (hasErrorFlag(error, "oauthReauthRequired")) {
@@ -1505,13 +1402,10 @@ const ingestOAuthSources = async (
           }
         }),
       SOURCE_TIMEOUT_MS);
-      };
     }),
 selectedSources.map((source) => source.userId),
     { groupConcurrency: USER_GROUP_CONCURRENCY, taskConcurrency: USER_CALENDAR_CONCURRENCY },
   );
-
-  recordYieldedCount(calendarIds, yieldedCalendarIds);
 
   return summariseIngestionSettlements(
     lane,
@@ -1524,10 +1418,14 @@ selectedSources.map((source) => source.userId),
   );
 };
 
-const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
-  if (!env.ENCRYPTION_KEY) {
+const ingestCalDAVSources = async (
+  calendarIds: string[],
+  options: IngestRunOptions = {},
+): Promise<IngestionBatchResult> => {
+  if (!env.ENCRYPTION_KEY || calendarIds.length === 0) {
     return createEmptyIngestionBatchResult();
   }
+  const lane = options.lane ?? fleetIngestLane;
 
   const encryptionKey = env.ENCRYPTION_KEY;
 
@@ -1549,14 +1447,14 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
     .innerJoin(caldavCredentialsTable, eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id))
-    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         arrayContains(calendarsTable.capabilities, ["pull"]),
         eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id, calendarIds),
       ),
     )
-    .orderBy(...buildFleetPriorityOrder());
+    .orderBy(asc(calendarsTable.id));
 
   const settlements = await allSettledGroupedWithConcurrency(
     caldavSources.map((source) => {
@@ -1565,6 +1463,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
+          recordClaimTelemetry(options, source.calendarId);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1574,8 +1473,8 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
           widelog.set("provider.calendar_id", source.calendarId);
 
           try {
-            const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async () => {
+            const run = await widelog.time.measure("duration_ms", () =>
+              runSourceIngest(source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
@@ -1666,6 +1565,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
                     firstIngest: currentSource.ingestWindowRecordedAt === null,
+                    outcome: { kind: "ingested" } as const,
                     reauthentication: {
                       accountId: source.accountId,
                       demand: "authenticated" as const,
@@ -1682,9 +1582,14 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
                 !shouldTreatAsProviderAuthFailure(error)
                 && !isIngestInfrastructureError(error)),
             );
-            if (!result) {
+            if (run.status !== "completed") {
               widelog.set("outcome", "skipped");
-              return createSkippedIngestionResult(source.userId);
+              return createSkippedIngestionResult(source.userId, resolveSkippedOutcome(run));
+            }
+            const { result } = run;
+            if (result.outcome.kind !== "ingested") {
+              widelog.set("outcome", "skipped");
+              return result;
             }
 
             widelog.set("sync.events_added", result.eventsAdded);
@@ -1703,7 +1608,7 @@ const ingestCalDAVSources = async (lane: IngestLane): Promise<IngestionBatchResu
             if (shouldTreatAsProviderAuthFailure(error)) {
               widelog.errorFields(error, { slug: "provider-auth-failed", retriable: false, requiresReauth: true });
 
-              return createRejectedIngestionResult(source.userId, source.accountId, "request-rejected");
+              return await createRequestRejectedIngestionResult(lane, source);
             }
 
             const missingCalendarFailure = resolveMissingCalendarFailure(error);
@@ -1738,7 +1643,14 @@ caldavSources.map((source) => source.userId),
   );
 };
 
-const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult> => {
+const ingestIcsSources = async (
+  calendarIds: string[],
+  options: IngestRunOptions = {},
+): Promise<IngestionBatchResult> => {
+  if (calendarIds.length === 0) {
+    return createEmptyIngestionBatchResult();
+  }
+  const lane = options.lane ?? fleetIngestLane;
   const icsSources = await database
     .select({
       calendarId: calendarsTable.id,
@@ -1750,14 +1662,14 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
       ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
     })
     .from(calendarsTable)
-    .leftJoin(userSubscriptionsTable, eq(calendarsTable.userId, userSubscriptionsTable.userId))
     .where(
       and(
         eq(calendarsTable.calendarType, "ical"),
         eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id, calendarIds),
       ),
     )
-    .orderBy(...buildFleetPriorityOrder());
+    .orderBy(asc(calendarsTable.id));
 
   const settlements = await allSettledGroupedWithConcurrency(
     icsSources.map((source) => {
@@ -1766,6 +1678,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
       withAbortTimeout((signal, deadlineAt): Promise<IngestionSourceResult> =>
         context(async () => {
           widelog.set("concurrency.slot_wait_ms", Date.now() - enqueuedAt);
+          recordClaimTelemetry(options, source.calendarId);
           widelog.set("operation.name", "ingest-source");
           widelog.set("operation.type", "job");
           widelog.set("sync.direction", "ingest");
@@ -1774,8 +1687,8 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
           widelog.set("provider.calendar_id", source.calendarId);
 
           try {
-            const result = await widelog.time.measure("duration_ms", () =>
-              runSourceIngest(lane, source.calendarId, signal, async () => {
+            const run = await widelog.time.measure("duration_ms", () =>
+              runSourceIngest(source.calendarId, signal, async () => {
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     failureCount: calendarsTable.ingestFailureCount,
@@ -1800,7 +1713,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                 return currentSource;
               }, async (currentSource, isCurrent) => {
                 if (!currentSource.url) {
-                  return createSkippedIngestionResult(source.userId);
+                  return createSkippedIngestionResult(source.userId, { kind: "unresolvable" });
                 }
                 const ranges = await getRequiredSourceRanges(lane, source.calendarId);
                 const rateLimiter = resolveRateLimiter("ical", {
@@ -1851,6 +1764,7 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                     eventsAdded: ingestionResult.eventsAdded,
                     eventsRemoved: ingestionResult.eventsRemoved,
                     firstIngest: currentSource.ingestWindowRecordedAt === null,
+                    outcome: { kind: "ingested" } as const,
                     reauthentication: null,
                     shouldPush: hasSourceAuthorityChanged(currentSource, ranges)
                       || ingestionResult.eventsAdded > 0
@@ -1862,9 +1776,14 @@ const ingestIcsSources = async (lane: IngestLane): Promise<IngestionBatchResult>
                 }
               }, (error) => !isIngestInfrastructureError(error)),
             );
-            if (!result) {
+            if (run.status !== "completed") {
               widelog.set("outcome", "skipped");
-              return createSkippedIngestionResult(source.userId);
+              return createSkippedIngestionResult(source.userId, resolveSkippedOutcome(run));
+            }
+            const { result } = run;
+            if (result.outcome.kind !== "ingested") {
+              widelog.set("outcome", "skipped");
+              return result;
             }
 
             widelog.set("sync.events_added", result.eventsAdded);
@@ -1902,75 +1821,54 @@ icsSources.map((source) => source.userId),
   );
 };
 
-/*
- * The enqueue filters a free user's destinations out unless a request is pending, so a
- * calendar's first ingest would otherwise wait out the 30 minute free cadence. Recording
- * the request rather than bypassing the filter also survives a failed enqueue: the row
- * stays and the next pass honours it.
- */
-const recordFirstIngestSyncRequests = async (userIds: Set<string>): Promise<void> => {
-  const settlements = await Promise.allSettled([...userIds].map((userId) => {
-    const request = { requestId: crypto.randomUUID(), requestedAt: new Date() };
-    return database
-      .insert(userSyncRequestsTable)
-      .values({ ...request, userId })
-      .onConflictDoUpdate({ target: userSyncRequestsTable.userId, set: request });
-  }));
-  /*
-   * Recording is a head start, so it must not cost the pass its enqueue: a throw here would
-   * strand every established user in the batch to hurry one new calendar.
-   */
+const mergeIngestionBatchResults = (results: IngestionBatchResult[]): IngestionBatchResult => ({
+  abortedCalendarIds: results.flatMap(({ abortedCalendarIds }) => abortedCalendarIds),
+  added: results.reduce((total, { added }) => total + added, 0),
+  affectedUserIds: [...new Set(results.flatMap(({ affectedUserIds }) => affectedUserIds))],
+  errors: results.reduce((total, { errors }) => total + errors, 0),
+  firstIngestUserIds: [...new Set(results.flatMap(({ firstIngestUserIds }) => firstIngestUserIds))],
+  outcomes: results.flatMap(({ outcomes }) => outcomes),
+  removed: results.reduce((total, { removed }) => total + removed, 0),
+});
+
+interface SourceCalendarsIngestion {
+  failures: unknown[];
+  result: IngestionBatchResult;
+}
+
+const ingestSourceCalendars = async (
+  calendarIds: string[],
+  options: IngestRunOptions = {},
+): Promise<SourceCalendarsIngestion> => {
+  const settlements = await Promise.allSettled([
+    ingestOAuthSources(calendarIds, options),
+    ingestCalDAVSources(calendarIds, options),
+    ingestIcsSources(calendarIds, options),
+  ]);
+  const failures: unknown[] = [];
+  const results: IngestionBatchResult[] = [];
   for (const settlement of settlements) {
     if (settlement.status === "rejected") {
-      widelog.errorFields(settlement.reason, {
-        retriable: true,
-        slug: "first-ingest-sync-request-failed",
-      });
+      failures.push(settlement.reason);
+      continue;
     }
+    results.push(settlement.value);
   }
+  return { failures, result: mergeIngestionBatchResults(results) };
 };
 
-export default withCronWideEvent({
-  async callback() {
-    const settlements = await Promise.allSettled([
-      ingestOAuthSources(),
-      ingestCalDAVSources(fleetIngestLane),
-      ingestIcsSources(fleetIngestLane),
-    ]);
-    const failures: unknown[] = [];
-    let failedSourceCount = 0;
-    const affectedUserIds = new Set<string>();
-    const firstIngestUserIds = new Set<string>();
-
-    for (const settlement of settlements) {
-      if (settlement.status === "rejected") {
-        failures.push(settlement.reason);
-        continue;
-      }
-      failedSourceCount += settlement.value.errors;
-      for (const userId of settlement.value.affectedUserIds) {
-        affectedUserIds.add(userId);
-      }
-      for (const userId of settlement.value.firstIngestUserIds) {
-        firstIngestUserIds.add(userId);
-      }
-    }
-
-    await recordFirstIngestSyncRequests(firstIngestUserIds);
-    await enqueueDestinationSyncsForUsers(affectedUserIds);
-
-    if (failedSourceCount > 0) {
-      failures.push(new Error(`${failedSourceCount} calendar source ingestions failed`));
-    }
-    if (failures.length > 0) {
-      throw new AggregateError(failures, "Calendar source ingestion completed with failures");
-    }
-  },
-  cron: "@every_1_minutes",
-  immediate: true,
-  name: "ingest-sources",
-  overrunProtection: false,
-}) satisfies CronOptions;
-
-export { FLEET_PASS_SOURCE_BOUND, ingestOAuthSources, resolveRateLimiter };
-export type { IngestionBatchResult };
+export {
+  ingestCalDAVSources,
+  ingestIcsSources,
+  ingestOAuthSources,
+  ingestSourceCalendars,
+  resolveRateLimiter,
+};
+export type {
+  IngestClaimTelemetry,
+  IngestRunOptions,
+  IngestTrigger,
+  IngestedCalendarOutcome,
+  IngestionBatchResult,
+  SourceCalendarsIngestion,
+};

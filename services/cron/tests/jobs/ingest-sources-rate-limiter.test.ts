@@ -79,7 +79,7 @@ const sourceContext: RateLimiterSourceContext = {
 };
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources") as unknown as Record<string, unknown>;
+  const module = await import("../../src/ingest/ingest-sources") as unknown as Record<string, unknown>;
   expect(typeof module.resolveRateLimiter).toBe("function");
   resolveRateLimiter = module.resolveRateLimiter as ResolveRateLimiter;
 });

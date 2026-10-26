@@ -23,7 +23,7 @@ vi.mock("entrykit", () => ({
 }));
 
 vi.mock("../src/env", () => ({
-  default: { WORKER_JOB_QUEUE_ENABLED: true },
+  default: { INGEST_LOOP_ENABLED: false, WORKER_JOB_QUEUE_ENABLED: true },
 }));
 
 vi.mock("../src/migration-check", () => ({
@@ -34,23 +34,9 @@ vi.mock("../src/migration-check", () => ({
 
 vi.mock("../src/context", () => ({
   database: { name: "fake-database" },
-  inFlightDrainRegistry: {
-    register: (): null => null,
-    settle: (): Promise<void> => Promise.resolve(),
-  },
-  refreshLockRedis: { hmget: (): Promise<null[]> => Promise.resolve([]) },
   shutdownDatabases: (): Promise<void> => Promise.resolve(),
   shutdownRefreshLockRedis: (): void => {
     // Intentionally empty.
-  },
-  shutdownSignalReaderRedis: (): void => {
-    // Intentionally empty.
-  },
-  signalReaderRedis: {
-    blpop: (): Promise<null> => Promise.resolve(null),
-    disconnect: (): void => {
-      // Intentionally empty.
-    },
   },
 }));
 

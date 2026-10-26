@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const CRON_DATABASE_POOL_MAX = 25;
 const OAUTH_SOURCE_COUNT = 400;
@@ -102,13 +102,11 @@ vi.mock("@keeper.sh/sync", () => ({
   }),
 }));
 
-let job: typeof ingestSourcesJob | null = null;
-let passBound = 0;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
-  passBound = module.FLEET_PASS_SOURCE_BOUND;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -117,13 +115,12 @@ beforeEach(() => {
   probe.queries = 0;
 });
 
-describe("per-pass ingest scheduling", () => {
-  it("keeps pooled queries inside the pool while launching a bounded prefix at once", async () => {
-    await job?.callback();
+describe("claimed ingest scheduling", () => {
+  it("keeps pooled queries inside the pool while every claimed calendar launches at once", async () => {
+    await ingestSourceCalendars?.(oauthSources.map(({ calendarId }) => calendarId));
     await settle();
 
-    expect(probe.queries).toBeGreaterThanOrEqual(passBound);
-    expect(probe.queries).toBeLessThan(OAUTH_SOURCE_COUNT);
+    expect(probe.queries).toBeGreaterThanOrEqual(OAUTH_SOURCE_COUNT);
     expect(probe.peakConcurrent).toBeGreaterThan(0);
     expect(probe.peakConcurrent).toBeLessThan(CRON_DATABASE_POOL_MAX);
   });

@@ -56,7 +56,7 @@ const produceShutdownRejection = async (): Promise<unknown> => {
 describe("backoff gate source pins", () => {
   it("keeps every family's gate routed through the infrastructure exemption", () => {
     const source = readFileSync(
-      new URL("../../src/jobs/ingest-sources.ts", import.meta.url),
+      new URL("../../src/ingest/ingest-sources.ts", import.meta.url),
       "utf8",
     );
 

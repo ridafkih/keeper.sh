@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { userSyncRequestsTable } from "@keeper.sh/database/schema";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * A free user's destinations are filtered out of the enqueue unless a sync request is
@@ -248,7 +248,7 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
   enqueueDestinationSyncsForUsers: harness.enqueueDestinationSyncsForUsers,
 }));
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 const syncRequestUserIds = (): unknown[] =>
   harness.state.inserts
@@ -256,8 +256,8 @@ const syncRequestUserIds = (): unknown[] =>
     .map(({ values }) => (values as { userId?: unknown }).userId);
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -269,8 +269,8 @@ beforeEach(() => {
   harness.ingestSource.mockClear();
 });
 
-describe("a newly connected calendar pushes immediately", () => {
-  it("records a sync request for a never-ingested calendar's user before enqueueing", async () => {
+describe("a newly connected calendar is reported for an immediate push", () => {
+  it("reports a never-ingested calendar's user as a first ingest", async () => {
     harness.state.icsRows.push({
       calendarId: "calendar-new",
       ingestFutureRange: "6m",
@@ -281,14 +281,14 @@ describe("a newly connected calendar pushes immediately", () => {
       userId: "user-free",
     });
 
-    await job?.callback();
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
-    expect(syncRequestUserIds()).toEqual(["user-free"]);
-    expect(harness.state.orderedEvents.indexOf("insert"))
-      .toBeLessThan(harness.state.orderedEvents.indexOf("enqueue"));
+    expect(result?.firstIngestUserIds).toEqual(["user-free"]);
+    expect(syncRequestUserIds()).toEqual([]);
   });
 
-  it("records no sync request when every calendar in the pass has ingested before", async () => {
+  it("reports no first ingest when every calendar in the pass has ingested before", async () => {
     harness.state.icsRows.push({
       calendarId: "calendar-established",
       ingestFutureRange: "6m",
@@ -299,30 +299,13 @@ describe("a newly connected calendar pushes immediately", () => {
       userId: "user-free",
     });
 
-    await job?.callback();
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
-    expect(syncRequestUserIds()).toEqual([]);
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalled();
+    expect(result?.firstIngestUserIds).toEqual([]);
   });
 
-  it("still enqueues the pass when recording the request fails", async () => {
-    harness.state.icsRows.push({
-      calendarId: "calendar-new",
-      ingestFutureRange: "6m",
-      ingestHistoricRange: "1m",
-      ingestWindowRecordedAt: null,
-      treatFullDayTimedEventsAsAllDay: false,
-      url: "https://feeds.example.net/new.ics",
-      userId: "user-free",
-    });
-    harness.state.failInserts = true;
-
-    await job?.callback();
-
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalled();
-  });
-
-  it("records a sync request when a second calendar joins established ones", async () => {
+  it("reports a first ingest when a second calendar joins established ones", async () => {
     harness.state.icsRows.push({
       calendarId: "calendar-established",
       ingestFutureRange: "6m",
@@ -341,8 +324,9 @@ describe("a newly connected calendar pushes immediately", () => {
       userId: "user-free",
     });
 
-    await job?.callback();
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
-    expect(syncRequestUserIds()).toEqual(["user-free"]);
+    expect(result?.firstIngestUserIds).toEqual(["user-free"]);
   });
 });

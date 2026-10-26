@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * The persist-time currency probe runs after the queue wait but before the flush
@@ -250,11 +250,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -269,7 +269,7 @@ describe("persist-time preflight and the serial writer slot", () => {
     harness.state.icsRows.push(createIcsRow("calendar-alpha", "user-alpha"));
     harness.state.icsRows.push(createIcsRow("calendar-bravo", "user-bravo"));
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     const { timeline } = harness.state;
     expect(timeline).toContain("flush-entered:calendar-alpha");

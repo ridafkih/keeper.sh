@@ -9,6 +9,7 @@ const emitted: WideEvent[] = [];
 const flagWrites: boolean[] = [];
 let current: WideEvent = { fields: {}, values: {} };
 let accountNeedsReauthentication = false;
+let siblingReading = false;
 
 vi.mock("@/utils/logging", () => ({
   context: (run: () => Promise<unknown>) => run(),
@@ -203,6 +204,7 @@ vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   createDatabase: () => Promise.resolve({}),
   decryptPassword: () => "plaintext",
+  hasSiblingReadSinceLastSuccess: () => Promise.resolve(siblingReading),
 }));
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
@@ -212,12 +214,15 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   }),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const runTick = async (): Promise<void> => {
   emitted.length = 0;
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
 };
 
 describe("an Outlook token revocation whose error body carries a request id containing 404", () => {
@@ -226,6 +231,7 @@ describe("an Outlook token revocation whose error body carries a request id cont
     flagWrites.length = 0;
     current = { fields: {}, values: {} };
     accountNeedsReauthentication = false;
+    siblingReading = false;
     requestId = REQUEST_ID_WITH_NOT_FOUND_SUBSTRING;
   });
 
@@ -259,6 +265,19 @@ describe("an Outlook token revocation whose error body carries a request id cont
     await runTick();
 
     expect(accountNeedsReauthentication).toBe(true);
+  });
+
+  it("leaves the account alone while another calendar on it is still being read", async () => {
+    siblingReading = true;
+
+    const result = await runIngestPass();
+
+    expect(accountNeedsReauthentication).toBe(false);
+    expect(flagWrites).toEqual([]);
+    expect(new Set(result.outcomes.map(({ outcome }) => outcome.kind))).toEqual(
+      new Set(["request-rejected"]),
+    );
+    expect(emitted.some(({ values }) => values["reauth.sibling_reading"] === true)).toBe(true);
   });
 
   it("converges instead of flipping the demand on every tick", async () => {

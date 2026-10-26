@@ -1,9 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, arrayContains, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, arrayContains, asc, eq, inArray } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { calendarsTable, userSubscriptionsTable } from "@keeper.sh/database/schema";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
-import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/jobs/ingest-sources";
+import { calendarsTable } from "@keeper.sh/database/schema";
+import type { ingestOAuthSources as ingestOAuthSourcesFn } from "../../src/ingest/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const capturedPredicates: unknown[] = [];
 const capturedOrderings: unknown[] = [];
@@ -41,7 +41,7 @@ const fakeDatabase = {
 
 let ingestOAuthSources: typeof ingestOAuthSourcesFn = () =>
   Promise.reject(new Error("Module not loaded"));
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 /* ENCRYPTION_KEY set so the CalDAV family does not early-return before its listing. */
 vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
@@ -69,9 +69,9 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
 }));
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
+  const module = await import("../../src/ingest/ingest-sources");
   ({ ingestOAuthSources } = module);
-  job = module.default;
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -79,12 +79,7 @@ beforeEach(() => {
   capturedOrderings.length = 0;
 });
 
-const FLEET_PRIORITY_ORDERING = [
-  sql`coalesce(${calendarsTable.ingestWindowRecordedAt}, '-infinity') - case when coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro' then interval '10 minutes' else interval '0' end asc`,
-  sql`${calendarsTable.ingestWindowRecordedAt} asc nulls first`,
-  desc(sql`coalesce(${userSubscriptionsTable.plan}, 'free') = 'pro'`),
-  asc(calendarsTable.id),
-];
+const CLAIM_ORDERING = [asc(calendarsTable.id)];
 
 const renderOrdering = (ordering: unknown[]): string[] => {
   const dialect = new PgDialect();
@@ -93,18 +88,8 @@ const renderOrdering = (ordering: unknown[]): string[] => {
   );
 };
 
-describe("ingestOAuthSources selection", () => {
-  it("selects every live pull calendar when given no ids", async () => {
-    await ingestOAuthSources();
-
-    expect(capturedPredicates).toHaveLength(1);
-    expect(capturedPredicates[0]).toEqual(and(
-      arrayContains(calendarsTable.capabilities, ["pull"]),
-      eq(calendarsTable.disabled, false),
-    ));
-  });
-
-  it("adds exactly one id filter when given ids", async () => {
+describe("claimed source selection", () => {
+  it("reads only the claimed live pull calendars", async () => {
     await ingestOAuthSources(["cal-1", "cal-2"]);
 
     expect(capturedPredicates).toHaveLength(1);
@@ -115,43 +100,42 @@ describe("ingestOAuthSources selection", () => {
     ));
   });
 
-  it("does not query at all for an empty id list", async () => {
+  it("does not query at all for an empty claim", async () => {
     await ingestOAuthSources([]);
+    await ingestSourceCalendars?.([]);
 
     expect(capturedPredicates).toHaveLength(0);
   });
 
-  it("puts the least recently ingested calendars first, never-ingested ahead of all", async () => {
-    await ingestOAuthSources();
+  it("filters every source family by the claimed ids", async () => {
+    await ingestSourceCalendars?.(["cal-1"]);
 
-    expect(capturedOrderings.map((ordering) => renderOrdering(ordering as unknown[]))).toEqual([
-      renderOrdering(FLEET_PRIORITY_ORDERING),
+    expect(capturedPredicates).toEqual([
+      and(
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+        eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id, ["cal-1"]),
+      ),
+      and(
+        arrayContains(calendarsTable.capabilities, ["pull"]),
+        eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id, ["cal-1"]),
+      ),
+      and(
+        eq(calendarsTable.calendarType, "ical"),
+        eq(calendarsTable.disabled, false),
+        inArray(calendarsTable.id, ["cal-1"]),
+      ),
     ]);
   });
 
-  /*
-   * Pinned as rendered SQL, not AST: without the coalesce, NULL plans sort ahead
-   * of every pro user, inverting the priority for the majority case.
-   */
-  it("renders a null-safe pro ordering", async () => {
-    await ingestOAuthSources();
-
-    const [ordering] = capturedOrderings as [unknown[]];
-    const proTerms = renderOrdering(ordering).filter((term) => term.includes("= 'pro'"));
-
-    expect(proTerms.length).toBeGreaterThan(0);
-    for (const term of proTerms) {
-      expect(term).toContain(`coalesce("user_subscriptions"."plan", 'free') = 'pro'`);
-    }
-  });
-
-  it("orders every source family the same way", async () => {
-    await job?.callback();
+  it("reads every source family in a stable order", async () => {
+    await ingestSourceCalendars?.(["cal-1"]);
 
     expect(capturedOrderings.map((ordering) => renderOrdering(ordering as unknown[]))).toEqual([
-      renderOrdering(FLEET_PRIORITY_ORDERING),
-      renderOrdering(FLEET_PRIORITY_ORDERING),
-      renderOrdering(FLEET_PRIORITY_ORDERING),
+      renderOrdering(CLAIM_ORDERING),
+      renderOrdering(CLAIM_ORDERING),
+      renderOrdering(CLAIM_ORDERING),
     ]);
   });
 });
