@@ -1,6 +1,14 @@
 name: Deploy to ECS
 
 on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       environment:
@@ -26,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     env:
+      ENVIRONMENT: ${{ inputs.environment }}
       CLUSTER: keeper-${{ inputs.environment }}
       VERSION: ${{ inputs.version }}
       REGISTRY: ghcr.io/${{ github.repository_owner }}
@@ -107,3 +116,13 @@ jobs:
               esac
             done
           done < rolled.env
+
+      - name: Record the deployed images
+        run: |
+          set -euo pipefail
+          images=$(jq -n \
+            --arg web "$IMAGE_WEB" --arg api "$IMAGE_API" --arg mcp "$IMAGE_MCP" \
+            --arg worker "$IMAGE_WORKER" --arg cron "$IMAGE_CRON" \
+            '{web: $web, api: $api, mcp: $mcp, worker: $worker, cron: $cron}')
+          aws ssm put-parameter --name "/keeper/$ENVIRONMENT/images" \
+            --type String --overwrite --value "$images" --query Version --output text

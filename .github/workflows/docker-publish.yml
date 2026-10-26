@@ -279,3 +279,41 @@ jobs:
             docker compose pull
             docker compose up -d --build --remove-orphans --wait
             docker image prune -af --filter "until=24h"
+
+  deploy-targets:
+    runs-on: ubuntu-latest
+    needs: merge-core-manifests
+    permissions: {}
+    outputs:
+      environments: ${{ steps.targets.outputs.environments }}
+      version: ${{ steps.targets.outputs.version }}
+    steps:
+      - id: targets
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          ON_PRERELEASE: ${{ vars.DEPLOY_ON_PRERELEASE }}
+          ON_RELEASE: ${{ vars.DEPLOY_ON_RELEASE }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          targets=$ON_RELEASE
+          if [ "$PRERELEASE" = "true" ]; then
+            targets=$ON_PRERELEASE
+          fi
+          echo "environments=$(printf '%s' "${targets:-[]}" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  deploy-ecs:
+    needs: deploy-targets
+    if: needs.deploy-targets.outputs.environments != '[]'
+    strategy:
+      max-parallel: 1
+      matrix:
+        environment: ${{ fromJSON(needs.deploy-targets.outputs.environments) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-ecs.yml
+    with:
+      environment: ${{ matrix.environment }}
+      version: ${{ needs.deploy-targets.outputs.version }}
