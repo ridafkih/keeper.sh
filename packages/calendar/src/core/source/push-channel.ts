@@ -156,12 +156,10 @@ interface PushChannelHealth {
 
 type PushPlanSkipReason =
   | "existing-channel"
-  | "free-plan"
   | "missing-external-calendar-id"
   | "missing-provider-account-id"
   | "needs-reauthentication"
   | "not-pull"
-  | "plan-unresolved"
   | "unsupported-provider";
 
 type CalendarPlanDecision =
@@ -173,8 +171,6 @@ interface PlanPushChannelActionsInput {
   channels: StoredPushChannel[];
   now: Date;
   onCalendarSkipped?: (calendar: EligibleSourceCalendar, reason: PushPlanSkipReason) => void;
-  onPlanError: (userId: string, error: unknown) => void;
-  resolvePlan: (userId: string) => Promise<"free" | "pro">;
   webhookPublicUrl: string | null;
 }
 
@@ -312,7 +308,6 @@ const isRegistrationEligible = (calendar: EligibleSourceCalendar): boolean => {
 const resolveCalendarPlanDecision = (
   calendar: EligibleSourceCalendar,
   hasLiveChannel: boolean,
-  plan: "free" | "pro" | null,
 ): CalendarPlanDecision => {
   if (hasLiveChannel) {
     return { kind: "skip", reason: "existing-channel" };
@@ -339,13 +334,6 @@ const resolveCalendarPlanDecision = (
   if (!scope) {
     return { kind: "skip", reason: "missing-external-calendar-id" };
   }
-  if (plan === null) {
-    return { kind: "skip", reason: "plan-unresolved" };
-  }
-  if (plan === "free") {
-    return { kind: "skip", reason: "free-plan" };
-  }
-
   return { kind: "register", profile, scope };
 };
 
@@ -387,32 +375,6 @@ const isPushChannelGoneError = (error: unknown): boolean =>
   && "channelGone" in error
   && (error as { channelGone: unknown }).channelGone === true;
 
-const resolvePlansByUserId = async (
-  userIds: string[],
-  resolvePlan: (userId: string) => Promise<"free" | "pro">,
-  onPlanError: (userId: string, error: unknown) => void,
-): Promise<Map<string, "free" | "pro">> => {
-  const uniqueUserIds = [...new Set(userIds)];
-  const settlements = await Promise.allSettled(
-    uniqueUserIds.map((userId) => resolvePlan(userId)),
-  );
-
-  const plansByUserId = new Map<string, "free" | "pro">();
-  for (const [index, settlement] of settlements.entries()) {
-    const userId = uniqueUserIds[index] ?? "";
-    if (settlement.status === "rejected") {
-      onPlanError(userId, new Error(
-        `Unable to resolve user plan for push channel registration: ${userId}`,
-        { cause: settlement.reason },
-      ));
-      continue;
-    }
-    plansByUserId.set(userId, settlement.value);
-  }
-
-  return plansByUserId;
-};
-
 const buildEligibleCalendarScope = (
   calendar: EligibleSourceCalendar | undefined,
 ): PushChannelScope | null => {
@@ -442,13 +404,12 @@ const buildChannelAction = (
 const planStoredChannelAction = (
   channel: StoredPushChannel,
   calendar: EligibleSourceCalendar | undefined,
-  plan: "free" | "pro",
   now: Date,
 ): PushChannelAction | null => {
   const profile = resolvePushProviderProfile(channel.provider);
   const scope = buildEligibleCalendarScope(calendar);
 
-  if (!profile || plan !== "pro" || scope === null) {
+  if (!profile || scope === null) {
     return buildChannelAction(
       channel,
       "deregister",
@@ -484,9 +445,9 @@ const planStoredChannelAction = (
   return buildChannelAction(channel, "renew", scope, profile.renewalMode, requestedExpiresAt);
 };
 
-const planPushChannelActions = async (
+const planPushChannelActions = (
   input: PlanPushChannelActionsInput,
-): Promise<PushChannelAction[]> => {
+): PushChannelAction[] => {
   if (!input.webhookPublicUrl) {
     return [];
   }
@@ -502,30 +463,12 @@ const planPushChannelActions = async (
       .filter((channel) => channel.calendarId !== null)
       .map((channel) => [channel.calendarId, channel]),
   );
-  const plansByUserId = await resolvePlansByUserId(
-    [
-      ...liveChannels.map((channel) => channel.userId),
-      ...input.calendars.map((calendar) => calendar.userId),
-    ],
-    input.resolvePlan,
-    input.onPlanError,
-  );
-
   const actions: PushChannelAction[] = [];
 
-  const plannableChannels = liveChannels.flatMap((channel) => {
-    const plan = plansByUserId.get(channel.userId);
-    if (!plan) {
-      return [];
-    }
-    return [{ channel, plan }];
-  });
-
-  for (const { channel, plan } of plannableChannels) {
+  for (const channel of liveChannels) {
     const action = planStoredChannelAction(
       channel,
       calendarsById.get(channel.calendarId ?? ""),
-      plan,
       input.now,
     );
     if (action) {
@@ -537,7 +480,6 @@ const planPushChannelActions = async (
     const decision = resolveCalendarPlanDecision(
       calendar,
       liveChannelsByCalendarId.has(calendar.calendarId),
-      plansByUserId.get(calendar.userId) ?? null,
     );
 
     if (decision.kind === "skip") {

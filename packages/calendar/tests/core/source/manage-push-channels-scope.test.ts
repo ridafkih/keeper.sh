@@ -42,7 +42,6 @@ const scopeOf = async (onlyAccountId?: string): Promise<unknown> => {
     recordError: (error) => {
       observed.push(error);
     },
-    resolvePlan: () => Promise.resolve("pro"),
     webhookPublicUrl: "https://example.test",
   }).selectEligibleCalendars();
 

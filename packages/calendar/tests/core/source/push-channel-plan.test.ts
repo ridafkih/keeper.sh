@@ -51,44 +51,29 @@ const makeChannel = (
   ...overrides,
 });
 
-const alwaysPro = (): Promise<"pro"> => Promise.resolve("pro");
-const alwaysFree = (): Promise<"free"> => Promise.resolve("free");
-
-const discardedPlanErrors: unknown[] = [];
-const discardPlanError = (_userId: string, error: unknown): void => {
-  discardedPlanErrors.push(error);
-};
-
 const plan = (
   input: {
     calendars?: EligibleSourceCalendar[];
     channels?: StoredPushChannel[];
     now?: Date;
-    onPlanError?: (userId: string, error: unknown) => void;
-    resolvePlan?: (userId: string) => Promise<"free" | "pro">;
     webhookPublicUrl?: string | null;
   } = {},
-): Promise<PushChannelAction[]> => planPushChannelActions({
+): Promise<PushChannelAction[]> => Promise.resolve(planPushChannelActions({
   calendars: [makeCalendar()],
   channels: [],
   now: NOW,
-  onPlanError: discardPlanError,
-  resolvePlan: alwaysPro,
   webhookPublicUrl: WEBHOOK_URL,
   ...input,
-});
+}));
 
 describe("planPushChannelActions eligibility", () => {
   it("plans nothing when no public webhook url is configured", async () => {
     await expect(plan({ webhookPublicUrl: null })).resolves.toEqual([]);
   });
 
-  it("registers for pro users and skips free users", async () => {
-    const proActions = await plan({ resolvePlan: alwaysPro });
-    expect(proActions.map((action) => action.type)).toEqual(["register"]);
-
-    const freeActions = await plan({ resolvePlan: alwaysFree });
-    expect(freeActions).toEqual([]);
+  it("registers whatever plan the owner is on", async () => {
+    const actions = await plan();
+    expect(actions.map((action) => action.type)).toEqual(["register"]);
   });
 
   it("skips accounts that need reauthentication", async () => {
@@ -160,70 +145,6 @@ describe("planPushChannelActions eligibility", () => {
     }
   });
 
-  it("reports rather than defaulting when a plan cannot be resolved", async () => {
-    const planErrors: { message: string; userId: string }[] = [];
-
-    const actions = await plan({
-      onPlanError: (userId, error) => {
-        planErrors.push({ message: String((error as Error).message), userId });
-      },
-      resolvePlan: () => Promise.reject(new Error("connection reset")),
-    });
-
-    expect(actions).toEqual([]);
-    expect(planErrors).toHaveLength(1);
-    expect(planErrors[0]?.userId).toBe("user-1");
-    expect(planErrors[0]?.message).toMatch(/Unable to resolve user plan/);
-  });
-
-  it("confines an unresolvable plan to that user and still plans for everyone else", async () => {
-    const planErrors: string[] = [];
-
-    const actions = await plan({
-      calendars: [
-        makeCalendar({
-          calendarId: "cal-broken",
-          externalCalendarId: "e-broken",
-          userId: "user-broken",
-        }),
-        makeCalendar({
-          calendarId: "cal-healthy",
-          externalCalendarId: "e-healthy",
-          userId: "user-healthy",
-        }),
-        makeCalendar({
-          calendarId: "cal-renew",
-          externalCalendarId: "e-renew",
-          userId: "user-healthy",
-        }),
-      ],
-      channels: [
-        makeChannel({
-          calendarId: "cal-renew",
-          expiresAt: new Date(NOW.getTime() + HOUR_MS),
-          id: "channel-renew",
-          userId: "user-healthy",
-        }),
-      ],
-      onPlanError: (userId) => {
-        planErrors.push(userId);
-      },
-      resolvePlan: (userId) => {
-        if (userId === "user-broken") {
-          return Promise.reject(new Error("connection reset"));
-        }
-        return Promise.resolve("pro");
-      },
-    });
-
-    expect(planErrors).toEqual(["user-broken"]);
-    expect(actions.map((action) => action.type).toSorted()).toEqual(["register", "renew"]);
-    expect(actions.some((action) => action.scope.kind === "calendar"
-      && action.scope.calendarId === "cal-broken")).toBe(false);
-  });
-});
-
-describe("planPushChannelActions registration recovery", () => {
   it("re-registers a live row that never reached activation", async () => {
     const neverActivated = makeChannel({
       expiresAt: null,

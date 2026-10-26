@@ -9,7 +9,7 @@ import { widelog } from "@/utils/logging";
 import { createRegistrarContext } from "@/utils/push-channel-registrar";
 
 const createDefaultDependencies = async (): Promise<ManagePushChannelsDependencies> => {
-  const { database, premiumService, refreshLockRedis, refreshLockStore } = await import(
+  const { database, refreshLockRedis, refreshLockStore } = await import(
     "@/context"
   );
   const { default: environment } = await import("@/env");
@@ -25,7 +25,6 @@ const createDefaultDependencies = async (): Promise<ManagePushChannelsDependenci
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: true, slug });
     },
-    resolvePlan: (userId) => premiumService.getUserPlan(userId),
     webhookPublicUrl: environment.WEBHOOK_PUBLIC_URL ?? null,
   });
 };

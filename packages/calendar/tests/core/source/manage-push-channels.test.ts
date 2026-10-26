@@ -136,7 +136,6 @@ const makeDependencies = (
     recordError: vi.fn(),
     registrar,
     releaseLock: vi.fn(() => Promise.resolve()),
-    resolvePlan: vi.fn(() => Promise.resolve("pro" as const)),
     resolveRegistrar: vi.fn(() => registrar),
     selectChannels: vi.fn(() => Promise.resolve([])),
     selectEligibleCalendars: vi.fn(() => Promise.resolve([makeCalendar()])),
@@ -171,7 +170,6 @@ describe("runManagePushChannels when push is unconfigured", () => {
     expect(dependencies.tryAcquireLock).not.toHaveBeenCalled();
     expect(dependencies.selectEligibleCalendars).not.toHaveBeenCalled();
     expect(dependencies.selectChannels).not.toHaveBeenCalled();
-    expect(dependencies.resolvePlan).not.toHaveBeenCalled();
     expect(dependencies.resolveRegistrar).not.toHaveBeenCalled();
     expect(dependencies.registrar.register).not.toHaveBeenCalled();
     expect(dependencies.registrar.renew).not.toHaveBeenCalled();
@@ -503,11 +501,11 @@ describe("runManagePushChannels renewal", () => {
 });
 
 describe("runManagePushChannels teardown", () => {
-  it("tears down a channel whose user downgraded to free", async () => {
+  it("tears down a channel whose calendar is no longer eligible", async () => {
     const callLog: string[] = [];
     const dependencies = makeDependencies(callLog, {
-      resolvePlan: vi.fn(() => Promise.resolve("free" as const)),
       selectChannels: vi.fn(() => Promise.resolve([makeChannel()])),
+      selectEligibleCalendars: vi.fn(() => Promise.resolve([])),
     });
 
     await runManagePushChannels(dependencies);
@@ -518,10 +516,9 @@ describe("runManagePushChannels teardown", () => {
     expect(dependencies.registrar.register).not.toHaveBeenCalled();
   });
 
-  it("counts the calendars it withheld from free users", async () => {
+  it("registers every eligible calendar without consulting a plan", async () => {
     const callLog: string[] = [];
     const dependencies = makeDependencies(callLog, {
-      resolvePlan: vi.fn(() => Promise.resolve("free" as const)),
       selectEligibleCalendars: vi.fn(() => Promise.resolve([
         makeCalendar({ calendarId: "cal-1", externalCalendarId: "external-1" }),
         makeCalendar({ calendarId: "cal-2", externalCalendarId: "external-2" }),
@@ -530,8 +527,7 @@ describe("runManagePushChannels teardown", () => {
 
     await runManagePushChannels(dependencies);
 
-    expect(observedFields(dependencies.observe)["push_channel.skipped.free_plan_count"]).toBe(2);
-    expect(dependencies.registrar.register).not.toHaveBeenCalled();
+    expect(dependencies.registrar.register).toHaveBeenCalledTimes(2);
   });
 
   it("registers a Google calendar whose account carries no provider account id", async () => {
@@ -614,8 +610,8 @@ describe("runManagePushChannels teardown", () => {
     });
     const dependencies = makeDependencies(callLog, {
       readChannel: vi.fn(() => Promise.resolve(orphan)),
-      resolvePlan: vi.fn(() => Promise.resolve("free" as const)),
       selectChannels: vi.fn(() => Promise.resolve([orphan])),
+      selectEligibleCalendars: vi.fn(() => Promise.resolve([])),
     });
 
     await runManagePushChannels(dependencies);
@@ -877,32 +873,4 @@ describe("runManagePushChannels error surfacing", () => {
     );
   });
 
-  it("reports an unresolvable plan without abandoning the rest of the tick", async () => {
-    const callLog: string[] = [];
-    const dependencies = makeDependencies(callLog, {
-      resolvePlan: vi.fn((userId: string) => {
-        if (userId === "user-broken") {
-          return Promise.reject(new Error("connection reset"));
-        }
-        return Promise.resolve("pro" as const);
-      }),
-      selectEligibleCalendars: vi.fn(() => Promise.resolve([
-        makeCalendar({
-          calendarId: "cal-broken",
-          externalCalendarId: "external-broken",
-          userId: "user-broken",
-        }),
-        makeCalendar({ calendarId: "cal-healthy", externalCalendarId: "external-healthy" }),
-      ])),
-    });
-
-    await runManagePushChannels(dependencies);
-
-    expect(dependencies.registrar.register).toHaveBeenCalledOnce();
-    expect(dependencies.recordError).toHaveBeenCalledWith(
-      expect.any(Error),
-      "webhook-plan-unresolvable",
-    );
-    expect(observedFields(dependencies.observe)["push_channel.plan_error_count"]).toBe(1);
-  });
 });

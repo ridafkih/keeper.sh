@@ -18,7 +18,6 @@ import type {
   SourcePushRegistrar,
   StoredPushChannel,
 } from "./push-channel";
-import type { Plan } from "@keeper.sh/data-schemas";
 import type { calendarPushChannelsTable } from "@keeper.sh/database/schema";
 
 type NewPushChannel = typeof calendarPushChannelsTable.$inferInsert;
@@ -50,7 +49,6 @@ interface ManagePushChannelsDependencies {
   readChannel: (channelId: string) => Promise<StoredPushChannel | null>;
   recordError: (error: unknown, slug: string) => void;
   releaseLock: (key: string) => Promise<void>;
-  resolvePlan: (userId: string) => Promise<Plan>;
   resolveRegistrar: (provider: string) => SourcePushRegistrar | null;
   selectChannels: () => Promise<StoredPushChannel[]>;
   selectEligibleCalendars: () => Promise<EligibleSourceCalendar[]>;
@@ -61,12 +59,10 @@ interface ManagePushChannelsDependencies {
 
 const PUSH_PLAN_SKIP_REASONS = [
   "existing-channel",
-  "free-plan",
   "missing-external-calendar-id",
   "missing-provider-account-id",
   "needs-reauthentication",
   "not-pull",
-  "plan-unresolved",
   "unsupported-provider",
 ] as const satisfies readonly PushPlanSkipReason[];
 
@@ -77,7 +73,6 @@ interface ManageCounters {
   failed: number;
   lockContention: number;
   orphanSuspected: number;
-  planErrors: number;
   registered: number;
   renewed: number;
   skipped: Record<PushPlanSkipReason, number>;
@@ -85,12 +80,10 @@ interface ManageCounters {
 
 const createSkipCounters = (): Record<PushPlanSkipReason, number> => ({
   "existing-channel": 0,
-  "free-plan": 0,
   "missing-external-calendar-id": 0,
   "missing-provider-account-id": 0,
   "needs-reauthentication": 0,
   "not-pull": 0,
-  "plan-unresolved": 0,
   "unsupported-provider": 0,
 });
 
@@ -111,7 +104,6 @@ const createCounters = (): ManageCounters => ({
   failed: 0,
   lockContention: 0,
   orphanSuspected: 0,
-  planErrors: 0,
   registered: 0,
   renewed: 0,
   skipped: createSkipCounters(),
@@ -675,18 +667,13 @@ const runManagePushChannels = async (
 
     observeInventory(calendars, channels, dependencies);
 
-    const actions = await planPushChannelActions({
+    const actions = planPushChannelActions({
       calendars,
       channels,
       now: dependencies.now(),
       onCalendarSkipped: (_calendar, reason) => {
         counters.skipped[reason] = (counters.skipped[reason] ?? 0) + 1;
       },
-      onPlanError: (_userId, error) => {
-        counters.planErrors += 1;
-        dependencies.recordError(error, "webhook-plan-unresolvable");
-      },
-      resolvePlan: dependencies.resolvePlan,
       webhookPublicUrl: dependencies.webhookPublicUrl,
     });
 
@@ -711,7 +698,6 @@ const runManagePushChannels = async (
       "push_channel.failed_count": counters.failed,
       "push_channel.lock_contention": counters.lockContention,
       "push_channel.orphan_suspected": counters.orphanSuspected,
-      "push_channel.plan_error_count": counters.planErrors,
       "push_channel.registered_count": counters.registered,
       "push_channel.renewed_count": counters.renewed,
       ...toSkipFields(counters.skipped),

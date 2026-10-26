@@ -15,7 +15,7 @@ const REGISTRATION_FAILED_SLUG = "webhook-registration-failed";
  * connection: the sweep remains the safety net and will pick the account up regardless.
  */
 const registerAccountPushChannels = async (accountId: string): Promise<void> => {
-  const { database, env, premiumService, redis, refreshLockStore, webhookConfig } = await import(
+  const { database, env, redis, refreshLockStore, webhookConfig } = await import(
     "@/context",
   );
 
@@ -44,7 +44,6 @@ const registerAccountPushChannels = async (accountId: string): Promise<void> => 
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: true, slug });
     },
-    resolvePlan: (userId) => premiumService.getUserPlan(userId),
     webhookPublicUrl: env.WEBHOOK_PUBLIC_URL ?? null,
   });
 

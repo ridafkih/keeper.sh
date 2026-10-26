@@ -5,7 +5,6 @@ import {
   calendarPushChannelsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import type { Plan } from "@keeper.sh/data-schemas";
 import { buildUnknownChannelKey } from "./push-keys";
 import { generatePushSecret } from "./push-secret";
 import { resolvePushRegistrar } from "./push-registry";
@@ -37,7 +36,6 @@ interface ManagePushChannelsConfig {
   observe: (fields: Record<string, unknown>) => void;
   onlyAccountId?: string;
   recordError: (error: unknown, slug: string) => void;
-  resolvePlan: (userId: string) => Promise<Plan>;
   webhookPublicUrl: string | null;
 }
 
@@ -103,7 +101,6 @@ const createManagePushChannelsDependencies = (
     },
     recordError: config.recordError,
     releaseLock: (key) => config.locks.release(key),
-    resolvePlan: config.resolvePlan,
     resolveRegistrar: resolvePushRegistrar,
     selectChannels: async () => {
       const rows = await database
