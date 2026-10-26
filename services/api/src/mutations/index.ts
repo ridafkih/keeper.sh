@@ -12,7 +12,7 @@ import type {
   RsvpStatus,
 } from "@/types";
 import { createCoordinatedRefresher } from "@keeper.sh/calendar";
-import type { RefreshLockStore } from "@keeper.sh/calendar";
+import type { RedisRateLimiter, RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import type { EventSource } from "./resolve-credentials";
 import { resolveSyncedEventWriteError } from "./synced-event-write";
@@ -49,6 +49,7 @@ interface MutationDependencies {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
+  googleRateLimiter?: RedisRateLimiter | null;
   onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
@@ -116,7 +117,12 @@ const createEventViaOAuth = async (
   );
 
   if (credentials.provider === "google") {
-    const result = await createGoogleEvent(accessToken, credentials.externalCalendarId, input);
+    const result = await createGoogleEvent(
+      accessToken,
+      credentials.externalCalendarId,
+      input,
+      deps.googleRateLimiter,
+    );
     if (!result.success) {
       return { success: false, error: result.error ?? "Google create failed." };
     }
@@ -240,7 +246,13 @@ const dispatchUpdateEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return updateGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid, updates);
+      return updateGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        reference.sourceEventUid,
+        updates,
+        deps.googleRateLimiter,
+      );
     }
 
     if (credentials.provider === "outlook") {
@@ -439,7 +451,12 @@ const dispatchDeleteEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return deleteGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid);
+      return deleteGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        reference.sourceEventUid,
+        deps.googleRateLimiter,
+      );
     }
 
     if (credentials.provider === "outlook") {
@@ -549,6 +566,7 @@ const rsvpEventMutation = async (
         { sourceEventId, sourceEventUid },
         status,
         credentials.email,
+        deps.googleRateLimiter,
       );
     }
 
@@ -601,7 +619,13 @@ const fetchOAuthPendingInvites = async (
   );
 
   if (credentials.provider === "google") {
-    const providerInvites = await getPendingGoogleInvites(accessToken, credentials.externalCalendarId, from, to);
+    const providerInvites = await getPendingGoogleInvites(
+      accessToken,
+      credentials.externalCalendarId,
+      from,
+      to,
+      deps.googleRateLimiter,
+    );
     return providerInvites.map((invite) => ({
       ...invite,
       calendarId: credentials.calendarId,

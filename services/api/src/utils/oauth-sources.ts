@@ -726,7 +726,10 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
   listCalendars: async (provider, accessToken, ownerEmail) => {
     try {
       if (provider === "google") {
-        const calendars = await listGoogleCalendars(accessToken);
+        const { googleInteractiveRateLimiter } = await import("@/context");
+        const calendars = await listGoogleCalendars(accessToken, {
+          rateLimiter: googleInteractiveRateLimiter,
+        });
         return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
       }
       if (provider === "outlook") {

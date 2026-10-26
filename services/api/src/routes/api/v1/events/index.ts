@@ -7,9 +7,10 @@ import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventCreateBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
+import { database, oauthProviders, refreshLockStore, encryptionKey, googleInteractiveRateLimiter } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
+  googleRateLimiter: googleInteractiveRateLimiter,
   oauthTokenRefresher: oauthProviders,
   refreshLockStore,
   encryptionKey,

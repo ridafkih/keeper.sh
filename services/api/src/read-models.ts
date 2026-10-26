@@ -12,13 +12,14 @@ import {
   getPendingInvitesMutation,
 } from "./mutations";
 import type { OAuthTokenRefresher } from "./mutations";
-import type { RefreshLockStore } from "@keeper.sh/calendar";
+import type { RedisRateLimiter, RefreshLockStore } from "@keeper.sh/calendar";
 import type { KeeperApi, KeeperDatabase } from "./types";
 
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
+  googleRateLimiter?: RedisRateLimiter | null;
   onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
@@ -28,6 +29,7 @@ const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): 
     oauthTokenRefresher: options?.oauthTokenRefresher,
     refreshLockStore: options?.refreshLockStore,
     encryptionKey: options?.encryptionKey,
+    googleRateLimiter: options?.googleRateLimiter,
     onSourceEventChanged: options?.onSourceEventChanged,
   };
 

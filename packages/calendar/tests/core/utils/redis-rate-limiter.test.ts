@@ -4,6 +4,8 @@ import {
 } from "@keeper.sh/constants";
 import { describe, expect, it, vi } from "vitest";
 import {
+  GoogleProjectBudgetExhaustedError,
+  createGoogleInteractiveRateLimiter,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
   resolveGoogleProjectRequestsPerMinute,
@@ -105,7 +107,7 @@ describe("withGoogleProjectBudget", () => {
     expect(projectCall?.at(5)).toBe("50");
   });
 
-  it("caps the project at Google's published per-minute limit by default", async () => {
+  it("leaves background work 90% of Google's published per-minute limit by default", async () => {
     const redis = grantingRedis();
 
     await withGoogleProjectBudget(
@@ -114,11 +116,11 @@ describe("withGoogleProjectBudget", () => {
     ).acquire(1);
 
     expect(evaluatedLimit(redis, "ratelimit:google:project")).toBe(
-      GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
+      GOOGLE_PROJECT_REQUESTS_PER_MINUTE * 0.9,
     );
   });
 
-  it("takes a configured project limit", async () => {
+  it("leaves background work 90% of a configured project limit", async () => {
     const redis = grantingRedis();
 
     await withGoogleProjectBudget(
@@ -127,7 +129,7 @@ describe("withGoogleProjectBudget", () => {
       2500,
     ).acquire(1);
 
-    expect(evaluatedLimit(redis, "ratelimit:google:project")).toBe(2500);
+    expect(evaluatedLimit(redis, "ratelimit:google:project")).toBe(2250);
   });
 
   it("leaves only the per-user limit when the project limit is set to zero", async () => {
@@ -156,6 +158,64 @@ describe("withGoogleProjectBudget", () => {
     expect(vi.mocked(redis.eval).mock.calls.map((call) => call.at(2))).not.toContain(
       "ratelimit:google:project",
     );
+  });
+});
+
+describe("createGoogleInteractiveRateLimiter", () => {
+  const grantingRedis = () => ({ eval: vi.fn(() => Promise.resolve([0, 0])) });
+
+  it("spends from the same project window at the full project limit", async () => {
+    const redis = grantingRedis();
+
+    await createGoogleInteractiveRateLimiter(redis)?.acquire(1);
+
+    const [call] = vi.mocked(redis.eval).mock.calls;
+    expect(call?.at(2)).toBe("ratelimit:google:project");
+    expect(Number(call?.at(6))).toBe(GOOGLE_PROJECT_REQUESTS_PER_MINUTE);
+  });
+
+  it("never joins the queue background waiters park in", async () => {
+    let calls = 0;
+    const redis = {
+      eval: vi.fn((script: string) => {
+        calls += 1;
+        expect(script).not.toContain(":queue");
+        if (calls < 3) {
+          return Promise.resolve([100, 10_000]);
+        }
+        return Promise.resolve([0, 9999]);
+      }),
+    };
+
+    await createGoogleInteractiveRateLimiter(redis)?.acquire(1);
+
+    expect(redis.eval).toHaveBeenCalledTimes(3);
+    for (const call of vi.mocked(redis.eval).mock.calls) {
+      expect(call).toHaveLength(7);
+    }
+  });
+
+  it("gives up with a quota error once its wait runs out", async () => {
+    const redis = { eval: vi.fn(() => Promise.resolve([60_000, 10_000])) };
+    const limiter = createGoogleInteractiveRateLimiter(redis, GOOGLE_PROJECT_REQUESTS_PER_MINUTE, {
+      maxWaitMs: 50,
+    });
+
+    await expect(limiter?.acquire(1)).rejects.toBeInstanceOf(GoogleProjectBudgetExhaustedError);
+  });
+
+  it("passes on the caller's own abort instead of reporting quota", async () => {
+    const redis = { eval: vi.fn(() => Promise.resolve([60_000, 10_000])) };
+    const controller = new AbortController();
+    const result = createGoogleInteractiveRateLimiter(redis)?.acquire(1, controller.signal);
+
+    controller.abort(new Error("request closed"));
+
+    await expect(result).rejects.toThrow("request closed");
+  });
+
+  it("is absent when the project limit is lifted", () => {
+    expect(createGoogleInteractiveRateLimiter(grantingRedis(), 0)).toBeNull();
   });
 });
 

@@ -9,6 +9,7 @@ import { createPremiumService } from "@keeper.sh/premium";
 import {
   createOAuthProviders,
   buildOAuthConfigs,
+  createGoogleInteractiveRateLimiter,
   createSyncAggregateRuntime,
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
@@ -53,6 +54,10 @@ const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
   },
 });
 const refreshLockStore = createRedisRefreshLockStore(redis);
+const googleInteractiveRateLimiter = createGoogleInteractiveRateLimiter(
+  redis,
+  env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
+);
 
 const parseTrustedOrigins = (origins?: string): string[] => {
   if (!origins) {
@@ -187,6 +192,7 @@ export {
   premiumService,
   oauthProviders,
   refreshLockStore,
+  googleInteractiveRateLimiter,
   resend,
   feedbackEmail,
   baseUrl,

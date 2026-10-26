@@ -134,7 +134,7 @@ export {
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
-export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, resolveGoogleProjectRequestsPerMinute, withGoogleProjectBudget, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, createGoogleInteractiveRateLimiter, GoogleProjectBudgetExhaustedError, resolveGoogleProjectRequestsPerMinute, withGoogleProjectBudget, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";

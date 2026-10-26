@@ -54,7 +54,6 @@ const REDISCOVER_BATCH_LIMIT = 200;
 const REDISCOVER_LOCK_TTL_SECONDS = 120;
 const REDISCOVER_LOCK_KEY_PREFIX = "calendar-rediscover:";
 const GOOGLE_REQUESTS_PER_MINUTE = 500;
-const GOOGLE_CALENDAR_LIST_REQUEST_SLOTS = 1;
 const HOUR_MS = 60 * 60 * 1000;
 const PRO_STALENESS_MS = 6 * HOUR_MS;
 const FREE_STALENESS_MS = 24 * HOUR_MS;
@@ -176,9 +175,8 @@ const discoverOAuthCalendars = async (
       ),
       env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
     );
-    await rateLimiter.acquire(GOOGLE_CALENDAR_LIST_REQUEST_SLOTS, signal);
     return toDiscoveredGoogleCalendars(
-      await listGoogleCalendars(tokenState.accessToken, { signal }),
+      await listGoogleCalendars(tokenState.accessToken, { rateLimiter, signal }),
     );
   }
 

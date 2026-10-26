@@ -5,6 +5,7 @@ import {
 import type { GoogleCalendarListEntry } from "../types";
 import { GOOGLE_CALENDAR_LIST_URL } from "../../shared/api";
 import { isSimpleAuthError } from "../../shared/errors";
+import type { RedisRateLimiter } from "../../../../core/utils/redis-rate-limiter";
 
 class CalendarListError extends Error {
   public readonly status: number;
@@ -39,9 +40,13 @@ interface CalendarListPage {
 
 const fetchCalendarPage = async (
   accessToken: string,
-  signal: AbortSignal | undefined,
+  options: ListUserCalendarsOptions | undefined,
   pageToken?: string,
 ): Promise<CalendarListPage> => {
+  const signal = options?.signal;
+  if (options?.rateLimiter) {
+    await options.rateLimiter.acquire(1, signal);
+  }
   const url = new URL(GOOGLE_CALENDAR_LIST_URL);
   url.searchParams.set("minAccessRole", "reader");
   if (pageToken) {
@@ -87,6 +92,7 @@ const fetchCalendarPage = async (
 
 interface ListUserCalendarsOptions {
   onInvalidEntries?: (count: number) => void;
+  rateLimiter?: RedisRateLimiter | null;
   signal?: AbortSignal;
 }
 
@@ -98,13 +104,13 @@ const listUserCalendars = async (
   const calendars: GoogleCalendarListEntry[] = [];
   let invalidEntryCount = 0;
 
-  let response = await fetchCalendarPage(accessToken, signal);
+  let response = await fetchCalendarPage(accessToken, options);
   calendars.push(...response.items);
   invalidEntryCount += response.invalidEntryCount;
 
   while (response.nextPageToken) {
     signal?.throwIfAborted();
-    response = await fetchCalendarPage(accessToken, signal, response.nextPageToken);
+    response = await fetchCalendarPage(accessToken, options, response.nextPageToken);
     calendars.push(...response.items);
     invalidEntryCount += response.invalidEntryCount;
   }

@@ -115,7 +115,7 @@ describe("resolveRateLimiter", () => {
       (call) => call.at(2) === "ratelimit:google:project",
     );
     expect(projectCall?.at(5)).toBe("3");
-    expect(projectCall?.at(6)).toBe("10000");
+    expect(projectCall?.at(6)).toBe("9000");
   });
 
   it("returns a limiter-shaped adapter over the outlook semaphore keyed by accountId", () => {

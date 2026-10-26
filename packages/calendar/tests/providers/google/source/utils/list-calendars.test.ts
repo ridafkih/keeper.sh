@@ -123,4 +123,28 @@ describe("listUserCalendars abort support", () => {
 
     await expect(pending).rejects.toBe(timeoutError);
   });
+
+  it("charges the rate limiter once for every page it requests", async () => {
+    const pages = [
+      { items: [calendarEntry({ id: "page-1" })], kind: "calendar#calendarList", nextPageToken: "next" },
+      { items: [calendarEntry({ id: "page-2" })], kind: "calendar#calendarList" },
+    ];
+    const order: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(() => {
+      order.push("fetch");
+      return Promise.resolve(Response.json(pages.shift()));
+    }));
+    const rateLimiter = {
+      acquire: vi.fn((_count: number) => {
+        order.push("acquire");
+        return Promise.resolve();
+      }),
+    };
+
+    const calendars = await listUserCalendars("access-token", { rateLimiter });
+
+    expect(calendars.map((calendar) => calendar.id)).toEqual(["page-1", "page-2"]);
+    expect(order).toEqual(["acquire", "fetch", "acquire", "fetch"]);
+    expect(rateLimiter.acquire.mock.calls.map(([count]) => count)).toEqual([1, 1]);
+  });
 });

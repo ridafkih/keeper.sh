@@ -115,6 +115,7 @@ beforeAll(async () => {
 
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
+    googleInteractiveRateLimiter: null,
     database: {
       insert: () => {
         throw new Error("global database.insert should not be used");

@@ -16,10 +16,12 @@ const GET = withWideEvent(
       isCalendarListError: (error): error is CalendarListError =>
         error instanceof CalendarListError,
       listCalendars: async (accessToken) => {
+        const { googleInteractiveRateLimiter } = await import("@/context");
         const calendars = await listUserCalendars(accessToken, {
           onInvalidEntries: (count) => {
             widelog.set("provider.calendar_entries_invalid", count);
           },
+          rateLimiter: googleInteractiveRateLimiter,
         });
         return calendars.map((calendar) => ({
           id: calendar.id,
