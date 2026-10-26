@@ -48,7 +48,7 @@ vi.mock("../../src/context", () => ({
   flushDrainRegistry: { register: (): null => null },
   database: { select: () => ({}), update: () => ({}) },
   premiumService: { getUserPlan: () => Promise.resolve("pro") },
-  refreshLockRedis: { eval: () => Promise.resolve(null), get: () => Promise.resolve(null) },
+  refreshLockRedis: { eval: () => Promise.resolve([0, 0]), get: () => Promise.resolve(null) },
   refreshLockStore: { release: () => Promise.resolve(), tryAcquire: () => Promise.resolve(true) },
 }));
 vi.mock("../../src/utils/logging", () => ({
