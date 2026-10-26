@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  FULL_POLL_INTERVAL_MS,
-  PUSH_HEALTHY_POLL_FLOOR_MS,
-  resolveIngestPollFloorMs,
+  isIngestPushHealthy,
   resolvePushChannelHealth,
   type PushChannelState,
   type StoredPushChannel,
@@ -36,14 +34,13 @@ const makeHealthyChannel = (
   ...overrides,
 });
 
-const floorFor = (
+const healthyFor = (
   channel: StoredPushChannel | null,
-  overrides: { needsReauthentication?: boolean; plan?: "free" | "pro" } = {},
-): number => resolveIngestPollFloorMs({
+  overrides: { needsReauthentication?: boolean } = {},
+): boolean => isIngestPushHealthy({
   channel,
   needsReauthentication: overrides.needsReauthentication ?? false,
   now: NOW,
-  plan: overrides.plan ?? "pro",
 });
 
 describe("resolvePushChannelHealth", () => {
@@ -71,122 +68,62 @@ describe("resolvePushChannelHealth", () => {
   });
 });
 
-describe("resolveIngestPollFloorMs", () => {
-  it("falls back to the full poll interval when there is no channel", () => {
-    expect(floorFor(null)).toBe(FULL_POLL_INTERVAL_MS);
+describe("isIngestPushHealthy", () => {
+  it("is unhealthy without a channel", () => {
+    expect(healthyFor(null)).toBe(false);
   });
 
-  it("falls back for a registering row with a null expiry", () => {
-    expect(floorFor(makeHealthyChannel({
+  it("is unhealthy for a registering row with a null expiry", () => {
+    expect(healthyFor(makeHealthyChannel({
       expiresAt: null,
       state: "registering",
       verifiedAt: null,
-    }))).toBe(FULL_POLL_INTERVAL_MS);
+    }))).toBe(false);
   });
 
-  it("falls back when registration succeeded but nothing was ever delivered", () => {
-    expect(floorFor(makeHealthyChannel({ verifiedAt: null }))).toBe(FULL_POLL_INTERVAL_MS);
+  it("is unhealthy when registration succeeded but nothing was ever delivered", () => {
+    expect(healthyFor(makeHealthyChannel({ verifiedAt: null }))).toBe(false);
   });
 
-  it("falls back when an active row has no provider expiry", () => {
-    expect(floorFor(makeHealthyChannel({ expiresAt: null }))).toBe(FULL_POLL_INTERVAL_MS);
+  it("is unhealthy when an active row has no provider expiry", () => {
+    expect(healthyFor(makeHealthyChannel({ expiresAt: null }))).toBe(false);
   });
 
-  it("falls back once the expiry is inside the renewal lead", () => {
-    expect(floorFor(makeHealthyChannel({
+  it("is unhealthy once the expiry is inside the renewal lead or past", () => {
+    expect(healthyFor(makeHealthyChannel({
       expiresAt: new Date(NOW.getTime() + HOUR_MS),
-    }))).toBe(FULL_POLL_INTERVAL_MS);
-  });
-
-  it("falls back once the expiry is in the past", () => {
-    expect(floorFor(makeHealthyChannel({
+    }))).toBe(false);
+    expect(healthyFor(makeHealthyChannel({
       expiresAt: new Date(NOW.getTime() - HOUR_MS),
-    }))).toBe(FULL_POLL_INTERVAL_MS);
+    }))).toBe(false);
   });
 
-  it("falls back when the last notification is older than a day", () => {
-    expect(floorFor(makeHealthyChannel({
+  it("is unhealthy when the last notification is older than a day", () => {
+    expect(healthyFor(makeHealthyChannel({
       lastNotificationAt: new Date(NOW.getTime() - 25 * HOUR_MS),
-    }))).toBe(FULL_POLL_INTERVAL_MS);
-    expect(floorFor(makeHealthyChannel({ lastNotificationAt: null })))
-      .toBe(FULL_POLL_INTERVAL_MS);
+    }))).toBe(false);
+    expect(healthyFor(makeHealthyChannel({ lastNotificationAt: null }))).toBe(false);
   });
 
-  it("falls back when the owning account needs reauthentication", () => {
-    expect(floorFor(makeHealthyChannel(), { needsReauthentication: true }))
-      .toBe(FULL_POLL_INTERVAL_MS);
+  it("is unhealthy when the owning account needs reauthentication", () => {
+    expect(healthyFor(makeHealthyChannel(), { needsReauthentication: true })).toBe(false);
   });
 
-  it("falls back for a free plan", () => {
-    expect(floorFor(makeHealthyChannel(), { plan: "free" })).toBe(FULL_POLL_INTERVAL_MS);
-  });
-
-  it("falls back for Outlook even when the channel is otherwise healthy", () => {
-    expect(floorFor(makeHealthyChannel({
+  it("is unhealthy for Outlook even when the channel is otherwise healthy", () => {
+    expect(healthyFor(makeHealthyChannel({
       provider: "outlook",
       providerResourceId: null,
-    }))).toBe(FULL_POLL_INTERVAL_MS);
+    }))).toBe(false);
   });
 
-  it("falls back for every non-active state", () => {
+  it("is unhealthy for every non-active state", () => {
     const states: PushChannelState[] = ["degraded", "failed", "registering", "removed"];
     for (const state of states) {
-      expect(floorFor(makeHealthyChannel({ state }))).toBe(FULL_POLL_INTERVAL_MS);
+      expect(healthyFor(makeHealthyChannel({ state }))).toBe(false);
     }
   });
 
-  it("relaxes only a fully healthy pro Google channel, and only to a finite floor", () => {
-    const relaxed = floorFor(makeHealthyChannel());
-    expect(relaxed).toBe(PUSH_HEALTHY_POLL_FLOOR_MS);
-    expect(relaxed).toBeGreaterThanOrEqual(300_000);
-    expect(relaxed).toBeLessThanOrEqual(FULL_POLL_INTERVAL_MS * 15);
-  });
-
-  it("never returns zero, negative, infinite or NaN across the whole input space", () => {
-    const states: PushChannelState[] = [
-      "active",
-      "degraded",
-      "failed",
-      "registering",
-      "removed",
-    ];
-    const expiries = [null, new Date(NOW.getTime() - HOUR_MS), new Date(NOW.getTime() + 6 * 24 * HOUR_MS)];
-    const verifications = [null, new Date(NOW.getTime() - 12 * HOUR_MS)];
-    const notifications = [null, new Date(NOW.getTime() - 25 * HOUR_MS), new Date(NOW.getTime() - HOUR_MS)];
-    const providers = ["google", "outlook", "caldav"];
-    const plans = ["free", "pro"] as const;
-
-    const cases = states.flatMap((state) => expiries.flatMap((expiresAt) =>
-      verifications.flatMap((verifiedAt) => notifications.flatMap((lastNotificationAt) =>
-        providers.flatMap((provider) => plans.flatMap((plan) =>
-          [false, true].map((needsReauthentication) => ({
-            channel: makeHealthyChannel({
-              expiresAt,
-              lastNotificationAt,
-              provider,
-              state,
-              verifiedAt,
-            }),
-            needsReauthentication,
-            plan,
-          })),
-        )),
-      )),
-    ));
-
-    const observed = new Set<number>();
-    for (const testCase of cases) {
-      const floor = floorFor(testCase.channel, {
-        needsReauthentication: testCase.needsReauthentication,
-        plan: testCase.plan,
-      });
-      expect(Number.isFinite(floor)).toBe(true);
-      expect(floor).toBeGreaterThan(0);
-      observed.add(floor);
-    }
-
-    expect([...observed].toSorted((left, right) => left - right))
-      .toEqual([FULL_POLL_INTERVAL_MS, PUSH_HEALTHY_POLL_FLOOR_MS]
-        .toSorted((left, right) => left - right));
+  it("is healthy only for a fully healthy Google channel", () => {
+    expect(healthyFor(makeHealthyChannel())).toBe(true);
   });
 });

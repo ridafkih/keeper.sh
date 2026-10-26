@@ -57,14 +57,12 @@ export {
   getOAuthSyncTokenVersion,
 } from "./core/oauth/sync-window";
 export {
-  FULL_POLL_INTERVAL_MS,
   LIVE_PUSH_CHANNEL_STATES,
-  PUSH_HEALTHY_POLL_FLOOR_MS,
   STALE_REGISTERING_MS,
   isPushChannelGoneError,
   planPushChannelActions,
   resolveAffectedCalendarIds,
-  resolveIngestPollFloorMs,
+  isIngestPushHealthy,
   resolvePushChannelHealth,
   shouldRetainPushChannelAction,
   toPushChannelState,
@@ -160,8 +158,28 @@ export { createSerialFlushWorker, isSerialFlushReserveAbortError, isSerialFlushR
 export {
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
+  resolveCalendarBackoffDelayMs,
   type CalendarBackoffState,
 } from "./core/utils/calendar-backoff";
+export {
+  BASELINE_MOVED_RETRY_MS,
+  CREDENTIAL_PROBE_MS,
+  DEFAULT_INGEST_INTERVAL_DIALS,
+  LOCK_HELD_RETRY_MS,
+  UNBACKED_FAILURE_RETRY_MS,
+  UNRESOLVABLE_PROBE_MS,
+  resolveIngestIntervalMs,
+  resolveIngestJitterMs,
+  resolveIngestScheduleDecision,
+  resolveWakeDebounceMs,
+  type IngestIntervalDials,
+  type IngestIntervalInput,
+  type IngestOutcome,
+  type IngestParkedReason,
+  type IngestPlan,
+  type IngestScheduleDecision,
+  type IngestScheduleDecisionInput,
+} from "./core/source/ingest-schedule-policy";
 export {
   RequestTimeoutError,
   fetchWithTimeout,

@@ -8,8 +8,6 @@ import {
   type PushProviderProfile,
 } from "./push-provider-profile";
 
-const FULL_POLL_INTERVAL_MS = 60_000;
-const PUSH_HEALTHY_POLL_FLOOR_MS = 300_000;
 const PUSH_NOTIFICATION_FRESHNESS_MS = 24 * 60 * 60 * 1000;
 const STALE_REGISTERING_MS = 10 * 60 * 1000;
 const PULL_CAPABILITY = "pull";
@@ -180,11 +178,10 @@ interface PlanPushChannelActionsInput {
   webhookPublicUrl: string | null;
 }
 
-interface IngestPollFloorInput {
+interface IngestPushHealthInput {
   channel: StoredPushChannel | null;
   needsReauthentication: boolean;
   now: Date;
-  plan: "free" | "pro";
 }
 
 const toPushChannelState = (state: string): PushChannelState =>
@@ -244,17 +241,14 @@ const resolvePushChannelHealth = (
   return { healthy: true, reason: null };
 };
 
-const resolveIngestPollFloorMs = (input: IngestPollFloorInput): number => {
-  if (input.plan !== "pro" || input.needsReauthentication || input.channel === null) {
-    return FULL_POLL_INTERVAL_MS;
+const isIngestPushHealthy = (input: IngestPushHealthInput): boolean => {
+  if (input.needsReauthentication || input.channel === null) {
+    return false;
   }
   if (input.channel.provider !== "google") {
-    return FULL_POLL_INTERVAL_MS;
+    return false;
   }
-  if (!resolvePushChannelHealth(input.channel, input.now).healthy) {
-    return FULL_POLL_INTERVAL_MS;
-  }
-  return PUSH_HEALTHY_POLL_FLOOR_MS;
+  return resolvePushChannelHealth(input.channel, input.now).healthy;
 };
 
 const resolveAffectedCalendarIds = async (
@@ -597,14 +591,12 @@ const shouldRetainPushChannelAction = (
 };
 
 export {
-  FULL_POLL_INTERVAL_MS,
   isPushChannelGoneError,
   LIVE_PUSH_CHANNEL_STATES,
   neverReachedProvider,
   planPushChannelActions,
-  PUSH_HEALTHY_POLL_FLOOR_MS,
   resolveAffectedCalendarIds,
-  resolveIngestPollFloorMs,
+  isIngestPushHealthy,
   resolvePushChannelHealth,
   shouldRetainPushChannelAction,
   STALE_REGISTERING_MS,
@@ -614,7 +606,7 @@ export type {
   AccountCalendarRow,
   AffectedCalendarDependencies,
   EligibleSourceCalendar,
-  IngestPollFloorInput,
+  IngestPushHealthInput,
   ListedPushChannel,
   PlanPushChannelActionsInput,
   PushChannelAction,

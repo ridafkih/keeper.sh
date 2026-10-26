@@ -13,15 +13,17 @@ const RESET_CALENDAR_BACKOFF_STATE: CalendarBackoffState = {
   nextAttemptAt: null,
 };
 
+const resolveCalendarBackoffDelayMs = (currentFailureCount: number): number =>
+  Math.min(
+    INITIAL_CALENDAR_BACKOFF_MS * 2 ** Math.max(0, currentFailureCount),
+    MAX_CALENDAR_BACKOFF_MS,
+  );
+
 const buildCalendarBackoffState = (
   currentFailureCount: number,
   now = new Date(),
 ): CalendarBackoffState => {
-  const exponent = Math.max(0, currentFailureCount);
-  const delayMs = Math.min(
-    INITIAL_CALENDAR_BACKOFF_MS * 2 ** exponent,
-    MAX_CALENDAR_BACKOFF_MS,
-  );
+  const delayMs = resolveCalendarBackoffDelayMs(currentFailureCount);
 
   return {
     failureCount: currentFailureCount + 1,
@@ -30,5 +32,5 @@ const buildCalendarBackoffState = (
   };
 };
 
-export { buildCalendarBackoffState, RESET_CALENDAR_BACKOFF_STATE };
+export { buildCalendarBackoffState, RESET_CALENDAR_BACKOFF_STATE, resolveCalendarBackoffDelayMs };
 export type { CalendarBackoffState };
