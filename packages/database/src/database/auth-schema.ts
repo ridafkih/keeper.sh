@@ -29,7 +29,9 @@ const session = pgTable("session", {
   userId: text()
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-});
+}, (table) => [
+  index("session_user_idx").on(table.userId),
+]);
 
 const account = pgTable("account", {
   accessToken: text(),

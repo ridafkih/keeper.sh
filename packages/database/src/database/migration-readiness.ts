@@ -57,6 +57,13 @@ const createMigrationReadinessDatabase = (
           WHERE index_class.relname = 'event_mappings_source_calendar_idx'
             AND index_class.relnamespace = 'public'::regnamespace
             AND index_state.indisvalid
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_trigger
+          WHERE tgrelid = to_regclass('public.calendars')
+            AND tgname = 'calendars_source_ingest_schedule_insert'
+            AND NOT tgisinternal
         ) AS ready
     `);
     const [state] = result as unknown as { ready: boolean }[];

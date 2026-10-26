@@ -179,6 +179,48 @@ const calendarsTable = pgTable(
   ],
 );
 
+const INGEST_SCHEDULE_PARKED_REASONS = ["ineligible", "credential-rejected", "unresolvable"] as const;
+
+const INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES = INGEST_SCHEDULE_PARKED_REASONS
+  .map((reason) => `'${reason}'`)
+  .join(", ");
+
+const sourceIngestScheduleTable = pgTable(
+  "source_ingest_schedule",
+  {
+    calendarId: uuid()
+      .notNull()
+      .primaryKey()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp({ withTimezone: true }),
+    failureCount: integer().notNull().default(0),
+    lastAttemptAt: timestamp({ withTimezone: true }),
+    lastFailureAt: timestamp({ withTimezone: true }),
+    lastSuccessAt: timestamp({ withTimezone: true }),
+    leaseToken: uuid(),
+    leasedUntil: timestamp({ withTimezone: true }),
+    parkedReason: text(),
+    releaseSeq: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    wakeCorrelationId: text(),
+    wakeDueAt: timestamp({ withTimezone: true }),
+    wakeReceivedAt: timestamp({ withTimezone: true }),
+    wakeSeq: integer().notNull().default(0),
+  },
+  (table) => [
+    index("source_ingest_schedule_due_idx").on(table.dueAt).where(isNotNull(table.dueAt)),
+    index("source_ingest_schedule_wake_idx").on(table.wakeDueAt).where(isNotNull(table.wakeDueAt)),
+    check(
+      "source_ingest_schedule_parked_reason_check",
+      sql`"parkedReason" IS NULL OR "parkedReason" IN (${sql.raw(INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES)})`,
+    ),
+  ],
+);
+
 const calendarRemovalsTable = pgTable(
   "calendar_removals",
   {
@@ -554,8 +596,10 @@ export {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
+  INGEST_SCHEDULE_PARKED_REASONS,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  sourceIngestScheduleTable,
   syncStatusTable,
   userSyncRequestsTable,
   userEventsTable,
