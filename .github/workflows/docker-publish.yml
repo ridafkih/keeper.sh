@@ -1,9 +1,8 @@
 name: Publish Docker Images
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [prereleased, released]
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -82,9 +81,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package.name }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           flavor: suffix=-${{ matrix.arch }}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -154,9 +153,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           flavor: suffix=-${{ matrix.arch }}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -195,9 +194,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
       - name: Create multi-arch manifest
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -230,9 +229,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
       - name: Create multi-arch manifest
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -246,7 +245,7 @@ jobs:
   deploy-ec2:
     runs-on: ubuntu-latest
     needs: merge-core-manifests
-    if: ${{ !contains(github.ref, '-') }}
+    if: ${{ !github.event.release.prerelease }}
     concurrency:
       group: production-deploy
       cancel-in-progress: false
