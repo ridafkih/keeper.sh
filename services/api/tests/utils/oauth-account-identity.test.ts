@@ -75,6 +75,7 @@ create table calendars (
   "accountId" uuid not null,
   "calendarType" text not null,
   "calendarUrl" text,
+  "color" text,
   "capabilities" text[] not null default array['pull'],
   "createdAt" timestamptz not null default now(),
   "customEventName" text not null default '{{calendar_name}}',

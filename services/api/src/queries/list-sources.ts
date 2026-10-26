@@ -11,6 +11,7 @@ const listSources = async (database: KeeperDatabase, userId: string): Promise<Ke
     .select({
       id: calendarsTable.id,
       name: calendarsTable.name,
+      color: calendarsTable.color,
       calendarType: calendarsTable.calendarType,
       capabilities: calendarsTable.capabilities,
       accountId: calendarAccountsTable.id,

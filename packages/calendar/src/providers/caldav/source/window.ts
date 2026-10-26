@@ -19,6 +19,7 @@ interface CalDAVSourceEventPartition {
 
 const toSourceEvent = (parsed: ParsedCalendarEvent): SourceEvent => ({
   availability: parsed.availability,
+  color: parsed.color,
   description: parsed.description,
   endTime: parsed.endTime,
   exceptionDates: parsed.exceptionDates,
