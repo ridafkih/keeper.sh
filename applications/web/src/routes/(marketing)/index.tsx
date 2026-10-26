@@ -247,7 +247,7 @@ function MarketingPage() {
           <MarketingHowItWorksSection>
             <Heading2 className="text-center">How your calendars stay in step</Heading2>
             <Text size="sm" align="center" tone="muted" className="mt-2">
-              You set a connection up once. After that, Keeper.sh keeps the copies right.
+              You set a sync up once. After that, Keeper.sh keeps the copies right.
             </Text>
             <MarketingHowItWorksCard>
               <MarketingHowItWorksRow>

@@ -1,20 +1,15 @@
-import { use, useEffect, useMemo, useState, useTransition } from "react";
+import { use, useEffect, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
-import {
-  MAX_EXCLUDE_TITLE_KEYWORDS,
-  MAX_EXCLUDE_TITLE_KEYWORD_LENGTH,
-  getExcludableAvailabilities,
-} from "@keeper.sh/data-schemas";
-import type { ExcludableAvailability, SyncRange } from "@keeper.sh/data-schemas";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import type { SyncRange } from "@keeper.sh/data-schemas";
+import { useEntitlements } from "@/hooks/use-entitlements";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
-import { MenuHint, PremiumHint, PremiumGate } from "@/components/ui/primitives/menu-hint";
+import { MenuHint, PremiumGate } from "@/components/ui/primitives/menu-hint";
 import { Pagination, PaginationPrevious, PaginationNext } from "@/components/ui/primitives/pagination";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
@@ -23,45 +18,32 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { serializedPatch, serializedCall } from "@/lib/serialized-mutate";
+import { serializedPatch } from "@/lib/serialized-mutate";
+import { InSyncsSection } from "@/features/syncs/components/in-syncs-section";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { formatDate } from "@/lib/time";
 import { resolveErrorMessage } from "@/utils/errors";
-import {
-  areTitleKeywordsEqual,
-  canPull,
-  canPush,
-  formatTitleKeywords,
-  parseTitleKeywords,
-  toggleExcludedAvailability,
-} from "@/utils/calendars";
+import { canPull, canPush } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
-  NavigationMenuEmptyItem,
   NavigationMenuItemIcon,
   NavigationMenuLinkItem,
   NavigationMenuItemLabel,
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { NavigationMenuPopover } from "@/components/ui/composites/navigation-menu/navigation-menu-popover";
-import {
-  NavigationMenuEditableItem,
-  NavigationMenuEditableTemplateItem,
-} from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
+import { NavigationMenuEditableItem } from "@/components/ui/composites/navigation-menu/navigation-menu-editable";
 import { MenuVariantContext, ItemDisabledContext, usePopover } from "@/components/ui/composites/navigation-menu/navigation-menu.contexts";
 import {
   DISABLED_LABEL_TONE,
   LABEL_TONE,
   navigationMenuItemStyle,
-  navigationMenuCheckbox,
-  navigationMenuCheckboxIcon,
   navigationMenuToggleTrack,
   navigationMenuToggleThumb,
 } from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
 import { Text } from "@/components/ui/primitives/text";
-import { TemplateText } from "@/components/ui/primitives/template-text";
 import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmation";
 import {
   calendarDetailAtom,
@@ -71,18 +53,8 @@ import {
   calendarProviderAtom,
   calendarProviderMissingSinceAtom,
   calendarTypeAtom,
-  customEventNameAtom,
-  excludeAvailabilitiesAtom,
-  excludeEventNameAtom,
-  excludeFieldAtoms,
-  excludeTitleKeywordsAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
-import type { ExcludeField } from "@/state/calendar-detail";
-import {
-  destinationIdsAtom,
-  selectDestinationInclusion,
-} from "@/state/destination-ids";
 import {
   getSyncRangeLabel,
   SYNC_RANGE_OPTIONS,
@@ -94,29 +66,6 @@ export const Route = createFileRoute(
 )({
   component: CalendarDetailPage,
 });
-
-interface SyncSetting {
-  field: ExcludeField;
-  label: string;
-  matchesField: boolean;
-}
-
-const SYNC_SETTINGS: SyncSetting[] = [
-  { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
-  { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
-  { field: "markEventsAsPrivate", label: "Mark Events as Private", matchesField: true },
-];
-
-const EXCLUSION_SETTINGS: SyncSetting[] = [
-  { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
-];
-
-const PROVIDER_EXCLUSION_SETTINGS: SyncSetting[] = [
-  { field: "excludeFocusTime", label: "Exclude Focus Time Events", matchesField: true },
-  { field: "excludeOutOfOffice", label: "Exclude Out of Office Events", matchesField: true },
-];
-
-const PROVIDERS_WITH_EXTRA_SETTINGS = new Set(["google"]);
 
 function patchSource(
   store: ReturnType<typeof useStore>,
@@ -187,18 +136,9 @@ function CalendarDetailPage() {
         <ReauthNotice account={account} />
         <ProviderMissingNotice />
         <RenameSection calendarId={calendarId} />
-        {isPullCapable && (
-          <>
-            <DashboardSection
-              title="Send Events to Calendars"
-              description="Select which calendars should receive events from this calendar."
-            />
-            <DestinationsSection calendarId={calendarId} />
-          </>
-        )}
+        <InSyncsSection calendarId={calendarId} calendarName={calendar.name} />
         {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
-        {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
-        {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
+        {isPullCapable && calendar.calendarType === "ical" && <AllDayEventsSection calendarId={calendarId} />}
         <CalendarInfoSection account={account} accountId={accountId} />
         {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
       </PageBody>
@@ -311,6 +251,7 @@ function SyncRangeOptionItem({
 
   return (
     <NavigationMenuButtonItem
+      selected={selected}
       onClick={() => {
         onSelect(option.value);
         close();
@@ -488,7 +429,7 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
       {deleteError && <Text size="sm" tone="danger" className="px-0.5">{deleteError}</Text>}
       <DeleteConfirmation
         title="Delete this calendar?"
-        description="This removes the calendar and its sync history from Keeper.sh. Any sync profiles using it will be affected."
+        description="This removes the calendar and its sync history from Keeper.sh. Any syncs using it stop copying to and from it."
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         deleting={isDeleting}
@@ -498,201 +439,23 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
   );
 }
 
-function DestinationsSeed({ calendarId }: { calendarId: string }) {
-  const { data } = useSWR<{ destinationIds: string[] }>(
-    `/api/sources/${calendarId}/destinations`,
-  );
-  const store = useStore();
-
-  useEffect(() => {
-    store.set(destinationIdsAtom, new Set(data?.destinationIds));
-  }, [calendarId, data, store]);
-
-  return null;
-}
-
-function DestinationsSection({ calendarId }: { calendarId: string }) {
-  const { data: allCalendars } = useSWR<CalendarSource[]>("/api/sources");
-  const { data: entitlements } = useEntitlements();
-  const atLimit = !canAddMore(entitlements?.mappings);
-
-  const pushCalendars = useMemo(
-    () => (allCalendars ?? []).filter((calendar) => canPush(calendar) && calendar.id !== calendarId),
-    [allCalendars, calendarId],
-  );
-
-  return (
-    <>
-      <DestinationsSeed calendarId={calendarId} />
-      <NavigationMenu>
-        {pushCalendars.length === 0 ? (
-          <NavigationMenuEmptyItem>No destination calendars available</NavigationMenuEmptyItem>
-        ) : (
-          pushCalendars.map((calendar) => (
-            <DestinationCheckboxItem
-              key={calendar.id}
-              calendarId={calendarId}
-              destinationId={calendar.id}
-              name={calendar.name}
-              provider={calendar.provider}
-              calendarType={calendar.calendarType}
-            />
-          ))
-        )}
-      </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
-    </>
-  );
-}
-
-function DestinationCheckboxItem({
-  calendarId,
-  destinationId,
-  name,
-  provider,
-  calendarType,
-}: {
-  calendarId: string;
-  destinationId: string;
-  name: string;
-  provider: string;
-  calendarType: string;
-}) {
-  const store = useStore();
-  const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
-  const { data: entitlements } = useEntitlements();
-  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
-
-  const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
-  const checked = useAtomValue(checkedAtom);
-  const atLimit = !canAddMore(entitlements?.mappings);
-  const disabled = atLimit && !checked;
-
-  const handleClick = () => {
-    if (disabled) return;
-
-    const currentIds = store.get(destinationIdsAtom);
-    const willCheck = !currentIds.has(destinationId);
-    track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
-    const updatedSet = new Set(currentIds);
-
-    if (willCheck) {
-      updatedSet.add(destinationId);
-      adjustMappingCount(1);
-    } else {
-      updatedSet.delete(destinationId);
-      adjustMappingCount(-1);
-    }
-
-    store.set(destinationIdsAtom, updatedSet);
-
-    const swrKey = `/api/sources/${calendarId}/destinations`;
-    serializedCall(swrKey, () => {
-      const latestIds = Array.from(store.get(destinationIdsAtom));
-      return mutate(
-        swrKey,
-        async () => {
-          await apiFetch(swrKey, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: latestIds }),
-          });
-          return { destinationIds: latestIds };
-        },
-        {
-          optimisticData: { destinationIds: latestIds },
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      ).catch(() => {
-        void mutate(swrKey);
-      }).finally(() => {
-        void revalidateEntitlements();
-      });
-    });
-  };
-
-  return (
-    <li>
-      <ItemDisabledContext value={disabled}>
-        <button
-          type="button"
-          role="checkbox"
-          disabled={disabled}
-          onClick={handleClick}
-          className={navigationMenuItemStyle({ variant, interactive: !disabled })}
-        >
-          <NavigationMenuItemIcon>
-            <ProviderIcon provider={provider} calendarType={calendarType} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{name}</NavigationMenuItemLabel>
-          <DestinationCheckboxIndicator destinationId={destinationId} />
-        </button>
-      </ItemDisabledContext>
-    </li>
-  );
-}
-
-function DestinationCheckboxIndicator({ destinationId }: { destinationId: string }) {
-  const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
-  const checked = useAtomValue(checkedAtom);
-  const variant = use(MenuVariantContext);
-
-  return (
-    <div className={navigationMenuCheckbox({ variant, checked, className: "ml-auto" })}>
-      {checked && <CheckIcon size={12} className={navigationMenuCheckboxIcon({ variant })} />}
-    </div>
-  );
-}
-
-function SyncSettingsSection({ calendarId }: { calendarId: string }) {
+function AllDayEventsSection({ calendarId }: { calendarId: string }) {
   const { data: entitlements } = useEntitlements();
   const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
-  const calendarType = useAtomValue(calendarTypeAtom);
 
   return (
     <>
       <DashboardSection
-        title="Sync Settings"
-        description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
+        title="All-Day Events"
+        description="Treat timed events that span a whole day as all-day when copying them."
       />
       <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
-          <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
-          <SyncEventNameToggle calendarId={calendarId} locked={locked} />
-          <ProviderSyncSettings calendarId={calendarId} calendarType={calendarType} locked={locked} />
-          {SYNC_SETTINGS.map((setting) => (
-            <ExcludeFieldToggle
-              key={setting.field}
-              calendarId={calendarId}
-              field={setting.field}
-              label={setting.label}
-              matchesField={setting.matchesField}
-              locked={locked}
-            />
-          ))}
+          <TreatFullDayTimedEventsToggle calendarId={calendarId} locked={locked} />
         </NavigationMenu>
       </PremiumGate>
     </>
   );
-}
-
-function ProviderSyncSettings({
-  calendarId,
-  calendarType,
-  locked,
-}: {
-  calendarId: string;
-  calendarType: string;
-  locked: boolean;
-}) {
-  switch (calendarType) {
-    case "ical":
-      return <TreatFullDayTimedEventsToggle calendarId={calendarId} locked={locked} />;
-    default:
-      return null;
-  }
 }
 
 function TreatFullDayTimedEventsToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
@@ -746,303 +509,6 @@ function TreatFullDayTimedEventsToggleIndicator({ disabled }: { disabled: boolea
     </div>
   );
 }
-
-function SyncEventNameDisabledProvider({ locked, children }: { locked: boolean; children: React.ReactNode }) {
-  const excludeEventName = useAtomValue(excludeEventNameAtom);
-  return <ItemDisabledContext value={locked || !excludeEventName}>{children}</ItemDisabledContext>;
-}
-
-function SyncEventNameTemplateItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
-  const store = useStore();
-  const customEventName = useAtomValue(customEventNameAtom);
-
-  return (
-    <SyncEventNameDisabledProvider locked={locked}>
-      <NavigationMenuEditableTemplateItem
-        label="Event Name"
-        disabled={locked}
-        value={customEventName || "{{event_name}}"}
-        renderInput={(live) => (
-          <SyncEventNameTemplateInput template={live} />
-        )}
-        onCommit={(customEventName) => {
-          store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, customEventName } : prev));
-          patchSource(store, calendarId, { customEventName });
-        }}
-      >
-        <SyncEventNameTemplateValue />
-      </NavigationMenuEditableTemplateItem>
-    </SyncEventNameDisabledProvider>
-  );
-}
-
-function SyncEventNameTemplateInput({ template }: { template: string }) {
-  return <TemplateText template={template} variables={TEMPLATE_VARIABLES} />;
-}
-
-const TEMPLATE_VARIABLES = { calendar_name: "Calendar Name", event_name: "Event Name" };
-
-function SyncEventNameTemplateValue() {
-  const customEventName = useAtomValue(customEventNameAtom);
-  const excludeEventName = useAtomValue(excludeEventNameAtom);
-  const disabled = !excludeEventName;
-  const template = customEventName || "{{event_name}}";
-
-  return (
-    <Text
-      size="sm"
-      tone={disabled ? "disabled" : "muted"}
-      className="min-w-0 truncate flex-1 text-right"
-    >
-      <TemplateText
-        template={template}
-        variables={TEMPLATE_VARIABLES}
-        disabled={disabled}
-      />
-    </Text>
-  );
-}
-
-function SyncEventNameToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
-  const store = useStore();
-  const variant = use(MenuVariantContext);
-
-  const handleClick = () => {
-    if (locked) return;
-    const current = store.get(calendarDetailAtom);
-    if (!current) return;
-
-    const patch = current.excludeEventName
-      ? { excludeEventName: false, customEventName: "{{event_name}}" }
-      : { excludeEventName: true, customEventName: "{{calendar_name}}" };
-
-    track(ANALYTICS_EVENTS.calendar_setting_toggled, { field: "excludeEventName", enabled: !current.excludeEventName });
-    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, ...patch } : prev));
-    patchSource(store, calendarId, patch);
-  };
-
-  return (
-    <li>
-      <ItemDisabledContext value={locked}>
-        <button
-          type="button"
-          role="switch"
-          disabled={locked}
-          onClick={handleClick}
-          className={navigationMenuItemStyle({ variant, interactive: !locked })}
-        >
-          <NavigationMenuItemLabel>Sync Event Name</NavigationMenuItemLabel>
-          <SyncEventNameToggleIndicator disabled={locked} />
-        </button>
-      </ItemDisabledContext>
-    </li>
-  );
-}
-
-function SyncEventNameToggleIndicator({ disabled }: { disabled: boolean }) {
-  const excludeEventName = useAtomValue(excludeEventNameAtom);
-  const variant = use(MenuVariantContext);
-  const checked = !excludeEventName;
-
-  return (
-    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
-      <div className={navigationMenuToggleThumb({ variant, checked })} />
-    </div>
-  );
-}
-
-function ExclusionsSection({ calendarId, provider }: { calendarId: string; provider: string }) {
-  const { data: entitlements } = useEntitlements();
-  const locked = entitlements ? !entitlements.canUseEventFilters : false;
-  const hasExtraSettings = PROVIDERS_WITH_EXTRA_SETTINGS.has(provider);
-  const exclusionSettings = hasExtraSettings
-    ? [...EXCLUSION_SETTINGS, ...PROVIDER_EXCLUSION_SETTINGS]
-    : EXCLUSION_SETTINGS;
-
-  return (
-    <>
-      <DashboardSection
-        title="Exclusions"
-        description={`Choose which events to exclude from syncing. Separate title keywords with commas. Up to ${MAX_EXCLUDE_TITLE_KEYWORDS} keywords of ${MAX_EXCLUDE_TITLE_KEYWORD_LENGTH} characters each, matched ignoring case.`}
-      />
-      <PremiumGate locked={locked} hint="Event exclusions are a Pro feature.">
-        <NavigationMenu>
-          {exclusionSettings.map((setting) => (
-            <ExcludeFieldToggle
-              key={setting.field}
-              calendarId={calendarId}
-              field={setting.field}
-              label={setting.label}
-              matchesField={setting.matchesField}
-              locked={locked}
-            />
-          ))}
-          <ExcludeAvailabilitiesItem calendarId={calendarId} provider={provider} locked={locked} />
-          <ExcludeTitleKeywordsItem calendarId={calendarId} locked={locked} />
-        </NavigationMenu>
-      </PremiumGate>
-    </>
-  );
-}
-
-function ExcludeAvailabilitiesItem({
-  calendarId,
-  provider,
-  locked,
-}: {
-  calendarId: string;
-  provider: string;
-  locked: boolean;
-}) {
-  const store = useStore();
-  const excluded = useAtomValue(excludeAvailabilitiesAtom);
-  const options = getExcludableAvailabilities(provider);
-
-  const toggleAvailability = (availability: ExcludableAvailability) => {
-    if (locked) return;
-    const excludeAvailabilities = toggleExcludedAvailability(excluded, availability);
-    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
-      field: "excludeAvailabilities",
-      value: availability,
-      enabled: excludeAvailabilities.includes(availability),
-    });
-    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, excludeAvailabilities } : prev));
-    patchSource(store, calendarId, { excludeAvailabilities });
-  };
-
-  const summary = options
-    .filter(({ value }) => excluded.includes(value))
-    .map(({ label }) => label)
-    .join(", ");
-
-  return (
-    <NavigationMenuPopover
-      disabled={locked}
-      trigger={
-        <>
-          <NavigationMenuItemLabel>Exclude by Status</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            <Text size="sm" tone={locked ? "disabled" : "muted"}>
-              {summary || "None"}
-            </Text>
-          </NavigationMenuItemTrailing>
-        </>
-      }
-    >
-      {options.map((option) => (
-        <NavigationMenuButtonItem
-          key={option.value}
-          onClick={() => toggleAvailability(option.value)}
-        >
-          <NavigationMenuItemLabel>{option.label}</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {excluded.includes(option.value) && <CheckIcon size={14} />}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuButtonItem>
-      ))}
-    </NavigationMenuPopover>
-  );
-}
-
-function ExcludeTitleKeywordsItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
-  const store = useStore();
-  const keywords = useAtomValue(excludeTitleKeywordsAtom);
-
-  return (
-    <NavigationMenuEditableItem
-      label="Exclude Titles Containing"
-      value={formatTitleKeywords(keywords)}
-      disabled={locked}
-      allowEmpty
-      onCommit={(value) => {
-        const excludeTitleKeywords = parseTitleKeywords(value);
-        if (areTitleKeywordsEqual(excludeTitleKeywords, store.get(excludeTitleKeywordsAtom))) return;
-        track(ANALYTICS_EVENTS.calendar_setting_toggled, {
-          field: "excludeTitleKeywords",
-          enabled: excludeTitleKeywords.length > 0,
-        });
-        store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, excludeTitleKeywords } : prev));
-        patchSource(store, calendarId, { excludeTitleKeywords });
-      }}
-    >
-      <ExcludeTitleKeywordsValue />
-    </NavigationMenuEditableItem>
-  );
-}
-
-function ExcludeTitleKeywordsValue() {
-  const keywords = useAtomValue(excludeTitleKeywordsAtom);
-  const variant = use(MenuVariantContext);
-  const disabled = use(ItemDisabledContext);
-
-  return (
-    <Text
-      size="sm"
-      tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
-      className="min-w-0 flex-1 truncate text-right"
-    >
-      {keywords.length > 0 ? formatTitleKeywords(keywords) : "None"}
-    </Text>
-  );
-}
-
-function ExcludeFieldToggle({
-  calendarId,
-  field,
-  label,
-  matchesField,
-  locked = false,
-}: {
-  calendarId: string;
-  field: ExcludeField;
-  label: string;
-  matchesField: boolean;
-  locked?: boolean;
-}) {
-  const store = useStore();
-  const variant = use(MenuVariantContext);
-
-  const handleClick = () => {
-    if (locked) return;
-    const current = store.get(calendarDetailAtom);
-    if (!current) return;
-
-    const newValue = !current[field];
-    track(ANALYTICS_EVENTS.calendar_setting_toggled, { field, enabled: newValue });
-    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, [field]: newValue } : prev));
-    patchSource(store, calendarId, { [field]: newValue });
-  };
-
-  return (
-    <li>
-      <ItemDisabledContext value={locked}>
-        <button
-          type="button"
-          role="switch"
-          disabled={locked}
-          onClick={handleClick}
-          className={navigationMenuItemStyle({ variant, interactive: !locked })}
-        >
-          <NavigationMenuItemLabel>{label}</NavigationMenuItemLabel>
-          <ExcludeFieldToggleIndicator field={field} matchesField={matchesField} disabled={locked} />
-        </button>
-      </ItemDisabledContext>
-    </li>
-  );
-}
-
-function ExcludeFieldToggleIndicator({ field, matchesField, disabled }: { field: ExcludeField; matchesField: boolean; disabled: boolean }) {
-  const raw = useAtomValue(excludeFieldAtoms[field]);
-  const variant = use(MenuVariantContext);
-  const checked = matchesField ? raw : !raw;
-
-  return (
-    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
-      <div className={navigationMenuToggleThumb({ variant, checked })} />
-    </div>
-  );
-}
-
 
 function CalendarInfoSection({ account, accountId }: { account: CalendarAccount; accountId: string }) {
   const calendar = useAtomValue(calendarDetailAtom);

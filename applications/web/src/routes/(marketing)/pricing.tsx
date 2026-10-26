@@ -26,7 +26,7 @@ import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 const breadcrumbs = breadcrumbTrail({ name: "Pricing", path: "/pricing" });
 
 const PAGE_DESCRIPTION =
-  "Keeper.sh is free for 2 calendar accounts and 3 connections. Pro is $5 a month, or $45 a year, for unlimited calendars and Google and Outlook changes that land within seconds.";
+  "Keeper.sh is free for 2 calendar accounts and 1 sync of up to 3 calendars on each side. Pro is $5 a month, or $45 a year, for unlimited calendars and syncs, and Google and Outlook changes that land within seconds.";
 
 type FaqItem = {
   question: string;
@@ -39,8 +39,8 @@ const FAQ_ITEMS: FaqItem[] = [
     answer: "An account is one connected calendar provider, such as a Google or Outlook login or a CalDAV server. Free allows 2, Pro is unlimited.",
   },
   {
-    question: "What counts as a connection?",
-    answer: "A connection copies events from one calendar into another. Free includes 3, Pro is unlimited. If you want two calendars to match each other, that is two connections.",
+    question: "What counts as a sync?",
+    answer: "A sync copies events between calendars you choose. One way, it copies from some calendars into others; both ways, it keeps a set of calendars matching each other. Free includes 1 sync with up to 3 calendars on each side: up to 3 copied from and 3 copied into, or up to 3 kept matching both ways. Pro has unlimited syncs.",
   },
   {
     question: "How quickly do changes show up?",
@@ -90,8 +90,8 @@ function PricingPage() {
       <header className="flex flex-col gap-1.5">
         <Heading1>Pricing</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
-          Start free with two calendar accounts and three connections. Pro is $5 a month, or $45 a year, for as many
-          calendars as you want.
+          Start free with two calendar accounts and one sync of up to three calendars on each side. Pro is $5 a
+          month, or $45 a year, for as many calendars and syncs as you want.
         </Text>
       </header>
 

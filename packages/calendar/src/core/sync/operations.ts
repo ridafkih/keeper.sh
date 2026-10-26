@@ -17,6 +17,7 @@ interface ReconciliationScope {
   authoritativeWindow: SyncWindow | null;
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
+  frozenSourceCalendarIds?: ReadonlySet<string>;
   requestedWindow: SyncWindow;
   withheldSourceEventStateIds?: ReadonlySet<string>;
 }
@@ -115,6 +116,10 @@ const getSourceAuthoritativeWindow = (
 ): SyncWindow | null => {
   if (sourceCalendarId === null) {
     return scope.requestedWindow;
+  }
+  // A paused sync's copies are frozen: never added, updated or removed, bar window cleanup.
+  if (scope.frozenSourceCalendarIds?.has(sourceCalendarId)) {
+    return null;
   }
   if (!scope.authoritativeSourceWindows || !scope.configuredSourceCalendarIds) {
     return scope.authoritativeWindow;

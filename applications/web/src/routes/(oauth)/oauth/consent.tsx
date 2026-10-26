@@ -31,7 +31,7 @@ const SCOPE_LABELS: Record<string, string> = {
   "keeper.write": "Create, edit and delete your events, and pause or trigger syncing",
   "keeper.sources.read": "View your calendar sources",
   "keeper.destinations.read": "View your sync destinations",
-  "keeper.mappings.read": "View your source-destination mappings",
+  "keeper.mappings.read": "View which of your calendars copy into which",
   "keeper.events.read": "View your calendar events",
   "keeper.sync-status.read": "View sync status",
   "offline_access": "Stay connected when you're away",

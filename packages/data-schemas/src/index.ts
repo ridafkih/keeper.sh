@@ -42,50 +42,6 @@ const syncRangeSchema = type.enumerated(
 );
 type SyncRange = typeof syncRangeSchema.infer;
 
-const EXCLUDABLE_AVAILABILITY_DEFINITIONS = [
-  { label: "Busy", value: "busy" },
-  { label: "Free", value: "free" },
-  { label: "Tentative", providers: ["outlook", "ics"], value: "tentative" },
-] as const;
-
-const excludableAvailabilitySchema = type.enumerated(
-  ...EXCLUDABLE_AVAILABILITY_DEFINITIONS.map(({ value }) => value),
-);
-type ExcludableAvailability = typeof excludableAvailabilitySchema.infer;
-type ExcludableAvailabilityDefinition = (typeof EXCLUDABLE_AVAILABILITY_DEFINITIONS)[number];
-
-const getExcludableAvailabilities = (
-  provider: string,
-): readonly ExcludableAvailabilityDefinition[] =>
-  EXCLUDABLE_AVAILABILITY_DEFINITIONS.filter(
-    (definition) =>
-      !("providers" in definition) || definition.providers.some((id) => id === provider),
-  );
-
-const canExcludeAvailability = (provider: string, availability: string): boolean =>
-  getExcludableAvailabilities(provider).some(({ value }) => value === availability);
-
-const MAX_EXCLUDE_TITLE_KEYWORDS = 50;
-const MAX_EXCLUDE_TITLE_KEYWORD_LENGTH = 100;
-
-const normalizeTitleKeywords = (keywords: readonly string[]): string[] => {
-  const seen = new Set<string>();
-  const normalized: string[] = [];
-  for (const keyword of keywords) {
-    const trimmed = keyword.trim().slice(0, MAX_EXCLUDE_TITLE_KEYWORD_LENGTH).trim();
-    const key = trimmed.toLowerCase();
-    if (trimmed && !seen.has(key)) {
-      seen.add(key);
-      normalized.push(trimmed);
-    }
-  }
-  return normalized.slice(0, MAX_EXCLUDE_TITLE_KEYWORDS);
-};
-
-const excludeTitleKeywordsSchema = type(`0 < string <= ${MAX_EXCLUDE_TITLE_KEYWORD_LENGTH}`)
-  .array()
-  .atMostLength(MAX_EXCLUDE_TITLE_KEYWORDS);
-
 const billingPeriodSchema = type("'monthly' | 'yearly'");
 type BillingPeriod = typeof billingPeriodSchema.infer;
 
@@ -581,13 +537,6 @@ export {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
-  MAX_EXCLUDE_TITLE_KEYWORDS,
-  MAX_EXCLUDE_TITLE_KEYWORD_LENGTH,
-  canExcludeAvailability,
-  excludableAvailabilitySchema,
-  excludeTitleKeywordsSchema,
-  getExcludableAvailabilities,
-  normalizeTitleKeywords,
   proxyableMethods,
   planSchema,
   syncRangeSchema,
@@ -643,11 +592,30 @@ export {
   pushChannelStateSchema,
 };
 
+export {
+  RULE_CONDITION_VALUE_MAX_LENGTH,
+  RULE_NAME_MAX_LENGTH,
+  RULE_TEMPLATE_MAX_LENGTH,
+  applyRuleActions,
+  evaluateRules,
+  findMatchingRule,
+  resolveEventNameTemplate,
+  ruleActionSchema,
+  ruleConditionSchema,
+  ruleNameSchema,
+} from "./rules";
+export type {
+  RuleAction,
+  RuleCondition,
+  RuleEventFacts,
+  RuleMatch,
+} from "./rules";
+export * from "./syncs";
+
 export type {
   ProxyableMethods,
   Plan,
   SyncRange,
-  ExcludableAvailability,
   BillingPeriod,
   FeedbackRequest,
   CreateSource,

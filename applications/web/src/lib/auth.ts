@@ -1,5 +1,6 @@
 import { authClient } from "./auth-client";
 import type { AuthCapabilities } from "./auth-capabilities";
+import { clearSetupSession, resolveSessionStorage } from "@/features/setup/setup-draft-storage";
 
 async function authPost(url: string, body: Record<string, unknown> = {}): Promise<void> {
   const response = await fetch(url, {
@@ -77,7 +78,11 @@ export const signUpWithCredential = async (
   throw new Error(error.message ?? "Sign up failed");
 };
 
-export const signOut = () => authPost("/api/auth/sign-out");
+// A tab can be handed to someone else after signing out, so nothing from this user's setup survives in it.
+export const signOut = () => {
+  clearSetupSession(resolveSessionStorage());
+  return authPost("/api/auth/sign-out");
+};
 
 export const forgotPassword = async (email: string): Promise<void> => {
   const { error } = await authClient.requestPasswordReset({
@@ -95,5 +100,7 @@ export const resetPassword = async (token: string, newPassword: string): Promise
 export const changePassword = (currentPassword: string, newPassword: string) =>
   authPost("/api/auth/change-password", { currentPassword, newPassword });
 
-export const deleteAccount = (password?: string) =>
-  authPost("/api/auth/delete-user", { ...(password && { password }) });
+export const deleteAccount = (password?: string) => {
+  clearSetupSession(resolveSessionStorage());
+  return authPost("/api/auth/delete-user", { ...(password && { password }) });
+};

@@ -219,7 +219,7 @@ const oauthCalendarRow = {
   ...commonCalendarFields,
   accessToken: "merged-access-token",
   accountId: "account-oauth",
-  excludeAvailabilities: [],
+  excludesTentative: false,
   expiresAt: new Date(Date.now() + TOKEN_EXPIRY_MS),
   externalCalendarId: "merged-external-id",
   failureCount: FAILURE_COUNT,

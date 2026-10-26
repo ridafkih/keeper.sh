@@ -72,10 +72,10 @@ export const PRICING_FEATURES: PricingFeature[] = [
     highlight: { free: 'Up to 2 linked accounts', pro: 'Unlimited linked accounts' },
   },
   {
-    label: 'Connections',
-    free: 'Up to 3',
+    label: 'Syncs',
+    free: '1, up to 3 calendars on each side',
     pro: 'infinity',
-    highlight: { free: 'Up to 3 connections', pro: 'Unlimited connections' },
+    highlight: { free: '1 sync, with up to 3 calendars on each side', pro: 'Unlimited syncs' },
   },
   { label: 'Shareable Calendar Link', free: 'check', pro: 'check' },
   { label: 'Choose What the Link Shows', free: 'minus', pro: 'check' },

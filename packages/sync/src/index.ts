@@ -6,6 +6,7 @@ export {
 } from "./sync-lock";
 export type { SyncLockHandle } from "./sync-lock";
 export type {
+  ActivityRecordFailure,
   CalendarSyncCompletion,
   CalendarSyncFailure,
   DestinationSkipReason,

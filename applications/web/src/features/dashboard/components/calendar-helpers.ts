@@ -101,6 +101,20 @@ export const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 export const HOUR_HEIGHT = 48;
 
+export interface ColumnLayout {
+  column: number;
+  gutter: number;
+}
+
+// Whole-pixel columns keep the header row and the scrolled grid on the same device pixels; the gutter takes the remainder, a few pixels either side of its nominal width.
+export function resolveColumnLayout(scrollerWidth: number, gutter: number): ColumnLayout {
+  const column = Math.max(Math.round((scrollerWidth - gutter) / WEEK_VIEW_DAYS), 1);
+  return { column, gutter: Math.max(scrollerWidth - column * WEEK_VIEW_DAYS, 1) };
+}
+
+export const sameColumnLayout = (left: ColumnLayout, right: ColumnLayout): boolean =>
+  left.column === right.column && left.gutter === right.gutter;
+
 export function formatHourLabel(hour: number): string {
   return new Date(2023, 0, 1, hour)
     .toLocaleTimeString("en-US", { hour: "numeric" })

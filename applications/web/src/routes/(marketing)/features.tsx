@@ -64,7 +64,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "Pick which calendar your events land in",
-    body: "You choose where each calendar's events are copied to. Copying runs one way, so set up both directions if you want the two to match.",
+    body: "A sync copies one way, from the calendars you pick into the ones you pick, or both ways, so a set of calendars all match each other.",
     gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-2",
     illustration: <MarketingIllustrationSetup />,
   },

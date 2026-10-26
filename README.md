@@ -13,7 +13,7 @@ The recommended way to run it is the hosted version at [keeper.sh](https://www.k
 - Incremental syncing on Google and Outlook using provider sync tokens rather than refetching everything
 - Event content agnostic syncing engine
 - Push aggregate events to one or more calendars
-- Per-source privacy controls to strip event names, descriptions, and locations, replacing the title with a `{{calendar_name}}` or `{{event_name}}` template
+- Syncs that copy one way or both ways, each with its own privacy controls to strip event names, descriptions, and locations, replacing the title with a `{{calendar_name}}` template, plus skip and rename rules
 - REST API under `/api/v1` authenticated with API tokens
 - MCP (Model Context Protocol) server for AI agent calendar access
 - Combined iCal feed you can subscribe to from any calendar app
@@ -121,7 +121,7 @@ Ingestion pulls from your sources into Keeper.sh's own database once a minute, r
 
 Pushing to destinations is what the refresh interval in the pricing table refers to. The cron service enqueues a job per destination onto a Redis-backed queue every minute for Pro and every thirty minutes for free, and the worker service reconciles the destination calendar. This is polling on our side rather than provider push notifications, so nothing needs to reach your instance from the outside.
 
-Neither half is schedule-only. `POST /api/v1/sync`, or `trigger_sync` over MCP, clears the ingest backoff so your sources are re-polled on the next pass and enqueues the push half straight away, throttled to one request per minute per user so a client cannot hammer your providers. A calendar paused with `pause_sync` is skipped by both halves until it is resumed.
+Neither half is schedule-only. `POST /api/v1/sync`, or `trigger_sync` over MCP, clears the ingest backoff so your sources are re-polled on the next pass and enqueues the push half straight away, throttled to one request per minute per user so a client cannot hammer your providers. A calendar paused with `pause_calendar` is skipped by both halves, in every sync it belongs to, until it is resumed. Pausing a single sync is done from the dashboard.
 
 # Cloud Hosted
 
@@ -135,12 +135,13 @@ Head to [keeper.sh](https://www.keeper.sh/register) to get started with the clou
 | **Annual Price**            | $0 USD     | $45 USD (-25%)     | $0                |
 | **Refresh Interval**        | 30 minutes | 1 minute           | 1 minute          |
 | **Linked Account Limit**    | 2          | ∞                  | ∞                 |
-| **Sync Mapping Limit**      | 3          | ∞                  | ∞                 |
+| **Sync Limit**              | 1          | ∞                  | ∞                 |
+| **Calendars per Sync Side** | 3          | 50 (8 both ways)   | 50 (8 both ways)  |
 | **Event Filters**           | No         | Yes                | Yes               |
 | **iCal Feed Customization** | No         | Yes                | Yes               |
 | **API Requests**            | 25 per day | ∞                  | ∞                 |
 
-The two limits that bite first are counted separately. A linked account is one connected Google, Outlook, iCloud, Fastmail, or CalDAV account, or one iCal/ICS subscription, and free is capped at two of them however many calendars each exposes. A sync mapping is one source calendar wired to one destination calendar, and free is capped at three, so a single source fanning out to three destinations uses the whole allowance. The refresh interval is how often Keeper.sh pushes to your destinations; ingestion from your sources runs every minute on every plan.
+The limits that bite first are counted separately. A linked account is one connected Google, Outlook, iCloud, Fastmail, or CalDAV account, or one iCal/ICS subscription, and free is capped at two of them however many calendars each exposes. A sync copies events from the calendars on one side into the calendars on the other, or both ways, keeping a set of calendars matching each other. Free is capped at one sync with up to three calendars on each side: up to three copied from and three copied into, or up to three kept matching both ways. Pro has unlimited syncs, each with up to 50 calendars on each side, or 8 kept matching both ways. Free accounts that already had more than this when syncs replaced per-calendar connections keep every sync, calendar and Pro setting they had, but can't add another sync, grow a calendar list beyond three (or beyond its current size, if it already holds more), or add new Pro settings. The refresh interval is how often Keeper.sh pushes to your destinations; ingestion from your sources runs every minute on every plan.
 
 # Self Hosted
 
@@ -610,7 +611,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | Method   | Path                                     | Description                                                                                                                                                    |
 | -------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/calendars`                      | List connected calendars. Accepts an optional comma-delimited `provider` filter.                                                                                |
-| `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume syncing for a calendar. Send `paused` as `true` to halt it in both directions without disconnecting it.                                         |
+| `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume a calendar. Send `paused` as `true` to halt it in both directions, in every sync it belongs to, without disconnecting it.                       |
 | `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
 | `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
 | `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
@@ -652,12 +653,12 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | `rsvp_event`          | Respond to a calendar event invitation with `accepted`, `declined`, or `tentative`.                                                            |
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
 | `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
-| `pause_sync`          | Pause or resume syncing for a single calendar without disconnecting it.                                                                        |
+| `pause_calendar`      | Pause or resume one calendar without disconnecting it, in every sync it belongs to. It does not pause a single sync.                           |
 | `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, and pause or force a sync, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, pause a calendar, and force a sync, not just read them.
 
 Example Claude Code MCP configuration:
 

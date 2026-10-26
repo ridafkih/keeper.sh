@@ -32,11 +32,12 @@ Keeper.sh also syncs those calendars. Writes go through to the provider that own
 
 ## Product context (busy-block sync)
 
-Alongside the MCP, Keeper.sh syncs calendars — Google, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal. A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A). Guest lists are **never** copied. Titles, descriptions, and locations stay private by default unless you opt in. Pasted ICS and share links are pull-only.
+Alongside the MCP, Keeper.sh syncs calendars — Google, Outlook, iCloud, Fastmail, CalDAV, and pasted iCal. Each **sync** copies events one way or both ways between the calendars you choose. Guest lists are **never** copied. Titles, descriptions, and locations stay private by default unless you opt in. Pasted ICS and share links are pull-only.
 
 ## Limits
 
-- **Free**: MCP and REST API together are capped at **25 requests per day** (`429` after that).
+- **Free**: 2 calendar accounts and 1 sync with up to 3 calendars on each side. MCP and REST API together are capped at **25 requests per day** (`429` after that).
+- **Pro**: unlimited syncs.
 - **Pro**: uncapped API/MCP usage on the hosted product (Pro is $5/mo or $45/year). Self-hosted instances without commercial mode are treated as Pro.
 
 ## Package layout

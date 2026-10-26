@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { use, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import { cn } from "@/utils/cn";
 import { ItemDisabledContext, MenuVariantContext } from "./navigation-menu.contexts";
@@ -14,8 +14,12 @@ import { shouldSkipEditableCommit } from "./navigation-menu-editable-logic";
 
 type NavigationMenuEditableItemProps = {
   onCommit: (value: string) => Promise<void> | void;
+  /** Called when editing ends without a commit, so a freshly added row can be discarded. */
+  onCancel?: () => void;
   label?: string;
   children?: ReactNode;
+  /** Sits beside the row, outside its click target, for a control such as a remove button. */
+  trailing?: ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
   allowEmpty?: boolean;
@@ -25,8 +29,10 @@ type NavigationMenuEditableItemProps = {
 export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProps) {
   const {
     onCommit,
+    onCancel,
     label,
     children,
+    trailing,
     defaultEditing,
     disabled,
     allowEmpty,
@@ -39,40 +45,46 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
 
   const startEditing = () => setEditing(true);
   const stopEditing = () => setEditing(false);
-
-  if (editing) {
-    return (
-      <EditableItemInput
-        value={resolveValue()}
-        label={label}
-        allowEmpty={allowEmpty}
-        className={className}
-        onCommit={async (trimmed) => {
-          await onCommit(trimmed);
-          stopEditing();
-        }}
-        onCancel={stopEditing}
-      />
-    );
-  }
+  const cancelEditing = () => {
+    stopEditing();
+    onCancel?.();
+  };
 
   return (
-    <EditableItemDisplay
-      label={label}
-      disabled={disabled}
-      className={className}
-      onStartEditing={startEditing}
-    >
-      {children ?? <EditableItemDefaultValue value={resolveValue()} label={label} />}
-    </EditableItemDisplay>
+    <EditableRow editing={editing} trailing={trailing}>
+      {editing ? (
+        <EditableItemInput
+          value={resolveValue()}
+          label={label}
+          allowEmpty={allowEmpty}
+          className={className}
+          onCommit={async (trimmed) => {
+            await onCommit(trimmed);
+            stopEditing();
+          }}
+          onCancel={cancelEditing}
+        />
+      ) : (
+        <EditableItemDisplay
+          label={label}
+          disabled={disabled}
+          className={className}
+          onStartEditing={startEditing}
+        >
+          {children ?? <EditableItemDefaultValue value={resolveValue()} label={label} />}
+        </EditableItemDisplay>
+      )}
+    </EditableRow>
   );
 }
 
 type NavigationMenuEditableTemplateItemProps = {
   onCommit: (value: string) => Promise<void> | void;
+  onCancel?: () => void;
   label?: string;
   valueContent?: ReactNode;
   children?: ReactNode;
+  trailing?: ReactNode;
   renderInput: (value: string) => ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
@@ -82,9 +94,11 @@ type NavigationMenuEditableTemplateItemProps = {
 export function NavigationMenuEditableTemplateItem(props: NavigationMenuEditableTemplateItemProps) {
   const {
     onCommit,
+    onCancel,
     label,
     valueContent,
     children,
+    trailing,
     renderInput,
     defaultEditing,
     disabled,
@@ -97,32 +111,36 @@ export function NavigationMenuEditableTemplateItem(props: NavigationMenuEditable
 
   const startEditing = () => setEditing(true);
   const stopEditing = () => setEditing(false);
-
-  if (editing) {
-    return (
-      <EditableTemplateItemInput
-        value={resolveValue()}
-        label={label}
-        renderInput={renderInput}
-        className={className}
-        onCommit={async (trimmed) => {
-          await onCommit(trimmed);
-          stopEditing();
-        }}
-        onCancel={stopEditing}
-      />
-    );
-  }
+  const cancelEditing = () => {
+    stopEditing();
+    onCancel?.();
+  };
 
   return (
-    <EditableItemDisplay
-      label={label}
-      disabled={disabled}
-      className={className}
-      onStartEditing={startEditing}
-    >
-      {children ?? <EditableItemDefaultValue value={valueContent ?? resolveValue()} label={label} />}
-    </EditableItemDisplay>
+    <EditableRow editing={editing} trailing={trailing}>
+      {editing ? (
+        <EditableTemplateItemInput
+          value={resolveValue()}
+          label={label}
+          renderInput={renderInput}
+          className={className}
+          onCommit={async (trimmed) => {
+            await onCommit(trimmed);
+            stopEditing();
+          }}
+          onCancel={cancelEditing}
+        />
+      ) : (
+        <EditableItemDisplay
+          label={label}
+          disabled={disabled}
+          className={className}
+          onStartEditing={startEditing}
+        >
+          {children ?? <EditableItemDefaultValue value={valueContent ?? resolveValue()} label={label} />}
+        </EditableItemDisplay>
+      )}
+    </EditableRow>
   );
 }
 
@@ -183,6 +201,23 @@ function useEditableCommit(
   return { inputProps };
 }
 
+const keepInputFocused = (event: ReactMouseEvent) => event.preventDefault();
+
+// The row and its trailing slot stay mounted across the editing toggle, so a focused remove button keeps its focus.
+// While editing, pressing the trailing control keeps focus in the input, so its click lands instead of a blur commit.
+function EditableRow({ editing, trailing, children }: { editing: boolean; trailing?: ReactNode; children: ReactNode }) {
+  return (
+    <li className={cn(editing && "relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring", trailing && "flex items-center")}>
+      {children}
+      {trailing && (
+        <div className="contents" onMouseDown={editing ? keepInputFocused : undefined}>
+          {trailing}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function EditableItemInput({
   value,
   label,
@@ -206,12 +241,10 @@ function EditableItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
-      <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
-        {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-        <input {...inputProps} className={cn(inputClass, "text-foreground-muted")} />
-      </div>
-    </li>
+    <div className={navigationMenuItemStyle({ variant, interactive: false, className: cn("min-w-0 flex-1", className) })}>
+      {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
+      <input {...inputProps} className={cn(inputClass, "text-foreground-muted")} />
+    </div>
   );
 }
 
@@ -238,26 +271,24 @@ function EditableTemplateItemInput({
   );
 
   return (
-    <li className="relative z-10 rounded-[0.875rem] has-focus:ring-2 has-focus:ring-ring">
-      <div className={navigationMenuItemStyle({ variant, interactive: false, className })}>
-        {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-        <div className={cn(inputClass, "grid items-center")}>
-          <input
-            {...inputProps}
-            className={cn(
-              "col-start-1 row-start-1 w-full text-sm tracking-tight bg-transparent text-transparent caret-foreground-muted cursor-text outline-none",
-              label && "text-right",
-            )}
-          />
-          <TemplateInputOverlay
-            inputRef={inputProps.ref}
-            defaultValue={value}
-            renderInput={renderInput}
-            label={label}
-          />
-        </div>
+    <div className={navigationMenuItemStyle({ variant, interactive: false, className: cn("min-w-0 flex-1", className) })}>
+      {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
+      <div className={cn(inputClass, "grid items-center")}>
+        <input
+          {...inputProps}
+          className={cn(
+            "col-start-1 row-start-1 w-full text-sm tracking-tight bg-transparent text-transparent caret-foreground-muted cursor-text outline-none",
+            label && "text-right",
+          )}
+        />
+        <TemplateInputOverlay
+          inputRef={inputProps.ref}
+          defaultValue={value}
+          renderInput={renderInput}
+          label={label}
+        />
       </div>
-    </li>
+    </div>
   );
 }
 
@@ -338,26 +369,24 @@ function EditableItemDisplay({
   const disabled = disabledProp || disabledFromContext;
 
   return (
-    <li>
-      <ItemDisabledContext value={disabled}>
-        <button
-          type="button"
-          onClick={() => !disabled && onStartEditing()}
-          disabled={disabled}
-          className={navigationMenuItemStyle({ variant, interactive: !disabled, className })}
-        >
-          {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
-          {children}
-          <Pencil
-            size={14}
-            className={navigationMenuItemIconStyle({
-              variant,
-              disabled,
-              className: label ? "shrink-0" : "ml-auto",
-            })}
-          />
-        </button>
-      </ItemDisabledContext>
-    </li>
+    <ItemDisabledContext value={disabled}>
+      <button
+        type="button"
+        onClick={() => !disabled && onStartEditing()}
+        disabled={disabled}
+        className={navigationMenuItemStyle({ variant, interactive: !disabled, className: cn("min-w-0 flex-1", className) })}
+      >
+        {label && <NavigationMenuItemLabel className="shrink-0">{label}</NavigationMenuItemLabel>}
+        {children}
+        <Pencil
+          size={14}
+          className={navigationMenuItemIconStyle({
+            variant,
+            disabled,
+            className: label ? "shrink-0" : "ml-auto",
+          })}
+        />
+      </button>
+    </ItemDisabledContext>
   );
 }

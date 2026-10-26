@@ -2,6 +2,7 @@ import type Redis from "ioredis";
 
 const SYNC_TRIGGER_COOLDOWN_SECONDS = 60;
 const CALENDAR_REFRESH_COOLDOWN_SECONDS = 60;
+const LOGIN_IMPORT_COOLDOWN_SECONDS = 60;
 const MINIMUM_RETRY_AFTER_SECONDS = 1;
 
 type SyncTriggerLimitResult =
@@ -43,10 +44,17 @@ const checkAndClaimCalendarRefresh = (
     CALENDAR_REFRESH_COOLDOWN_SECONDS,
   );
 
+const checkAndClaimLoginImport = (
+  redisClient: Redis,
+  userId: string,
+): Promise<SyncTriggerLimitResult> =>
+  claimCooldown(redisClient, `login_import:${userId}`, LOGIN_IMPORT_COOLDOWN_SECONDS);
+
 export {
   CALENDAR_REFRESH_COOLDOWN_SECONDS,
   SYNC_TRIGGER_COOLDOWN_SECONDS,
   checkAndClaimCalendarRefresh,
+  checkAndClaimLoginImport,
   checkAndClaimSyncTrigger,
 };
 export type { SyncTriggerLimitResult };

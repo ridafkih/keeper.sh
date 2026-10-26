@@ -49,20 +49,20 @@ Each calendar can be read from, written to, or both. A pasted iCal link can only
 
 Leaving detail behind is the default on both routes out of Keeper.sh: the copies written to your other calendars, and the links you share.
 
-A calendar you copy events from holds back their titles, descriptions and locations. The copy's title comes from a template that starts as `{{calendar_name}}`, so a colleague sees the calendar's name in the slot. Turning any of the three back on is a per-calendar Pro setting, and a deliberate act.
+A sync holds back the titles, descriptions and locations of the events it copies. The copy's title comes from a template that starts as `{{calendar_name}}`, so a colleague sees the calendar's name in the slot. Turning any of the three back on is a per-sync Pro setting, and a deliberate act.
 
 Shared iCal links hide event names, descriptions and locations too. They show time blocks labelled "Busy".
 
 Guest lists are never copied to another calendar or to a shared link, and no setting turns that on. They are read only when you use the invite and RSVP features.
 
-Per-calendar settings:
-- Show or hide event titles (hidden by default)
-- Show or hide descriptions and locations (hidden by default)
-- A custom title template using `{{event_name}}` or `{{calendar_name}}`
-- Skip all-day events
-- Skip Google's own event types (Focus Time, Working Location, Out of Office)
+Per-sync settings:
+- Share As: Busy Only (the default: just the time, named after the calendar), Title Only (keeps the title, drops the description and location) or Full Details
+- A custom title for Busy Only copies, using `{{calendar_name}}`
+- Mark copies private
+- Skip all-day events, Focus Time, Out of Office, or events whose title contains a word you choose
+- Rules that skip, rename, strip the description or location from, or mark private the events that match them
 
-Turning titles, descriptions or locations back on, changing the title template, the event filters and the date range covered are Pro settings. Hiding titles, descriptions and locations is the default on every plan.
+Google Working Location events are never copied. Every setting above apart from Busy Only is a Pro setting, as is the date range covered. Busy Only is the default on every plan.
 
 ### Shareable Calendar Link
 
@@ -70,24 +70,22 @@ Keeper.sh gives you a private URL combining events from the calendars you choose
 
 Links are named, and each has its own calendars and its own privacy settings. A link shared with a client can carry different detail from one shared at home. Free covers one link; Pro is unlimited.
 
-### Connections
+### Syncs
 
-Connect your calendar accounts, then say which calendar's events are copied into which. One calendar can be copied into several others. One calendar can receive from several others.
+Connect your calendar accounts, then set up a sync to say which calendars' events are copied into which. A sync runs one way, copying every calendar it copies from into every calendar it copies into, or both ways, keeping a set of calendars matching each other. Each sync has its own privacy settings, can be paused on its own, and keeps a log of what it copied.
 
 Setup:
 1. Connect an account by sign-in, CalDAV, or a pasted iCal URL
-2. Pick calendars
-3. Rename them for clearer labels
-4. Say which one copies into which
-
-A connection runs one way. If you want two calendars to match each other, that is two connections.
+2. Start a sync, from a ready-made profile such as Block My Time or from scratch
+3. Pick the calendars to copy from and into, or the ones to keep matching both ways
+4. Choose what the copies share
 
 ## Pricing
 
-- **Free**: 2 calendar accounts, 3 connections, 1 shared link, changes landing every 30 minutes, 25 API requests a day
-- **Pro ($5 a month, or $45 a year)**: Unlimited accounts, connections and shared links, Google and Outlook changes landing within seconds, event filters, link customization, uncapped API requests, priority support
+- **Free**: 2 calendar accounts, 1 sync with up to 3 calendars on each side, 1 shared link, changes landing every 30 minutes, 25 API requests a day
+- **Pro ($5 a month, or $45 a year)**: Unlimited accounts, syncs and shared links, Google and Outlook changes landing within seconds, event filters, link customization, uncapped API requests, priority support
 
-There is no cap on how many calendars an account holds. An account is one connected Google, Outlook, iCloud, Fastmail or CalDAV login, or one iCal subscription. A connection is one calendar wired into one other calendar.
+There is no cap on how many calendars an account holds. An account is one connected Google, Outlook, iCloud, Fastmail or CalDAV login, or one iCal subscription. The free sync copies from up to 3 calendars into up to 3, or keeps up to 3 matching each other both ways.
 
 On Pro, Google Calendar and Microsoft Graph send Keeper.sh a notification when an event changes, and the copy is written as it arrives, so the change lands within seconds. Polling continues underneath it, so a missed notification costs the old timing rather than the change. On Free, and on iCloud, Fastmail and other CalDAV calendars on either plan, calendars are read on a timer — Apple publishes no way for a calendar tool to be told an event changed.
 
@@ -112,7 +110,7 @@ Authenticate with an API token created from Settings → API Tokens in the dashb
 
 Endpoints:
 - `GET /api/v1/calendars` — List connected calendars, with an optional comma-delimited `provider` filter
-- `PATCH /api/v1/calendars/{calendarId}` — Pause or resume a calendar in both directions without disconnecting it
+- `PATCH /api/v1/calendars/{calendarId}` — Pause or resume a calendar in every sync it belongs to, in both directions, without disconnecting it. This pauses the calendar, not a single sync
 - `GET /api/v1/calendars/{calendarId}/invites` — List invitations on a calendar with no reply yet, within a date range
 - `GET /api/v1/accounts` — List connected calendar accounts and how many calendars each has
 - `GET /api/v1/events` — List events in a date range, with `calendarId`, `availability` and `isAllDay` filters, and `count=true` for a count only
@@ -130,7 +128,7 @@ On the free plan the API is capped at 25 requests a day, after which requests re
 
 ## MCP (Model Context Protocol)
 
-Keeper.sh includes an optional MCP server. It gives AI agents such as Claude read and write access to your calendar data. The toolset books, amends, deletes and answers events, searches for open time, and pauses or forces a sync.
+Keeper.sh includes an optional MCP server. It gives AI agents such as Claude read and write access to your calendar data. The toolset books, amends, deletes and answers events, searches for open time, pauses a calendar and forces a sync.
 
 The server authenticates with OAuth 2.1 and a consent screen you approve. It is served through the web service at `/mcp`.
 
@@ -156,7 +154,7 @@ Scheduling:
 
 Sync control:
 - **trigger_sync** — Run a sync now instead of waiting for the next one, throttled to one request a minute per user
-- **pause_sync** — Pause or resume a single calendar without disconnecting it, keeping its stored events
+- **pause_calendar** — Pause or resume one calendar without disconnecting it, in every sync it belongs to, keeping its stored events. It does not pause a single sync; that is done from the dashboard
 
 ### Connecting
 

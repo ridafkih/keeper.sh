@@ -5,12 +5,11 @@ import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
 import { idParamSchema } from "@/utils/request-query";
 import {
-  getDestinationsForSource,
-  getSourcesForDestination,
   requestUserSync,
   scheduleMappingReplacementSync,
   withMappingMutationLocks,
 } from "@/utils/source-destination-mappings";
+import { setCalendarPaused } from "@/utils/calendar-pause";
 import { withProviderMetadata } from "@/utils/provider-display";
 import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
 import type { FeedMembershipClient } from "@/utils/ical-feeds";
@@ -34,15 +33,6 @@ const GET = withWideEvent(
         provider: calendarAccountsTable.provider,
         url: calendarsTable.url,
         calendarUrl: calendarsTable.calendarUrl,
-        customEventName: calendarsTable.customEventName,
-        excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
-        excludeAvailabilities: calendarsTable.excludeAvailabilities,
-        excludeEventDescription: calendarsTable.excludeEventDescription,
-        excludeEventLocation: calendarsTable.excludeEventLocation,
-        excludeEventName: calendarsTable.excludeEventName,
-        excludeFocusTime: calendarsTable.excludeFocusTime,
-        excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-        excludeTitleKeywords: calendarsTable.excludeTitleKeywords,
         syncFutureRange: calendarsTable.syncFutureRange,
         syncHistoricRange: calendarsTable.syncHistoricRange,
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
@@ -50,7 +40,6 @@ const GET = withWideEvent(
         disabled: calendarsTable.disabled,
         ingestFailureCount: calendarsTable.ingestFailureCount,
         ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
-        markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
         providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
@@ -69,24 +58,9 @@ const GET = withWideEvent(
       return ErrorResponse.notFound().toResponse();
     }
 
-    const [destinationIds, sourceIds] = await Promise.all([
-      getDestinationsForSource(userId, id),
-      getSourcesForDestination(userId, id),
-    ]);
-
-    return Response.json({
-      ...withProviderMetadata(source),
-      destinationIds,
-      sourceIds,
-    });
+    return Response.json(withProviderMetadata(source));
   }),
 );
-
-const SYNC_REQUESTING_FIELDS = [
-  "markEventsAsPrivate",
-  "excludeAvailabilities",
-  "excludeTitleKeywords",
-] as const;
 
 const PATCH = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
@@ -95,21 +69,7 @@ const PATCH = withWideEvent(
       { body: payload, params, userId },
       {
         canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
-        getSourceExclusionState: async (userIdToRead, sourceCalendarId) => {
-          const [source] = await database
-            .select({
-              excludeAvailabilities: calendarsTable.excludeAvailabilities,
-              provider: calendarAccountsTable.provider,
-            })
-            .from(calendarsTable)
-            .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-            .where(and(
-              eq(calendarsTable.id, sourceCalendarId),
-              eq(calendarsTable.userId, userIdToRead),
-            ))
-            .limit(1);
-          return source ?? null;
-        },
+        setPaused: (userIdToPause, calendarId, paused) => setCalendarPaused(database, userIdToPause, calendarId, paused),
         updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
           const applyFeedMembership = async (
             client: FeedMembershipClient,
@@ -152,9 +112,7 @@ const PATCH = withWideEvent(
                     ),
                   )
                   .returning();
-                const requestsSync = updated?.capabilities.includes("push")
-                  || SYNC_REQUESTING_FIELDS.some((field) => field in updates);
-                if (updated && requestsSync) {
+                if (updated?.capabilities.includes("push")) {
                   await requestUserSync(transaction, userIdToUpdate);
                 }
                 await applyFeedMembership(transaction, updated ?? null);
@@ -178,9 +136,6 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
-            if (updated && SYNC_REQUESTING_FIELDS.some((field) => field in updates)) {
-              await requestUserSync(transaction, userIdToUpdate);
-            }
             await applyFeedMembership(transaction, updated ?? null);
             return updated ?? null;
           });
