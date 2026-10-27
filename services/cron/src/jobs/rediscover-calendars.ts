@@ -10,8 +10,10 @@ import {
   ensureValidToken,
   isProviderAuthFailure,
   isProviderTokenRefreshFailure,
+  isRedisUnavailableError,
   isTimeoutError,
   markCalendarRediscoveryAttempt,
+  REDIS_UNAVAILABLE_SLUG,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
@@ -285,6 +287,9 @@ const resolveTerminalAuthSlug = (error: unknown): string => {
 };
 
 const resolveRediscoveryErrorSlug = (error: unknown): string => {
+  if (isRedisUnavailableError(error)) {
+    return REDIS_UNAVAILABLE_SLUG;
+  }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
   }

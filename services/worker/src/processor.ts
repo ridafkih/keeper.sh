@@ -4,8 +4,10 @@ import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import {
   createSyncAggregateRuntime,
+  isRedisUnavailableError,
   mergeAbortSignals,
   RecurrenceMaterializationLimitError,
+  REDIS_UNAVAILABLE_SLUG,
 } from "@keeper.sh/calendar";
 import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
@@ -71,6 +73,10 @@ const classifyKnownSyncError = (error: unknown): string | null => {
 
   if (error instanceof RecurrenceMaterializationLimitError) {
     return "recurrence-materialization-limit";
+  }
+
+  if (isRedisUnavailableError(error)) {
+    return REDIS_UNAVAILABLE_SLUG;
   }
 
   if (error instanceof SyncLockRenewalError) {

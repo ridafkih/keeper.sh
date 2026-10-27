@@ -1,4 +1,5 @@
 import type { CronOptions } from "cronbake";
+import { REDIS_UNAVAILABLE_SLUG, isRedisUnavailableError } from "@keeper.sh/calendar";
 import { resolveDatabaseErrorClassification } from "@keeper.sh/database";
 import { context, widelog } from "./logging";
 
@@ -32,6 +33,13 @@ const withWideEvent = ({ fields, name, onError, run }: WideEventOptions): Promis
     }
   });
 
+const resolveUnclassifiedSlug = (error: unknown): string => {
+  if (isRedisUnavailableError(error)) {
+    return REDIS_UNAVAILABLE_SLUG;
+  }
+  return "unclassified";
+};
+
 const withCronWideEvent = (options: CronOptions): CronOptions => ({
   ...options,
   callback: async () => {
@@ -42,7 +50,7 @@ const withCronWideEvent = (options: CronOptions): CronOptions => ({
         if (databaseError?.sqlState) {
           widelog.set("db.error_sqlstate", databaseError.sqlState);
         }
-        widelog.errorFields(error, { slug: databaseError?.slug ?? "unclassified" });
+        widelog.errorFields(error, { slug: databaseError?.slug ?? resolveUnclassifiedSlug(error) });
         throw error;
       },
       run: options.callback,

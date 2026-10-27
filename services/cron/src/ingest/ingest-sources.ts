@@ -17,6 +17,8 @@ import {
   isHostedCalDAVProvider,
   getCalDAVAccountRequestsPerMinute,
   ensureValidToken,
+  REDIS_UNAVAILABLE_SLUG,
+  isRedisUnavailableError,
   isTimeoutError,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
@@ -234,6 +236,9 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   const databaseErrorSlug = resolveDatabaseIngestErrorSlug(error);
   if (databaseErrorSlug) {
     return databaseErrorSlug;
+  }
+  if (isRedisUnavailableError(error)) {
+    return REDIS_UNAVAILABLE_SLUG;
   }
   if (error instanceof CalDAVIncompleteMultiGetError) {
     return "provider-response-incomplete";
