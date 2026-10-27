@@ -10,6 +10,7 @@ import {
   parseIndexableRoutePaths,
 } from "../src/lib/indexable-routes";
 import { processChangelogDirectory } from "../src/lib/changelog-content";
+import { dedupeSitemapEntries, type SitemapEntry } from "../src/lib/sitemap-entries";
 import { staticAssetSitemapPaths } from "../src/lib/static-asset-sitemap-paths";
 
 const SITE_URL = "https://www.keeper.sh";
@@ -20,11 +21,6 @@ const GUIDES_BASE_PATH = "/guides";
 const RECIPES_BASE_PATH = "/recipes";
 const FRONTMATTER_PATTERN = /^---\r?\n([\s\S]*?)\r?\n---/;
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-interface SitemapEntry {
-  path: string;
-  lastmod?: string;
-}
 
 function readStaticEntries(): SitemapEntry[] {
   return staticPageMetadata.map(({ path, updatedAt }) => {
@@ -199,7 +195,7 @@ export function sitemapPlugin(): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "sitemap.xml",
-        source: buildSitemapXml(entries),
+        source: buildSitemapXml(dedupeSitemapEntries(entries)),
       });
     },
   };
