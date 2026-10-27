@@ -182,6 +182,10 @@ const sleep = (delayMs: number): Promise<void> =>
     setTimeout(resolve, delayMs);
   });
 
+const failBoth = (client: Client): Promise<unknown> => client.query(
+  `UPDATE "source_ingest_schedule" SET "failureCount" = 1, "parkedReason" = 'credential-rejected'`,
+);
+
 describe.skipIf(!administrativeUrl)("source ingest schedule", () => {
   beforeAll(async () => {
     await withAdministrativeClient(async (client) => {
@@ -1032,10 +1036,6 @@ describe.skipIf(!administrativeUrl)("source ingest schedule", () => {
         await prober.end();
       }
     };
-
-    const failBoth = (client: Client): Promise<unknown> => client.query(
-      `UPDATE "source_ingest_schedule" SET "failureCount" = 1, "parkedReason" = 'credential-rejected'`,
-    );
 
     it("completes a batch", async () => {
       await withScratch("order_complete", async ({ client, database, url }) => {
