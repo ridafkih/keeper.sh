@@ -16,6 +16,10 @@ import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
+import {
+  REGISTRATION_EMAIL_DOMAIN_MESSAGE,
+  isRegistrationEmailAllowed,
+} from "./registration-email-domains";
 import type { McpTokenVersion } from "./mcp-token-version";
 import {
   createUnverifiedRegistrationReclaim,
@@ -72,6 +76,7 @@ interface AuthConfig {
   passkeyRpName?: string;
   passkeyOrigin?: string;
   trustedOrigins?: string[];
+  registrationEmailDomains?: string[];
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
 }
@@ -169,6 +174,7 @@ const createAuth = (config: AuthConfig) => {
     passkeyRpName,
     passkeyOrigin,
     trustedOrigins,
+    registrationEmailDomains = [],
     mcpResourceUrl,
     mcpApiBaseUrl,
   } = config;
@@ -402,6 +408,11 @@ const createAuth = (config: AuthConfig) => {
             if (oidcEnabled && isLocalAccountEmail(user.email)) {
               return Promise.resolve(false);
             }
+            if (!isRegistrationEmailAllowed(user.email, registrationEmailDomains)) {
+              return Promise.reject(
+                new APIError("FORBIDDEN", { message: REGISTRATION_EMAIL_DOMAIN_MESSAGE }),
+              );
+            }
             return Promise.resolve();
           },
         },
@@ -540,6 +551,7 @@ export {
   isKeeperMcpEnabledAuth,
 };
 export { resolveAuthCapabilities } from "./capabilities";
+export { parseRegistrationEmailDomains } from "./registration-email-domains";
 export {
   KEEPER_API_DEFAULT_SCOPE,
   KEEPER_API_DESTINATION_SCOPE,

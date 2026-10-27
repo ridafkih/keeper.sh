@@ -29,6 +29,7 @@ const schema = {
   POLAR_MODE: "'sandbox' | 'production' | undefined?",
   POLAR_WEBHOOK_SECRET: "string?",
   REDIS_URL: "string.url",
+  REGISTRATION_EMAIL_DOMAINS: "string?",
   RESEND_API_KEY: "string?",
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
