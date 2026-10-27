@@ -51,13 +51,18 @@ const googleAdsHosts = [
   "https://www.google.com",
 ].join(" ");
 
+const googleAnalyticsHosts = [
+  "https://*.google-analytics.com",
+  "https://*.analytics.google.com",
+].join(" ");
+
 const cspHeader = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' ${googleAdsHosts} https://cdn.visitors.now`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${googleAdsHosts}`,
+  `img-src 'self' data: ${googleAdsHosts} ${googleAnalyticsHosts}`,
   "font-src 'self'",
-  `connect-src 'self' ${googleAdsHosts} https://www.google-analytics.com https://cdn.visitors.now https://e.visitors.now`,
+  `connect-src 'self' ${googleAdsHosts} ${googleAnalyticsHosts} https://cdn.visitors.now https://e.visitors.now`,
   "frame-src https://polar.sh",
   "frame-ancestors 'none'",
   "base-uri 'self'",

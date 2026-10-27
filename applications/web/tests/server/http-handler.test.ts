@@ -278,6 +278,14 @@ async function productionCsp(): Promise<Map<string, string[]>> {
 }
 
 describe("content security policy", () => {
+  it("allows the hosts Google Analytics sends hits to", async () => {
+    const directives = await productionCsp();
+
+    expect(directives.get("connect-src")).toContain("https://*.google-analytics.com");
+    expect(directives.get("connect-src")).toContain("https://*.analytics.google.com");
+    expect(directives.get("img-src")).toContain("https://*.google-analytics.com");
+  });
+
   it("allows the hosts Google Ads loads conversion scripts from", async () => {
     const scriptSrc = (await productionCsp()).get("script-src") ?? [];
 

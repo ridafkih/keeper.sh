@@ -33,6 +33,7 @@ const runtimeConfig: PublicRuntimeConfig = {
   googleAdsConversionLabel: "test-label",
   googleAdsId: "AW-1234567890",
   googleAdsSignupConversionLabel: "signup-label",
+  googleAnalyticsId: null,
   polarProMonthlyProductId: null,
   polarProYearlyProductId: null,
   visitorsNowToken: null,
@@ -299,5 +300,33 @@ describe("AnalyticsScripts oauth signup conversions", () => {
     });
 
     expect(conversions()).toHaveLength(1);
+  });
+});
+
+describe("AnalyticsScripts Google tag", () => {
+  const renderMarkup = (config: PublicRuntimeConfig): string =>
+    renderToStaticMarkup(<AnalyticsScripts runtimeConfig={config} />);
+
+  it("configures Google Analytics on the Google Ads tag loader", () => {
+    const markup = renderMarkup({ ...runtimeConfig, googleAnalyticsId: "G-TEST123" });
+
+    expect(markup.match(/googletagmanager\.com\/gtag\/js/g)).toHaveLength(1);
+    expect(markup).toContain("gtag/js?id=AW-1234567890");
+    expect(markup).toContain("gtag('config', 'AW-1234567890');");
+    expect(markup).toContain("gtag('config', 'G-TEST123');");
+  });
+
+  it("loads the Google tag for Google Analytics alone", () => {
+    const markup = renderMarkup({ ...runtimeConfig, googleAdsId: null, googleAnalyticsId: "G-TEST123" });
+
+    expect(markup).toContain("gtag/js?id=G-TEST123");
+    expect(markup).toContain("'analytics_storage': 'denied'");
+    expect(markup).not.toContain("AW-1234567890");
+  });
+
+  it("renders no Google tag without any Google ids", () => {
+    const markup = renderMarkup({ ...runtimeConfig, googleAdsId: null, googleAnalyticsId: null });
+
+    expect(markup).not.toContain("googletagmanager");
   });
 });
