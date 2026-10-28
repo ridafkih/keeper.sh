@@ -241,6 +241,16 @@ describe("techArticleSchema", () => {
   });
 });
 
+describe("jsonLdScript", () => {
+  it("keeps markup-significant characters out of the script body", () => {
+    const text = "</script><!-- & \u2028\u2029";
+    const script = jsonLdScript({ text });
+
+    expect(script.children).not.toMatch(/[<>&\u2028\u2029]/);
+    expect(JSON.parse(script.children)).toEqual({ text });
+  });
+});
+
 describe("markdownAlternateLink", () => {
   it("points at the page's markdown version", () => {
     expect(markdownAlternateLink("/docs/plans-and-limits")).toEqual({

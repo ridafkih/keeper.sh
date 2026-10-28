@@ -21,8 +21,17 @@ export function markdownAlternateLink(path: string) {
   return { rel: "alternate", type: "text/markdown", href: `${canonicalUrl(path)}.md` };
 }
 
+const SCRIPT_UNSAFE_CHARACTERS = /[<>&\u2028\u2029]/g;
+
+function escapeForScript(character: string): string {
+  return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+}
+
 export function jsonLdScript(data: Record<string, unknown>) {
-  return { type: "application/ld+json", children: JSON.stringify(data) };
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify(data).replace(SCRIPT_UNSAFE_CHARACTERS, escapeForScript),
+  };
 }
 
 export interface SeoMetaOptions {
