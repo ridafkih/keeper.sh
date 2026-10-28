@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlogPost } from "../../src/lib/blog-posts";
 
 const { blogPost } = vi.hoisted(() => ({
@@ -22,6 +22,14 @@ vi.mock("../../src/lib/blog-posts", () => ({ blogPosts: [blogPost] }));
 import { renderMarkdownPage } from "../../src/lib/markdown-pages";
 
 describe("renderMarkdownPage", () => {
+  beforeEach(() => {
+    vi.stubEnv("COMMERCIAL_MODE", "true");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("returns the prepared document for a content page", () => {
     expect(renderMarkdownPage("/blog/how-sync-works")).toContain(
       "# How sync works\n\n> How sync works.\n\nRead [the docs](https://www.keeper.sh/docs).",
@@ -42,4 +50,8 @@ describe("renderMarkdownPage", () => {
     }
   });
 
+  it("serves nothing where the marketing site is turned off", () => {
+    vi.stubEnv("COMMERCIAL_MODE", "false");
+    expect(renderMarkdownPage("/blog/how-sync-works")).toBeNull();
+  });
 });

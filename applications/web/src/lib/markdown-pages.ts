@@ -2,6 +2,7 @@ import { blogPosts, type BlogPost } from "./blog-posts";
 import { comparePages } from "./compare-pages";
 import { contentSiloList } from "./content-silos";
 import { toMarkdownDocument } from "./markdown-document";
+import { getServerPublicRuntimeConfig } from "./runtime-config";
 
 interface MarkdownCollection {
   basePath: string;
@@ -31,5 +32,6 @@ const markdownPages = new Map(
 );
 
 export function renderMarkdownPage(path: string): string | null {
+  if (!getServerPublicRuntimeConfig({ environment: process.env }).commercialMode) return null;
   return markdownPages.get(path) ?? null;
 }
