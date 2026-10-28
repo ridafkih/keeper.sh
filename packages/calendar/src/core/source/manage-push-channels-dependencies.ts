@@ -1,4 +1,4 @@
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
   calendarAccountsTable,
@@ -61,6 +61,8 @@ const createManagePushChannelsDependencies = (
     const shared = and(
       arrayContains(calendarsTable.capabilities, ["pull"]),
       eq(calendarsTable.disabled, false),
+      isNull(calendarsTable.providerMissingSince),
+      isNull(calendarsTable.unavailableSince),
       inArray(calendarAccountsTable.provider, PUSH_PROVIDERS),
     );
     if (!config.onlyAccountId) {

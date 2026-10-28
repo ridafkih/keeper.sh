@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { createManagePushChannelsDependencies } from "../../../src/core/source/manage-push-channels-dependencies";
 
 const ACCOUNT_ID = "b0a0c0d0-0000-4000-8000-000000000001";
@@ -73,5 +75,20 @@ describe("narrowing the sweep to one account", () => {
 
   it("names no account when the run is the whole sweep", async () => {
     expect(mentions(await scopeOf(), ACCOUNT_ID)).toBe(false);
+  });
+});
+
+const renderScope = async (): Promise<string> => {
+  const condition = await scopeOf();
+  return new PgDialect({ casing: "snake_case" }).sqlToQuery(condition as SQL).sql;
+};
+
+describe("calendars missing at the provider", () => {
+  it("leaves out calendars a refresh could not find", async () => {
+    expect(await renderScope()).toContain("\"provider_missing_since\" is null");
+  });
+
+  it("leaves out calendars rediscovery marked unavailable", async () => {
+    expect(await renderScope()).toContain("\"unavailable_since\" is null");
   });
 });
