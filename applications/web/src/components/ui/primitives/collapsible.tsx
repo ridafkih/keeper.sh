@@ -30,6 +30,7 @@ export function Collapsible({ trigger, children, className }: CollapsibleProps) 
       <summary className={collapsibleTrigger()}>
         {trigger}
         <svg
+          aria-hidden="true"
           className={collapsibleIcon()}
           width="16"
           height="16"
