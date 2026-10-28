@@ -17,6 +17,10 @@ function entityId(path: string, fragment: string): string {
   return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
+export function markdownAlternateLink(path: string) {
+  return { rel: "alternate", type: "text/markdown", href: `${canonicalUrl(path)}.md` };
+}
+
 export function jsonLdScript(data: Record<string, unknown>) {
   return { type: "application/ld+json", children: JSON.stringify(data) };
 }

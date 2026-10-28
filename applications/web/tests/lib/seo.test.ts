@@ -7,6 +7,7 @@ import {
   faqPageSchema,
   faqSchema,
   jsonLdScript,
+  markdownAlternateLink,
   offerCatalogSchema,
   organizationSchema,
   personSchema,
@@ -237,6 +238,16 @@ describe("techArticleSchema", () => {
     const schema = techArticleSchema({ ...post, path: "/docs/plans-and-limits" });
     expect(schema["@type"]).toBe("TechArticle");
     expect(schema["@id"]).toBe("https://www.keeper.sh/docs/plans-and-limits/#techarticle");
+  });
+});
+
+describe("markdownAlternateLink", () => {
+  it("points at the page's markdown version", () => {
+    expect(markdownAlternateLink("/docs/plans-and-limits")).toEqual({
+      rel: "alternate",
+      type: "text/markdown",
+      href: "https://www.keeper.sh/docs/plans-and-limits.md",
+    });
   });
 });
 

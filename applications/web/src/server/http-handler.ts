@@ -3,12 +3,17 @@ import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
 import { resolveMovedPath } from "@/lib/moved-paths";
+import { pagePathForMarkdown, prefersMarkdown } from "@/lib/markdown-document";
+import { canonicalUrl } from "@/lib/seo";
 import type { Runtime, ServerConfig } from "./types";
 
 const HTML_CACHE_TTL_MS = 60_000;
 const PUBLIC_HTML_CACHE_CONTROL = "public, max-age=0, s-maxage=600, stale-while-revalidate=86400";
 const PRIVATE_HTML_CACHE_CONTROL = "private, no-store";
 const PUBLIC_HTML_VARY = "accept-encoding";
+const NEGOTIATED_VARY = "accept, accept-encoding";
+const NEGOTIATED_MARKDOWN_CACHE_CONTROL = "private, max-age=600";
+const MARKDOWN_CONTENT_TYPE = "text/markdown; charset=utf-8";
 
 interface CachedHtml {
   body: string;
@@ -144,6 +149,60 @@ function notModifiedResponse(etag: string, config: ServerConfig): Response {
   return withSecurityHeaders(withPublicHtmlCacheHeaders(response, etag), config);
 }
 
+interface MarkdownCachePolicy {
+  cacheControl: string;
+  vary: string;
+}
+
+const EXPLICIT_MARKDOWN_CACHE: MarkdownCachePolicy = {
+  cacheControl: PUBLIC_HTML_CACHE_CONTROL,
+  vary: PUBLIC_HTML_VARY,
+};
+
+const NEGOTIATED_MARKDOWN_CACHE: MarkdownCachePolicy = {
+  cacheControl: NEGOTIATED_MARKDOWN_CACHE_CONTROL,
+  vary: NEGOTIATED_VARY,
+};
+
+function markdownResponse(body: string, pagePath: string, cache: MarkdownCachePolicy): Response {
+  return new Response(body, {
+    headers: {
+      "cache-control": cache.cacheControl,
+      "content-type": MARKDOWN_CONTENT_TYPE,
+      link: `<${canonicalUrl(pagePath)}>; rel="canonical"`,
+      vary: cache.vary,
+    },
+  });
+}
+
+async function resolveMarkdownResponse(
+  request: Request,
+  pathname: string,
+  runtime: Runtime,
+  config: ServerConfig,
+): Promise<Response | null> {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return null;
+  }
+
+  const explicitPagePath = pagePathForMarkdown(pathname);
+  if (explicitPagePath) {
+    const body = await runtime.renderMarkdown(explicitPagePath);
+    if (!body) return null;
+    const response = markdownResponse(body, explicitPagePath, EXPLICIT_MARKDOWN_CACHE);
+    return withCompression(request, withSecurityHeaders(response, config));
+  }
+
+  if (!prefersMarkdown(request.headers.get("accept"))) {
+    return null;
+  }
+
+  const body = await runtime.renderMarkdown(pathname);
+  if (!body) return null;
+  const response = markdownResponse(body, pathname, NEGOTIATED_MARKDOWN_CACHE);
+  return withCompression(request, withSecurityHeaders(response, config));
+}
+
 export async function handleApplicationRequest(
   request: Request,
   runtime: Runtime,
@@ -168,12 +227,17 @@ export async function handleApplicationRequest(
     return canonicalRedirect;
   }
 
+  const pathname = requestUrl.pathname;
+  const markdown = await resolveMarkdownResponse(request, pathname, runtime, config);
+  if (markdown) {
+    return markdown;
+  }
+
   const assetResponse = await runtime.handleAssetRequest(request);
   if (assetResponse.status !== 404) {
     return withCompression(request, assetResponse);
   }
 
-  const pathname = requestUrl.pathname;
   const cookieHeader = request.headers.get("cookie") ?? undefined;
   const isAuthenticated = hasSessionCookie(cookieHeader);
   const cacheKey = pathname;

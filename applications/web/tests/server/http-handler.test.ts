@@ -34,6 +34,7 @@ function createRuntime(cacheableHtmlPaths: string[], body = "<html>page</html>")
     }),
     renderApp: vi.fn(async () =>
       new Response(body, { headers: { "content-type": "text/html; charset=UTF-8" } })),
+    renderMarkdown: async (path) => (path === MARKDOWN_PAGE_PATH ? MARKDOWN_BODY : null),
   };
 }
 
@@ -49,6 +50,9 @@ function createCountingRuntime(cacheableHtmlPaths: string[]): Runtime {
     }),
   };
 }
+
+const MARKDOWN_PAGE_PATH = "/docs/plans-and-limits";
+const MARKDOWN_BODY = "# Plans and limits\n";
 
 function request(path: string, headers: Record<string, string> = {}): Request {
   return new Request(`http://localhost${path}`, { headers });
@@ -203,6 +207,56 @@ describe("handleApplicationRequest caching", () => {
 
     expect(response.status).toBe(307);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+});
+
+describe("handleApplicationRequest markdown", () => {
+  it("serves the markdown version of a content page at its .md path", async () => {
+    const runtime = createRuntime([]);
+
+    const response = await handleApplicationRequest(request(`${MARKDOWN_PAGE_PATH}.md`), runtime, config);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(response.headers.get("link")).toBe(`<https://www.keeper.sh${MARKDOWN_PAGE_PATH}>; rel="canonical"`);
+    expect(await response.text()).toBe(MARKDOWN_BODY);
+    expect(runtime.renderApp).not.toHaveBeenCalled();
+  });
+
+  it("serves markdown when the Accept header prefers it", async () => {
+    const runtime = createRuntime([MARKDOWN_PAGE_PATH]);
+
+    const response = await handleApplicationRequest(
+      request(MARKDOWN_PAGE_PATH, { accept: "text/markdown, text/html;q=0.5" }),
+      runtime,
+      config,
+    );
+
+    expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(response.headers.get("vary")).toBe("accept, accept-encoding");
+    expect(response.headers.get("cache-control")).toBe("private, max-age=600");
+    expect(await response.text()).toBe(MARKDOWN_BODY);
+  });
+
+  it("serves HTML to browsers on the same path", async () => {
+    const runtime = createRuntime([MARKDOWN_PAGE_PATH]);
+
+    const response = await handleApplicationRequest(
+      request(MARKDOWN_PAGE_PATH, { accept: "text/html,application/xhtml+xml,*/*;q=0.8" }),
+      runtime,
+      config,
+    );
+
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(runtime.renderApp).toHaveBeenCalledOnce();
+  });
+
+  it("falls through to the app for a .md path with no content page", async () => {
+    const runtime = createRuntime([]);
+
+    await handleApplicationRequest(request("/docs/missing.md"), runtime, config);
+
+    expect(runtime.renderApp).toHaveBeenCalledOnce();
   });
 });
 

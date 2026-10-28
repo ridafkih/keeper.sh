@@ -4,6 +4,7 @@ import { createAppRouter } from "./router";
 import type { ViteAssets } from "./lib/router-context";
 
 export { cacheableHtmlPaths } from "./lib/cacheable-paths";
+export { renderMarkdownPage } from "./lib/markdown-pages";
 
 export function render(request: Request, viteAssets: ViteAssets): Promise<Response> {
   const handleRequest = createRequestHandler({

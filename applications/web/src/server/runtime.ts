@@ -10,6 +10,7 @@ import type { Runtime, ServerConfig } from "./types";
 interface EntryServerModule {
   cacheableHtmlPaths: string[];
   render: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
+  renderMarkdownPage: (path: string) => string | null;
 }
 
 function isEntryServerModule(value: unknown): value is EntryServerModule {
@@ -19,6 +20,11 @@ function isEntryServerModule(value: unknown): value is EntryServerModule {
 
   const renderProperty = Reflect.get(value, "render");
   if (typeof renderProperty !== "function") {
+    return false;
+  }
+
+  const renderMarkdownProperty = Reflect.get(value, "renderMarkdownPage");
+  if (typeof renderMarkdownProperty !== "function") {
     return false;
   }
 
@@ -33,7 +39,7 @@ async function loadProductionRenderer(): Promise<EntryServerModule> {
   const moduleValue = await import(pathToFileURL(serverDistEntry).href);
   if (!isEntryServerModule(moduleValue)) {
     throw new Error(
-      "SSR entry module must export render(request, viteAssets) and cacheableHtmlPaths.",
+      "SSR entry module must export render(request, viteAssets), renderMarkdownPage(path) and cacheableHtmlPaths.",
     );
   }
 
@@ -53,6 +59,7 @@ async function createProductionRuntime(): Promise<Runtime> {
     },
     resolveViteAssets: async () => viteAssets,
     renderApp: (request, assets) => renderer.render(request, assets),
+    renderMarkdown: async (path) => renderer.renderMarkdownPage(path),
   };
 }
 
@@ -79,7 +86,7 @@ async function createViteDevServerInstance(vitePort: number): Promise<ViteDevSer
 async function loadDevelopmentRenderer(viteServer: ViteDevServer): Promise<EntryServerModule> {
   const moduleValue = await viteServer.ssrLoadModule("/src/server.tsx");
   if (!isEntryServerModule(moduleValue)) {
-    throw new Error("Development SSR entry must export render(request, viteAssets).");
+    throw new Error("Development SSR entry must export render(request, viteAssets) and renderMarkdownPage(path).");
   }
 
   return moduleValue;
@@ -100,6 +107,10 @@ async function createDevelopmentRuntime(vitePort: number): Promise<Runtime> {
     renderApp: async (request, viteAssets) => {
       const renderer = await loadDevelopmentRenderer(viteServer);
       return renderer.render(request, viteAssets);
+    },
+    renderMarkdown: async (path) => {
+      const renderer = await loadDevelopmentRenderer(viteServer);
+      return renderer.renderMarkdownPage(path);
     },
     shutdown: () => viteServer.close(),
   };

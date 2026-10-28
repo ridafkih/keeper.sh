@@ -4,6 +4,7 @@ const COMPRESSIBLE_TYPES = new Set([
   "text/html",
   "text/css",
   "text/plain",
+  "text/markdown",
   "text/xml",
   "text/javascript",
   "application/javascript",

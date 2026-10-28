@@ -6,6 +6,7 @@ import {
   collectionPageSchema,
   faqPageSchema,
   jsonLdScript,
+  markdownAlternateLink,
   seoMeta,
   techArticleSchema,
 } from "./seo";
@@ -49,7 +50,7 @@ export function contentSiloPageHead(silo: ContentSilo, slug: string) {
 
   const pagePath = `${silo.basePath}/${slug}`;
   return {
-    links: [{ rel: "canonical", href: canonicalUrl(pagePath) }],
+    links: [{ rel: "canonical", href: canonicalUrl(pagePath) }, markdownAlternateLink(pagePath)],
     meta: [
       ...seoMeta({
         title: page.metadata.title,
