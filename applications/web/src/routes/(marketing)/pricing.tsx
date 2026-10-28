@@ -108,6 +108,7 @@ function PricingPage() {
               period={plan.period}
               description={plan.description}
               ctaLabel={plan.ctaLabel}
+              headingLevel="h2"
               features={pricingPlanHighlights(plan.id)}
             />
           ))}
