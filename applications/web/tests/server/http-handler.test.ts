@@ -251,6 +251,37 @@ describe("handleApplicationRequest markdown", () => {
     expect(runtime.renderApp).toHaveBeenCalledOnce();
   });
 
+  it("sends markdown with the same security headers as pages", async () => {
+    for (const markdownRequest of [
+      request(`${MARKDOWN_PAGE_PATH}.md`),
+      request(MARKDOWN_PAGE_PATH, { accept: "text/markdown" }),
+    ]) {
+      const response = await handleApplicationRequest(markdownRequest, createRuntime([]), config);
+
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("content-security-policy")).toContain("default-src 'self'");
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
+  });
+
+  it("serves the same public document whether or not the reader is signed in", async () => {
+    const response = await handleApplicationRequest(
+      request(`${MARKDOWN_PAGE_PATH}.md`, { cookie: "better-auth.session_token=abc" }),
+      createRuntime([]),
+      config,
+    );
+
+    expect(await response.text()).toBe(MARKDOWN_BODY);
+  });
+
+  it("resolves dot segments before looking up a markdown page", async () => {
+    const runtime = createRuntime([]);
+
+    const response = await handleApplicationRequest(request("/blog/%2e%2e/docs/plans-and-limits.md"), runtime, config);
+
+    expect(response.headers.get("link")).toBe(`<https://www.keeper.sh${MARKDOWN_PAGE_PATH}>; rel="canonical"`);
+  });
+
   it("falls through to the app for a .md path with no content page", async () => {
     const runtime = createRuntime([]);
 
