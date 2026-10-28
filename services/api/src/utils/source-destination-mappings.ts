@@ -14,6 +14,15 @@ import { assertAllIdsOwned } from "./owned-ids";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
+const MAPPING_MUTATION_ACQUIRE_TIMEOUT_MS = 30_000;
+const MAPPING_MUTATION_RETRY_DELAY_MS = 100;
+
+class MappingMutationBusyError extends Error {
+  public constructor() {
+    super("Another calendar update is still in progress. Try again in a moment.");
+    this.name = "MappingMutationBusyError";
+  }
+}
 
 type DatabaseClient = typeof databaseInstance;
 type DatabaseTransactionCallback = Parameters<DatabaseClient["transaction"]>[0];
@@ -555,30 +564,51 @@ interface MappingMutationSyncLock {
   acquire: ReturnType<typeof createSyncLock>["acquire"];
 }
 
+const waitBeforeRetry = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, MAPPING_MUTATION_RETRY_DELAY_MS);
+  });
+
+const acquireBeforeDeadline = async (
+  syncLock: MappingMutationSyncLock,
+  lockId: string,
+  deadline: number,
+): Promise<SyncLockHandle> => {
+  while (Date.now() < deadline) {
+    const lock = await syncLock.acquire(lockId);
+    if (lock.acquired) {
+      return lock.handle;
+    }
+    await waitBeforeRetry();
+  }
+  throw new MappingMutationBusyError();
+};
+
 const runWithMappingMutationLocks = async <TResult>(
   syncLock: MappingMutationSyncLock,
   userId: string,
   resolveDestinationCalendarIds: () => Promise<string[]>,
   callback: () => Promise<TResult>,
+  acquireTimeoutMs: number = MAPPING_MUTATION_ACQUIRE_TIMEOUT_MS,
 ): Promise<{ destinationCalendarIds: string[]; result: TResult }> => {
-  const mutationLock = await syncLock.acquire(createMappingMutationLockId(userId));
-  if (!mutationLock.acquired) {
-    throw new Error("Mapping update was superseded by another request");
-  }
+  const deadline = Date.now() + acquireTimeoutMs;
+  const mutationHandle = await acquireBeforeDeadline(
+    syncLock,
+    createMappingMutationLockId(userId),
+    deadline,
+  );
 
   const destinationHandles: SyncLockHandle[] = [];
   const operation = await settle(async () => {
     const destinationCalendarIds = [...new Set(await resolveDestinationCalendarIds())].toSorted();
     for (const destinationCalendarId of destinationCalendarIds) {
-      const destinationLock = await syncLock.acquire(destinationCalendarId);
-      if (!destinationLock.acquired) {
-        throw new Error(`Unable to coordinate mapping update for destination ${destinationCalendarId}`);
-      }
-      destinationHandles.push(destinationLock.handle);
+      destinationHandles.push(
+        await acquireBeforeDeadline(syncLock, destinationCalendarId, deadline),
+      );
     }
 
     const heldStates = await Promise.all([
-      mutationLock.handle.isHeld(),
+      mutationHandle.isHeld(),
       ...destinationHandles.map((handle) => handle.isHeld()),
     ]);
     if (heldStates.some((held) => !held)) {
@@ -592,7 +622,7 @@ const runWithMappingMutationLocks = async <TResult>(
   });
   const releaseFailures = await releaseMappingMutationLocks(
     destinationHandles,
-    mutationLock.handle,
+    mutationHandle,
   );
   if (operation.status === "rejected") {
     if (releaseFailures.length > 0) {
@@ -723,6 +753,7 @@ export {
   getDestinationsForSource,
   getSourcesForDestination,
   MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingMutationBusyError,
   setDestinationsForSource,
   setSourcesForDestination,
   runSetDestinationsForSource,

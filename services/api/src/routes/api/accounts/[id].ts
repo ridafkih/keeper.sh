@@ -7,6 +7,24 @@ import { database } from "@/context";
 import { withAccountDisplay } from "@/utils/provider-display";
 import { runDeleteCalendarAccount } from "@/utils/delete-calendar-account";
 import { createDeleteCalendarAccountDependencies } from "@/utils/delete-calendar-account-dependencies";
+import { MappingMutationBusyError } from "@/utils/source-destination-mappings";
+
+const deleteAccountOrReportBusy = async (
+  accountId: string,
+  userId: string,
+): Promise<boolean | Response> => {
+  try {
+    return await runDeleteCalendarAccount(
+      { accountId, userId },
+      createDeleteCalendarAccountDependencies(),
+    );
+  } catch (error) {
+    if (error instanceof MappingMutationBusyError) {
+      return ErrorResponse.conflict(error.message).toResponse();
+    }
+    throw error;
+  }
+};
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -62,10 +80,11 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const deleted = await runDeleteCalendarAccount(
-      { accountId: id, userId },
-      createDeleteCalendarAccountDependencies(),
-    );
+    const deleted = await deleteAccountOrReportBusy(id, userId);
+
+    if (deleted instanceof Response) {
+      return deleted;
+    }
 
     if (!deleted) {
       return ErrorResponse.notFound("Account not found").toResponse();
