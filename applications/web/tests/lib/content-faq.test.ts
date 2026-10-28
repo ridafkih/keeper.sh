@@ -7,6 +7,13 @@ describe("extractContentFaq", () => {
     expect(extractContentFaq(content)).toEqual([{ answer: "Yes.", question: "Is it free?" }]);
   });
 
+  it("reads faq-item answers as plain text", () => {
+    const content = '<faq-item question="Where are the limits?">See [plans](/docs/plans-and-limits) and **pricing**.</faq-item>';
+    expect(extractContentFaq(content)).toEqual([
+      { answer: "See plans and pricing.", question: "Where are the limits?" },
+    ]);
+  });
+
   it("reads question headings under an FAQ section", () => {
     const content = [
       "## How it works",

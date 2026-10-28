@@ -1,53 +1,78 @@
+import type { Element, ElementContent, Root, RootContent } from "hast";
+import { toString } from "hast-util-to-string";
+import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
+
 export interface ContentFaqEntry {
   answer: string;
   question: string;
 }
 
-const FAQ_ITEM_PATTERN = /<faq-item question="([^"]*)">([\s\S]*?)<\/faq-item>/g;
-const FAQ_SECTION_HEADING_PATTERN = /^##\s+(?:faq|frequently asked questions|common questions\b.*)$/i;
-const SECTION_HEADING_PATTERN = /^##\s/;
-const QUESTION_HEADING_PATTERN = /^###\s+/m;
-const MARKDOWN_LINK_PATTERN = /\[([^\]]+)\]\([^)]*\)/g;
-const EMPHASIS_PATTERN = /(\*\*|__|`)(.+?)\1/g;
-const EXCESS_BLANK_LINES_PATTERN = /\n{3,}/g;
+const FAQ_SECTION_TITLES = new Set(["faq", "frequently asked questions"]);
+const FAQ_SECTION_TITLE_PREFIX = "common questions";
 
-function toPlainText(markdown: string): string {
-  return markdown
-    .replace(MARKDOWN_LINK_PATTERN, "$1")
-    .replace(EMPHASIS_PATTERN, "$2")
-    .replace(EXCESS_BLANK_LINES_PATTERN, "\n\n")
-    .trim();
+const htmlProcessor = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(remarkRehype, { allowDangerousHtml: true })
+  .use(rehypeRaw);
+
+function toHtmlTree(content: string): Root {
+  return htmlProcessor.runSync(htmlProcessor.parse(content));
 }
 
-function extractFaqItems(content: string): ContentFaqEntry[] {
-  return [...content.matchAll(FAQ_ITEM_PATTERN)].map((match) => ({
-    answer: match[2].trim(),
-    question: match[1].trim(),
-  }));
+function isElement(node: RootContent | ElementContent, tagName: string): node is Element {
+  return node.type === "element" && node.tagName === tagName;
 }
 
-function extractFaqSection(content: string): ContentFaqEntry[] {
-  const lines = content.split("\n");
-  const start = lines.findIndex((line) => FAQ_SECTION_HEADING_PATTERN.test(line.trim()));
+function isFaqSectionHeading(node: RootContent): boolean {
+  if (!isElement(node, "h2")) return false;
+  const title = toString(node).trim().toLowerCase();
+  return FAQ_SECTION_TITLES.has(title) || title.startsWith(FAQ_SECTION_TITLE_PREFIX);
+}
+
+function blockText(nodes: RootContent[]): string {
+  return nodes
+    .map((node) => toString(node).trim())
+    .filter((text) => text.length > 0)
+    .join("\n\n");
+}
+
+function faqItems(tree: Root): ContentFaqEntry[] {
+  const entries: ContentFaqEntry[] = [];
+  visit(tree, "element", (node) => {
+    if (node.tagName !== "faq-item") return;
+    entries.push({ answer: toString(node).trim(), question: String(node.properties.question ?? "").trim() });
+  });
+  return entries;
+}
+
+function faqSection(tree: Root): ContentFaqEntry[] {
+  const start = tree.children.findIndex(isFaqSectionHeading);
   if (start === -1) return [];
 
-  const sectionLength = lines.slice(start + 1).findIndex((line) => SECTION_HEADING_PATTERN.test(line));
-  const sectionLines = sectionLength === -1
-    ? lines.slice(start + 1)
-    : lines.slice(start + 1, start + 1 + sectionLength);
+  const rest = tree.children.slice(start + 1);
+  const end = rest.findIndex((node) => isElement(node, "h2"));
+  const section = end === -1 ? rest : rest.slice(0, end);
 
-  return sectionLines
-    .join("\n")
-    .split(QUESTION_HEADING_PATTERN)
-    .slice(1)
-    .map((block) => {
-      const [question = "", ...answer] = block.split("\n");
-      return { answer: toPlainText(answer.join("\n")), question: question.trim() };
-    });
+  const entries: Array<{ question: string; answer: RootContent[] }> = [];
+  for (const node of section) {
+    if (isElement(node, "h3")) {
+      entries.push({ answer: [], question: toString(node).trim() });
+    } else {
+      entries.at(-1)?.answer.push(node);
+    }
+  }
+
+  return entries.map(({ answer, question }) => ({ answer: blockText(answer), question }));
 }
 
 export function extractContentFaq(content: string): ContentFaqEntry[] {
-  const items = extractFaqItems(content);
-  if (items.length > 0) return items;
-  return extractFaqSection(content);
+  const tree = toHtmlTree(content);
+  const items = faqItems(tree);
+  return items.length > 0 ? items : faqSection(tree);
 }
