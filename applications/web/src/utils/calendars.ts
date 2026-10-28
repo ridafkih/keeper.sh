@@ -13,6 +13,11 @@ export const canPull = (calendar: CalendarLike): boolean =>
 export const canPush = (calendar: CalendarLike): boolean =>
   calendar.capabilities.includes("push");
 
+export const isMissingAtProvider = (calendar: {
+  providerMissingSince: string | null;
+  unavailableSince: string | null;
+}): boolean => calendar.providerMissingSince !== null || calendar.unavailableSince !== null;
+
 export const getCalendarProvider = (
   calendar: Pick<CalendarLike, "provider" | "calendarType">,
 ): string => calendar.provider ?? calendar.calendarType;

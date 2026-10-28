@@ -198,6 +198,9 @@ const PATCH = withWideEvent(
   }),
 );
 
+const RECEIVES_EVENTS_MESSAGE
+  = "Keeper.sh syncs events into this calendar, so it can only be removed once it no longer exists at the provider.";
+
 const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {
     if (!params.id || !idParamSchema.allows(params)) {
@@ -205,9 +208,12 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const deleted = await deleteSourceCalendar(userId, id);
-    if (!deleted) {
+    const outcome = await deleteSourceCalendar(userId, id);
+    if (outcome === "not-found") {
       return ErrorResponse.notFound().toResponse();
+    }
+    if (outcome === "receives-events") {
+      return ErrorResponse.conflict(RECEIVES_EVENTS_MESSAGE).toResponse();
     }
 
     return Response.json({ success: true });

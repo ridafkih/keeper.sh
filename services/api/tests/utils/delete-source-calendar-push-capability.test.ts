@@ -4,18 +4,16 @@ import { runDeleteSourceCalendar } from "../../src/utils/delete-source-calendar"
 const CALENDAR_ID = "calendar-1";
 const USER_ID = "user-1";
 
-const makeDependencies = (capabilities: string[]) => {
+const makeDependencies = (capabilities: string[], missingAtProvider = false) => {
   const deleteCalendarRow = vi.fn(() => Promise.resolve(true));
   const deregisterPushChannels = vi.fn(() => Promise.resolve(0));
-  const loadCapabilities = vi.fn(() => Promise.resolve(capabilities));
-  const isOwnedByUser = vi.fn(() => Promise.resolve(true));
+  const loadCandidate = vi.fn(() => Promise.resolve({ capabilities, missingAtProvider }));
   const recordError = vi.fn();
 
   return {
     deleteCalendarRow,
     deregisterPushChannels,
-    isOwnedByUser,
-    loadCapabilities,
+    loadCandidate,
     recordError,
   };
 };
@@ -26,7 +24,7 @@ describe("runDeleteSourceCalendar capability guard", () => {
 
     await expect(
       runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
-    ).resolves.toBe(false);
+    ).resolves.toBe("receives-events");
 
     expect(dependencies.deleteCalendarRow).not.toHaveBeenCalled();
   });
@@ -39,12 +37,23 @@ describe("runDeleteSourceCalendar capability guard", () => {
     expect(dependencies.deregisterPushChannels).not.toHaveBeenCalled();
   });
 
+  it("deletes a push-capable calendar that no longer exists at the provider", async () => {
+    const dependencies = makeDependencies(["pull", "push"], true);
+
+    await expect(
+      runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
+    ).resolves.toBe("deleted");
+
+    expect(dependencies.deregisterPushChannels).toHaveBeenCalledWith(CALENDAR_ID);
+    expect(dependencies.deleteCalendarRow).toHaveBeenCalledTimes(1);
+  });
+
   it("still deletes a calendar keeper only pulls from", async () => {
     const dependencies = makeDependencies(["pull"]);
 
     await expect(
       runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
-    ).resolves.toBe(true);
+    ).resolves.toBe("deleted");
 
     expect(dependencies.deleteCalendarRow).toHaveBeenCalledTimes(1);
     expect(dependencies.deregisterPushChannels).toHaveBeenCalledWith(CALENDAR_ID);

@@ -32,6 +32,7 @@ import {
   canPull,
   canPush,
   formatTitleKeywords,
+  isMissingAtProvider,
   parseTitleKeywords,
   toggleExcludedAvailability,
 } from "@/utils/calendars";
@@ -69,7 +70,7 @@ import {
   calendarDetailErrorAtom,
   calendarNameAtom,
   calendarProviderAtom,
-  calendarProviderMissingSinceAtom,
+  calendarMissingSinceAtom,
   calendarTypeAtom,
   customEventNameAtom,
   excludeAvailabilitiesAtom,
@@ -173,6 +174,7 @@ function CalendarDetailPage() {
 
   const isPullCapable = canPull(calendar);
   const isPushCapable = canPush(calendar);
+  const isRemovable = !isPushCapable || isMissingAtProvider(calendar);
 
   return (
     <div className="flex flex-col gap-1.5 lg:h-full">
@@ -200,7 +202,7 @@ function CalendarDetailPage() {
         {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
         {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
         <CalendarInfoSection account={account} accountId={accountId} />
-        {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
+        {isRemovable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
       </PageBody>
     </div>
   );
@@ -440,14 +442,14 @@ function ReauthNotice({ account }: { account: CalendarAccount }) {
 }
 
 function ProviderMissingNotice() {
-  const providerMissingSince = useAtomValue(calendarProviderMissingSinceAtom);
-  if (!providerMissingSince) return null;
+  const missingSince = useAtomValue(calendarMissingSinceAtom);
+  if (!missingSince) return null;
 
   return (
     <Text size="sm" tone="danger" className="px-0.5">
-      This calendar was not found the last time its connection was refreshed
-      (since {formatDate(providerMissingSince)}) - it may have been deleted or renamed at the
-      provider. Refresh the connection again to confirm, or remove the calendar below.
+      This calendar could not be found at the provider (since {formatDate(missingSince)}) - it
+      may have been deleted or renamed there. Refresh the connection to check again, or remove
+      the calendar below.
     </Text>
   );
 }
@@ -478,7 +480,7 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
     <>
       <DashboardSection
         title="Remove Calendar"
-        description="Stop syncing this calendar and remove it from Keeper.sh. It will be re-imported the next time you refresh the account's calendars, unless it no longer exists at the provider."
+        description="Stop syncing this calendar and remove it from Keeper.sh. It will not be imported again when the account's calendars are refreshed."
       />
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
