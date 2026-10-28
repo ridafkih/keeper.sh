@@ -1,6 +1,5 @@
 import { findSiloPageBySlug, type ContentSilo } from "./content-silos";
 import {
-  blogPostingSchema,
   breadcrumbSchema,
   breadcrumbTrail,
   canonicalUrl,
@@ -8,6 +7,7 @@ import {
   faqPageSchema,
   jsonLdScript,
   seoMeta,
+  techArticleSchema,
 } from "./seo";
 
 export function siloBreadcrumbs(silo: ContentSilo) {
@@ -63,7 +63,7 @@ export function contentSiloPageHead(silo: ContentSilo, slug: string) {
       { content: page.metadata.updatedAt, property: "article:modified_time" },
     ],
     scripts: [
-      jsonLdScript(blogPostingSchema({
+      jsonLdScript(techArticleSchema({
         title: page.metadata.title,
         description: page.metadata.description,
         path: pagePath,

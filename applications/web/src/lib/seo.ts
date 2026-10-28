@@ -366,7 +366,7 @@ export function personSchema(description: string) {
   };
 }
 
-export function blogPostingSchema(post: {
+interface ArticleSchemaInput {
   title: string;
   description: string;
   path: string;
@@ -374,12 +374,22 @@ export function blogPostingSchema(post: {
   updatedAt: string;
   tags: string[];
   imagePath?: string;
-}) {
+}
+
+export function blogPostingSchema(post: ArticleSchemaInput) {
+  return articleSchema("BlogPosting", post);
+}
+
+export function techArticleSchema(article: ArticleSchemaInput) {
+  return articleSchema("TechArticle", article);
+}
+
+function articleSchema(type: "BlogPosting" | "TechArticle", post: ArticleSchemaInput) {
   const url = canonicalUrl(post.path);
   return {
     "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    "@id": entityId(post.path, "blogposting"),
+    "@type": type,
+    "@id": entityId(post.path, type.toLowerCase()),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),

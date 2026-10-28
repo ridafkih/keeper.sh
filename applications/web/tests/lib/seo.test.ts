@@ -13,6 +13,7 @@ import {
   seoHead,
   seoMeta,
   softwareApplicationSchema,
+  techArticleSchema,
   webPageSchema,
 } from "@/lib/seo";
 
@@ -228,6 +229,14 @@ describe("blogPostingSchema", () => {
     });
     expect(schema["@id"]).toBe("https://www.keeper.sh/blog/why-keeper/#blogposting");
     expect(schema.url).toBe("https://www.keeper.sh/blog/why-keeper");
+  });
+});
+
+describe("techArticleSchema", () => {
+  it("types docs pages as TechArticle with their own identifier", () => {
+    const schema = techArticleSchema({ ...post, path: "/docs/plans-and-limits" });
+    expect(schema["@type"]).toBe("TechArticle");
+    expect(schema["@id"]).toBe("https://www.keeper.sh/docs/plans-and-limits/#techarticle");
   });
 });
 
