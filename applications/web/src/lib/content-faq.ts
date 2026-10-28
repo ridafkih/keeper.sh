@@ -64,7 +64,7 @@ function faqSection(tree: Root): ContentFaqEntry[] {
     if (isElement(node, "h3")) {
       entries.push({ answer: [], question: toString(node).trim() });
     } else {
-      entries.at(-1)?.answer.push(node);
+      entries[entries.length - 1]?.answer.push(node);
     }
   }
 
