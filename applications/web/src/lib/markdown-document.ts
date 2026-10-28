@@ -1,3 +1,7 @@
+import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import { unified } from "unified";
+import { visit } from "unist-util-visit";
 import { canonicalUrl } from "./seo";
 
 const MARKDOWN_SUFFIX = ".md";
@@ -5,11 +9,7 @@ const MARKDOWN_MEDIA_TYPE = "text/markdown";
 const HTML_MEDIA_TYPE = "text/html";
 const ISSUES_URL = "https://github.com/ridafkih/keeper.sh/issues/new";
 
-const FAQ_WRAPPER_PATTERN = /^<\/?faq>\s*$/gm;
-const FAQ_ITEM_PATTERN = /<faq-item question="([^"]*)">([\s\S]*?)<\/faq-item>/g;
-const MDX_MODULE_LINE_PATTERN = /^(?:import|export)\s.*$/gm;
-const ROOT_RELATIVE_LINK_PATTERN = /\]\((\/[^)\s]*)\)/g;
-const EXCESS_BLANK_LINES_PATTERN = /\n{3,}/g;
+const markdownParser = unified().use(remarkParse).use(remarkGfm);
 
 export interface MarkdownDocumentSource {
   content: string;
@@ -48,20 +48,34 @@ export function prefersMarkdown(accept: string | null): boolean {
   return mediaTypeQuality(accept, MARKDOWN_MEDIA_TYPE) > mediaTypeQuality(accept, HTML_MEDIA_TYPE);
 }
 
-function faqItemsToHeadings(content: string): string {
-  return content
-    .replace(FAQ_ITEM_PATTERN, (_match, question: string, answer: string) =>
-      `### ${question.trim()}\n\n${answer.trim()}\n`)
-    .replace(FAQ_WRAPPER_PATTERN, "");
+function isRootRelative(url: string): boolean {
+  return url.startsWith("/") && !url.startsWith("//");
 }
 
-function absoluteLinks(content: string): string {
-  return content.replace(ROOT_RELATIVE_LINK_PATTERN, (_match, path: string) => `](${canonicalUrl(path)})`);
+interface UrlOccurrence {
+  offset: number;
+  url: string;
 }
 
-export function cleanMdxContent(content: string): string {
-  return absoluteLinks(faqItemsToHeadings(content.replace(MDX_MODULE_LINE_PATTERN, "")))
-    .replace(EXCESS_BLANK_LINES_PATTERN, "\n\n")
+function rootRelativeUrls(content: string): UrlOccurrence[] {
+  const occurrences: UrlOccurrence[] = [];
+  visit(markdownParser.parse(content), (node) => {
+    if (!("url" in node) || !isRootRelative(node.url) || !node.position) return;
+    const { end, start } = node.position;
+    const offset = content.lastIndexOf(node.url, end.offset);
+    if (start.offset === undefined || offset < start.offset) return;
+    occurrences.push({ offset, url: node.url });
+  });
+  return occurrences;
+}
+
+export function withAbsoluteLinks(content: string): string {
+  return rootRelativeUrls(content)
+    .reverse()
+    .reduce(
+      (result, { offset, url }) => `${result.slice(0, offset)}${canonicalUrl(url)}${result.slice(offset + url.length)}`,
+      content,
+    )
     .trim();
 }
 
@@ -83,7 +97,7 @@ export function toMarkdownDocument(source: MarkdownDocumentSource): string {
   return [
     `# ${source.title}`,
     `> ${source.description}`,
-    cleanMdxContent(source.content),
+    withAbsoluteLinks(source.content),
     feedbackFooter(source.path, source.updatedAt),
   ].join("\n\n").concat("\n");
 }

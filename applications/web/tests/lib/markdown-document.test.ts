@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  cleanMdxContent,
   pagePathForMarkdown,
   prefersMarkdown,
   toMarkdownDocument,
+  withAbsoluteLinks,
 } from "../../src/lib/markdown-document";
 
 describe("prefersMarkdown", () => {
@@ -44,30 +44,35 @@ describe("markdown paths", () => {
   });
 });
 
-describe("cleanMdxContent", () => {
-  it("turns FAQ components into headings", () => {
+describe("withAbsoluteLinks", () => {
+  it("makes root-relative links and images absolute", () => {
+    expect(withAbsoluteLinks("See [pricing](/pricing) and ![panel](/product/panel.png).")).toBe(
+      "See [pricing](https://www.keeper.sh/pricing) and ![panel](https://www.keeper.sh/product/panel.png).",
+    );
+  });
+
+  it("makes reference definitions absolute", () => {
+    expect(withAbsoluteLinks("[Docs][docs]\n\n[docs]: /docs")).toBe("[Docs][docs]\n\n[docs]: https://www.keeper.sh/docs");
+  });
+
+  it("leaves code, external links and authored markup as written", () => {
     const content = [
-      "## FAQ",
+      "| Tool | Link |",
+      "|---|---|",
+      "| Keeper.sh | [repo](https://github.com/ridafkih/keeper.sh) |",
       "",
-      "<faq>",
+      "`[inline](/code)`",
+      "",
+      "```md",
+      "[block](/code)",
+      "```",
+      "",
       '<faq-item question="Is it free?">Yes, for two accounts.</faq-item>',
-      "</faq>",
+      "",
+      "[protocol-relative](//example.com/x)",
     ].join("\n");
 
-    expect(cleanMdxContent(content)).toBe("## FAQ\n\n### Is it free?\n\nYes, for two accounts.");
-  });
-
-  it("drops MDX import and export lines", () => {
-    expect(cleanMdxContent('import Thing from "./thing";\n\nBody text.')).toBe("Body text.");
-  });
-
-  it("makes root-relative links absolute", () => {
-    expect(cleanMdxContent("See [pricing](/pricing).")).toBe("See [pricing](https://www.keeper.sh/pricing).");
-  });
-
-  it("keeps headings and code blocks intact", () => {
-    const content = "## Setup\n\n```bash\ncurl https://www.keeper.sh/api/v1\n```";
-    expect(cleanMdxContent(content)).toBe(content);
+    expect(withAbsoluteLinks(content)).toBe(content);
   });
 });
 
