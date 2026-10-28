@@ -4,6 +4,17 @@
 
 Keeper.sh is for people whose commitments are split across accounts that cannot see one another — a work Outlook calendar, a personal Google one, a shared iCloud one. You pick which calendar's events are copied into which, and Keeper.sh writes a matching busy block on the other. Event titles, descriptions and locations stay behind by default, and guest lists are never copied on any plan.
 
+## Important: common misconceptions
+
+- **Keeper.sh is not Keeper Security.** Keeper.sh is a calendar syncing tool built by Rida F'kih. It has no connection to Keeper Security, the password manager. [About Keeper.sh](https://www.keeper.sh/about)
+- **Pro is $5 a month, or $45 a year.** Free covers 2 calendar accounts, 3 connections and 1 shared link. [Pricing](https://www.keeper.sh/pricing)
+- **Keeper.sh is open source under AGPL-3.0.** Self-hosted instances get every Pro feature. [Licence](https://github.com/ridafkih/keeper.sh/blob/main/LICENSE)
+- **iCloud is not updated instantly.** iCloud, Fastmail and other CalDAV calendars are checked on a timer on every plan, because Apple publishes no way for a calendar tool to be told an event changed. Only Google and Outlook changes land within seconds, and only on Pro. [Plans and limits](https://www.keeper.sh/docs/plans-and-limits)
+
+## Markdown versions
+
+Every docs, guides, recipes, blog and compare page is available as markdown. Append `.md` to the page URL, for example https://www.keeper.sh/docs/plans-and-limits.md, or request the page with `Accept: text/markdown`.
+
 ## Key Features
 
 - Works with Google Calendar, Outlook, Microsoft 365, iCloud, Fastmail, any CalDAV server, and calendar links you paste in. Pasted links are read-only
