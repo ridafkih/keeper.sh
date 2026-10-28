@@ -15,6 +15,7 @@ import { Route as dashboardRouteRouteImport } from './../../routes/(dashboard)/r
 import { Route as authRouteRouteImport } from './../../routes/(auth)/route'
 import { Route as marketingIndexRouteImport } from './../../routes/(marketing)/index'
 import { Route as marketingTermsRouteImport } from './../../routes/(marketing)/terms'
+import { Route as marketingSupportRouteImport } from './../../routes/(marketing)/support'
 import { Route as marketingSelfHostingRouteImport } from './../../routes/(marketing)/self-hosting'
 import { Route as marketingPrivacyRouteImport } from './../../routes/(marketing)/privacy'
 import { Route as marketingPricingRouteImport } from './../../routes/(marketing)/pricing'
@@ -104,6 +105,11 @@ const marketingIndexRoute = marketingIndexRouteImport.update({
 const marketingTermsRoute = marketingTermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingSupportRoute = marketingSupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => marketingRouteRoute,
 } as any)
 const marketingSelfHostingRoute = marketingSelfHostingRouteImport.update({
@@ -475,6 +481,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/self-hosting': typeof marketingSelfHostingRoute
+  '/support': typeof marketingSupportRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -540,6 +547,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/self-hosting': typeof marketingSelfHostingRoute
+  '/support': typeof marketingSupportRoute
   '/terms': typeof marketingTermsRoute
   '/': typeof marketingIndexRoute
   '/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -608,6 +616,7 @@ export interface FileRoutesById {
   '/(marketing)/pricing': typeof marketingPricingRoute
   '/(marketing)/privacy': typeof marketingPrivacyRoute
   '/(marketing)/self-hosting': typeof marketingSelfHostingRoute
+  '/(marketing)/support': typeof marketingSupportRoute
   '/(marketing)/terms': typeof marketingTermsRoute
   '/(marketing)/': typeof marketingIndexRoute
   '/(dashboard)/dashboard/accounts': typeof dashboardDashboardAccountsRouteRouteWithChildren
@@ -678,6 +687,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/self-hosting'
+    | '/support'
     | '/terms'
     | '/'
     | '/dashboard/accounts'
@@ -743,6 +753,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/privacy'
     | '/self-hosting'
+    | '/support'
     | '/terms'
     | '/'
     | '/dashboard/accounts'
@@ -810,6 +821,7 @@ export interface FileRouteTypes {
     | '/(marketing)/pricing'
     | '/(marketing)/privacy'
     | '/(marketing)/self-hosting'
+    | '/(marketing)/support'
     | '/(marketing)/terms'
     | '/(marketing)/'
     | '/(dashboard)/dashboard/accounts'
@@ -911,6 +923,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof marketingTermsRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/support': {
+      id: '/(marketing)/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof marketingSupportRouteImport
       parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/self-hosting': {
@@ -1536,6 +1555,7 @@ interface marketingRouteRouteChildren {
   marketingPricingRoute: typeof marketingPricingRoute
   marketingPrivacyRoute: typeof marketingPrivacyRoute
   marketingSelfHostingRoute: typeof marketingSelfHostingRoute
+  marketingSupportRoute: typeof marketingSupportRoute
   marketingTermsRoute: typeof marketingTermsRoute
   marketingIndexRoute: typeof marketingIndexRoute
   marketingCompareSlugRoute: typeof marketingCompareSlugRoute
@@ -1560,6 +1580,7 @@ const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingPricingRoute: marketingPricingRoute,
   marketingPrivacyRoute: marketingPrivacyRoute,
   marketingSelfHostingRoute: marketingSelfHostingRoute,
+  marketingSupportRoute: marketingSupportRoute,
   marketingTermsRoute: marketingTermsRoute,
   marketingIndexRoute: marketingIndexRoute,
   marketingCompareSlugRoute: marketingCompareSlugRoute,

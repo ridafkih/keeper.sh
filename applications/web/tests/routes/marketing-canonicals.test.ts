@@ -32,6 +32,7 @@ import { Route as FeaturesRoute } from "../../src/routes/(marketing)/features";
 import { Route as PricingRoute } from "../../src/routes/(marketing)/pricing";
 import { Route as PrivacyRoute } from "../../src/routes/(marketing)/privacy";
 import { Route as TermsRoute } from "../../src/routes/(marketing)/terms";
+import { Route as SupportRoute } from "../../src/routes/(marketing)/support";
 import { Route as BlogIndexRoute } from "../../src/routes/(marketing)/blog/index";
 import { Route as BlogPostRoute } from "../../src/routes/(marketing)/blog/$slug";
 import { Route as McpDocsRoute } from "../../src/routes/(marketing)/docs/mcp";
@@ -69,6 +70,7 @@ const indexableRoutes: Record<string, HeadRoute> = {
   "/privacy": PrivacyRoute as unknown as HeadRoute,
   "/recipes": RecipesIndexRoute as unknown as HeadRoute,
   "/self-hosting": SelfHostingRoute as unknown as HeadRoute,
+  "/support": SupportRoute as unknown as HeadRoute,
   "/terms": TermsRoute as unknown as HeadRoute,
   "/tools/ics-generator": IcsGeneratorRoute as unknown as HeadRoute,
   "/tools/ics-viewer": IcsViewerRoute as unknown as HeadRoute,
