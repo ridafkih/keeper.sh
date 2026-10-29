@@ -86,8 +86,8 @@ function AboutPage() {
           </Text>
           <Text size="sm">
             The tools that already existed charged more the more calendars you had, and none of them read
-            Fastmail. They also copied the event contents across. Keeper.sh does the smaller job: block the
-            same time everywhere, and keep the details private until you turn them on.
+            Fastmail. They also copied the event contents across. Keeper.sh does the job that matters:
+            block the same time everywhere, and keep the details private until you turn them on.
           </Text>
           <Text size="sm">
             The longer version of that story is in{" "}
@@ -116,10 +116,10 @@ function AboutPage() {
             version has to publish their changes under the same licence. Improvements stay in the open.
           </Text>
           <Text size="sm">
-            Every account on a self-hosted instance gets every paid sync feature, with no plan limits.
-            Paying for the{" "}
-            <TextLink align="left" size="sm" to="/pricing" tone="default">hosted version</TextLink>
-            {" "}buys you the server, the upgrades and the backups. It funds the work on both.
+            Every plan runs on the managed service at keeper.sh, with the servers, upgrades and backups
+            handled for you.{" "}
+            <TextLink align="left" size="sm" to="/pricing" tone="default">Keeper.sh Pro</TextLink>
+            {" "}funds the work on the code everyone can read.
           </Text>
         </Section>
 

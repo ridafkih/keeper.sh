@@ -124,7 +124,7 @@ const MARKETING_FEATURES: MarketingFeature[] = [
     id: 5,
     title: 'Anyone can read the code',
     description:
-      'Check exactly what Keeper.sh sends to your calendars, or run it on your own server.',
+      'Check exactly what Keeper.sh sends to your calendars.',
     gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-3',
     illustration: <MarketingIllustrationContributors />,
     link: { to: '/about', label: 'Who builds Keeper.sh' },
@@ -146,7 +146,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'Which calendars does Keeper.sh work with?',
     answer:
-      'Google Calendar, Outlook, iCloud and Fastmail sign in directly. Most others work too, as long as yours gives you a calendar link or a login.',
+      'Google Calendar, Outlook, iCloud and Fastmail sign in directly. Every other calendar connects with a CalDAV login or a calendar link.',
   },
   {
     question: 'Can my colleagues see what my personal events are?',
@@ -156,13 +156,7 @@ const FAQ_ITEMS: FaqItem[] = [
   {
     question: 'How often do calendars update?',
     answer:
-      'On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. Free checks every minute and copies every 30. iCloud, Fastmail and other CalDAV calendars are always checked on a timer, because Apple offers no way to be told.',
-  },
-  {
-    question: 'Can I run Keeper.sh myself?',
-    answer:
-      'Yes. Keeper.sh is open source under AGPL-3.0. The self-hosting page covers what you get, and the README on GitHub has the setup steps.',
-    content: <>Yes. Keeper.sh is open source under AGPL-3.0. The <TextLink align="left" size="sm" to="/self-hosting" tone="default">self-hosting page</TextLink> covers what you get, and the <a href="https://github.com/ridafkih/keeper.sh#readme" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">README on GitHub</a> has the setup steps.</>,
+      'On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail and other CalDAV calendars sync every minute. On Free, changes land every 30 minutes.',
   },
   {
     question: 'Can I cancel any time?',

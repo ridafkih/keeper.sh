@@ -17,7 +17,7 @@ export const HOW_IT_WORKS_STEPS: HowItWorksStep[] = [
   },
   {
     title: "Keeper.sh takes it from there",
-    body: "On Pro, Google and Outlook tell Keeper.sh the moment something changes, so the copy lands within seconds. Free checks every minute and copies within 30.",
+    body: "On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail and CalDAV sync every minute. On Free, changes land every 30 minutes.",
     note: "Calendars you connect with a pasted link are read in full each time.",
   },
 ];

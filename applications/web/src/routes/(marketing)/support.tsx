@@ -57,9 +57,8 @@ function SupportPage() {
 
         <Section title="Quick answers">
           <Question title="How often do calendars update?">
-            On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds.
-            Free checks every minute and copies every 30. iCloud, Fastmail and other CalDAV calendars are
-            always checked on a timer, because Apple offers no way to be told.
+            On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail
+            and other CalDAV calendars sync every minute. On Free, changes land every 30 minutes.
           </Question>
           <Question title="An event has not arrived in my other calendar">
             Work through{" "}
@@ -76,8 +75,8 @@ function SupportPage() {
             list is never copied on any plan.
           </Question>
           <Question title="Which calendars does Keeper.sh work with?">
-            Google Calendar, Outlook, iCloud and Fastmail sign in directly. Most others work too, as long
-            as yours gives you a calendar link or a login.
+            Google Calendar, Outlook, iCloud and Fastmail sign in directly. Every other calendar connects
+            with a CalDAV login or a calendar link.
           </Question>
           <Text size="sm">
             The{" "}

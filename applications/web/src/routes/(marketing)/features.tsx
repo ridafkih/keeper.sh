@@ -47,7 +47,7 @@ type FeatureCard = {
 const FEATURE_CARDS: FeatureCard[] = [
   {
     title: "Works with the calendars you already use",
-    body: "Google, Outlook, iCloud and Fastmail sign in directly. Anything else connects with a link you paste in, or over CalDAV.",
+    body: "Google, Outlook, iCloud and Fastmail sign in directly. Every other calendar connects over CalDAV or with a link you paste in.",
     gridClassName: "lg:col-start-1 lg:col-span-4 lg:row-start-1",
     illustration: <MarketingIllustrationProviders />,
   },
@@ -64,7 +64,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "Pick which calendar your events land in",
-    body: "You choose where each calendar's events are copied to. Copying runs one way, so set up both directions if you want the two to match.",
+    body: "You choose where each calendar's events are copied to. Copy one way, or both ways to keep two calendars matched.",
     gridClassName: "lg:col-start-7 lg:col-span-4 lg:row-start-2",
     illustration: <MarketingIllustrationSetup />,
   },
@@ -75,7 +75,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "Anyone can read the code",
-    body: "Check exactly what Keeper.sh sends to your calendars, or run it on your own server. It is open source under AGPL-3.0, with Docker images ready to deploy.",
+    body: "Check exactly what Keeper.sh sends to your calendars. Every line is open source under AGPL-3.0.",
     gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
     illustration: <MarketingIllustrationContributors />,
   },
