@@ -344,6 +344,7 @@ const createAuth = (config: AuthConfig) => {
   if (oidcEnabled && oidcIssuerUrl && oidcClientId && oidcClientSecret) {
     plugins.push(
       createOidcPlugin({
+        baseUrl,
         clientId: oidcClientId,
         clientSecret: oidcClientSecret,
         issuerUrl: oidcIssuerUrl,
@@ -576,6 +577,7 @@ export {
   isKeeperMcpEnabledAuth,
 };
 export { resolveAuthCapabilities } from "./capabilities";
+export { routeOidcCallbackRequest } from "./oidc";
 export { parseRegistrationEmailDomains } from "./registration-email-domains";
 export {
   KEEPER_API_DEFAULT_SCOPE,

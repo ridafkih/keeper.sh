@@ -2,6 +2,8 @@ import { genericOAuth } from "better-auth/plugins";
 import type { BetterAuthPlugin } from "better-auth";
 
 const OIDC_PROVIDER_ID = "oidc";
+const OIDC_REGISTERED_CALLBACK_PATH = `/api/auth/oauth2/callback/${OIDC_PROVIDER_ID}`;
+const OIDC_HANDLER_CALLBACK_PATH = `/api/auth/callback/${OIDC_PROVIDER_ID}`;
 const DEFAULT_OIDC_SCOPES = ["openid", "profile", "email"];
 const LOCAL_ACCOUNT_EMAIL_SUFFIX = "@local";
 
@@ -15,6 +17,7 @@ const LOCAL_AUTH_PATHS = new Set([
 ]);
 
 interface OidcConfig {
+  baseUrl: string;
   issuerUrl: string;
   clientId: string;
   clientSecret: string;
@@ -72,6 +75,18 @@ const isLocalAccountEmail = (email: string): boolean =>
 
 const isLocalAuthPath = (path: string): boolean => LOCAL_AUTH_PATHS.has(path);
 
+const resolveOidcRedirectUri = (baseUrl: string): string =>
+  new URL(OIDC_REGISTERED_CALLBACK_PATH, baseUrl).toString();
+
+const routeOidcCallbackRequest = (request: Request): Request => {
+  const url = new URL(request.url);
+  if (url.pathname !== OIDC_REGISTERED_CALLBACK_PATH) {
+    return request;
+  }
+  url.pathname = OIDC_HANDLER_CALLBACK_PATH;
+  return new Request(url.toString(), request);
+};
+
 const createOidcPlugin = (config: OidcConfig): BetterAuthPlugin =>
   genericOAuth({
     config: [
@@ -82,6 +97,7 @@ const createOidcPlugin = (config: OidcConfig): BetterAuthPlugin =>
         mapProfileToUser: mapOidcProfileToUser,
         pkce: true,
         providerId: OIDC_PROVIDER_ID,
+        redirectURI: resolveOidcRedirectUri(config.baseUrl),
         scopes: config.scopes ?? DEFAULT_OIDC_SCOPES,
       },
     ],
@@ -94,5 +110,6 @@ export {
   isLocalAuthPath,
   mapOidcProfileToUser,
   resolveOidcDiscoveryUrl,
+  routeOidcCallbackRequest,
 };
 export type { OidcConfig };
