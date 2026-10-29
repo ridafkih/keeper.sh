@@ -80,9 +80,9 @@ function SettingsPage() {
   const handleLinkOidc = async () => {
     setOidcLinkError(null);
     setIsLinkingOidc(true);
-    const { error } = await authClient.oauth2.link({
+    const { error } = await authClient.linkSocial({
       callbackURL: "/dashboard/settings",
-      providerId: "oidc",
+      provider: "oidc",
     });
     if (error) {
       setOidcLinkError(error.message ?? "Failed to start linking.");
