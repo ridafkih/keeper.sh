@@ -8,8 +8,8 @@ Keeper.sh is for people whose commitments are split across accounts that cannot 
 
 - **Keeper.sh is not Keeper Security.** Keeper.sh is a calendar syncing tool built by Rida F'kih. It has no connection to Keeper Security, the password manager. [About Keeper.sh](https://www.keeper.sh/about)
 - **Pro is $5 a month, or $45 a year.** Free covers 2 calendar accounts, 3 connections and 1 shared link. [Pricing](https://www.keeper.sh/pricing)
-- **Keeper.sh is open source under AGPL-3.0.** Self-hosted instances get every Pro feature. [Licence](https://github.com/ridafkih/keeper.sh/blob/main/LICENSE)
-- **iCloud is not updated instantly.** iCloud, Fastmail and other CalDAV calendars are checked on a timer on every plan, because Apple publishes no way for a calendar tool to be told an event changed. Only Google and Outlook changes land within seconds, and only on Pro. [Plans and limits](https://www.keeper.sh/docs/plans-and-limits)
+- **Keeper.sh is a managed service.** Sign up at keeper.sh and it runs for you, with no server to set up. The code is open source under AGPL-3.0. [Licence](https://github.com/ridafkih/keeper.sh/blob/main/LICENSE)
+- **Pro syncs within seconds.** On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail and other CalDAV calendars sync every minute. [Plans and limits](https://www.keeper.sh/docs/plans-and-limits)
 
 ## Markdown versions
 
@@ -23,9 +23,9 @@ Every docs, guides, recipes, blog and compare page is available as markdown. App
 - One shareable calendar link covering everything you connect, labelled "Busy" by default, and it opens in any calendar app
 - A REST API under `/api/v1` for calendars, accounts, events, invitations, free-time search and on-demand sync, using `kpr_` API tokens
 - An MCP server with fourteen tools over OAuth 2.1. An AI agent can read your week, book and amend events, RSVP, find open slots, and pause or force a sync
-- Open source under AGPL-3.0, with Docker Compose images you can run yourself
-- On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. iCloud, Fastmail and other CalDAV calendars are read on a timer, because Apple publishes no way to be told an event changed
-- Free covers 2 calendar accounts, 3 connections and 1 shared link, reading every minute and copying every 30. Pro is $5 a month or $45 a year, unlimited, with Google and Outlook changes copied within seconds
+- Open source under AGPL-3.0, so you can read exactly what it does with your calendars
+- On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail and other CalDAV calendars sync every minute
+- Free covers 2 calendar accounts, 3 connections and 1 shared link, with changes landing every 30 minutes. Pro is $5 a month or $45 a year, unlimited, with Google and Outlook changes copied within seconds and CalDAV every minute
 
 ## Links
 

@@ -4,11 +4,11 @@
 
 Keeper.sh is for people whose commitments are split across accounts that cannot see one another — a work Outlook calendar, a personal Google one, a shared iCloud one. You pick which calendar's events are copied into which, and Keeper.sh writes a matching busy block on the other. Event titles, descriptions and locations stay behind by default, and guest lists are never copied on any plan.
 
-It is built by Rida F'kih and hosted at keeper.sh. It is open source under AGPL-3.0, so you can read what it does with your calendars and run it on your own server.
+It is built by Rida F'kih and runs as a managed service at keeper.sh. It is open source under AGPL-3.0, so you can read exactly what it does with your calendars.
 
 ## Problem
 
-People with calendars across several providers end up with a split picture of their week. Each group of people sees only part of it, so meetings land on top of each other. Existing tools were too manual, hid too little, or could not be run by the people using them.
+People with calendars across several providers end up with a split picture of their week. Each group of people sees only part of it, so meetings land on top of each other. Existing tools were too manual, or copied too much detail across.
 
 ## How It Works
 
@@ -16,9 +16,9 @@ People with calendars across several providers end up with a split picture of th
 
 Keeper.sh runs on two schedules: reading your calendars, and writing changes out to the others.
 
-1. **Read**: Events are fetched into Keeper.sh's own database. Google and Outlook notify Keeper.sh as changes happen on Pro; otherwise this runs every minute
+1. **Read**: Events are fetched into Keeper.sh's own database. On Pro, Google and Outlook push changes through webhooks the moment they happen; every other calendar is read every minute
 2. **Compare**: Events are checked against what Keeper.sh already knows about
-3. **Write**: Changes go out to your other calendars. Within seconds on Pro for Google and Outlook, every thirty minutes on Free
+3. **Write**: Changes go out to your other calendars. On Pro, Google and Outlook changes land within seconds and iCloud, Fastmail and CalDAV changes every minute; on Free, every 30 minutes
 
 Three things can happen to a copy:
 - **Add**: An event with no copy yet gets one created
@@ -85,24 +85,15 @@ A connection runs one way. If you want two calendars to match each other, that i
 ## Pricing
 
 - **Free**: 2 calendar accounts, 3 connections, 1 shared link, changes landing every 30 minutes, 25 API requests a day
-- **Pro ($5 a month, or $45 a year)**: Unlimited accounts, connections and shared links, Google and Outlook changes landing within seconds, event filters, link customization, uncapped API requests, priority support
+- **Pro ($5 a month, or $45 a year)**: Unlimited accounts, connections and shared links, Google and Outlook changes landing within seconds, iCloud, Fastmail and CalDAV changes every minute, event filters, link customization, uncapped API requests, priority support
 
 There is no cap on how many calendars an account holds. An account is one connected Google, Outlook, iCloud, Fastmail or CalDAV login, or one iCal subscription. A connection is one calendar wired into one other calendar.
 
-On Pro, Google Calendar and Microsoft Graph send Keeper.sh a notification when an event changes, and the copy is written as it arrives, so the change lands within seconds. Polling continues underneath it, so a missed notification costs the old timing rather than the change. On Free, and on iCloud, Fastmail and other CalDAV calendars on either plan, calendars are read on a timer — Apple publishes no way for a calendar tool to be told an event changed.
+On Pro, Google Calendar and Microsoft Graph send Keeper.sh a notification when an event changes, and the copy is written as it arrives, so the change lands within seconds. Polling continues underneath as a backstop, so a missed notification is picked up on the next read. iCloud, Fastmail and other CalDAV calendars sync every minute on Pro. On Free, changes land every 30 minutes.
 
-## Running It Yourself
+## Open Source
 
-The stack runs on PostgreSQL, Redis, Bun, and Vite with React. Every account on a server you run gets the Pro feature set, with no plan limits. Plan entitlements under each model are set out in the repository README.
-
-Running it yourself costs a server, a domain, upgrades, backups, your own Google and Microsoft sign-in apps, and being the person paged when it stops. The hosted service at keeper.sh is the easier path for most people.
-
-Three ways to deploy:
-- **Standalone**: One `compose.yaml` bundling Caddy, PostgreSQL, Redis, API, web, and cron
-- **Services-only**: Application containers only, with your own PostgreSQL and Redis
-- **Individual containers**: Separate `keeper-web`, `keeper-api`, `keeper-cron`, and `keeper-mcp` images
-
-Google Calendar and Outlook need their own sign-in apps set up in Google Cloud and Azure. CalDAV providers and iCal links work without that.
+The code is public under AGPL-3.0, and the managed service at keeper.sh runs the same code that is in the repository. Notes for running your own instance are in the repository README.
 
 ## REST API
 
@@ -126,11 +117,11 @@ Endpoints:
 
 Range parameters `from` and `to` are ISO 8601 datetimes. Left out, `from` defaults to now and `to` to a week later. A range may not exceed 732 days.
 
-On the free plan the API is capped at 25 requests a day, after which requests return `429`. Pro is uncapped, as are servers you run yourself.
+On the free plan the API is capped at 25 requests a day, after which requests return `429`. Pro is uncapped.
 
 ## MCP (Model Context Protocol)
 
-Keeper.sh includes an optional MCP server. It gives AI agents such as Claude read and write access to your calendar data. The toolset books, amends, deletes and answers events, searches for open time, and pauses or forces a sync.
+Keeper.sh includes an MCP server. It gives AI agents such as Claude read and write access to your calendar data. The toolset books, amends, deletes and answers events, searches for open time, and pauses or forces a sync.
 
 The server authenticates with OAuth 2.1 and a consent screen you approve. It is served through the web service at `/mcp`.
 
@@ -160,9 +151,7 @@ Sync control:
 
 ### Connecting
 
-Point any MCP-compatible client at the `/mcp` endpoint of a Keeper.sh instance. The client walks you through the consent screen for read and write access. Full documentation lives at https://www.keeper.sh/docs/mcp.
-
-MCP is optional. Every related environment variable is optional across every service, so existing deployments are unaffected when upgrading.
+Point any MCP-compatible client at https://www.keeper.sh/mcp. The client walks you through the consent screen for read and write access. Full documentation lives at https://www.keeper.sh/docs/mcp.
 
 ## Technical Notes
 
