@@ -25,15 +25,14 @@ describe("resolveMcpAuthOptions", () => {
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
+        clientRegistrationDefaultApplicationType: "infer",
         clientRegistrationDefaultScopes: KEEPER_MCP_OAUTH_SCOPES,
         consentPage: "https://app.keeper.sh/oauth/consent",
         customAccessTokenClaims: resolveMcpAccessTokenClaims,
         loginPage: "https://app.keeper.sh/login",
         scopes: KEEPER_MCP_OAUTH_SCOPES,
-        silenceWarnings: {
-          oauthAuthServerConfig: true,
-        },
-        validAudiences: ["https://mcp.keeper.sh"],
+        enforcePerClientResources: false,
+        resources: ["https://mcp.keeper.sh"],
       },
       protectedResourceMetadata: {
         resource: "https://mcp.keeper.sh",
