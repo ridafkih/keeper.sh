@@ -722,6 +722,27 @@
       "when": 1793055048603,
       "tag": "0102_source_ingest_schedule_lock_order",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793308119183,
+      "tag": "0103_better_auth_1_7_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793308124722,
+      "tag": "0104_microsoft_account_object_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793308135831,
+      "tag": "0105_drop_legacy_oauth_client_columns",
+      "breakpoints": true
     }
   ]
 }
