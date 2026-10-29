@@ -135,7 +135,7 @@ function UpgradePage() {
             <Text size="sm" tone="highlight">Annual billing</Text>
           </UpgradeCardToggle>
           <Text size="sm" align="left" className="text-neutral-400 pt-1">
-            For power users who need fast syncs, advanced feed controls, and unlimited syncing. Thank you for supporting this project.
+            Unlimited calendars, changes within seconds from Google and Outlook, and full control over what every link shows.
           </Text>
         </UpgradeCardSection>
 

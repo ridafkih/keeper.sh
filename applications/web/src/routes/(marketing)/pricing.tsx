@@ -44,15 +44,11 @@ const FAQ_ITEMS: FaqItem[] = [
   },
   {
     question: "How quickly do changes show up?",
-    answer: "On Pro, Google and Outlook tell Keeper.sh the moment an event changes, so it reaches your other calendars within seconds. On Free your calendars are checked every minute and changes are copied every 30. iCloud, Fastmail and other CalDAV calendars are checked on a timer on either plan, because Apple publishes no way for a calendar tool to be told an event changed.",
+    answer: "On Pro, Google and Outlook changes land within seconds through webhooks, and iCloud, Fastmail and other CalDAV calendars sync every minute. On Free, changes land every 30 minutes.",
   },
   {
     question: "Is there a discount for paying annually?",
     answer: "Pro is $5 per month, or $45 per year if you pay annually (25% off $60).",
-  },
-  {
-    question: "Is self-hosting free?",
-    answer: "Yes. Every account on a self-hosted instance gets every paid sync feature, with no plan limits — Keeper.sh is open-source under AGPL-3.0. You are the one running the server, so updates, backups and downtime are yours to handle.",
   },
   {
     question: "Do I need a Google or Microsoft account to sign up?",

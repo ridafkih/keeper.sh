@@ -19,8 +19,8 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
     monthlyPrice: 0,
     yearlyPrice: 0,
     features: [
-      "Up to 2 calendar accounts",
-      "Up to 3 connections",
+      "2 calendar accounts",
+      "3 connections",
       "1 shareable calendar link",
       "Changes land every 30 minutes",
       "25 API calls a day",
@@ -29,11 +29,12 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
     id: "pro",
     name: "Pro",
-    description: "As many calendars as you want, and changes that land within a minute.",
+    description: "As many calendars as you want, with Google and Outlook changes landing within seconds.",
     monthlyPrice: 5,
     yearlyPrice: 42,
     features: [
-      "Changes land every minute",
+      "Google and Outlook changes within seconds",
+      "iCloud, Fastmail and CalDAV changes every minute",
       "Unlimited calendar accounts",
       "Unlimited connections",
       "Unlimited shareable links, each with its own filters",
