@@ -46,7 +46,6 @@ import { Route as marketingToolsIcsViewerRouteImport } from './../../routes/(mar
 import { Route as marketingToolsIcsGeneratorRouteImport } from './../../routes/(marketing)/tools/ics-generator'
 import { Route as marketingRecipesSlugRouteImport } from './../../routes/(marketing)/recipes/$slug'
 import { Route as marketingGuidesSlugRouteImport } from './../../routes/(marketing)/guides/$slug'
-import { Route as marketingDocsMcpRouteImport } from './../../routes/(marketing)/docs/mcp'
 import { Route as marketingDocsSlugRouteImport } from './../../routes/(marketing)/docs/$slug'
 import { Route as marketingCompareSlugRouteImport } from './../../routes/(marketing)/compare/$slug'
 import { Route as marketingChangelogSlugRouteImport } from './../../routes/(marketing)/changelog/$slug'
@@ -262,11 +261,6 @@ const marketingRecipesSlugRoute = marketingRecipesSlugRouteImport.update({
 const marketingGuidesSlugRoute = marketingGuidesSlugRouteImport.update({
   id: '/guides/$slug',
   path: '/guides/$slug',
-  getParentRoute: () => marketingRouteRoute,
-} as any)
-const marketingDocsMcpRoute = marketingDocsMcpRouteImport.update({
-  id: '/docs/mcp',
-  path: '/docs/mcp',
   getParentRoute: () => marketingRouteRoute,
 } as any)
 const marketingDocsSlugRoute = marketingDocsSlugRouteImport.update({
@@ -494,7 +488,6 @@ export interface FileRoutesByFullPath {
   '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
   '/docs/$slug': typeof marketingDocsSlugRoute
-  '/docs/mcp': typeof marketingDocsMcpRoute
   '/guides/$slug': typeof marketingGuidesSlugRoute
   '/recipes/$slug': typeof marketingRecipesSlugRoute
   '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
@@ -558,7 +551,6 @@ export interface FileRoutesByTo {
   '/changelog/$slug': typeof marketingChangelogSlugRoute
   '/compare/$slug': typeof marketingCompareSlugRoute
   '/docs/$slug': typeof marketingDocsSlugRoute
-  '/docs/mcp': typeof marketingDocsMcpRoute
   '/guides/$slug': typeof marketingGuidesSlugRoute
   '/recipes/$slug': typeof marketingRecipesSlugRoute
   '/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
@@ -630,7 +622,6 @@ export interface FileRoutesById {
   '/(marketing)/changelog/$slug': typeof marketingChangelogSlugRoute
   '/(marketing)/compare/$slug': typeof marketingCompareSlugRoute
   '/(marketing)/docs/$slug': typeof marketingDocsSlugRoute
-  '/(marketing)/docs/mcp': typeof marketingDocsMcpRoute
   '/(marketing)/guides/$slug': typeof marketingGuidesSlugRoute
   '/(marketing)/recipes/$slug': typeof marketingRecipesSlugRoute
   '/(marketing)/tools/ics-generator': typeof marketingToolsIcsGeneratorRoute
@@ -700,7 +691,6 @@ export interface FileRouteTypes {
     | '/changelog/$slug'
     | '/compare/$slug'
     | '/docs/$slug'
-    | '/docs/mcp'
     | '/guides/$slug'
     | '/recipes/$slug'
     | '/tools/ics-generator'
@@ -764,7 +754,6 @@ export interface FileRouteTypes {
     | '/changelog/$slug'
     | '/compare/$slug'
     | '/docs/$slug'
-    | '/docs/mcp'
     | '/guides/$slug'
     | '/recipes/$slug'
     | '/tools/ics-generator'
@@ -835,7 +824,6 @@ export interface FileRouteTypes {
     | '/(marketing)/changelog/$slug'
     | '/(marketing)/compare/$slug'
     | '/(marketing)/docs/$slug'
-    | '/(marketing)/docs/mcp'
     | '/(marketing)/guides/$slug'
     | '/(marketing)/recipes/$slug'
     | '/(marketing)/tools/ics-generator'
@@ -1140,13 +1128,6 @@ declare module '@tanstack/react-router' {
       path: '/guides/$slug'
       fullPath: '/guides/$slug'
       preLoaderRoute: typeof marketingGuidesSlugRouteImport
-      parentRoute: typeof marketingRouteRoute
-    }
-    '/(marketing)/docs/mcp': {
-      id: '/(marketing)/docs/mcp'
-      path: '/docs/mcp'
-      fullPath: '/docs/mcp'
-      preLoaderRoute: typeof marketingDocsMcpRouteImport
       parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/docs/$slug': {
@@ -1560,7 +1541,6 @@ interface marketingRouteRouteChildren {
   marketingIndexRoute: typeof marketingIndexRoute
   marketingCompareSlugRoute: typeof marketingCompareSlugRoute
   marketingDocsSlugRoute: typeof marketingDocsSlugRoute
-  marketingDocsMcpRoute: typeof marketingDocsMcpRoute
   marketingGuidesSlugRoute: typeof marketingGuidesSlugRoute
   marketingRecipesSlugRoute: typeof marketingRecipesSlugRoute
   marketingToolsIcsGeneratorRoute: typeof marketingToolsIcsGeneratorRoute
@@ -1585,7 +1565,6 @@ const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingIndexRoute: marketingIndexRoute,
   marketingCompareSlugRoute: marketingCompareSlugRoute,
   marketingDocsSlugRoute: marketingDocsSlugRoute,
-  marketingDocsMcpRoute: marketingDocsMcpRoute,
   marketingGuidesSlugRoute: marketingGuidesSlugRoute,
   marketingRecipesSlugRoute: marketingRecipesSlugRoute,
   marketingToolsIcsGeneratorRoute: marketingToolsIcsGeneratorRoute,
