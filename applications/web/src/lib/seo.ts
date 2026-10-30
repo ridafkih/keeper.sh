@@ -1,3 +1,5 @@
+import type { SoftwareSchemaCopy } from "./marketing-content";
+
 const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
 const SITE_ALTERNATE_NAME = "Keeper";
@@ -184,14 +186,13 @@ export function faqPageSchema(
   };
 }
 
-export function softwareApplicationSchema() {
+export function softwareApplicationSchema(copy: SoftwareSchemaCopy) {
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "@id": `${SITE_URL}/#software`,
     name: SITE_NAME,
-    description:
-      "Keeper.sh keeps your personal, work and school calendars in sync, so a booking on one shows you as busy on the others. Your event titles stay private.",
+    description: copy.description,
     url: SITE_URL,
     image: `${SITE_URL}/open-graph.png`,
     applicationCategory: "BusinessApplication",
@@ -202,8 +203,7 @@ export function softwareApplicationSchema() {
         name: "Free",
         price: "0",
         priceCurrency: "USD",
-        description:
-          "For keeping two calendar accounts from double-booking each other.",
+        description: copy.offers.free,
       },
       {
         "@type": "Offer",
@@ -216,8 +216,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1M",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proMonthly,
       },
       {
         "@type": "Offer",
@@ -230,8 +229,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1Y",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proYearly,
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },

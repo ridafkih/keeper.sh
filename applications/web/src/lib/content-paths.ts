@@ -10,6 +10,7 @@ export const CONTENT_DIRECTORIES = {
   compare: `${SEO_CONTENT_ROOT}/compare`,
   docs: `${SEO_CONTENT_ROOT}/docs`,
   guides: `${SEO_CONTENT_ROOT}/guides`,
+  marketing: `${SEO_CONTENT_ROOT}/marketing`,
   recipes: `${SEO_CONTENT_ROOT}/recipes`,
 } as const;
 

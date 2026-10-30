@@ -17,6 +17,7 @@ import {
   techArticleSchema,
   webPageSchema,
 } from "@/lib/seo";
+import { marketingCopy } from "@/lib/marketing-copy";
 
 const GENERIC_IMAGE_URL = "https://www.keeper.sh/open-graph.png";
 
@@ -341,7 +342,7 @@ describe("offerCatalogSchema", () => {
 
 describe("softwareApplicationSchema", () => {
   it("offers Free, monthly Pro, and yearly Pro at 45 USD", () => {
-    const { offers } = softwareApplicationSchema();
+    const { offers } = softwareApplicationSchema(marketingCopy.softwareSchema);
 
     expect(offers).toEqual([
       expect.objectContaining({
@@ -376,6 +377,6 @@ describe("softwareApplicationSchema", () => {
   });
 
   it("does not invent an aggregate rating", () => {
-    expect(softwareApplicationSchema()).not.toHaveProperty("aggregateRating");
+    expect(softwareApplicationSchema(marketingCopy.softwareSchema)).not.toHaveProperty("aggregateRating");
   });
 });
