@@ -7,6 +7,7 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { blogPlugin, comparePlugin, docsPlugin, guidesPlugin, movedPathsPlugin, recipesPlugin } from "./plugins/blog";
 import { changelogPlugin } from "./plugins/changelog";
+import { marketingPlugin } from "./plugins/marketing";
 import { feedPlugin } from "./plugins/feed";
 import { changelogFeedPlugin } from "./plugins/changelog-feed";
 import { sitemapPlugin } from "./plugins/sitemap";
@@ -20,6 +21,7 @@ export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     blogPlugin(),
     changelogPlugin(),
+    marketingPlugin(),
     comparePlugin(),
     docsPlugin(),
     guidesPlugin(),
