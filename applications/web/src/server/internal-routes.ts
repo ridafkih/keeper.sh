@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { KEEPER_API_RESOURCE_SCOPES } from "@keeper.sh/constants";
 import { GDPR_COUNTRIES } from "@/config/gdpr";
+import { SEO_CONTENT_ROOT } from "@/lib/content-paths";
 import { getGithubStarsSnapshot } from "./github-stars";
 import { proxyRequest } from "./proxy/http";
 import type { ServerConfig } from "./types";
@@ -93,7 +94,7 @@ async function serveStaticTextFile(pathname: string): Promise<Response | null> {
   const contentType = staticTextFiles[pathname];
   if (!contentType) return null;
 
-  const filePath = path.resolve(process.cwd(), `public${pathname}`);
+  const filePath = path.resolve(process.cwd(), SEO_CONTENT_ROOT, pathname.slice(1));
   try {
     const content = await fs.readFile(filePath, "utf-8");
     return new Response(content, {
