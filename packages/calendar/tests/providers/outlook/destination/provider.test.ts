@@ -496,4 +496,27 @@ describe("createOutlookSyncProvider", () => {
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it("permanently deletes events so they bypass the Deleted Items folder", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
+      { success: true },
+    ]);
+
+    const [input, init] = fetchMock.mock.calls[0] as [string | URL | Request, RequestInit];
+    const url = new URL(input.toString());
+    expect(url.pathname).toBe("/v1.0/me/events/outlook-event-id/permanentDelete");
+    expect(init.method).toBe("POST");
+  });
+
+  it("treats a 404 from permanentDelete as an already-removed event", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
+      { success: true },
+    ]);
+  });
 });
