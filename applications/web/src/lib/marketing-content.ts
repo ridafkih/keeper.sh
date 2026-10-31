@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { type, type Type } from "arktype";
 
@@ -315,7 +315,183 @@ function readSurface<T>(directory: string, name: string, schema: Type<T>): T {
   return result as T;
 }
 
+export function marketingContentPresent(directory: string): boolean {
+  return existsSync(directory) && readdirSync(directory).some((entry) => entry.endsWith(".json"));
+}
+
+const emptySeo = { title: "Keeper.sh", description: "Keeper.sh" };
+const emptyCard = { title: "Keeper.sh", description: "Keeper.sh" };
+const emptyCta = { heading: "Keeper.sh", body: "Keeper.sh", primaryLabel: "Keeper.sh", secondaryLabel: "Keeper.sh" };
+
+export const fallbackMarketingCopy: MarketingCopy = {
+  home: {
+    seo: emptySeo,
+    hero: { heading: "Keeper.sh", body: "Keeper.sh", cta: "Keeper.sh" },
+    features: {
+      sync: emptyCard,
+      providers: emptyCard,
+      details: emptyCard,
+      agents: emptyCard,
+      openSource: { title: "Keeper.sh", description: "Keeper.sh", linkLabel: "Keeper.sh" },
+    },
+    howItWorks: { heading: "Keeper.sh", subheading: "Keeper.sh" },
+    testimonials: { heading: "Keeper.sh", subheading: "Keeper.sh" },
+    pricing: { heading: "Keeper.sh", subheadingLead: "Keeper.sh", subheadingLinkLabel: "Keeper.sh" },
+    articles: {
+      heading: "Keeper.sh",
+      bodyLead: "Keeper.sh",
+      blogLinkLabel: "Keeper.sh",
+      bodyAnd: "Keeper.sh",
+      compareLinkLabel: "Keeper.sh",
+    },
+    faq: { heading: "Keeper.sh", bodyLead: "Keeper.sh", items: [] },
+    cta: emptyCta,
+  },
+  features: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh" },
+    cards: [],
+    howItWorks: { heading: "Keeper.sh", subheading: "Keeper.sh" },
+    cta: emptyCta,
+  },
+  pricing: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh", body: "Keeper.sh" },
+    faq: { heading: "Keeper.sh", items: [] },
+  },
+  plans: {
+    free: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
+    pro: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
+  },
+  pricingPlans: { plans: [], features: [] },
+  howItWorks: { steps: [] },
+  about: {
+    seo: { title: "Keeper.sh", description: "Keeper.sh", schemaDescription: "Keeper.sh" },
+    header: { heading: "Keeper.sh" },
+    personDescription: "Keeper.sh",
+    sections: {
+      who: {
+        title: "Keeper.sh",
+        intro: "Keeper.sh",
+        linksLead: "Keeper.sh",
+        blogLinkLabel: "Keeper.sh",
+        afterBlog: "Keeper.sh",
+        afterGithub: "Keeper.sh",
+        end: "Keeper.sh",
+      },
+      why: {
+        title: "Keeper.sh",
+        p1: "Keeper.sh",
+        p2: "Keeper.sh",
+        p3Lead: "Keeper.sh",
+        p3LinkLabel: "Keeper.sh",
+        p3End: "Keeper.sh",
+      },
+      code: {
+        title: "Keeper.sh",
+        p1Lead: "Keeper.sh",
+        p1LinkLabel: "Keeper.sh",
+        p1End: "Keeper.sh",
+        p2: "Keeper.sh",
+        p3Lead: "Keeper.sh",
+        p3LinkLabel: "Keeper.sh",
+        p3End: "Keeper.sh",
+      },
+      support: {
+        title: "Keeper.sh",
+        lead: "Keeper.sh",
+        issuesLinkLabel: "Keeper.sh",
+        afterIssues: "Keeper.sh",
+      },
+    },
+    cta: emptyCta,
+  },
+  support: {
+    seo: { title: "Keeper.sh", description: "Keeper.sh", schemaName: "Keeper.sh" },
+    header: { heading: "Keeper.sh" },
+    sections: {
+      getHelp: {
+        title: "Keeper.sh",
+        emailLead: "Keeper.sh",
+        afterEmail: "Keeper.sh",
+        issuesLead: "Keeper.sh",
+        issuesLinkLabel: "Keeper.sh",
+        afterIssues: "Keeper.sh",
+      },
+      quickAnswers: {
+        title: "Keeper.sh",
+        updateTiming: { question: "Keeper.sh", answer: "Keeper.sh" },
+        missingEvent: {
+          question: "Keeper.sh",
+          lead: "Keeper.sh",
+          guideLinkLabel: "Keeper.sh",
+          afterGuide: "Keeper.sh",
+          guidesLinkLabel: "Keeper.sh",
+          end: "Keeper.sh",
+        },
+        privacy: { question: "Keeper.sh", answer: "Keeper.sh" },
+        providers: { question: "Keeper.sh", answer: "Keeper.sh" },
+        docsLead: "Keeper.sh",
+        docsLinkLabel: "Keeper.sh",
+        afterDocs: "Keeper.sh",
+      },
+      plansBilling: {
+        title: "Keeper.sh",
+        lead: "Keeper.sh",
+        limitsLinkLabel: "Keeper.sh",
+        afterLimits: "Keeper.sh",
+        billing: "Keeper.sh",
+      },
+      accountData: {
+        title: "Keeper.sh",
+        delete: "Keeper.sh",
+        exportLead: "Keeper.sh",
+        afterEmail: "Keeper.sh",
+        privacyLinkLabel: "Keeper.sh",
+        afterPrivacy: "Keeper.sh",
+        termsLinkLabel: "Keeper.sh",
+        end: "Keeper.sh",
+      },
+    },
+  },
+  selfHosting: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh" },
+    cards: [],
+    setup: {
+      heading: "Keeper.sh",
+      subheading: "Keeper.sh",
+      need: { title: "Keeper.sh", body: "Keeper.sh", note: "Keeper.sh" },
+      do: { title: "Keeper.sh", body: "Keeper.sh", linkLabel: "Keeper.sh" },
+    },
+    faq: { heading: "Keeper.sh", items: [] },
+    cta: emptyCta,
+  },
+  icsViewer: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh" },
+    howRead: { heading: "Keeper.sh", body: "Keeper.sh" },
+    faq: { heading: "Keeper.sh", items: [] },
+    cta: { title: "Keeper.sh", body: "Keeper.sh" },
+  },
+  icsGenerator: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh" },
+    writes: { heading: "Keeper.sh", body: "Keeper.sh" },
+    faq: { heading: "Keeper.sh", items: [] },
+    cta: { title: "Keeper.sh", body: "Keeper.sh" },
+  },
+  softwareSchema: {
+    description: "Keeper.sh",
+    offers: { free: "Keeper.sh", proMonthly: "Keeper.sh", proYearly: "Keeper.sh" },
+  },
+};
+
 export function processMarketingDirectory(directory: string): MarketingCopy {
+  if (!marketingContentPresent(directory)) {
+    return fallbackMarketingCopy;
+  }
+
   return {
     home: readSurface(directory, "home", homeSchema),
     features: readSurface(directory, "features", featuresSchema),
