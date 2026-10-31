@@ -23,6 +23,10 @@ interface GoogleEventDateTime {
 }
 
 interface GoogleCalendarEvent {
+  hangoutLink?: string;
+  conferenceData?: {
+    entryPoints?: { entryPointType?: string; uri?: string }[];
+  };
   id?: string;
   iCalUID?: string;
   status?: "confirmed" | "tentative" | "cancelled";
