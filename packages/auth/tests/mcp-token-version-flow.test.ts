@@ -127,13 +127,16 @@ create table "oauth_consent" (
 );
 `;
 
-const MARK_EXISTING_CLIENTS_LEGACY_SQL = readFileSync(
-  join(
-    import.meta.dirname,
-    "../../database/drizzle/0095_mark_existing_oauth_clients_legacy.sql",
-  ),
-  "utf8",
-);
+const readMigration = (tag: string): string =>
+  readFileSync(join(import.meta.dirname, `../../database/drizzle/${tag}.sql`), "utf8");
+
+const MARK_EXISTING_CLIENTS_LEGACY_SQL = readMigration("0095_mark_existing_oauth_clients_legacy");
+
+const BETTER_AUTH_1_7_MIGRATIONS = [
+  "0103_better_auth_1_7_schema",
+  "0104_microsoft_account_object_ids",
+  "0105_drop_legacy_oauth_client_columns",
+].map((tag) => readMigration(tag));
 
 const REDIRECT_URI = "https://client.example/callback";
 const REQUESTED_SCOPE = "openid offline_access keeper.read keeper.write";
@@ -159,7 +162,7 @@ const toCookieHeader = (response: Response): string =>
     .join("; ");
 
 const readClientId = async (response: Response): Promise<string> => {
-  expect(response.status).toBe(200);
+  expect(response.status).toBe(201);
   const { client_id: clientId } = (await response.json()) as { client_id: string };
   return clientId;
 };
@@ -167,6 +170,9 @@ const readClientId = async (response: Response): Promise<string> => {
 const createHarness = async () => {
   const pglite = new PGlite();
   await pglite.exec(AUTH_DDL);
+  for (const migration of BETTER_AUTH_1_7_MIGRATIONS) {
+    await pglite.exec(migration);
+  }
   const database = drizzle(pglite);
 
   const router: { handle: (request: Request) => Promise<Response> } = { handle: respondUnavailable };
@@ -308,6 +314,24 @@ const createHarness = async () => {
     stop,
   };
 };
+
+describe("MCP client registration", () => {
+  it("accepts clients that call back to a loopback address or an app URL", async () => {
+    const harness = await createHarness();
+    try {
+      for (const redirectUri of [
+        "http://localhost:51234/callback",
+        "http://127.0.0.1:33418/callback",
+        "cursor://anysphere.cursor-retrieval/oauth/callback",
+        "https://claude.ai/api/mcp/auth_callback",
+      ]) {
+        expect(await harness.registerClient({ redirect_uris: [redirectUri] })).toEqual(expect.any(String));
+      }
+    } finally {
+      await harness.stop();
+    }
+  });
+});
 
 describe("MCP token versions", () => {
   it("issues version 2 tokens to a client registered now, even when it asks for version 1", async () => {

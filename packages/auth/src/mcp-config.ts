@@ -35,15 +35,14 @@ interface ResolvedMcpAuthOptions {
     allowDynamicClientRegistration: true;
     allowUnauthenticatedClientRegistration: true;
     clientRegistrationAllowedScopes: string[];
+    clientRegistrationDefaultApplicationType: "infer";
     clientRegistrationDefaultScopes: string[];
     consentPage: string;
     customAccessTokenClaims: typeof resolveMcpAccessTokenClaims;
     loginPage: string;
     scopes: string[];
-    silenceWarnings: {
-      oauthAuthServerConfig: boolean;
-    };
-    validAudiences: string[];
+    enforcePerClientResources: false;
+    resources: string[];
   };
   protectedResourceMetadata: {
     resource: string;
@@ -57,7 +56,7 @@ const resolveAbsoluteUrl = (pathname: string, baseUrl: string): string =>
 const normalizeUrl = (url: string): string =>
   url.replace(/\/$/, "");
 
-const resolveValidAudiences = (resourceBaseUrl: string): string[] => {
+const resolveResourceIdentifiers = (resourceBaseUrl: string): string[] => {
   const normalized = normalizeUrl(resourceBaseUrl);
   const { origin } = new URL(resourceBaseUrl);
   const audiences = new Set([origin, normalized]);
@@ -83,15 +82,14 @@ const resolveMcpAuthOptions = (
       allowDynamicClientRegistration: true,
       allowUnauthenticatedClientRegistration: true,
       clientRegistrationAllowedScopes: KEEPER_MCP_OAUTH_SCOPES,
+      clientRegistrationDefaultApplicationType: "infer",
       clientRegistrationDefaultScopes: KEEPER_MCP_OAUTH_SCOPES,
       consentPage: resolveAbsoluteUrl("/oauth/consent", input.webBaseUrl),
       customAccessTokenClaims: resolveMcpAccessTokenClaims,
       loginPage: resolveAbsoluteUrl("/login", input.webBaseUrl),
       scopes: KEEPER_MCP_OAUTH_SCOPES,
-      silenceWarnings: {
-        oauthAuthServerConfig: true,
-      },
-      validAudiences: resolveValidAudiences(input.resourceBaseUrl),
+      enforcePerClientResources: false,
+      resources: resolveResourceIdentifiers(input.resourceBaseUrl),
     },
     protectedResourceMetadata: {
       resource: resourceUrl,

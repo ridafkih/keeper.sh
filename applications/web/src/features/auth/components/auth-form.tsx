@@ -278,10 +278,10 @@ function OidcSignInButton({
     const fallbackMessage = `Couldn't reach ${providerName}.`;
 
     try {
-      const { error } = await authClient.signIn.oauth2({
+      const { error } = await authClient.signIn.social({
         callbackURL,
         newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
-        providerId: "oidc",
+        provider: "oidc",
       });
 
       if (error) {
