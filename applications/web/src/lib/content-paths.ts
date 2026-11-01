@@ -16,6 +16,8 @@ export const CONTENT_DIRECTORIES = {
 
 export const MOVED_PATHS_FILE = "moved-paths.json";
 
+export const LLMS_TEXT_FILES = ["llms.txt", "llms-full.txt"] as const;
+
 export interface SupersedingPage {
   basePath: string;
   replaces?: string[];
