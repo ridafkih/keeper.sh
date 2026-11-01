@@ -212,8 +212,8 @@ function MarketingPage() {
             <MarketingHowItWorksCard>
               <MarketingHowItWorksRow>
                 <MarketingHowItWorksStepBody step={1}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.connect.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.connect.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="right">
                   <HowItWorksConnect />
@@ -222,8 +222,8 @@ function MarketingPage() {
 
               <MarketingHowItWorksRow reverse>
                 <MarketingHowItWorksStepBody step={2}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.configure.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.configure.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="left">
                   <HowItWorksConfigure />
@@ -232,8 +232,8 @@ function MarketingPage() {
 
               <MarketingHowItWorksRow>
                 <MarketingHowItWorksStepBody step={3}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.sync.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.sync.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="right">
                   <HowItWorksSync />
