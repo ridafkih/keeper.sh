@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url";
 
 const READY_TIMEOUT_MS = 30_000;
 const READY_POLL_MS = 250;
+const CLIENT_RENDER_FALLBACK_MARKER = "<!--$!-->";
 
 const paths = Bun.argv.slice(2);
 
@@ -49,6 +50,13 @@ async function waitForServer(): Promise<void> {
   throw new Error(`keeper-web did not accept requests within ${READY_TIMEOUT_MS} ms.`);
 }
 
+function serverRenderError(body: string): string | null {
+  if (!body.includes(CLIENT_RENDER_FALLBACK_MARKER)) return null;
+
+  const message = body.match(/<template data-msg="([^"]*)"/)?.[1];
+  return message ?? "React switched to client rendering after a server render error.";
+}
+
 async function check(path: string): Promise<string | null> {
   const response = await fetch(new URL(path, origin));
   const landed = new URL(response.url).pathname;
@@ -56,6 +64,10 @@ async function check(path: string): Promise<string | null> {
   console.log(summary);
 
   if (response.status !== 200) return summary;
+
+  const renderError = serverRenderError(await response.text());
+  if (renderError) return `${summary}: ${renderError}`;
+
   return null;
 }
 
