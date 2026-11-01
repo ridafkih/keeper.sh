@@ -94,6 +94,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.package.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package.name }}-${{ matrix.arch }}
+      - name: Verify the web image carries the llms text files
+        if: matrix.package.name == 'web'
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          for file in llms.txt llms-full.txt; do
+            docker run --rm --entrypoint test "$IMAGE" -s "dist/client/$file"
+          done
 
   build-convenience:
     strategy:
