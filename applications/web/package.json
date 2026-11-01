@@ -10,7 +10,8 @@
     "types": "tsc --noEmit",
     "test": "bun x --bun vitest run",
     "preview": "vite preview",
-    "start": "bun scripts/start.ts"
+    "start": "bun scripts/start.ts",
+    "smoke": "bun scripts/smoke.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "1.6.22",
