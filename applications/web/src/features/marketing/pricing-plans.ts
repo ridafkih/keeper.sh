@@ -1,8 +1,6 @@
 import type { MarketingPricingFeatureValueKind } from "./components/marketing-pricing-section";
+import { type PricingPlanId, resolvePricingFeatures } from "./pricing-layout";
 import { marketingCopy } from "@/lib/marketing-copy";
-
-export type PricingPlanId = 'free' | 'pro';
-
 
 export type PricingPlan = {
   id: PricingPlanId;
@@ -27,28 +25,12 @@ export type PricingFeature = {
 };
 
 /**
- * Presentation held in the app: which plan is emphasised, and which matrix
- * cells render an icon rather than a word. The copy — plan names, prices, row
- * labels, cell words and card bullets — comes from the seo submodule under
+ * Presentation held in the app: which plan is emphasised. The cell layout lives
+ * in pricing-layout.ts. The copy — plan names, prices, row labels, cell words
+ * and card bullets — comes from the seo submodule under
  * marketing/pricing-plans.json and is merged in below by id.
  */
 const PLAN_TONES: Partial<Record<PricingPlanId, "inverse">> = { pro: "inverse" };
-
-type FeatureIcon = "check" | "minus" | "infinity";
-type FeatureCell = FeatureIcon | "copy";
-
-const FEATURE_CELLS: { id: string; free: FeatureCell; pro: FeatureCell }[] = [
-  { id: "google-outlook-updates", free: "copy", pro: "copy" },
-  { id: "caldav-updates", free: "copy", pro: "copy" },
-  { id: "linked-accounts", free: "copy", pro: "infinity" },
-  { id: "connections", free: "copy", pro: "infinity" },
-  { id: "shareable-link", free: "check", pro: "check" },
-  { id: "choose-link-shows", free: "minus", pro: "check" },
-  { id: "choose-events-sync", free: "minus", pro: "check" },
-  { id: "api-access", free: "copy", pro: "infinity" },
-  { id: "sign-in", free: "check", pro: "check" },
-  { id: "priority-support", free: "minus", pro: "check" },
-];
 
 export const PRICING_PLANS: PricingPlan[] = marketingCopy.pricingPlans.plans.map((plan) => {
   const id = plan.id as PricingPlanId;
@@ -65,39 +47,7 @@ export const PRICING_PLANS: PricingPlan[] = marketingCopy.pricingPlans.plans.map
   };
 });
 
-const featureCopyById = new Map(
-  marketingCopy.pricingPlans.features.map((feature) => [feature.id, feature] as const),
-);
-
-function resolveCell(
-  cell: FeatureCell,
-  word: string | undefined,
-  id: string,
-  column: "free" | "pro",
-): MarketingPricingFeatureValueKind {
-  if (cell !== "copy") return cell;
-
-  if (!word) {
-    throw new Error(`Pricing feature "${id}" is missing its ${column} word in the marketing collection.`);
-  }
-
-  return word;
-}
-
-export const PRICING_FEATURES: PricingFeature[] = FEATURE_CELLS.map((cell) => {
-  const copy = featureCopyById.get(cell.id);
-
-  if (!copy) {
-    throw new Error(`Pricing feature "${cell.id}" has no copy in the marketing collection.`);
-  }
-
-  return {
-    label: copy.label,
-    free: resolveCell(cell.free, copy.free, cell.id, "free"),
-    pro: resolveCell(cell.pro, copy.pro, cell.id, "pro"),
-    ...(copy.highlight ? { highlight: copy.highlight } : {}),
-  };
-});
+export const PRICING_FEATURES: PricingFeature[] = resolvePricingFeatures(marketingCopy.pricingPlans.features);
 
 /**
  * The rows where Free and Pro actually differ, in PRICING_FEATURES order. A row

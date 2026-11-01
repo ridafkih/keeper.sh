@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { type, type Type } from "arktype";
+import { FEATURE_CELLS, PRICING_PLAN_IDS, resolvePricingFeatures } from "../features/marketing/pricing-layout";
 
 const titledCard = type({
   "+": "reject",
@@ -363,7 +364,22 @@ export const fallbackMarketingCopy: MarketingCopy = {
     free: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
     pro: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
   },
-  pricingPlans: { plans: [], features: [] },
+  pricingPlans: {
+    plans: PRICING_PLAN_IDS.map((id) => ({
+      id,
+      name: "Keeper.sh",
+      price: "Keeper.sh",
+      period: "Keeper.sh",
+      description: "Keeper.sh",
+      ctaLabel: "Keeper.sh",
+    })),
+    features: FEATURE_CELLS.map((cell) => ({
+      id: cell.id,
+      label: "Keeper.sh",
+      ...(cell.free === "copy" ? { free: "Keeper.sh" } : {}),
+      ...(cell.pro === "copy" ? { pro: "Keeper.sh" } : {}),
+    })),
+  },
   howItWorks: { steps: [] },
   about: {
     seo: { title: "Keeper.sh", description: "Keeper.sh", schemaDescription: "Keeper.sh" },
@@ -492,12 +508,15 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
     return fallbackMarketingCopy;
   }
 
+  const pricingPlans = readSurface(directory, "pricing-plans", pricingPlansSchema);
+  resolvePricingFeatures(pricingPlans.features);
+
   return {
     home: readSurface(directory, "home", homeSchema),
     features: readSurface(directory, "features", featuresSchema),
     pricing: readSurface(directory, "pricing", pricingSchema),
     plans: readSurface(directory, "plans", plansSchema),
-    pricingPlans: readSurface(directory, "pricing-plans", pricingPlansSchema),
+    pricingPlans,
     howItWorks: readSurface(directory, "how-it-works", howItWorksSchema),
     about: readSurface(directory, "about", aboutSchema),
     support: readSurface(directory, "support", supportSchema),
