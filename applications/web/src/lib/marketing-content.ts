@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { type, type Type } from "arktype";
+import { HOW_IT_WORKS_STEP_IDS, resolveHowItWorksSteps } from "../features/marketing/how-it-works-layout";
 import { FEATURE_CELLS, PRICING_PLAN_IDS, resolvePricingFeatures } from "../features/marketing/pricing-layout";
 
 const titledCard = type({
@@ -380,7 +381,9 @@ export const fallbackMarketingCopy: MarketingCopy = {
       ...(cell.pro === "copy" ? { pro: "Keeper.sh" } : {}),
     })),
   },
-  howItWorks: { steps: [] },
+  howItWorks: {
+    steps: HOW_IT_WORKS_STEP_IDS.map((id) => ({ id, title: "Keeper.sh", body: "Keeper.sh" })),
+  },
   about: {
     seo: { title: "Keeper.sh", description: "Keeper.sh", schemaDescription: "Keeper.sh" },
     header: { heading: "Keeper.sh" },
@@ -510,6 +513,8 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
 
   const pricingPlans = readSurface(directory, "pricing-plans", pricingPlansSchema);
   resolvePricingFeatures(pricingPlans.features);
+  const howItWorks = readSurface(directory, "how-it-works", howItWorksSchema);
+  resolveHowItWorksSteps(howItWorks.steps);
 
   return {
     home: readSurface(directory, "home", homeSchema),
@@ -517,7 +522,7 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
     pricing: readSurface(directory, "pricing", pricingSchema),
     plans: readSurface(directory, "plans", plansSchema),
     pricingPlans,
-    howItWorks: readSurface(directory, "how-it-works", howItWorksSchema),
+    howItWorks,
     about: readSurface(directory, "about", aboutSchema),
     support: readSurface(directory, "support", supportSchema),
     selfHosting: readSurface(directory, "self-hosting", selfHostingSchema),

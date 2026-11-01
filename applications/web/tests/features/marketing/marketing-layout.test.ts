@@ -7,6 +7,10 @@ import {
   PRICING_PLAN_IDS,
   resolvePricingFeatures,
 } from "../../../src/features/marketing/pricing-layout";
+import {
+  HOW_IT_WORKS_STEP_IDS,
+  resolveHowItWorksSteps,
+} from "../../../src/features/marketing/how-it-works-layout";
 import { fallbackMarketingCopy, processMarketingDirectory } from "../../../src/lib/marketing-content";
 
 describe("default marketing copy", () => {
@@ -23,6 +27,12 @@ describe("default marketing copy", () => {
     const features = resolvePricingFeatures(fallbackMarketingCopy.pricingPlans.features);
 
     expect(features).toHaveLength(FEATURE_CELLS.length);
+  });
+
+  it("covers every how-it-works step", () => {
+    const steps = resolveHowItWorksSteps(fallbackMarketingCopy.howItWorks.steps);
+
+    expect(Object.keys(steps)).toEqual([...HOW_IT_WORKS_STEP_IDS]);
   });
 
   it("covers every plan", () => {
@@ -43,5 +53,15 @@ describe("resolvePricingFeatures", () => {
     const features = fallbackMarketingCopy.pricingPlans.features.map((feature) => ({ ...feature, free: undefined }));
 
     expect(() => resolvePricingFeatures(features)).toThrow(/is missing its free word/);
+  });
+});
+
+describe("resolveHowItWorksSteps", () => {
+  it("fails loudly when a step has no copy", () => {
+    const steps = fallbackMarketingCopy.howItWorks.steps.slice(1);
+
+    expect(() => resolveHowItWorksSteps(steps)).toThrow(
+      `How-it-works step "${HOW_IT_WORKS_STEP_IDS[0]}" has no copy in the marketing collection.`,
+    );
   });
 });
