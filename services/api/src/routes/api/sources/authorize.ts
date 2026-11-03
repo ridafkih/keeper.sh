@@ -2,6 +2,7 @@ import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/databas
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { getAuthorizationUrl, isOAuthProvider } from "@/utils/destinations";
 import { sourceAuthorizeQuerySchema } from "@/utils/request-query";
 import { baseUrl, database } from "@/context";
@@ -81,6 +82,9 @@ const GET = withWideEvent(
     ) {
       return ErrorResponse.badRequest("Unsupported provider").toResponse();
     }
+
+    widelog.set("provider.name", provider);
+    widelog.set("oauth.is_reconnect", Boolean(accountId ?? credentialId));
 
     if (accountId) {
       const target = await resolveReconnectTarget(userId, accountId);
