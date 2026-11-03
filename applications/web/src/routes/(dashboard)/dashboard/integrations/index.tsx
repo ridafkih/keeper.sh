@@ -2,13 +2,15 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { describeOAuthConnectFailure } from "@/lib/connect-failures";
+import { describeOAuthConnectFailure, isAdminApprovalFailure } from "@/lib/connect-failures";
+import { AdminApproval } from "@/features/onboarding/components/admin-approval";
 
 interface SearchParams {
   reason?: string;
+  approvalUrl?: string;
 }
 
-function parseSearchReason(value: unknown): string | undefined {
+function parseSearchString(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   return undefined;
 }
@@ -16,7 +18,8 @@ function parseSearchReason(value: unknown): string | undefined {
 export const Route = createFileRoute("/(dashboard)/dashboard/integrations/")({
   component: OAuthCallbackErrorPage,
   validateSearch: (search: Record<string, unknown>): SearchParams => ({
-    reason: parseSearchReason(search.reason),
+    approvalUrl: parseSearchString(search.approvalUrl),
+    reason: parseSearchString(search.reason),
   }),
   beforeLoad: ({ search }) => {
     if (!search.reason) {
@@ -26,7 +29,11 @@ export const Route = createFileRoute("/(dashboard)/dashboard/integrations/")({
 });
 
 function OAuthCallbackErrorPage() {
-  const { reason } = Route.useSearch();
+  const { reason, approvalUrl } = Route.useSearch();
+
+  if (isAdminApprovalFailure(reason) && approvalUrl) {
+    return <AdminApproval approvalUrl={approvalUrl} />;
+  }
 
   return (
     <div className="flex flex-col gap-3">
