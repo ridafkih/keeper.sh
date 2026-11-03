@@ -304,7 +304,7 @@ const createAuth = (config: AuthConfig) => {
         }
         return {};
       },
-      prompt: "consent",
+      prompt: "select_account",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
   }
