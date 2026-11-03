@@ -19,6 +19,8 @@ import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
 import { noteUserMilestone } from "@/utils/user-milestones";
 import { resolveProviderFailureReason } from "@/utils/oauth-callback-failure";
 import { baseUrl } from "@/context";
+import env from "@/env";
+import { buildMicrosoftAdminConsentUrl } from "@/utils/microsoft-admin-consent";
 import type { OAuthConnectFailureReason } from "@keeper.sh/data-schemas";
 
 const MS_PER_SECOND = 1000;
@@ -26,8 +28,27 @@ const MISSING_MAILBOX_ERROR_CODES = new Set(["MailboxNotEnabledForRESTAPI", "Res
 
 type CallbackFailureStage = "query" | "provider" | "state" | "token_exchange" | "userinfo" | "import";
 
-const buildErrorUrl = (reason: OAuthConnectFailureReason): URL =>
-  buildRedirectUrl("/dashboard/integrations", baseUrl, { reason, source: "error" });
+const buildCallbackUrl = (provider: string): string =>
+  new URL(`/api/sources/callback/${provider}`, baseUrl).toString();
+
+const resolveApprovalUrl = (reason: OAuthConnectFailureReason): string | null => {
+  if (reason !== "admin-approval-required" || !env.MICROSOFT_CLIENT_ID) {
+    return null;
+  }
+  return buildMicrosoftAdminConsentUrl({
+    callbackUrl: buildCallbackUrl("outlook"),
+    clientId: env.MICROSOFT_CLIENT_ID,
+  });
+};
+
+const buildErrorUrl = (reason: OAuthConnectFailureReason): URL => {
+  const approvalUrl = resolveApprovalUrl(reason);
+  return buildRedirectUrl("/dashboard/integrations", baseUrl, {
+    reason,
+    source: "error",
+    ...(approvalUrl && { approvalUrl }),
+  });
+};
 
 const readProviderErrorCode = (error: unknown): string | null => {
   if (!(error instanceof Error) || !("providerErrorCode" in error)) {
@@ -99,8 +120,7 @@ const importAccount = async (
   enterStage: (stage: CallbackFailureStage) => void,
 ): Promise<string> => {
   enterStage("token_exchange");
-  const callbackUrl = new URL(`/api/sources/callback/${provider}`, baseUrl);
-  const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
+  const tokens = await exchangeCodeForTokens(provider, code, buildCallbackUrl(provider));
 
   if (!tokens.refresh_token) {
     throw new OAuthError("No refresh token", buildErrorUrl("unknown"));
@@ -149,6 +169,11 @@ const GET = withWideEvent(async ({ request, params }) => {
 
   if (!oauthCallbackQuerySchema.allows(callbackQuery)) {
     return rejectCallback("query", "Invalid callback query parameters");
+  }
+
+  if (url.searchParams.has("admin_consent") && !url.searchParams.has("error")) {
+    widelog.set("onboarding.admin_consent_completed", true);
+    return Response.redirect(buildRedirectUrl(`/dashboard/connect/${provider}`, baseUrl).toString());
   }
 
   const validatedState = await resolveCallbackState(state);

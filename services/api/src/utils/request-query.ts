@@ -28,6 +28,9 @@ const socketQuerySchema = type({
 type SocketQuery = typeof socketQuerySchema.infer;
 
 const oauthCallbackQuerySchema = type({
+  "admin_consent?": "string",
+  "tenant?": "string",
+  "scope?": "string",
   "code?": "string",
   "state?": "string",
   "error?": "string",

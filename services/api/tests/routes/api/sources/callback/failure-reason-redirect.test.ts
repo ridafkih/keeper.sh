@@ -11,6 +11,10 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+vi.mock("@/env", () => ({
+  default: { MICROSOFT_CLIENT_ID: "microsoft-client" },
+}));
+
 vi.mock("@/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
@@ -49,12 +53,16 @@ const callbackRoute = handleCallback as unknown as (ctx: {
   request: Request;
 }) => Promise<Response>;
 
-const readFailureReason = async (query: string): Promise<string | null> => {
+const readRedirect = async (query: string): Promise<URL> => {
   const response = await callbackRoute({
     params: { provider: "outlook" },
     request: new Request(`${BASE_URL}/api/sources/callback/outlook?${query}`),
   });
-  const location = new URL(response.headers.get("location") ?? "");
+  return new URL(response.headers.get("location") ?? "");
+};
+
+const readFailureReason = async (query: string): Promise<string | null> => {
+  const location = await readRedirect(query);
   expect(location.pathname).toBe("/dashboard/integrations");
   return location.searchParams.get("reason");
 };
@@ -64,6 +72,25 @@ describe("source callback failure redirects", () => {
     const description = encodeURIComponent("AADSTS90094: The grant requires admin permission.");
     expect(await readFailureReason(`error=access_denied&error_description=${description}`))
       .toBe("admin-approval-required");
+  });
+
+  it("hands a work account the admin approval link to pass on", async () => {
+    const description = encodeURIComponent("AADSTS65001: The user or administrator has not consented.");
+    const location = await readRedirect(`error=consent_required&error_description=${description}`);
+    const approvalUrl = new URL(location.searchParams.get("approvalUrl") ?? "");
+
+    expect(approvalUrl.pathname).toBe("/organizations/v2.0/adminconsent");
+    expect(approvalUrl.searchParams.get("client_id")).toBe("microsoft-client");
+  });
+
+  it("leaves the approval link off every other failure", async () => {
+    const location = await readRedirect("error=access_denied");
+    expect(location.searchParams.has("approvalUrl")).toBe(false);
+  });
+
+  it("sends an admin who approved back to the Outlook connect screen", async () => {
+    const location = await readRedirect("admin_consent=True&tenant=tenant-1");
+    expect(location.pathname).toBe("/dashboard/connect/outlook");
   });
 
   it("names a cancelled consent screen", async () => {
