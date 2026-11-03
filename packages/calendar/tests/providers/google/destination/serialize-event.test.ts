@@ -58,4 +58,49 @@ describe("serializeGoogleEvent", () => {
 
     expect(event?.visibility).toBeUndefined();
   });
+
+  it("writes a zoned timed event as UTC instants with no time zone label or recurrence", () => {
+    const event = serializeGoogleEvent(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-11-03T16:00:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-11-03T15:00:00.000Z"),
+        startTimeZone: "America/Edmonton",
+        summary: "Standup",
+      },
+      "destination-uid",
+    );
+
+    expect(event?.start).toStrictEqual({ dateTime: "2026-11-03T15:00:00.000Z" });
+    expect(event?.end).toStrictEqual({ dateTime: "2026-11-03T16:00:00.000Z" });
+    expect(event).not.toHaveProperty("recurrence");
+  });
+
+  it("writes an all-day event as dates", () => {
+    const event = serializeGoogleEvent(
+      {
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-11-04T00:00:00.000Z"),
+        id: "event-id",
+        isAllDay: true,
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-11-03T00:00:00.000Z"),
+        summary: "Holiday",
+      },
+      "destination-uid",
+    );
+
+    expect(event?.start).toStrictEqual({ date: "2026-11-03" });
+    expect(event?.end).toStrictEqual({ date: "2026-11-04" });
+  });
+
+  it("takes only the event and its uid", () => {
+    expect(serializeGoogleEvent).toHaveLength(2);
+  });
 });
