@@ -61,4 +61,16 @@ describe("declared VTIMEZONE observances that would expand without bound", () =>
       "custom-zone-event": { end: "2026-07-15T16:00:00.000Z", start: "2026-07-15T15:00:00.000Z" },
     });
   });
+
+  it.each([
+    ["FREQ=MONTHLY;BYMONTH=11;BYDAY=1SU", "16010101T020000"],
+    ["FREQ=MONTHLY;INTERVAL=12;BYDAY=1SU", "16011101T020000"],
+    ["FREQ=WEEKLY;INTERVAL=520;COUNT=3", "20251102T020000"],
+  ])("still reads a custom zone whose observance repeats %s from %s, as its yearly form would", (rule, observanceStart) => {
+    const { outcome } = readWithinBudget(buildCustomZoneCalendar(observanceStart, rule));
+
+    expect(outcome).toEqual({
+      "custom-zone-event": { end: "2026-07-15T16:00:00.000Z", start: "2026-07-15T15:00:00.000Z" },
+    });
+  });
 });
