@@ -12,6 +12,7 @@ import {
   importCalDAVCalendars,
 } from "@/utils/caldav-sources";
 import type { CalDAVImportResult } from "@/utils/caldav-calendar-import";
+import { noteUserMilestone } from "@/utils/user-milestones";
 
 const SOURCE_CREATE_FAILED_MESSAGE = "Failed to import CalDAV calendars";
 
@@ -63,6 +64,10 @@ const POST = withWideEvent(
       widelog.set("account.id", result.accountId);
       widelog.set("caldav.calendars_imported", importedCount);
       widelog.set("caldav.calendars_already_connected", countByStatus(result, "already_connected"));
+
+      if (importedCount > 0) {
+        noteUserMilestone(userId, "first_calendar_connected");
+      }
 
       return Response.json(result, { status: resolveImportStatusCode(importedCount) });
     } catch (error) {

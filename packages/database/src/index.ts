@@ -16,6 +16,8 @@ export type { DatabaseErrorClassification, DatabaseErrorDetails } from "./utils/
 export { account, user } from "./database/auth-schema";
 export { encryptPassword, decryptPassword } from "./encryption";
 export { buildImportedCalendarExists } from "./database/rediscovery-candidates";
+export { recordUserMilestone } from "./database/user-milestones";
+export type { UserMilestoneDatabase } from "./database/user-milestones";
 export {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,

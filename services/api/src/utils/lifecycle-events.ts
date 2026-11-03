@@ -1,10 +1,6 @@
 import { context, widelog } from "./logging";
 
-type UserLifecycleEvent =
-  | "user.created"
-  | "user.deleted"
-  | "user.first_calendar_connected"
-  | "user.first_sync_created";
+type UserLifecycleEvent = "user.created" | "user.deleted";
 
 const emitUserLifecycleEvent = (event: UserLifecycleEvent, userId: string): void => {
   context(() => {

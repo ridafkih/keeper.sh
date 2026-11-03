@@ -16,6 +16,7 @@ import {
   discardUnusedOAuthSourceCredential,
 } from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
+import { noteUserMilestone } from "@/utils/user-milestones";
 import { baseUrl } from "@/context";
 
 const MS_PER_SECOND = 1000;
@@ -163,6 +164,7 @@ const GET = withWideEvent(async ({ request, params }) => {
     const accountId = await importAccount(provider, userId, code, (nextStage) => {
       stage = nextStage;
     });
+    noteUserMilestone(userId, "first_calendar_connected");
 
     /* A reconnect already has its calendars chosen, so only a first connection — which
        carries no source credential in its state — belongs in the setup wizard. */
