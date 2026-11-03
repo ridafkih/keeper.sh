@@ -3,8 +3,8 @@ import {
   resolveEventLocalEnd,
   resolveEventLocalStart,
   resolveEventStartDay,
-  resolveViewerTimeZone,
 } from "../../src/lib/event-day";
+import { resolveViewerTimeZone } from "../../src/lib/events-url";
 import { runInTimeZone } from "../helpers/time-zone";
 
 const allDayNovemberFifth = () => ({

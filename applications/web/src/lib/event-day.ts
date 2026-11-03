@@ -24,5 +24,3 @@ export const resolveEventLocalStart = (event: EventStart): Date =>
 
 export const resolveEventLocalEnd = (event: EventEnd): Date =>
   event.isAllDay ? localMidnightOfUtcDate(event.endTime) : event.endTime;
-
-export const resolveViewerTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;

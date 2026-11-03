@@ -1,4 +1,4 @@
-import { resolveViewerTimeZone } from "./event-day";
+export const resolveViewerTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // Relative: Bun has no `globalThis.location`, and an eagerly built absolute key would throw in SSR.
 export const buildEventsUrl = (from: Date, to: Date): string => {
