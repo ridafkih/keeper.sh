@@ -641,6 +641,8 @@ curl https://keeper.example.com/api/v1/calendars \
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
 
+On `POST` and `PATCH /api/v1/events`, a `startTime` or `endTime` without a UTC offset is read in `timezone`, which is then required; times with `Z` or an offset are used as given, and all-day events take the calendar date as written.
+
 `/api/v1/events/free-time` treats events marked free or working-elsewhere as non-blocking and everything else, including all-day events, as busy; pass `ignoreAllDayEvents=true` to stop all-day events blocking. `workingHoursStart` and `workingHoursEnd` are 24-hour local times such as `09:00`, and `workingDays` is a comma-delimited list where `0` is Sunday. All three are read against `timezone`, so the hours hold across daylight saving transitions.
 
 `POST /api/v1/sync` clears the ingest backoff on your sources so they are re-polled on the next pass, and enqueues a push to every destination. Exceeding the throttle returns `429` with a `Retry-After` header rather than queueing a second run.
