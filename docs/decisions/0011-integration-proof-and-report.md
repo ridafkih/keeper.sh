@@ -1,6 +1,6 @@
 # 0011. Integration: proof, reach and the audit report
 
-- Status: accepted
+- Status: accepted; the last sentence of rule 6 is superseded by 0017
 - Date: 2026-11-03
 - Tasks: INTEGRATE (owner); constrains every slice's test design
 
