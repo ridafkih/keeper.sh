@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useSetAtom } from "jotai";
+import Clock from "lucide-react/dist/esm/icons/clock";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import { NavigationMenu } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { Button, ButtonText, ExternalLinkButton } from "@/components/ui/primitives/button";
@@ -31,6 +32,7 @@ export function NothingToCopyStep({ proposal, calendars }: NothingToCopyStepProp
   return (
     <>
       <OnboardingHeading
+        icon={{ glyph: <Clock size={22} strokeWidth={1.75} />, tone: "neutral" }}
         title="Nothing to copy yet"
         description={`${source.name} has no upcoming events. New events copy within a few minutes of being added.`}
       />

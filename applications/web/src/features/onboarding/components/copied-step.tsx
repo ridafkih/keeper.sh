@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useSetAtom } from "jotai";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
+import Check from "lucide-react/dist/esm/icons/check";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import {
   NavigationMenu,
@@ -47,6 +48,7 @@ export function CopiedStep({ copies, calendars, proposal }: CopiedStepProps) {
   return (
     <>
       <OnboardingHeading
+        icon={{ glyph: <Check size={22} strokeWidth={1.75} />, tone: "success" }}
         title={`${pluralize(copies.count, "event")} copied`}
         description={proposal ? describeOutcome(proposal) : "Your calendars now show you as busy at the same times."}
       />

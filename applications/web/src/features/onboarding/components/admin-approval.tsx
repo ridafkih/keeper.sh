@@ -1,8 +1,7 @@
 import { useSetAtom } from "jotai";
+import Building2 from "lucide-react/dist/esm/icons/building-2";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Mail from "lucide-react/dist/esm/icons/mail";
-import { Heading2 } from "@/components/ui/primitives/heading";
-import { Text } from "@/components/ui/primitives/text";
 import { LinkButton, ButtonText } from "@/components/ui/primitives/button";
 import {
   NavigationMenu,
@@ -12,6 +11,7 @@ import {
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { showToastAtom } from "@/state/toast";
+import { OnboardingHeading } from "./onboarding-heading";
 
 const APPROVAL_EMAIL_SUBJECT = "Approve Keeper.sh for our Microsoft 365 calendars";
 
@@ -36,12 +36,11 @@ export function AdminApproval({ approvalUrl }: { approvalUrl: string }) {
 
   return (
     <div className="flex flex-col gap-3 pt-4">
-      <div className="flex flex-col gap-1 px-0.5">
-        <Heading2 as="h1">Your organisation needs to approve Keeper.sh</Heading2>
-        <Text size="sm" tone="muted">
-          This work account only allows apps your IT admin has approved. Send them the approval link and you&apos;ll carry on here once they accept.
-        </Text>
-      </div>
+      <OnboardingHeading
+        icon={{ glyph: <Building2 size={22} strokeWidth={1.75} />, tone: "caution" }}
+        title="Your organisation needs to approve Keeper.sh"
+        description="This work account only allows apps your IT admin has approved. Send them the approval link and you'll carry on here once they accept."
+      />
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={copyApprovalLink}>
           <NavigationMenuItemIcon>
