@@ -981,7 +981,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   const timer = createPhaseTimer();
   const timedProvider = createTimedProvider(provider, timer);
   const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
-  const unrecordedCopies: UnrecordedCopyTally = { deleted: 0 };
+  const unrecordedCopies: UnrecordedCopyTally = { deleteFailed: 0, deleted: 0 };
   let flushed = false;
 
   const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
@@ -1128,6 +1128,9 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
      */
     if (unrecordedCopies.deleted > 0) {
       wideEvent["events.unrecorded_deleted"] = unrecordedCopies.deleted;
+    }
+    if (unrecordedCopies.deleteFailed > 0) {
+      wideEvent["events.unrecorded_delete_failed"] = unrecordedCopies.deleteFailed;
     }
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);

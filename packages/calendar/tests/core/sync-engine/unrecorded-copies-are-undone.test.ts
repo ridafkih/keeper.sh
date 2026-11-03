@@ -89,3 +89,32 @@ describe("copies whose ownership could not be recorded", () => {
     expect(deleted).toEqual([]);
   });
 });
+
+describe("copies that could not be undone", () => {
+  it("still fails with the mapping error and counts the copies it could not delete", async () => {
+    const storeFailure = new Error("destination calendar is gone");
+    const events: Record<string, unknown>[] = [];
+
+    await expect(syncCalendar({
+      calendarId: "destination-1",
+      flush: () => Promise.reject(storeFailure),
+      isCurrent: () => Promise.resolve(true),
+      onSyncEvent: (event) => { events.push(event); },
+      provider: {
+        deleteEvents: () => Promise.reject(new Error("provider unavailable")),
+        listRemoteEvents: () => Promise.resolve([]),
+        pushEvents: (pushed: MaterializedSyncableEvent[]) =>
+          Promise.resolve(pushed.map((event) => ({ remoteId: `remote-${event.id}`, success: true }))),
+      },
+      readState: () => Promise.resolve({
+        existingMappings: [],
+        localEvents: [makeEvent("ev-1")],
+        remoteEvents: [],
+      }),
+      reconciliationScope: SCOPE,
+      userId: "user-1",
+    })).rejects.toBe(storeFailure);
+
+    expect(events[0]?.["events.unrecorded_delete_failed"]).toBe(1);
+  });
+});
