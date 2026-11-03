@@ -12,6 +12,7 @@ const keeperEventSchema = z.object({
   calendarName: z.string(),
   calendarProvider: z.string(),
   calendarUrl: z.string().nullable(),
+  isAllDay: z.boolean(),
 });
 
 type KeeperEvent = z.infer<typeof keeperEventSchema>;
@@ -215,11 +216,25 @@ const toLocalizedTime = (utcIso: string, timeZone: string): string => {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}${normalizedOffset}`;
 };
 
-const localizeEvent = (event: KeeperEvent, timeZone: string) => ({
-  ...event,
-  startTime: toLocalizedTime(event.startTime, timeZone),
-  endTime: toLocalizedTime(event.endTime, timeZone),
-});
+const CALENDAR_DATE_LENGTH = "YYYY-MM-DD".length;
+
+const toCalendarDate = (utcIso: string): string =>
+  new Date(utcIso).toISOString().slice(0, CALENDAR_DATE_LENGTH);
+
+const localizeEvent = (event: KeeperEvent, timeZone: string): KeeperEvent => {
+  if (event.isAllDay) {
+    return {
+      ...event,
+      startTime: toCalendarDate(event.startTime),
+      endTime: toCalendarDate(event.endTime),
+    };
+  }
+  return {
+    ...event,
+    startTime: toLocalizedTime(event.startTime, timeZone),
+    endTime: toLocalizedTime(event.endTime, timeZone),
+  };
+};
 
 const FREE_TIME_OPTIONAL_PARAMS = [
   "workingHoursStart",
@@ -299,7 +314,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Get events",
     annotations: READ_ONLY,
     description:
-      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to', and an IANA timezone (e.g. America/New_York) to localize event times.",
+      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to', and an IANA timezone (e.g. America/New_York) to localize event times. All-day events (isAllDay true) return YYYY-MM-DD dates with an exclusive end.",
     inputSchema: eventRangeSchema,
     execute: async (context, input) => {
       if (!input || !isEventRangeInput(input)) {
