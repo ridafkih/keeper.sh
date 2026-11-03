@@ -92,7 +92,7 @@ function resolveEventCount(hoverIndex: number | null, days: DayData[]): number {
 
 function resolveLabel(hoverIndex: number | null, days: DayData[]): string {
   if (hoverIndex !== null) return days[hoverIndex].fullLabel;
-  return "This Week";
+  return "This week";
 }
 
 interface EventGraphSummaryProps {

@@ -31,7 +31,7 @@ function ConnectPage() {
               <NavigationMenuItemIcon>
                 <LinkIcon size={15} />
               </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>Subscribe to ICS Calendar Feed</NavigationMenuItemLabel>
+              <NavigationMenuItemLabel>Subscribe with a calendar link</NavigationMenuItemLabel>
               <NavigationMenuItemTrailing />
             </NavigationMenuLinkItem>
           </div>
@@ -80,7 +80,7 @@ function ConnectPage() {
               <NavigationMenuItemIcon>
                 <Calendar size={15} />
               </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>Connect CalDAV Server</NavigationMenuItemLabel>
+              <NavigationMenuItemLabel>Connect a CalDAV server</NavigationMenuItemLabel>
               <NavigationMenuItemTrailing />
             </NavigationMenuLinkItem>
           </div>

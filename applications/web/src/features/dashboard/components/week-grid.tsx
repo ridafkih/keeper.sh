@@ -140,7 +140,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
           className="flex shrink-0 flex-col items-center justify-center gap-1"
           style={{ height: HEADER_HEIGHT }}
         >
-          <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
+          <Text as="span" size="xs" tone="muted" className="font-medium tracking-wide">
             {day.toLocaleDateString("en-US", { weekday: "short" })}
           </Text>
           <span
