@@ -17,13 +17,13 @@ const POST = withWideEvent(
     const body = await request.json();
 
     try {
-      const { message, type, wantsFollowUp } = feedbackRequestSchema.assert(body);
+      const { message, type, wantsFollowUp = false } = feedbackRequestSchema.assert(body);
 
       await database.insert(feedbackTable).values({
         message,
         type,
         userId,
-        wantsFollowUp: wantsFollowUp ?? false,
+        wantsFollowUp,
       });
 
       if (!resend || !feedbackEmail) {

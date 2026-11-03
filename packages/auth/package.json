@@ -6,7 +6,7 @@
   "types": "src/index.ts",
   "scripts": {
     "types": "tsc --noEmit",
-    "test": "bun x --bun vitest run",
+    "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {

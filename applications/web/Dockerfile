@@ -16,6 +16,8 @@ COPY --from=prune /app/out/full/ .
 RUN bun run --cwd applications/web build
 
 FROM base AS runtime
+COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
+ENV ICU_TIMEZONE_FILES_DIR=/usr/share/icu-timezone
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/applications/web/dist ./applications/web/dist

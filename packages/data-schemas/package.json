@@ -10,7 +10,7 @@
   "scripts": {
     "types": "tsc --noEmit",
     "lint": "oxlint .",
-    "test": "bun x --bun vitest run"
+    "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run"
   },
   "dependencies": {
     "arktype": "^2.2.0"

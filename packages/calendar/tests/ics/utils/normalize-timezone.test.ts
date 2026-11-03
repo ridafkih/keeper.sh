@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeTimezone } from "../../../src/ics/utils/normalize-timezone";
+import { isSupportedTimeZone } from "../../../src/ics/utils/timezone-instant";
+import { WINDOWS_TO_IANA } from "../../../src/ics/utils/windows-timezones";
 
 describe("normalizeTimezone", () => {
   it("returns IANA timezone unchanged", () => {
@@ -40,6 +42,18 @@ describe("normalizeTimezone", () => {
 
   it("maps 'AUS Eastern Standard Time' to Australia/Sydney", () => {
     expect(normalizeTimezone("AUS Eastern Standard Time")).toBe("Australia/Sydney");
+  });
+
+  it.each([
+    { ianaTimeZone: "America/Edmonton", windowsTimeZone: "Alberta Standard Time" },
+    { ianaTimeZone: "America/Vancouver", windowsTimeZone: "British Columbia Standard Time" },
+    { ianaTimeZone: "America/Winnipeg", windowsTimeZone: "Manitoba Standard Time" },
+  ])("maps the 2026 Windows zone '$windowsTimeZone' to $ianaTimeZone", ({ ianaTimeZone, windowsTimeZone }) => {
+    expect(normalizeTimezone(windowsTimeZone)).toBe(ianaTimeZone);
+  });
+
+  it.each(Object.entries(WINDOWS_TO_IANA))("maps '%s' to a timezone the runtime supports", (windowsTimeZone, ianaTimeZone) => {
+    expect(isSupportedTimeZone(ianaTimeZone)).toBe(true);
   });
 
   it("returns undefined for undefined input", () => {
