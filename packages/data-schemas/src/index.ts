@@ -284,6 +284,16 @@ const microsoftApiErrorSchema = type({
 });
 type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
 
+const microsoftGraphBatchResponseSchema = type({
+  responses: type({
+    "body?": "unknown",
+    "headers?": "Record<string, string>",
+    id: "string",
+    status: "number",
+  }).array(),
+});
+type MicrosoftGraphBatchResponse = typeof microsoftGraphBatchResponseSchema.infer;
+
 const authSocialProvidersSchema = type({
   google: "boolean",
   microsoft: "boolean",
@@ -626,6 +636,7 @@ export {
   outlookCalendarViewEventSchema,
   outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
+  microsoftGraphBatchResponseSchema,
   authSocialProvidersSchema,
   authCapabilitiesSchema,
   socketMessageSchema,
@@ -683,6 +694,7 @@ export type {
   OutlookCalendarViewEvent,
   OutlookCalendarViewList,
   MicrosoftApiError,
+  MicrosoftGraphBatchResponse,
   AuthSocialProviders,
   AuthCapabilities,
   SocketMessage,
