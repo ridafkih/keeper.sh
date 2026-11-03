@@ -101,6 +101,27 @@ const parseWorkingHours = (
   return { days: parseWorkingDays(days), endMinute, startMinute };
 };
 
+const INVALID_TIME_ZONE_MESSAGE = "timezone must be an IANA timezone identifier";
+
+const resolveSupportedTimeZone = (identifier: string): string | undefined => {
+  try {
+    return resolveTimeZone(identifier);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return;
+    }
+    throw error;
+  }
+};
+
+const resolveRequestTimeZone = (identifier: string): string => {
+  const timeZone = resolveSupportedTimeZone(identifier);
+  if (!timeZone) {
+    throw new FreeTimeValidationError(INVALID_TIME_ZONE_MESSAGE);
+  }
+  return timeZone;
+};
+
 const toMsInterval = ({ start, end }: TimeInterval): MsInterval => ({
   end: end.getTime(),
   start: start.getTime(),
@@ -216,10 +237,7 @@ const findFreeSlots = (
     throw new FreeTimeValidationError(`limit must be a whole number from 1 to ${MAX_FREE_SLOTS}`);
   }
 
-  const timeZone = resolveTimeZone(options.timezone);
-  if (!timeZone) {
-    throw new FreeTimeValidationError("timezone must be an IANA timezone identifier");
-  }
+  const timeZone = resolveRequestTimeZone(options.timezone);
 
   const msRange = toMsInterval(range);
   const busy = mergeIntervals(busyIntervals.map((interval) => toMsInterval(interval)));
@@ -240,6 +258,7 @@ export {
   MAX_FREE_SLOTS,
   mergeIntervals,
   parseWorkingHours,
+  resolveRequestTimeZone,
   subtractBusyFromWindow,
 };
 export type { FreeSlot, FreeTimeOptions, TimeInterval, WorkingHours };
