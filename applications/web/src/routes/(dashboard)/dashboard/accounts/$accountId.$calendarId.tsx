@@ -9,7 +9,8 @@ import {
   getExcludableAvailabilities,
 } from "@keeper.sh/data-schemas";
 import type { ExcludableAvailability, SyncRange } from "@keeper.sh/data-schemas";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useMappingToggles } from "@/hooks/use-mapping-toggles";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
@@ -23,7 +24,7 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { serializedPatch, serializedCall } from "@/lib/serialized-mutate";
+import { serializedPatch } from "@/lib/serialized-mutate";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { formatDate } from "@/lib/time";
 import { resolveErrorMessage } from "@/utils/errors";
@@ -562,9 +563,8 @@ function DestinationCheckboxItem({
 }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
   const { data: entitlements } = useEntitlements();
-  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
+  const { toggle } = useMappingToggles(calendarId, "destinations");
 
   const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
   const checked = useAtomValue(checkedAtom);
@@ -574,45 +574,9 @@ function DestinationCheckboxItem({
   const handleClick = () => {
     if (disabled) return;
 
-    const currentIds = store.get(destinationIdsAtom);
-    const willCheck = !currentIds.has(destinationId);
+    const willCheck = !store.get(destinationIdsAtom).has(destinationId);
     track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
-    const updatedSet = new Set(currentIds);
-
-    if (willCheck) {
-      updatedSet.add(destinationId);
-      adjustMappingCount(1);
-    } else {
-      updatedSet.delete(destinationId);
-      adjustMappingCount(-1);
-    }
-
-    store.set(destinationIdsAtom, updatedSet);
-
-    const swrKey = `/api/sources/${calendarId}/destinations`;
-    serializedCall(swrKey, () => {
-      const latestIds = Array.from(store.get(destinationIdsAtom));
-      return mutate(
-        swrKey,
-        async () => {
-          await apiFetch(swrKey, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: latestIds }),
-          });
-          return { destinationIds: latestIds };
-        },
-        {
-          optimisticData: { destinationIds: latestIds },
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      ).catch(() => {
-        void mutate(swrKey);
-      }).finally(() => {
-        void revalidateEntitlements();
-      });
-    });
+    toggle(destinationId, willCheck);
   };
 
   return (

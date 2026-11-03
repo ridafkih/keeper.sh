@@ -89,3 +89,28 @@ describe("mapping toggles", () => {
     expect(published).toEqual([["dest-a"], ["dest-a", "dest-limit"], ["dest-a", "dest-limit"], ["dest-a"]]);
   });
 });
+
+describe("mapping toggles on the calendar page", () => {
+  it("keeps a click made while the previous save is in flight when that save's answer resets the page", async () => {
+    const server = createServer([]);
+    let displayed: string[] = [];
+    const options = {
+      currentIds: [],
+      onError: () => null,
+      publish: (calendarIds: string[]) => { displayed = calendarIds; },
+      send: server.send,
+    };
+
+    enqueueMappingToggle("calendar-page", { calendarId: "dest-a", enabled: true }, options);
+    enqueueMappingToggle("calendar-page", { calendarId: "dest-b", enabled: true }, options);
+    await server.respond();
+    displayed = server.mapped();
+    await server.respond();
+
+    expect(server.received).toEqual([
+      { calendarId: "dest-a", enabled: true },
+      { calendarId: "dest-b", enabled: true },
+    ]);
+    expect(displayed).toEqual(["dest-a", "dest-b"]);
+  });
+});

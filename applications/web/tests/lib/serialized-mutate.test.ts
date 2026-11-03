@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serializedPatch, serializedCall } from "../../src/lib/serialized-mutate";
+import { serializedPatch } from "../../src/lib/serialized-mutate";
 
 function deferred<T = void>() {
   const handle: {
@@ -142,77 +142,5 @@ describe("serializedPatch", () => {
     await Promise.resolve();
 
     expect(flushed).toEqual([{ toggle: true }]);
-  });
-});
-
-describe("serializedCall", () => {
-  it("executes immediately when nothing is in-flight", async () => {
-    const calls: string[] = [];
-
-    serializedCall("call-a", async () => {
-      calls.push("executed");
-    });
-
-    await Promise.resolve();
-    expect(calls).toEqual(["executed"]);
-  });
-
-  it("queues the latest callback and discards earlier ones", async () => {
-    const calls: string[] = [];
-    const first = deferred();
-
-    serializedCall("call-b", () => first.promise);
-
-    serializedCall("call-b", async () => {
-      calls.push("second");
-    });
-    serializedCall("call-b", async () => {
-      calls.push("third");
-    });
-
-    first.resolve();
-    await first.promise;
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(calls).toEqual(["third"]);
-  });
-
-  it("drains the queue even when callback rejects", async () => {
-    const calls: string[] = [];
-    const errors: unknown[] = [];
-    const failing = deferred();
-
-    serializedCall("call-c", () => failing.promise, (error) => {
-      errors.push(error);
-    });
-
-    serializedCall("call-c", async () => {
-      calls.push("recovered");
-    });
-
-    failing.reject(new Error("network error"));
-    await failing.promise.catch(() => {});
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(calls).toEqual(["recovered"]);
-    expect(errors).toHaveLength(1);
-  });
-
-  it("uses independent queues for different keys", async () => {
-    const calls: string[] = [];
-    const first = deferred();
-
-    serializedCall("call-d1", () => first.promise);
-    serializedCall("call-d2", async () => {
-      calls.push("d2");
-    });
-
-    await Promise.resolve();
-    expect(calls).toEqual(["d2"]);
-
-    first.resolve();
-    await first.promise;
   });
 });
