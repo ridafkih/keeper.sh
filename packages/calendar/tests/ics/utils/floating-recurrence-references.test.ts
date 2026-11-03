@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createIcsSourceFetcher } from "../../../src/ics/utils/fetch-adapter";
+import {
+  applyCalendarTimeZoneToFloatingEventDates,
+  createIcsSourceFetcher,
+} from "../../../src/ics/utils/fetch-adapter";
 import {
   CalDAVUnreadableResourceError,
   parseICalCalendarsToRemoteEvents,
@@ -478,6 +481,47 @@ describe("a Los Angeles series with selectors and a DATE EXDATE", () => {
       "2026-01-08T01:00:00.000Z",
       "2026-01-08T13:00:00.000Z",
     ]);
+  });
+});
+
+describe("a DATE EXDATE on a series with long selector lists", () => {
+  const repeated = (values: number[], times: number): string =>
+    Array.from({ length: times }, () => values).flat().join(",");
+
+  it("writes each distinct BYHOUR slot of the excluded day once however often the lists repeat them", () => {
+    const startedAt = performance.now();
+    const normalized = applyCalendarTimeZoneToFloatingEventDates(buildCalendar([], [
+      ...zonedMaster(
+        "America/Los_Angeles",
+        "20260105T090000",
+        "20260105T093000",
+        `FREQ=DAILY;BYHOUR=${repeated([14, 9, 99], 1000)};BYMINUTE=${repeated([0, 75], 1000)};COUNT=6`,
+      ),
+      "EXDATE;VALUE=DATE:20260106",
+    ]), globalThis.undefined);
+
+    expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
+      "EXDATE;TZID=America/Los_Angeles:20260106T090000,20260106T140000",
+    ]);
+    expect(performance.now() - startedAt).toBeLessThan(2000);
+  });
+
+  it("withholds a series whose excluded day would cover more slots than a day of minutes, quickly", async () => {
+    const hours = Array.from({ length: 24 }, (_unused, hour) => hour).join(",");
+    const minutes = Array.from({ length: 60 }, (_unused, minute) => minute).join(",");
+    const startedAt = performance.now();
+    const view = await syncIcsFeed(buildCalendar([], [
+      ...zonedMaster(
+        "America/Los_Angeles",
+        "20261205T000000",
+        "20261205T000001",
+        `FREQ=DAILY;BYHOUR=${hours};BYMINUTE=${minutes};BYSECOND=0,30;COUNT=6`,
+      ),
+      `EXDATE;VALUE=DATE:${Array.from({ length: 300 }, (_unused, day) => `2026${String(Math.floor(day / 28) + 1).padStart(2, "0")}${String((day % 28) + 1).padStart(2, "0")}`).join(",")}`,
+    ]));
+
+    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(performance.now() - startedAt).toBeLessThan(2000);
   });
 });
 

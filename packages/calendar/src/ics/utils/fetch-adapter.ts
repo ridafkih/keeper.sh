@@ -21,6 +21,7 @@ import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
 import {
   anchorRecurrenceIdentifier,
+  MAX_EXCLUDED_SLOTS_PER_PROPERTY,
   expandDateExclusion,
   isDateExclusionEntry,
   readSeriesMasterContext,
@@ -216,6 +217,9 @@ const splitDatePropertyEntries = (
       const slots = expandDateExclusion(entry, dateExclusionMaster);
       entries.absoluteEntries.push(...slots.instants);
       entries.floatingEntries.push(...slots.wallTimes);
+      if (entries.absoluteEntries.length + entries.floatingEntries.length > MAX_EXCLUDED_SLOTS_PER_PROPERTY) {
+        throw new RangeError(`EXDATE covers more than ${MAX_EXCLUDED_SLOTS_PER_PROPERTY} series slots`);
+      }
     } else if (isAbsoluteDateEntry(entry)) {
       entries.absoluteEntries.push(entry);
     } else {

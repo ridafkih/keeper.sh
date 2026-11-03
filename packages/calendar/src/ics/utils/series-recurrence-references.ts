@@ -37,6 +37,11 @@ const MS_PER_SECOND = 1000;
 const MS_PER_HOUR = 60 * 60 * MS_PER_SECOND;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 const HOURS_OF_DAY = Array.from({ length: 24 }, (_unused, hour) => hour);
+const HOUR_RANGE: NumberRange = { max: 23, min: 0 };
+const MINUTE_RANGE: NumberRange = { max: 59, min: 0 };
+const SECOND_RANGE: NumberRange = { max: 60, min: 0 };
+const MAX_SLOTS_PER_EXCLUDED_DATE = 1440;
+const MAX_EXCLUDED_SLOTS_PER_PROPERTY = 100_000;
 const TIME_OF_DAY_FREQUENCIES = new Set(["MINUTELY", "SECONDLY"]);
 const DATE_PATTERN = /^\d{8}$/;
 const DATE_TIME_PATTERN = /^(\d{8})T(\d{6})$/;
@@ -80,11 +85,19 @@ const readDateTimeWallTime = (value: string): Date | undefined => {
   ));
 };
 
-const readNumberList = (value: string | undefined): number[] | undefined => {
+interface NumberRange {
+  max: number;
+  min: number;
+}
+
+const readNumberList = (value: string | undefined, range: NumberRange): number[] | undefined => {
   if (!value) {
     return;
   }
-  return value.split(",").map(Number);
+  const numbers = new Set(value.split(",").map(Number));
+  return [...numbers]
+    .filter((number) => Number.isInteger(number) && number >= range.min && number <= range.max)
+    .toSorted((left, right) => left - right);
 };
 
 const readSeriesRule = (ruleValue: string): SeriesRule => {
@@ -92,9 +105,9 @@ const readSeriesRule = (ruleValue: string): SeriesRule => {
     const [name = "", value = ""] = part.split("=");
     return [name.toUpperCase(), value];
   }));
-  const byHour = readNumberList(parts.get("BYHOUR"));
-  const byMinute = readNumberList(parts.get("BYMINUTE"));
-  const bySecond = readNumberList(parts.get("BYSECOND"));
+  const byHour = readNumberList(parts.get("BYHOUR"), HOUR_RANGE);
+  const byMinute = readNumberList(parts.get("BYMINUTE"), MINUTE_RANGE);
+  const bySecond = readNumberList(parts.get("BYSECOND"), SECOND_RANGE);
   return {
     ...byHour && { byHour },
     ...byMinute && { byMinute },
@@ -241,6 +254,9 @@ const listSlotWallTimes = (date: string, master: SeriesMasterContext): Date[] =>
   const hours = rule.byHour ?? defaultHours;
   const minutes = rule.byMinute ?? [startWallTime.getUTCMinutes()];
   const seconds = rule.bySecond ?? [startWallTime.getUTCSeconds()];
+  if (hours.length * minutes.length * seconds.length > MAX_SLOTS_PER_EXCLUDED_DATE) {
+    throw new RangeError(`DATE EXDATE ${date} covers more than ${MAX_SLOTS_PER_EXCLUDED_DATE} series slots`);
+  }
   return hours.flatMap((hour) => minutes.flatMap((minute) => seconds.map((second) =>
     new Date(dayStart + Date.UTC(1970, 0, 1, hour, minute, second)))));
 };
@@ -275,6 +291,7 @@ const toEndOfLocalDayUntil = (ruleValue: string, master: SeriesMasterContext): s
 };
 
 export {
+  MAX_EXCLUDED_SLOTS_PER_PROPERTY,
   anchorRecurrenceIdentifier,
   expandDateExclusion,
   isDateExclusionEntry,
