@@ -1,13 +1,13 @@
+import {
+  readDateTimeWallTime,
+  readTimeZoneParameter,
+  toFloatingIcsDateTime,
+  toUtcIcsDateTime,
+} from "./ics-property";
+import type { IcsProperty } from "./ics-property";
 import { resolveDeclaredTimeZone } from "./resolve-timezone-identifier";
 import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
-
-interface IcsProperty {
-  parameters: string[];
-  property: string;
-  propertyName: string;
-  value: string;
-}
 
 type SeriesZone =
   | { kind: "utc" }
@@ -44,46 +44,15 @@ const MAX_SLOTS_PER_EXCLUDED_DATE = 1440;
 const MAX_EXCLUDED_SLOTS_PER_PROPERTY = 100_000;
 const TIME_OF_DAY_FREQUENCIES = new Set(["MINUTELY", "SECONDLY"]);
 const DATE_PATTERN = /^\d{8}$/;
-const DATE_TIME_PATTERN = /^(\d{8})T(\d{6})$/;
 const DATE_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8})(?=;|$)/i;
-const TZID_PARAMETER_PATTERN = /;TZID=(?:"([^"]*)"|([^;:]*))/i;
 
 const isIcsDate = (entry: string): boolean => DATE_PATTERN.test(entry);
-
-const padded = (value: number, length = 2): string => String(value).padStart(length, "0");
-
-const toFloatingIcsDateTime = (wallTime: Date): string => [
-  padded(wallTime.getUTCFullYear(), 4),
-  padded(wallTime.getUTCMonth() + 1),
-  padded(wallTime.getUTCDate()),
-  "T",
-  padded(wallTime.getUTCHours()),
-  padded(wallTime.getUTCMinutes()),
-  padded(wallTime.getUTCSeconds()),
-].join("");
-
-const toUtcIcsDateTime = (instant: Date): string => `${toFloatingIcsDateTime(instant)}Z`;
 
 const readDateWallTime = (date: string, dayOffset = 0): Date => new Date(Date.UTC(
   Number(date.slice(0, 4)),
   Number(date.slice(4, 6)) - 1,
   Number(date.slice(6, 8)) + dayOffset,
 ));
-
-const readDateTimeWallTime = (value: string): Date | undefined => {
-  const [, date, time] = DATE_TIME_PATTERN.exec(value.replace(/Z$/i, "")) ?? [];
-  if (!date || !time) {
-    return;
-  }
-  return new Date(Date.UTC(
-    Number(date.slice(0, 4)),
-    Number(date.slice(4, 6)) - 1,
-    Number(date.slice(6, 8)),
-    Number(time.slice(0, 2)),
-    Number(time.slice(2, 4)),
-    Number(time.slice(4, 6)),
-  ));
-};
 
 interface NumberRange {
   max: number;
@@ -123,8 +92,7 @@ const readSeriesZone = (
   calendarTimeZone: string | undefined,
   declaredOffsets: DeclaredTimeZoneOffsets,
 ): SeriesZone | undefined => {
-  const match = TZID_PARAMETER_PATTERN.exec(start.property);
-  const declared = match?.[1] ?? match?.[2];
+  const declared = readTimeZoneParameter(start.property);
   if (declared) {
     return { declared, kind: "zoned", resolved: resolveDeclaredTimeZone(declared, declaredOffsets) };
   }
@@ -203,7 +171,7 @@ const anchorRecurrenceIdentifier = (
   master: SeriesMasterContext,
 ): string | undefined => {
   if (
-    TZID_PARAMETER_PATTERN.test(recurrenceIdentifier.property)
+    readTimeZoneParameter(recurrenceIdentifier.property) !== globalThis.undefined
     || /Z$/i.test(recurrenceIdentifier.value)
   ) {
     return;
@@ -300,4 +268,4 @@ export {
   toEndOfLocalDayUntil,
   withoutValueParameter,
 };
-export type { DateExclusionSlots, IcsProperty, SeriesMasterContext };
+export type { DateExclusionSlots, SeriesMasterContext };

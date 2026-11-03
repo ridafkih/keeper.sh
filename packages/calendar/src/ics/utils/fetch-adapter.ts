@@ -29,7 +29,9 @@ import {
   toEndOfLocalDayUntil,
   withoutValueParameter,
 } from "./series-recurrence-references";
-import type { IcsProperty, SeriesMasterContext } from "./series-recurrence-references";
+import type { SeriesMasterContext } from "./series-recurrence-references";
+import { parseIcsProperty, readDateTimeWallTime, readTimeZoneParameter, toUtcIcsDateTime } from "./ics-property";
+import type { IcsProperty } from "./ics-property";
 import { measureProviderRequest, measureSyncSegment } from "../../core/telemetry/segments";
 
 interface IcsSourceFetcherConfig {
@@ -61,7 +63,6 @@ const FLOATING_DATE_PROPERTIES = new Set([
 ]);
 
 const FLOATING_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8}T\d{6})(?=;|$)/i;
-const TZID_PARAMETER_PATTERN = /;TZID=(?:"([^"]*)"|([^;:]*))/i;
 
 /**
  * The zone a VEVENT's own DTSTART declares. Recurrence properties that carry no
@@ -93,39 +94,6 @@ interface EventFloatingZones {
   resolved?: string;
 }
 
-const formatUtcIcsDateTime = (date: Date): string =>
-  date.toISOString().replaceAll(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-
-const readFloatingWallTime = (recurrenceRuleValue: string): Date => {
-  const floatingUntil = FLOATING_UNTIL_PATTERN.exec(recurrenceRuleValue)?.[2] ?? "";
-  return new Date(Date.UTC(
-    Number(floatingUntil.slice(0, 4)),
-    Number(floatingUntil.slice(4, 6)) - 1,
-    Number(floatingUntil.slice(6, 8)),
-    Number(floatingUntil.slice(9, 11)),
-    Number(floatingUntil.slice(11, 13)),
-    Number(floatingUntil.slice(13, 15)),
-  ));
-};
-
-const parseIcsProperty = (line: string): IcsProperty | null => {
-  const separatorIndex = line.indexOf(":");
-  if (separatorIndex === -1) {
-    return null;
-  }
-  const property = line.slice(0, separatorIndex);
-  const [propertyName, ...parameters] = property.toUpperCase().split(";");
-  if (!propertyName) {
-    return null;
-  }
-  return {
-    parameters,
-    property,
-    propertyName,
-    value: line.slice(separatorIndex + 1),
-  };
-};
-
 const readEventTimeZoneContext = (lines: readonly string[]): EventTimeZoneContext => {
   for (const line of lines) {
     const parts = parseIcsProperty(line);
@@ -135,8 +103,7 @@ const readEventTimeZoneContext = (lines: readonly string[]): EventTimeZoneContex
     if (parts.parameters.includes("VALUE=DATE")) {
       return { isAllDay: true };
     }
-    const match = TZID_PARAMETER_PATTERN.exec(parts.property);
-    const timeZone = match?.[1] ?? match?.[2];
+    const timeZone = readTimeZoneParameter(parts.property);
     if (!timeZone) {
       return { isAllDay: false };
     }
@@ -163,14 +130,19 @@ const splitIcsLineBlocks = (lines: readonly string[]): IcsLineBlock[] => {
 
 const applyTimeZoneToFloatingUntil = (
   line: string,
+  floatingUntil: string,
   timeZone: string,
 ): string => {
+  const wallTime = readDateTimeWallTime(floatingUntil);
+  if (!wallTime) {
+    return line;
+  }
   const separatorIndex = line.indexOf(":");
   const value = line.slice(separatorIndex + 1);
-  const instant = wallTimeToInstant(readFloatingWallTime(value), timeZone);
+  const instant = wallTimeToInstant(wallTime, timeZone);
   const normalizedValue = value.replace(
     FLOATING_UNTIL_PATTERN,
-    (matched, prefix: string) => `${prefix}UNTIL=${formatUtcIcsDateTime(instant)}`,
+    (matched, prefix: string) => `${prefix}UNTIL=${toUtcIcsDateTime(instant)}`,
   );
   return `${line.slice(0, separatorIndex + 1)}${normalizedValue}`;
 };
@@ -196,7 +168,7 @@ const normalizeFloatingRecurrenceRule = (
      */
     return line;
   }
-  return applyTimeZoneToFloatingUntil(line, zones.resolved);
+  return applyTimeZoneToFloatingUntil(line, match[2], zones.resolved);
 };
 
 const isAbsoluteDateEntry = (entry: string): boolean =>
