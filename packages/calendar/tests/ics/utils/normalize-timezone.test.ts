@@ -42,6 +42,14 @@ describe("normalizeTimezone", () => {
     expect(normalizeTimezone("AUS Eastern Standard Time")).toBe("Australia/Sydney");
   });
 
+  it.each([
+    { ianaTimeZone: "America/Edmonton", windowsTimeZone: "Alberta Standard Time" },
+    { ianaTimeZone: "America/Vancouver", windowsTimeZone: "British Columbia Standard Time" },
+    { ianaTimeZone: "America/Winnipeg", windowsTimeZone: "Manitoba Standard Time" },
+  ])("maps the 2026 Windows zone '$windowsTimeZone' to $ianaTimeZone", ({ ianaTimeZone, windowsTimeZone }) => {
+    expect(normalizeTimezone(windowsTimeZone)).toBe(ianaTimeZone);
+  });
+
   it("returns undefined for undefined input", () => {
     expect(normalizeTimezone(globalThis.undefined)).toBeUndefined();
   });
