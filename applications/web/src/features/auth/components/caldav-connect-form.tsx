@@ -2,6 +2,7 @@ import { useRef, useState, useTransition } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { useSWRConfig } from "swr";
+import { useSetAtom } from "jotai";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { Divider } from "@/components/ui/primitives/divider";
@@ -9,6 +10,8 @@ import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
 import { apiFetch } from "@/lib/fetcher";
 import { invalidateAccountsAndSources } from "@/lib/swr";
+import { resolveCalDAVImportNotice } from "@/lib/caldav-import-notice";
+import { showToastAtom } from "@/state/toast";
 import { resolveErrorMessage } from "@/utils/errors";
 
 export type CalDAVProvider = "fastmail" | "icloud" | "caldav";
@@ -93,6 +96,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
   const config = PROVIDER_CONFIGS[provider];
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
+  const showToast = useSetAtom(showToastAtom);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [isPending, startTransition] = useTransition();
@@ -139,6 +143,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       }
 
       let accountId: string | undefined;
+      let importNotice: string | null = null;
 
       try {
         const importResponse = await apiFetch("/api/sources/caldav", {
@@ -156,13 +161,21 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
             username,
           }),
         });
-        accountId = parseAccountId(await importResponse.json());
+        const importPayload: unknown = await importResponse.json();
+        accountId = parseAccountId(importPayload);
+        importNotice = resolveCalDAVImportNotice(
+          isRecord(importPayload) ? importPayload.calendars : undefined,
+        );
       } catch (err) {
         setError(resolveErrorMessage(err, "Failed to import calendars"));
         return;
       }
 
       await invalidateAccountsAndSources(globalMutate);
+
+      if (importNotice) {
+        showToast(importNotice);
+      }
 
       if (accountId) {
         navigate({ to: "/dashboard/accounts/$accountId/setup", params: { accountId } });
