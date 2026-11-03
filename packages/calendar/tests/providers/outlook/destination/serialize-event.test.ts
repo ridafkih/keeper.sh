@@ -187,6 +187,15 @@ describe("serializeOutlookEvent for every timed startTimeZone ingest stores", ()
     expect(serialized.start).toEqual(toUtcGraphValue(first));
     expect(serialized.end).toEqual(toUtcGraphValue(second));
   });
+
+  it("writes no recurrence for a materialized occurrence", () => {
+    const serialized = serializeOutlookEvent({
+      ...buildTimedEvent("UTC"),
+      recurrenceRule: { frequency: "WEEKLY" },
+    } as unknown as MaterializedSyncableEvent);
+
+    expect(serialized).not.toHaveProperty("recurrence");
+  });
 });
 
 const ingestCalendarConfig = {
