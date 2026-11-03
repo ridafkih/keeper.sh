@@ -20,7 +20,8 @@ import { Text } from "@/components/ui/primitives/text";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { ApiEventSummary } from "@/types/api";
-import { addDays, startOfDay } from "./calendar-helpers";
+import { addDays } from "./calendar-helpers";
+import { countEventsByDay } from "./event-graph-counts";
 import { periodFill, resolvePeriod } from "./density-period";
 import type { Period } from "./density-period";
 
@@ -29,23 +30,10 @@ const MIN_BAR_HEIGHT = 20;
 /** The layout's `lg:` gate on the calendar column; below it a bar has nothing to jump. */
 const CALENDAR_VISIBLE_QUERY = "(min-width: 64rem)";
 
-const MS_PER_DAY = 86_400_000;
-
 const buildGraphUrl = (todayStart: Date): string => {
   const from = addDays(todayStart, -EVENT_GRAPH_DAYS_BEFORE);
   const to = new Date(addDays(todayStart, EVENT_GRAPH_DAYS_AFTER + 1).getTime() - 1);
   return `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`;
-};
-
-const countEventsByDay = (events: ApiEventSummary[], todayTimestamp: number): number[] => {
-  const counts = new Array<number>(EVENT_GRAPH_TOTAL_DAYS).fill(0);
-  for (const event of events) {
-    const eventDay = startOfDay(new Date(event.startTime));
-    const dayOffset = Math.round((eventDay.getTime() - todayTimestamp) / MS_PER_DAY);
-    const slotIndex = dayOffset + EVENT_GRAPH_DAYS_BEFORE;
-    if (slotIndex >= 0 && slotIndex < EVENT_GRAPH_TOTAL_DAYS) counts[slotIndex]++;
-  }
-  return counts;
 };
 
 interface DayData {
@@ -88,7 +76,7 @@ const normalizeDayData = (counts: number[], todayStart: Date): DayData[] => {
 };
 
 const buildDays = (events: ApiEventSummary[], todayStart: Date): DayData[] => {
-  const counts = countEventsByDay(events, todayStart.getTime());
+  const counts = countEventsByDay(events, todayStart);
   return normalizeDayData(counts, todayStart);
 };
 
