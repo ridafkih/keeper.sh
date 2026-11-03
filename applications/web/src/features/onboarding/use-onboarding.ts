@@ -9,6 +9,7 @@ import type { SyncProposal } from "./sync-proposal";
 import { resolveOnboardingStep } from "./onboarding-step";
 import type { OnboardingStep } from "./onboarding-step";
 import { useCopiedEvents } from "./use-copied-events";
+import { resolveCopiesVersion } from "./copies-version";
 import type { CopiedEvents } from "./use-copied-events";
 
 interface OnboardingState {
@@ -28,10 +29,7 @@ export function useOnboarding(): OnboardingState | null {
   const run = useAtomValue(onboardingRunAtom);
   const chosenDestinationId = useAtomValue(chosenDestinationIdAtom);
   const sync = useAtomValue(syncStateAtom);
-  const copies = useCopiedEvents(
-    run.phase === "started",
-    `${sync.mappings?.seq ?? 0}:${sync.seq}`,
-  );
+  const copies = useCopiedEvents(run.phase === "started", resolveCopiesVersion(sync));
 
   if (!calendars || !accounts || !entitlements) {
     return null;

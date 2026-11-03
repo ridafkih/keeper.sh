@@ -8,6 +8,7 @@ import { isEventsKey } from "@/lib/swr";
 import { onboardingRunAtom } from "@/state/onboarding";
 import { syncStateAtom } from "@/state/sync";
 import type { OnboardingState } from "../use-onboarding";
+import { resolveCopiesVersion } from "../copies-version";
 import type { OnboardingStep } from "../onboarding-step";
 import { WelcomeStep } from "./welcome-step";
 import { AddDestinationStep } from "./add-destination-step";
@@ -42,12 +43,11 @@ function useStepViewed({ step, origin, sameAccountDestinations }: OnboardingStat
 
 function useLivePreview() {
   const { mutate } = useSWRConfig();
-  const sync = useAtomValue(syncStateAtom);
-  const serverStateVersion = `${sync.mappings?.seq ?? 0}:${sync.seq}`;
+  const copiesVersion = resolveCopiesVersion(useAtomValue(syncStateAtom));
 
   useEffect(() => {
     void mutate(isEventsKey);
-  }, [mutate, serverStateVersion]);
+  }, [mutate, copiesVersion]);
 }
 
 function LeaveSetup() {
