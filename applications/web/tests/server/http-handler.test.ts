@@ -367,7 +367,7 @@ describe("content security policy", () => {
     const directives = await productionCsp();
 
     expect(directives.get("connect-src")).toContain("https://*.google-analytics.com");
-    expect(directives.get("connect-src")).toContain("https://*.analytics.google.com");
+    expect(directives.get("connect-src")).toContain("https://*.google.com");
     expect(directives.get("img-src")).toContain("https://*.google-analytics.com");
   });
 
@@ -396,5 +396,46 @@ describe("content security policy", () => {
     expect(imgSrc).toContain("https://googleads.g.doubleclick.net");
     expect(imgSrc).toContain("https://www.google.com");
     expect(imgSrc).toContain("https://pagead2.googlesyndication.com");
+  });
+});
+
+function sourceMatches(source: string, url: URL): boolean {
+  const { protocol, host } = new URL(source.replace("*.", "wildcard."));
+  if (protocol !== url.protocol) return false;
+  if (!source.includes("*.")) return host === url.host;
+  return url.host.endsWith(host.slice("wildcard".length));
+}
+
+async function cspAllows(directive: string, target: string): Promise<boolean> {
+  const sources = (await productionCsp()).get(directive) ?? [];
+  return sources.some((source) => source.startsWith("https://") && sourceMatches(source, new URL(target)));
+}
+
+describe("content security policy for the endpoints Google tags actually call", () => {
+  it("lets GA4 post hits to the analytics.google.com apex", async () => {
+    expect(await cspAllows("connect-src", "https://analytics.google.com/g/collect")).toBe(true);
+  });
+
+  it("lets GA4 post hits to its regional collectors", async () => {
+    expect(await cspAllows("connect-src", "https://region1.google-analytics.com/g/collect")).toBe(true);
+    expect(await cspAllows("connect-src", "https://region1.analytics.google.com/g/collect")).toBe(true);
+  });
+
+  it("lets GA4 reach the doubleclick hosts Google Ads-linked properties use", async () => {
+    expect(await cspAllows("connect-src", "https://stats.g.doubleclick.net/g/collect")).toBe(true);
+    expect(await cspAllows("img-src", "https://stats.g.doubleclick.net/g/collect")).toBe(true);
+  });
+
+  it("lets Google Ads conversions ping regional Google domains", async () => {
+    expect(await cspAllows("img-src", "https://www.google.ca/pagead/1p-conversion/1/")).toBe(true);
+    expect(await cspAllows("connect-src", "https://www.google.co.uk/pagead/1p-user-list/1/")).toBe(true);
+  });
+
+  it("lets the Google tag load its service worker frame", async () => {
+    expect(await cspAllows("frame-src", "https://www.googletagmanager.com/static/service_worker/")).toBe(true);
+  });
+
+  it("still refuses hosts outside Google's documented list", async () => {
+    expect(await cspAllows("connect-src", "https://analytics.example.com/g/collect")).toBe(false);
   });
 });

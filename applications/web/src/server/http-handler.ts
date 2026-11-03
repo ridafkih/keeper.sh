@@ -1,4 +1,10 @@
 import { withCompression } from "./compression";
+import {
+  googleTagConnectHosts,
+  googleTagFrameHosts,
+  googleTagImageHosts,
+  googleTagScriptHosts,
+} from "./google-tag-csp";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
 import { handleInternalRoute } from "./internal-routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
@@ -47,28 +53,14 @@ const baseSecurityHeaders: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 };
 
-const googleAdsHosts = [
-  "https://www.googletagmanager.com",
-  "https://www.googleadservices.com",
-  "https://googleads.g.doubleclick.net",
-  "https://ad.doubleclick.net",
-  "https://pagead2.googlesyndication.com",
-  "https://www.google.com",
-].join(" ");
-
-const googleAnalyticsHosts = [
-  "https://*.google-analytics.com",
-  "https://*.analytics.google.com",
-].join(" ");
-
 const cspHeader = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' ${googleAdsHosts} https://cdn.visitors.now`,
+  `script-src 'self' 'unsafe-inline' ${googleTagScriptHosts.join(" ")} https://cdn.visitors.now`,
   "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${googleAdsHosts} ${googleAnalyticsHosts}`,
+  `img-src 'self' data: ${googleTagImageHosts.join(" ")}`,
   "font-src 'self'",
-  `connect-src 'self' ${googleAdsHosts} ${googleAnalyticsHosts} https://cdn.visitors.now https://e.visitors.now`,
-  "frame-src https://polar.sh",
+  `connect-src 'self' ${googleTagConnectHosts.join(" ")} https://cdn.visitors.now https://e.visitors.now`,
+  `frame-src https://polar.sh ${googleTagFrameHosts.join(" ")}`,
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
