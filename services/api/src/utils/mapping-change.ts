@@ -39,7 +39,23 @@ const listNewlyMappedSourcesOfSource = (
   return [sourceCalendarId];
 };
 
+const describeMappingChange = (
+  change: MappingChange,
+  result: MappingChangeResult,
+): Record<string, number | string> => {
+  const previous = new Set(result.previousIds);
+  const next = new Set(result.nextIds);
+  return {
+    "mappings.added_count": result.nextIds.filter((calendarId) => !previous.has(calendarId)).length,
+    "mappings.after_count": result.nextIds.length,
+    "mappings.before_count": result.previousIds.length,
+    "mappings.change": change.kind,
+    "mappings.removed_count": result.previousIds.filter((calendarId) => !next.has(calendarId)).length,
+  };
+};
+
 export {
+  describeMappingChange,
   listChangeCalendarIds,
   listNewlyMappedIds,
   listNewlyMappedSourcesOfSource,

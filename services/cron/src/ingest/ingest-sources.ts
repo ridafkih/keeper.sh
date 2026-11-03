@@ -64,6 +64,7 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { context, widelog } from "@/utils/logging";
+import { pendingFirstSyncMappingCount, recordPendingFirstSyncs } from "@/utils/first-sync-fields";
 import {
   database,
   flushDatabase,
@@ -1175,6 +1176,7 @@ const buildOAuthSourceQuery = (calendarIds: string[]) =>
       ingestWindowEnd: calendarsTable.ingestWindowEnd,
       ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
       ingestWindowStart: calendarsTable.ingestWindowStart,
+      pendingFirstSyncMappingCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -1214,6 +1216,7 @@ const ingestOAuthSources = async (
           widelog.set("provider.name", source.provider);
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
+          recordPendingFirstSyncs(source.pendingFirstSyncMappingCount);
           if (source.externalCalendarId) {
             widelog.set("provider.external_calendar_id", source.externalCalendarId);
           }
@@ -1449,6 +1452,7 @@ const ingestCalDAVSources = async (
       ingestFutureRange: calendarsTable.ingestFutureRange,
       ingestHistoricRange: calendarsTable.ingestHistoricRange,
       ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+      pendingFirstSyncMappingCount,
     })
     .from(calendarsTable)
     .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
@@ -1477,6 +1481,7 @@ const ingestCalDAVSources = async (
           widelog.set("provider.name", source.provider);
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
+          recordPendingFirstSyncs(source.pendingFirstSyncMappingCount);
 
           try {
             const run = await widelog.time.measure("duration_ms", () =>
@@ -1666,6 +1671,7 @@ const ingestIcsSources = async (
       ingestFutureRange: calendarsTable.ingestFutureRange,
       ingestHistoricRange: calendarsTable.ingestHistoricRange,
       ingestWindowRecordedAt: calendarsTable.ingestWindowRecordedAt,
+      pendingFirstSyncMappingCount,
     })
     .from(calendarsTable)
     .where(
@@ -1691,6 +1697,7 @@ const ingestIcsSources = async (
           widelog.set("user.id", source.userId);
           widelog.set("provider.name", "ical");
           widelog.set("provider.calendar_id", source.calendarId);
+          recordPendingFirstSyncs(source.pendingFirstSyncMappingCount);
 
           try {
             const run = await widelog.time.measure("duration_ms", () =>

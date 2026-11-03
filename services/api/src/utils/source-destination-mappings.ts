@@ -12,9 +12,11 @@ import type { SyncLockHandle } from "@keeper.sh/sync";
 import type { database as databaseInstance } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { spawnBackgroundJob } from "./background-task";
+import { widelog } from "./logging";
 import { assertAllIdsOwned } from "./owned-ids";
 import { noteUserMilestone } from "./user-milestones";
 import {
+  describeMappingChange,
   listChangeCalendarIds,
   listNewlyMappedIds,
   listNewlyMappedSourcesOfSource,
@@ -755,6 +757,7 @@ const changeDestinationsForSource = async (
     },
     () => runChangeDestinationsForSource(userId, sourceCalendarId, change, dependencies),
   );
+  widelog.setFields({ ...describeMappingChange(change, result), "mappings.direction": "destinations" });
   scheduleNewlyMappedSourceReads(userId, listNewlyMappedSourcesOfSource(sourceCalendarId, result));
   scheduleMappingReplacementSync(userId);
   noteMappingMilestone(userId, result.nextIds);
@@ -783,6 +786,7 @@ const changeSourcesForDestination = async (
     },
     () => runChangeSourcesForDestination(userId, destinationCalendarId, change, dependencies),
   );
+  widelog.setFields({ ...describeMappingChange(change, result), "mappings.direction": "sources" });
   scheduleNewlyMappedSourceReads(userId, listNewlyMappedIds(result));
   scheduleMappingReplacementSync(userId);
   noteMappingMilestone(userId, result.nextIds);

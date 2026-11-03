@@ -6,7 +6,11 @@ import {
   runSetSourcesForDestination,
   runWithMappingMutationLocks,
 } from "../../src/utils/source-destination-mappings";
-import { listNewlyMappedIds, listNewlyMappedSourcesOfSource } from "../../src/utils/mapping-change";
+import {
+  describeMappingChange,
+  listNewlyMappedIds,
+  listNewlyMappedSourcesOfSource,
+} from "../../src/utils/mapping-change";
 
 const createMappingKey = (sourceCalendarId: string, destinationCalendarId: string): string =>
   `${sourceCalendarId}::${destinationCalendarId}`;
@@ -783,5 +787,27 @@ describe("sources a mapping change asks to read now", () => {
   it("reads each source a destination gains", () => {
     expect(listNewlyMappedIds({ nextIds: ["source-1", "source-2"], previousIds: ["source-1"] }))
       .toEqual(["source-2"]);
+  });
+});
+
+describe("describeMappingChange", () => {
+  it("records how many mappings a save added and removed", () => {
+    expect(describeMappingChange(
+      { calendarIds: ["dest-2", "dest-3"], kind: "replace" },
+      { nextIds: ["dest-2", "dest-3"], previousIds: ["dest-1", "dest-2"] },
+    )).toEqual({
+      "mappings.added_count": 1,
+      "mappings.after_count": 2,
+      "mappings.before_count": 2,
+      "mappings.change": "replace",
+      "mappings.removed_count": 1,
+    });
+  });
+
+  it("records a toggle that changed nothing", () => {
+    expect(describeMappingChange(
+      { calendarId: "dest-1", enabled: true, kind: "toggle" },
+      { nextIds: ["dest-1"], previousIds: ["dest-1"] },
+    )).toMatchObject({ "mappings.added_count": 0, "mappings.change": "toggle", "mappings.removed_count": 0 });
   });
 });
