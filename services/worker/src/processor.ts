@@ -19,6 +19,7 @@ import {
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
+import { createEventsCopiedMilestone } from "./utils/user-milestones";
 import env from "./env";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
 
@@ -187,6 +188,8 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
   redis: refreshLockRedis,
 });
 
+const noteEventsCopied = createEventsCopiedMilestone(database);
+
 const resolveSyncOutcome = (failed: number, total: number): "success" | "partial" | "error" => {
   if (total === 0) {
     return "success";
@@ -322,6 +325,10 @@ const processJob = (
           widelog.set("sync.events_failed", completion.addFailed + completion.removeFailed);
           widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
           widelog.set("duration_ms", completion.durationMs);
+
+          if (completion.added > 0) {
+            pendingDestinationSyncs.push(noteEventsCopied(userId));
+          }
 
           if (!completion.syncEvent) {
             for (const syncError of completion.errors) {
