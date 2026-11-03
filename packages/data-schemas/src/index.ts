@@ -105,7 +105,7 @@ const feedbackRequestSchema = type({
 type FeedbackRequest = typeof feedbackRequestSchema.infer;
 
 const createSourceSchema = type({
-  name: "string",
+  "name?": "string",
   url: "string",
   "+": "reject",
 });

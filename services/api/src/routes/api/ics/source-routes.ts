@@ -13,7 +13,7 @@ interface IcsPostRouteContext extends IcsRouteContext {
 }
 
 interface ParsedCreateSourceBody {
-  name: string;
+  name?: string;
   url: string;
 }
 
@@ -29,7 +29,7 @@ interface GetIcsSourcesDependencies {
 
 interface PostIcsSourceDependencies {
   parseCreateSourceBody: (body: unknown) => ParsedCreateSourceBody;
-  createSource: (userId: string, name: string, url: string) => Promise<unknown>;
+  createSource: (userId: string, name: string | undefined, url: string) => Promise<unknown>;
   isSourceLimitError: (error: unknown) => boolean;
   isInvalidSourceUrlError: (error: unknown) => error is InvalidSourceUrlErrorLike;
 }

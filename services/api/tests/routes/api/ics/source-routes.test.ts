@@ -41,7 +41,7 @@ describe("handleGetIcsSourcesRoute", () => {
 
 describe("handlePostIcsSourceRoute", () => {
   it("creates source with parsed body and returns 201", async () => {
-    const receivedCreateCalls: { userId: string; name: string; url: string }[] = [];
+    const receivedCreateCalls: { userId: string; name: string | undefined; url: string }[] = [];
 
     const response = await handlePostIcsSourceRoute(
       {

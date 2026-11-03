@@ -61,7 +61,7 @@ export function ICSFeedForm() {
 
       try {
         const response = await apiFetch("/api/ics", {
-          body: JSON.stringify({ name: "iCal Feed", url }),
+          body: JSON.stringify({ url }),
           headers: { "Content-Type": "application/json" },
           method: "POST",
         });
