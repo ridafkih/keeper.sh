@@ -34,7 +34,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
     credentialsFailure:
-      "That email or app password didn't work. Create an app password in Fastmail under Settings, then Privacy & Security.",
+      "That email or app password didn't work. Use an app password, not your Fastmail password.",
   },
   icloud: {
     serverUrl: "https://caldav.icloud.com/",
@@ -43,7 +43,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
     credentialsFailure:
-      "That Apple ID or app-specific password didn't work. Create one at account.apple.com under Sign-In and Security.",
+      "That Apple ID or app-specific password didn't work. Use an app-specific password, not your Apple ID password.",
   },
   caldav: {
     serverUrl: "",
