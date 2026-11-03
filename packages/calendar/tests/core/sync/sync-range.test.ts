@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 import {
   DEFAULT_FUTURE_SYNC_RANGE,
@@ -61,35 +61,54 @@ console.log(JSON.stringify({
 }));
 `;
 
-const probeInServerTimeZone = (timeZone: string): ZoneProbe => {
-  const child = Bun.spawnSync([process.execPath, "-e", PROBE_SCRIPT], {
+const PROBE_TIMEOUT_MS = 60_000;
+
+const probeInServerTimeZone = async (timeZone: string): Promise<ZoneProbe> => {
+  const child = Bun.spawn([process.execPath, "-e", PROBE_SCRIPT], {
     env: { ...process.env, ICU_TIMEZONE_FILES_DIR, TZ: timeZone },
+    stderr: "pipe",
+    stdout: "pipe",
   });
-  const stderr = child.stderr.toString();
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
   expect(stderr).toBe("");
-  expect(child.exitCode).toBe(0);
-  return JSON.parse(child.stdout.toString());
+  expect(exitCode).toBe(0);
+  return JSON.parse(stdout);
 };
 
 describe("sync window independence from the server time zone", () => {
-  it.each(SERVER_TIME_ZONES)("computes UTC-midnight edges under TZ=%s", (timeZone) => {
-    const probe = probeInServerTimeZone(timeZone);
+  const probes = new Map<string, ZoneProbe>();
 
-    expect(probe.resolvedTimeZone).toBe(timeZone);
-    expect(probe.startOfToday).toBe("2026-07-20T00:00:00.000Z");
-    expect(probe.shortWindow).toEqual({
+  beforeAll(async () => {
+    const entries = await Promise.all(
+      SERVER_TIME_ZONES.map(async (timeZone) => [timeZone, await probeInServerTimeZone(timeZone)] as const),
+    );
+    for (const [timeZone, probe] of entries) {
+      probes.set(timeZone, probe);
+    }
+  }, PROBE_TIMEOUT_MS);
+
+  it.each(SERVER_TIME_ZONES)("computes UTC-midnight edges under TZ=%s", (timeZone) => {
+    const probe = probes.get(timeZone);
+
+    expect(probe?.resolvedTimeZone).toBe(timeZone);
+    expect(probe?.startOfToday).toBe("2026-07-20T00:00:00.000Z");
+    expect(probe?.shortWindow).toEqual({
       timeMax: "2026-11-20T00:00:00.000Z",
       timeMin: "2026-10-13T00:00:00.000Z",
     });
-    expect(probe.monthEndWindow).toEqual({
+    expect(probe?.monthEndWindow).toEqual({
       timeMax: "2026-04-30T00:00:00.000Z",
       timeMin: "2026-02-28T00:00:00.000Z",
     });
-    expect(probe.wideWindow).toEqual({
+    expect(probe?.wideWindow).toEqual({
       timeMax: "2028-07-20T00:00:00.000Z",
       timeMin: "2026-04-20T00:00:00.000Z",
     });
-    expect(probe.weekAcrossDaylightSavingEnd).toEqual({
+    expect(probe?.weekAcrossDaylightSavingEnd).toEqual({
       timeMax: "2026-11-12T00:00:00.000Z",
       timeMin: "2026-10-29T00:00:00.000Z",
     });
