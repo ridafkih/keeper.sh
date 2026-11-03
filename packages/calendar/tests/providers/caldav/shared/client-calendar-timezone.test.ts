@@ -229,6 +229,7 @@ describe("CalDAV discovery reads the collection time zone", () => {
       displayName: "Foreign",
       timeZone: "Asia/Manila",
       url: `${SERVER_URL}${HOME_PATH}foreign/`,
+      writable: true,
     });
   });
 

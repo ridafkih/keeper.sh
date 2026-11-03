@@ -4,7 +4,7 @@ import {
   syncStatusTable,
   userSyncRequestsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, sql } from "drizzle-orm";
 import { createMappingMutationLockId, createSyncLock } from "@keeper.sh/sync";
 import type { SyncLockHandle } from "@keeper.sh/sync";
 import type { database as databaseInstance } from "@/context";
@@ -144,6 +144,7 @@ const createSetDestinationsTransaction = (
         and(
           eq(calendarsTable.userId, userId),
           inArray(calendarsTable.id, destinationCalendarIds),
+          arrayContains(calendarsTable.capabilities, ["push"]),
         ),
       );
 
@@ -195,6 +196,7 @@ const createSetSourcesTransaction = (
         and(
           eq(calendarsTable.id, destinationCalendarId),
           eq(calendarsTable.userId, userId),
+          arrayContains(calendarsTable.capabilities, ["push"]),
         ),
       )
       .limit(1);

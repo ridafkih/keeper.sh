@@ -14,7 +14,8 @@ let importOAuthAccountCalendars: typeof importOAuthAccountCalendarsFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
 let canAddAccountResult = true;
-let googleCalendars = [{ id: "external-1", summary: "Team Calendar" }];
+let googleCalendars = [{ accessRole: "owner", id: "external-1", summary: "Team Calendar" }];
+let caldavCalendarWritable = true;
 let insertCalls: unknown[] = [];
 let selectResults: unknown[][] = [];
 let triggerSyncCalls: string[] = [];
@@ -164,9 +165,20 @@ beforeAll(async () => {
     encryptPassword: () => "encrypted-password",
   }));
 
+  vi.mock("../../src/utils/account-calendar-discovery", () => ({
+    discoverOAuthCredentialCalendars: () => Promise.resolve(googleCalendars.map((calendar) => ({
+      calendarUrl: null,
+      externalCalendarId: calendar.id,
+      identityKey: calendar.id,
+      name: calendar.summary,
+      writable: calendar.accessRole === "owner",
+    }))),
+  }));
+
   vi.mock("@keeper.sh/calendar/caldav", () => ({
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
+      fetchCalendarWritable: () => Promise.resolve(caldavCalendarWritable),
       getResolvedAuthMethod: () => "basic",
     }),
     createCalDAVProvider: () => ({
@@ -207,6 +219,14 @@ beforeAll(async () => {
     isCalDAVProvider: () => true,
     isOAuthProvider: () => false,
     isProviderId: () => false,
+    resolveCalendarCapabilities: (writable: boolean) => {
+      if (writable) {
+        return ["pull", "push"];
+      }
+      return ["pull"];
+    },
+    isGoogleAccessRoleWritable: (accessRole: string) => accessRole === "owner",
+    isOutlookCalendarWritable: (canEdit?: boolean) => canEdit === true,
   }));
 
   ({
@@ -224,7 +244,8 @@ afterAll(() => {
 
 beforeEach(() => {
   canAddAccountResult = true;
-  googleCalendars = [{ id: "external-1", summary: "Team Calendar" }];
+  googleCalendars = [{ accessRole: "owner", id: "external-1", summary: "Team Calendar" }];
+  caldavCalendarWritable = true;
   insertCalls = [];
   selectResults = [];
   triggerSyncCalls = [];
@@ -323,7 +344,11 @@ describe("Account locks", () => {
     ]);
   });
 
-  it("imports CalDAV calendars through the locked transaction client", async () => {
+  it.each([
+    [true, ["pull", "push"]],
+    [false, ["pull"]],
+  ])("imports CalDAV calendars through the locked transaction client (writable %s)", async (writable, capabilities) => {
+    caldavCalendarWritable = writable;
     selectResults = [
       [],
       [],
@@ -342,13 +367,13 @@ describe("Account locks", () => {
           return createInsertBuilder([{ id: "account-1" }]);
         }
 
-        return createInsertBuilder([{
+        return createTrackedInsertBuilder([{
           calendarUrl: "https://caldav.test/team",
           createdAt: new Date("2026-03-10T12:00:00.000Z"),
           id: "source-1",
           name: "Team CalDAV",
           userId: "user-1",
-        }]);
+        }], true);
       }),
       select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
@@ -376,5 +401,6 @@ describe("Account locks", () => {
       }],
     });
     expect(triggerSyncCalls).toEqual(["user-1"]);
+    expect(insertCalls.at(-1)).toEqual([expect.objectContaining({ capabilities })]);
   });
 });

@@ -207,6 +207,13 @@ export {
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
 export {
+  isCalDAVPrivilegeSetWritable,
+  isGoogleAccessRoleWritable,
+  isOutlookCalendarWritable,
+  resolveCalendarCapabilities,
+  type CalendarCapability,
+} from "./core/source/calendar-capabilities";
+export {
   planCalendarRediscovery,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,

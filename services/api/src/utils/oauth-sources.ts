@@ -14,7 +14,14 @@ import {
   insertSourceCalendars,
 } from "./source-calendar-insert";
 
+import { resolveCalendarCapabilities } from "@keeper.sh/calendar";
 import { enqueuePushSync } from "./enqueue-push-sync";
+import {
+  fromGoogleCalendarListEntries,
+  fromOutlookCalendarListEntries,
+  toOAuthCalendarInsert,
+} from "./external-calendars";
+import type { ExternalCalendar } from "./external-calendars";
 import { registerAccountPushChannels } from "./push-notifications/register-account-channels";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -230,6 +237,7 @@ interface CreateOAuthSourceDependencies {
     userId: string;
     excludeFocusTime: boolean;
     excludeOutOfOffice: boolean;
+    writable: boolean;
   }) => Promise<{ id: string; name: string } | null>;
   createCalendarAccount: (payload: {
     displayName: string | null;
@@ -250,6 +258,12 @@ interface CreateOAuthSourceDependencies {
   hasExistingCalendar: (options: {
     externalCalendarId: string;
     oauthCredentialId: string;
+    userId: string;
+  }) => Promise<boolean>;
+  resolveCalendarWritable: (options: {
+    externalCalendarId: string;
+    oauthCredentialId: string;
+    provider: string;
     userId: string;
   }) => Promise<boolean>;
   triggerSync: (userId: string, provider: string, accountId: string) => void;
@@ -402,7 +416,7 @@ const createOAuthSourceRecordWithDatabase = async (
     [{
       accountId: payload.accountId,
       calendarType: OAUTH_CALENDAR_TYPE,
-      capabilities: ["pull", "push"],
+      capabilities: resolveCalendarCapabilities(payload.writable),
       excludeFocusTime: payload.excludeFocusTime,
       excludeOutOfOffice: payload.excludeOutOfOffice,
       externalCalendarId: payload.externalCalendarId,
@@ -444,6 +458,15 @@ const findCredentialEmailWithDatabase = async (
   };
 };
 
+const resolveOAuthCalendarWritable: CreateOAuthSourceDependencies["resolveCalendarWritable"] = async (
+  { externalCalendarId, oauthCredentialId, provider, userId },
+) => {
+  const { discoverOAuthCredentialCalendars } = await import("./account-calendar-discovery");
+  const calendars = await discoverOAuthCredentialCalendars(userId, oauthCredentialId, provider);
+  return calendars.some((calendar) =>
+    calendar.externalCalendarId === externalCalendarId && calendar.writable);
+};
+
 const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependencies => ({
   canAddAccount: async (userId, currentCount) => {
     const { premiumService } = await import("@/context");
@@ -476,6 +499,7 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   },
   findExistingAccountId: findOAuthAccountId,
   hasExistingCalendar: hasExistingOAuthCalendar,
+  resolveCalendarWritable: resolveOAuthCalendarWritable,
   triggerSync: (userId, provider, accountId) => {
     spawnBackgroundJob("oauth-source-push-enqueue", { userId, provider }, async () => {
       const { premiumService } = await import("@/context");
@@ -550,6 +574,13 @@ const createOAuthSourceWithDependencies = async (
     accountId = createdAccountId;
   }
 
+  const writable = await dependencies.resolveCalendarWritable({
+    externalCalendarId,
+    oauthCredentialId,
+    provider,
+    userId,
+  });
+
   const source = await dependencies.createSource({
     accountId,
     excludeFocusTime,
@@ -559,6 +590,7 @@ const createOAuthSourceWithDependencies = async (
     originalName: name,
     provider,
     userId,
+    writable,
   });
 
   if (!source) {
@@ -712,15 +744,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     await insertSourceCalendars(
       createSourceCalendarInsertDependencies(database),
       userId,
-      calendars.map((calendar) => ({
-        accountId,
-        calendarType: OAUTH_CALENDAR_TYPE,
-        capabilities: ["pull", "push"],
-        externalCalendarId: calendar.externalId,
-        name: calendar.name,
-        originalName: calendar.name,
-        userId,
-      })),
+      calendars.map((calendar) => toOAuthCalendarInsert(userId, accountId, calendar)),
     );
   },
   listCalendars: async (provider, accessToken, ownerEmail) => {
@@ -730,11 +754,10 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
         const calendars = await listGoogleCalendars(accessToken, {
           rateLimiter: googleInteractiveRateLimiter,
         });
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
+        return fromGoogleCalendarListEntries(calendars);
       }
       if (provider === "outlook") {
-        const calendars = await listOutlookCalendars(accessToken, { ownerEmail });
-        return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+        return fromOutlookCalendarListEntries(await listOutlookCalendars(accessToken, { ownerEmail }));
       }
       throw new Error(`No calendar listing support for provider: ${provider}`);
     } catch (error) {
@@ -808,11 +831,6 @@ const importOAuthAccountCalendarsWithDependencies = async (
 
   return accountId;
 };
-
-interface ExternalCalendar {
-  externalId: string;
-  name: string;
-}
 
 interface ImportOAuthAccountOptions {
   userId: string;
@@ -890,15 +908,7 @@ const insertOAuthCalendarsWithDatabase = async (
   await insertSourceCalendars(
     createSourceCalendarInsertDependencies(databaseClient),
     userId,
-    calendars.map((calendar) => ({
-      accountId,
-      calendarType: OAUTH_CALENDAR_TYPE,
-      capabilities: ["pull", "push"],
-      externalCalendarId: calendar.externalId,
-      name: calendar.name,
-      originalName: calendar.name,
-      userId,
-    })),
+    calendars.map((calendar) => toOAuthCalendarInsert(userId, accountId, calendar)),
   );
 };
 

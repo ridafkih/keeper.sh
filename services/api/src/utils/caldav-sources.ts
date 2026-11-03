@@ -6,6 +6,10 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
+import { resolveCalendarCapabilities } from "@keeper.sh/calendar";
+import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
+import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
+import { safeFetchOptions } from "./safe-fetch-options";
 import { database, premiumService, encryptionKey } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
@@ -156,6 +160,26 @@ const countCalDAVImportAccounts = async (
   return result?.value ?? 0;
 };
 
+const probeWritableCalDAVCalendarUrls = async (
+  credentials: CalDAVAccountCredentials,
+  calendars: CalDAVCalendarSelection[],
+): Promise<Set<string>> => {
+  const client = createCalDAVClient({
+    authMethod: credentials.authMethod as CalDAVAuthMethod,
+    credentials: { password: credentials.password, username: credentials.username },
+    serverUrl: credentials.serverUrl,
+  }, safeFetchOptions);
+
+  const probes = await Promise.all(
+    calendars.map(async ({ calendarUrl }) => ({
+      calendarUrl,
+      writable: await client.fetchCalendarWritable(calendarUrl),
+    })),
+  );
+
+  return new Set(probes.filter(({ writable }) => writable).map(({ calendarUrl }) => calendarUrl));
+};
+
 const createCalDAVAccount = async (
   client: CaldavImportDatabase,
   userId: string,
@@ -199,6 +223,7 @@ const insertCalDAVCalendars = async (
   userId: string,
   accountId: string,
   calendars: CalDAVCalendarSelection[],
+  writableCalendarUrls: Set<string>,
 ): Promise<ConnectedCalDAVCalendar[]> => {
   const inserted = await insertSourceCalendars(
     createSourceCalendarInsertDependencies(client),
@@ -207,7 +232,7 @@ const insertCalDAVCalendars = async (
       accountId,
       calendarType: CALDAV_CALENDAR_TYPE,
       calendarUrl,
-      capabilities: ["pull", "push"],
+      capabilities: resolveCalendarCapabilities(writableCalendarUrls.has(calendarUrl)),
       name,
       originalName: name,
       userId,
@@ -232,6 +257,7 @@ const createCalDAVImportTransaction = (
   userId: string,
   credentials: CalDAVAccountCredentials,
   resolvedEncryptionKey: string,
+  writableCalendarUrls: Set<string>,
 ): CalDAVImportTransaction => ({
   countAccounts: () => countCalDAVImportAccounts(client, userId),
   createAccount: () => createCalDAVAccount(client, userId, credentials, resolvedEncryptionKey),
@@ -239,7 +265,7 @@ const createCalDAVImportTransaction = (
     findConnectedCalDAVCalendars(client, userId, accountId, calendarUrls),
   findReusableAccountId: () => findReusableCalDAVAccountId(client, userId, credentials),
   insertCalendars: (accountId, calendars) =>
-    insertCalDAVCalendars(client, userId, accountId, calendars),
+    insertCalDAVCalendars(client, userId, accountId, calendars, writableCalendarUrls),
   lockUserAccounts: async () => {
     await client.execute(
       sql`select pg_advisory_xact_lock(${USER_ACCOUNT_LOCK_NAMESPACE}, hashtext(${userId}))`,
@@ -262,11 +288,19 @@ const importCalDAVCalendars = async (
     throw new Error("Unable to resolve user plan for sync enqueue");
   }
 
+  const writableCalendarUrls = await probeWritableCalDAVCalendarUrls(credentials, calendars);
+
   const result = await importCalDAVCalendarsWithDependencies(calendars, {
     accountLimit: premiumService.getAccountLimit(plan),
     runInTransaction: (work) =>
       database.transaction((transaction) =>
-        work(createCalDAVImportTransaction(transaction, userId, credentials, resolvedEncryptionKey))),
+        work(createCalDAVImportTransaction(
+          transaction,
+          userId,
+          credentials,
+          resolvedEncryptionKey,
+          writableCalendarUrls,
+        ))),
   });
 
   if (result.calendars.some(({ status }) => status === "imported")) {

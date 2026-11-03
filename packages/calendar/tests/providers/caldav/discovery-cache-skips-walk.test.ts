@@ -19,8 +19,8 @@ const DISCOVERED = [{
 }];
 
 const makeClient = (cache?: {
-  read: () => Promise<{ displayName: string; url: string }[] | null>;
-  write: (calendars: { displayName: string; url: string }[]) => Promise<void>;
+  read: () => Promise<{ displayName: string; url: string; writable: boolean }[] | null>;
+  write: (calendars: { displayName: string; url: string; writable: boolean }[]) => Promise<void>;
 }) => new CalDAVClient({
   calendarDiscoveryCache: cache,
   credentials: { password: "secret", username: "rida" },
@@ -42,7 +42,7 @@ describe("discovery cache against the client", () => {
 
   it("issues no discovery requests at all when the walk is cached", async () => {
     walks.fetchCalendars.mockClear().mockResolvedValue(DISCOVERED);
-    const cached = [{ displayName: "Work", url: "https://dav.example/work/" }];
+    const cached = [{ displayName: "Work", url: "https://dav.example/work/", writable: true }];
     const client = makeClient({ read: () => Promise.resolve(cached), write: () => Promise.resolve() });
 
     const calendars = await client.discoverCalendars();
@@ -57,5 +57,29 @@ describe("discovery cache against the client", () => {
     await makeClient().discoverCalendars();
 
     expect(walks.fetchCalendars).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("calendar write access from discovery", () => {
+  it("marks a calendar whose privilege set lacks write as read-only", async () => {
+    walks.fetchCalendars.mockClear().mockResolvedValue([{
+      ...DISCOVERED[0],
+      projectedProps: { currentUserPrivilegeSet: { privilege: [{ read: {} }, { readFreeBusy: {} }] } },
+    }]);
+
+    const [calendar] = await makeClient().discoverCalendars();
+
+    expect(calendar?.writable).toBe(false);
+  });
+
+  it("marks a calendar whose privilege set grants write as writable", async () => {
+    walks.fetchCalendars.mockClear().mockResolvedValue([{
+      ...DISCOVERED[0],
+      projectedProps: { currentUserPrivilegeSet: { privilege: [{ read: {} }, { write: {} }] } },
+    }]);
+
+    const [calendar] = await makeClient().discoverCalendars();
+
+    expect(calendar?.writable).toBe(true);
   });
 });

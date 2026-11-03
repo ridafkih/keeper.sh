@@ -13,6 +13,8 @@ import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
 import { findCalendarByStoredUrl } from "./calendar-identity";
 import { resolveCollectionTimeZone } from "./collection-timezone";
+import { CURRENT_USER_PRIVILEGE_SET_PROP, readCurrentUserPrivileges } from "./privileges";
+import { isCalDAVPrivilegeSetWritable } from "../../../core/source/calendar-capabilities";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
@@ -30,11 +32,13 @@ const CALENDAR_DISCOVERY_PROPS = {
   "d:resourcetype": {},
   "c:supported-calendar-component-set": {},
   "d:sync-token": {},
+  [CURRENT_USER_PRIVILEGE_SET_PROP]: {},
 };
 
 const CALENDAR_DISCOVERY_PROJECTED_PROPS = {
   calendarTimezone: true,
   calendarTimezoneId: true,
+  currentUserPrivilegeSet: true,
 };
 
 interface ResolvedCalendar {
@@ -180,6 +184,9 @@ const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Pro
     return result;
   });
 
+const isPrivilegeSetWritable = (privilegeSet: unknown): boolean =>
+  isCalDAVPrivilegeSetWritable(readCurrentUserPrivileges(privilegeSet));
+
 const getDisplayName = (name: unknown): string => {
   if (typeof name === "string") {
     return name;
@@ -296,11 +303,24 @@ class CalDAVClient {
           displayName: getDisplayName(displayName),
           ...timeZone && { timeZone },
           url: bindUrlToAccount(url, this.config.serverUrl),
+          writable: isPrivilegeSetWritable(projectedProps?.["currentUserPrivilegeSet"]),
         };
       });
 
     await this.config.calendarDiscoveryCache?.write(discovered);
     return discovered;
+  }
+
+  async fetchCalendarWritable(calendarUrl: string): Promise<boolean> {
+    const [response] = await mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      return measureProviderRequest(() => client.propfind({
+        depth: "0",
+        props: { [CURRENT_USER_PRIVILEGE_SET_PROP]: {} },
+        url: bindUrlToAccount(calendarUrl, this.config.serverUrl),
+      }));
+    });
+    return isPrivilegeSetWritable(response?.props?.["currentUserPrivilegeSet"]);
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {

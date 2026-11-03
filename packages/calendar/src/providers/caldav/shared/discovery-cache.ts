@@ -26,6 +26,7 @@ const isCalendarInfo = (value: unknown): value is CalendarInfo => {
   return (
     typeof candidate.url === "string"
     && typeof candidate.displayName === "string"
+    && typeof candidate.writable === "boolean"
     && (!("timeZone" in candidate) || typeof candidate.timeZone === "string")
   );
 };
