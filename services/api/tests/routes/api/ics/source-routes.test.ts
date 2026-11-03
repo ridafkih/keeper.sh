@@ -10,6 +10,7 @@ class TestSourceLimitError extends Error {}
 
 class TestInvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
+  public readonly reason = "auth_required";
 
   constructor(message: string, authRequired: boolean) {
     super(message);

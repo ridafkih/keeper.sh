@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import { RequestTimeoutError } from "@keeper.sh/calendar";
+import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
 import {
   SourceLimitError,
   runSourceCreationPreflight,
@@ -55,7 +57,7 @@ describe("runSourceCreationPreflight", () => {
   });
 
   it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
-    const rejection = new CalendarFetchError("auth needed", 401);
+    const rejection = new CalendarFetchError("auth needed", "auth_required", 401);
 
     await expect(
       runSourceCreationPreflight(
@@ -73,6 +75,41 @@ describe("runSourceCreationPreflight", () => {
     ).rejects.toMatchObject({
       authRequired: true,
       message: "auth needed",
+      reason: "auth_required",
+    });
+  });
+
+  const rejectWith = (cause: unknown) =>
+    runSourceCreationPreflight(
+      { name: "Team Feed", url: "https://example.com/team.ics", userId: "user-1" },
+      {
+        canAddAccount: () => Promise.resolve(true),
+        countExistingAccounts: () => Promise.resolve(0),
+        validateSourceUrl: () => Promise.reject(cause),
+      },
+    );
+
+  it("says a page that is not an iCal file was rejected for that reason", async () => {
+    await expect(
+      rejectWith(new CalendarFetchError("not an ics file", "not_ical")),
+    ).rejects.toMatchObject({ reason: "not_ical" });
+  });
+
+  it("says a URL pointing at a private address was refused as unsafe", async () => {
+    await expect(rejectWith(new UrlSafetyError("private address"))).rejects.toMatchObject({
+      reason: "unsafe_url",
+    });
+  });
+
+  it("says a feed that took too long timed out", async () => {
+    await expect(rejectWith(new RequestTimeoutError(15_000))).rejects.toMatchObject({
+      reason: "timeout",
+    });
+  });
+
+  it("says a feed that could not be reached was unreachable", async () => {
+    await expect(rejectWith(new TypeError("fetch failed"))).rejects.toMatchObject({
+      reason: "unreachable",
     });
   });
 
