@@ -3,8 +3,11 @@ import {
   jwks,
   oauthAccessToken,
   oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
   oauthConsent,
   oauthRefreshToken,
+  oauthResource,
 } from "../../src/database/auth-schema";
 
 describe("oauth provider schema", () => {
@@ -14,6 +17,9 @@ describe("oauth provider schema", () => {
     expect(oauthAccessToken).toBeDefined();
     expect(oauthConsent).toBeDefined();
     expect(jwks).toBeDefined();
+    expect(oauthResource).toBeDefined();
+    expect(oauthClientResource).toBeDefined();
+    expect(oauthClientAssertion).toBeDefined();
   });
 
   it("includes the OAuth client registration fields", () => {
@@ -22,7 +28,8 @@ describe("oauth provider schema", () => {
     expect(oauthClient.tokenEndpointAuthMethod).toBeDefined();
     expect(oauthClient.grantTypes).toBeDefined();
     expect(oauthClient.responseTypes).toBeDefined();
-    expect(oauthClient.public).toBeDefined();
+    expect(oauthClient.applicationType).toBeDefined();
+    expect(oauthClient.clientCredentialsScopes).toBeDefined();
     expect(oauthClient.requirePKCE).toBeDefined();
     expect(oauthClient.skipConsent).toBeDefined();
   });

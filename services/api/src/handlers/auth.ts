@@ -1,4 +1,4 @@
-import { hasOAuthProviderApi } from "@keeper.sh/auth";
+import { hasOAuthProviderApi, routeOidcCallbackRequest } from "@keeper.sh/auth";
 import { auth, authCapabilities, env } from "@/context";
 import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 import { context, widelog } from "@/utils/logging";
@@ -157,7 +157,7 @@ const processAuth = async (pathname: string, request: Request): Promise<Response
     request: preparedRequest,
   });
 
-  const response = await auth.handler(preparedTokenRequest.request);
+  const response = await auth.handler(routeOidcCallbackRequest(preparedTokenRequest.request));
   return processAuthResponse(pathname, response);
 };
 

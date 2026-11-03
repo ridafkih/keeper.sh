@@ -34,8 +34,11 @@ import {
   jwks as jwksTable,
   oauthAccessToken as oauthAccessTokenTable,
   oauthClient as oauthClientTable,
+  oauthClientAssertion as oauthClientAssertionTable,
+  oauthClientResource as oauthClientResourceTable,
   oauthConsent as oauthConsentTable,
   oauthRefreshToken as oauthRefreshTokenTable,
+  oauthResource as oauthResourceTable,
   passkey as passkeyTable,
   session as sessionTable,
   user as userTable,
@@ -147,6 +150,21 @@ const isMicrosoftEmailOwnershipEstablished = (
   }
   return profile.tid === MICROSOFT_CONSUMER_TENANT_ID;
 };
+
+const EMAIL_SIGN_UP_PATH = "/sign-up/email";
+
+const readSignUpEmail = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  if (!("email" in body) || typeof body.email !== "string") {
+    return null;
+  }
+  return body.email;
+};
+
+const createRegistrationEmailDomainError = (): APIError =>
+  new APIError("FORBIDDEN", { message: REGISTRATION_EMAIL_DOMAIN_MESSAGE });
 
 const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
@@ -326,6 +344,7 @@ const createAuth = (config: AuthConfig) => {
   if (oidcEnabled && oidcIssuerUrl && oidcClientId && oidcClientSecret) {
     plugins.push(
       createOidcPlugin({
+        baseUrl,
         clientId: oidcClientId,
         clientSecret: oidcClientSecret,
         issuerUrl: oidcIssuerUrl,
@@ -351,8 +370,11 @@ const createAuth = (config: AuthConfig) => {
         jwks: jwksTable,
         oauthAccessToken: oauthAccessTokenTable,
         oauthClient: oauthClientTable,
+        oauthClientAssertion: oauthClientAssertionTable,
+        oauthClientResource: oauthClientResourceTable,
         oauthConsent: oauthConsentTable,
         oauthRefreshToken: oauthRefreshTokenTable,
+        oauthResource: oauthResourceTable,
         passkey: passkeyTable,
         session: sessionTable,
         user: userTable,
@@ -409,9 +431,7 @@ const createAuth = (config: AuthConfig) => {
               return Promise.resolve(false);
             }
             if (!isRegistrationEmailAllowed(user.email, registrationEmailDomains)) {
-              return Promise.reject(
-                new APIError("FORBIDDEN", { message: REGISTRATION_EMAIL_DOMAIN_MESSAGE }),
-              );
+              return Promise.reject(createRegistrationEmailDomainError());
             }
             return Promise.resolve();
           },
@@ -424,6 +444,12 @@ const createAuth = (config: AuthConfig) => {
           throw new APIError("FORBIDDEN", {
             message: "Local authentication is disabled",
           });
+        }
+        if (context.path === EMAIL_SIGN_UP_PATH) {
+          const email = readSignUpEmail(context.body);
+          if (email && !isRegistrationEmailAllowed(email, registrationEmailDomains)) {
+            throw createRegistrationEmailDomainError();
+          }
         }
         return Promise.resolve();
       }),
@@ -498,10 +524,10 @@ const createAuth = (config: AuthConfig) => {
           return null;
         }
 
-        const jwt = await resourceActions.verifyAccessToken(accessToken, {
+        const jwt = await resourceActions.verifyBearerToken(accessToken, {
           jwksUrl,
           verifyOptions: {
-            audience: mcpOptions.oauthProvider.validAudiences,
+            audience: mcpOptions.oauthProvider.resources,
             issuer: `${baseUrl}/api/auth`,
           },
         });
@@ -551,6 +577,7 @@ export {
   isKeeperMcpEnabledAuth,
 };
 export { resolveAuthCapabilities } from "./capabilities";
+export { routeOidcCallbackRequest } from "./oidc";
 export { parseRegistrationEmailDomains } from "./registration-email-domains";
 export {
   KEEPER_API_DEFAULT_SCOPE,

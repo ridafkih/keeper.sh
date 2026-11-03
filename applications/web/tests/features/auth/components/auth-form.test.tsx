@@ -6,9 +6,9 @@ import { parseHTML } from "linkedom";
 import type { AuthCapabilities } from "@/lib/auth-capabilities";
 import type { AuthScreenCopy } from "../../../../src/features/auth/components/auth-form";
 
-const { passkeySignInMock, oauth2SignInMock, omitMotionProps } = vi.hoisted(() => {
+const { passkeySignInMock, socialSignInMock, omitMotionProps } = vi.hoisted(() => {
   const passkeySignInMock = vi.fn(() => Promise.resolve({ error: null }));
-  const oauth2SignInMock = vi.fn<(options: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>>(
+  const socialSignInMock = vi.fn<(options: Record<string, unknown>) => Promise<{ error: { message?: string } | null }>>(
     () => Promise.resolve({ error: null }),
   );
 
@@ -23,7 +23,7 @@ const { passkeySignInMock, oauth2SignInMock, omitMotionProps } = vi.hoisted(() =
     return domProps;
   };
 
-  return { passkeySignInMock, oauth2SignInMock, omitMotionProps };
+  return { passkeySignInMock, socialSignInMock, omitMotionProps };
 });
 
 vi.mock("@tanstack/react-router", () => ({
@@ -52,7 +52,7 @@ vi.mock("../../../../src/lib/motion-features", () => ({
 vi.mock("../../../../src/lib/auth-client", () => ({
   authClient: {
     signIn: {
-      oauth2: oauth2SignInMock,
+      social: socialSignInMock,
       passkey: passkeySignInMock,
     },
   },
@@ -287,7 +287,7 @@ describe("AuthForm", () => {
   });
 
   it("starts the OIDC redirect straight from the sign-in button", async () => {
-    oauth2SignInMock.mockClear();
+    socialSignInMock.mockClear();
 
     await renderInDom(
       <AuthForm
@@ -297,18 +297,18 @@ describe("AuthForm", () => {
       async (container) => {
         await clickButtonWithText(container, "Sign in with SSO");
 
-        expect(oauth2SignInMock).toHaveBeenCalledWith({
+        expect(socialSignInMock).toHaveBeenCalledWith({
           callbackURL: "/dashboard",
           newUserCallbackURL: "/dashboard?keeper_signup=1",
-          providerId: "oidc",
+          provider: "oidc",
         });
       },
     );
   });
 
   it("recovers the form when the OIDC redirect request throws", async () => {
-    oauth2SignInMock.mockClear();
-    oauth2SignInMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    socialSignInMock.mockClear();
+    socialSignInMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
 
     await renderInDom(
       <AuthForm
@@ -327,8 +327,8 @@ describe("AuthForm", () => {
   });
 
   it("shows a failed OIDC redirect on the form when local auth is disabled", async () => {
-    oauth2SignInMock.mockClear();
-    oauth2SignInMock.mockResolvedValueOnce({ error: { message: "Discovery failed" } });
+    socialSignInMock.mockClear();
+    socialSignInMock.mockResolvedValueOnce({ error: { message: "Discovery failed" } });
 
     await renderInDom(
       <AuthForm
