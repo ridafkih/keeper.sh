@@ -22,13 +22,20 @@ import {
  * back, so a mirrored event near a DST boundary looks moved and is deleted and
  * re-created on every run.
  *
- * A recurring observance is therefore only trustworthy for identifiers the platform
- * cannot answer for; where the TZID names a zone IANA knows, the IANA rules decide.
- * An observance set with no RRULE states every onset outright, ts-ics reads it
- * correctly, and it stays authoritative over IANA as RFC 5545 §3.6.5 intends.
+ * ts-ics also never reads RDATE: an observance listing further onsets as RDATEs
+ * counts only from its DTSTART. Full-history zones such as tzurl's Asia/Manila
+ * list every later return to standard time that way, so the observance with the
+ * latest DTSTART wins and a present-day wall time takes a wartime offset.
+ *
+ * An observance with more than one onset is therefore only trustworthy for
+ * identifiers the platform cannot answer for; where the TZID names a zone IANA
+ * knows, the IANA rules decide. An observance set where each DTSTART is the only
+ * onset states every transition outright, ts-ics reads it correctly, and it stays
+ * authoritative over IANA as RFC 5545 §3.6.5 intends.
  */
 const hasProjectedObservance = (timezone: IcsTimezone): boolean =>
-  timezone.props.some((observance) => Boolean(observance.recurrenceRule));
+  timezone.props.some((observance) =>
+    Boolean(observance.recurrenceRule ?? observance.recurrenceDate));
 
 const collectProjectedTimeZoneIds = (timezones: IcsTimezone[] | undefined): Set<string> =>
   new Set(
