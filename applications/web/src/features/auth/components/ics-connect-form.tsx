@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/primitives/checkbox";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
-import { describeIcsFeedFailure } from "@/lib/connect-failures";
+import { describeIcsFeedFailure, type FeedFailureCopy } from "@/lib/connect-failures";
 
 function resolveSubmitLabel(pending: boolean): string {
   if (pending) return "Subscribing...";
@@ -21,7 +21,7 @@ export function ICSFeedForm() {
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
   const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<FeedFailureCopy | null>(null);
   const [requiresAuth, setRequiresAuth] = useState(false);
 
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
@@ -39,7 +39,7 @@ export function ICSFeedForm() {
       const password = formData.get("password");
 
       if (!username || !password) {
-        setError("Username and password are required for authenticated feeds.");
+        setError({ hint: null, message: "Username and password are required for authenticated feeds." });
         return;
       }
 
@@ -49,7 +49,7 @@ export function ICSFeedForm() {
         parsed.password = encodeURIComponent(String(password));
         url = parsed.toString();
       } catch {
-        setError("Invalid URL.");
+        setError({ hint: null, message: "Invalid URL." });
         return;
       }
     }
@@ -89,9 +89,13 @@ export function ICSFeedForm() {
           id="feed-url"
           name="feed-url"
           type="url"
-          placeholder="Calendar Feed URL"
+          placeholder="Calendar link"
           disabled={isPending}
+          tone={error ? "error" : "neutral"}
+          aria-invalid={Boolean(error)}
         />
+        {error && <Text size="sm" tone="danger">{error.message}</Text>}
+        {error?.hint && <Text size="sm" tone="muted">{error.hint}</Text>}
         <Checkbox checked={requiresAuth} onCheckedChange={setRequiresAuth}>
           Requires authentication
         </Checkbox>
@@ -122,7 +126,6 @@ export function ICSFeedForm() {
           <ButtonText>{resolveSubmitLabel(isPending)}</ButtonText>
         </Button>
       </div>
-      {error && <Text size="sm" tone="danger" align="center">{error}</Text>}
     </form>
   );
 }

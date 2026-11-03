@@ -18,13 +18,28 @@ const OAUTH_CONNECT_FAILURE_COPY: Record<OAuthConnectFailureReason, string> = {
   unknown: "Your calendar couldn't be connected. Try again.",
 };
 
-const ICS_FEED_FAILURE_COPY: Record<IcsFeedFailureReason, string> = {
-  "auth-required":
-    "This feed needs a login. Turn on Requires authentication and add the username and password.",
-  "not-calendar":
-    "This link opens a page, not a calendar feed. Copy the feed link instead, often ending in .ics.",
-  "not-found": "Nothing was found at this link. Check that it's the full feed URL.",
-  unreachable: "This feed couldn't be reached. Check the link and try again.",
+interface FeedFailureCopy {
+  message: string;
+  hint: string | null;
+}
+
+const ICS_FEED_FAILURE_COPY: Record<IcsFeedFailureReason, FeedFailureCopy> = {
+  "auth-required": {
+    hint: "Turn on Requires authentication and add the username and password.",
+    message: "This feed needs a login.",
+  },
+  "not-calendar": {
+    hint: "Look for a link that ends in .ics or starts with webcal://",
+    message: "This link opens a web page, not a calendar.",
+  },
+  "not-found": {
+    hint: "Check that it's the full feed URL.",
+    message: "Nothing was found at this link.",
+  },
+  unreachable: {
+    hint: "Check the link and try again.",
+    message: "This feed couldn't be reached.",
+  },
 };
 
 const CALENDAR_IMPORT_FAILURE = "Your calendars couldn't be imported. Try again.";
@@ -47,12 +62,18 @@ export function describeOAuthConnectFailure(reason: unknown): string {
   return OAUTH_CONNECT_FAILURE_COPY[reason];
 }
 
-export function describeIcsFeedFailure(error: unknown): string {
+export function isAdminApprovalFailure(reason: unknown): boolean {
+  return reason === "admin-approval-required";
+}
+
+export function describeIcsFeedFailure(error: unknown): FeedFailureCopy {
   if (!(error instanceof HttpError)) {
     return ICS_FEED_FAILURE_COPY.unreachable;
   }
   if (error.status === HTTP_STATUS.PAYMENT_REQUIRED) {
-    return readApiErrorMessage(error.body) ?? ICS_FEED_FAILURE_COPY.unreachable;
+    const planMessage = readApiErrorMessage(error.body);
+    if (planMessage) return { hint: null, message: planMessage };
+    return ICS_FEED_FAILURE_COPY.unreachable;
   }
   return ICS_FEED_FAILURE_COPY[readIcsFeedFailureReason(error.body)];
 }
@@ -69,3 +90,5 @@ export function describeCalendarImportFailure(error: unknown): string {
   }
   return CALENDAR_IMPORT_FAILURE;
 }
+
+export type { FeedFailureCopy };
