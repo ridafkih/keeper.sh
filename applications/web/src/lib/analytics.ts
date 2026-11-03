@@ -100,6 +100,18 @@ export const ANALYTICS_EVENTS = {
   oauth_consent_granted: "oauth_consent_granted",
   oauth_consent_denied: "oauth_consent_denied",
   marketing_cta_clicked: "marketing_cta_clicked",
+  onboarding_step_viewed: "onboarding_step_viewed",
+  onboarding_provider_chosen: "onboarding_provider_chosen",
+  onboarding_destination_chosen: "onboarding_destination_chosen",
+  onboarding_sync_proposed: "onboarding_sync_proposed",
+  onboarding_sync_edited: "onboarding_sync_edited",
+  onboarding_sync_started: "onboarding_sync_started",
+  onboarding_first_run_empty: "onboarding_first_run_empty",
+  onboarding_completed: "onboarding_completed",
+  onboarding_admin_link_copied: "onboarding_admin_link_copied",
+  onboarding_help_link_opened: "onboarding_help_link_opened",
+  oauth_authorize_started: "oauth_authorize_started",
+  upgrade_card_clicked: "upgrade_card_clicked",
 } satisfies Record<string, string>;
 
 type EventProperties = Record<string, string | number | boolean>;
