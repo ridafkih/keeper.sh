@@ -8,12 +8,20 @@ import { Text } from "@/components/ui/primitives/text";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
 
-type Provider = "google" | "outlook" | "microsoft-365";
+type Provider = "google" | "outlook";
 
-const PROVIDER_LABELS: Record<Provider, string> = {
-  google: "Google",
-  outlook: "Outlook",
-  "microsoft-365": "Microsoft 365",
+interface ProviderPreamble {
+  label: string;
+  accountNotice?: string;
+}
+
+const PROVIDER_PREAMBLES: Record<Provider, ProviderPreamble> = {
+  google: { label: "Google" },
+  outlook: {
+    label: "Outlook",
+    accountNotice:
+      "Works with personal Outlook and work or school Microsoft 365 accounts. A work or school account may need your admin to approve Keeper.sh first.",
+  },
 };
 
 const PERMISSIONS = [
@@ -22,12 +30,6 @@ const PERMISSIONS = [
   "View events, summaries and details",
   "Add or remove calendar events",
 ];
-
-const PROVIDER_API_MAP: Record<Provider, string> = {
-  google: "google",
-  outlook: "outlook",
-  "microsoft-365": "outlook",
-};
 
 export function PermissionsList({ items }: { items: readonly string[] }) {
   return (
@@ -49,22 +51,29 @@ interface PreambleLayoutProps {
 }
 
 function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
+  const { label, accountNotice } = PROVIDER_PREAMBLES[provider];
   return (
     <>
       <ProviderIconPair>
         <img
           src={`/integrations/icon-${provider}.svg`}
-          alt={PROVIDER_LABELS[provider]}
+          alt={label}
           width={40}
           height={40}
           className="size-full rounded-lg p-3"
         />
       </ProviderIconPair>
-      <Heading2 as="h1">Connect {PROVIDER_LABELS[provider]}</Heading2>
+      <Heading2 as="h1">Connect {label}</Heading2>
       <Text size="sm" tone="muted" align="left">
-        Start importing your events and sync them across all your calendars.
+        Keeper.sh reads your events so it can show you as busy on your other calendars.
       </Text>
       <PermissionsList items={PERMISSIONS} />
+      <Text size="sm" tone="muted" align="left">
+        Edit access lets Keeper.sh add its own copies to the calendars you sync to. It never edits or deletes your own events, and titles, descriptions, locations and guests stay behind by default.
+      </Text>
+      {accountNotice && (
+        <Text size="sm" tone="muted" align="left">{accountNotice}</Text>
+      )}
       <Divider />
       <form onSubmit={onSubmit} className="contents">
         <div className="flex items-stretch gap-2">
@@ -86,8 +95,7 @@ interface LinkOAuthPreambleProps {
 export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const apiProvider = PROVIDER_API_MAP[provider];
-    window.location.href = `/api/sources/authorize?provider=${apiProvider}`;
+    window.location.href = `/api/sources/authorize?provider=${provider}`;
   };
 
   return (
