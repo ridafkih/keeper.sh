@@ -412,3 +412,4 @@ export { createManagePushChannelsDependencies } from "./core/source/manage-push-
 export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
 export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
+export { REQUIRED_TIME_ZONE_DATA_VERSION, exitUnlessTimeZoneDataCurrent } from "./utils/timezone-data-currency";
