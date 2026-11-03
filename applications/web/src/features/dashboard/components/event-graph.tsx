@@ -20,6 +20,7 @@ import { Text } from "@/components/ui/primitives/text";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import type { ApiEventSummary } from "@/types/api";
+import { buildEventsUrl } from "@/lib/events-url";
 import { addDays } from "./calendar-helpers";
 import { countEventsByDay } from "./event-graph-counts";
 import { periodFill, resolvePeriod } from "./density-period";
@@ -33,7 +34,7 @@ const CALENDAR_VISIBLE_QUERY = "(min-width: 64rem)";
 const buildGraphUrl = (todayStart: Date): string => {
   const from = addDays(todayStart, -EVENT_GRAPH_DAYS_BEFORE);
   const to = new Date(addDays(todayStart, EVENT_GRAPH_DAYS_AFTER + 1).getTime() - 1);
-  return `/api/events?from=${from.toISOString()}&to=${to.toISOString()}`;
+  return buildEventsUrl(from, to);
 };
 
 interface DayData {
