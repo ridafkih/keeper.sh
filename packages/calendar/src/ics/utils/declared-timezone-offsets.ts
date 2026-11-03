@@ -1,4 +1,5 @@
 import ICAL from "ical.js";
+import { assertObservanceExpansionBounded } from "./observance-onset-bound";
 import { wallTimeToInstantWith } from "./timezone-instant";
 import type { ZoneOffsetAt } from "./timezone-instant";
 
@@ -123,6 +124,7 @@ const expandObservance = (
 ): ZoneChange[] => {
   const offsetMinutes = readObservanceOffset(observance, "tzoffsetto") ?? 0;
   const previousOffsetMinutes = readObservanceOffset(observance, "tzoffsetfrom") ?? 0;
+  assertObservanceExpansionBounded(observance, untilYear);
   includeStartAsListedOnset(observance);
   const changes = expander._expandComponent(observance, untilYear, []) ?? [];
   return changes.map((change) => toZoneChange(change, offsetMinutes, previousOffsetMinutes));
