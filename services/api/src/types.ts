@@ -5,6 +5,7 @@ type KeeperDatabase = BunSQLDatabase;
 
 interface KeeperEventRangeInput {
   from: Date | string;
+  timeZone?: string;
   to: Date | string;
 }
 

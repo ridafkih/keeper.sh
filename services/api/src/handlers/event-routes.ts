@@ -1,6 +1,7 @@
 import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
 import { withEventReadErrorHandling } from "@/utils/event-read-errors";
 import { ErrorResponse } from "@/utils/responses";
+import { parseViewerTimeZone } from "@/utils/viewer-time-zone";
 import type { KeeperEvent, KeeperEventRangeInput } from "@/types";
 
 interface EventsInRangeReader {
@@ -19,7 +20,11 @@ const handleGetEventsInRangeRoute = (
   const url = new URL(request.url);
   const { from, to } = parseDateRangeParams(url);
   const { end, start } = normalizeDateRange(from, to);
-  const events = await reader.getEventsInRange(userId, { from: start, to: end });
+  const timeZone = parseViewerTimeZone(url);
+  const events = await reader.getEventsInRange(
+    userId,
+    { from: start, to: end, ...(timeZone && { timeZone }) },
+  );
   return Response.json(events);
 });
 

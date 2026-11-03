@@ -47,6 +47,33 @@ describe("handleGetEventsInRangeRoute", () => {
     expect(await response.json()).toEqual([event]);
   });
 
+  it("passes the viewer timezone to the range read", async () => {
+    const ranges: unknown[] = [];
+
+    await handleGetEventsInRangeRoute(
+      new Request("https://api.test/api/events?from=2026-03-01&to=2026-03-08&timezone=Pacific/Auckland"),
+      "user-1",
+      {
+        getEventsInRange: (_userId, range) => {
+          ranges.push(range);
+          return Promise.resolve([]);
+        },
+      },
+    );
+
+    expect(ranges).toEqual([expect.objectContaining({ timeZone: "Pacific/Auckland" })]);
+  });
+
+  it("returns 400 for a timezone that is not an IANA identifier", async () => {
+    const response = await handleGetEventsInRangeRoute(
+      new Request("https://api.test/api/events?from=2026-03-01&to=2026-03-08&timezone=Nowhere/Land"),
+      "user-1",
+      { getEventsInRange: () => Promise.resolve([]) },
+    );
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns 400 when a series exceeds the recurrence budget", async () => {
     const response = await handleGetEventsInRangeRoute(
       new Request("https://api.test/api/events?from=2026-03-01&to=2026-03-08"),

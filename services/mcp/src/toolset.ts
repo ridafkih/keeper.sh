@@ -320,7 +320,7 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (!input || !isEventRangeInput(input)) {
         throw new Error("'from', 'to', and 'timezone' are required");
       }
-      const params = new URLSearchParams({ from: input.from, to: input.to });
+      const params = new URLSearchParams({ from: input.from, timezone: input.timezone, to: input.to });
       const events = await apiFetch(context, `/api/v1/events?${params}`, z.array(keeperEventSchema));
       return events.map((event) => localizeEvent(event, input.timezone));
     },

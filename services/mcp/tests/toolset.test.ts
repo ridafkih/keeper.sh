@@ -431,3 +431,23 @@ describe("get_event", () => {
     });
   });
 });
+
+describe("get_events", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("forwards the viewer timezone to the events route", async () => {
+    const requests = stubFetch([]);
+
+    await createKeeperMcpToolset().get_events.execute(context, {
+      from: "2026-11-12T06:00:00Z",
+      timezone: "America/Chicago",
+      to: "2026-11-13T06:00:00Z",
+    });
+
+    const url = new URL(requests[0]?.url ?? "");
+    expect(url.pathname).toBe("/api/v1/events");
+    expect(url.searchParams.get("timezone")).toBe("America/Chicago");
+  });
+});

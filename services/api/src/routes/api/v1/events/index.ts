@@ -1,6 +1,7 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
 import { withEventReadErrorHandling } from "@/utils/event-read-errors";
+import { parseViewerTimeZone } from "@/utils/viewer-time-zone";
 import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
@@ -52,9 +53,10 @@ const GET = withWideEvent(
     }
 
     const filters = parseEventFilters(url);
+    const timeZone = parseViewerTimeZone(url);
     const events = await keeperApi.getEventsInRange(
       userId,
-      { from: start, to: end },
+      { from: start, to: end, ...(timeZone && { timeZone }) },
       filters,
     );
     return Response.json(events);
