@@ -17,6 +17,7 @@ import { resolveAuthCapabilities } from "./capabilities";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
+import { keepSignedInAccount } from "./passkey-session-owner";
 import type { AuthObserver, AuthRequestOutcome } from "./auth-observer";
 import {
   REGISTRATION_EMAIL_DOMAIN_MESSAGE,
@@ -271,6 +272,7 @@ const createAuth = (config: AuthConfig) => {
   if (commercialMode && passkeyRpId && passkeyOrigin) {
     plugins.push(
       passkeyPlugin({
+        authentication: { afterVerification: keepSignedInAccount },
         origin: passkeyOrigin,
         rpID: passkeyRpId,
         rpName: passkeyRpName,
