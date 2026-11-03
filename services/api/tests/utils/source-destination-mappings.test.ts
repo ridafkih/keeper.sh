@@ -703,7 +703,7 @@ describe("toggling one mapping at a time", () => {
           listSourceDestinationIds: (sourceCalendarId) =>
             Promise.resolve(collectDestinationIds(draftMappings, sourceCalendarId)),
           replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
-            for (const mappingKey of [...draftMappings]) {
+            for (const mappingKey of new Set(draftMappings)) {
               if (parseMappingKey(mappingKey).sourceCalendarId === sourceCalendarId) {
                 draftMappings.delete(mappingKey);
               }

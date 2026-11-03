@@ -329,9 +329,10 @@ const resolveMappingLimitOrNull = (
 };
 
 const exceedsMappingLimit = async (
+  userId: string,
   mappingLimit: number | null,
   result: MappingChangeResult,
-  countUserMappings: (() => Promise<number>) | null,
+  countUserMappings: ((userId: string) => Promise<number>) | undefined,
 ): Promise<boolean> => {
   if (mappingLimit === null || !countUserMappings) {
     return false;
@@ -339,7 +340,7 @@ const exceedsMappingLimit = async (
   if (result.nextIds.length <= result.previousIds.length) {
     return false;
   }
-  const currentMappingCount = await countUserMappings();
+  const currentMappingCount = await countUserMappings(userId);
   return currentMappingCount - result.previousIds.length + result.nextIds.length > mappingLimit;
 };
 
@@ -368,12 +369,7 @@ const runChangeDestinationsForSource = async (
       assertAllIdsOwned(newlyMappedIds, validDestinationIds, "Some destination calendars not found");
     }
 
-    const { countUserMappings } = transaction;
-    if (await exceedsMappingLimit(
-      mappingLimit,
-      result,
-      countUserMappings ? () => countUserMappings(userId) : null,
-    )) {
+    if (await exceedsMappingLimit(userId, mappingLimit, result, transaction.countUserMappings)) {
       throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
     }
 
@@ -415,12 +411,7 @@ const runChangeSourcesForDestination = async (
       assertAllIdsOwned(newlyMappedIds, validSourceIds, "Some source calendars not found");
     }
 
-    const { countUserMappings } = transaction;
-    if (await exceedsMappingLimit(
-      mappingLimit,
-      result,
-      countUserMappings ? () => countUserMappings(userId) : null,
-    )) {
+    if (await exceedsMappingLimit(userId, mappingLimit, result, transaction.countUserMappings)) {
       throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
     }
 
