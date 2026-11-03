@@ -104,12 +104,12 @@ const buildZone = (timeZoneId: string, observances: string[][]): string[] => [
   "END:VTIMEZONE",
 ];
 
-const buildZonedEvent = (uid: string, timeZoneId: string): string[] => [
+const buildZonedEvent = (uid: string, timeZoneId: string, date = "20260715"): string[] => [
   "BEGIN:VEVENT",
   `UID:${uid}`,
   "DTSTAMP:20260101T000000Z",
-  `DTSTART;TZID=${timeZoneId}:20260715T090000`,
-  `DTEND;TZID=${timeZoneId}:20260715T100000`,
+  `DTSTART;TZID=${timeZoneId}:${date}T090000`,
+  `DTEND;TZID=${timeZoneId}:${date}T100000`,
   "SUMMARY:Standup",
   "END:VEVENT",
 ];
@@ -145,6 +145,26 @@ describe("declared VTIMEZONEs whose observances expand within bound one by one",
 
     expect(outcome[`near-limit-event-${zoneIds.length - 1}`]).toBe("unsupported");
     expect(elapsedMs).toBeLessThan(EXPANSION_BUDGET_MS);
+  });
+
+  it("still reads every event when a calendar's custom zones carry events across many later years", () => {
+    const zoneIds = Array.from({ length: 30 }, (_unused, index) => `Exchange Zone ${index}`);
+    const years = Array.from({ length: 30 }, (_unused, index) => 2026 + index);
+    const { outcome } = readWithinBudget(buildCalendar([
+      ...zoneIds.map((zoneId) => buildZone(zoneId, [
+        buildObservance("STANDARD", "FREQ=YEARLY;BYMONTH=11;BYDAY=1SU"),
+        buildObservance("DAYLIGHT", "FREQ=YEARLY;BYMONTH=3;BYDAY=2SU"),
+      ])),
+      ...years.flatMap((year) => zoneIds.map((zoneId, index) =>
+        buildZonedEvent(`exchange-event-${index}-${year}`, zoneId, `${year}0715`))),
+    ]));
+
+    expect(Object.values(outcome)).toHaveLength(zoneIds.length * years.length);
+    expect(Object.values(outcome)).not.toContain("unsupported");
+    expect(outcome["exchange-event-0-2055"]).toEqual({
+      end: "2055-07-15T16:00:00.000Z",
+      start: "2055-07-15T15:00:00.000Z",
+    });
   });
 
   it("still reads every event in a calendar that declares many small custom zones", () => {

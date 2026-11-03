@@ -1,13 +1,17 @@
 import ICAL from "ical.js";
 
 interface OnsetBudget {
-  spend: (observances: readonly ICAL.Component[], untilYear: number) => void;
+  expand: <TChange>(
+    observances: readonly ICAL.Component[],
+    untilYear: number,
+    expandObservances: () => TChange[],
+  ) => TChange[];
 }
 
 type RuleParts = Record<string, unknown[] | undefined>;
 
 const MAX_ZONE_ONSETS = 50_000;
-const MAX_CALENDAR_ONSETS = 500_000;
+const MAX_CALENDAR_ONSETS = 200_000;
 const MONTHS_PER_YEAR = 12;
 const WEEKS_PER_YEAR = 53;
 const DAYS_PER_YEAR = 366;
@@ -166,17 +170,22 @@ const boundZoneOnsets = (observances: readonly ICAL.Component[], untilYear: numb
 
 const createOnsetBudget = (): OnsetBudget => {
   let remaining = MAX_CALENDAR_ONSETS;
-  const spend = (observances: readonly ICAL.Component[], untilYear: number): void => {
-    const onsets = boundZoneOnsets(observances, untilYear);
-    if (onsets > MAX_ZONE_ONSETS) {
+  const expand = <TChange>(
+    observances: readonly ICAL.Component[],
+    untilYear: number,
+    expandObservances: () => TChange[],
+  ): TChange[] => {
+    if (boundZoneOnsets(observances, untilYear) > MAX_ZONE_ONSETS) {
       throw new RangeError(`Declared VTIMEZONE expands to more than ${MAX_ZONE_ONSETS} onsets`);
     }
-    if (onsets > remaining) {
+    if (remaining <= 0) {
       throw new RangeError(`Declared VTIMEZONEs expand to more than ${MAX_CALENDAR_ONSETS} onsets in one calendar`);
     }
-    remaining -= onsets;
+    const changes = expandObservances();
+    remaining -= changes.length;
+    return changes;
   };
-  return { spend };
+  return { expand };
 };
 
 export { createOnsetBudget };

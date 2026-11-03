@@ -40,6 +40,7 @@ const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
 const COVERAGE_YEARS_AHEAD = 1;
+const COVERAGE_YEARS_PER_EXPANSION = 10;
 const JCAL_UTC_OFFSET_PATTERN = /^([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
 const parseJcalUtcOffset = (value: unknown): number | undefined => {
@@ -133,9 +134,9 @@ const expandZoneChanges = (blockText: string, untilYear: number, budget: OnsetBu
   const expander: ObservanceExpander = new ICAL.Timezone({ component: timezone });
   try {
     const observances = listUsableObservances(timezone);
-    budget.spend(observances, untilYear);
-    return observances
-      .flatMap((observance) => expandObservance(expander, observance, untilYear))
+    return budget
+      .expand(observances, untilYear, () =>
+        observances.flatMap((observance) => expandObservance(expander, observance, untilYear)))
       .toSorted((left, right) => left.instant - right.instant);
   } catch (error) {
     throw new RangeError("Unable to expand declared VTIMEZONE", { cause: error });
@@ -167,7 +168,7 @@ const createDeclaredZone = (blockText: string, latestOnsetYear: number, budget: 
   const coverChanges = (instant: number): readonly ZoneChange[] => {
     const year = new Date(instant).getUTCFullYear() + COVERAGE_YEARS_AHEAD;
     if (year > coveredUntilYear) {
-      coveredUntilYear = Math.max(year, latestOnsetYear);
+      coveredUntilYear = Math.max(year + COVERAGE_YEARS_PER_EXPANSION, latestOnsetYear);
       changes = expandZoneChanges(blockText, coveredUntilYear, budget);
     }
     return changes;
