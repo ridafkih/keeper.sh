@@ -9,7 +9,6 @@ import {
   NavigationMenuButtonItem,
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
-  NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { showToastAtom } from "@/state/toast";
@@ -55,7 +54,6 @@ export function AdminApproval({ approvalUrl }: { approvalUrl: string }) {
             <Mail size={15} />
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>Email it to your admin</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
         </NavigationMenuButtonItem>
       </NavigationMenu>
       <LinkButton to="/dashboard" variant="border" className="w-full justify-center">
