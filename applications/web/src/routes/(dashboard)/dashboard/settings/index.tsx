@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import KeyRound from "lucide-react/dist/esm/icons/key-round";
 import KeySquare from "lucide-react/dist/esm/icons/key-square";
@@ -8,24 +8,18 @@ import Mail from "lucide-react/dist/esm/icons/mail";
 import Cookie from "lucide-react/dist/esm/icons/cookie";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "@/lib/pluralize";
-import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
 import { usePasskeys } from "@/hooks/use-passkeys";
 import { useHasPassword } from "@/hooks/use-has-password";
 import { useHasOidcAccount } from "@/hooks/use-has-oidc-account";
-import { Input } from "@/components/ui/primitives/input";
-import { deleteAccount } from "@/lib/auth";
 import { authClient } from "@/lib/auth-client";
 import { resolveAccountIdentity } from "@/lib/account-identity";
-import {
-  Modal,
-  ModalContent,
-  ModalDescription,
-  ModalFooter,
-  ModalTitle,
-} from "@/components/ui/primitives/modal";
+import { useLinkedProviderIds } from "@/hooks/use-linked-provider-ids";
+import { DeleteAccountModal } from "@/features/auth/components/delete-account-modal";
+import { readsAsReauthenticationReturn } from "@/lib/account-reauthentication";
+import { toStringSearchParams } from "@/lib/mcp-auth-flow";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -39,7 +33,6 @@ import {
 import { setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
-import { resolveErrorMessage } from "@/utils/errors";
 import {
   fetchAuthCapabilitiesWithApi,
   resolveOidcProviderName,
@@ -51,14 +44,16 @@ export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({
     return { authCapabilities };
   },
   component: SettingsPage,
+  validateSearch: toStringSearchParams,
 });
 
 function SettingsPage() {
   const { authCapabilities } = Route.useLoaderData();
   const { user } = useSession();
   const navigate = useNavigate();
-  const passwordRef = useRef<HTMLInputElement>(null);
+  const search = Route.useSearch();
   const { data: hasPassword = false } = useHasPassword();
+  const { data: linkedProviderIds = [] } = useLinkedProviderIds();
   const { label: accountLabel, value: accountValue } = resolveAccountIdentity(user);
   const { data: apiTokens = [] } = useApiTokens();
   const { data: passkeys = [] } = usePasskeys(authCapabilities.supportsPasskeys);
@@ -71,11 +66,14 @@ function SettingsPage() {
     track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
     setAnalyticsConsent(checked);
   }, []);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(() => readsAsReauthenticationReturn(search));
 
-
+  const handleDeleteOpenChange = (open: boolean) => {
+    setDeleteOpen(open);
+    if (!open && readsAsReauthenticationReturn(search)) {
+      navigate({ to: "/dashboard/settings", replace: true });
+    }
+  };
 
   const handleLinkOidc = async () => {
     setOidcLinkError(null);
@@ -87,23 +85,6 @@ function SettingsPage() {
     if (error) {
       setOidcLinkError(error.message ?? "Failed to start linking.");
       setIsLinkingOidc(false);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    const password = hasPassword ? passwordRef.current?.value : undefined;
-    if (hasPassword && !password) return;
-    setDeleteError(null);
-    setIsDeleting(true);
-    try {
-      await deleteAccount(password);
-      track(ANALYTICS_EVENTS.account_deleted);
-      setDeleteOpen(false);
-      navigate({ to: "/login" });
-    } catch (err) {
-      setDeleteError(resolveErrorMessage(err, "Failed to delete account."));
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -191,26 +172,15 @@ function SettingsPage() {
           <Text size="sm" tone="danger">Delete Account</Text>
         </NavigationMenuButtonItem>
       </NavigationMenu>
-      <Modal open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <ModalContent>
-          <ModalTitle>Delete account?</ModalTitle>
-          <ModalDescription>
-            This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.
-          </ModalDescription>
-          {hasPassword && (
-            <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
-          )}
-          {deleteError && <Text size="sm" tone="danger">{deleteError}</Text>}
-          <ModalFooter>
-            <Button variant="destructive" className="w-full justify-center" onClick={handleDeleteAccount} disabled={isDeleting}>
-              <ButtonText>{isDeleting ? "Deleting..." : "Delete my account"}</ButtonText>
-            </Button>
-            <Button variant="elevated" className="w-full justify-center" onClick={() => setDeleteOpen(false)}>
-              <ButtonText>Cancel</ButtonText>
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      <DeleteAccountModal
+        open={deleteOpen}
+        onOpenChange={handleDeleteOpenChange}
+        user={user}
+        capabilities={authCapabilities}
+        hasPassword={hasPassword}
+        linkedProviderIds={linkedProviderIds}
+        passkeyCount={passkeys.length}
+      />
     </div>
   );
 }

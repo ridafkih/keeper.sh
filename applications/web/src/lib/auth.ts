@@ -1,5 +1,10 @@
 import { authClient } from "./auth-client";
 import type { AuthCapabilities } from "./auth-capabilities";
+import {
+  ACCOUNT_DELETION_REAUTHENTICATION_PATH,
+  resolveAccountDeletionOutcome,
+} from "./account-reauthentication";
+import type { AccountDeletionOutcome, ReauthenticationMethod } from "./account-reauthentication";
 
 async function authPost(url: string, body: Record<string, unknown> = {}): Promise<void> {
   const response = await fetch(url, {
@@ -95,5 +100,44 @@ export const resetPassword = async (token: string, newPassword: string): Promise
 export const changePassword = (currentPassword: string, newPassword: string) =>
   authPost("/api/auth/change-password", { currentPassword, newPassword });
 
-export const deleteAccount = (password?: string) =>
-  authPost("/api/auth/delete-user", { ...(password && { password }) });
+export const deleteAccount = async (password?: string): Promise<AccountDeletionOutcome> => {
+  const { error } = await authClient.deleteUser({ ...(password && { password }) });
+  return resolveAccountDeletionOutcome(error);
+};
+
+interface ReauthenticatingUser {
+  id: string;
+  email?: string;
+}
+
+const reauthenticateWithPasskey = async (user: ReauthenticatingUser): Promise<void> => {
+  const { error } = await authClient.signIn.passkey();
+  if (error) throw new Error(error.message ?? "Passkey sign-in failed.");
+
+  const { data } = await authClient.getSession();
+  if (data?.user.id !== user.id) {
+    throw new Error("That passkey belongs to a different account.");
+  }
+};
+
+const reauthenticateWithProvider = async (
+  provider: Extract<ReauthenticationMethod, { kind: "social" }>["provider"],
+  user: ReauthenticatingUser,
+): Promise<void> => {
+  const { error } = await authClient.signIn.social({
+    callbackURL: ACCOUNT_DELETION_REAUTHENTICATION_PATH,
+    errorCallbackURL: "/dashboard/settings",
+    newUserCallbackURL: "/dashboard",
+    provider,
+    ...(user.email && { loginHint: user.email }),
+  });
+  if (error) throw new Error(error.message ?? "Sign-in failed.");
+};
+
+export const reauthenticate = (
+  method: ReauthenticationMethod,
+  user: ReauthenticatingUser,
+): Promise<void> => {
+  if (method.kind === "passkey") return reauthenticateWithPasskey(user);
+  return reauthenticateWithProvider(method.provider, user);
+};
