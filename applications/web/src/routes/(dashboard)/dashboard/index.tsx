@@ -46,10 +46,10 @@ import { SyncStatus } from "@/features/dashboard/components/sync-status";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/reauth-notice";
-import CreditCard from "lucide-react/dist/esm/icons/credit-card";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
-import { openCustomerPortal } from "@/utils/checkout";
+import { useHasConfiguredSync } from "@/hooks/use-entitlements";
+import { PlanMenuItem } from "@/features/dashboard/components/plan-menu";
+import { isPlanShownOnHome } from "@/features/dashboard/components/plan-placement";
 
 async function loadSubscription(context: {
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -129,40 +129,20 @@ interface RefreshStatus {
 }
 
 function PlanMenu() {
-  const navigate = useNavigate();
   const { commercialMode, subscription: loaderSubscription } = Route.useLoaderData();
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
     fallbackData: loaderSubscription,
   });
   const isPro = subscription?.plan === "pro";
-  const [isManaging, setIsManaging] = useState(false);
+  const hasConfiguredSync = useHasConfiguredSync();
 
-  const handleManagePlan = async () => {
-    if (!isPro) {
-      navigate({ to: "/dashboard/upgrade" });
-      return;
-    }
-    setIsManaging(true);
-    try {
-      await openCustomerPortal();
-    } catch {
-      setIsManaging(false);
-    }
-  };
-
-  if (!commercialMode) {
+  if (!commercialMode || !isPlanShownOnHome({ isPro, hasConfiguredSync })) {
     return null;
   }
 
   return (
     <NavigationMenu variant={isPro ? "default" : "highlight"}>
-      <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
-        <NavigationMenuItemIcon>
-          {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
-        <NavigationMenuItemTrailing />
-      </NavigationMenuButtonItem>
+      <PlanMenuItem subscription={subscription} subscriptionLoading={subscriptionLoading} />
     </NavigationMenu>
   );
 }

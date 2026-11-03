@@ -33,6 +33,8 @@ import {
 import { setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
+import { getCommercialMode } from "@/config/commercial";
+import { SettingsPlanMenuItem } from "@/features/dashboard/components/plan-menu";
 import {
   fetchAuthCapabilitiesWithApi,
   resolveOidcProviderName,
@@ -143,6 +145,7 @@ function SettingsPage() {
             </NavigationMenuItemTrailing>
           </NavigationMenuButtonItem>
         )}
+        {getCommercialMode() && <SettingsPlanMenuItem />}
         <NavigationMenuLinkItem to="/dashboard/settings/api-tokens">
           <NavigationMenuItemIcon>
             <KeySquare size={15} />
