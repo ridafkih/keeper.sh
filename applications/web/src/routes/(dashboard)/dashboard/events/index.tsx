@@ -57,7 +57,6 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
 }
 
-
 function EventsPage() {
   return (
     <div className="flex flex-col gap-3 lg:h-full">
