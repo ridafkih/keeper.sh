@@ -22,6 +22,8 @@ RUN bun run --cwd services/api build && \
     bun run --cwd applications/web build
 
 FROM debian:bookworm-slim AS runtime
+COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
+ENV ICU_TIMEZONE_FILES_DIR=/usr/share/icu-timezone
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
