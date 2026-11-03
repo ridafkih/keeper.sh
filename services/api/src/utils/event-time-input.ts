@@ -1,4 +1,5 @@
-import { resolveTimeZone, wallTimeToInstant } from "@keeper.sh/calendar";
+import { wallTimeToInstant } from "@keeper.sh/calendar";
+import { resolveTimeZoneOrThrow } from "@/utils/request-time-zone";
 
 interface EventTimeInputOptions {
   isAllDay: boolean;
@@ -98,15 +99,10 @@ const resolveRequestedTimeZone = (timeZone: string | undefined): string | undefi
   if (typeof timeZone !== "string") {
     return;
   }
-  try {
-    const resolved = resolveTimeZone(timeZone);
-    if (resolved) {
-      return resolved;
-    }
-  } catch (error) {
-    throw new EventTimeInputError(`Unsupported timezone: ${timeZone}`, { cause: error });
-  }
-  throw new EventTimeInputError(`Unsupported timezone: ${timeZone}`);
+  return resolveTimeZoneOrThrow(
+    timeZone,
+    (identifier, cause) => new EventTimeInputError(`Unsupported timezone: ${identifier}`, { cause }),
+  );
 };
 
 const resolveWallTimeInZone = (value: string, wallTime: Date, timeZone: string | undefined): Date => {

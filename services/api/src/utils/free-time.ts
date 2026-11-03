@@ -1,4 +1,5 @@
-import { instantToWallTime, resolveTimeZone, wallTimeToInstant } from "@keeper.sh/calendar";
+import { instantToWallTime, wallTimeToInstant } from "@keeper.sh/calendar";
+import { INVALID_TIME_ZONE_MESSAGE, resolveTimeZoneOrThrow } from "@/utils/request-time-zone";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 
 const MS_PER_MINUTE = 60_000;
@@ -101,26 +102,8 @@ const parseWorkingHours = (
   return { days: parseWorkingDays(days), endMinute, startMinute };
 };
 
-const INVALID_TIME_ZONE_MESSAGE = "timezone must be an IANA timezone identifier";
-
-const resolveSupportedTimeZone = (identifier: string): string | undefined => {
-  try {
-    return resolveTimeZone(identifier);
-  } catch (error) {
-    if (error instanceof RangeError) {
-      return;
-    }
-    throw error;
-  }
-};
-
-const resolveRequestTimeZone = (identifier: string): string => {
-  const timeZone = resolveSupportedTimeZone(identifier);
-  if (!timeZone) {
-    throw new FreeTimeValidationError(INVALID_TIME_ZONE_MESSAGE);
-  }
-  return timeZone;
-};
+const resolveRequestTimeZone = (identifier: string): string =>
+  resolveTimeZoneOrThrow(identifier, () => new FreeTimeValidationError(INVALID_TIME_ZONE_MESSAGE));
 
 const toMsInterval = ({ start, end }: TimeInterval): MsInterval => ({
   end: end.getTime(),
