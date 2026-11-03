@@ -8,6 +8,7 @@ const createComposite = (
   connected: true,
   hasReceivedAggregate: true,
   lastSyncedAt: "2026-03-08T12:00:00.000Z",
+  mappings: { failingCount: 0, pendingCount: 0, seq: 1 },
   progressPercent: 50,
   seq: 2,
   state: "syncing",
@@ -55,5 +56,14 @@ describe("resolveSyncPercent", () => {
     );
 
     expect(percent).toBe(100);
+  });
+
+  it("shows no progress while a new mapping waits for its source to be read", () => {
+    expect(resolveSyncPercent(createComposite({
+      mappings: { failingCount: 0, pendingCount: 1, seq: 2 },
+      state: "idle",
+      syncEventsRemaining: 0,
+      syncEventsTotal: 0,
+    }))).toBe(0);
   });
 });

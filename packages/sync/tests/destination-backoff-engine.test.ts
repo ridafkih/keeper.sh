@@ -174,6 +174,7 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
   database: database as never,
   redis: {} as never,
   oauthConfig: {} as never,
+  recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,
   ...overrides,
 });
@@ -678,5 +679,46 @@ describe("a single permanently rejected event", () => {
     expect(deleted).toEqual([]);
     expect(mappings).toHaveLength(1);
     expect(counts).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("first syncs recorded by a destination run", () => {
+  it("records the first sync of every source the run read once its copies landed", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(() => [makeEvent("ev-1", new Date("2026-03-10T09:00:00.000Z"))]);
+    const recorded: { destinationCalendarId: string; sourceCalendarIds: string[] }[] = [];
+    const completions: string[][] = [];
+
+    await syncDestinationsForUser(USER_ID, config(database, {
+      recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => {
+        recorded.push({ destinationCalendarId, sourceCalendarIds });
+        return Promise.resolve(sourceCalendarIds);
+      },
+    }), {
+      onCalendarComplete: (completion) => {
+        completions.push(completion.firstSyncedSourceCalendarIds);
+      },
+    });
+
+    expect(recorded).toEqual([{ destinationCalendarId: CALENDAR_ID, sourceCalendarIds: [SOURCE_ID] }]);
+    expect(completions).toEqual([[SOURCE_ID]]);
+  });
+
+  it("records no first sync when every copy was rejected", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(() => [makeEvent("ev-1", new Date("2026-03-10T09:00:00.000Z"))]);
+    setProvider({
+      pushEvents: (events) => Promise.resolve(events.map(() => ({ error: "read-only", success: false }))),
+    });
+    const recorded: string[][] = [];
+
+    await syncDestinationsForUser(USER_ID, config(database, {
+      recordFirstSyncs: (_destinationCalendarId: string, sourceCalendarIds: string[]) => {
+        recorded.push(sourceCalendarIds);
+        return Promise.resolve(sourceCalendarIds);
+      },
+    }));
+
+    expect(recorded).toEqual([]);
   });
 });

@@ -22,6 +22,7 @@ interface IngestRoundDependencies {
   ) => Promise<void>;
   ingestCalendars: (calendarIds: string[], options: IngestRunOptions) => Promise<SourceCalendarsIngestion>;
   observe: (fields: Record<string, number | string>) => void;
+  publishMappingSyncStates: (userIds: string[]) => Promise<void>;
   random: () => number;
   recordError: (error: unknown, slug: string) => void;
   recordFirstIngestSyncRequests: (userIds: string[]) => Promise<void>;
@@ -199,6 +200,42 @@ const propagate = async (
   }
 };
 
+const FAILING_PARKED_REASONS: ReadonlySet<string> = new Set(["credential-rejected", "unresolvable"]);
+
+const isCompletionFailing = (completion: IngestCompletion): boolean =>
+  completion.failureCount > 0
+  || (completion.parkedReason !== null && FAILING_PARKED_REASONS.has(completion.parkedReason));
+
+const listUsersWithChangedReadHealth = (
+  claims: ClaimedIngest[],
+  completions: IngestCompletion[],
+): string[] => {
+  const completionByCalendarId = new Map(completions.map((completion) => [completion.calendarId, completion]));
+  return [...new Set(claims.flatMap((claim) => {
+    const completion = completionByCalendarId.get(claim.calendarId);
+    if (!completion?.attempted || isCompletionFailing(completion) === claim.failureCount > 0) {
+      return [];
+    }
+    return [claim.userId];
+  }))];
+};
+
+const publishChangedReadHealth = async (
+  claims: ClaimedIngest[],
+  completions: IngestCompletion[],
+  dependencies: IngestRoundDependencies,
+): Promise<void> => {
+  const userIds = listUsersWithChangedReadHealth(claims, completions);
+  if (userIds.length === 0) {
+    return;
+  }
+  try {
+    await dependencies.publishMappingSyncStates(userIds);
+  } catch (error) {
+    dependencies.recordError(error, "mapping-sync-state-publish-failed");
+  }
+};
+
 interface IngestGroupSummary {
   outcomes: IngestOutcome[];
   written: number;
@@ -222,6 +259,7 @@ const runClaimGroup = async (
   if (ingestion) {
     await propagate(lane, claims, ingestion.result, dependencies);
   }
+  await publishChangedReadHealth(claims, completions, dependencies);
   return { outcomes: [...outcomes.values()], written };
 };
 

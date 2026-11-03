@@ -10,6 +10,8 @@ import {
   createOAuthProviders,
   buildOAuthConfigs,
   createGoogleInteractiveRateLimiter,
+  createMappingSyncStatePublisher,
+  createMappingSyncStateReader,
   createSyncAggregateRuntime,
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
@@ -154,6 +156,17 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
   redis,
 });
 
+const mappingSyncStateConfig = {
+  broadcast: (userId: string, eventName: string, payload: unknown): void => {
+    broadcastService.emit(userId, eventName, payload);
+  },
+  database,
+  redis,
+};
+
+const publishMappingSyncState = createMappingSyncStatePublisher(mappingSyncStateConfig);
+const readMappingSyncState = createMappingSyncStateReader(mappingSyncStateConfig);
+
 const getCurrentSyncAggregate = (
   userId: string,
   fallback: {
@@ -193,6 +206,8 @@ export {
   authCapabilities,
   broadcastService,
   premiumService,
+  publishMappingSyncState,
+  readMappingSyncState,
   oauthProviders,
   refreshLockStore,
   googleInteractiveRateLimiter,

@@ -137,6 +137,7 @@ interface SyncConfig {
   googleProjectRequestsPerMinute?: number;
   oauthConfig: OAuthConfig;
   plan: Plan;
+  recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => Promise<string[]>;
   refreshLockStore?: RefreshLockStore | null;
   safeFetchOptions?: SafeFetchOptions;
   deadlineMs?: number;
@@ -583,6 +584,7 @@ interface CalendarSyncCompletion {
   accountId: string;
   calendarId: string;
   userId: string;
+  firstSyncedSourceCalendarIds: string[];
   added: number;
   addFailed: number;
   removed: number;
@@ -777,6 +779,19 @@ const recordDestinationAttemptFailure = async (
     ...(syncEvent && { syncEvent }),
   });
   return [getErrorMessage(error)];
+};
+
+const recordCompletedFirstSyncs = (options: {
+  destinationCalendarId: string;
+  recordFirstSyncs: SyncConfig["recordFirstSyncs"];
+  superseded: boolean;
+  verdict: DestinationAttemptVerdict;
+  verifiedSourceCalendarIds: string[];
+}): Promise<string[]> => {
+  if (options.superseded || options.verdict !== "succeeded") {
+    return Promise.resolve([]);
+  }
+  return options.recordFirstSyncs(options.destinationCalendarId, options.verifiedSourceCalendarIds);
 };
 
 const countMappedSources = async (
@@ -1083,11 +1098,21 @@ const syncDestinationsForUser = async (
           }),
         });
 
+        const verdict = resolveDestinationAttemptVerdict(result, calendarAttempt.superseded);
+        const firstSyncedSourceCalendarIds = await recordCompletedFirstSyncs({
+          destinationCalendarId: destination.calendarId,
+          recordFirstSyncs: config.recordFirstSyncs,
+          superseded: calendarAttempt.superseded,
+          verdict,
+          verifiedSourceCalendarIds: [...authoritativeSourceWindows.keys()],
+        });
+
         callbacks?.onCalendarComplete?.({
           provider: destination.provider,
           accountId: destination.accountId,
           calendarId: destination.calendarId,
           userId: destination.userId,
+          firstSyncedSourceCalendarIds,
           added: result.added,
           addFailed: result.addFailed,
           removed: result.removed,
@@ -1102,7 +1127,7 @@ const syncDestinationsForUser = async (
           database,
           destination,
           handle,
-          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+          verdict,
         });
         if (!stillOwned) {
           return;

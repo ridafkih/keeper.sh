@@ -4,6 +4,7 @@ import {
   parseIncomingSocketAction,
   resolveAggregateLastSyncedAt,
   shouldAcceptAggregatePayload,
+  shouldAcceptMappingSyncState,
 } from "../../src/providers/sync-provider-logic";
 
 const createCurrentState = (
@@ -12,6 +13,7 @@ const createCurrentState = (
   connected: true,
   hasReceivedAggregate: true,
   lastSyncedAt: "2026-03-08T12:00:00.000Z",
+  mappings: { failingCount: 0, pendingCount: 0, seq: 1 },
   progressPercent: 30,
   seq: 8,
   state: "syncing",
@@ -226,5 +228,26 @@ describe("resolveAggregateLastSyncedAt", () => {
       "2026-03-08T12:00:00.000Z",
       createAggregate({ lastSyncedAt: null }),
     )).toBeNull();
+  });
+});
+
+describe("mapping sync state frames", () => {
+  it("returns a mappings action for a valid mapping sync state", () => {
+    const payload = { failingCount: 0, pendingCount: 2, seq: 5 };
+
+    expect(
+      parseIncomingSocketAction(JSON.stringify({ data: payload, event: "sync:mappings" })),
+    ).toEqual({ data: payload, kind: "mappings" });
+  });
+
+  it("asks to reconnect on a malformed mapping sync state", () => {
+    expect(
+      parseIncomingSocketAction(JSON.stringify({ data: { pendingCount: "two" }, event: "sync:mappings" })),
+    ).toEqual({ kind: "reconnect" });
+  });
+
+  it("keeps only mapping states newer than the last one applied", () => {
+    expect(shouldAcceptMappingSyncState(4, { failingCount: 0, pendingCount: 0, seq: 5 })).toBe(true);
+    expect(shouldAcceptMappingSyncState(5, { failingCount: 0, pendingCount: 1, seq: 4 })).toBe(false);
   });
 });

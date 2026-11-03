@@ -6,6 +6,7 @@ import {
   runSetSourcesForDestination,
   runWithMappingMutationLocks,
 } from "../../src/utils/source-destination-mappings";
+import { listNewlyMappedIds, listNewlyMappedSourcesOfSource } from "../../src/utils/mapping-change";
 
 const createMappingKey = (sourceCalendarId: string, destinationCalendarId: string): string =>
   `${sourceCalendarId}::${destinationCalendarId}`;
@@ -766,5 +767,21 @@ describe("toggling one mapping at a time", () => {
     );
 
     expect(result.nextIds).toEqual(["dest-b"]);
+  });
+});
+
+describe("sources a mapping change asks to read now", () => {
+  it("reads the source when it gains a destination", () => {
+    expect(listNewlyMappedSourcesOfSource("source-1", { nextIds: ["dest-1", "dest-2"], previousIds: ["dest-1"] }))
+      .toEqual(["source-1"]);
+  });
+
+  it("reads nothing when the source only loses destinations", () => {
+    expect(listNewlyMappedSourcesOfSource("source-1", { nextIds: [], previousIds: ["dest-1"] })).toEqual([]);
+  });
+
+  it("reads each source a destination gains", () => {
+    expect(listNewlyMappedIds({ nextIds: ["source-1", "source-2"], previousIds: ["source-1"] }))
+      .toEqual(["source-2"]);
   });
 });

@@ -462,6 +462,7 @@ const sourceDestinationMappingsTable = pgTable(
     destinationCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    firstSyncedAt: timestamp({ withTimezone: true }),
     id: uuid().notNull().primaryKey().defaultRandom(),
     sourceCalendarId: uuid()
       .notNull()

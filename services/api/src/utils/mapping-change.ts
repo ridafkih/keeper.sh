@@ -24,5 +24,25 @@ const listChangeCalendarIds = (change: MappingChange): string[] => {
   return [change.calendarId];
 };
 
-export { listChangeCalendarIds, resolveMappedIds };
+const listNewlyMappedIds = (result: MappingChangeResult): string[] => {
+  const previous = new Set(result.previousIds);
+  return result.nextIds.filter((calendarId) => !previous.has(calendarId));
+};
+
+const listNewlyMappedSourcesOfSource = (
+  sourceCalendarId: string,
+  result: MappingChangeResult,
+): string[] => {
+  if (listNewlyMappedIds(result).length === 0) {
+    return [];
+  }
+  return [sourceCalendarId];
+};
+
+export {
+  listChangeCalendarIds,
+  listNewlyMappedIds,
+  listNewlyMappedSourcesOfSource,
+  resolveMappedIds,
+};
 export type { MappingChange, MappingChangeResult };
