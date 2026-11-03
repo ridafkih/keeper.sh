@@ -124,6 +124,59 @@ describe("resolving TZID wall times against projected observances", () => {
     expect(event?.start.date.toISOString()).toBe("2027-07-01T17:00:00.000Z");
   });
 
+  it("resolves a zone whose later onsets are listed as RDATEs by its current offset", () => {
+    const icsString = buildCalendar([
+      "BEGIN:VTIMEZONE",
+      "TZID:Asia/Manila",
+      "BEGIN:STANDARD",
+      "DTSTART:18990906T120352",
+      "TZOFFSETFROM:+080352",
+      "TZOFFSETTO:+0800",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19361101T000000",
+      "RDATE:19411216T000000",
+      "RDATE:19540412T000000",
+      "RDATE:19770328T000000",
+      "RDATE:19900521T000000",
+      "TZOFFSETFROM:+0800",
+      "TZOFFSETTO:+0900",
+      "END:DAYLIGHT",
+      "BEGIN:STANDARD",
+      "DTSTART:19370116T000000",
+      "RDATE:19451201T000000",
+      "RDATE:19540605T000000",
+      "RDATE:19770922T000000",
+      "RDATE:19900729T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0800",
+      "END:STANDARD",
+      "BEGIN:STANDARD",
+      "DTSTART:19420212T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0900",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19450304T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0900",
+      "END:DAYLIGHT",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:listed-onsets",
+      "DTSTART;TZID=Asia/Manila:20261105T100000",
+      "DTEND;TZID=Asia/Manila:20261105T110000",
+      "SUMMARY:Standup",
+      "END:VEVENT",
+    ]);
+
+    const calendar = parseIcsCalendar({ icsString });
+    const [event] = calendar.events ?? [];
+
+    expect(event?.start.date.toISOString()).toBe("2026-11-05T02:00:00.000Z");
+    expect(event?.end?.date.toISOString()).toBe("2026-11-05T03:00:00.000Z");
+  });
+
   it("leaves a TZID the platform cannot resolve to its declared observances", () => {
     const icsString = buildCalendar([
       "BEGIN:VTIMEZONE",

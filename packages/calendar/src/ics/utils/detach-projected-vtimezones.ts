@@ -5,7 +5,7 @@ const LINE_BREAK_PATTERN = /\r?\n/;
 const CONTINUATION_PATTERN = /^[\t ]/;
 const TIMEZONE_BEGIN_PATTERN = /^BEGIN:VTIMEZONE[\t ]*$/i;
 const TIMEZONE_END_PATTERN = /^END:VTIMEZONE[\t ]*$/i;
-const RECURRENCE_RULE_PATTERN = /^RRULE[;:]/i;
+const ADDITIONAL_ONSET_PATTERN = /^(?:RRULE|RDATE)[;:]/i;
 const TIMEZONE_ID_PATTERN = /^TZID:(.*)$/i;
 
 const unfoldLines = (lines: string[]): string[] => {
@@ -24,23 +24,23 @@ const unfoldLines = (lines: string[]): string[] => {
 
 /*
  * The ts-ics parser resolves a projected observance by re-expanding its RRULE
- * for every date it converts, and Keeper overrides exactly those zones with the
- * IANA rules afterwards, so the expansion is a per-event cost paid for an
- * answer that is thrown away.
+ * for every date it converts, and Keeper overrides exactly those zones, along
+ * with those listing onsets as RDATEs, with the IANA rules afterwards, so the
+ * expansion is a per-event cost paid for an answer that is thrown away.
  */
 const isProjectedIanaZone = (blockLines: string[]): boolean => {
-  let hasRecurrenceRule = false;
+  let hasAdditionalOnsets = false;
   let declaredId = "";
   for (const line of unfoldLines(blockLines)) {
-    if (RECURRENCE_RULE_PATTERN.test(line)) {
-      hasRecurrenceRule = true;
+    if (ADDITIONAL_ONSET_PATTERN.test(line)) {
+      hasAdditionalOnsets = true;
     }
     const idMatch = TIMEZONE_ID_PATTERN.exec(line);
     if (idMatch) {
       declaredId = idMatch[1]?.trim() ?? "";
     }
   }
-  if (!hasRecurrenceRule) {
+  if (!hasAdditionalOnsets) {
     return false;
   }
   const timeZone = normalizeTimezone(declaredId);
