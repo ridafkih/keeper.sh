@@ -8,9 +8,12 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
+import { parseEventDateTime, parseEventTime } from "@keeper.sh/calendar/outlook";
+import type { PartialOutlookDateTime } from "@keeper.sh/calendar/outlook";
 import { resolveRepresentableIsoRange } from "./representable-range";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
+const UTC_TIME_ZONE_PREFERENCE = 'outlook.timezone="UTC"';
 
 const buildHeaders = (accessToken: string): Record<string, string> => ({
   "Authorization": `Bearer ${accessToken}`,
@@ -297,6 +300,27 @@ const buildCalendarViewUrl = (from: string, to: string, nextLink: string | null)
   return url;
 };
 
+const parseInviteTime = (time: PartialOutlookDateTime | undefined, isAllDay: boolean): Date | null => {
+  if (isAllDay) {
+    return parseEventTime(time, true);
+  }
+  if (!time?.dateTime || !time.timeZone) {
+    return null;
+  }
+  return parseEventDateTime({ dateTime: time.dateTime, timeZone: time.timeZone });
+};
+
+const readInviteTime = (time: PartialOutlookDateTime | undefined, isAllDay: boolean): string | null => {
+  try {
+    return parseInviteTime(time, isAllDay)?.toISOString() ?? null;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 const getPendingOutlookInvites = async (
   accessToken: string,
   from: string,
@@ -328,7 +352,7 @@ const getPendingOutlookInvites = async (
     const url = buildCalendarViewUrl(from, to, nextLink);
 
     const response = await fetch(url, {
-      headers: buildHeaders(accessToken),
+      headers: { ...buildHeaders(accessToken), Prefer: UTC_TIME_ZONE_PREFERENCE },
       method: "GET",
     });
 
@@ -343,7 +367,10 @@ const getPendingOutlookInvites = async (
         continue;
       }
 
-      if (!event.start?.dateTime || !event.end?.dateTime) {
+      const isAllDay = event.isAllDay ?? false;
+      const startTime = readInviteTime(event.start, isAllDay);
+      const endTime = readInviteTime(event.end, isAllDay);
+      if (!startTime || !endTime) {
         continue;
       }
 
@@ -352,9 +379,9 @@ const getPendingOutlookInvites = async (
         title: event.subject ?? null,
         description: event.bodyPreview ?? null,
         location: event.location?.displayName ?? null,
-        startTime: event.start.dateTime,
-        endTime: event.end.dateTime,
-        isAllDay: event.isAllDay ?? false,
+        startTime,
+        endTime,
+        isAllDay,
         organizer: event.organizer?.emailAddress?.address ?? null,
       });
     }
