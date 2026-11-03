@@ -24,7 +24,7 @@ interface ProposeSyncInput<TCalendar extends ProposalCalendar> {
 }
 
 const byConnectionOrder = (accounts: ProposalAccount[]): ProposalAccount[] =>
-  accounts.toSorted((first, second) => first.createdAt.localeCompare(second.createdAt));
+  [...accounts].sort((first, second) => first.createdAt.localeCompare(second.createdAt));
 
 const isWritable = (calendar: ProposalCalendar): boolean => calendar.capabilities.includes("push");
 
@@ -63,7 +63,7 @@ const resolveNewestAccountDestination = <TCalendar extends ProposalCalendar>(
 ): TCalendar | null => {
   const laterAccounts = byConnectionOrder(accounts)
     .filter((account) => account.id !== origin.accountId)
-    .toReversed();
+    .reverse();
   for (const account of laterAccounts) {
     const primary = resolvePrimaryCalendar(calendars, account.id);
     if (primary) return primary;

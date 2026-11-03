@@ -21,7 +21,7 @@ interface SyncDirections<TCalendar extends NamedCalendar> {
 }
 
 const pairKey = ({ sourceCalendarId, destinationCalendarId }: MappingPair): string =>
-  [sourceCalendarId, destinationCalendarId].toSorted().join(":");
+  [sourceCalendarId, destinationCalendarId].sort().join(":");
 
 const describeSyncPairs = (
   mappings: MappingPair[],
