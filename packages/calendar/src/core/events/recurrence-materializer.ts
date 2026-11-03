@@ -259,16 +259,15 @@ const createSyntheticOccurrenceId = (
 
 const createMaterializedOccurrence = (
   master: SyncableEvent,
-  occurrenceStartWallTime: Date,
-  timeZone: string | undefined,
+  occurrenceStart: Date,
+  seriesTimeZone: string | undefined,
 ): MaterializedSyncableEvent => {
-  const occurrenceStart = fromRecurrenceWallTime(occurrenceStartWallTime, timeZone);
   const resolveOccurrenceEnd = (): Date => {
     if (master.recurrenceDuration) {
       return addIcsDuration(
         occurrenceStart,
         master.recurrenceDuration,
-        timeZone,
+        seriesTimeZone,
       );
     }
     const exactDuration = master.endTime.getTime() - master.startTime.getTime();
@@ -363,14 +362,26 @@ const getOverriddenSlotsByMaster = (
   return slotsByMaster;
 };
 
-// DATE-valued series are floating (RFC 5545 §3.3.10); the zone is still resolved so unsupported ones throw.
-const resolveExpansionTimeZone = (master: SyncableEvent): string | undefined => {
+interface SeriesTimeZones {
+  expansionTimeZone?: string;
+  seriesTimeZone?: string;
+}
+
+const stepsInElapsedTime = (rule: IcsRecurrenceRule): boolean =>
+  Boolean(HIGH_FREQUENCY_INTERVAL_MS[rule.frequency]) && !hasOccurrenceSelectors(rule);
+
+const resolveSeriesTimeZones = (
+  master: SyncableEvent,
+  rule: IcsRecurrenceRule,
+): SeriesTimeZones => {
   const timeZone = resolveTimeZone(master.startTimeZone);
   if (resolveIsAllDayEvent(master)) {
-    return;
+    return {};
   }
-
-  return timeZone;
+  if (stepsInElapsedTime(rule)) {
+    return { seriesTimeZone: timeZone };
+  }
+  return { expansionTimeZone: timeZone, seriesTimeZone: timeZone };
 };
 
 const materializeMaster = (
@@ -382,7 +393,10 @@ const materializeMaster = (
     return [];
   }
 
-  const timeZone = resolveExpansionTimeZone(master);
+  const { expansionTimeZone: timeZone, seriesTimeZone } = resolveSeriesTimeZones(
+    master,
+    master.recurrenceRule,
+  );
   const recurrenceStart = toRecurrenceWallTime(master.startTime, timeZone);
   const recurrenceEnd = toRecurrenceWallTime(window.end, timeZone);
   let durationForWindowLookback = master.endTime.getTime() - master.startTime.getTime();
@@ -439,11 +453,7 @@ const materializeMaster = (
       return [];
     }
 
-    const occurrence = createMaterializedOccurrence(
-      master,
-      occurrenceStartWallTime,
-      timeZone,
-    );
+    const occurrence = createMaterializedOccurrence(master, occurrenceStart, seriesTimeZone);
     if (!overlapsWindow(occurrence, window)) {
       return [];
     }
