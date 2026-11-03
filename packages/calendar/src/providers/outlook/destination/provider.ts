@@ -1,6 +1,7 @@
 import { HTTP_STATUS, KEEPER_CATEGORY, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import {
   microsoftApiErrorSchema,
+  microsoftGraphBatchResponseSchema,
   outlookEventListSchema,
   outlookEventSchema,
 } from "@keeper.sh/data-schemas";
@@ -21,6 +22,18 @@ import { ensureValidToken } from "../../../core/oauth/ensure-valid-token";
 import type { TokenState, TokenRefresher } from "../../../core/oauth/ensure-valid-token";
 import { withBackoff } from "../../../core/utils/backoff";
 import type { BackoffRetry } from "../../../core/utils/backoff";
+import {
+  MicrosoftGraphHttpError,
+  executeGraphBatch,
+  isRetriableSubResponseStatus,
+  isSuccessfulStatus,
+  readSubResponseErrorMessage,
+} from "./graph-batch";
+import type {
+  GraphBatchOutcome,
+  GraphBatchRequest,
+  GraphBatchSubResponse,
+} from "./graph-batch";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import {
   getThrottleRetryDelayMs,
@@ -53,6 +66,14 @@ interface OutlookSyncProviderConfig {
 }
 
 const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
+  if (error instanceof MicrosoftGraphHttpError) {
+    return {
+      error: error.message,
+      errorType: error.name,
+      statusCode: error.status,
+      success: false,
+    };
+  }
   if (isThrottledError(error)) {
     return {
       error: error.message,
@@ -66,6 +87,19 @@ const createCaughtFailure = (error: unknown): PushResult | DeleteResult => {
     errorType = error.name;
   }
   return { error: getErrorMessage(error), errorType, success: false };
+};
+
+const createSubResponseFailure = (response: GraphBatchSubResponse): PushResult | DeleteResult => {
+  let errorType = "MicrosoftGraphHttpError";
+  if (isRetriableSubResponseStatus(response.status)) {
+    errorType = "OutlookThrottledError";
+  }
+  return {
+    error: readSubResponseErrorMessage(response),
+    errorType,
+    statusCode: response.status,
+    success: false,
+  };
 };
 
 const readGraphErrorMessage = async (response: Response): Promise<string> => {
@@ -179,7 +213,9 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     "Content-Type": "application/json",
   });
 
-  const calendarEventsUrl = `${MICROSOFT_GRAPH_API}/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
+  const calendarEventsPath = `/me/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
+  const calendarEventsUrl = `${MICROSOFT_GRAPH_API}${calendarEventsPath}`;
+  const graphBatchUrl = `${MICROSOFT_GRAPH_API}/$batch`;
 
   const throttleMetrics: ProviderThrottleMetrics = { retryAfterMs: 0, retryCount: 0 };
 
@@ -188,9 +224,9 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     throttleMetrics.retryAfterMs += retry.delayMs;
   };
 
-  const sendRequest = async (url: URL, init: RequestInit): Promise<Response> => {
+  const sendRequest = async (url: URL, init: RequestInit, requestCount: number): Promise<Response> => {
     if (config.rateLimiter) {
-      await config.rateLimiter.acquire(1, config.signal);
+      await config.rateLimiter.acquire(requestCount, config.signal);
     }
 
     const response = await fetchWithTimeout(
@@ -212,8 +248,12 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
     );
   };
 
-  const sendRequestWithRetry = (url: URL, init: RequestInit): Promise<Response> =>
-    withBackoff(() => sendRequest(url, init), {
+  const sendRequestWithRetry = (
+    url: URL,
+    init: RequestInit,
+    requestCount: number,
+  ): Promise<Response> =>
+    withBackoff(() => sendRequest(url, init, requestCount), {
       getRetryDelayMs: getThrottleRetryDelayMs,
       maxRetries: OUTLOOK_MAX_THROTTLE_RETRIES,
       onRetry: recordThrottleRetry,
@@ -221,87 +261,114 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
       signal: config.signal,
     });
 
-  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
-    await refreshIfNeeded();
-    const results: PushResult[] = [];
+  const sendBatch = async (requests: GraphBatchRequest[]): Promise<GraphBatchSubResponse[]> => {
+    const response = await sendRequestWithRetry(new URL(graphBatchUrl), {
+      body: JSON.stringify({ requests }),
+      headers: getHeaders(),
+      method: "POST",
+    }, requests.length);
 
-    for (const event of events) {
-      try {
-        const resource = serializeOutlookEvent(event);
-        const url = new URL(calendarEventsUrl);
-
-        const response = await sendRequestWithRetry(url, {
-          body: JSON.stringify(resource),
-          headers: {
-            ...getHeaders(),
-            Prefer: `outlook.body-content-type="text"`,
-          },
-          method: "POST",
-        });
-
-        if (!response.ok) {
-          results.push({
-            error: await readGraphErrorMessage(response),
-            errorType: "MicrosoftGraphHttpError",
-            statusCode: response.status,
-            success: false,
-          });
-          continue;
-        }
-
-        const body = await response.json();
-        const created = outlookEventSchema.assert(body);
-        results.push({
-          deleteId: created.id,
-          echo: compareOutlookCreateEcho(resource, created),
-          remoteId: created.iCalUId ?? created.id,
-          success: true,
-        });
-      } catch (error) {
-        if (config.signal?.aborted) {
-          throw error;
-        }
-        results.push(createCaughtFailure(error));
-      }
+    if (!response.ok) {
+      throw new MicrosoftGraphHttpError(response.status, await readGraphErrorMessage(response));
     }
 
-    return results;
+    return microsoftGraphBatchResponseSchema.assert(await response.json()).responses;
+  };
+
+  const sendGraphBatch = (requests: GraphBatchRequest[]): Promise<Map<string, GraphBatchOutcome>> =>
+    executeGraphBatch(requests, {
+      onRetryRound: ({ delayMs, retriedCount }) => {
+        throttleMetrics.retryCount += retriedCount;
+        throttleMetrics.retryAfterMs += delayMs;
+      },
+      sendBatch,
+      signal: config.signal,
+    });
+
+  const toPushResult = (resource: OutlookEvent, outcome: GraphBatchOutcome | undefined): PushResult => {
+    if (!outcome) {
+      return createCaughtFailure(new Error("Microsoft Graph batch outcome missing"));
+    }
+    if ("error" in outcome) {
+      return createCaughtFailure(outcome.error);
+    }
+    const { response } = outcome;
+    if (!isSuccessfulStatus(response.status)) {
+      return createSubResponseFailure(response);
+    }
+    try {
+      const created = outlookEventSchema.assert(response.body);
+      return {
+        deleteId: created.id,
+        echo: compareOutlookCreateEcho(resource, created),
+        remoteId: created.iCalUId ?? created.id,
+        success: true,
+      };
+    } catch (error) {
+      return createCaughtFailure(error);
+    }
+  };
+
+  const toDeleteResult = (outcome: GraphBatchOutcome | undefined): DeleteResult => {
+    if (!outcome) {
+      return createCaughtFailure(new Error("Microsoft Graph batch outcome missing"));
+    }
+    if ("error" in outcome) {
+      return createCaughtFailure(outcome.error);
+    }
+    const { response } = outcome;
+    if (isSuccessfulStatus(response.status) || response.status === HTTP_STATUS.NOT_FOUND) {
+      return { success: true };
+    }
+    return createSubResponseFailure(response);
+  };
+
+  const serializeForPush = (event: MaterializedSyncableEvent): OutlookEvent | PushResult => {
+    try {
+      return serializeOutlookEvent(event);
+    } catch (error) {
+      return createCaughtFailure(error);
+    }
+  };
+
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
+    const serialized = events.map((event) => serializeForPush(event));
+    const requests = serialized.flatMap((entry, index): GraphBatchRequest[] => {
+      if ("success" in entry) {
+        return [];
+      }
+      return [{
+        body: entry,
+        headers: {
+          "Content-Type": "application/json",
+          Prefer: `outlook.body-content-type="text"`,
+        },
+        id: String(index),
+        method: "POST",
+        url: calendarEventsPath,
+      }];
+    });
+
+    const outcomes = await sendGraphBatch(requests);
+    return serialized.map((entry, index) => {
+      if ("success" in entry) {
+        return entry;
+      }
+      return toPushResult(entry, outcomes.get(String(index)));
+    });
   };
 
   const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
     await refreshIfNeeded();
-    const results: DeleteResult[] = [];
+    const requests = eventIds.map((eventId, index): GraphBatchRequest => ({
+      id: String(index),
+      method: "POST",
+      url: `/me/events/${eventId}/permanentDelete`,
+    }));
 
-    for (const eventId of eventIds) {
-      try {
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}/permanentDelete`);
-
-        const response = await sendRequestWithRetry(url, {
-          headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-          method: "POST",
-        });
-
-        if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
-          results.push({
-            error: await readGraphErrorMessage(response),
-            errorType: "MicrosoftGraphHttpError",
-            statusCode: response.status,
-            success: false,
-          });
-          continue;
-        }
-
-        await response.body?.cancel?.();
-        results.push({ success: true });
-      } catch (error) {
-        if (config.signal?.aborted) {
-          throw error;
-        }
-        results.push(createCaughtFailure(error));
-      }
-    }
-
-    return results;
+    const outcomes = await sendGraphBatch(requests);
+    return requests.map((request) => toDeleteResult(outcomes.get(request.id)));
   };
 
   const buildOutlookEventsUrl = (
@@ -341,7 +408,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
           Prefer: `outlook.body-content-type="text"`,
         },
         method: "GET",
-      });
+      }, 1);
 
       if (!response.ok) {
         throw new Error(await readGraphErrorMessage(response));
@@ -380,7 +447,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
           Prefer: `outlook.body-content-type="text"`,
         },
         method: "GET",
-      });
+      }, 1);
 
       if (response.status === HTTP_STATUS.NOT_FOUND) {
         await response.body?.cancel?.();
@@ -422,7 +489,7 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
           Prefer: `outlook.body-content-type="text"`,
         },
         method: "GET",
-      });
+      }, 1);
 
       if (response.status === HTTP_STATUS.NOT_FOUND) {
         await response.body?.cancel?.();
