@@ -297,6 +297,7 @@ export {
 } from "./core/sync/required-source-ranges";
 export {
   type DestinationSyncResult,
+  type SyncPace,
   type SyncProgressUpdate,
   type SyncStage,
 } from "./core/sync/types";
