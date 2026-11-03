@@ -1,21 +1,3 @@
-/**
- * The one time-zone identifier resolver every time-math path shares.
- *
- * RFC 5545 lets a feed name its own TZID as long as a matching VTIMEZONE is
- * declared, so real feeds ship identifiers Intl has never heard of: Exchange
- * writes Windows names and labels such as `Customized Time Zone`, and
- * Thunderbird/Lightning writes tzurl-style `/mozilla.org/<version>/America/Denver`.
- * Identifiers resolve in a fixed order: a Windows name through CLDR, a name Intl
- * accepts, the trailing IANA zone of a prefixed id, and finally the single offset
- * a declared VTIMEZONE holds.
- *
- * Destinations need IANA identifiers, so a declared fixed offset maps onto
- * `Etc/UTC`, `Etc/GMT∓N`, or the IANA zone that has held exactly that offset
- * throughout the sampled span. A VTIMEZONE with DST transitions is never mapped
- * onto a fixed offset, and display labels are never parsed: half the year an
- * hour wrong, or a guessed zone, is worse than reporting the event unsupported.
- */
-
 import { visitIcsProperties } from "./apply-patches";
 import { canFormatTimeZone, listSupportedTimeZones, readTimeZoneOffsetMinutes } from "./intl-time-zone";
 import { WINDOWS_TO_IANA } from "./windows-timezones";
@@ -99,10 +81,6 @@ const findConstantOffsetIanaZone = (offsetMinutes: number): string | undefined =
   return timeZone;
 };
 
-/**
- * `Etc/GMT+N` is the IANA zone whose UTC offset is minus N hours, so the sign is
- * inverted on purpose.
- */
 const formatWholeHourTimeZone = (offsetMinutes: number): string => {
   const hours = offsetMinutes / MINUTES_PER_HOUR;
   if (hours === 0) {
