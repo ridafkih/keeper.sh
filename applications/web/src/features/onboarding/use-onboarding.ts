@@ -29,7 +29,10 @@ export function useOnboarding(): OnboardingState | null {
   const run = useAtomValue(onboardingRunAtom);
   const chosenDestinationId = useAtomValue(chosenDestinationIdAtom);
   const sync = useAtomValue(syncStateAtom);
-  const copies = useCopiedEvents(run.phase === "started", resolveCopiesVersion(sync));
+  const copies = useCopiedEvents(
+    run.phase === "started" || run.phase === "settled",
+    resolveCopiesVersion(sync),
+  );
 
   if (!calendars || !accounts || !entitlements) {
     return null;

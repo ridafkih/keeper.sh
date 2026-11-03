@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useSetAtom } from "jotai";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import Check from "lucide-react/dist/esm/icons/check";
@@ -11,7 +10,6 @@ import {
   NavigationMenuLinkItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { Button, ButtonText, ExternalLinkButton } from "@/components/ui/primitives/button";
-import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { pluralize } from "@/lib/pluralize";
 import { providerCalendarApp } from "@/lib/providers";
 import { onboardingRunAtom } from "@/state/onboarding";
@@ -40,10 +38,6 @@ export function CopiedStep({ copies, calendars, proposal }: CopiedStepProps) {
   const setRun = useSetAtom(onboardingRunAtom);
   const destination = proposal?.forward ? proposal.destination : proposal?.origin;
   const calendarApp = destination ? providerCalendarApp(getCalendarProvider(destination)) : null;
-
-  useEffect(() => {
-    track(ANALYTICS_EVENTS.onboarding_completed, { events_copied: copies.count });
-  }, [copies.count]);
 
   return (
     <>

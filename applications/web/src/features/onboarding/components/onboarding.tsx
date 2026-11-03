@@ -9,6 +9,7 @@ import { onboardingRunAtom } from "@/state/onboarding";
 import { syncStateAtom } from "@/state/sync";
 import type { OnboardingState } from "../use-onboarding";
 import { resolveCopiesVersion } from "../copies-version";
+import { useSettleFirstSync } from "../use-settle-first-sync";
 import type { OnboardingStep } from "../onboarding-step";
 import { WelcomeStep } from "./welcome-step";
 import { AddDestinationStep } from "./add-destination-step";
@@ -84,6 +85,7 @@ function OnboardingStepContent({ state }: { state: OnboardingState }) {
 
 export function Onboarding({ state }: { state: OnboardingState }) {
   useStepViewed(state);
+  useSettleFirstSync(state.step, state.copies?.count ?? null);
   useLivePreview();
 
   return (

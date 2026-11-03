@@ -90,3 +90,20 @@ describe("resolveOnboardingStep after Start syncing", () => {
       .toBe("home");
   });
 });
+
+describe("resolveOnboardingStep after the first sync settled", () => {
+  it("stays on the copied step while later syncs run", () => {
+    expect(resolveOnboardingStep(input({
+      mappingSync: { failingCount: 0, pendingCount: 0, seq: 20 },
+      run: { outcome: "copied", phase: "settled" },
+      syncing: true,
+    }))).toBe("copied");
+  });
+
+  it("stays on the nothing-to-copy step while later syncs run", () => {
+    expect(resolveOnboardingStep(input({
+      run: { outcome: "nothing-to-copy", phase: "settled" },
+      syncing: true,
+    }))).toBe("nothing-to-copy");
+  });
+});

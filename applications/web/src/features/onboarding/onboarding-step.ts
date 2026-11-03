@@ -7,9 +7,12 @@ type OnboardingStep =
   | "nothing-to-copy"
   | "home";
 
+type FirstSyncOutcome = Extract<OnboardingStep, "copied" | "nothing-to-copy">;
+
 type OnboardingRun =
   | { phase: "idle" }
   | { phase: "started"; startedAfterSeq: number }
+  | { phase: "settled"; outcome: FirstSyncOutcome }
   | { phase: "finished" };
 
 interface MappingSyncSnapshot {
@@ -46,11 +49,15 @@ const resolveFirstSyncStep = (
   return "nothing-to-copy";
 };
 
+const isFirstSyncOutcome = (step: OnboardingStep): step is FirstSyncOutcome =>
+  step === "copied" || step === "nothing-to-copy";
+
 const resolveOnboardingStep = (input: OnboardingStepInput): OnboardingStep => {
   if (input.run.phase === "finished") return "home";
+  if (input.run.phase === "settled") return input.run.outcome;
   if (input.run.phase === "started") return resolveFirstSyncStep(input, input.run.startedAfterSeq);
   return resolveSetupStep(input);
 };
 
-export { resolveOnboardingStep };
-export type { MappingSyncSnapshot, OnboardingRun, OnboardingStep, OnboardingStepInput };
+export { isFirstSyncOutcome, resolveOnboardingStep };
+export type { FirstSyncOutcome, MappingSyncSnapshot, OnboardingRun, OnboardingStep, OnboardingStepInput };
