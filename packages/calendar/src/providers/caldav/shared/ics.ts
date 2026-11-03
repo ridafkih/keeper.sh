@@ -91,6 +91,7 @@ interface ParsedCalendarEvent {
 
 interface ParseICalCalendarsOptions {
   rejectUnsupportedRecurrenceDates?: boolean;
+  calendarTimeZone?: string;
 }
 
 interface ParsedCalendarResources {
@@ -160,7 +161,7 @@ const parseCalendarResource = (
   const initialCalendar = parseIcsCalendar({ icsString });
   const normalizedIcs = applyCalendarTimeZoneToFloatingEventDates(
     icsString,
-    normalizeTimezone(initialCalendar.nonStandard?.wrTimezone),
+    normalizeTimezone(initialCalendar.nonStandard?.wrTimezone) ?? options.calendarTimeZone,
   );
   if (normalizedIcs === icsString) {
     return initialCalendar;

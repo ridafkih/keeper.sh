@@ -12,12 +12,35 @@ import {
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
 import { findCalendarByStoredUrl } from "./calendar-identity";
+import { resolveCollectionTimeZone } from "./collection-timezone";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 import { measureProviderRequest } from "../../../core/telemetry/segments";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
+
+const CALENDAR_DISCOVERY_PROPS = {
+  "c:calendar-description": {},
+  "c:calendar-timezone": {},
+  "c:calendar-timezone-id": {},
+  "d:displayname": {},
+  "ca:calendar-color": {},
+  "cs:getctag": {},
+  "d:resourcetype": {},
+  "c:supported-calendar-component-set": {},
+  "d:sync-token": {},
+};
+
+const CALENDAR_DISCOVERY_PROJECTED_PROPS = {
+  calendarTimezone: true,
+  calendarTimezoneId: true,
+};
+
+interface ResolvedCalendar {
+  url: string;
+  timeZone?: string;
+}
 
 interface CalendarObject {
   url: string;
@@ -258,16 +281,23 @@ class CalDAVClient {
 
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
-      return measureProviderRequest(() => client.fetchCalendars());
+      return measureProviderRequest(() => client.fetchCalendars({
+        projectedProps: CALENDAR_DISCOVERY_PROJECTED_PROPS,
+        props: CALENDAR_DISCOVERY_PROPS,
+      }));
     });
 
     const discovered = calendars
       .filter(({ components }) => components?.includes("VEVENT"))
-      .map(({ url, displayName, ctag }) => ({
-        ctag,
-        displayName: getDisplayName(displayName),
-        url: bindUrlToAccount(url, this.config.serverUrl),
-      }));
+      .map(({ url, displayName, ctag, projectedProps }): CalendarInfo => {
+        const timeZone = resolveCollectionTimeZone(projectedProps ?? {});
+        return {
+          ctag,
+          displayName: getDisplayName(displayName),
+          ...timeZone && { timeZone },
+          url: bindUrlToAccount(url, this.config.serverUrl),
+        };
+      });
 
     await this.config.calendarDiscoveryCache?.write(discovered);
     return discovered;
@@ -279,10 +309,22 @@ class CalDAVClient {
     return findCalendarByStoredUrl(calendars, calendarUrl)?.displayName ?? null;
   }
 
-  async resolveCalendarUrl(storedUrl: string): Promise<string> {
+  async resolveCalendar(storedUrl: string): Promise<ResolvedCalendar> {
     const calendars = await this.discoverCalendars();
+    const calendar = findCalendarByStoredUrl(calendars, storedUrl);
+    if (!calendar) {
+      return { url: storedUrl };
+    }
 
-    return findCalendarByStoredUrl(calendars, storedUrl)?.url ?? storedUrl;
+    return {
+      ...calendar.timeZone && { timeZone: calendar.timeZone },
+      url: calendar.url,
+    };
+  }
+
+  async resolveCalendarUrl(storedUrl: string): Promise<string> {
+    const { url } = await this.resolveCalendar(storedUrl);
+    return url;
   }
 
   async createCalendarObject(params: {
