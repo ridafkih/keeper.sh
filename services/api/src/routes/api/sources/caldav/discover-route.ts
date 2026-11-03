@@ -24,9 +24,9 @@ interface CalDAVDiscoverRouteDependencies {
   discoverCalendars: (credentials: CalDAVDiscoverCredentials) => Promise<CalDAVDiscoverResult>;
 }
 
-const readServerHost = (serverUrl: string): string | null => {
-  if (!URL.canParse(serverUrl)) return null;
-  return new URL(serverUrl).hostname;
+const recordServerHost = (serverUrl: string): void => {
+  if (!URL.canParse(serverUrl)) return;
+  widelog.set("caldav.server_host", new URL(serverUrl).hostname);
 };
 
 const handleCalDAVDiscoverRoute = async (
@@ -35,7 +35,7 @@ const handleCalDAVDiscoverRoute = async (
 ): Promise<Response> => {
   try {
     const credentials = dependencies.parseDiscoverBody(context.body);
-    widelog.set("caldav.server_host", readServerHost(credentials.serverUrl));
+    recordServerHost(credentials.serverUrl);
     const { calendars, authMethod } = await dependencies.discoverCalendars(credentials);
 
     return Response.json({ calendars, authMethod });
