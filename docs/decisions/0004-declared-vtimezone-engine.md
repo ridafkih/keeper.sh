@@ -70,7 +70,7 @@ resolveCalendarZonedInstants(calendar, blocksByTimeZoneId: ReadonlyMap<string, s
 
 ## Agent context
 
-- Research §2 items 2 and the engine table: `/Users/villager/.worm/runs/20261103-112532-tz-audit/research.md`
+- Research §2 items 2 and the engine table: the audit research notes (kept outside the repository)
 - `packages/calendar/src/ics/utils/resolve-zoned-instants.ts:30-34,66`; `detach-projected-vtimezones.ts:46`; `parse-ics-events.ts:463,533`
 - `packages/calendar/src/providers/caldav/shared/ics.ts:214-217`
 - `services/api/node_modules/ical.js/lib/ical/timezone.js:354,395-407,451-480`

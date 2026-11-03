@@ -63,4 +63,4 @@ const wallTimeToInstant: (wallTime: Date, timeZone: string) => Date;
 - `knip.json` `ignoreExportsUsedInFile: true`
 - RFC 5545 §3.3.5: https://www.rfc-editor.org/rfc/rfc5545#section-3.3.5
 - ical.js gap/fold behaviour: `services/api/node_modules/ical.js/lib/ical/timezone.js:354`
-- Research §2: `/Users/villager/.worm/runs/20261103-112532-tz-audit/research.md`
+- Research §2: the audit research notes (kept outside the repository)

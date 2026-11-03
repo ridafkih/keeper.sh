@@ -18,13 +18,13 @@ The owner wants a trustworthy audit: what is actually broken, for whom, and what
 
 ### Binding rules
 
-1. Toolchain: `PATH=/Users/villager/.bun-1.3.11/bin:$PATH` (packageManager pin, what CI resolves). Throwaway `postgres:17.6-alpine` container named `keeper-tz-audit-pg` on port 55432 for `KEEPER_TEST_DATABASE_URL` and `MIGRATION_TEST_DATABASE_URL`; stopped by that exact name.
+1. Toolchain: Bun 1.3.11 first on `PATH` (the `packageManager` pin CI resolves). Throwaway `postgres:17.6-alpine` container named `keeper-tz-audit-pg` on port 55432 for `KEEPER_TEST_DATABASE_URL` and `MIGRATION_TEST_DATABASE_URL`; stopped by that exact name.
 2. TZ matrix by calling vitest directly: `TZ=<zone> ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run` in packages/calendar, services/api, services/cron and services/worker, zones America/Edmonton, Pacific/Auckland, Asia/Kolkata. Baseline the same matrix on an origin/main copy; failures present on main are reported as pre-existing.
 3. Red state: one APFS clone (`cp -cR`) at `/tmp/tz-main-state`, its `.git` file deleted immediately, every non-test source path changed in `origin/main..HEAD` restored from origin/main and every added source file deleted. Each finding's tests are copied in alone and run; only assertion failures through main entry points count (ADR 0001 rule 1). Collection/import failures are bounced to the owning slice for a boundary-level test.
 4. Finding → owner map: A S-CALDAV-ZONE; B1, B2, C S-ENGINE; D C2 + S-ENGINE; J S-RECUR; E S-FREETIME; F S-MCP; I S-API-TIME; K S-OUTLOOK-WRITE; H S-ICU-STARTUP; sync range S-SYNC-RANGE; feed EXDATE S-FEED-EXDATE; Google strict S-GOOGLE-STRICT. Shared files are attributed by fix commit and named as shared.
 5. Before counting K, read ingest to see which `startTimeZone` values can reach the Outlook writer; downgrade to hardening if only resolvable zones arrive. Also probe the MCP/API neighbour-day all-day inclusion (ADR 0007 rule 5) and report it as confirmed or not.
-6. Bounces go through the run ledger (`/Users/villager/.worm/runs/20261103-112532-tz-audit/ledger.md`) with command, output, file:line and what done means. INTEGRATE edits no source and makes no commits.
-7. Reach: per-day Loki instant queries for 7 days, server-side aggregation, counts only; credentials from `~/.claude/channels/grafana/.env` in a subshell, never printed. Findings without a log signal are "not countable" with the reason.
+6. Bounces go through the run ledger (kept outside the repository) with command, output, file:line and what done means. INTEGRATE edits no source and makes no commits.
+7. Reach: per-day Loki instant queries for 7 days, server-side aggregation, counts only; Grafana credentials loaded in a subshell from a local env file outside the repository, never printed. Findings without a log signal are "not countable" with the reason.
 8. Self-heal per fix is proven by citing the code path (file:line) that re-reads affected copies (ICS re-parse every tick, CalDAV full reads, `localHashChanged`, 7-day OAuth window, Outlook read-back); anything needing a one-off job is named. Note S-RECUR's snapshot-hash re-ingest question.
 9. Hygiene: every commit author and committer `worm-agent-bot[bot]`, trailer `Co-Authored-By: ridafkih <9158485+ridafkih@users.noreply.github.com>`; `gitleaks detect --log-opts origin/main..HEAD`; personal-data sweep of fixtures; fixtures under 1 MB.
 10. Push `fix/tz-audit` once all checks pass on the final HEAD; verify `git ls-remote` equals HEAD. No PR.
@@ -39,4 +39,4 @@ The owner wants a trustworthy audit: what is actually broken, for whom, and what
 
 - `.github/workflows/checks.yml` (Postgres 17.6, setup-bun v2 reading packageManager)
 - `packages/calendar/package.json:18`; `turbo.json`; `package.json` (`packageManager: bun@1.3.11`)
-- Research reach sources G2, G5, Q8: `/Users/villager/.worm/runs/20261103-112532-tz-audit/research.md`
+- Research reach sources G2, G5, Q8: the audit research notes (kept outside the repository)
