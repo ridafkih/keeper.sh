@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/primitives/checkbox";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
+import { describeIcsFeedFailure } from "@/lib/connect-failures";
 
 function resolveSubmitLabel(pending: boolean): string {
   if (pending) return "Subscribing...";
@@ -66,8 +67,8 @@ export function ICSFeedForm() {
         });
         const data = await response.json();
         accountId = data?.accountId;
-      } catch {
-        setError("Failed to subscribe to feed");
+      } catch (err) {
+        setError(describeIcsFeedFailure(err));
         return;
       }
 
