@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import useSWR from "swr";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PremiumHint } from "@/components/ui/primitives/menu-hint";
@@ -7,7 +7,7 @@ import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Button, LinkButton, ButtonText } from "@/components/ui/primitives/button";
 import { apiFetch } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useEntitlements, canAddMore, hasConfiguredSync } from "@/hooks/use-entitlements";
 import type { CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
@@ -220,6 +220,7 @@ function AccountSetupPage() {
   const requestedCalendarIndex = search.index ?? 0;
 
   const { data, isLoading, error, mutate: mutateCalendars } = useSWR<CalendarSource[]>("/api/sources");
+  const { data: entitlements, isLoading: entitlementsLoading } = useEntitlements();
   const allCalendars = data ?? [];
   const workflow = resolveSetupWorkflowData({
     allCalendars,
@@ -243,9 +244,13 @@ function AccountSetupPage() {
     navigateToDashboard: () => navigate({ to: "/dashboard" }),
   });
 
-  if (error || isLoading) {
+  if (error || isLoading || entitlementsLoading) {
     if (error) return <RouteShell backFallback="/dashboard" status="error" onRetry={() => mutateCalendars()} />;
     return <RouteShell backFallback="/dashboard" status="loading" />;
+  }
+
+  if (!hasConfiguredSync(entitlements)) {
+    return <Navigate to="/dashboard" search={{ connected: accountId }} replace />;
   }
 
   return (
