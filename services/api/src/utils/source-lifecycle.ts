@@ -2,6 +2,7 @@ import { RequestTimeoutError } from "@keeper.sh/calendar";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
 import type { CalendarFetchFailureReason } from "@keeper.sh/calendar/ics";
 import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
+import type { IcsFeedFailureReason } from "@keeper.sh/data-schemas";
 
 interface SourceReference {
   id: string;
@@ -57,6 +58,18 @@ interface InvalidSourceUrlDetails {
   reason: InvalidSourceUrlReason;
 }
 
+const FEED_FAILURE_REASONS: Record<InvalidSourceUrlReason, IcsFeedFailureReason> = {
+  auth_required: "auth-required",
+  http_error: "unreachable",
+  not_found: "not-found",
+  not_ical: "not-calendar",
+  partial_response: "unreachable",
+  timeout: "unreachable",
+  truncated: "not-calendar",
+  unreachable: "unreachable",
+  unsafe_url: "unreachable",
+};
+
 const INVALID_CALENDAR_URL_MESSAGE = "Invalid calendar URL";
 
 const resolveUnfetchedReason = (cause: unknown): InvalidSourceUrlReason => {
@@ -88,6 +101,7 @@ const getInvalidSourceUrlDetails = (cause: unknown): InvalidSourceUrlDetails => 
 class InvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
   public readonly reason: InvalidSourceUrlReason;
+  public readonly feedFailureReason: IcsFeedFailureReason;
 
   public constructor(cause?: unknown) {
     const details = getInvalidSourceUrlDetails(cause);
@@ -95,6 +109,7 @@ class InvalidSourceUrlError extends Error {
     this.name = "InvalidSourceUrlError";
     this.authRequired = details.authRequired;
     this.reason = details.reason;
+    this.feedFailureReason = FEED_FAILURE_REASONS[details.reason];
     this.cause = cause;
   }
 }

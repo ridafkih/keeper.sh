@@ -160,7 +160,7 @@ describe("an Outlook connect whose account has no mailbox", () => {
     const response = await connect();
     const location = new URL(response.headers.get("location") ?? "");
 
-    expect(location.searchParams.get("error")).toContain("mailbox");
+    expect(location.searchParams.get("reason")).toBe("no-mailbox");
   });
 
   it("does not leave the credential behind", async () => {

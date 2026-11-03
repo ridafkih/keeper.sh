@@ -11,6 +11,7 @@ class TestSourceLimitError extends Error {}
 class TestInvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
   public readonly reason = "auth_required";
+  public readonly feedFailureReason = "auth-required" as const;
 
   constructor(message: string, authRequired: boolean) {
     super(message);
@@ -122,6 +123,7 @@ describe("handlePostIcsSourceRoute", () => {
     expect(await readJson(response)).toEqual({
       authRequired: true,
       error: "requires auth",
+      reason: "auth-required",
     });
   });
 

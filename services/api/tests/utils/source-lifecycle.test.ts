@@ -76,6 +76,7 @@ describe("runSourceCreationPreflight", () => {
       authRequired: true,
       message: "auth needed",
       reason: "auth_required",
+      feedFailureReason: "auth-required",
     });
   });
 
@@ -92,24 +93,27 @@ describe("runSourceCreationPreflight", () => {
   it("says a page that is not an iCal file was rejected for that reason", async () => {
     await expect(
       rejectWith(new CalendarFetchError("not an ics file", "not_ical")),
-    ).rejects.toMatchObject({ reason: "not_ical" });
+    ).rejects.toMatchObject({ reason: "not_ical", feedFailureReason: "not-calendar" });
   });
 
   it("says a URL pointing at a private address was refused as unsafe", async () => {
     await expect(rejectWith(new UrlSafetyError("private address"))).rejects.toMatchObject({
       reason: "unsafe_url",
+      feedFailureReason: "unreachable",
     });
   });
 
   it("says a feed that took too long timed out", async () => {
     await expect(rejectWith(new RequestTimeoutError(15_000))).rejects.toMatchObject({
       reason: "timeout",
+      feedFailureReason: "unreachable",
     });
   });
 
   it("says a feed that could not be reached was unreachable", async () => {
     await expect(rejectWith(new TypeError("fetch failed"))).rejects.toMatchObject({
       reason: "unreachable",
+      feedFailureReason: "unreachable",
     });
   });
 
@@ -130,6 +134,7 @@ describe("runSourceCreationPreflight", () => {
     ).rejects.toEqual(expect.objectContaining<Partial<InvalidSourceUrlError>>({
       authRequired: false,
       message: "Invalid calendar URL",
+      reason: "unreachable",
     }));
   });
 });

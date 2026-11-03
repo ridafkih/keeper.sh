@@ -19,6 +19,7 @@ const { handlePostIcsSourceRoute } = await import("@/routes/api/ics/source-route
 class TestInvalidSourceUrlError extends Error {
   public readonly authRequired = false;
   public readonly reason = "not_ical";
+  public readonly feedFailureReason = "not-calendar" as const;
 }
 
 beforeEach(() => {

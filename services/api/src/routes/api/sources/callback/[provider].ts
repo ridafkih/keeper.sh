@@ -17,18 +17,17 @@ import {
 } from "@/utils/oauth-source-credentials";
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
 import { noteUserMilestone } from "@/utils/user-milestones";
+import { resolveProviderFailureReason } from "@/utils/oauth-callback-failure";
 import { baseUrl } from "@/context";
+import type { OAuthConnectFailureReason } from "@keeper.sh/data-schemas";
 
 const MS_PER_SECOND = 1000;
-const GENERIC_FAILURE_MESSAGE = "Failed to connect source";
-const MISSING_MAILBOX_MESSAGE =
-  "This Microsoft account has no Outlook mailbox to sync. Connect an account with Outlook or Exchange Online.";
 const MISSING_MAILBOX_ERROR_CODES = new Set(["MailboxNotEnabledForRESTAPI", "ResourceNotFound"]);
 
 type CallbackFailureStage = "query" | "provider" | "state" | "token_exchange" | "userinfo" | "import";
 
-const buildErrorUrl = (message: string): URL =>
-  buildRedirectUrl("/dashboard/integrations", baseUrl, { error: message, source: "error" });
+const buildErrorUrl = (reason: OAuthConnectFailureReason): URL =>
+  buildRedirectUrl("/dashboard/integrations", baseUrl, { reason, source: "error" });
 
 const readProviderErrorCode = (error: unknown): string | null => {
   if (!(error instanceof Error) || !("providerErrorCode" in error)) {
@@ -40,14 +39,14 @@ const readProviderErrorCode = (error: unknown): string | null => {
   return error.providerErrorCode;
 };
 
-const resolveImportFailureMessage = (providerErrorCode: string | null): string => {
+const resolveImportFailureReason = (providerErrorCode: string | null): OAuthConnectFailureReason => {
   if (providerErrorCode && MISSING_MAILBOX_ERROR_CODES.has(providerErrorCode)) {
-    return MISSING_MAILBOX_MESSAGE;
+    return "no-mailbox";
   }
-  return GENERIC_FAILURE_MESSAGE;
+  return "unknown";
 };
 
-const recordProviderError = (searchParams: URLSearchParams): void => {
+const recordProviderError = (searchParams: URLSearchParams): OAuthConnectFailureReason => {
   const providerError = readOAuthProviderError(searchParams);
   if (providerError.error) {
     widelog.set("oauth.provider_error", providerError.error);
@@ -58,6 +57,12 @@ const recordProviderError = (searchParams: URLSearchParams): void => {
   if (providerError.code) {
     widelog.set("oauth.provider_error_code", providerError.code);
   }
+  const reason = resolveProviderFailureReason({
+    error: searchParams.get("error") ?? "",
+    errorDescription: searchParams.get("error_description"),
+  });
+  widelog.set("oauth.failure_reason", reason);
+  return reason;
 };
 
 const resolveCallbackState = async (state: string | null) => {
@@ -77,11 +82,14 @@ const redirectAsFailure = (stage: CallbackFailureStage, redirectUrl: URL): Respo
   return asFailedResponse(Response.redirect(redirectUrl.toString()));
 };
 
-const rejectCallback = (stage: CallbackFailureStage, reason: string): Response => {
-  widelog.errorFields(new OAuthError(reason, buildErrorUrl(GENERIC_FAILURE_MESSAGE)), {
-    slug: "oauth-callback-failed",
-  });
-  return redirectAsFailure(stage, buildErrorUrl(GENERIC_FAILURE_MESSAGE));
+const rejectCallback = (
+  stage: CallbackFailureStage,
+  message: string,
+  reason: OAuthConnectFailureReason = "unknown",
+): Response => {
+  const errorUrl = buildErrorUrl(reason);
+  widelog.errorFields(new OAuthError(message, errorUrl), { slug: "oauth-callback-failed" });
+  return redirectAsFailure(stage, errorUrl);
 };
 
 const importAccount = async (
@@ -95,7 +103,7 @@ const importAccount = async (
   const tokens = await exchangeCodeForTokens(provider, code, callbackUrl.toString());
 
   if (!tokens.refresh_token) {
-    throw new OAuthError("No refresh token", buildErrorUrl(GENERIC_FAILURE_MESSAGE));
+    throw new OAuthError("No refresh token", buildErrorUrl("unknown"));
   }
 
   enterStage("userinfo");
@@ -150,8 +158,8 @@ const GET = withWideEvent(async ({ request, params }) => {
   }
 
   if (url.searchParams.has("error")) {
-    recordProviderError(url.searchParams);
-    return rejectCallback("provider", "OAuth error from provider");
+    const reason = recordProviderError(url.searchParams);
+    return rejectCallback("provider", "OAuth error from provider", reason);
   }
 
   if (!code || !state) {
@@ -159,7 +167,7 @@ const GET = withWideEvent(async ({ request, params }) => {
   }
 
   if (!validatedState) {
-    return rejectCallback("state", "Invalid or expired state");
+    return rejectCallback("state", "Invalid or expired state", "expired");
   }
 
   const { userId, sourceCredentialId } = validatedState;
@@ -190,7 +198,7 @@ const GET = withWideEvent(async ({ request, params }) => {
     }
 
     labelFailure(error, { slug: "unclassified" });
-    return redirectAsFailure(stage, buildErrorUrl(resolveImportFailureMessage(providerErrorCode)));
+    return redirectAsFailure(stage, buildErrorUrl(resolveImportFailureReason(providerErrorCode)));
   }
 });
 

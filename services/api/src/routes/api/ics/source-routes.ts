@@ -1,4 +1,5 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
+import type { IcsFeedFailureReason } from "@keeper.sh/data-schemas";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
 import { labelFailureResponse } from "@/utils/error-labelling";
@@ -19,6 +20,7 @@ interface ParsedCreateSourceBody {
 interface InvalidSourceUrlErrorLike extends Error {
   authRequired: boolean;
   reason: string;
+  feedFailureReason: IcsFeedFailureReason;
 }
 
 interface GetIcsSourcesDependencies {
@@ -65,6 +67,7 @@ const handlePostIcsSourceRoute = async (
         {
           authRequired: error.authRequired,
           error: error.message,
+          reason: error.feedFailureReason,
         },
         { status: HTTP_STATUS.BAD_REQUEST },
       );
