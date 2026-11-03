@@ -10,6 +10,7 @@ interface SyncAggregate {
   syncEventsProcessed: number;
   syncEventsRemaining: number;
   syncEventsTotal: number;
+  syncSecondsRemaining?: number;
   syncing: boolean;
   lastSyncedAt?: string | null;
 }
@@ -44,7 +45,8 @@ const isSyncAggregate = (value: unknown): value is SyncAggregate => {
     "syncEventsTotal" in value &&
     typeof value.syncEventsTotal === "number" &&
     "syncing" in value &&
-    typeof value.syncing === "boolean"
+    typeof value.syncing === "boolean" &&
+    (!("syncSecondsRemaining" in value) || typeof value.syncSecondsRemaining === "number")
   );
 };
 

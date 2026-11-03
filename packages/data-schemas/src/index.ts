@@ -340,6 +340,7 @@ const syncAggregateSchema = type({
   syncEventsProcessed: "number",
   syncEventsRemaining: "number",
   syncEventsTotal: "number",
+  "syncSecondsRemaining?": "number",
   syncing: "boolean",
   "lastSyncedAt?": "string | null",
 });
