@@ -484,10 +484,10 @@ describe("a Los Angeles series with selectors and a DATE EXDATE", () => {
   });
 });
 
-describe("a DATE EXDATE on a series with long selector lists", () => {
-  const repeated = (values: number[], times: number): string =>
-    Array.from({ length: times }, () => values).flat().join(",");
+const repeated = (values: number[], times: number): string =>
+  Array.from({ length: times }, () => values).flat().join(",");
 
+describe("a DATE EXDATE on a series with long selector lists", () => {
   it("writes each distinct BYHOUR slot of the excluded day once however often the lists repeat them", () => {
     const startedAt = performance.now();
     const normalized = applyCalendarTimeZoneToFloatingEventDates(buildCalendar([], [
