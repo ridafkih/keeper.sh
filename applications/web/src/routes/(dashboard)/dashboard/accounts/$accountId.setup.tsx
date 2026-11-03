@@ -7,7 +7,7 @@ import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Button, LinkButton, ButtonText } from "@/components/ui/primitives/button";
 import { apiFetch } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import type { CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
@@ -20,7 +20,7 @@ import { NavigationMenuEditableItem } from "@/components/ui/composites/navigatio
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { canPull, canPush, getCalendarProvider } from "@/utils/calendars";
-import { resolveUpdatedIds } from "@/utils/collections";
+import { useMappingToggles } from "@/hooks/use-mapping-toggles";
 
 const VALID_STEPS = ["select", "rename", "destinations", "sources"] as const;
 type SetupStep = (typeof VALID_STEPS)[number];
@@ -30,10 +30,6 @@ interface SetupSearch {
   id?: string;
   index?: number;
 }
-
-type MappingRoute = "destinations" | "sources";
-type MappingResponseKey = "destinationIds" | "sourceIds";
-type CalendarMappingData = Partial<Record<MappingResponseKey, string[]>>;
 
 function isValidStep(value: unknown): value is SetupStep {
   const validSteps: readonly string[] = VALID_STEPS;
@@ -212,60 +208,6 @@ function SetupStepContent({
   const onNext = () => actions.advanceFromSources(workflow.sourceCalendarIndex);
   if (!calendar) return <EmptyStepSection heading="No source setup needed" message="None of the selected calendars can pull events right now." buttonLabel="Finish" onNext={onNext} />;
   return <SourcesSection calendar={calendar} allCalendars={allCalendars} onNext={onNext} />;
-}
-
-function buildMappingData(responseKey: MappingResponseKey, ids: string[]): CalendarMappingData {
-  return { [responseKey]: ids };
-}
-
-function useCalendarMapping({
-  calendarId,
-  route,
-  responseKey,
-}: {
-  calendarId?: string;
-  route: MappingRoute;
-  responseKey: MappingResponseKey;
-}) {
-  const endpoint = calendarId ? `/api/sources/${calendarId}/${route}` : null;
-  const { data, mutate } = useSWR<CalendarMappingData>(endpoint);
-  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
-
-  const selectedIds = new Set(data?.[responseKey] ?? []);
-
-  const handleToggle = async (targetCalendarId: string, checked: boolean) => {
-    if (!endpoint) return;
-    const currentIds = data?.[responseKey] ?? [];
-    const updatedIds = resolveUpdatedIds(currentIds, targetCalendarId, checked);
-    const mappingData = buildMappingData(responseKey, updatedIds);
-    const delta = checked ? 1 : -1;
-
-    adjustMappingCount(delta);
-
-    try {
-      await mutate(
-        async () => {
-          await apiFetch(endpoint, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: updatedIds }),
-          });
-          return mappingData;
-        },
-        {
-          optimisticData: mappingData,
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      );
-    } catch {
-      adjustMappingCount(-delta);
-    } finally {
-      void revalidateEntitlements();
-    }
-  };
-
-  return { selectedIds, handleToggle };
 }
 
 function AccountSetupPage() {
@@ -479,11 +421,8 @@ function DestinationsSection({
   allCalendars: CalendarSource[];
   onNext: () => void;
 }) {
-  const { selectedIds, handleToggle } = useCalendarMapping({
-    calendarId: calendar.id,
-    route: "destinations",
-    responseKey: "destinationIds",
-  });
+  const { mappedIds, toggle } = useMappingToggles(calendar.id, "destinations");
+  const selectedIds = new Set(mappedIds);
   const { data: entitlements } = useEntitlements();
   const atLimit = !canAddMore(entitlements?.mappings);
 
@@ -510,7 +449,7 @@ function DestinationsSection({
               key={destination.id}
               checked={checked}
               disabled={disabled}
-              onCheckedChange={(next) => !disabled && handleToggle(destination.id, next)}
+              onCheckedChange={(next) => !disabled && toggle(destination.id, next)}
             >
               <NavigationMenuItemIcon>
                 <ProviderIcon
@@ -543,11 +482,8 @@ function SourcesSection({
   allCalendars: CalendarSource[];
   onNext: () => void;
 }) {
-  const { selectedIds, handleToggle } = useCalendarMapping({
-    calendarId: calendar.id,
-    route: "sources",
-    responseKey: "sourceIds",
-  });
+  const { mappedIds, toggle } = useMappingToggles(calendar.id, "sources");
+  const selectedIds = new Set(mappedIds);
   const { data: entitlements } = useEntitlements();
   const atLimit = !canAddMore(entitlements?.mappings);
 
@@ -574,7 +510,7 @@ function SourcesSection({
               key={source.id}
               checked={checked}
               disabled={disabled}
-              onCheckedChange={(next) => !disabled && handleToggle(source.id, next)}
+              onCheckedChange={(next) => !disabled && toggle(source.id, next)}
             >
               <NavigationMenuItemIcon>
                 <ProviderIcon

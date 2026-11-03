@@ -1,28 +1,31 @@
 import { ErrorResponse } from "@/utils/responses";
-import { calendarIdsBodySchema } from "@/utils/request-body";
+import { calendarIdsBodySchema, calendarToggleBodySchema } from "@/utils/request-body";
 import { idParamSchema } from "@/utils/request-query";
 import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
+import type { MappingChange, MappingChangeResult } from "@/utils/mapping-change";
 
 interface MappingRouteContext {
   params: Record<string, string>;
   userId: string;
 }
 
-interface MappingPutRouteContext extends MappingRouteContext {
+interface MappingChangeRouteContext extends MappingRouteContext {
   body: unknown;
 }
+
+type ChangeMappings = (
+  userId: string,
+  calendarId: string,
+  change: MappingChange,
+) => Promise<MappingChangeResult>;
 
 interface GetSourceDestinationsDependencies {
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
   getDestinationsForSource: (userId: string, sourceCalendarId: string) => Promise<string[]>;
 }
 
-interface PutSourceDestinationsDependencies {
-  setDestinationsForSource: (
-    userId: string,
-    sourceCalendarId: string,
-    destinationCalendarIds: string[],
-  ) => Promise<void>;
+interface ChangeSourceDestinationsDependencies {
+  changeDestinationsForSource: ChangeMappings;
 }
 
 interface GetSourcesForDestinationDependencies {
@@ -30,13 +33,46 @@ interface GetSourcesForDestinationDependencies {
   getSourcesForDestination: (userId: string, destinationCalendarId: string) => Promise<string[]>;
 }
 
-interface PutSourcesForDestinationDependencies {
-  setSourcesForDestination: (
-    userId: string,
-    destinationCalendarId: string,
-    sourceCalendarIds: string[],
-  ) => Promise<void>;
+interface ChangeSourcesForDestinationDependencies {
+  changeSourcesForDestination: ChangeMappings;
 }
+
+interface MappingDirection {
+  invalidLinkedCalendarsMessage: string;
+  missingCalendarMessage: string;
+  missingIdMessage: string;
+  responseKey: "destinationIds" | "sourceIds";
+}
+
+const DESTINATIONS_OF_SOURCE: MappingDirection = {
+  invalidLinkedCalendarsMessage: "Some destination calendars not found",
+  missingCalendarMessage: "Source calendar not found",
+  missingIdMessage: "Source ID is required",
+  responseKey: "destinationIds",
+};
+
+const SOURCES_OF_DESTINATION: MappingDirection = {
+  invalidLinkedCalendarsMessage: "Some source calendars not found",
+  missingCalendarMessage: "Destination calendar not found",
+  missingIdMessage: "Destination ID is required",
+  responseKey: "sourceIds",
+};
+
+type MappingChangeParser = (body: unknown) => MappingChange | Response;
+
+const parseReplaceChange: MappingChangeParser = (body) => {
+  if (!calendarIdsBodySchema.allows(body)) {
+    return ErrorResponse.badRequest("calendarIds array is required").toResponse();
+  }
+  return { calendarIds: body.calendarIds, kind: "replace" };
+};
+
+const parseToggleChange: MappingChangeParser = (body) => {
+  if (!calendarToggleBodySchema.allows(body)) {
+    return ErrorResponse.badRequest("calendarId and enabled are required").toResponse();
+  }
+  return { calendarId: body.calendarId, enabled: body.enabled, kind: "toggle" };
+};
 
 const resolveIdParam = (
   params: Record<string, string>,
@@ -50,18 +86,17 @@ const resolveIdParam = (
 
 const mapMappingDomainError = (
   error: unknown,
-  missingCalendarMessage: string,
-  invalidLinkedCalendarsMessage: string,
+  direction: MappingDirection,
 ): Response | null => {
   if (!(error instanceof Error)) {
     return null;
   }
 
-  if (error.message === missingCalendarMessage) {
+  if (error.message === direction.missingCalendarMessage) {
     return ErrorResponse.notFound().toResponse();
   }
 
-  if (error.message === invalidLinkedCalendarsMessage) {
+  if (error.message === direction.invalidLinkedCalendarsMessage) {
     return ErrorResponse.badRequest(error.message).toResponse();
   }
 
@@ -72,11 +107,42 @@ const mapMappingDomainError = (
   return null;
 };
 
+const handleMappingChange = async (
+  context: MappingChangeRouteContext,
+  direction: MappingDirection,
+  parseChange: MappingChangeParser,
+  changeMappings: ChangeMappings,
+): Promise<Response> => {
+  const resolved = resolveIdParam(context.params, direction.missingIdMessage);
+  if (resolved instanceof Response) {
+    return resolved;
+  }
+
+  const change = parseChange(context.body);
+  if (change instanceof Response) {
+    return change;
+  }
+
+  try {
+    const result = await changeMappings(context.userId, resolved.id, change);
+    if (change.kind === "replace") {
+      return Response.json({ success: true });
+    }
+    return Response.json({ [direction.responseKey]: result.nextIds });
+  } catch (error) {
+    const mappedResponse = mapMappingDomainError(error, direction);
+    if (mappedResponse) {
+      return mappedResponse;
+    }
+    throw error;
+  }
+};
+
 const handleGetSourceDestinationsRoute = async (
   context: MappingRouteContext,
   dependencies: GetSourceDestinationsDependencies,
 ): Promise<Response> => {
-  const resolved = resolveIdParam(context.params, "Source ID is required");
+  const resolved = resolveIdParam(context.params, DESTINATIONS_OF_SOURCE.missingIdMessage);
   if (resolved instanceof Response) {
     return resolved;
   }
@@ -90,45 +156,33 @@ const handleGetSourceDestinationsRoute = async (
   return Response.json({ destinationIds });
 };
 
-const handlePutSourceDestinationsRoute = async (
-  context: MappingPutRouteContext,
-  dependencies: PutSourceDestinationsDependencies,
-): Promise<Response> => {
-  const resolved = resolveIdParam(context.params, "Source ID is required");
-  if (resolved instanceof Response) {
-    return resolved;
-  }
+const handlePutSourceDestinationsRoute = (
+  context: MappingChangeRouteContext,
+  dependencies: ChangeSourceDestinationsDependencies,
+): Promise<Response> =>
+  handleMappingChange(
+    context,
+    DESTINATIONS_OF_SOURCE,
+    parseReplaceChange,
+    dependencies.changeDestinationsForSource,
+  );
 
-  if (!calendarIdsBodySchema.allows(context.body)) {
-    return ErrorResponse.badRequest("calendarIds array is required").toResponse();
-  }
-
-  try {
-    await dependencies.setDestinationsForSource(
-      context.userId,
-      resolved.id,
-      context.body.calendarIds,
-    );
-  } catch (error) {
-    const mappedResponse = mapMappingDomainError(
-      error,
-      "Source calendar not found",
-      "Some destination calendars not found",
-    );
-    if (mappedResponse) {
-      return mappedResponse;
-    }
-    throw error;
-  }
-
-  return Response.json({ success: true });
-};
+const handlePatchSourceDestinationsRoute = (
+  context: MappingChangeRouteContext,
+  dependencies: ChangeSourceDestinationsDependencies,
+): Promise<Response> =>
+  handleMappingChange(
+    context,
+    DESTINATIONS_OF_SOURCE,
+    parseToggleChange,
+    dependencies.changeDestinationsForSource,
+  );
 
 const handleGetSourcesForDestinationRoute = async (
   context: MappingRouteContext,
   dependencies: GetSourcesForDestinationDependencies,
 ): Promise<Response> => {
-  const resolved = resolveIdParam(context.params, "Destination ID is required");
+  const resolved = resolveIdParam(context.params, SOURCES_OF_DESTINATION.missingIdMessage);
   if (resolved instanceof Response) {
     return resolved;
   }
@@ -142,43 +196,33 @@ const handleGetSourcesForDestinationRoute = async (
   return Response.json({ sourceIds });
 };
 
-const handlePutSourcesForDestinationRoute = async (
-  context: MappingPutRouteContext,
-  dependencies: PutSourcesForDestinationDependencies,
-): Promise<Response> => {
-  const resolved = resolveIdParam(context.params, "Destination ID is required");
-  if (resolved instanceof Response) {
-    return resolved;
-  }
+const handlePutSourcesForDestinationRoute = (
+  context: MappingChangeRouteContext,
+  dependencies: ChangeSourcesForDestinationDependencies,
+): Promise<Response> =>
+  handleMappingChange(
+    context,
+    SOURCES_OF_DESTINATION,
+    parseReplaceChange,
+    dependencies.changeSourcesForDestination,
+  );
 
-  if (!calendarIdsBodySchema.allows(context.body)) {
-    return ErrorResponse.badRequest("calendarIds array is required").toResponse();
-  }
-
-  try {
-    await dependencies.setSourcesForDestination(
-      context.userId,
-      resolved.id,
-      context.body.calendarIds,
-    );
-  } catch (error) {
-    const mappedResponse = mapMappingDomainError(
-      error,
-      "Destination calendar not found",
-      "Some source calendars not found",
-    );
-    if (mappedResponse) {
-      return mappedResponse;
-    }
-    throw error;
-  }
-
-  return Response.json({ success: true });
-};
+const handlePatchSourcesForDestinationRoute = (
+  context: MappingChangeRouteContext,
+  dependencies: ChangeSourcesForDestinationDependencies,
+): Promise<Response> =>
+  handleMappingChange(
+    context,
+    SOURCES_OF_DESTINATION,
+    parseToggleChange,
+    dependencies.changeSourcesForDestination,
+  );
 
 export {
   handleGetSourceDestinationsRoute,
-  handlePutSourceDestinationsRoute,
   handleGetSourcesForDestinationRoute,
+  handlePatchSourceDestinationsRoute,
+  handlePatchSourcesForDestinationRoute,
+  handlePutSourceDestinationsRoute,
   handlePutSourcesForDestinationRoute,
 };

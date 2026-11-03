@@ -12,6 +12,8 @@ import { enqueuePushSync } from "./enqueue-push-sync";
 import { spawnBackgroundJob } from "./background-task";
 import { assertAllIdsOwned } from "./owned-ids";
 import { noteUserMilestone } from "./user-milestones";
+import { listChangeCalendarIds, resolveMappedIds } from "./mapping-change";
+import type { MappingChange, MappingChangeResult } from "./mapping-change";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -32,11 +34,11 @@ interface SetDestinationsTransaction {
   acquireUserLock: (userId: string) => Promise<void>;
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
   countUserMappings?: (userId: string) => Promise<number>;
-  countMappingsForSource?: (sourceCalendarId: string) => Promise<number>;
   findOwnedDestinationIds: (
     userId: string,
     destinationCalendarIds: string[],
   ) => Promise<string[]>;
+  listSourceDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
   replaceSourceMappings: (
     sourceCalendarId: string,
     destinationCalendarIds: string[],
@@ -58,8 +60,8 @@ interface SetSourcesTransaction {
   acquireUserLock: (userId: string) => Promise<void>;
   destinationExists: (userId: string, destinationCalendarId: string) => Promise<boolean>;
   countUserMappings?: (userId: string) => Promise<number>;
-  countMappingsForDestination?: (destinationCalendarId: string) => Promise<number>;
   findOwnedSourceIds: (userId: string, sourceCalendarIds: string[]) => Promise<string[]>;
+  listDestinationSourceIds: (destinationCalendarId: string) => Promise<string[]>;
   replaceDestinationMappings: (
     destinationCalendarId: string,
     sourceCalendarIds: string[],
@@ -124,14 +126,6 @@ const createSetDestinationsTransaction = (
 
     return Number(result?.value ?? EMPTY_LIST_COUNT);
   },
-  countMappingsForSource: async (sourceCalendarId) => {
-    const [result] = await transactionClient
-      .select({ value: sql<number>`count(*)` })
-      .from(sourceDestinationMappingsTable)
-      .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
-
-    return Number(result?.value ?? EMPTY_LIST_COUNT);
-  },
   findOwnedDestinationIds: async (userId, destinationCalendarIds) => {
     if (destinationCalendarIds.length === EMPTY_LIST_COUNT) {
       return [];
@@ -149,6 +143,13 @@ const createSetDestinationsTransaction = (
       );
 
     return ownedDestinations.map(({ id }) => id);
+  },
+  listSourceDestinationIds: async (sourceCalendarId) => {
+    const mappings = await transactionClient
+      .select({ id: sourceDestinationMappingsTable.destinationCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId));
+    return mappings.map(({ id }) => id);
   },
   replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
     await transactionClient
@@ -215,16 +216,6 @@ const createSetSourcesTransaction = (
 
     return Number(result?.value ?? EMPTY_LIST_COUNT);
   },
-  countMappingsForDestination: async (destinationCalendarId) => {
-    const [result] = await transactionClient
-      .select({ value: sql<number>`count(*)` })
-      .from(sourceDestinationMappingsTable)
-      .where(
-        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
-      );
-
-    return Number(result?.value ?? EMPTY_LIST_COUNT);
-  },
   findOwnedSourceIds: async (userId, sourceCalendarIds) => {
     if (sourceCalendarIds.length === EMPTY_LIST_COUNT) {
       return [];
@@ -241,6 +232,13 @@ const createSetSourcesTransaction = (
       );
 
     return ownedSources.map(({ id }) => id);
+  },
+  listDestinationSourceIds: async (destinationCalendarId) => {
+    const mappings = await transactionClient
+      .select({ id: sourceDestinationMappingsTable.sourceCalendarId })
+      .from(sourceDestinationMappingsTable)
+      .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
+    return mappings.map(({ id }) => id);
   },
   replaceDestinationMappings: async (destinationCalendarId, sourceCalendarIds) => {
     await transactionClient
@@ -310,17 +308,35 @@ const resolveMappingLimitOrNull = (
   return resolve(userId);
 };
 
-const runSetDestinationsForSource = async (
+const listNewlyMappedIds = (result: MappingChangeResult): string[] => {
+  const previous = new Set(result.previousIds);
+  return result.nextIds.filter((calendarId) => !previous.has(calendarId));
+};
+
+const exceedsMappingLimit = async (
+  mappingLimit: number | null,
+  result: MappingChangeResult,
+  countUserMappings: (() => Promise<number>) | null,
+): Promise<boolean> => {
+  if (mappingLimit === null || !countUserMappings) {
+    return false;
+  }
+  if (result.nextIds.length <= result.previousIds.length) {
+    return false;
+  }
+  const currentMappingCount = await countUserMappings();
+  return currentMappingCount - result.previousIds.length + result.nextIds.length > mappingLimit;
+};
+
+const runChangeDestinationsForSource = async (
   userId: string,
   sourceCalendarId: string,
-  destinationCalendarIds: string[],
+  change: MappingChange,
   dependencies: SetDestinationsDependencies,
-): Promise<void> => {
-  const uniqueDestinationCalendarIds = [...new Set(destinationCalendarIds)];
-
+): Promise<MappingChangeResult> => {
   const mappingLimit = await resolveMappingLimitOrNull(userId, dependencies.resolveMappingLimit);
 
-  await dependencies.withTransaction(async (transaction) => {
+  return dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
 
     const sourceExists = await transaction.sourceExists(userId, sourceCalendarId);
@@ -328,56 +344,43 @@ const runSetDestinationsForSource = async (
       throw new Error("Source calendar not found");
     }
 
-    if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
-      const validDestinationIds = await transaction.findOwnedDestinationIds(
-        userId,
-        uniqueDestinationCalendarIds,
-      );
-      assertAllIdsOwned(
-        uniqueDestinationCalendarIds,
-        validDestinationIds,
-        "Some destination calendars not found",
-      );
+    const previousIds = await transaction.listSourceDestinationIds(sourceCalendarId);
+    const result = { nextIds: resolveMappedIds(previousIds, change), previousIds };
+
+    const newlyMappedIds = listNewlyMappedIds(result);
+    if (newlyMappedIds.length > EMPTY_LIST_COUNT) {
+      const validDestinationIds = await transaction.findOwnedDestinationIds(userId, newlyMappedIds);
+      assertAllIdsOwned(newlyMappedIds, validDestinationIds, "Some destination calendars not found");
     }
 
-    if (
-      mappingLimit !== null
-      && transaction.countUserMappings
-      && transaction.countMappingsForSource
-    ) {
-      const [currentMappingCount, currentSourceMappingCount] = await Promise.all([
-        transaction.countUserMappings(userId),
-        transaction.countMappingsForSource(sourceCalendarId),
-      ]);
-      const nextMappingCount = currentMappingCount
-        - currentSourceMappingCount
-        + uniqueDestinationCalendarIds.length;
-
-      if (nextMappingCount > mappingLimit) {
-        throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
-      }
+    const { countUserMappings } = transaction;
+    if (await exceedsMappingLimit(
+      mappingLimit,
+      result,
+      countUserMappings ? () => countUserMappings(userId) : null,
+    )) {
+      throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
     }
 
-    await transaction.replaceSourceMappings(sourceCalendarId, uniqueDestinationCalendarIds);
+    await transaction.replaceSourceMappings(sourceCalendarId, result.nextIds);
 
-    if (uniqueDestinationCalendarIds.length > EMPTY_LIST_COUNT) {
-      await transaction.ensureDestinationSyncStatuses(uniqueDestinationCalendarIds);
+    if (result.nextIds.length > EMPTY_LIST_COUNT) {
+      await transaction.ensureDestinationSyncStatuses(result.nextIds);
     }
     await transaction.requestUserSync?.(userId);
+    return result;
   });
 };
 
-const runSetSourcesForDestination = async (
+const runChangeSourcesForDestination = async (
   userId: string,
   destinationCalendarId: string,
-  sourceCalendarIds: string[],
+  change: MappingChange,
   dependencies: SetSourcesDependencies,
-): Promise<void> => {
-  const uniqueSourceCalendarIds = [...new Set(sourceCalendarIds)];
-
+): Promise<MappingChangeResult> => {
   const mappingLimit = await resolveMappingLimitOrNull(userId, dependencies.resolveMappingLimit);
 
-  await dependencies.withTransaction(async (transaction) => {
+  return dependencies.withTransaction(async (transaction) => {
     await transaction.acquireUserLock(userId);
 
     const destinationExists = await transaction.destinationExists(
@@ -388,37 +391,59 @@ const runSetSourcesForDestination = async (
       throw new Error("Destination calendar not found");
     }
 
-    if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
-      const validSourceIds = await transaction.findOwnedSourceIds(userId, uniqueSourceCalendarIds);
-      assertAllIdsOwned(uniqueSourceCalendarIds, validSourceIds, "Some source calendars not found");
+    const previousIds = await transaction.listDestinationSourceIds(destinationCalendarId);
+    const result = { nextIds: resolveMappedIds(previousIds, change), previousIds };
+
+    const newlyMappedIds = listNewlyMappedIds(result);
+    if (newlyMappedIds.length > EMPTY_LIST_COUNT) {
+      const validSourceIds = await transaction.findOwnedSourceIds(userId, newlyMappedIds);
+      assertAllIdsOwned(newlyMappedIds, validSourceIds, "Some source calendars not found");
     }
 
-    if (
-      mappingLimit !== null
-      && transaction.countUserMappings
-      && transaction.countMappingsForDestination
-    ) {
-      const [currentMappingCount, currentDestinationMappingCount] = await Promise.all([
-        transaction.countUserMappings(userId),
-        transaction.countMappingsForDestination(destinationCalendarId),
-      ]);
-      const nextMappingCount = currentMappingCount
-        - currentDestinationMappingCount
-        + uniqueSourceCalendarIds.length;
-
-      if (nextMappingCount > mappingLimit) {
-        throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
-      }
+    const { countUserMappings } = transaction;
+    if (await exceedsMappingLimit(
+      mappingLimit,
+      result,
+      countUserMappings ? () => countUserMappings(userId) : null,
+    )) {
+      throw new Error(MAPPING_LIMIT_ERROR_MESSAGE);
     }
 
-    await transaction.replaceDestinationMappings(destinationCalendarId, uniqueSourceCalendarIds);
+    await transaction.replaceDestinationMappings(destinationCalendarId, result.nextIds);
 
-    if (uniqueSourceCalendarIds.length > EMPTY_LIST_COUNT) {
+    if (result.nextIds.length > EMPTY_LIST_COUNT) {
       await transaction.ensureDestinationSyncStatus(destinationCalendarId);
     }
     await transaction.requestUserSync?.(userId);
+    return result;
   });
 };
+
+const runSetDestinationsForSource = (
+  userId: string,
+  sourceCalendarId: string,
+  destinationCalendarIds: string[],
+  dependencies: SetDestinationsDependencies,
+): Promise<MappingChangeResult> =>
+  runChangeDestinationsForSource(
+    userId,
+    sourceCalendarId,
+    { calendarIds: destinationCalendarIds, kind: "replace" },
+    dependencies,
+  );
+
+const runSetSourcesForDestination = (
+  userId: string,
+  destinationCalendarId: string,
+  sourceCalendarIds: string[],
+  dependencies: SetSourcesDependencies,
+): Promise<MappingChangeResult> =>
+  runChangeSourcesForDestination(
+    userId,
+    destinationCalendarId,
+    { calendarIds: sourceCalendarIds, kind: "replace" },
+    dependencies,
+  );
 
 const getUserMappings = async (userId: string): Promise<SourceDestinationMapping[]> => {
   const { database } = await import("@/context");
@@ -665,21 +690,22 @@ const noteMappingMilestone = (userId: string, mappedCalendarIds: string[]): void
   noteUserMilestone(userId, "first_sync_created");
 };
 
-const setDestinationsForSource = async (
+const changeDestinationsForSource = async (
   userId: string,
   sourceCalendarId: string,
-  destinationCalendarIds: string[],
-): Promise<void> => {
+  change: MappingChange,
+): Promise<MappingChangeResult> => {
   const dependencies = await createSetDestinationsDependencies();
-  await withMappingMutationLocks(
+  const requestedCalendarIds = listChangeCalendarIds(change);
+  const { result } = await withMappingMutationLocks(
     userId,
     async () => {
       const ownedDestinationCalendarIds = await getOwnedCalendarIds(
         userId,
-        destinationCalendarIds,
+        requestedCalendarIds,
       );
       assertAllIdsOwned(
-        destinationCalendarIds,
+        requestedCalendarIds,
         ownedDestinationCalendarIds,
         "Some destination calendars not found",
       );
@@ -688,24 +714,20 @@ const setDestinationsForSource = async (
         ...ownedDestinationCalendarIds,
       ];
     },
-    () => runSetDestinationsForSource(
-      userId,
-      sourceCalendarId,
-      destinationCalendarIds,
-      dependencies,
-    ),
+    () => runChangeDestinationsForSource(userId, sourceCalendarId, change, dependencies),
   );
   scheduleMappingReplacementSync(userId);
-  noteMappingMilestone(userId, destinationCalendarIds);
+  noteMappingMilestone(userId, result.nextIds);
+  return result;
 };
 
-const setSourcesForDestination = async (
+const changeSourcesForDestination = async (
   userId: string,
   destinationCalendarId: string,
-  sourceCalendarIds: string[],
-): Promise<void> => {
+  change: MappingChange,
+): Promise<MappingChangeResult> => {
   const dependencies = await createSetSourcesDependencies();
-  await withMappingMutationLocks(
+  const { result } = await withMappingMutationLocks(
     userId,
     async () => {
       const ownedDestinationCalendarIds = await getOwnedCalendarIds(
@@ -719,15 +741,11 @@ const setSourcesForDestination = async (
       );
       return ownedDestinationCalendarIds;
     },
-    () => runSetSourcesForDestination(
-      userId,
-      destinationCalendarId,
-      sourceCalendarIds,
-      dependencies,
-    ),
+    () => runChangeSourcesForDestination(userId, destinationCalendarId, change, dependencies),
   );
   scheduleMappingReplacementSync(userId);
-  noteMappingMilestone(userId, sourceCalendarIds);
+  noteMappingMilestone(userId, result.nextIds);
+  return result;
 };
 
 export {
@@ -735,8 +753,10 @@ export {
   getDestinationsForSource,
   getSourcesForDestination,
   MAPPING_LIMIT_ERROR_MESSAGE,
-  setDestinationsForSource,
-  setSourcesForDestination,
+  changeDestinationsForSource,
+  changeSourcesForDestination,
+  runChangeDestinationsForSource,
+  runChangeSourcesForDestination,
   runSetDestinationsForSource,
   runSetSourcesForDestination,
   runWithMappingMutationLocks,

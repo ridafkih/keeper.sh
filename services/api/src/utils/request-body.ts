@@ -11,6 +11,12 @@ const calendarIdsBodySchema = type({
 });
 type CalendarIdsBody = typeof calendarIdsBodySchema.infer;
 
+const calendarToggleBodySchema = type({
+  calendarId: "string",
+  enabled: "boolean",
+  "+": "reject",
+});
+
 const sourcePatchBodySchema = type({
   "name?": "string",
   "customEventName?": "string",
@@ -103,6 +109,7 @@ type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
 export {
   calendarIdsBodySchema,
+  calendarToggleBodySchema,
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,
