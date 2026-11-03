@@ -3,7 +3,7 @@ import { CalDAVConnectPage } from "@/features/auth/components/caldav-connect-pag
 import { AppPasswordHelp } from "@/features/auth/components/app-password-help";
 
 export const Route = createFileRoute(
-  "/(oauth)/dashboard/connect/fastmail",
+  "/(dashboard)/dashboard/connect/fastmail",
 )({
   component: ConnectFastmailPage,
 });

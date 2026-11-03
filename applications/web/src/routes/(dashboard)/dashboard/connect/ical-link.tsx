@@ -6,7 +6,7 @@ import { ProviderIconPair } from "@/features/auth/components/oauth-preamble";
 import { ICSFeedForm } from "@/features/auth/components/ics-connect-form";
 
 export const Route = createFileRoute(
-  "/(oauth)/dashboard/connect/ical-link",
+  "/(dashboard)/dashboard/connect/ical-link",
 )({
   component: ConnectICalLinkPage,
 });

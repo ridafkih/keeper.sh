@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CalDAVConnectPage } from "@/features/auth/components/caldav-connect-page";
 import { AppPasswordHelp } from "@/features/auth/components/app-password-help";
 
-export const Route = createFileRoute("/(oauth)/dashboard/connect/apple")({
+export const Route = createFileRoute("/(dashboard)/dashboard/connect/apple")({
   component: ConnectApplePage,
 });
 

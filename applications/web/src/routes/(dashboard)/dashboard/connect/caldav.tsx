@@ -3,7 +3,7 @@ import Calendar from "lucide-react/dist/esm/icons/calendar";
 import { Text } from "@/components/ui/primitives/text";
 import { CalDAVConnectPage } from "@/features/auth/components/caldav-connect-page";
 
-export const Route = createFileRoute("/(oauth)/dashboard/connect/caldav")({
+export const Route = createFileRoute("/(dashboard)/dashboard/connect/caldav")({
   component: ConnectCalDAVPage,
 });
 
