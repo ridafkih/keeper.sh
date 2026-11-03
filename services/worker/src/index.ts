@@ -1,3 +1,4 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import { entry } from "entrykit";
 import { Worker } from "bullmq";
 import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
@@ -11,6 +12,8 @@ import { processJob } from "./processor";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { destroy } from "./utils/logging";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
 
 const DEFAULT_CONCURRENCY = 25;
 const LOCK_DURATION_MS = 360_000;

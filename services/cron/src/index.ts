@@ -1,3 +1,4 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import { entry } from "entrykit";
 import { join } from "node:path";
 import { getAllJobs } from "./utils/get-jobs";
@@ -14,6 +15,8 @@ import { resolveIngestDials } from "./ingest/ingest-dials";
 import type { IngestDials } from "./ingest/ingest-dials";
 import type { IngestScheduler } from "./ingest/start-ingest-scheduler";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
 
 checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
