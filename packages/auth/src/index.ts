@@ -16,6 +16,8 @@ import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
+import { createAuthObservation } from "./auth-observer";
+import type { AuthObserver, AuthRequestOutcome } from "./auth-observer";
 import {
   REGISTRATION_EMAIL_DOMAIN_MESSAGE,
   isRegistrationEmailAllowed,
@@ -82,6 +84,7 @@ interface AuthConfig {
   registrationEmailDomains?: string[];
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
+  observer?: AuthObserver;
 }
 
 interface KeeperMcpAuthSession {
@@ -195,7 +198,10 @@ const createAuth = (config: AuthConfig) => {
     registrationEmailDomains = [],
     mcpResourceUrl,
     mcpApiBaseUrl,
+    observer,
   } = config;
+
+  const observation = createAuthObservation(observer);
 
   const buildResendClient = (): Resend | null => {
     if (resendApiKey) {
@@ -435,10 +441,15 @@ const createAuth = (config: AuthConfig) => {
             }
             return Promise.resolve();
           },
+          after: (user) => {
+            observation.userCreated(user.id);
+            return Promise.resolve();
+          },
         },
       },
     },
     hooks: {
+      ...observation.hooks,
       before: createAuthMiddleware((context) => {
         if (localAuthDisabled && isLocalAuthPath(context.path)) {
           throw new APIError("FORBIDDEN", {
@@ -480,6 +491,8 @@ const createAuth = (config: AuthConfig) => {
     user: {
       deleteUser: {
         afterDelete: async (user) => {
+          observation.userDeleted(user.id);
+
           if (!polarClient) {
             return;
           }
@@ -598,6 +611,8 @@ export {
 } from "./mcp-token-version";
 export type {
   AuthConfig,
+  AuthObserver,
+  AuthRequestOutcome,
   AuthResult,
   KeeperMcpAuthApi,
   KeeperMcpAuthSession,

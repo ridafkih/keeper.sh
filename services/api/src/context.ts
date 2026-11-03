@@ -14,6 +14,7 @@ import {
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
 import { widelog } from "@/utils/logging";
+import { authObserver } from "@/utils/auth-observer";
 import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@keeper.sh/calendar";
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
@@ -104,6 +105,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
   registrationEmailDomains: parseRegistrationEmailDomains(env.REGISTRATION_EMAIL_DOMAINS),
+  observer: authObserver,
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 
