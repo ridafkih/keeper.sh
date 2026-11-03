@@ -91,6 +91,7 @@ const getUserCalDAVSources = async (userId: string, provider?: string): Promise<
 const findConnectedCalDAVCalendars = async (
   client: CaldavImportDatabase,
   userId: string,
+  accountId: string,
   calendarUrls: string[],
 ): Promise<ConnectedCalDAVCalendar[]> => {
   const rows = await client
@@ -104,6 +105,7 @@ const findConnectedCalDAVCalendars = async (
     .where(
       and(
         eq(calendarsTable.userId, userId),
+        eq(calendarsTable.accountId, accountId),
         eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
         inArray(calendarsTable.calendarUrl, calendarUrls),
       ),
@@ -233,8 +235,8 @@ const createCalDAVImportTransaction = (
 ): CalDAVImportTransaction => ({
   countAccounts: () => countCalDAVImportAccounts(client, userId),
   createAccount: () => createCalDAVAccount(client, userId, credentials, resolvedEncryptionKey),
-  findConnectedCalendars: (calendarUrls) =>
-    findConnectedCalDAVCalendars(client, userId, calendarUrls),
+  findConnectedCalendars: (accountId, calendarUrls) =>
+    findConnectedCalDAVCalendars(client, userId, accountId, calendarUrls),
   findReusableAccountId: () => findReusableCalDAVAccountId(client, userId, credentials),
   insertCalendars: (accountId, calendars) =>
     insertCalDAVCalendars(client, userId, accountId, calendars),

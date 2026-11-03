@@ -39,7 +39,10 @@ interface CalDAVImportResult {
 
 interface CalDAVImportTransaction {
   lockUserAccounts: () => Promise<void>;
-  findConnectedCalendars: (calendarUrls: string[]) => Promise<ConnectedCalDAVCalendar[]>;
+  findConnectedCalendars: (
+    accountId: string,
+    calendarUrls: string[],
+  ) => Promise<ConnectedCalDAVCalendar[]>;
   findReusableAccountId: () => Promise<string | null>;
   countAccounts: () => Promise<number>;
   createAccount: () => Promise<string>;
@@ -62,15 +65,10 @@ const uniqueByCalendarUrl = (
   ...new Map(calendars.map((calendar) => [calendar.calendarUrl, calendar])).values(),
 ];
 
-const resolveImportAccountId = async (
+const createImportAccount = async (
   transaction: CalDAVImportTransaction,
   accountLimit: number,
 ): Promise<string> => {
-  const reusableAccountId = await transaction.findReusableAccountId();
-  if (reusableAccountId) {
-    return reusableAccountId;
-  }
-
   const accountCount = await transaction.countAccounts();
   if (accountCount >= accountLimit) {
     throw new CalDAVSourceLimitError();
@@ -101,12 +99,18 @@ const describeSelection = (
     return { ...created, status: "imported" };
   });
 
-const resolveConnectedAccountId = (calendars: ConnectedCalDAVCalendar[]): string => {
-  const [firstCalendar] = calendars;
-  if (!firstCalendar) {
-    throw new Error("A CalDAV import resolved no account");
+const findCalendarsConnectedToAccount = (
+  transaction: CalDAVImportTransaction,
+  accountId: string | null,
+  selection: CalDAVCalendarSelection[],
+): Promise<ConnectedCalDAVCalendar[]> => {
+  if (!accountId) {
+    return Promise.resolve([]);
   }
-  return firstCalendar.accountId;
+  return transaction.findConnectedCalendars(
+    accountId,
+    selection.map(({ calendarUrl }) => calendarUrl),
+  );
 };
 
 const importCalDAVCalendarsWithDependencies = (
@@ -117,20 +121,21 @@ const importCalDAVCalendarsWithDependencies = (
     await transaction.lockUserAccounts();
 
     const selection = uniqueByCalendarUrl(requestedCalendars);
-    const connectedCalendars = await transaction.findConnectedCalendars(
-      selection.map(({ calendarUrl }) => calendarUrl),
+    const reusableAccountId = await transaction.findReusableAccountId();
+    const connected = toCalendarsByUrl(
+      await findCalendarsConnectedToAccount(transaction, reusableAccountId, selection),
     );
-    const connected = toCalendarsByUrl(connectedCalendars);
     const missing = selection.filter(({ calendarUrl }) => !connected.has(calendarUrl));
 
-    if (missing.length === 0) {
+    if (reusableAccountId && missing.length === 0) {
       return {
-        accountId: resolveConnectedAccountId(connectedCalendars),
+        accountId: reusableAccountId,
         calendars: describeSelection(selection, connected, new Map()),
       };
     }
 
-    const accountId = await resolveImportAccountId(transaction, dependencies.accountLimit);
+    const accountId =
+      reusableAccountId ?? (await createImportAccount(transaction, dependencies.accountLimit));
     const imported = toCalendarsByUrl(await transaction.insertCalendars(accountId, missing));
 
     return {

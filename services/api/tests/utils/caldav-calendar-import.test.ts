@@ -40,9 +40,12 @@ const createDependencies = (
         store.accounts.push(accountId);
         return Promise.resolve(accountId);
       },
-      findConnectedCalendars: (calendarUrls) =>
+      findConnectedCalendars: (accountId, calendarUrls) =>
         Promise.resolve(
-          store.calendars.filter(({ calendarUrl }) => calendarUrls.includes(calendarUrl)),
+          store.calendars.filter(
+            (calendar) =>
+              calendar.accountId === accountId && calendarUrls.includes(calendar.calendarUrl),
+          ),
         ),
       findReusableAccountId: () => Promise.resolve(store.reusableAccountId),
       insertCalendars: (accountId, calendars) => {
@@ -91,6 +94,7 @@ describe("importCalDAVCalendarsWithDependencies", () => {
         { ...WORK, accountId: "account-2", id: "calendar-1" },
         { ...HOME, accountId: "account-2", id: "calendar-2" },
       ],
+      reusableAccountId: "account-2",
     });
 
     const result = await importCalDAVCalendarsWithDependencies(
@@ -101,6 +105,24 @@ describe("importCalDAVCalendarsWithDependencies", () => {
     expect(result.accountId).toBe("account-2");
     expect(result.calendars.every(({ status }) => status === "already_connected")).toBe(true);
     expect(store.accounts).toHaveLength(2);
+    expect(store.calendars).toHaveLength(2);
+  });
+
+  it("imports calendars a different account of the same server already holds at the same URLs", async () => {
+    const store = createStore({
+      accounts: ["account-1"],
+      calendars: [{ ...WORK, accountId: "account-1", id: "calendar-1" }],
+    });
+
+    const result = await importCalDAVCalendarsWithDependencies(
+      [WORK],
+      createDependencies(store, 2),
+    );
+
+    expect(result.accountId).toBe("account-2");
+    expect(result.calendars.map(({ accountId, status }) => [accountId, status])).toEqual([
+      ["account-2", "imported"],
+    ]);
     expect(store.calendars).toHaveLength(2);
   });
 
