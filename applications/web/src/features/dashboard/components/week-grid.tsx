@@ -18,6 +18,7 @@ import { useSetPopoverOverlay } from "@/hooks/use-popover-overlay";
 import { useNowMinute } from "@/hooks/use-now-minute";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
+import { resolveEventLocalEnd } from "@/lib/event-day";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
@@ -157,7 +158,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
           style={{ height: bandHeight, gap: EVENT_PILL_GAP_PX }}
         >
           {allDay.slice(0, visibleCount).map((event) => (
-            <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
+            <EventPill key={event.id} event={event} past={isEventPast(resolveEventLocalEnd(event))} />
           ))}
           {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
         </div>
