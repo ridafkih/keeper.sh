@@ -4,12 +4,20 @@ const MAX_OBSERVANCE_ONSETS = 50_000;
 const MONTHS_PER_YEAR = 12;
 const WEEKDAY_OCCURRENCES_PER_MONTH = 5;
 const WEEKDAY_OCCURRENCES_PER_YEAR = 53;
-const YEARLY_RULE_PARTS = new Set(["BYMONTH", "BYMONTHDAY", "BYDAY", "BYSETPOS"]);
+const DAYS_PER_WEEK = 7;
 
 const countPart = (parts: Record<string, unknown[] | undefined>, name: string): number | undefined =>
   parts[name]?.length;
 
-const boundOnsetsPerYear = (parts: Record<string, unknown[] | undefined>): number => {
+const boundOnsetDaysPerYear = (parts: Record<string, unknown[] | undefined>): number => {
+  const yearDays = countPart(parts, "BYYEARDAY");
+  if (yearDays !== globalThis.undefined) {
+    return yearDays;
+  }
+  const weeks = countPart(parts, "BYWEEKNO");
+  if (weeks !== globalThis.undefined) {
+    return weeks * (countPart(parts, "BYDAY") ?? DAYS_PER_WEEK);
+  }
   const months = countPart(parts, "BYMONTH");
   const monthDays = countPart(parts, "BYMONTHDAY");
   const weekdays = countPart(parts, "BYDAY");
@@ -25,6 +33,9 @@ const boundOnsetsPerYear = (parts: Record<string, unknown[] | undefined>): numbe
   return months ?? 1;
 };
 
+const boundOnsetsPerDay = (parts: Record<string, unknown[] | undefined>): number =>
+  (countPart(parts, "BYHOUR") ?? 1) * (countPart(parts, "BYMINUTE") ?? 1) * (countPart(parts, "BYSECOND") ?? 1);
+
 const readRuleEndYear = (rule: ICAL.Recur, untilYear: number): number => {
   if (rule.until) {
     return Math.min(rule.until.year, untilYear);
@@ -36,13 +47,10 @@ const boundRuleOnsets = (rule: ICAL.Recur, onsetYear: number, untilYear: number)
   if (rule.freq !== "YEARLY") {
     throw new RangeError(`Declared VTIMEZONE observance repeats ${rule.freq}, not YEARLY`);
   }
-  const unsupportedPart = Object.keys(rule.parts).find((name) => !YEARLY_RULE_PARTS.has(name));
-  if (unsupportedPart) {
-    throw new RangeError(`Declared VTIMEZONE observance uses ${unsupportedPart}`);
-  }
   const years = Math.max(readRuleEndYear(rule, untilYear) - onsetYear + 1, 0);
   const interval = Math.max(rule.interval, 1);
-  const onsets = Math.ceil(years / interval) * boundOnsetsPerYear(rule.parts);
+  const onsetsPerYear = boundOnsetDaysPerYear(rule.parts) * boundOnsetsPerDay(rule.parts);
+  const onsets = Math.ceil(years / interval) * onsetsPerYear;
   if (rule.count) {
     return Math.min(onsets, rule.count);
   }
