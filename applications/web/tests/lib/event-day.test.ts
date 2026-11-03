@@ -7,17 +7,17 @@ import {
 } from "../../src/lib/event-day";
 import { runInTimeZone } from "../helpers/time-zone";
 
-const allDayNovemberFifth = {
+const allDayNovemberFifth = () => ({
   startTime: new Date("2026-11-05T00:00:00.000Z"),
   endTime: new Date("2026-11-06T00:00:00.000Z"),
   isAllDay: true,
-};
+});
 
-const timedEdmontonEvening = {
+const timedEdmontonEvening = () => ({
   startTime: new Date("2026-11-05T01:30:00.000Z"),
   endTime: new Date("2026-11-05T02:30:00.000Z"),
   isAllDay: false,
-};
+});
 
 const localDate = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -30,19 +30,21 @@ describe.each(["America/Edmonton", "Asia/Tokyo", "Pacific/Auckland", "UTC"])("in
   });
 
   it("puts an all-day event on its calendar date", () => {
-    const day = resolveEventStartDay(allDayNovemberFifth);
+    const day = resolveEventStartDay(allDayNovemberFifth());
     expect(localDate(day)).toBe("2026-11-05");
     expect(day.getHours()).toBe(0);
   });
 
   it("starts and ends an all-day event at local midnight of its dates", () => {
-    expect(resolveEventLocalStart(allDayNovemberFifth).getTime()).toBe(new Date(2026, 10, 5).getTime());
-    expect(resolveEventLocalEnd(allDayNovemberFifth).getTime()).toBe(new Date(2026, 10, 6).getTime());
+    const event = allDayNovemberFifth();
+    expect(resolveEventLocalStart(event).getTime()).toBe(new Date(2026, 10, 5).getTime());
+    expect(resolveEventLocalEnd(event).getTime()).toBe(new Date(2026, 10, 6).getTime());
   });
 
   it("keeps a timed event at its instant", () => {
-    expect(resolveEventLocalStart(timedEdmontonEvening)).toBe(timedEdmontonEvening.startTime);
-    expect(resolveEventLocalEnd(timedEdmontonEvening)).toBe(timedEdmontonEvening.endTime);
+    const event = timedEdmontonEvening();
+    expect(resolveEventLocalStart(event)).toBe(event.startTime);
+    expect(resolveEventLocalEnd(event)).toBe(event.endTime);
   });
 });
 
@@ -50,6 +52,6 @@ describe("timed events west of UTC", () => {
   runInTimeZone("America/Edmonton");
 
   it("fall on the local day of their start", () => {
-    expect(localDate(resolveEventStartDay(timedEdmontonEvening))).toBe("2026-11-04");
+    expect(localDate(resolveEventStartDay(timedEdmontonEvening()))).toBe("2026-11-04");
   });
 });
