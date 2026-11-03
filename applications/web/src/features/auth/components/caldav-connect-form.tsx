@@ -141,30 +141,24 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       let accountId: string | undefined;
 
       try {
-        const responses = await Promise.all(
-          calendars.map((calendar) =>
-            apiFetch("/api/sources/caldav", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                authMethod,
-                calendarUrl: calendar.url,
-                name: calendar.displayName,
-                password,
-                provider,
-                serverUrl,
-                username,
-              }),
-            }),
-          ),
-        );
-
-        const firstResponse = responses[0];
-        if (firstResponse) {
-          accountId = parseAccountId(await firstResponse.json());
-        }
-      } catch {
-        setError("Failed to import calendars");
+        const importResponse = await apiFetch("/api/sources/caldav", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            authMethod,
+            calendars: calendars.map((calendar) => ({
+              calendarUrl: calendar.url,
+              name: calendar.displayName,
+            })),
+            password,
+            provider,
+            serverUrl,
+            username,
+          }),
+        });
+        accountId = parseAccountId(await importResponse.json());
+      } catch (err) {
+        setError(resolveErrorMessage(err, "Failed to import calendars"));
         return;
       }
 

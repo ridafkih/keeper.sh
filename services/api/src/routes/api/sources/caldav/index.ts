@@ -1,5 +1,5 @@
 import { TraversalError } from "arktype";
-import { createCalDAVSourceSchema } from "@keeper.sh/data-schemas";
+import { importCalDAVCalendarsSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
@@ -8,12 +8,24 @@ import { labelFailureResponse } from "@/utils/error-labelling";
 import { caldavSourcesQuerySchema } from "@/utils/request-query";
 import {
   CalDAVSourceLimitError,
-  DuplicateCalDAVSourceError,
   getUserCalDAVSources,
-  createCalDAVSource,
+  importCalDAVCalendars,
 } from "@/utils/caldav-sources";
+import type { CalDAVImportResult } from "@/utils/caldav-calendar-import";
 
-const SOURCE_CREATE_FAILED_MESSAGE = "Failed to create CalDAV source";
+const SOURCE_CREATE_FAILED_MESSAGE = "Failed to import CalDAV calendars";
+
+const countByStatus = (
+  result: CalDAVImportResult,
+  status: CalDAVImportResult["calendars"][number]["status"],
+): number => result.calendars.filter((calendar) => calendar.status === status).length;
+
+const resolveImportStatusCode = (importedCount: number): number => {
+  if (importedCount > 0) {
+    return HTTP_STATUS.CREATED;
+  }
+  return HTTP_STATUS.OK;
+};
 
 const GET = withWideEvent(
   withAuth(async ({ request, userId }) => {
@@ -40,23 +52,24 @@ const POST = withWideEvent(
     const body = await request.json();
 
     try {
-      const data = createCalDAVSourceSchema.assert(body);
+      const data = importCalDAVCalendarsSchema.assert(body);
 
       widelog.set("provider.name", data.provider);
+      widelog.set("caldav.calendars_requested", data.calendars.length);
 
-      const source = await createCalDAVSource(userId, data);
+      const result = await importCalDAVCalendars(userId, data);
+      const importedCount = countByStatus(result, "imported");
 
-      return Response.json(source, { status: HTTP_STATUS.CREATED });
+      widelog.set("account.id", result.accountId);
+      widelog.set("caldav.calendars_imported", importedCount);
+      widelog.set("caldav.calendars_already_connected", countByStatus(result, "already_connected"));
+
+      return Response.json(result, { status: resolveImportStatusCode(importedCount) });
     } catch (error) {
       if (error instanceof CalDAVSourceLimitError) {
         widelog.errorFields(error, { slug: "account-limit-reached" });
         return ErrorResponse.paymentRequired(error.message).toResponse();
       }
-      if (error instanceof DuplicateCalDAVSourceError) {
-        widelog.errorFields(error, { slug: "duplicate-source" });
-        return Response.json({ error: error.message }, { status: HTTP_STATUS.CONFLICT });
-      }
-
       if (error instanceof TraversalError) {
         widelog.errorFields(error, { slug: "invalid-request-body" });
         return ErrorResponse.badRequest(error.message).toResponse();

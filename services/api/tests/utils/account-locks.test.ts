@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTableName } from "drizzle-orm";
-import type { createCalDAVSource as createCalDAVSourceFn } from "../../src/utils/caldav-sources";
+import type { importCalDAVCalendars as importCalDAVCalendarsFn } from "../../src/utils/caldav-sources";
 import type {
   createOAuthSource as createOAuthSourceFn,
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "../../src/utils/oauth-sources";
 
-let createCalDAVSource: typeof createCalDAVSourceFn = () =>
+let importCalDAVCalendars: typeof importCalDAVCalendarsFn = () =>
   Promise.reject(new Error("Module not loaded"));
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -214,7 +214,7 @@ beforeAll(async () => {
     importOAuthAccountCalendars,
   } = await import("../../src/utils/oauth-sources"));
   ({
-    createCalDAVSource,
+    importCalDAVCalendars,
   } = await import("../../src/utils/caldav-sources"));
 });
 
@@ -323,7 +323,7 @@ describe("Account locks", () => {
     ]);
   });
 
-  it("creates CalDAV sources through the locked transaction client", async () => {
+  it("imports CalDAV calendars through the locked transaction client", async () => {
     selectResults = [
       [],
       [],
@@ -343,6 +343,7 @@ describe("Account locks", () => {
         }
 
         return createInsertBuilder([{
+          calendarUrl: "https://caldav.test/team",
           createdAt: new Date("2026-03-10T12:00:00.000Z"),
           id: "source-1",
           name: "Team CalDAV",
@@ -355,23 +356,24 @@ describe("Account locks", () => {
       }),
     };
 
-    const source = await createCalDAVSource("user-1", {
+    const result = await importCalDAVCalendars("user-1", {
       authMethod: "basic",
-      calendarUrl: "https://caldav.test/team",
-      name: "Team CalDAV",
+      calendars: [{ calendarUrl: "https://caldav.test/team", name: "Team CalDAV" }],
       password: "secret",
       provider: "icloud",
       serverUrl: "https://caldav.test",
       username: "person@example.com",
     });
 
-    expect(source).toMatchObject({
+    expect(result).toEqual({
       accountId: "account-1",
-      calendarUrl: "https://caldav.test/team",
-      id: "source-1",
-      name: "Team CalDAV",
-      provider: "icloud",
-      userId: "user-1",
+      calendars: [{
+        accountId: "account-1",
+        calendarUrl: "https://caldav.test/team",
+        id: "source-1",
+        name: "Team CalDAV",
+        status: "imported",
+      }],
     });
     expect(triggerSyncCalls).toEqual(["user-1"]);
   });
