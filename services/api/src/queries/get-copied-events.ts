@@ -2,8 +2,9 @@ import {
   calendarsTable,
   eventMappingsTable,
   eventStatesTable,
+  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
-import { and, asc, count, eq, gte } from "drizzle-orm";
+import { and, asc, countDistinct, eq, gte, sql } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 
 interface CopiedEvent {
@@ -19,10 +20,18 @@ interface CopiedEvents {
   upcoming: CopiedEvent[];
 }
 
+const sourceEventIdentity = sql`coalesce(${eventMappingsTable.syncEventId}, ${eventMappingsTable.eventStateId}::text)`;
+
+const throughCurrentMapping = and(
+  eq(sourceDestinationMappingsTable.sourceCalendarId, eventMappingsTable.sourceCalendarId),
+  eq(sourceDestinationMappingsTable.destinationCalendarId, eventMappingsTable.calendarId),
+);
+
 const countCopiedEvents = async (database: KeeperDatabase, userId: string): Promise<number> => {
   const [row] = await database
-    .select({ value: count() })
+    .select({ value: countDistinct(sourceEventIdentity) })
     .from(eventMappingsTable)
+    .innerJoin(sourceDestinationMappingsTable, throughCurrentMapping)
     .innerJoin(calendarsTable, eq(eventMappingsTable.calendarId, calendarsTable.id))
     .where(eq(calendarsTable.userId, userId));
   return row?.value ?? 0;
@@ -35,7 +44,7 @@ const listUpcomingCopiedEvents = async (
   now: Date,
 ): Promise<CopiedEvent[]> => {
   const rows = await database
-    .select({
+    .selectDistinctOn([eventMappingsTable.startTime, sourceEventIdentity], {
       destinationCalendarId: eventMappingsTable.calendarId,
       id: eventMappingsTable.id,
       sourceCalendarId: eventMappingsTable.sourceCalendarId,
@@ -43,10 +52,11 @@ const listUpcomingCopiedEvents = async (
       title: eventStatesTable.title,
     })
     .from(eventMappingsTable)
+    .innerJoin(sourceDestinationMappingsTable, throughCurrentMapping)
     .innerJoin(calendarsTable, eq(eventMappingsTable.calendarId, calendarsTable.id))
     .leftJoin(eventStatesTable, eq(eventMappingsTable.eventStateId, eventStatesTable.id))
     .where(and(eq(calendarsTable.userId, userId), gte(eventMappingsTable.endTime, now)))
-    .orderBy(asc(eventMappingsTable.startTime))
+    .orderBy(asc(eventMappingsTable.startTime), sourceEventIdentity)
     .limit(limit);
 
   return rows.map((row) => ({ ...row, startTime: row.startTime.toISOString() }));
