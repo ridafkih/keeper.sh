@@ -5,6 +5,7 @@ const TOKEN_LIFETIME_SECONDS = 3600;
 
 let values: Record<string, unknown> = {};
 let importResult: () => Promise<string> = () => Promise.resolve("account-1");
+let stateStoreFails = false;
 const discardedCredentials: string[] = [];
 
 class TestCalendarListError extends Error {
@@ -51,7 +52,12 @@ vi.mock("@/utils/destinations", () => ({
     }),
   fetchUserInfo: () =>
     Promise.resolve({ email: "person@tenant.test.invalid", id: "graph-object-id-1" }),
-  validateState: () => Promise.resolve({ userId: "user-1" }),
+  validateState: () => {
+    if (stateStoreFails) {
+      return Promise.reject(new Error("Redis unavailable"));
+    }
+    return Promise.resolve({ userId: "user-1" });
+  },
 }));
 
 vi.mock("@/utils/oauth-source-credentials", () => ({
@@ -60,6 +66,14 @@ vi.mock("@/utils/oauth-source-credentials", () => ({
     discardedCredentials.push(credentialId);
     return Promise.resolve();
   },
+}));
+
+vi.mock("@/utils/error-labelling", () => ({
+  labelFailure: () => null,
+}));
+
+vi.mock("@/utils/user-milestones", () => ({
+  noteUserMilestone: () => Promise.resolve(),
 }));
 
 vi.mock("@/utils/oauth-sources", () => ({
@@ -89,6 +103,7 @@ beforeEach(() => {
   values = {};
   importResult = () => Promise.resolve("account-1");
   discardedCredentials.length = 0;
+  stateStoreFails = false;
 });
 
 describe("an Outlook connect the provider refused", () => {
@@ -162,5 +177,16 @@ describe("an Outlook connect that succeeds", () => {
     expect(values["user.id"]).toBe("user-1");
     expect(isFailedResponse(response)).toBe(false);
     expect(discardedCredentials).toEqual([]);
+  });
+});
+
+describe("an Outlook connect while the state store is down", () => {
+  it("sends the user back with an error instead of failing the request", async () => {
+    stateStoreFails = true;
+
+    const response = await runCallback({ code: "auth-code-1", state: "state-1" });
+
+    expect(response.status).toBe(302);
+    expect(values["oauth.failure_stage"]).toBe("state");
   });
 });

@@ -60,11 +60,16 @@ const recordProviderError = (searchParams: URLSearchParams): void => {
   }
 };
 
-const resolveCallbackState = (state: string | null) => {
+const resolveCallbackState = async (state: string | null) => {
   if (!state) {
-    return Promise.resolve(null);
+    return null;
   }
-  return validateState(state);
+  try {
+    return await validateState(state);
+  } catch (error) {
+    labelFailure(error, { slug: "unclassified" });
+    return null;
+  }
 };
 
 const redirectAsFailure = (stage: CallbackFailureStage, redirectUrl: URL): Response => {
