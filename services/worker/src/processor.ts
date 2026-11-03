@@ -426,7 +426,6 @@ const processJob = (
       throw error;
     } finally {
       await Promise.all(pendingDestinationSyncs);
-      void publishMappingSyncStateAfterJob(userId);
       clearTimeout(deadlineTimer);
       if (deadlineController.signal.aborted) {
         widelog.set("timeout.fired", true);
@@ -439,6 +438,7 @@ const processJob = (
         recordReflectMs();
         widelog.flush();
       }
+      await publishMappingSyncStateAfterJob(userId);
     }
   });
 
