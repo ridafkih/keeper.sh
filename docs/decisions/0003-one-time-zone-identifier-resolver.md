@@ -1,6 +1,6 @@
 # 0003. One time-zone identifier resolver
 
-- Status: accepted
+- Status: accepted; step 4 span start amended by 0012
 - Date: 2026-11-03
 - Tasks: C2 (owner); consumers S-ENGINE, S-CALDAV-ZONE, S-RECUR, S-API-TIME, S-FREETIME
 
