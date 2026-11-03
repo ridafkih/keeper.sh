@@ -661,7 +661,7 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_calendars`      | List all calendars connected to Keeper.sh, including provider name and account.                                                                   |
 | `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
-| `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
+| `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times. All-day events return `YYYY-MM-DD` dates with an exclusive end. |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
 | `find_free_time`      | Find open slots of at least a given duration across every synced calendar in a date range.                                                     |
 | `create_event`        | Create an event on a connected calendar. Requires a calendar ID, title, start time, and end time.                                               |
