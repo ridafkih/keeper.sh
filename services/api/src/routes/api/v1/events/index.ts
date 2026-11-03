@@ -46,19 +46,16 @@ const GET = withWideEvent(
     const { from, to } = parseDateRangeParams(url);
     const { end, start } = normalizeDateRange(from, to);
     const shouldCount = url.searchParams.get("count") === "true";
+    const timeZone = parseViewerTimeZone(url);
+    const range = { from: start, to: end, ...(timeZone && { timeZone }) };
 
     if (shouldCount) {
-      const count = await keeperApi.getEventCount(userId, { from: start, to: end });
+      const count = await keeperApi.getEventCount(userId, range);
       return Response.json({ count });
     }
 
     const filters = parseEventFilters(url);
-    const timeZone = parseViewerTimeZone(url);
-    const events = await keeperApi.getEventsInRange(
-      userId,
-      { from: start, to: end, ...(timeZone && { timeZone }) },
-      filters,
-    );
+    const events = await keeperApi.getEventsInRange(userId, range, filters);
     return Response.json(events);
   })),
 );

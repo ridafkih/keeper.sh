@@ -630,7 +630,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume syncing for a calendar. Send `paused` as `true` to halt it in both directions without disconnecting it.                                         |
 | `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
 | `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
-| `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
+| `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, a `timezone` whose local days all-day events fall on, and `count=true` to return only a count. |
 | `POST`   | `/api/v1/events`                         | Create an event. Requires `calendarId`, `title`, `startTime`, and `endTime`.                                                                                    |
 | `GET`    | `/api/v1/events/{id}`                    | Get a single event.                                                                                                                                            |
 | `PATCH`  | `/api/v1/events/{id}`                    | Update an event's fields, or send `rsvpStatus` to respond to an invitation.                                                                                     |
@@ -660,7 +660,7 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | Tool                  | Description                                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_calendars`      | List all calendars connected to Keeper.sh, including provider name and account.                                                                   |
-| `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
+| `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes, and an IANA timezone whose local days all-day events count on. |
 | `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times. All-day events return `YYYY-MM-DD` dates with an exclusive end. |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
 | `find_free_time`      | Find open slots of at least a given duration across every synced calendar in a date range.                                                     |

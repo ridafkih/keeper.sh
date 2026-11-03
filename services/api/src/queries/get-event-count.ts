@@ -8,6 +8,7 @@ const EMPTY_RESULT_COUNT = 0;
 interface EventCountOptions {
   from: Date;
   to: Date;
+  timeZone?: string;
 }
 
 const countEventsInWindow = async (
@@ -15,10 +16,7 @@ const countEventsInWindow = async (
   userId: string,
   options: EventCountOptions,
 ): Promise<number> => {
-  const events = await getEventsInRange(database, userId, {
-    from: options.from,
-    to: options.to,
-  });
+  const events = await getEventsInRange(database, userId, options);
 
   return events.length;
 };

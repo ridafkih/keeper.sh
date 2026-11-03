@@ -294,10 +294,14 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Get event count",
     annotations: READ_ONLY,
     description:
-      "Get the number of calendar events. Optionally provide a date range with 'from' and 'to' ISO 8601 datetimes.",
+      "Get the number of calendar events. Optionally provide a date range with 'from' and 'to' ISO 8601 datetimes, and an IANA timezone (e.g. America/New_York) so all-day events count on that zone's local days.",
     inputSchema: {
       from: z.string().datetime().optional().describe("Start of date range (ISO 8601)"),
       to: z.string().datetime().optional().describe("End of date range (ISO 8601)"),
+      timezone: z
+        .string()
+        .optional()
+        .describe("IANA timezone identifier (e.g. America/New_York) whose local days all-day events count on"),
     },
     execute: (context, input) => {
       const params = new URLSearchParams({ count: "true" });
@@ -306,6 +310,9 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       }
       if (input?.to && typeof input.to === "string") {
         params.set("to", input.to);
+      }
+      if (input?.timezone && typeof input.timezone === "string") {
+        params.set("timezone", input.timezone);
       }
       return apiFetch(context, `/api/v1/events?${params}`, z.object({ count: z.number() }));
     },
