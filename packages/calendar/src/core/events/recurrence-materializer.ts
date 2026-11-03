@@ -446,12 +446,15 @@ const materializeMaster = (
     }, MAX_OCCURRENCES_PER_SERIES);
   }
 
+  const emittedSlots = new Set<number>();
+
   return occurrenceStarts.flatMap((occurrenceStartWallTime) => {
     const occurrenceStart = fromRecurrenceWallTime(occurrenceStartWallTime, timeZone);
     const slot = occurrenceStart.getTime();
-    if (excludedSlots.has(slot) || overriddenSlots.has(slot)) {
+    if (excludedSlots.has(slot) || overriddenSlots.has(slot) || emittedSlots.has(slot)) {
       return [];
     }
+    emittedSlots.add(slot);
 
     const occurrence = createMaterializedOccurrence(master, occurrenceStart, seriesTimeZone);
     if (!overlapsWindow(occurrence, window)) {
