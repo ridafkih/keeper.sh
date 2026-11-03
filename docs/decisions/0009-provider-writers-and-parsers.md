@@ -1,6 +1,6 @@
 # 0009. Provider writers write instants; provider parsers never read server-local time
 
-- Status: accepted
+- Status: accepted; the Google parser contracts and rule 4's whole-fetch default are superseded by 0016
 - Date: 2026-11-03
 - Tasks: S-OUTLOOK-WRITE, S-GOOGLE-STRICT (owners)
 
