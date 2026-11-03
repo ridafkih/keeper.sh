@@ -5,6 +5,8 @@ import type {
   NonStandardValuesGeneric,
 } from "ts-ics";
 import { readDeclaredZone } from "./declared-timezone-offsets";
+import { createOnsetBudget } from "./observance-onset-bound";
+import type { OnsetBudget } from "./observance-onset-bound";
 import { readDeclaredTimeZoneOffsets, resolveTimeZoneIdentifier } from "./resolve-timezone-identifier";
 import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { formatIcsUtcOffset, ianaOffsetAt, wallTimeToInstantWith } from "./timezone-instant";
@@ -26,6 +28,7 @@ const buildZoneSource = (
   timeZoneId: string,
   blocksByTimeZoneId: ReadonlyMap<string, string>,
   declaredOffsets: DeclaredTimeZoneOffsets,
+  budget: OnsetBudget,
 ): ZoneSource | undefined => {
   const resolved = resolveTimeZoneIdentifier(timeZoneId, declaredOffsets);
   if (resolved) {
@@ -35,15 +38,16 @@ const buildZoneSource = (
   if (!block) {
     return;
   }
-  return readDeclaredZone(block);
+  return readDeclaredZone(block, budget);
 };
 
 const createZoneSourceLookup = (blocksByTimeZoneId: ReadonlyMap<string, string>): ZoneSourceLookup => {
   const declaredOffsets = readDeclaredTimeZoneOffsets([...blocksByTimeZoneId.values()].join("\r\n"));
   const sources = new Map<string, ZoneSource | undefined>();
+  const budget = createOnsetBudget();
   return (timeZoneId) => {
     if (!sources.has(timeZoneId)) {
-      sources.set(timeZoneId, buildZoneSource(timeZoneId, blocksByTimeZoneId, declaredOffsets));
+      sources.set(timeZoneId, buildZoneSource(timeZoneId, blocksByTimeZoneId, declaredOffsets, budget));
     }
     return sources.get(timeZoneId);
   };

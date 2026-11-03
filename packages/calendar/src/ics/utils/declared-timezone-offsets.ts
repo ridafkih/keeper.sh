@@ -1,5 +1,6 @@
 import ICAL from "ical.js";
-import { assertObservanceExpansionBounded } from "./observance-onset-bound";
+import { createOnsetBudget } from "./observance-onset-bound";
+import type { OnsetBudget } from "./observance-onset-bound";
 import { wallTimeToInstantWith } from "./timezone-instant";
 import { offsetPartsToMinutes } from "./utc-offset";
 import type { ZoneOffsetAt } from "./timezone-instant";
@@ -119,20 +120,21 @@ const expandObservance = (
 ): ZoneChange[] => {
   const offsetMinutes = readObservanceOffset(observance, "tzoffsetto") ?? 0;
   const previousOffsetMinutes = readObservanceOffset(observance, "tzoffsetfrom") ?? 0;
-  assertObservanceExpansionBounded(observance, untilYear);
   includeStartAsListedOnset(observance);
   const changes = expander._expandComponent(observance, untilYear, []) ?? [];
   return changes.map((change) => toZoneChange(change, offsetMinutes, previousOffsetMinutes));
 };
 
-const expandZoneChanges = (blockText: string, untilYear: number): ZoneChange[] => {
+const expandZoneChanges = (blockText: string, untilYear: number, budget: OnsetBudget): ZoneChange[] => {
   const timezone = readTimezoneComponent(blockText);
   if (!timezone) {
     throw new RangeError("Unable to read declared VTIMEZONE");
   }
   const expander: ObservanceExpander = new ICAL.Timezone({ component: timezone });
   try {
-    return listUsableObservances(timezone)
+    const observances = listUsableObservances(timezone);
+    budget.spend(observances, untilYear);
+    return observances
       .flatMap((observance) => expandObservance(expander, observance, untilYear))
       .toSorted((left, right) => left.instant - right.instant);
   } catch (error) {
@@ -158,7 +160,7 @@ const findLastChangeIndexAtOrBefore = (changes: readonly ZoneChange[], instant: 
 const offsetBeforeChange = (changes: readonly ZoneChange[], index: number): number =>
   changes[index - 1]?.offsetMinutes ?? changes[index]?.previousOffsetMinutes ?? 0;
 
-const createDeclaredZone = (blockText: string, latestOnsetYear: number): DeclaredZone => {
+const createDeclaredZone = (blockText: string, latestOnsetYear: number, budget: OnsetBudget): DeclaredZone => {
   let coveredUntilYear = Number.NEGATIVE_INFINITY;
   let changes: ZoneChange[] = [];
 
@@ -166,7 +168,7 @@ const createDeclaredZone = (blockText: string, latestOnsetYear: number): Declare
     const year = new Date(instant).getUTCFullYear() + COVERAGE_YEARS_AHEAD;
     if (year > coveredUntilYear) {
       coveredUntilYear = Math.max(year, latestOnsetYear);
-      changes = expandZoneChanges(blockText, coveredUntilYear);
+      changes = expandZoneChanges(blockText, coveredUntilYear, budget);
     }
     return changes;
   };
@@ -204,7 +206,7 @@ const createDeclaredZone = (blockText: string, latestOnsetYear: number): Declare
   return { offsetAt, wallTimeToInstant };
 };
 
-const readDeclaredZone = (blockText: string): DeclaredZone | undefined => {
+const readDeclaredZone = (blockText: string, budget: OnsetBudget): DeclaredZone | undefined => {
   const timezone = readTimezoneComponent(blockText);
   if (!timezone) {
     return;
@@ -213,11 +215,12 @@ const readDeclaredZone = (blockText: string): DeclaredZone | undefined => {
   if (observances.length === 0) {
     return;
   }
-  return createDeclaredZone(blockText, Math.max(...observances.map((observance) => readOnsetYear(observance))));
+  const latestOnsetYear = Math.max(...observances.map((observance) => readOnsetYear(observance)));
+  return createDeclaredZone(blockText, latestOnsetYear, budget);
 };
 
 const declaredZoneOffsetAt = (blockText: string): ZoneOffsetAt | undefined =>
-  readDeclaredZone(blockText)?.offsetAt;
+  readDeclaredZone(blockText, createOnsetBudget())?.offsetAt;
 
 export { declaredZoneOffsetAt, readDeclaredZone };
 export type { DeclaredZone };
