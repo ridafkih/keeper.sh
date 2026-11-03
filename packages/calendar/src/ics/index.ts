@@ -6,6 +6,7 @@ export type { ParsedIcsEventDiagnostics } from "./utils/parse-ics-events";
 export { parseIcsCalendar } from "./utils/parse-ics-calendar";
 export { diffEvents } from "./utils/diff-events";
 export { persistCalendarSnapshot, prepareCalendarSnapshot } from "./utils/create-snapshot";
+export { resolveFeedName } from "./utils/feed-name";
 export {
   applyCalendarTimeZoneToFloatingEventDates,
   createIcsSourceFetcher,
