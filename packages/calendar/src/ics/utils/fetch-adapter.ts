@@ -19,6 +19,16 @@ import {
 } from "./resolve-timezone-identifier";
 import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
+import {
+  anchorRecurrenceIdentifier,
+  expandDateExclusion,
+  isDateExclusionEntry,
+  readSeriesMasterContext,
+  readSeriesMasterContexts,
+  toEndOfLocalDayUntil,
+  withoutValueParameter,
+} from "./series-recurrence-references";
+import type { IcsProperty, SeriesMasterContext } from "./series-recurrence-references";
 import { measureProviderRequest, measureSyncSegment } from "../../core/telemetry/segments";
 
 interface IcsSourceFetcherConfig {
@@ -51,13 +61,6 @@ const FLOATING_DATE_PROPERTIES = new Set([
 
 const FLOATING_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8}T\d{6})(?=;|$)/i;
 const TZID_PARAMETER_PATTERN = /;TZID=(?:"([^"]*)"|([^;:]*))/i;
-
-interface IcsPropertyParts {
-  parameters: string[];
-  property: string;
-  propertyName: string;
-  value: string;
-}
 
 /**
  * The zone a VEVENT's own DTSTART declares. Recurrence properties that carry no
@@ -104,7 +107,7 @@ const readFloatingWallTime = (recurrenceRuleValue: string): Date => {
   ));
 };
 
-const parseIcsPropertyParts = (line: string): IcsPropertyParts | null => {
+const parseIcsProperty = (line: string): IcsProperty | null => {
   const separatorIndex = line.indexOf(":");
   if (separatorIndex === -1) {
     return null;
@@ -124,7 +127,7 @@ const parseIcsPropertyParts = (line: string): IcsPropertyParts | null => {
 
 const readEventTimeZoneContext = (lines: readonly string[]): EventTimeZoneContext => {
   for (const line of lines) {
-    const parts = parseIcsPropertyParts(line);
+    const parts = parseIcsProperty(line);
     if (!parts || parts.propertyName !== "DTSTART") {
       continue;
     }
@@ -198,45 +201,103 @@ const normalizeFloatingRecurrenceRule = (
 const isAbsoluteDateEntry = (entry: string): boolean =>
   entry.endsWith("Z") || /^\d{8}$/.test(entry);
 
+interface DatePropertyEntries {
+  absoluteEntries: string[];
+  floatingEntries: string[];
+}
+
+const splitDatePropertyEntries = (
+  parts: IcsProperty,
+  dateExclusionMaster: SeriesMasterContext | undefined,
+): DatePropertyEntries => {
+  const entries: DatePropertyEntries = { absoluteEntries: [], floatingEntries: [] };
+  for (const entry of parts.value.split(",")) {
+    if (dateExclusionMaster && isDateExclusionEntry(parts, entry)) {
+      const slots = expandDateExclusion(entry, dateExclusionMaster);
+      entries.absoluteEntries.push(...slots.instants);
+      entries.floatingEntries.push(...slots.wallTimes);
+    } else if (isAbsoluteDateEntry(entry)) {
+      entries.absoluteEntries.push(entry);
+    } else {
+      entries.floatingEntries.push(entry);
+    }
+  }
+  return entries;
+};
+
+const readDateExclusionMaster = (
+  parts: IcsProperty,
+  master: SeriesMasterContext | undefined,
+): SeriesMasterContext | undefined => {
+  if (parts.propertyName !== "EXDATE") {
+    return;
+  }
+  return master;
+};
+
 const normalizeFloatingDateProperty = (
   line: string,
-  parts: IcsPropertyParts,
+  parts: IcsProperty,
   zones: EventFloatingZones,
+  master: SeriesMasterContext | undefined,
 ): string[] => {
+  const dateExclusionMaster = readDateExclusionMaster(parts, master);
   if (
     !FLOATING_DATE_PROPERTIES.has(parts.propertyName)
     || parts.property.toUpperCase().includes("TZID=")
-    || parts.parameters.includes("VALUE=DATE")
+    || (parts.parameters.includes("VALUE=DATE") && !dateExclusionMaster)
   ) {
     return [line];
   }
-  const entries = parts.value.split(",");
-  const floatingEntries = entries.filter((entry) => !isAbsoluteDateEntry(entry));
-  if (floatingEntries.length === 0) {
+  const { absoluteEntries, floatingEntries } = splitDatePropertyEntries(parts, dateExclusionMaster);
+  if (floatingEntries.length === 0 && !dateExclusionMaster) {
     return [line];
   }
-  if (!zones.declared) {
+  if (floatingEntries.length > 0 && !zones.declared) {
     throw new RangeError(
       `Floating ICS ${parts.propertyName} requires an explicit TZID or X-WR-TIMEZONE`,
     );
   }
-  const zonedLine = `${parts.property};TZID=${zones.declared}:${floatingEntries.join(",")}`;
-  const absoluteEntries = entries.filter((entry) => isAbsoluteDateEntry(entry));
-  if (absoluteEntries.length === 0) {
-    return [zonedLine];
-  }
+  const property = withoutValueParameter(parts.property);
   /*
    * A TZID parameter applies to every value on the property, so the absolute
    * entries of a mixed multi-value list are re-emitted on their own line rather
    * than being reinterpreted in the event's zone.
    */
-  return [zonedLine, `${parts.property}:${absoluteEntries.join(",")}`];
+  const lines: string[] = [];
+  if (floatingEntries.length > 0) {
+    lines.push(`${property};TZID=${zones.declared}:${floatingEntries.join(",")}`);
+  }
+  if (absoluteEntries.length > 0) {
+    lines.push(`${property}:${absoluteEntries.join(",")}`);
+  }
+  return lines;
 };
+
+const normalizeDateUntil = (line: string, master: SeriesMasterContext | undefined): string => {
+  if (!master) {
+    return line;
+  }
+  const separatorIndex = line.indexOf(":");
+  return `${line.slice(0, separatorIndex + 1)}${toEndOfLocalDayUntil(line.slice(separatorIndex + 1), master)}`;
+};
+
+interface EventSeriesContext {
+  calendarTimeZone: string | undefined;
+  declaredOffsets: DeclaredTimeZoneOffsets;
+  mastersByUid: ReadonlyMap<string, SeriesMasterContext>;
+}
+
+const readEventUid = (properties: readonly (IcsProperty | null)[]): string | undefined =>
+  properties.find((parts) => parts?.propertyName === "UID")?.value;
+
+const toBlockProperties = (block: IcsLineBlock): IcsProperty[] => block.lines
+  .map((line) => parseIcsProperty(line))
+  .filter((parts) => parts !== null);
 
 const normalizeFloatingEventBlock = (
   block: IcsLineBlock,
-  calendarTimeZone: string | undefined,
-  declaredOffsets: DeclaredTimeZoneOffsets,
+  series: EventSeriesContext,
 ): string[] => {
   const context = readEventTimeZoneContext(block.lines);
   /*
@@ -246,27 +307,36 @@ const normalizeFloatingEventBlock = (
   if (context.isAllDay) {
     return block.lines;
   }
-  const declared = context.timeZone ?? calendarTimeZone;
+  const declared = context.timeZone ?? series.calendarTimeZone;
   const zones: EventFloatingZones = {
     declared,
-    resolved: resolveDeclaredTimeZone(declared, declaredOffsets),
+    resolved: resolveDeclaredTimeZone(declared, series.declaredOffsets),
   };
+  const properties = toBlockProperties(block);
+  const ownMaster = readSeriesMasterContext(
+    properties,
+    series.calendarTimeZone,
+    series.declaredOffsets,
+  );
+  const seriesMaster = series.mastersByUid.get(readEventUid(properties) ?? "");
 
   return block.lines.flatMap((line) => {
-    const parts = parseIcsPropertyParts(line);
+    const parts = parseIcsProperty(line);
     if (!parts) {
       return [line];
     }
     if (parts.propertyName === "RRULE") {
-      return [normalizeFloatingRecurrenceRule(line, zones)];
+      return [normalizeDateUntil(normalizeFloatingRecurrenceRule(line, zones), ownMaster)];
     }
-    return normalizeFloatingDateProperty(line, parts, zones);
+    const anchored = parts.propertyName === "RECURRENCE-ID"
+      && seriesMaster
+      && anchorRecurrenceIdentifier(parts, seriesMaster);
+    if (anchored) {
+      return [anchored];
+    }
+    return normalizeFloatingDateProperty(line, parts, zones, ownMaster);
   });
 };
-
-const readEventUid = (lines: readonly string[]): string | undefined => lines
-  .map((line) => parseIcsPropertyParts(line))
-  .find((parts) => parts?.propertyName === "UID")?.value;
 
 const normalizeFloatingEventDates = (
   ical: string,
@@ -275,18 +345,28 @@ const normalizeFloatingEventDates = (
   const unfolded = ical.replaceAll(/\r?\n[\t ]/g, "");
   const declaredOffsets = readDeclaredTimeZoneOffsets(unfolded);
   const failures: FloatingEventFailure[] = [];
+  const blocks = splitIcsLineBlocks(unfolded.split(/\r?\n/));
+  const series: EventSeriesContext = {
+    calendarTimeZone,
+    declaredOffsets,
+    mastersByUid: readSeriesMasterContexts(
+      blocks.filter(({ insideEvent }) => insideEvent).map((block) => toBlockProperties(block)),
+      calendarTimeZone,
+      declaredOffsets,
+    ),
+  };
 
-  const lines = splitIcsLineBlocks(unfolded.split(/\r?\n/)).flatMap((block) => {
+  const lines = blocks.flatMap((block) => {
     if (!block.insideEvent) {
       return block.lines;
     }
     try {
-      return normalizeFloatingEventBlock(block, calendarTimeZone, declaredOffsets);
+      return normalizeFloatingEventBlock(block, series);
     } catch (error) {
       if (!(error instanceof RangeError)) {
         throw error;
       }
-      const uid = readEventUid(block.lines);
+      const uid = readEventUid(toBlockProperties(block));
       failures.push({ error, ...uid && { uid } });
       return block.lines;
     }
