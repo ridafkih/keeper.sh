@@ -26,7 +26,7 @@ interface OnboardingHeadingIcon {
 
 interface OnboardingHeadingProps {
   title: ReactNode;
-  description: ReactNode;
+  description: ReactNode | null;
   icon?: OnboardingHeadingIcon;
 }
 
@@ -39,7 +39,7 @@ export function OnboardingHeading({ title, description, icon }: OnboardingHeadin
         </div>
       )}
       <Heading2 as="h1">{title}</Heading2>
-      <Text size="sm" tone="muted">{description}</Text>
+      {description && <Text size="sm" tone="muted">{description}</Text>}
     </div>
   );
 }

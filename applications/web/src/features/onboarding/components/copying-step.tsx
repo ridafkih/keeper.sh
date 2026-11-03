@@ -5,12 +5,13 @@ import {
   NavigationMenuItemIcon,
   NavigationMenuItemLabel,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { ShimmerText } from "@/components/ui/primitives/shimmer-text";
 import { SyncProgressCircle } from "@/features/dashboard/components/sync-status";
-import { resolveSyncPercent } from "@/features/dashboard/components/sync-status-helpers";
-import { pluralize } from "@/lib/pluralize";
 import { syncStateAtom } from "@/state/sync";
 import type { CalendarSource } from "@/types/api";
 import type { CopiedEvents } from "../use-copied-events";
+import { describeRemainingEvents, describeTimeLeft, resolveCopyPercent } from "../copy-progress";
+import { useCopyProgress } from "../use-copy-progress";
 import { OnboardingHeading } from "./onboarding-heading";
 import { CopiedEventRows } from "./copied-event-rows";
 
@@ -19,25 +20,23 @@ interface CopyingStepProps {
   calendars: CalendarSource[];
 }
 
-const resolveRemainingLabel = (remaining: number): string => {
-  if (remaining > 0) return pluralize(remaining, "more event");
-  return "Copying";
-};
-
 export function CopyingStep({ copies, calendars }: CopyingStepProps) {
   const sync = useAtomValue(syncStateAtom);
-  const percent = resolveSyncPercent(sync) ?? 0;
+  const progress = useCopyProgress();
+  const remainingLabel = describeRemainingEvents(progress);
 
   return (
     <>
-      <OnboardingHeading title="Copying your events" description="Usually done in about a minute." />
+      <OnboardingHeading title="Copying your events" description={describeTimeLeft(progress?.secondsRemaining ?? null)} />
       <NavigationMenu>
         <CopiedEventRows events={copies?.upcoming ?? []} calendars={calendars} showsCheck />
         <NavigationMenuItem>
           <NavigationMenuItemIcon>
-            <SyncProgressCircle percent={percent} />
+            <SyncProgressCircle percent={resolveCopyPercent(progress) ?? 0} />
           </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>{resolveRemainingLabel(sync.syncEventsRemaining)}</NavigationMenuItemLabel>
+          <NavigationMenuItemLabel>
+            {sync.state === "syncing" ? <ShimmerText>{remainingLabel}</ShimmerText> : remainingLabel}
+          </NavigationMenuItemLabel>
         </NavigationMenuItem>
       </NavigationMenu>
     </>

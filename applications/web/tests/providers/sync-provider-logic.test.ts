@@ -20,6 +20,7 @@ const createCurrentState = (
   syncEventsProcessed: 3,
   syncEventsRemaining: 7,
   syncEventsTotal: 10,
+  syncSecondsRemaining: null,
   ...overrides,
 });
 

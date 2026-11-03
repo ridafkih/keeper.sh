@@ -15,6 +15,7 @@ const createComposite = (
   syncEventsProcessed: 5,
   syncEventsRemaining: 5,
   syncEventsTotal: 10,
+  syncSecondsRemaining: null,
   ...overrides,
 });
 

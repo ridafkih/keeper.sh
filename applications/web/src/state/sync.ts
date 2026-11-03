@@ -15,6 +15,7 @@ export interface CompositeSyncState {
   syncEventsProcessed: number;
   syncEventsRemaining: number;
   syncEventsTotal: number;
+  syncSecondsRemaining: number | null;
   lastSyncedAt: string | null;
   connected: boolean;
   hasReceivedAggregate: boolean;
@@ -28,6 +29,7 @@ export const syncStateAtom = atom<CompositeSyncState>({
   syncEventsProcessed: 0,
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
+  syncSecondsRemaining: null,
   lastSyncedAt: null,
   connected: false,
   hasReceivedAggregate: false,

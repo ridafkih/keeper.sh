@@ -20,6 +20,7 @@ const compositeState = (overrides: Partial<CompositeSyncState>): CompositeSyncSt
   syncEventsProcessed: 0,
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
+  syncSecondsRemaining: null,
   ...overrides,
 });
 
