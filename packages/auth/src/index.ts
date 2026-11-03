@@ -294,11 +294,9 @@ const createAuth = (config: AuthConfig) => {
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {
-      accessType: "offline",
       clientId: googleClientId,
       clientSecret: googleClientSecret,
-      prompt: "consent",
-      scope: ["https://www.googleapis.com/auth/calendar.events"],
+      prompt: "select_account",
     };
   }
 
@@ -313,7 +311,6 @@ const createAuth = (config: AuthConfig) => {
         return {};
       },
       prompt: "select_account",
-      scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
     };
   }
 

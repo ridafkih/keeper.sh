@@ -2,17 +2,9 @@ import type { ReactNode, SubmitEvent } from "react";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import KeeperLogo from "@/assets/keeper.svg?react";
-import { authClient } from "@/lib/auth-client";
-import { withSignupMarker } from "@/lib/signup-marker";
-import {
-  resolvePathWithSearch,
-  resolveClientPostAuthRedirect,
-  type StringSearchParams,
-} from "@/lib/mcp-auth-flow";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
 
@@ -30,11 +22,6 @@ const PERMISSIONS = [
   "View events, summaries and details",
   "Add or remove calendar events",
 ];
-
-const PROVIDER_SOCIAL_MAP: Partial<Record<Provider, string>> = {
-  google: "google",
-  outlook: "microsoft",
-};
 
 const PROVIDER_API_MAP: Record<Provider, string> = {
   google: "google",
@@ -89,38 +76,6 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
       </form>
       {children}
     </>
-  );
-}
-
-interface AuthOAuthPreambleProps {
-  provider: Provider;
-  authorizationSearch?: StringSearchParams;
-}
-
-export function AuthOAuthPreamble({
-  provider,
-  authorizationSearch,
-}: AuthOAuthPreambleProps) {
-  const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const socialProvider = PROVIDER_SOCIAL_MAP[provider];
-    if (!socialProvider) return;
-
-    const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
-
-    await authClient.signIn.social({
-      callbackURL,
-      newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
-      provider: socialProvider,
-    });
-  };
-
-  return (
-    <PreambleLayout provider={provider} onSubmit={handleSubmit}>
-      <ExternalTextLink href={resolvePathWithSearch("/login", authorizationSearch)}>
-        Don&apos;t import my calendars yet, just log me in.
-      </ExternalTextLink>
-    </PreambleLayout>
   );
 }
 
