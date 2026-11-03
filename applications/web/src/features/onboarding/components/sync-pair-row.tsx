@@ -5,6 +5,7 @@ import {
   NavigationMenuItemTrailing,
   NavigationMenuLinkItem,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { Text } from "@/components/ui/primitives/text";
 import type { CalendarSource } from "@/types/api";
 import type { SyncPairSummary } from "../sync-pairs";
 
@@ -20,7 +21,9 @@ export function SyncPairRow({ pair, source }: SyncPairRowProps) {
         <ArrowLeftRight size={15} />
       </NavigationMenuItemIcon>
       <NavigationMenuItemLabel tone="default">{pair.label}</NavigationMenuItemLabel>
-      <NavigationMenuItemTrailing />
+      <NavigationMenuItemTrailing>
+        {pair.busyOnly && <Text size="sm" tone="muted" className="shrink-0">Busy only</Text>}
+      </NavigationMenuItemTrailing>
     </NavigationMenuLinkItem>
   );
 }

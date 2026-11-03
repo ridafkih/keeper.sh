@@ -7,10 +7,15 @@ interface SyncPairSummary {
   key: string;
   label: string;
   sourceCalendarId: string;
+  busyOnly: boolean;
 }
 
 interface NamedCalendar {
   name: string;
+}
+
+interface PairedCalendar extends NamedCalendar {
+  excludeEventName: boolean;
 }
 
 interface SyncDirections<TCalendar extends NamedCalendar> {
@@ -23,25 +28,29 @@ interface SyncDirections<TCalendar extends NamedCalendar> {
 const pairKey = ({ sourceCalendarId, destinationCalendarId }: MappingPair): string =>
   [sourceCalendarId, destinationCalendarId].sort().join(":");
 
+const isReverseOf = (mapping: MappingPair) => (other: MappingPair): boolean =>
+  other.sourceCalendarId === mapping.destinationCalendarId
+  && other.destinationCalendarId === mapping.sourceCalendarId;
+
 const describeSyncPairs = (
   mappings: MappingPair[],
-  namesById: Map<string, string>,
+  calendarsById: ReadonlyMap<string, PairedCalendar>,
 ): SyncPairSummary[] => {
   const summaries = new Map<string, SyncPairSummary>();
 
   for (const mapping of mappings) {
     const key = pairKey(mapping);
-    const sourceName = namesById.get(mapping.sourceCalendarId);
-    const destinationName = namesById.get(mapping.destinationCalendarId);
-    if (summaries.has(key) || !sourceName || !destinationName) continue;
+    const source = calendarsById.get(mapping.sourceCalendarId);
+    const destination = calendarsById.get(mapping.destinationCalendarId);
+    if (summaries.has(key) || !source || !destination) continue;
 
-    const twoWay = mappings.some((other) =>
-      other.sourceCalendarId === mapping.destinationCalendarId
-      && other.destinationCalendarId === mapping.sourceCalendarId);
+    const twoWay = mappings.some(isReverseOf(mapping));
     const joiner = twoWay ? "and" : "to";
+    const senders = twoWay ? [source, destination] : [source];
     summaries.set(key, {
+      busyOnly: senders.every(({ excludeEventName }) => excludeEventName),
       key,
-      label: `${sourceName} ${joiner} ${destinationName}`,
+      label: `${source.name} ${joiner} ${destination.name}`,
       sourceCalendarId: mapping.sourceCalendarId,
     });
   }
@@ -62,4 +71,4 @@ const describeProposal = <TCalendar extends NamedCalendar>(
 };
 
 export { describeProposal, describeSyncPairs };
-export type { MappingPair, SyncDirections, SyncPairSummary };
+export type { MappingPair, PairedCalendar, SyncDirections, SyncPairSummary };

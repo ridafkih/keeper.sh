@@ -13,9 +13,8 @@ export function useSyncPairs(calendars: CalendarSource[] | undefined): SyncPairW
   if (!data || !calendars) return [];
 
   const calendarsById = new Map(calendars.map((calendar) => [calendar.id, calendar]));
-  const names = new Map(calendars.map(({ id, name }) => [id, name]));
 
-  return describeSyncPairs(data.mappings, names).flatMap((pair) => {
+  return describeSyncPairs(data.mappings, calendarsById).flatMap((pair) => {
     const source = calendarsById.get(pair.sourceCalendarId);
     if (!source) return [];
     return [{ pair, source }];
