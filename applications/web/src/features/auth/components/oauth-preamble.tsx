@@ -19,6 +19,7 @@ import {
   NavigationMenuItemLabel,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { providerIcons } from "@/lib/providers";
 
 type Provider = "google" | "outlook";
 
@@ -73,7 +74,7 @@ function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
     <>
       <ProviderIconPair>
         <img
-          src={`/integrations/icon-${provider}.svg`}
+          src={providerIcons[provider]}
           alt={label}
           width={40}
           height={40}
