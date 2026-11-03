@@ -1,4 +1,4 @@
-import { wallTimeToInstant } from "@keeper.sh/calendar";
+import { offsetPartsToMinutes, wallTimeToInstant } from "@keeper.sh/calendar";
 import { resolveTimeZoneOrThrow } from "@/utils/request-time-zone";
 
 interface EventTimeInputOptions {
@@ -73,15 +73,11 @@ const readOffsetMinutes = (value: string, designator: string): number => {
   if (!match) {
     return 0;
   }
-  const [, sign, hours, minutes] = match;
+  const [, sign = "+", hours = "0", minutes = "0"] = match;
   if (Number(hours) >= HOURS_PER_DAY || Number(minutes) >= MINUTES_PER_HOUR) {
     throw new EventTimeInputError(`Event time ${value} has an impossible UTC offset.`);
   }
-  const magnitude = (Number(hours) * MINUTES_PER_HOUR) + Number(minutes);
-  if (sign === "-") {
-    return -magnitude;
-  }
-  return magnitude;
+  return offsetPartsToMinutes(sign, hours, minutes);
 };
 
 const toWallTime = (date: CalendarDate, clock: WallClock): Date =>

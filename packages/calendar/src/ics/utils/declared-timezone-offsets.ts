@@ -1,6 +1,7 @@
 import ICAL from "ical.js";
 import { assertObservanceExpansionBounded } from "./observance-onset-bound";
 import { wallTimeToInstantWith } from "./timezone-instant";
+import { offsetPartsToMinutes } from "./utc-offset";
 import type { ZoneOffsetAt } from "./timezone-instant";
 
 interface ObservanceChange {
@@ -37,8 +38,6 @@ const JCAL_VALUE_INDEX = 3;
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60 * MS_PER_SECOND;
 const MS_PER_DAY = 24 * 60 * MS_PER_MINUTE;
-const MINUTES_PER_HOUR = 60;
-const SECONDS_PER_MINUTE = 60;
 const COVERAGE_YEARS_AHEAD = 1;
 const JCAL_UTC_OFFSET_PATTERN = /^([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/;
 
@@ -50,12 +49,8 @@ const parseJcalUtcOffset = (value: unknown): number | undefined => {
   if (!match) {
     return;
   }
-  const [, sign, hours, minutes, seconds = "0"] = match;
-  const magnitude = Number(hours) * MINUTES_PER_HOUR + Number(minutes) + Number(seconds) / SECONDS_PER_MINUTE;
-  if (sign === "-") {
-    return -magnitude;
-  }
-  return magnitude;
+  const [, sign = "+", hours = "0", minutes = "0", seconds] = match;
+  return offsetPartsToMinutes(sign, hours, minutes, seconds);
 };
 
 const readObservanceOffset = (observance: ICAL.Component, name: string): number | undefined =>

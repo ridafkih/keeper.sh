@@ -1,5 +1,6 @@
 import { visitIcsProperties } from "./apply-patches";
 import { canFormatTimeZone, listSupportedTimeZones, readTimeZoneOffsetMinutes } from "./intl-time-zone";
+import { offsetPartsToMinutes } from "./utc-offset";
 import { WINDOWS_TO_IANA } from "./windows-timezones";
 
 type DeclaredTimeZoneOffsets = ReadonlyMap<string, readonly number[]>;
@@ -9,7 +10,6 @@ type ResolvedTimeZone =
   | { kind: "fixed-offset"; timeZone: string; offsetMinutes: number };
 
 const MINUTES_PER_HOUR = 60;
-const SECONDS_PER_MINUTE = 60;
 const MAX_FIXED_OFFSET_MINUTES = 14 * MINUTES_PER_HOUR;
 const MAX_IANA_ZONE_SEGMENTS = 3;
 const UTC_OFFSET_PATTERN = /^([+-])(\d{2})(\d{2})(\d{2})?$/;
@@ -157,11 +157,7 @@ const parseUtcOffsetMinutes = (offset: string): number | undefined => {
   if (!sign || !hours || !minutes) {
     return;
   }
-  const magnitude = Number(hours) * MINUTES_PER_HOUR + Number(minutes) + Number(seconds) / SECONDS_PER_MINUTE;
-  if (sign === "-") {
-    return -magnitude;
-  }
-  return magnitude;
+  return offsetPartsToMinutes(sign, hours, minutes, seconds);
 };
 
 const readDeclaredTimeZoneOffsets = (ical: string): DeclaredTimeZoneOffsets => {

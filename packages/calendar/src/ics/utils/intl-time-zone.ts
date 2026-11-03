@@ -1,4 +1,5 @@
-const MINUTES_PER_HOUR = 60;
+import { offsetPartsToMinutes } from "./utc-offset";
+
 const LONG_OFFSET_PATTERN = /^GMT(?:(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2}))?$/;
 
 const formattableTimeZones = new Map<string, boolean>();
@@ -37,15 +38,11 @@ const readTimeZoneOffsetMinutes = (timeZone: string, instant: Date): number | un
   if (!match) {
     return;
   }
-  const { hours, minutes, sign } = match.groups ?? {};
+  const { hours = "0", minutes = "0", sign } = match.groups ?? {};
   if (!sign) {
     return 0;
   }
-  const magnitude = Number(hours) * MINUTES_PER_HOUR + Number(minutes);
-  if (sign === "-") {
-    return -magnitude;
-  }
-  return magnitude;
+  return offsetPartsToMinutes(sign, hours, minutes);
 };
 
 const listSupportedTimeZones = (): readonly string[] => Intl.supportedValuesOf("timeZone");
