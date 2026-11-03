@@ -308,7 +308,7 @@ describe("dashboard route loader", () => {
     expect(data.commercialMode).toBe(false);
   });
 
-  it("does not read the plan at all outside commercial mode", async () => {
+  it("does not read the plan at all outside commercial mode, only the setup data", async () => {
     const { calls, fetchApi } = createApi(() => ({}));
 
     const data = (await runDashboardLoader(fetchApi, { commercialMode: false })) as {
@@ -316,7 +316,8 @@ describe("dashboard route loader", () => {
     };
 
     expect(data.subscription).toBeUndefined();
-    expect(calls).toEqual([]);
+    expect(calls).not.toContain(CUSTOMER_STATE_PATH);
+    expect(calls.toSorted()).toEqual(["/api/accounts", "/api/entitlements", "/api/mappings", "/api/sources"]);
   });
 
   it("converges on the same preload across repeated runs during the outage", async () => {
