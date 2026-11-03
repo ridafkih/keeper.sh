@@ -4,6 +4,7 @@ import {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   readsAsReauthenticationReturn,
   resolveAccountDeletionOutcome,
+  resolveDeleteAccountDescription,
   resolveReauthenticationErrorMessage,
   resolveReauthenticationMethods,
 } from "../../src/lib/account-reauthentication";
@@ -123,6 +124,26 @@ describe("resolveReauthenticationErrorMessage", () => {
     ).toBe("Couldn't confirm it's you.");
     expect(resolveReauthenticationErrorMessage({ message: "fetch failed" })).toBe(
       "Couldn't confirm it's you.",
+    );
+  });
+});
+
+describe("resolveDeleteAccountDescription", () => {
+  it("warns that deletion is permanent before anything else", () => {
+    expect(resolveDeleteAccountDescription({ methodCount: 2, step: "confirm" })).toBe(
+      "This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.",
+    );
+  });
+
+  it("asks to sign in again when there is a way to confirm it's you here", () => {
+    expect(resolveDeleteAccountDescription({ methodCount: 1, step: "reauthenticate" })).toBe(
+      "Sign in again to confirm it's you, then delete your account.",
+    );
+  });
+
+  it("gives one instruction when there is no way to confirm it's you here", () => {
+    expect(resolveDeleteAccountDescription({ methodCount: 0, step: "reauthenticate" })).toBe(
+      "Sign out and back in, then delete your account.",
     );
   });
 });

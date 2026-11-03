@@ -10,16 +10,17 @@ import {
   ModalFooter,
   ModalTitle,
 } from "@/components/ui/primitives/modal";
-import { deleteAccount, reauthenticate } from "@/lib/auth";
-import { resolveReauthenticationMethods } from "@/lib/account-reauthentication";
-import type { ReauthenticationMethod } from "@/lib/account-reauthentication";
+import { deleteAccount, reauthenticate, signOut } from "@/lib/auth";
+import {
+  resolveDeleteAccountDescription,
+  resolveReauthenticationMethods,
+} from "@/lib/account-reauthentication";
+import type { DeleteAccountStep, ReauthenticationMethod } from "@/lib/account-reauthentication";
 import { resolveOidcProviderName } from "@/lib/auth-capabilities";
 import type { AuthCapabilities } from "@/lib/auth-capabilities";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { resolveErrorMessage } from "@/utils/errors";
 import type { SessionUser } from "@/hooks/use-session";
-
-type DeleteAccountStep = "confirm" | "reauthenticate";
 
 interface DeleteAccountModalProps {
   open: boolean;
@@ -44,13 +45,6 @@ const resolveMethodLabel = (
   if (method.provider === "google") return "Continue with Google";
   if (method.provider === "microsoft") return "Continue with Outlook";
   return `Continue with ${resolveOidcProviderName(capabilities)}`;
-};
-
-const resolveDescription = (step: DeleteAccountStep): string => {
-  if (step === "reauthenticate") {
-    return "Sign in again to confirm it's you, then delete your account.";
-  }
-  return "This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.";
 };
 
 export function DeleteAccountModal({
@@ -119,16 +113,25 @@ export function DeleteAccountModal({
       }
     }, "Couldn't confirm it's you.");
 
+  const handleSignOut = () =>
+    runSafely(async () => {
+      track(ANALYTICS_EVENTS.logout);
+      await signOut();
+      onOpenChange(false);
+      navigate({ to: "/login" });
+    }, "Couldn't sign out.");
+
+  const needsSignOut = step === "reauthenticate" && methods.length === 0;
+
   return (
     <Modal open={open} onOpenChange={handleOpenChange}>
       <ModalContent>
         <ModalTitle>Delete account?</ModalTitle>
-        <ModalDescription>{resolveDescription(step)}</ModalDescription>
+        <ModalDescription>
+          {resolveDeleteAccountDescription({ methodCount: methods.length, step })}
+        </ModalDescription>
         {step === "confirm" && hasPassword && (
           <Input ref={passwordRef} type="password" placeholder="Confirm your password" />
-        )}
-        {step === "reauthenticate" && methods.length === 0 && (
-          <Text size="sm" tone="muted">Sign out, sign back in, and then delete your account.</Text>
         )}
         {error && <Text size="sm" tone="danger">{error}</Text>}
         <ModalFooter>
@@ -148,6 +151,11 @@ export function DeleteAccountModal({
               <ButtonText>{resolveMethodLabel(method, capabilities)}</ButtonText>
             </Button>
           ))}
+          {needsSignOut && (
+            <Button variant="border" className="w-full justify-center" onClick={handleSignOut} disabled={isWorking}>
+              <ButtonText>Sign out</ButtonText>
+            </Button>
+          )}
           <Button variant="elevated" className="w-full justify-center" onClick={() => handleOpenChange(false)}>
             <ButtonText>Cancel</ButtonText>
           </Button>

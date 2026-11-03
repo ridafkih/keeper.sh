@@ -3,6 +3,8 @@ import type { AuthCapabilities, SocialProviderId } from "./auth-capabilities";
 
 type AccountDeletionOutcome = "deleted" | "reauthentication-required";
 
+type DeleteAccountStep = "confirm" | "reauthenticate";
+
 type ReauthenticationMethod =
   | { kind: "passkey" }
   | { kind: "social"; provider: SocialProviderId };
@@ -67,6 +69,24 @@ const resolveReauthenticationErrorMessage = (error: AuthErrorLike): string => {
   return "Couldn't confirm it's you.";
 };
 
+interface DeleteAccountDescriptionInput {
+  methodCount: number;
+  step: DeleteAccountStep;
+}
+
+const resolveDeleteAccountDescription = ({
+  methodCount,
+  step,
+}: DeleteAccountDescriptionInput): string => {
+  if (step === "confirm") {
+    return "This action is permanent and cannot be undone. All of your data, calendars, and connected accounts will be permanently deleted.";
+  }
+  if (methodCount === 0) {
+    return "Sign out and back in, then delete your account.";
+  }
+  return "Sign in again to confirm it's you, then delete your account.";
+};
+
 const readsAsReauthenticationReturn = (search: Record<string, unknown>): boolean =>
   search[REAUTHENTICATION_SEARCH_KEY] === REAUTHENTICATION_SEARCH_VALUE;
 
@@ -74,7 +94,8 @@ export {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   readsAsReauthenticationReturn,
   resolveAccountDeletionOutcome,
+  resolveDeleteAccountDescription,
   resolveReauthenticationErrorMessage,
   resolveReauthenticationMethods,
 };
-export type { AccountDeletionOutcome, ReauthenticationMethod };
+export type { AccountDeletionOutcome, DeleteAccountStep, ReauthenticationMethod };
