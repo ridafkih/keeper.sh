@@ -21,7 +21,7 @@ import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
 import { wallTimeToInstant } from "./timezone-instant";
 import {
   anchorRecurrenceIdentifier,
-  MAX_EXCLUDED_SLOTS_PER_PROPERTY,
+  createExclusionSlotBudget,
   expandDateExclusion,
   isDateExclusionEntry,
   readSeriesMasterContext,
@@ -29,7 +29,7 @@ import {
   toEndOfLocalDayUntil,
   withoutValueParameter,
 } from "./series-recurrence-references";
-import type { SeriesMasterContext } from "./series-recurrence-references";
+import type { ExclusionSlotBudget, SeriesMasterContext } from "./series-recurrence-references";
 import { parseIcsProperty, readDateTimeWallTime, readTimeZoneParameter, toUtcIcsDateTime } from "./ics-property";
 import type { IcsProperty } from "./ics-property";
 import { measureProviderRequest, measureSyncSegment } from "../../core/telemetry/segments";
@@ -182,16 +182,14 @@ interface DatePropertyEntries {
 const splitDatePropertyEntries = (
   parts: IcsProperty,
   dateExclusionMaster: SeriesMasterContext | undefined,
+  exclusionSlotBudget: ExclusionSlotBudget,
 ): DatePropertyEntries => {
   const entries: DatePropertyEntries = { absoluteEntries: [], floatingEntries: [] };
   for (const entry of parts.value.split(",")) {
     if (dateExclusionMaster && isDateExclusionEntry(parts, entry)) {
-      const slots = expandDateExclusion(entry, dateExclusionMaster);
+      const slots = expandDateExclusion(entry, dateExclusionMaster, exclusionSlotBudget);
       entries.absoluteEntries.push(...slots.instants);
       entries.floatingEntries.push(...slots.wallTimes);
-      if (entries.absoluteEntries.length + entries.floatingEntries.length > MAX_EXCLUDED_SLOTS_PER_PROPERTY) {
-        throw new RangeError(`EXDATE covers more than ${MAX_EXCLUDED_SLOTS_PER_PROPERTY} series slots`);
-      }
     } else if (isAbsoluteDateEntry(entry)) {
       entries.absoluteEntries.push(entry);
     } else {
@@ -216,6 +214,7 @@ const normalizeFloatingDateProperty = (
   parts: IcsProperty,
   zones: EventFloatingZones,
   master: SeriesMasterContext | undefined,
+  exclusionSlotBudget: ExclusionSlotBudget,
 ): string[] => {
   const dateExclusionMaster = readDateExclusionMaster(parts, master);
   if (
@@ -225,7 +224,11 @@ const normalizeFloatingDateProperty = (
   ) {
     return [line];
   }
-  const { absoluteEntries, floatingEntries } = splitDatePropertyEntries(parts, dateExclusionMaster);
+  const { absoluteEntries, floatingEntries } = splitDatePropertyEntries(
+    parts,
+    dateExclusionMaster,
+    exclusionSlotBudget,
+  );
   if (floatingEntries.length === 0 && !dateExclusionMaster) {
     return [line];
   }
@@ -261,6 +264,7 @@ const normalizeDateUntil = (line: string, master: SeriesMasterContext | undefine
 interface EventSeriesContext {
   calendarTimeZone: string | undefined;
   declaredOffsets: DeclaredTimeZoneOffsets;
+  exclusionSlotBudget: ExclusionSlotBudget;
   mastersByUid: ReadonlyMap<string, SeriesMasterContext>;
 }
 
@@ -310,7 +314,7 @@ const normalizeFloatingEventBlock = (
     if (anchored) {
       return [anchored];
     }
-    return normalizeFloatingDateProperty(line, parts, zones, ownMaster);
+    return normalizeFloatingDateProperty(line, parts, zones, ownMaster, series.exclusionSlotBudget);
   });
 };
 
@@ -325,6 +329,7 @@ const normalizeFloatingEventDates = (
   const series: EventSeriesContext = {
     calendarTimeZone,
     declaredOffsets,
+    exclusionSlotBudget: createExclusionSlotBudget(),
     mastersByUid: readSeriesMasterContexts(
       blocks.filter(({ insideEvent }) => insideEvent).map((block) => toBlockProperties(block)),
       calendarTimeZone,

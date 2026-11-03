@@ -33,6 +33,10 @@ interface DateExclusionSlots {
   wallTimes: string[];
 }
 
+interface ExclusionSlotBudget {
+  spend: (date: string, slots: number) => void;
+}
+
 const MS_PER_SECOND = 1000;
 const MS_PER_HOUR = 60 * 60 * MS_PER_SECOND;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -41,12 +45,26 @@ const HOUR_RANGE: NumberRange = { max: 23, min: 0 };
 const MINUTE_RANGE: NumberRange = { max: 59, min: 0 };
 const SECOND_RANGE: NumberRange = { max: 60, min: 0 };
 const MAX_SLOTS_PER_EXCLUDED_DATE = 1440;
-const MAX_EXCLUDED_SLOTS_PER_PROPERTY = 100_000;
+const MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR = 5000;
 const TIME_OF_DAY_FREQUENCIES = new Set(["MINUTELY", "SECONDLY"]);
 const DATE_PATTERN = /^\d{8}$/;
 const DATE_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8})(?=;|$)/i;
 
 const isIcsDate = (entry: string): boolean => DATE_PATTERN.test(entry);
+
+const createExclusionSlotBudget = (): ExclusionSlotBudget => {
+  let remaining = MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR;
+  const spend = (date: string, slots: number): void => {
+    const added = Math.max(slots - 1, 0);
+    if (added > remaining) {
+      throw new RangeError(
+        `DATE EXDATE ${date} takes the calendar past ${MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR} added series slots`,
+      );
+    }
+    remaining -= added;
+  };
+  return { spend };
+};
 
 const readDateWallTime = (date: string, dayOffset = 0): Date => new Date(Date.UTC(
   Number(date.slice(0, 4)),
@@ -209,7 +227,11 @@ const listElapsedHourInstants = (date: string, master: SeriesMasterContext): Dat
   return instants;
 };
 
-const listSlotWallTimes = (date: string, master: SeriesMasterContext): Date[] => {
+const listSlotWallTimes = (
+  date: string,
+  master: SeriesMasterContext,
+  budget: ExclusionSlotBudget,
+): Date[] => {
   const dayStart = readDateWallTime(date).getTime();
   const { rule, startWallTime } = master;
   if (TIME_OF_DAY_FREQUENCIES.has(rule.frequency)) {
@@ -225,17 +247,23 @@ const listSlotWallTimes = (date: string, master: SeriesMasterContext): Date[] =>
   if (hours.length * minutes.length * seconds.length > MAX_SLOTS_PER_EXCLUDED_DATE) {
     throw new RangeError(`DATE EXDATE ${date} covers more than ${MAX_SLOTS_PER_EXCLUDED_DATE} series slots`);
   }
+  budget.spend(date, hours.length * minutes.length * seconds.length);
   return hours.flatMap((hour) => minutes.flatMap((minute) => seconds.map((second) =>
     new Date(dayStart + Date.UTC(1970, 0, 1, hour, minute, second)))));
 };
 
-const expandDateExclusion = (date: string, master: SeriesMasterContext): DateExclusionSlots => {
+const expandDateExclusion = (
+  date: string,
+  master: SeriesMasterContext,
+  budget: ExclusionSlotBudget,
+): DateExclusionSlots => {
   const stepsInElapsedHours = master.rule.frequency === "HOURLY" && !master.rule.hasSelectors;
   const elapsedInstants = stepsInElapsedHours && listElapsedHourInstants(date, master);
   if (elapsedInstants) {
+    budget.spend(date, elapsedInstants.length);
     return { instants: elapsedInstants.map((instant) => toUtcIcsDateTime(instant)), wallTimes: [] };
   }
-  const wallTimes = listSlotWallTimes(date, master);
+  const wallTimes = listSlotWallTimes(date, master, budget);
   if (master.zone.kind === "utc") {
     return { instants: wallTimes.map((wallTime) => toUtcIcsDateTime(wallTime)), wallTimes: [] };
   }
@@ -259,8 +287,8 @@ const toEndOfLocalDayUntil = (ruleValue: string, master: SeriesMasterContext): s
 };
 
 export {
-  MAX_EXCLUDED_SLOTS_PER_PROPERTY,
   anchorRecurrenceIdentifier,
+  createExclusionSlotBudget,
   expandDateExclusion,
   isDateExclusionEntry,
   readSeriesMasterContext,
@@ -268,4 +296,4 @@ export {
   toEndOfLocalDayUntil,
   withoutValueParameter,
 };
-export type { DateExclusionSlots, SeriesMasterContext };
+export type { DateExclusionSlots, ExclusionSlotBudget, SeriesMasterContext };

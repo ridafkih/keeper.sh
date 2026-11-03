@@ -525,6 +525,87 @@ describe("a DATE EXDATE on a series with long selector lists", () => {
   });
 });
 
+const HOURS_OF_DAY = Array.from({ length: 24 }, (_unused, hour) => hour).join(",");
+const MINUTES_OF_HOUR = Array.from({ length: 60 }, (_unused, minute) => minute).join(",");
+const MINUTE_SLOTS_RULE = `FREQ=DAILY;BYHOUR=${HOURS_OF_DAY};BYMINUTE=${MINUTES_OF_HOUR}`;
+
+const listDates = (count: number, offset = 0): string[] => Array.from({ length: count }, (_unused, index) =>
+  new Date(Date.UTC(2026, 0, 1 + offset + index)).toISOString().slice(0, 10).replaceAll("-", ""));
+
+const buildMinuteSlotSeries = (uid: string, exclusionLines: string[]): string[] => [
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  "DTSTAMP:20260101T000000Z",
+  ...zonedMaster("America/Los_Angeles", "20261205T000000", "20261205T000001", `${MINUTE_SLOTS_RULE};COUNT=2`),
+  ...exclusionLines,
+  "END:VEVENT",
+];
+
+const buildMultiEventCalendar = (...events: string[][]): string => [
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "PRODID:-//test//test//EN",
+  ...events.flat(),
+  "END:VCALENDAR",
+].join("\r\n");
+
+describe("the DATE EXDATE slots one calendar may expand to", () => {
+  it("still excludes every slot of a day that yields exactly a day of minutes", async () => {
+    const view = await syncIcsFeed(buildCalendar([], [
+      ...zonedMaster("America/Los_Angeles", "20260105T000000", "20260105T000001", `${MINUTE_SLOTS_RULE};COUNT=1441`),
+      "EXDATE;VALUE=DATE:20260105",
+    ]));
+
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toEqual(["2026-01-06T08:00:00.000Z"]);
+  });
+
+  it("withholds a series whose one EXDATE line of whole days passes the calendar's slot budget, quickly", async () => {
+    const startedAt = performance.now();
+    const view = await syncIcsFeed(buildCalendar([], [
+      ...zonedMaster("America/Los_Angeles", "20261205T000000", "20261205T000001", `${MINUTE_SLOTS_RULE};COUNT=2`),
+      `EXDATE;VALUE=DATE:${listDates(70).join(",")}`,
+    ]));
+
+    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(performance.now() - startedAt).toBeLessThan(2000);
+  });
+
+  it("withholds a series whose many EXDATE lines together pass the calendar's slot budget, quickly", async () => {
+    const startedAt = performance.now();
+    const view = await syncIcsFeed(buildCalendar([], [
+      ...zonedMaster("America/Edmonton", "20261205T000000", "20261205T000100", `FREQ=HOURLY;BYMINUTE=${MINUTES_OF_HOUR};COUNT=5`),
+      ...Array.from({ length: 20 }, (_unused, line) => `EXDATE;VALUE=DATE:${listDates(60, line * 60).join(",")}`),
+    ]));
+
+    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(performance.now() - startedAt).toBeLessThan(2000);
+  });
+
+  it("spends one budget across the calendar's events and keeps syncing series that exclude a single slot a day", async () => {
+    const view = await syncIcsFeed(buildMultiEventCalendar(
+      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(3).join(",")}`]),
+      buildMinuteSlotSeries("second@test", [`EXDATE;VALUE=DATE:${listDates(3).join(",")}`]),
+      [
+        "BEGIN:VEVENT",
+        "UID:daily@test",
+        "DTSTAMP:20260101T000000Z",
+        ...zonedMaster("America/Los_Angeles", "20260105T090000", "20260105T093000", "FREQ=DAILY;COUNT=3"),
+        "EXDATE;VALUE=DATE:20260106",
+        "END:VEVENT",
+      ],
+    ));
+
+    expect(view.unsupportedEventUids).toEqual(["second@test"]);
+    expect(view.starts.toSorted()).toEqual([
+      "2026-01-05T17:00:00.000Z",
+      "2026-01-07T17:00:00.000Z",
+      "2026-12-05T08:00:00.000Z",
+      "2026-12-05T08:01:00.000Z",
+    ]);
+  });
+});
+
 describe("an override with no series master", () => {
   it("keeps resolving its floating RECURRENCE-ID in its own DTSTART zone (regression pin, passes on main)", async () => {
     const view = await syncIcsFeed(buildCalendar([], [
