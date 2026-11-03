@@ -45,7 +45,7 @@ const HOUR_RANGE: NumberRange = { max: 23, min: 0 };
 const MINUTE_RANGE: NumberRange = { max: 59, min: 0 };
 const SECOND_RANGE: NumberRange = { max: 60, min: 0 };
 const MAX_SLOTS_PER_EXCLUDED_DATE = 1440;
-const MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR = 5000;
+const MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR = 3000;
 const TIME_OF_DAY_FREQUENCIES = new Set(["MINUTELY", "SECONDLY"]);
 const DATE_PATTERN = /^\d{8}$/;
 const DATE_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8})(?=;|$)/i;

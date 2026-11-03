@@ -550,14 +550,19 @@ const buildMultiEventCalendar = (...events: string[][]): string => [
 ].join("\r\n");
 
 describe("the DATE EXDATE slots one calendar may expand to", () => {
-  it("still excludes every slot of a day that yields exactly a day of minutes", async () => {
-    const view = await syncIcsFeed(buildCalendar([], [
+  it("still excludes every slot of a day that yields exactly a day of minutes", () => {
+    const normalized = applyCalendarTimeZoneToFloatingEventDates(buildCalendar([], [
       ...zonedMaster("America/Los_Angeles", "20260105T000000", "20260105T000001", `${MINUTE_SLOTS_RULE};COUNT=1441`),
       "EXDATE;VALUE=DATE:20260105",
-    ]));
+    ]), globalThis.undefined);
+    const exclusion = normalized.split("\r\n").find((line) => line.startsWith("EXDATE")) ?? "";
+    const [property, values = ""] = exclusion.split(":");
+    const slots = values.split(",");
 
-    expect(view.unsupportedEventUids).toEqual([]);
-    expect(view.starts).toEqual(["2026-01-06T08:00:00.000Z"]);
+    expect(property).toBe("EXDATE;TZID=America/Los_Angeles");
+    expect(new Set(slots).size).toBe(1440);
+    expect(slots[0]).toBe("20260105T000000");
+    expect(slots.at(-1)).toBe("20260105T235900");
   });
 
   it("withholds a series whose one EXDATE line of whole days passes the calendar's slot budget, quickly", async () => {
@@ -584,8 +589,8 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
 
   it("spends one budget across the calendar's events and keeps syncing series that exclude a single slot a day", async () => {
     const view = await syncIcsFeed(buildMultiEventCalendar(
-      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(3).join(",")}`]),
-      buildMinuteSlotSeries("second@test", [`EXDATE;VALUE=DATE:${listDates(3).join(",")}`]),
+      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(2).join(",")}`]),
+      buildMinuteSlotSeries("second@test", [`EXDATE;VALUE=DATE:${listDates(2).join(",")}`]),
       [
         "BEGIN:VEVENT",
         "UID:daily@test",
