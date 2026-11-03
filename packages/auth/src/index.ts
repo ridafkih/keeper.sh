@@ -14,6 +14,7 @@ import { usernameOnly } from "./plugins/username-only";
 import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
+import { buildVerificationEmail } from "./verification-email";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
@@ -321,13 +322,7 @@ const createAuth = (config: AuthConfig) => {
     if (!resend) {
       return;
     }
-    await resend.emails.send({
-      template: {
-        id: "email-verification",
-        variables: { name: user.name, url },
-      },
-      to: user.email,
-    });
+    await resend.emails.send(buildVerificationEmail({ url, user }));
   };
 
   const sendReclaimVerificationEmail = async (user: EmailUser) => {
