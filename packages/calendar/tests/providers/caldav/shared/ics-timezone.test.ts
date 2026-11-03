@@ -114,7 +114,7 @@ describe("parsing a TZID with no VTIMEZONE", () => {
     expect(parsedEvent?.endTime.toISOString()).toBe("2026-07-05T11:00:00.000Z");
   });
 
-  it("keeps an explicit VTIMEZONE authoritative over the IANA database", () => {
+  it("follows IANA rules for an IANA TZID even when its declared VTIMEZONE disagrees", () => {
     const icsString = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
@@ -138,6 +138,6 @@ describe("parsing a TZID with no VTIMEZONE", () => {
 
     const parsedEvent = parseICalToRemoteEvent(icsString);
 
-    expect(parsedEvent?.startTime.toISOString()).toBe("2026-03-08T15:00:00.000Z");
+    expect(parsedEvent?.startTime.toISOString()).toBe("2026-03-08T14:00:00.000Z");
   });
 });
