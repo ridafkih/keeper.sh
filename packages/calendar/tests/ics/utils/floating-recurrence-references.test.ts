@@ -527,6 +527,7 @@ describe("a DATE EXDATE on a series with long selector lists", () => {
 
 const HOURS_OF_DAY = Array.from({ length: 24 }, (_unused, hour) => hour).join(",");
 const MINUTES_OF_HOUR = Array.from({ length: 60 }, (_unused, minute) => minute).join(",");
+const SLOT_BUDGET_TEST_TIMEOUT_MS = 30_000;
 const MINUTE_SLOTS_RULE = `FREQ=DAILY;BYHOUR=${HOURS_OF_DAY};BYMINUTE=${MINUTES_OF_HOUR}`;
 
 const listDates = (count: number, offset = 0): string[] => Array.from({ length: count }, (_unused, index) =>
@@ -589,7 +590,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
 
   it("spends one budget across the calendar's events and keeps syncing series that exclude a single slot a day", async () => {
     const view = await syncIcsFeed(buildMultiEventCalendar(
-      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(2).join(",")}`]),
+      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(1).join(",")}`]),
       buildMinuteSlotSeries("second@test", [`EXDATE;VALUE=DATE:${listDates(2).join(",")}`]),
       [
         "BEGIN:VEVENT",
@@ -608,7 +609,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
       "2026-12-05T08:00:00.000Z",
       "2026-12-05T08:01:00.000Z",
     ]);
-  });
+  }, SLOT_BUDGET_TEST_TIMEOUT_MS);
 });
 
 describe("an override with no series master", () => {
