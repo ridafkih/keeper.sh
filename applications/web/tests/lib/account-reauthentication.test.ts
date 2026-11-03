@@ -4,6 +4,7 @@ import {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   readsAsReauthenticationReturn,
   resolveAccountDeletionOutcome,
+  resolveReauthenticationErrorMessage,
   resolveReauthenticationMethods,
 } from "../../src/lib/account-reauthentication";
 
@@ -91,5 +92,37 @@ describe("readsAsReauthenticationReturn", () => {
 
   it("ignores an ordinary visit to settings", () => {
     expect(readsAsReauthenticationReturn({})).toBe(false);
+  });
+});
+
+describe("resolveReauthenticationErrorMessage", () => {
+  it("says the passkey prompt was cancelled instead of the library's wording", () => {
+    expect(
+      resolveReauthenticationErrorMessage({ code: "AUTH_CANCELLED", message: "Auth cancelled" }),
+    ).toBe("Passkey cancelled.");
+  });
+
+  it("treats a ceremony the browser aborted as a cancel", () => {
+    expect(
+      resolveReauthenticationErrorMessage({ code: "ERROR_CEREMONY_ABORTED", message: "Auth cancelled" }),
+    ).toBe("Passkey cancelled.");
+  });
+
+  it("says when the passkey chosen belongs to another account", () => {
+    expect(
+      resolveReauthenticationErrorMessage({
+        code: "PASSKEY_BELONGS_TO_ANOTHER_ACCOUNT",
+        message: "That passkey belongs to a different account.",
+      }),
+    ).toBe("That passkey belongs to a different account.");
+  });
+
+  it("never passes any other library message through", () => {
+    expect(
+      resolveReauthenticationErrorMessage({ code: "AUTHENTICATION_FAILED", message: "Authentication failed" }),
+    ).toBe("Couldn't confirm it's you.");
+    expect(resolveReauthenticationErrorMessage({ message: "fetch failed" })).toBe(
+      "Couldn't confirm it's you.",
+    );
   });
 });

@@ -3,6 +3,7 @@ import type { AuthCapabilities } from "./auth-capabilities";
 import {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   resolveAccountDeletionOutcome,
+  resolveReauthenticationErrorMessage,
 } from "./account-reauthentication";
 import type { AccountDeletionOutcome, ReauthenticationMethod } from "./account-reauthentication";
 
@@ -110,14 +111,9 @@ interface ReauthenticatingUser {
   email?: string;
 }
 
-const reauthenticateWithPasskey = async (user: ReauthenticatingUser): Promise<void> => {
+const reauthenticateWithPasskey = async (): Promise<void> => {
   const { error } = await authClient.signIn.passkey();
-  if (error) throw new Error(error.message ?? "Passkey sign-in failed.");
-
-  const { data } = await authClient.getSession();
-  if (data?.user.id !== user.id) {
-    throw new Error("That passkey belongs to a different account.");
-  }
+  if (error) throw new Error(resolveReauthenticationErrorMessage(error));
 };
 
 const reauthenticateWithProvider = async (
@@ -131,13 +127,13 @@ const reauthenticateWithProvider = async (
     provider,
     ...(user.email && { loginHint: user.email }),
   });
-  if (error) throw new Error(error.message ?? "Sign-in failed.");
+  if (error) throw new Error(resolveReauthenticationErrorMessage(error));
 };
 
 export const reauthenticate = (
   method: ReauthenticationMethod,
   user: ReauthenticatingUser,
 ): Promise<void> => {
-  if (method.kind === "passkey") return reauthenticateWithPasskey(user);
+  if (method.kind === "passkey") return reauthenticateWithPasskey();
   return reauthenticateWithProvider(method.provider, user);
 };

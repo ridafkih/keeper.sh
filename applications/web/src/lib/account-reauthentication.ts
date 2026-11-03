@@ -19,6 +19,9 @@ interface ReauthenticationMethodsInput {
 }
 
 const SESSION_EXPIRED_CODE = "SESSION_EXPIRED";
+const PASSKEY_CANCELLED_CODE = "AUTH_CANCELLED";
+const WEBAUTHN_ERROR_CODE_PREFIX = "ERROR_";
+const PASSKEY_BELONGS_TO_ANOTHER_ACCOUNT_CODE = "PASSKEY_BELONGS_TO_ANOTHER_ACCOUNT";
 const REAUTHENTICATION_SEARCH_KEY = "delete";
 const REAUTHENTICATION_SEARCH_VALUE = "confirm";
 const ACCOUNT_DELETION_REAUTHENTICATION_PATH =
@@ -51,6 +54,19 @@ const resolveReauthenticationMethods = ({
   return socialMethods;
 };
 
+const isPasskeyCancellation = (code: string | undefined): boolean =>
+  code === PASSKEY_CANCELLED_CODE || Boolean(code?.startsWith(WEBAUTHN_ERROR_CODE_PREFIX));
+
+const resolveReauthenticationErrorMessage = (error: AuthErrorLike): string => {
+  if (error.code === PASSKEY_BELONGS_TO_ANOTHER_ACCOUNT_CODE) {
+    return "That passkey belongs to a different account.";
+  }
+  if (isPasskeyCancellation(error.code)) {
+    return "Passkey cancelled.";
+  }
+  return "Couldn't confirm it's you.";
+};
+
 const readsAsReauthenticationReturn = (search: Record<string, unknown>): boolean =>
   search[REAUTHENTICATION_SEARCH_KEY] === REAUTHENTICATION_SEARCH_VALUE;
 
@@ -58,6 +74,7 @@ export {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   readsAsReauthenticationReturn,
   resolveAccountDeletionOutcome,
+  resolveReauthenticationErrorMessage,
   resolveReauthenticationMethods,
 };
 export type { AccountDeletionOutcome, ReauthenticationMethod };
