@@ -21,7 +21,7 @@ beforeAll(async () => {
 
 describe("handleCopiesRoute", () => {
   it("returns the user's copied event count and the next copies, and logs the count", async () => {
-    const requests: Array<[string, number]> = [];
+    const requests: [string, number][] = [];
     const response = await handleCopiesRoute({ userId: "user-1" }, {
       getCopiedEvents: (userId, limit) => {
         requests.push([userId, limit]);

@@ -8,16 +8,12 @@ import type {
 
 const loggedFields = vi.hoisted(() => new Map<string, unknown>());
 
-vi.mock("@/utils/logging", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../../../../src/utils/logging")>();
-  return {
-    ...original,
-    widelog: {
-      ...original.widelog,
-      set: (key: string, value: unknown) => loggedFields.set(key, value),
-    },
-  };
-});
+vi.mock("@/utils/logging", () => ({
+  widelog: {
+    errorFields: () => null,
+    set: (key: string, value: unknown) => loggedFields.set(key, value),
+  },
+}));
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 

@@ -25,7 +25,9 @@ interface CalDAVDiscoverRouteDependencies {
 }
 
 const recordServerHost = (serverUrl: string): void => {
-  if (!URL.canParse(serverUrl)) return;
+  if (!URL.canParse(serverUrl)) {
+    return;
+  }
   widelog.set("caldav.server_host", new URL(serverUrl).hostname);
 };
 
