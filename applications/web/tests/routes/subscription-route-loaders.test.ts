@@ -317,7 +317,7 @@ describe("dashboard route loader", () => {
 
     expect(data.subscription).toBeUndefined();
     expect(calls).not.toContain(CUSTOMER_STATE_PATH);
-    expect(calls.toSorted()).toEqual(["/api/accounts", "/api/entitlements", "/api/mappings", "/api/sources"]);
+    expect([...calls].sort()).toEqual(["/api/accounts", "/api/entitlements", "/api/mappings", "/api/sources"]);
   });
 
   it("converges on the same preload across repeated runs during the outage", async () => {
