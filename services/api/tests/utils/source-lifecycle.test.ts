@@ -57,7 +57,10 @@ describe("runSourceCreationPreflight", () => {
   });
 
   it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
-    const rejection = new CalendarFetchError("auth needed", "auth_required", 401);
+    const rejection = new CalendarFetchError("auth needed", {
+      reason: "auth_required",
+      statusCode: 401,
+    });
 
     await expect(
       runSourceCreationPreflight(
@@ -92,7 +95,7 @@ describe("runSourceCreationPreflight", () => {
 
   it("says a page that is not an iCal file was rejected for that reason", async () => {
     await expect(
-      rejectWith(new CalendarFetchError("not an ics file", "not_ical")),
+      rejectWith(new CalendarFetchError("not an ics file", { reason: "not_ical" })),
     ).rejects.toMatchObject({ reason: "not_ical", feedFailureReason: "not-calendar" });
   });
 
