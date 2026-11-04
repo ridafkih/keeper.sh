@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
+import { RecurrenceMaterializationLimitError, RequestTimeoutError } from "@keeper.sh/calendar";
+import { GoogleCalendarApiError } from "@keeper.sh/calendar/google";
 import {
   hasNoSuccessfulOperations,
   isBackoffEligibleError,
@@ -37,6 +38,28 @@ describe("isBackoffEligibleError", () => {
     }, 10_000);
 
     expect(isBackoffEligibleError(error)).toBe(true);
+  });
+
+  it("backs off a destination whose provider request timed out", () => {
+    expect(isBackoffEligibleError(new RequestTimeoutError(30_000))).toBe(true);
+  });
+
+  it("backs off a destination that refuses writes for missing writer access", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 403,
+        errors: [{ reason: "requiredAccessLevel" }],
+        message: "You need to have writer access to this calendar.",
+      },
+    });
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(403, body))).toBe(true);
+  });
+
+  it("does not back off a Google rate limit answered as 403", () => {
+    const body = JSON.stringify({
+      error: { code: 403, errors: [{ reason: "rateLimitExceeded" }], message: "Rate Limit Exceeded" },
+    });
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(403, body))).toBe(false);
   });
 
   it("does not match transient 500 errors", () => {
