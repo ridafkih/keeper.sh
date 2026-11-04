@@ -462,6 +462,51 @@ describe("a Los Angeles series with selectors and a DATE EXDATE", () => {
     ]);
   });
 
+  it("drops both slots of an excluded spring-forward day, the shifted 02:00 included", async () => {
+    const calendar = buildCalendar([], [
+      ...zonedMaster(
+        "America/Los_Angeles",
+        "20260307T020000",
+        "20260307T023000",
+        "FREQ=DAILY;BYHOUR=2,9;COUNT=6",
+      ),
+      "EXDATE;VALUE=DATE:20260308",
+    ]);
+    const normalized = applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined);
+    const view = await syncIcsFeed(calendar);
+
+    expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
+      "EXDATE:20260308T100000Z,20260308T160000Z",
+    ]);
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toEqual([
+      "2026-03-07T10:00:00.000Z",
+      "2026-03-07T17:00:00.000Z",
+      "2026-03-09T09:00:00.000Z",
+      "2026-03-09T16:00:00.000Z",
+    ]);
+  });
+
+  it("drops the first 01:30 of an excluded fall-back day, the one the series occurs at", async () => {
+    const calendar = buildCalendar([], [
+      ...zonedMaster(
+        "America/Los_Angeles",
+        "20261031T013000",
+        "20261031T020000",
+        "FREQ=DAILY;COUNT=3",
+      ),
+      "EXDATE;VALUE=DATE:20261101",
+    ]);
+    const normalized = applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined);
+    const view = await syncIcsFeed(calendar);
+
+    expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
+      "EXDATE:20261101T083000Z",
+    ]);
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toEqual(["2026-10-31T08:30:00.000Z", "2026-11-02T09:30:00.000Z"]);
+  });
+
   it("still syncs a MINUTELY series with a DATE EXDATE, dropping the series' own time of day", async () => {
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster(
