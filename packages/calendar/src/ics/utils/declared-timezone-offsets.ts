@@ -168,8 +168,9 @@ const createDeclaredZone = (blockText: string, latestOnsetYear: number, budget: 
   const coverChanges = (instant: number): readonly ZoneChange[] => {
     const year = new Date(instant).getUTCFullYear() + COVERAGE_YEARS_AHEAD;
     if (year > coveredUntilYear) {
-      coveredUntilYear = Math.max(year + COVERAGE_YEARS_PER_EXPANSION, latestOnsetYear);
-      changes = expandZoneChanges(blockText, coveredUntilYear, budget);
+      const nextCoveredUntilYear = Math.max(year + COVERAGE_YEARS_PER_EXPANSION, latestOnsetYear);
+      changes = expandZoneChanges(blockText, nextCoveredUntilYear, budget);
+      coveredUntilYear = nextCoveredUntilYear;
     }
     return changes;
   };
