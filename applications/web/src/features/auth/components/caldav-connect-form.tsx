@@ -8,11 +8,12 @@ import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
-import { apiFetch } from "@/lib/fetcher";
+import { apiFetch, HttpError } from "@/lib/fetcher";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { resolveCalDAVImportNotice } from "@/lib/caldav-import-notice";
 import { showToastAtom } from "@/state/toast";
-import { resolveErrorMessage } from "@/utils/errors";
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { describeCalendarImportFailure } from "@/lib/connect-failures";
 
 export type CalDAVProvider = "fastmail" | "icloud" | "caldav";
 
@@ -22,6 +23,7 @@ interface ProviderConfig {
   usernamePlaceholder: string;
   usernameInputType: string;
   passwordPlaceholder: string;
+  credentialsFailure: string;
 }
 
 const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
@@ -31,6 +33,8 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Fastmail Email Address",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
+    credentialsFailure:
+      "That email or app password didn't work. Use an app password, not your Fastmail password.",
   },
   icloud: {
     serverUrl: "https://caldav.icloud.com/",
@@ -38,6 +42,8 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Apple ID",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
+    credentialsFailure:
+      "That Apple ID or app-specific password didn't work. Use an app-specific password, not your Apple ID password.",
   },
   caldav: {
     serverUrl: "",
@@ -45,6 +51,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "CalDAV Server Username",
     usernameInputType: "text",
     passwordPlaceholder: "CalDAV Server Password",
+    credentialsFailure: "That username or password didn't work.",
   },
 };
 
@@ -125,7 +132,11 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           body: JSON.stringify({ serverUrl, username, password }),
         });
       } catch (err) {
-        setError(resolveErrorMessage(err, "Failed to discover calendars"));
+        if (err instanceof HttpError && err.status === HTTP_STATUS.UNAUTHORIZED) {
+          setError(PROVIDER_CONFIGS[provider].credentialsFailure);
+          return;
+        }
+        setError("Couldn't find calendars on this server. Check the details and try again.");
         return;
       }
 
@@ -167,7 +178,7 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           isRecord(importPayload) ? importPayload.calendars : undefined,
         );
       } catch (err) {
-        setError(resolveErrorMessage(err, "Failed to import calendars"));
+        setError(describeCalendarImportFailure(err));
         return;
       }
 

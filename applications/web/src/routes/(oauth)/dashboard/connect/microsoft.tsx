@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { LinkOAuthPreamble } from "@/features/auth/components/oauth-preamble";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute(
   "/(oauth)/dashboard/connect/microsoft",
 )({
-  component: () => <LinkOAuthPreamble provider="microsoft-365" />,
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard/connect/outlook" });
+  },
 });

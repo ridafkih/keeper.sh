@@ -33,6 +33,7 @@ import {
 import { setAnalyticsConsent, track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { Text } from "@/components/ui/primitives/text";
+import { SettingsPlanMenuItem } from "@/features/dashboard/components/plan-menu";
 import {
   fetchAuthCapabilitiesWithApi,
   resolveOidcProviderName,
@@ -41,14 +42,14 @@ import {
 export const Route = createFileRoute("/(dashboard)/dashboard/settings/")({
   loader: async ({ context }) => {
     const authCapabilities = await fetchAuthCapabilitiesWithApi(context.fetchApi);
-    return { authCapabilities };
+    return { authCapabilities, commercialMode: context.runtimeConfig.commercialMode };
   },
   component: SettingsPage,
   validateSearch: toStringSearchParams,
 });
 
 function SettingsPage() {
-  const { authCapabilities } = Route.useLoaderData();
+  const { authCapabilities, commercialMode } = Route.useLoaderData();
   const { user } = useSession();
   const navigate = useNavigate();
   const search = Route.useSearch();
@@ -143,6 +144,7 @@ function SettingsPage() {
             </NavigationMenuItemTrailing>
           </NavigationMenuButtonItem>
         )}
+        {commercialMode && <SettingsPlanMenuItem />}
         <NavigationMenuLinkItem to="/dashboard/settings/api-tokens">
           <NavigationMenuItemIcon>
             <KeySquare size={15} />

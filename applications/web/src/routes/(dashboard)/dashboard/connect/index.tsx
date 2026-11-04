@@ -51,7 +51,7 @@ function ConnectPage() {
               <NavigationMenuItemIcon>
                 <img src="/integrations/icon-outlook.svg" alt="" width={15} height={15} />
               </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>Connect Outlook</NavigationMenuItemLabel>
+              <NavigationMenuItemLabel>Connect Outlook or Microsoft 365</NavigationMenuItemLabel>
               <NavigationMenuItemTrailing />
             </NavigationMenuLinkItem>
           </div>
@@ -61,15 +61,6 @@ function ConnectPage() {
                 <img src="/integrations/icon-icloud.svg" alt="" width={15} height={15} />
               </NavigationMenuItemIcon>
               <NavigationMenuItemLabel>Connect iCloud</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing />
-            </NavigationMenuLinkItem>
-          </div>
-          <div data-visitors-event={ANALYTICS_EVENTS.calendar_connect_started} data-visitors-provider="microsoft">
-            <NavigationMenuLinkItem to="/dashboard/connect/microsoft" disabled={atLimit}>
-              <NavigationMenuItemIcon>
-                <img src="/integrations/icon-microsoft-365.svg" alt="" width={15} height={15} />
-              </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel>Connect Microsoft 365</NavigationMenuItemLabel>
               <NavigationMenuItemTrailing />
             </NavigationMenuLinkItem>
           </div>

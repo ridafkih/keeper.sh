@@ -5,6 +5,13 @@ const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPT
 type ProxyableMethods = typeof proxyableMethods.infer;
 
 const planSchema = type("'free' | 'pro'");
+
+const icsFeedFailureReasonSchema = type("'auth-required' | 'not-found' | 'not-calendar' | 'unreachable'");
+const oauthConnectFailureReasonSchema = type(
+  "'access-declined' | 'admin-approval-required' | 'expired' | 'no-mailbox' | 'unknown'",
+);
+type IcsFeedFailureReason = typeof icsFeedFailureReasonSchema.infer;
+type OAuthConnectFailureReason = typeof oauthConnectFailureReasonSchema.infer;
 type Plan = typeof planSchema.infer;
 
 const SYNC_RANGE_DEFINITIONS = [
@@ -577,6 +584,8 @@ const googleWatchHeadersSchema = type({
 type GoogleWatchHeaders = typeof googleWatchHeadersSchema.infer;
 
 export {
+  icsFeedFailureReasonSchema,
+  oauthConnectFailureReasonSchema,
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_SOURCE_SYNC_RULES,
@@ -649,6 +658,8 @@ export {
 };
 
 export type {
+  IcsFeedFailureReason,
+  OAuthConnectFailureReason,
   ProxyableMethods,
   Plan,
   SyncRange,
