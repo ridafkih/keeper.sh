@@ -25,8 +25,11 @@ interface SeriesRule {
 interface SeriesMasterContext {
   rule: SeriesRule;
   startWallTime: Date;
+  uid: string;
   zone: SeriesZone;
 }
+
+type DateExclusionSlot = { instant: Date } | { wallTime: Date };
 
 interface DateExclusionSlots {
   instants: string[];
@@ -34,7 +37,7 @@ interface DateExclusionSlots {
 }
 
 interface ExclusionSlotBudget {
-  spend: (date: string, slots: number) => void;
+  claim: (seriesUid: string, slots: number) => boolean;
 }
 
 const MS_PER_SECOND = 1000;
@@ -45,7 +48,8 @@ const HOUR_RANGE: NumberRange = { max: 23, min: 0 };
 const MINUTE_RANGE: NumberRange = { max: 59, min: 0 };
 const SECOND_RANGE: NumberRange = { max: 60, min: 0 };
 const MAX_SLOTS_PER_EXCLUDED_DATE = 1440;
-const MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR = 3000;
+const MAX_ADDED_EXCLUSION_SLOTS_PER_SERIES = 10_000;
+const MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR = 50_000;
 const TIME_OF_DAY_FREQUENCIES = new Set(["MINUTELY", "SECONDLY"]);
 const DATE_PATTERN = /^\d{8}$/;
 const DATE_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8})(?=;|$)/i;
@@ -53,17 +57,19 @@ const DATE_UNTIL_PATTERN = /(^|;)UNTIL=(\d{8})(?=;|$)/i;
 const isIcsDate = (entry: string): boolean => DATE_PATTERN.test(entry);
 
 const createExclusionSlotBudget = (): ExclusionSlotBudget => {
-  let remaining = MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR;
-  const spend = (date: string, slots: number): void => {
+  let calendarRemaining = MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR;
+  const seriesRemaining = new Map<string, number>();
+  const claim = (seriesUid: string, slots: number): boolean => {
     const added = Math.max(slots - 1, 0);
-    if (added > remaining) {
-      throw new RangeError(
-        `DATE EXDATE ${date} takes the calendar past ${MAX_ADDED_EXCLUSION_SLOTS_PER_CALENDAR} added series slots`,
-      );
+    const remaining = seriesRemaining.get(seriesUid) ?? MAX_ADDED_EXCLUSION_SLOTS_PER_SERIES;
+    if (added > remaining || added > calendarRemaining) {
+      return false;
     }
-    remaining -= added;
+    seriesRemaining.set(seriesUid, remaining - added);
+    calendarRemaining -= added;
+    return true;
   };
-  return { spend };
+  return { claim };
 };
 
 const readDateWallTime = (date: string, dayOffset = 0): Date => new Date(Date.UTC(
@@ -147,7 +153,8 @@ const readSeriesMasterContext = (
   if (!startWallTime || !zone || start.parameters.includes("VALUE=DATE")) {
     return;
   }
-  return { rule: readSeriesRule(rule.value), startWallTime, zone };
+  const uid = findProperty(properties, "UID")?.value ?? "";
+  return { rule: readSeriesRule(rule.value), startWallTime, uid, zone };
 };
 
 const readSeriesMasterContexts = (
@@ -157,10 +164,9 @@ const readSeriesMasterContexts = (
 ): Map<string, SeriesMasterContext> => {
   const contexts = new Map<string, SeriesMasterContext>();
   for (const properties of blocks) {
-    const uid = findProperty(properties, "UID")?.value;
     const context = readSeriesMasterContext(properties, calendarTimeZone, declaredOffsets);
-    if (uid && context && !contexts.has(uid)) {
-      contexts.set(uid, context);
+    if (context?.uid && !contexts.has(context.uid)) {
+      contexts.set(context.uid, context);
     }
   }
   return contexts;
@@ -227,16 +233,13 @@ const listElapsedHourInstants = (date: string, master: SeriesMasterContext): Dat
   return instants;
 };
 
-const listSlotWallTimes = (
-  date: string,
-  master: SeriesMasterContext,
-  budget: ExclusionSlotBudget,
-): Date[] => {
+const listMasterTimeOfDaySlot = (date: string, master: SeriesMasterContext): Date[] => [
+  new Date(readDateWallTime(date).getTime() + timeOfDayMilliseconds(master.startWallTime)),
+];
+
+const listSelectedSlotWallTimes = (date: string, master: SeriesMasterContext): Date[] => {
   const dayStart = readDateWallTime(date).getTime();
   const { rule, startWallTime } = master;
-  if (TIME_OF_DAY_FREQUENCIES.has(rule.frequency)) {
-    return [new Date(dayStart + timeOfDayMilliseconds(startWallTime))];
-  }
   let defaultHours = [startWallTime.getUTCHours()];
   if (rule.frequency === "HOURLY") {
     defaultHours = HOURS_OF_DAY;
@@ -247,9 +250,41 @@ const listSlotWallTimes = (
   if (hours.length * minutes.length * seconds.length > MAX_SLOTS_PER_EXCLUDED_DATE) {
     throw new RangeError(`DATE EXDATE ${date} covers more than ${MAX_SLOTS_PER_EXCLUDED_DATE} series slots`);
   }
-  budget.spend(date, hours.length * minutes.length * seconds.length);
   return hours.flatMap((hour) => minutes.flatMap((minute) => seconds.map((second) =>
     new Date(dayStart + Date.UTC(1970, 0, 1, hour, minute, second)))));
+};
+
+const listExcludedSlots = (date: string, master: SeriesMasterContext): DateExclusionSlot[] => {
+  if (TIME_OF_DAY_FREQUENCIES.has(master.rule.frequency)) {
+    return listMasterTimeOfDaySlot(date, master).map((wallTime) => ({ wallTime }));
+  }
+  const stepsInElapsedHours = master.rule.frequency === "HOURLY" && !master.rule.hasSelectors;
+  const elapsedInstants = stepsInElapsedHours && listElapsedHourInstants(date, master);
+  if (elapsedInstants) {
+    return elapsedInstants.map((instant) => ({ instant }));
+  }
+  return listSelectedSlotWallTimes(date, master).map((wallTime) => ({ wallTime }));
+};
+
+const listAffordableSlots = (
+  date: string,
+  master: SeriesMasterContext,
+  budget: ExclusionSlotBudget,
+): DateExclusionSlot[] => {
+  const slots = listExcludedSlots(date, master);
+  if (budget.claim(master.uid, slots.length)) {
+    return slots;
+  }
+  return listMasterTimeOfDaySlot(date, master).map((wallTime) => ({ wallTime }));
+};
+
+const isWallTimeSlot = (slot: DateExclusionSlot): slot is { wallTime: Date } => "wallTime" in slot;
+
+const resolveSlotInstant = (slot: DateExclusionSlot, zone: SeriesZone): Date | undefined => {
+  if ("instant" in slot) {
+    return slot.instant;
+  }
+  return toZoneInstant(slot.wallTime, zone);
 };
 
 const expandDateExclusion = (
@@ -257,17 +292,15 @@ const expandDateExclusion = (
   master: SeriesMasterContext,
   budget: ExclusionSlotBudget,
 ): DateExclusionSlots => {
-  const stepsInElapsedHours = master.rule.frequency === "HOURLY" && !master.rule.hasSelectors;
-  const elapsedInstants = stepsInElapsedHours && listElapsedHourInstants(date, master);
-  if (elapsedInstants) {
-    budget.spend(date, elapsedInstants.length);
-    return { instants: elapsedInstants.map((instant) => toUtcIcsDateTime(instant)), wallTimes: [] };
+  const slots = listAffordableSlots(date, master, budget);
+  const instants = slots.map((slot) => resolveSlotInstant(slot, master.zone));
+  if (instants.every((instant) => instant !== globalThis.undefined)) {
+    return { instants: instants.map((instant) => toUtcIcsDateTime(instant)), wallTimes: [] };
   }
-  const wallTimes = listSlotWallTimes(date, master, budget);
-  if (master.zone.kind === "utc") {
-    return { instants: wallTimes.map((wallTime) => toUtcIcsDateTime(wallTime)), wallTimes: [] };
-  }
-  return { instants: [], wallTimes: wallTimes.map((wallTime) => toFloatingIcsDateTime(wallTime)) };
+  return {
+    instants: [],
+    wallTimes: slots.filter((slot) => isWallTimeSlot(slot)).map((slot) => toFloatingIcsDateTime(slot.wallTime)),
+  };
 };
 
 const isDateExclusionEntry = (exclusion: IcsProperty, entry: string): boolean =>

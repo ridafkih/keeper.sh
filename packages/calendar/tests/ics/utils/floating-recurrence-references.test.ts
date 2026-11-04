@@ -501,7 +501,7 @@ describe("a DATE EXDATE on a series with long selector lists", () => {
     ]), globalThis.undefined);
 
     expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
-      "EXDATE;TZID=America/Los_Angeles:20260106T090000,20260106T140000",
+      "EXDATE:20260106T170000Z,20260106T220000Z",
     ]);
     expect(performance.now() - startedAt).toBeLessThan(2000);
   });
@@ -542,6 +542,21 @@ const buildMinuteSlotSeries = (uid: string, exclusionLines: string[]): string[] 
   "END:VEVENT",
 ];
 
+const WHOLE_DAYS_PER_SERIES_BUDGET = 6;
+
+const readExclusionValuesByUid = (ical: string): Map<string, string[]> => {
+  const exclusions = new Map<string, string[]>();
+  let uid = "";
+  for (const line of ical.split("\r\n")) {
+    if (line.startsWith("UID:")) {
+      uid = line.slice("UID:".length);
+    } else if (line.startsWith("EXDATE")) {
+      exclusions.set(uid, [...exclusions.get(uid) ?? [], ...line.slice(line.indexOf(":") + 1).split(",")]);
+    }
+  }
+  return exclusions;
+};
+
 const buildMultiEventCalendar = (...events: string[][]): string => [
   "BEGIN:VCALENDAR",
   "VERSION:2.0",
@@ -560,37 +575,55 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
     const [property, values = ""] = exclusion.split(":");
     const slots = values.split(",");
 
-    expect(property).toBe("EXDATE;TZID=America/Los_Angeles");
+    expect(property).toBe("EXDATE");
     expect(new Set(slots).size).toBe(1440);
-    expect(slots[0]).toBe("20260105T000000");
-    expect(slots.at(-1)).toBe("20260105T235900");
+    expect(slots[0]).toBe("20260105T080000Z");
+    expect(slots.at(-1)).toBe("20260106T075900Z");
   });
 
-  it("withholds a series whose one EXDATE line of whole days passes the calendar's slot budget, quickly", async () => {
+  it("keeps syncing a series whose one EXDATE line of whole days passes its slot budget, quickly", async () => {
     const startedAt = performance.now();
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster("America/Los_Angeles", "20261205T000000", "20261205T000001", `${MINUTE_SLOTS_RULE};COUNT=2`),
       `EXDATE;VALUE=DATE:${listDates(70).join(",")}`,
     ]));
 
-    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toEqual(["2026-12-05T08:00:00.000Z", "2026-12-05T08:01:00.000Z"]);
     expect(performance.now() - startedAt).toBeLessThan(2000);
   });
 
-  it("withholds a series whose many EXDATE lines together pass the calendar's slot budget, quickly", async () => {
+  it("excludes whole days until a series' slot budget runs out, then only its start time of day", () => {
+    const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(buildMultiEventCalendar(
+      buildMinuteSlotSeries(SERIES_UID, [`EXDATE;VALUE=DATE:${listDates(70).join(",")}`]),
+    ), globalThis.undefined));
+    const values = exclusions.get(SERIES_UID) ?? [];
+
+    expect(values).toHaveLength(WHOLE_DAYS_PER_SERIES_BUDGET * 1440 + 70 - WHOLE_DAYS_PER_SERIES_BUDGET);
+    expect(values.slice(0, 2)).toEqual(["20260101T080000Z", "20260101T080100Z"]);
+    expect(values.slice(-2)).toEqual(["20260310T070000Z", "20260311T070000Z"]);
+  });
+
+  it("keeps syncing a series whose many EXDATE lines together pass its slot budget, excluding only its start time on later days, quickly", async () => {
     const startedAt = performance.now();
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster("America/Edmonton", "20261205T000000", "20261205T000100", `FREQ=HOURLY;BYMINUTE=${MINUTES_OF_HOUR};COUNT=5`),
       ...Array.from({ length: 20 }, (_unused, line) => `EXDATE;VALUE=DATE:${listDates(60, line * 60).join(",")}`),
     ]));
 
-    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toEqual([
+      "2026-12-05T06:01:00.000Z",
+      "2026-12-05T06:02:00.000Z",
+      "2026-12-05T06:03:00.000Z",
+      "2026-12-05T06:04:00.000Z",
+    ]);
     expect(performance.now() - startedAt).toBeLessThan(2000);
   });
 
-  it("spends one budget across the calendar's events and keeps syncing series that exclude a single slot a day", async () => {
-    const view = await syncIcsFeed(buildMultiEventCalendar(
-      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(1).join(",")}`]),
+  it("charges each series its own slot budget, so one series' exclusions never cost another series its days", async () => {
+    const calendar = buildMultiEventCalendar(
+      buildMinuteSlotSeries("first@test", [`EXDATE;VALUE=DATE:${listDates(WHOLE_DAYS_PER_SERIES_BUDGET + 2).join(",")}`]),
       buildMinuteSlotSeries("second@test", [`EXDATE;VALUE=DATE:${listDates(2).join(",")}`]),
       [
         "BEGIN:VEVENT",
@@ -600,15 +633,35 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
         "EXDATE;VALUE=DATE:20260106",
         "END:VEVENT",
       ],
-    ));
+    );
+    const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
+    const view = await syncIcsFeed(calendar);
 
-    expect(view.unsupportedEventUids).toEqual(["second@test"]);
+    expect(exclusions.get("second@test")).toHaveLength(2 * 1440);
+    expect(view.unsupportedEventUids).toEqual([]);
     expect(view.starts.toSorted()).toEqual([
       "2026-01-05T17:00:00.000Z",
       "2026-01-07T17:00:00.000Z",
       "2026-12-05T08:00:00.000Z",
+      "2026-12-05T08:00:00.000Z",
+      "2026-12-05T08:01:00.000Z",
       "2026-12-05T08:01:00.000Z",
     ]);
+  }, SLOT_BUDGET_TEST_TIMEOUT_MS);
+
+  it("keeps every series syncing once the calendar's series together pass the calendar's slot budget, quickly", async () => {
+    const uids = Array.from({ length: 7 }, (_unused, index) => `series-${index}@test`);
+    const calendar = buildMultiEventCalendar(...uids.map((uid) =>
+      buildMinuteSlotSeries(uid, [`EXDATE;VALUE=DATE:${listDates(WHOLE_DAYS_PER_SERIES_BUDGET).join(",")}`])));
+    const startedAt = performance.now();
+    const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
+    const view = await syncIcsFeed(calendar);
+
+    expect(exclusions.get("series-0@test")).toHaveLength(WHOLE_DAYS_PER_SERIES_BUDGET * 1440);
+    expect(exclusions.get("series-6@test")).toHaveLength(WHOLE_DAYS_PER_SERIES_BUDGET);
+    expect(view.unsupportedEventUids).toEqual([]);
+    expect(view.starts).toHaveLength(2 * uids.length);
+    expect(performance.now() - startedAt).toBeLessThan(SLOT_BUDGET_TEST_TIMEOUT_MS);
   }, SLOT_BUDGET_TEST_TIMEOUT_MS);
 });
 
