@@ -1,10 +1,19 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTableName } from "drizzle-orm";
+import type {
+  normalizeCalDAVCalendarKey as normalizeCalDAVCalendarKeyFn,
+  normalizeCalDAVServerHost as normalizeCalDAVServerHostFn,
+} from "@keeper.sh/calendar/caldav";
 import type { importCalDAVCalendars as importCalDAVCalendarsFn } from "../../src/utils/caldav-sources";
 import type {
   createOAuthSource as createOAuthSourceFn,
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "../../src/utils/oauth-sources";
+
+interface CalDAVIdentityModule {
+  normalizeCalDAVCalendarKey: typeof normalizeCalDAVCalendarKeyFn;
+  normalizeCalDAVServerHost: typeof normalizeCalDAVServerHostFn;
+}
 
 let importCalDAVCalendars: typeof importCalDAVCalendarsFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -175,7 +184,12 @@ beforeAll(async () => {
     }))),
   }));
 
-  vi.mock("@keeper.sh/calendar/caldav", () => ({
+  vi.mock("@keeper.sh/calendar/caldav", async (importOriginal) => {
+    const { normalizeCalDAVCalendarKey, normalizeCalDAVServerHost } =
+      await importOriginal<CalDAVIdentityModule>();
+    return {
+    normalizeCalDAVCalendarKey,
+    normalizeCalDAVServerHost,
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
       fetchCalendarWritable: () => Promise.resolve(caldavCalendarWritable),
@@ -187,7 +201,8 @@ beforeAll(async () => {
     createCalDAVSourceProvider: () => ({
       id: "icloud",
     }),
-  }));
+    };
+  });
 
   vi.mock("@keeper.sh/calendar/google", () => ({
     createGoogleCalendarProvider: () => ({
@@ -211,6 +226,7 @@ beforeAll(async () => {
 
   vi.mock("@keeper.sh/calendar", () => ({
     PROVIDER_DEFINITIONS: [],
+    findUserCalDAVCalendarsOnServer: () => Promise.resolve([]),
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],
     getOAuthProviders: () => [],
