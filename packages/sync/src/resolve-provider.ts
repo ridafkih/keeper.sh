@@ -1,4 +1,4 @@
-import type { CalendarSyncProvider, RefreshLockStore } from "@keeper.sh/calendar";
+import type { CalendarSyncProvider, MicrosoftOAuthCredentials, RefreshLockStore } from "@keeper.sh/calendar";
 import type { SafeFetchOptions } from "@keeper.sh/calendar/safe-fetch";
 import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import {
@@ -27,9 +27,7 @@ const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 interface OAuthConfig {
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
-  microsoftTenantId?: string;
+  microsoftCredentials?: MicrosoftOAuthCredentials | null;
 }
 
 const resolveOAuthProvider = async (
@@ -88,15 +86,11 @@ const resolveOAuthProvider = async (
     });
   }
 
-  if (provider === "outlook" && oauthConfig.microsoftClientId && oauthConfig.microsoftClientSecret) {
+  if (provider === "outlook" && oauthConfig.microsoftCredentials) {
     if (!oauthCred.externalCalendarId) {
       return null;
     }
-    const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-      clientId: oauthConfig.microsoftClientId,
-      clientSecret: oauthConfig.microsoftClientSecret,
-      tenantId: oauthConfig.microsoftTenantId,
-    });
+    const refreshMicrosoftToken = createMicrosoftTokenRefresher(oauthConfig.microsoftCredentials);
     return createOutlookSyncProvider({
       accessToken: oauthCred.accessToken,
       refreshToken: oauthCred.refreshToken,

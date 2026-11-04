@@ -1,12 +1,11 @@
 import { authCapabilitiesSchema } from "@keeper.sh/data-schemas";
-import type { AuthCapabilities } from "@keeper.sh/data-schemas";
+import type { AuthCapabilities, MicrosoftOAuthCredentials } from "@keeper.sh/data-schemas";
 
 interface ResolveAuthCapabilitiesConfig {
   commercialMode?: boolean;
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
+  microsoftCredentials?: MicrosoftOAuthCredentials | null;
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcClientSecret?: string;
@@ -54,7 +53,7 @@ const resolveAuthCapabilities = (
     requiresEmailVerification: config.commercialMode ?? false,
     socialProviders: {
       google: hasOAuthCredentials(config.googleClientId, config.googleClientSecret),
-      microsoft: hasOAuthCredentials(config.microsoftClientId, config.microsoftClientSecret),
+      microsoft: Boolean(config.microsoftCredentials),
       ...(hasOidcCredentials(config) && { oidc: true }),
     },
     supportsChangePassword: true,

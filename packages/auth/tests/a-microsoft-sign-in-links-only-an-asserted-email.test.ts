@@ -75,8 +75,11 @@ const createHostedAuth = async () => {
     baseUrl: BASE_URL,
     commercialMode: true,
     database: database as unknown as BunSQLDatabase,
-    microsoftClientId: "test-microsoft-client-id",
-    microsoftClientSecret: "test-microsoft-client-secret",
+    microsoftCredentials: {
+      clientId: "test-microsoft-client-id",
+      clientSecret: "test-microsoft-client-secret",
+      tenant: "common",
+    },
     secret: SECRET,
   });
 

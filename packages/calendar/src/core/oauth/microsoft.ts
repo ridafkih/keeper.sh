@@ -1,9 +1,10 @@
-import {
-  microsoftTenantIdSchema,
-  microsoftTokenResponseSchema,
-  microsoftUserInfoSchema,
+import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
+import type {
+  MicrosoftDirectoryTenant,
+  MicrosoftOAuthCredentials,
+  MicrosoftTokenResponse,
+  MicrosoftUserInfo,
 } from "@keeper.sh/data-schemas";
-import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
@@ -19,19 +20,10 @@ const isRequestTimeoutError = (error: unknown): boolean =>
   error instanceof Error
   && (error.name === "AbortError" || error.name === "TimeoutError");
 
-interface MicrosoftOAuthCredentials {
-  clientId: string;
-  clientSecret: string;
-  tenantId?: string;
-}
-
 const resolveMicrosoftEndpoint = (
-  tenantId: string | undefined,
+  tenant: MicrosoftDirectoryTenant,
   endpoint: "authorize" | "token",
-): string => {
-  const tenant = microsoftTenantIdSchema.assert(tenantId);
-  return `${MICROSOFT_AUTHORITY_URL}/${tenant}/oauth2/v2.0/${endpoint}`;
-};
+): string => `${MICROSOFT_AUTHORITY_URL}/${tenant}/oauth2/v2.0/${endpoint}`;
 
 interface AuthorizationUrlOptions {
   callbackUrl: string;
@@ -52,7 +44,7 @@ const createMicrosoftTokenRefresher = (
   credentials: MicrosoftOAuthCredentials,
 ) => {
   const { clientId, clientSecret } = credentials;
-  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenantId, "token");
+  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenant, "token");
 
   return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
     const response = await fetch(tokenUrl, {
@@ -88,8 +80,8 @@ const createMicrosoftOAuthService = (
   stateStore: OAuthStateStore,
 ): MicrosoftOAuthService => {
   const { clientId, clientSecret } = credentials;
-  const authorizationUrl = resolveMicrosoftEndpoint(credentials.tenantId, "authorize");
-  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenantId, "token");
+  const authorizationUrl = resolveMicrosoftEndpoint(credentials.tenant, "authorize");
+  const tokenUrl = resolveMicrosoftEndpoint(credentials.tenant, "token");
 
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
     const state = await generateState(stateStore, userId, {

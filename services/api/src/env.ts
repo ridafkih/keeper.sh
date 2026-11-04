@@ -1,5 +1,5 @@
 import arkenv from "arkenv";
-import { microsoftTenantIdSchema } from "@keeper.sh/data-schemas";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
 
 const schema = {
   API_PORT: "number",
@@ -15,7 +15,7 @@ const schema = {
   GOOGLE_PROJECT_REQUESTS_PER_MINUTE: "number?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
-  MICROSOFT_TENANT_ID: microsoftTenantIdSchema.optional(),
+  MICROSOFT_TENANT_ID: microsoftDirectoryTenantSchema.optional(),
   MICROSOFT_AUTH_PROMPT: "'consent' | 'select_account' | undefined?",
   OIDC_ISSUER_URL: "string.url?",
   OIDC_CLIENT_ID: "string?",

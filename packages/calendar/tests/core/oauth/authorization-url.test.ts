@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftDirectoryTenant } from "@keeper.sh/data-schemas";
 import { buildOAuthConfigs } from "../../../src/core/oauth/config";
 import { createGoogleOAuthService } from "../../../src/core/oauth/google";
 import {
@@ -8,6 +10,8 @@ import {
 
 const MS_PER_SECOND = 1000;
 const CALLBACK_URL = "https://calendar.test.invalid/api/oauth/callback";
+const DIRECTORY_ID = "abcdef01-2345-6789-abcd-ef0123456789";
+const DIRECTORY_TENANT = microsoftDirectoryTenantSchema.assert(DIRECTORY_ID);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -35,6 +39,7 @@ const buildMicrosoftAuthorizationUrl = async (): Promise<URL> => {
   const service = createMicrosoftOAuthService({
     clientId: "microsoft-test-client-id",
     clientSecret: "microsoft-test-client-secret",
+    tenant: "common",
   }, createTestStateStore());
 
   const authorizationUrl = await service.getAuthorizationUrl("user-test-1", {
@@ -44,11 +49,11 @@ const buildMicrosoftAuthorizationUrl = async (): Promise<URL> => {
   return new URL(authorizationUrl);
 };
 
-const buildTenantMicrosoftAuthorizationUrl = async (tenantId: string): Promise<URL> => {
+const buildTenantMicrosoftAuthorizationUrl = async (tenant: MicrosoftDirectoryTenant): Promise<URL> => {
   const service = createMicrosoftOAuthService({
     clientId: "microsoft-test-client-id",
     clientSecret: "microsoft-test-client-secret",
-    tenantId,
+    tenant,
   }, createTestStateStore());
 
   const authorizationUrl = await service.getAuthorizationUrl("user-test-1", {
@@ -72,22 +77,6 @@ const buildGoogleAuthorizationUrl = async (): Promise<URL> => {
 };
 
 describe("microsoft getAuthorizationUrl", () => {
-  it("normalizes pasted tenant IDs consistently", async () => {
-    const parsed = await buildTenantMicrosoftAuthorizationUrl(
-      "  ABCDEF01-2345-6789-ABCD-EF0123456789  ",
-    );
-
-    expect(parsed.pathname).toBe("/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/authorize");
-  });
-
-  it("rejects tenant values that change the authority path", () => {
-    expect(() => createMicrosoftTokenRefresher({
-      clientId: "microsoft-test-client-id",
-      clientSecret: "microsoft-test-client-secret",
-      tenantId: "../common?unexpected=1",
-    })).toThrow();
-  });
-
   it("pins the authority, response shape and scope set", async () => {
     const parsed = await buildMicrosoftAuthorizationUrl();
     const { searchParams } = parsed;
@@ -103,21 +92,30 @@ describe("microsoft getAuthorizationUrl", () => {
   });
 
   it("uses the configured tenant authority", async () => {
-    const parsed = await buildTenantMicrosoftAuthorizationUrl("abcdef01-2345-6789-abcd-ef0123456789");
+    const parsed = await buildTenantMicrosoftAuthorizationUrl(DIRECTORY_TENANT);
 
     expect(`${parsed.origin}${parsed.pathname}`).toBe(
-      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/authorize",
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/authorize`,
     );
   });
 
-  it("passes the configured tenant ID through OAuth configuration", () => {
+  it("carries the configured tenant into the Microsoft credentials", () => {
     const configs = buildOAuthConfigs({
       MICROSOFT_CLIENT_ID: "microsoft-test-client-id",
       MICROSOFT_CLIENT_SECRET: "microsoft-test-client-secret",
-      MICROSOFT_TENANT_ID: "abcdef01-2345-6789-abcd-ef0123456789",
+      MICROSOFT_TENANT_ID: DIRECTORY_TENANT,
     });
 
-    expect(configs.microsoft?.tenantId).toBe("abcdef01-2345-6789-abcd-ef0123456789");
+    expect(configs.microsoft?.tenant).toBe(DIRECTORY_ID);
+  });
+
+  it("uses the common tenant when none is configured", () => {
+    const configs = buildOAuthConfigs({
+      MICROSOFT_CLIENT_ID: "microsoft-test-client-id",
+      MICROSOFT_CLIENT_SECRET: "microsoft-test-client-secret",
+    });
+
+    expect(configs.microsoft?.tenant).toBe("common");
   });
 
   it("uses the configured tenant for code exchange and token refresh", async () => {
@@ -135,15 +133,15 @@ describe("microsoft getAuthorizationUrl", () => {
     const credentials = {
       clientId: "microsoft-test-client-id",
       clientSecret: "microsoft-test-client-secret",
-      tenantId: "abcdef01-2345-6789-abcd-ef0123456789",
+      tenant: DIRECTORY_TENANT,
     };
     const service = createMicrosoftOAuthService(credentials, createTestStateStore());
     await service.exchangeCodeForTokens("authorization-code", CALLBACK_URL);
     await createMicrosoftTokenRefresher(credentials)("refresh-token");
 
     expect(requestedUrls).toEqual([
-      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/token",
-      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/token",
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/token`,
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/token`,
     ]);
   });
 

@@ -20,6 +20,7 @@ import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
 import env from "./env";
+import { microsoftCredentials } from "./microsoft-credentials";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
 
 const resolveCount = (value: unknown): number => {
@@ -264,9 +265,7 @@ const processJob = (
         oauthConfig: {
           googleClientId: env.GOOGLE_CLIENT_ID,
           googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-          microsoftClientId: env.MICROSOFT_CLIENT_ID,
-          microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
-          microsoftTenantId: env.MICROSOFT_TENANT_ID,
+          microsoftCredentials,
         },
         plan: job.data.plan,
       }, {

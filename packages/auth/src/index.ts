@@ -1,5 +1,5 @@
 import { type } from "arktype";
-import { microsoftTenantIdSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftOAuthCredentials } from "@keeper.sh/data-schemas";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { signJWT } from "better-auth/crypto";
@@ -67,9 +67,7 @@ interface AuthConfig {
   polarMode?: "sandbox" | "production";
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
-  microsoftTenantId?: string;
+  microsoftCredentials?: MicrosoftOAuthCredentials | null;
   microsoftAuthPrompt?: "consent" | "select_account";
   oidcIssuerUrl?: string;
   oidcClientId?: string;
@@ -185,9 +183,7 @@ const createAuth = (config: AuthConfig) => {
     polarMode,
     googleClientId,
     googleClientSecret,
-    microsoftClientId,
-    microsoftClientSecret,
-    microsoftTenantId,
+    microsoftCredentials,
     microsoftAuthPrompt,
     oidcIssuerUrl,
     oidcClientId,
@@ -217,8 +213,7 @@ const createAuth = (config: AuthConfig) => {
     commercialMode,
     googleClientId,
     googleClientSecret,
-    microsoftClientId,
-    microsoftClientSecret,
+    microsoftCredentials,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -302,10 +297,10 @@ const createAuth = (config: AuthConfig) => {
     };
   }
 
-  if (microsoftClientId && microsoftClientSecret) {
+  if (microsoftCredentials) {
     socialProviders.microsoft = {
-      clientId: microsoftClientId,
-      clientSecret: microsoftClientSecret,
+      clientId: microsoftCredentials.clientId,
+      clientSecret: microsoftCredentials.clientSecret,
       mapProfileToUser: (profile) => {
         if (isMicrosoftEmailOwnershipEstablished(profile)) {
           return { emailVerified: true };
@@ -314,7 +309,7 @@ const createAuth = (config: AuthConfig) => {
       },
       prompt: resolveMicrosoftAuthPrompt(microsoftAuthPrompt),
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
-      tenantId: microsoftTenantIdSchema.assert(microsoftTenantId),
+      tenantId: microsoftCredentials.tenant,
     };
   }
 

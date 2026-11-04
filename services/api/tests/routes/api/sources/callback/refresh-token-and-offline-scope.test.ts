@@ -90,6 +90,7 @@ describe("microsoft connect keeps requesting offline access", () => {
         microsoft: {
           clientId: "microsoft-test-client-id",
           clientSecret: "microsoft-test-client-secret",
+          tenant: "common",
         },
       },
       createTestStateStore(),

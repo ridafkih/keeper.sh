@@ -2,11 +2,14 @@ import { PGlite } from "@electric-sql/pglite";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftDirectoryTenant } from "@keeper.sh/data-schemas";
 import { createAuth } from "../src/index";
 
 const BASE_URL = "http://localhost:3000";
 const SECRET = "test-secret-for-outlook-sign-in-email-verification";
 const clients: PGlite[] = [];
+const DIRECTORY_TENANT = microsoftDirectoryTenantSchema.assert("abcdef01-2345-6789-abcd-ef0123456789");
 
 const AUTH_DDL = `
 create table "user" (
@@ -28,7 +31,7 @@ const buildIdToken = (claims: Record<string, unknown>) =>
   `${encodeSegment({ alg: "RS256", kid: "test-kid", typ: "JWT" })}.${encodeSegment(claims)}.signature`;
 
 const createHostedAuth = async (
-  microsoftTenantId?: string,
+  microsoftTenant: MicrosoftDirectoryTenant = "common",
   microsoftAuthPrompt?: "consent" | "select_account",
 ) => {
   const client = new PGlite();
@@ -42,9 +45,11 @@ const createHostedAuth = async (
     database: database as unknown as BunSQLDatabase,
     googleClientId: "test-google-client-id",
     googleClientSecret: "test-google-client-secret",
-    microsoftClientId: "test-microsoft-client-id",
-    microsoftClientSecret: "test-microsoft-client-secret",
-    microsoftTenantId,
+    microsoftCredentials: {
+      clientId: "test-microsoft-client-id",
+      clientSecret: "test-microsoft-client-secret",
+      tenant: microsoftTenant,
+    },
     microsoftAuthPrompt,
     secret: SECRET,
   });
@@ -107,9 +112,9 @@ afterEach(async () => {
 });
 
 describe("an Outlook sign-in", () => {
-  it.each<{ tenantId?: string; authority: string }>([
+  it.each<{ tenantId?: MicrosoftDirectoryTenant; authority: string }>([
     { authority: "common" },
-    { tenantId: " ABCDEF01-2345-6789-ABCD-EF0123456789 ", authority: "abcdef01-2345-6789-abcd-ef0123456789" },
+    { tenantId: DIRECTORY_TENANT, authority: "abcdef01-2345-6789-abcd-ef0123456789" },
   ])("exchanges and refreshes sign-in tokens using $authority", async ({ tenantId, authority }) => {
     const fetchMock = vi.fn<FetchFunction>(() => Promise.resolve(Response.json({
       access_token: "access-token",
@@ -139,7 +144,7 @@ describe("an Outlook sign-in", () => {
     }
   });
 
-  describe.each([{}, { tenantId: "abcdef01-2345-6789-abcd-ef0123456789" }])("with authority %j", ({ tenantId }) => {
+  describe.each<{ tenantId?: MicrosoftDirectoryTenant }>([{}, { tenantId: DIRECTORY_TENANT }])("with authority %j", ({ tenantId }) => {
     it.each<{ prompt?: "consent" | "select_account" }>([
       {},
       { prompt: "consent" },
@@ -167,11 +172,9 @@ describe("an Outlook sign-in", () => {
     });
   });
 
-  it.each<{ tenantId?: string; authority: string }>([
+  it.each<{ tenantId?: MicrosoftDirectoryTenant; authority: string }>([
     { authority: "common" },
-    { tenantId: "", authority: "common" },
-    { tenantId: "  ", authority: "common" },
-    { tenantId: " ABCDEF01-2345-6789-ABCD-EF0123456789 ", authority: "abcdef01-2345-6789-abcd-ef0123456789" },
+    { tenantId: DIRECTORY_TENANT, authority: "abcdef01-2345-6789-abcd-ef0123456789" },
   ])(
     "uses the Microsoft tenant authority for configuration %j",
     async ({ tenantId, authority }) => {
@@ -294,7 +297,7 @@ describe("an Outlook sign-in", () => {
 
 describe("a Google sign-in", () => {
   it("keeps requesting consent when Microsoft uses the account picker", async () => {
-    const auth = await createHostedAuth("abcdef01-2345-6789-abcd-ef0123456789", "select_account");
+    const auth = await createHostedAuth(DIRECTORY_TENANT, "select_account");
     const context = await auth.$context;
     const provider = context.socialProviders.find((candidate) => candidate.id === "google");
 

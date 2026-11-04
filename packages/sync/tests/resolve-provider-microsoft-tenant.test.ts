@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftDirectoryTenant } from "@keeper.sh/data-schemas";
 import { resolveSyncProvider } from "../src/resolve-provider";
 
 const TENANT_ID = "abcdef01-2345-6789-abcd-ef0123456789";
@@ -9,10 +11,10 @@ afterEach(() => {
 });
 
 describe("an Outlook destination with an expired token", () => {
-  it.each<{ tenantId?: string; authority: string }>([
-    { authority: "common" },
-    { tenantId: ` ${TENANT_ID.toUpperCase()} `, authority: TENANT_ID },
-  ])("refreshes and persists credentials through authority $authority", async ({ tenantId, authority }) => {
+  it.each<{ tenant: MicrosoftDirectoryTenant; authority: string }>([
+    { tenant: "common", authority: "common" },
+    { tenant: microsoftDirectoryTenantSchema.assert(TENANT_ID), authority: TENANT_ID },
+  ])("refreshes and persists credentials through authority $authority", async ({ tenant, authority }) => {
     const row = {
       accessToken: "expired-access-token",
       expiresAt: new Date(0),
@@ -68,9 +70,11 @@ describe("an Outlook destination with an expired token", () => {
       userId: "user-id",
       accountId: "account-id",
       oauthConfig: {
-        microsoftClientId: "microsoft-client-id",
-        microsoftClientSecret: "microsoft-client-secret",
-        microsoftTenantId: tenantId,
+        microsoftCredentials: {
+          clientId: "microsoft-client-id",
+          clientSecret: "microsoft-client-secret",
+          tenant,
+        },
       },
     });
     if (!provider) {

@@ -1,4 +1,4 @@
-import type { MicrosoftOAuthCredentials } from "./microsoft";
+import type { MicrosoftDirectoryTenant, MicrosoftOAuthCredentials } from "@keeper.sh/data-schemas";
 
 interface OAuthCredentials {
   clientId: string;
@@ -10,7 +10,7 @@ interface OAuthEnv {
   GOOGLE_CLIENT_SECRET?: string;
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
-  MICROSOFT_TENANT_ID?: string;
+  MICROSOFT_TENANT_ID?: MicrosoftDirectoryTenant;
 }
 
 interface OAuthConfigs {
@@ -33,16 +33,19 @@ const getCredentials = (
   return { clientId, clientSecret };
 };
 
-const buildOAuthConfigs = (env: OAuthEnv): OAuthConfigs => {
-  const google = getCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET);
-  const microsoftCredentials = getCredentials(env.MICROSOFT_CLIENT_ID, env.MICROSOFT_CLIENT_SECRET);
-  const microsoft = microsoftCredentials && {
-    ...microsoftCredentials,
-    tenantId: env.MICROSOFT_TENANT_ID,
-  };
+const buildMicrosoftOAuthCredentials = (env: OAuthEnv): MicrosoftOAuthCredentials | null => {
+  const credentials = getCredentials(env.MICROSOFT_CLIENT_ID, env.MICROSOFT_CLIENT_SECRET);
+  if (!credentials) {
+    return null;
+  }
 
-  return { google, microsoft };
+  return { ...credentials, tenant: env.MICROSOFT_TENANT_ID ?? "common" };
 };
 
-export { buildOAuthConfigs };
+const buildOAuthConfigs = (env: OAuthEnv): OAuthConfigs => ({
+  google: getCredentials(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET),
+  microsoft: buildMicrosoftOAuthCredentials(env),
+});
+
+export { buildMicrosoftOAuthCredentials, buildOAuthConfigs };
 export type { OAuthCredentials, MicrosoftOAuthCredentials, OAuthEnv, OAuthConfigs };

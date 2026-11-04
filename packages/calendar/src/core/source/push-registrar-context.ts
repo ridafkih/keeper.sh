@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import type { MicrosoftOAuthCredentials } from "@keeper.sh/data-schemas";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { createCoordinatedRefresher } from "../oauth/coordinated-refresher";
@@ -29,9 +30,7 @@ interface RegistrarContextConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   googleProjectRequestsPerMinute?: number;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
-  microsoftTenantId?: string;
+  microsoftCredentials?: MicrosoftOAuthCredentials | null;
   rateLimiterRedis: Parameters<typeof createRedisRateLimiter>[0];
   refreshLockStore: RefreshLockStore;
   webhookConfig: WebhookCallbackUrls | null;
@@ -45,12 +44,8 @@ const resolveTokenRefresher = (provider: string, config: RegistrarContextConfig)
     });
   }
 
-  if (provider === "outlook" && config.microsoftClientId && config.microsoftClientSecret) {
-    return createMicrosoftTokenRefresher({
-      clientId: config.microsoftClientId,
-      clientSecret: config.microsoftClientSecret,
-      tenantId: config.microsoftTenantId,
-    });
+  if (provider === "outlook" && config.microsoftCredentials) {
+    return createMicrosoftTokenRefresher(config.microsoftCredentials);
   }
 
   return null;

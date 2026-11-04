@@ -8,6 +8,7 @@ import {
   toPushChannelState,
 } from "@keeper.sh/calendar";
 import type {
+  MicrosoftOAuthCredentials,
   RegistrarContext,
   SourcePushRegistrar,
   StoredPushChannel,
@@ -88,9 +89,7 @@ const resolveTokenRefresher = (
   clientCredentials: {
     googleClientId?: string;
     googleClientSecret?: string;
-    microsoftClientId?: string;
-    microsoftClientSecret?: string;
-    microsoftTenantId?: string;
+    microsoftCredentials: MicrosoftOAuthCredentials | null;
   },
 ) => {
   if (
@@ -104,16 +103,8 @@ const resolveTokenRefresher = (
     });
   }
 
-  if (
-    provider === "outlook"
-    && clientCredentials.microsoftClientId
-    && clientCredentials.microsoftClientSecret
-  ) {
-    return createMicrosoftTokenRefresher({
-      clientId: clientCredentials.microsoftClientId,
-      clientSecret: clientCredentials.microsoftClientSecret,
-      tenantId: clientCredentials.microsoftTenantId,
-    });
+  if (provider === "outlook" && clientCredentials.microsoftCredentials) {
+    return createMicrosoftTokenRefresher(clientCredentials.microsoftCredentials);
   }
 
   return null;
@@ -133,7 +124,9 @@ const deregisterPushChannelsWithin = async (
   scopeId: string,
   scopeColumn: "accountId" | "calendarId",
 ): Promise<number> => {
-  const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
+  const { database, env, microsoftCredentials, refreshLockStore, webhookConfig } = await import(
+    "@/context",
+  );
 
   return await runDeregisterAccountPushChannels(scopeId, {
     createRegistrarContext: async (channel) => {
@@ -174,9 +167,7 @@ const deregisterPushChannelsWithin = async (
       const rawRefresh = resolveTokenRefresher(channel.provider, {
         googleClientId: env.GOOGLE_CLIENT_ID,
         googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-        microsoftClientId: env.MICROSOFT_CLIENT_ID,
-        microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
-        microsoftTenantId: env.MICROSOFT_TENANT_ID,
+        microsoftCredentials,
       });
       if (rawRefresh) {
         await ensureValidToken(tokenState, createCoordinatedRefresher({
