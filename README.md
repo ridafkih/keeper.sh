@@ -184,7 +184,6 @@ There are seven images currently available: two designed for convenience, and fi
 | MICROSOFT_CLIENT_ID            | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_TENANT_ID            | `api`, `cron`, `worker` | Optional. Microsoft Entra directory GUID for Microsoft sign-in, Outlook OAuth, and token refresh. Also accepts `common` (default), `organizations`, or `consumers`. Whitespace is trimmed and IDs are lowercased; malformed values fail startup. |
-| MICROSOFT_AUTH_PROMPT          | `api`         | Optional. Microsoft sign-in prompt: `consent` (default) or `select_account`. Use `select_account` to show the account picker without forcing the consent dialog on every sign-in. |
 | OIDC_ISSUER_URL                | `api`         | Optional. Issuer URL of an OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, ...), exactly as the provider publishes it. Discovery is read from `<issuer>/.well-known/openid-configuration`. Requires `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`.<br><br>e.g. `https://id.example.com` or `https://auth.example.com/realms/keeper`                                                                              |
 | OIDC_CLIENT_ID                 | `api`         | Optional. OAuth client ID registered with the OIDC issuer.                                                                                                           |
 | OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
@@ -285,8 +284,6 @@ If people will sign in with work or school (Entra ID) accounts, add the `xms_edo
 
 For a single-tenant app registration, set `MICROSOFT_TENANT_ID` to the Entra directory (tenant) GUID, not its domain name or a full authority URL. The sign-in provider validates token issuers against the directory GUID. The supported shared authorities are `common`, `organizations`, and `consumers`. Keeper uses that tenant for Microsoft sign-in and Outlook authorization/token requests; when unset, it keeps using the `common` authority. The same tenant ID must be available to the `api`, `cron`, and `worker` services so token refreshes continue to use the tenant that issued the token. Configure this before connecting accounts; changing it for an existing deployment may require reconnecting accounts that were authorized in another tenant.
 
-To show the Microsoft account picker during sign-in, set `MICROSOFT_AUTH_PROMPT=select_account` on the `api` service. The default is `consent`, which preserves the existing sign-in behavior. Microsoft still requests consent when required permissions have not been granted. This setting only affects signing in to Keeper; connecting and reconnecting Outlook calendars retain their existing prompt behavior.
-
 ### OIDC / SSO
 
 Self-hosters can delegate sign-in to any OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, Zitadel, ...). Nothing changes until the variables below are set.
@@ -355,7 +352,6 @@ GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 MICROSOFT_TENANT_ID=
-MICROSOFT_AUTH_PROMPT=consent
 EOF
 ```
 
@@ -392,7 +388,6 @@ services:
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
-      MICROSOFT_AUTH_PROMPT: ${MICROSOFT_AUTH_PROMPT:-consent}
 
 volumes:
   keeper-data:
@@ -426,7 +421,6 @@ GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 MICROSOFT_TENANT_ID=
-MICROSOFT_AUTH_PROMPT=consent
 EOF
 ```
 
@@ -474,7 +468,6 @@ services:
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
-      MICROSOFT_AUTH_PROMPT: ${MICROSOFT_AUTH_PROMPT:-consent}
     ports:
       - "3000:3000"
     depends_on:
@@ -516,7 +509,6 @@ GOOGLE_CLIENT_SECRET=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
 MICROSOFT_TENANT_ID=
-MICROSOFT_AUTH_PROMPT=consent
 EOF
 ```
 
@@ -563,7 +555,6 @@ services:
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
       MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
-      MICROSOFT_AUTH_PROMPT: ${MICROSOFT_AUTH_PROMPT:-consent}
     depends_on:
       postgres:
         condition: service_healthy

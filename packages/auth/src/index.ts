@@ -68,7 +68,6 @@ interface AuthConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   microsoftCredentials?: MicrosoftOAuthCredentials | null;
-  microsoftAuthPrompt?: "consent" | "select_account";
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcClientSecret?: string;
@@ -170,9 +169,6 @@ const createRegistrationEmailDomainError = (): APIError =>
 const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
 
-const resolveMicrosoftAuthPrompt = (prompt: AuthConfig["microsoftAuthPrompt"]) =>
-  prompt ?? "consent";
-
 const createAuth = (config: AuthConfig) => {
   const {
     database,
@@ -184,7 +180,6 @@ const createAuth = (config: AuthConfig) => {
     googleClientId,
     googleClientSecret,
     microsoftCredentials,
-    microsoftAuthPrompt,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -307,7 +302,7 @@ const createAuth = (config: AuthConfig) => {
         }
         return {};
       },
-      prompt: resolveMicrosoftAuthPrompt(microsoftAuthPrompt),
+      prompt: "select_account",
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
       tenantId: microsoftCredentials.tenant,
     };

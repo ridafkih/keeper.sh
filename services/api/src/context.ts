@@ -93,7 +93,6 @@ const { auth, capabilities: authCapabilities } = createAuth({
   googleClientId: env.GOOGLE_CLIENT_ID,
   googleClientSecret: env.GOOGLE_CLIENT_SECRET,
   microsoftCredentials,
-  microsoftAuthPrompt: env.MICROSOFT_AUTH_PROMPT,
   oidcIssuerUrl: env.OIDC_ISSUER_URL,
   oidcClientId: env.OIDC_CLIENT_ID,
   oidcClientSecret: env.OIDC_CLIENT_SECRET,

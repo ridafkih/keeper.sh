@@ -37,17 +37,3 @@ describe.each([
     })).toThrow(/MICROSOFT_TENANT_ID/);
   });
 });
-
-describe("Microsoft sign-in prompt environment", () => {
-  it.each(["consent", "select_account"])("accepts %s", (prompt) => {
-    expect(createEnv({ MICROSOFT_AUTH_PROMPT: apiSchema.MICROSOFT_AUTH_PROMPT }, {
-      env: { MICROSOFT_AUTH_PROMPT: prompt },
-    }).MICROSOFT_AUTH_PROMPT).toBe(prompt);
-  });
-
-  it.each(["none", "login", "invalid"])("rejects unsupported prompt %s", (prompt) => {
-    expect(() => createEnv({ MICROSOFT_AUTH_PROMPT: apiSchema.MICROSOFT_AUTH_PROMPT }, {
-      env: { MICROSOFT_AUTH_PROMPT: prompt },
-    })).toThrow(/MICROSOFT_AUTH_PROMPT/);
-  });
-});

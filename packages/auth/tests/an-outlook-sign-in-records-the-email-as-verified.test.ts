@@ -30,10 +30,7 @@ const encodeSegment = (value: object) =>
 const buildIdToken = (claims: Record<string, unknown>) =>
   `${encodeSegment({ alg: "RS256", kid: "test-kid", typ: "JWT" })}.${encodeSegment(claims)}.signature`;
 
-const createHostedAuth = async (
-  microsoftTenant: MicrosoftDirectoryTenant = "common",
-  microsoftAuthPrompt?: "consent" | "select_account",
-) => {
+const createHostedAuth = async (microsoftTenant: MicrosoftDirectoryTenant = "common") => {
   const client = new PGlite();
   clients.push(client);
   await client.exec(AUTH_DDL);
@@ -50,7 +47,6 @@ const createHostedAuth = async (
       clientSecret: "test-microsoft-client-secret",
       tenant: microsoftTenant,
     },
-    microsoftAuthPrompt,
     secret: SECRET,
   });
 
@@ -145,12 +141,8 @@ describe("an Outlook sign-in", () => {
   });
 
   describe.each<{ tenantId?: MicrosoftDirectoryTenant }>([{}, { tenantId: DIRECTORY_TENANT }])("with authority %j", ({ tenantId }) => {
-    it.each<{ prompt?: "consent" | "select_account" }>([
-      {},
-      { prompt: "consent" },
-      { prompt: "select_account" },
-    ])("uses the configured sign-in prompt %j", async ({ prompt }) => {
-      const auth = await createHostedAuth(tenantId, prompt);
+    it("shows the account picker", async () => {
+      const auth = await createHostedAuth(tenantId);
       const context = await auth.$context;
       const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
 
@@ -165,7 +157,7 @@ describe("an Outlook sign-in", () => {
       });
 
       expect(authorizationUrl.pathname).toBe(`/${tenantId ?? "common"}/oauth2/v2.0/authorize`);
-      expect(authorizationUrl.searchParams.get("prompt")).toBe(prompt ?? "consent");
+      expect(authorizationUrl.searchParams.get("prompt")).toBe("select_account");
       expect(authorizationUrl.searchParams.get("scope")?.split(" ")).toEqual(
         expect.arrayContaining(["offline_access", "User.Read", "Calendars.ReadWrite"]),
       );
@@ -297,7 +289,7 @@ describe("an Outlook sign-in", () => {
 
 describe("a Google sign-in", () => {
   it("keeps requesting consent when Microsoft uses the account picker", async () => {
-    const auth = await createHostedAuth(DIRECTORY_TENANT, "select_account");
+    const auth = await createHostedAuth(DIRECTORY_TENANT);
     const context = await auth.$context;
     const provider = context.socialProviders.find((candidate) => candidate.id === "google");
 
