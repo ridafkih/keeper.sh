@@ -6,6 +6,7 @@ export default defineConfig({
       interopDefault: false,
     },
     globals: true,
+    pool: "forks",
     include: ["./tests/**/*.test.ts"],
   },
 });
