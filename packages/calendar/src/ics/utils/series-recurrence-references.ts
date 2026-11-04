@@ -281,8 +281,10 @@ const planSelectedSlotWallTimes = (date: string, master: SeriesMasterContext): E
   };
 };
 
+const isUnresolvedZone = (zone: SeriesZone): boolean => zone.kind === "zoned" && !zone.resolved;
+
 const planExcludedSlots = (date: string, master: SeriesMasterContext): ExcludedSlotPlan => {
-  if (TIME_OF_DAY_FREQUENCIES.has(master.rule.frequency)) {
+  if (TIME_OF_DAY_FREQUENCIES.has(master.rule.frequency) || isUnresolvedZone(master.zone)) {
     return planMasterTimeOfDaySlot(date, master);
   }
   const stepsInElapsedHours = master.rule.frequency === "HOURLY" && !master.rule.hasSelectors;

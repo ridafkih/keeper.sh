@@ -665,6 +665,51 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
   }, SLOT_BUDGET_TEST_TIMEOUT_MS);
 });
 
+const UNRESOLVED_ZONE_EXCLUDED_DAYS = 430;
+
+const buildUnresolvedZoneHourlySeries = (uid: string): string[] => [
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  "DTSTAMP:20260101T000000Z",
+  ...zonedMaster("Nowhere/Zone", "20260101T000000", "20260101T003000", "FREQ=HOURLY;BYMINUTE=0;COUNT=5"),
+  `EXDATE;VALUE=DATE:${listDates(UNRESOLVED_ZONE_EXCLUDED_DAYS).join(",")}`,
+  "END:VEVENT",
+];
+
+describe("a DATE EXDATE on a series whose zone does not resolve", () => {
+  it("writes only the series' start time of day under its declared TZID and withholds the series", async () => {
+    const calendar = buildCalendar([], [
+      ...zonedMaster(
+        "Nowhere Standard Time",
+        "20260105T090000",
+        "20260105T093000",
+        "FREQ=DAILY;BYHOUR=9,14;COUNT=6",
+      ),
+      "EXDATE;VALUE=DATE:20260106",
+    ]);
+    const normalized = applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined);
+    const view = await syncIcsFeed(calendar);
+
+    expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
+      "EXDATE;TZID=Nowhere Standard Time:20260106T090000",
+    ]);
+    expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
+    expect(view.starts).toEqual([]);
+  });
+
+  it("withholds hourly series that exclude many days without expanding each day's hours, quickly", async () => {
+    const uids = Array.from({ length: 5 }, (_unused, index) => `nowhere-${index}@test`);
+    const calendar = buildMultiEventCalendar(...uids.map((uid) => buildUnresolvedZoneHourlySeries(uid)));
+    const startedAt = performance.now();
+    const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
+    const view = await syncIcsFeed(calendar);
+
+    expect(exclusions.get("nowhere-0@test")).toHaveLength(UNRESOLVED_ZONE_EXCLUDED_DAYS);
+    expect(view.unsupportedEventUids.toSorted()).toEqual(uids);
+    expect(performance.now() - startedAt).toBeLessThan(2000);
+  });
+});
+
 describe("DATE EXDATE dates past every slot budget", () => {
   it("costs each over-budget date one slot of work, not the slots it would have expanded to", () => {
     const excludedDates = listDates(50_000);
