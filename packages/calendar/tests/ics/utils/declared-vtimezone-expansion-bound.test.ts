@@ -44,6 +44,13 @@ describe("declared VTIMEZONE observances that would expand without bound", () =>
     ["FREQ=MINUTELY", "19900101T020000"],
     ["FREQ=SECONDLY", "19900101T020000"],
     ["FREQ=DAILY", "16010101T020000"],
+    ["FREQ=HOURLY", "19900101T020000"],
+    ["FREQ=HOURLY;BYMINUTE=0,30", "16010101T020000"],
+    [`FREQ=HOURLY;INTERVAL=24;BYMINUTE=${Array.from({ length: 60 }, (_unused, minute) => minute).join(",")};BYSECOND=${Array.from({ length: 60 }, (_unused, second) => second).join(",")}`, "20200101T020000"],
+    ["FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30", "20200101T020000"],
+    ["FREQ=HOURLY;INTERVAL=1000;BYMONTH=2;BYMONTHDAY=30", "20200101T020000"],
+    ["FREQ=SECONDLY;INTERVAL=100000;BYMONTH=2;BYMONTHDAY=30", "20200101T020000"],
+    ["FREQ=WEEKLY;BYMONTH=2;BYDAY=MO", "20200101T020000"],
     ["FREQ=YEARLY;BYMONTH=11;BYDAY=1SU;BYHOUR=0,1,2,3,4,5,6,7,8,9,10,11;BYMINUTE=0,1,2,3,4,5", "16010101T020000"],
     [`FREQ=YEARLY;BYMONTH=1,2,3,4,5,6,7,8,9,10,11,12;BYMONTHDAY=${Array.from({ length: 31 }, (_unused, day) => day + 1).join(",")}`, "16010101T020000"],
   ])("withholds an event in a zone whose observance repeats %s from %s, within the budget", (rule, observanceStart) => {

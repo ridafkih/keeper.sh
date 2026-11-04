@@ -14,67 +14,32 @@ const MAX_ZONE_ONSETS = 50_000;
 const MAX_CALENDAR_ONSETS = 200_000;
 const MONTHS_PER_YEAR = 12;
 const WEEKS_PER_YEAR = 53;
-const DAYS_PER_YEAR = 366;
-const DAYS_PER_MONTH = 31;
 const WEEKDAY_OCCURRENCES_PER_MONTH = 5;
 const DAYS_PER_WEEK = 7;
-const HOURS_PER_DAY = 24;
-const MINUTES_PER_HOUR = 60;
-const SECONDS_PER_MINUTE = 60;
-
-const FREQUENCY_RANKS: Record<string, number> = {
-  DAILY: 3,
-  HOURLY: 4,
-  MINUTELY: 5,
-  MONTHLY: 1,
-  SECONDLY: 6,
-  WEEKLY: 2,
-  YEARLY: 0,
-};
-const FINEST_FREQUENCY_RANK = 6;
-const HOURLY_RANK = 4;
-const MINUTELY_RANK = 5;
-const SECONDLY_RANK = 6;
-
-const UNITS_PER_DAY_BY_FREQUENCY: Record<string, number> = {
-  HOURLY: HOURS_PER_DAY,
-  MINUTELY: HOURS_PER_DAY * MINUTES_PER_HOUR,
-  SECONDLY: HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE,
-};
+const SELF_TERMINATING_FREQUENCIES = new Set(["MONTHLY", "YEARLY"]);
+const WEEKLY_FILTER_PARTS = ["BYMONTH", "BYMONTHDAY", "BYWEEKNO", "BYYEARDAY"];
 
 const countPart = (parts: RuleParts, name: string): number | undefined => parts[name]?.length;
 
-const readFrequencyRank = (rule: ICAL.Recur): number =>
-  FREQUENCY_RANKS[rule.freq] ?? FINEST_FREQUENCY_RANK;
-
 const readInterval = (rule: ICAL.Recur): number => Math.max(rule.interval, 1);
+
+const isUnfilteredWeeklyRule = (rule: ICAL.Recur): boolean =>
+  rule.freq === "WEEKLY" && WEEKLY_FILTER_PARTS.every((name) => countPart(rule.parts, name) === globalThis.undefined);
+
+const isExpandableRule = (rule: ICAL.Recur): boolean =>
+  SELF_TERMINATING_FREQUENCIES.has(rule.freq) || isUnfilteredWeeklyRule(rule);
 
 const boundUnfilteredDaysPerYear = (rule: ICAL.Recur, months: number | undefined): number => {
   const interval = readInterval(rule);
   switch (rule.freq) {
-    case "YEARLY": {
-      return months ?? 1;
-    }
     case "MONTHLY": {
       return months ?? Math.ceil(MONTHS_PER_YEAR / interval);
     }
     case "WEEKLY": {
-      if (months !== globalThis.undefined) {
-        return months * WEEKDAY_OCCURRENCES_PER_MONTH;
-      }
       return Math.ceil(WEEKS_PER_YEAR / interval);
     }
-    case "DAILY": {
-      if (months !== globalThis.undefined) {
-        return months * DAYS_PER_MONTH;
-      }
-      return Math.ceil(DAYS_PER_YEAR / interval);
-    }
     default: {
-      if (months !== globalThis.undefined) {
-        return months * DAYS_PER_MONTH;
-      }
-      return DAYS_PER_YEAR;
+      return months ?? 1;
     }
   }
 };
@@ -104,34 +69,10 @@ const boundOnsetDaysPerYear = (rule: ICAL.Recur): number => {
   return boundUnfilteredDaysPerYear(rule, months);
 };
 
-const countTimeOfDayPart = (
-  parts: RuleParts,
-  name: string,
-  frequencyRank: number,
-  expandingRank: number,
-  unitsPerParent: number,
-): number => {
-  const selected = countPart(parts, name);
-  if (selected !== globalThis.undefined) {
-    return selected;
-  }
-  if (frequencyRank >= expandingRank) {
-    return unitsPerParent;
-  }
-  return 1;
-};
-
-const boundOnsetsPerDay = (rule: ICAL.Recur): number => {
-  const rank = readFrequencyRank(rule);
-  const selected = countTimeOfDayPart(rule.parts, "BYHOUR", rank, HOURLY_RANK, HOURS_PER_DAY)
-    * countTimeOfDayPart(rule.parts, "BYMINUTE", rank, MINUTELY_RANK, MINUTES_PER_HOUR)
-    * countTimeOfDayPart(rule.parts, "BYSECOND", rank, SECONDLY_RANK, SECONDS_PER_MINUTE);
-  const unitsPerDay = UNITS_PER_DAY_BY_FREQUENCY[rule.freq];
-  if (unitsPerDay === globalThis.undefined) {
-    return selected;
-  }
-  return Math.min(selected, Math.ceil(unitsPerDay / readInterval(rule)));
-};
+const boundOnsetsPerDay = (rule: ICAL.Recur): number =>
+  (countPart(rule.parts, "BYHOUR") ?? 1)
+  * (countPart(rule.parts, "BYMINUTE") ?? 1)
+  * (countPart(rule.parts, "BYSECOND") ?? 1);
 
 const readRuleEndYear = (rule: ICAL.Recur, untilYear: number): number => {
   if (rule.until) {
@@ -161,6 +102,9 @@ const boundObservanceOnsets = (observance: ICAL.Component, untilYear: number): n
   const onset = observance.getFirstPropertyValue("dtstart");
   if (!(rule instanceof ICAL.Recur) || !(onset instanceof ICAL.Time)) {
     return 0;
+  }
+  if (!isExpandableRule(rule)) {
+    throw new RangeError(`Declared VTIMEZONE observance repeats ${rule.freq}, which ical.js may step through forever`);
   }
   return boundRuleOnsets(rule, onset.year, untilYear);
 };
