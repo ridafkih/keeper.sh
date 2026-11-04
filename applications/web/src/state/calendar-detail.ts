@@ -23,7 +23,7 @@ export const excludeAvailabilitiesAtom = selectAtom(calendarDetailAtom, (detail)
 const NO_TITLE_KEYWORDS: string[] = [];
 export const excludeTitleKeywordsAtom = selectAtom(calendarDetailAtom, (detail) => detail?.excludeTitleKeywords ?? NO_TITLE_KEYWORDS);
 export const treatFullDayTimedEventsAsAllDayAtom = selectAtom(calendarDetailAtom, (detail) => detail?.treatFullDayTimedEventsAsAllDay ?? false);
-export const calendarProviderMissingSinceAtom = selectAtom(calendarDetailAtom, (detail) => detail?.providerMissingSince ?? null);
+export const calendarMissingSinceAtom = selectAtom(calendarDetailAtom, (detail) => detail?.providerMissingSince ?? detail?.unavailableSince ?? null);
 export const markEventsAsPrivateAtom = selectAtom(calendarDetailAtom, (detail) => detail?.markEventsAsPrivate ?? false);
 export type ExcludeField = keyof Pick<
   CalendarDetail,

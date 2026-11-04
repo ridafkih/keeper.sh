@@ -1,3 +1,4 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import type { BroadcastData } from "@keeper.sh/broadcast";
 import { entry } from "entrykit";
 import { join } from "node:path";
@@ -7,10 +8,13 @@ import { websocketHandler } from "./handlers/websocket";
 import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
@@ -28,6 +32,7 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.API_PORT,
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       websocket: websocketHandler,
       fetch: withCors(async (request) => {
         const url = new URL(request.url);

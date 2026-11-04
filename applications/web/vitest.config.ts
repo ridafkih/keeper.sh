@@ -7,6 +7,7 @@ export default defineConfig({
     alias: {
       "@": resolve(fileURLToPath(import.meta.url), "../src"),
       "virtual:changelog-releases": resolve(fileURLToPath(import.meta.url), "../tests/stubs/changelog-releases.ts"),
+      "virtual:marketing-copy": resolve(fileURLToPath(import.meta.url), "../tests/stubs/marketing-copy.ts"),
       "virtual:compare-pages": resolve(fileURLToPath(import.meta.url), "../tests/stubs/virtual-content.ts"),
       "virtual:docs-pages": resolve(fileURLToPath(import.meta.url), "../tests/stubs/virtual-content.ts"),
       "virtual:guides-pages": resolve(fileURLToPath(import.meta.url), "../tests/stubs/virtual-content.ts"),

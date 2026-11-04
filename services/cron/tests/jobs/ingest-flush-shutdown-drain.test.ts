@@ -134,7 +134,7 @@ const yieldToWriterPump = async (): Promise<void> => {
 
 describe("ingest flush writer shutdown drain", () => {
   it("closes and drains the flush writer before closing flushDatabase", async () => {
-    await import("../../src/jobs/ingest-sources");
+    await import("../../src/ingest/ingest-sources");
     const { shutdownDatabases } = await import("../../src/context");
 
     const [worker] = harness.workers;

@@ -4,15 +4,17 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "bun run --hot src/index.ts",
+    "dev": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run --hot src/index.ts",
     "build": "bun scripts/build.ts",
-    "start": "bun run dist/index.js",
+    "start": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run dist/index.js",
     "types": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
     "@keeper.sh/auth": "workspace:*",
+    "@keeper.sh/calendar": "workspace:*",
+    "@keeper.sh/constants": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/otelemetry": "workspace:*",
     "@modelcontextprotocol/sdk": "1.27.1",

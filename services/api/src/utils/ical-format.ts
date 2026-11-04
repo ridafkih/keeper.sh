@@ -45,11 +45,15 @@ interface CalendarEvent {
 const resolveEventTimeZone = (event: CalendarEvent): string | undefined =>
   buildZonedIcsDate(event.startTime, event.startTimeZone ?? "", false).local?.timezone;
 
-const buildExceptionDate = (value: IcsDateObject, timezone: string | undefined): IcsDateObject => {
+const buildExceptionDate = (
+  value: IcsDateObject,
+  timezone: string | undefined,
+  masterIsAllDay: boolean,
+): IcsDateObject => {
   if (value.type === "DATE") {
     return { date: value.date, type: "DATE" };
   }
-  return buildZonedIcsDate(value.date, timezone, false);
+  return buildZonedIcsDate(value.date, timezone, masterIsAllDay);
 };
 
 const toUtcDateObject = (value: IcsDateObject): IcsDateObject => {
@@ -166,13 +170,18 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
   return { ...common, end: buildZonedIcsDate(endTime, timezone, isAllDay) };
 };
 
-const buildMasterIcsEvent = (master: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
+const buildMasterIcsEvent = (
+  master: CalendarEvent,
+  uid: string,
+  settings: FeedSettings,
+  masterIsAllDay: boolean,
+): IcsEvent => {
   const timezone = resolveEventTimeZone(master);
   return {
     ...buildBaseIcsEvent(master, uid, settings),
     ...(master.recurrenceRule && { recurrenceRule: normalizeRecurrenceRuleToUtc(master.recurrenceRule) }),
     ...(master.exceptionDates?.length && {
-      exceptionDates: master.exceptionDates.map((value) => buildExceptionDate(value, timezone)),
+      exceptionDates: master.exceptionDates.map((value) => buildExceptionDate(value, timezone, masterIsAllDay)),
     }),
   };
 };
@@ -195,7 +204,7 @@ const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsE
   const masterTimeZone = resolveEventTimeZone(group.master);
   const masterIsAllDay = resolveIsAllDayEvent(toAllDayShape(group.master));
   return [
-    buildMasterIcsEvent(group.master, uid, settings),
+    buildMasterIcsEvent(group.master, uid, settings, masterIsAllDay),
     ...group.overrides.map((override) =>
       buildOverrideIcsEvent(override, uid, settings, masterTimeZone, masterIsAllDay),
     ),

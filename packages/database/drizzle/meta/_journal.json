@@ -687,6 +687,62 @@
       "when": 1791915616003,
       "tag": "0097_tough_morbius",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793046269170,
+      "tag": "0098_source_ingest_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793046269528,
+      "tag": "0099_source_ingest_schedule_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793046269910,
+      "tag": "0100_session_user_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793054228574,
+      "tag": "0101_calendar_account_credential_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793055048603,
+      "tag": "0102_source_ingest_schedule_lock_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793308119183,
+      "tag": "0103_better_auth_1_7_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793308124722,
+      "tag": "0104_microsoft_account_object_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793308135831,
+      "tag": "0105_drop_legacy_oauth_client_columns",
+      "breakpoints": true
     }
   ]
 }

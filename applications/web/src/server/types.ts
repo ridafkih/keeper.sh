@@ -6,6 +6,7 @@ export interface Runtime {
   handleAssetRequest: (request: Request) => Promise<Response>;
   resolveViteAssets: (requestPath: string) => Promise<ViteAssets>;
   renderApp: (request: Request, viteAssets: ViteAssets) => Promise<Response>;
+  renderMarkdown: (path: string) => Promise<string | null>;
   shutdown?: () => Promise<void>;
 }
 

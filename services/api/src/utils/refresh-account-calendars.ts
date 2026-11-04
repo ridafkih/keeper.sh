@@ -154,7 +154,10 @@ const listProviderCalendars = async (
   accessToken: string,
 ): Promise<ExternalCalendar[]> => {
   if (provider === "google") {
-    const calendars = await listGoogleCalendars(accessToken);
+    const { googleInteractiveRateLimiter } = await import("@/context");
+    const calendars = await listGoogleCalendars(accessToken, {
+      rateLimiter: googleInteractiveRateLimiter,
+    });
     return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
   }
 

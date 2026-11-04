@@ -1,9 +1,8 @@
 name: Publish Docker Images
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [prereleased, released]
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -82,9 +81,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package.name }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           flavor: suffix=-${{ matrix.arch }}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -95,6 +94,14 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.package.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package.name }}-${{ matrix.arch }}
+      - name: Verify the web image carries the llms text files
+        if: matrix.package.name == 'web'
+        env:
+          IMAGE: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+        run: |
+          for file in llms.txt llms-full.txt; do
+            docker run --rm --entrypoint test "$IMAGE" -s "dist/client/$file"
+          done
 
   build-convenience:
     strategy:
@@ -154,9 +161,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
           flavor: suffix=-${{ matrix.arch }}
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -195,9 +202,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
       - name: Create multi-arch manifest
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -230,9 +237,9 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/keeper-${{ matrix.package }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}},enable=${{ !contains(github.ref, '-') }}
-            type=semver,pattern={{major}},enable=${{ !contains(github.ref, '-') }}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !github.event.release.prerelease }}
+            type=semver,pattern={{major}},enable=${{ !github.event.release.prerelease }}
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }}
       - name: Create multi-arch manifest
         env:
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -246,7 +253,7 @@ jobs:
   deploy-ec2:
     runs-on: ubuntu-latest
     needs: merge-core-manifests
-    if: ${{ !contains(github.ref, '-') }}
+    if: ${{ !github.event.release.prerelease }}
     concurrency:
       group: production-deploy
       cancel-in-progress: false
@@ -280,3 +287,42 @@ jobs:
             docker compose pull
             docker compose up -d --build --remove-orphans --wait
             docker image prune -af --filter "until=24h"
+
+  deploy-targets:
+    runs-on: ubuntu-latest
+    needs: merge-core-manifests
+    permissions: {}
+    outputs:
+      environments: ${{ steps.targets.outputs.environments }}
+      version: ${{ steps.targets.outputs.version }}
+    steps:
+      - id: targets
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+          ON_PRERELEASE: ${{ vars.DEPLOY_ON_PRERELEASE }}
+          ON_RELEASE: ${{ vars.DEPLOY_ON_RELEASE }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          targets=$ON_RELEASE
+          if [ "$PRERELEASE" = "true" ]; then
+            targets=$ON_PRERELEASE
+          fi
+          echo "environments=$(printf '%s' "${targets:-[]}" | jq -c .)" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+  deploy-ecs:
+    needs: deploy-targets
+    if: needs.deploy-targets.outputs.environments != '[]'
+    strategy:
+      max-parallel: 1
+      matrix:
+        environment: ${{ fromJSON(needs.deploy-targets.outputs.environments) }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-ecs.yml
+    secrets: inherit
+    with:
+      environment: ${{ matrix.environment }}
+      version: ${{ needs.deploy-targets.outputs.version }}

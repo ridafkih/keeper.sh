@@ -1,7 +1,6 @@
 import type { MarketingPricingFeatureValueKind } from "./components/marketing-pricing-section";
-
-export type PricingPlanId = 'free' | 'pro';
-
+import { type PricingPlanId, resolvePricingFeatures } from "./pricing-layout";
+import { marketingCopy } from "@/lib/marketing-copy";
 
 export type PricingPlan = {
   id: PricingPlanId;
@@ -25,75 +24,30 @@ export type PricingFeature = {
   highlight?: Partial<Record<PricingPlanId, string>>;
 };
 
-export const PRICING_PLANS: PricingPlan[] = [
-  {
-    id: 'free',
-    name: 'Free',
-    price: '$0',
-    period: 'per month',
-    description:
-      'For keeping two calendar accounts from double-booking each other.',
-    ctaLabel: 'Start for Free',
-  },
-  {
-    id: 'pro',
-    name: 'Pro',
-    price: '$5',
-    period: 'per month',
-    description:
-      'For more than two calendar accounts, or when you need updates within the minute.',
-    ctaLabel: 'Get Pro',
-    tone: "inverse" as const,
-  },
-];
+/**
+ * Presentation held in the app: which plan is emphasised. The cell layout lives
+ * in pricing-layout.ts. The copy — plan names, prices, row labels, cell words
+ * and card bullets — comes from the seo submodule under
+ * marketing/pricing-plans.json and is merged in below by id.
+ */
+const PLAN_TONES: Partial<Record<PricingPlanId, "inverse">> = { pro: "inverse" };
 
-export const PRICING_FEATURES: PricingFeature[] = [
-  {
-    label: 'Updates from Google and Outlook',
-    free: 'Every 30 minutes',
-    pro: 'Within seconds',
-    highlight: {
-      free: 'Updates every 30 minutes',
-      pro: 'Updates from Google and Outlook within seconds',
-    },
-  },
-  {
-    // Free carries no bullet here: it is the same 30 minutes as the row above,
-    // and the cards would otherwise repeat it.
-    label: 'Updates from iCloud, Fastmail and CalDAV',
-    free: 'Every 30 minutes',
-    pro: 'Within a minute',
-    highlight: { pro: 'Updates from iCloud, Fastmail and CalDAV within a minute' },
-  },
-  {
-    label: 'Linked Accounts',
-    free: 'Up to 2',
-    pro: 'infinity',
-    highlight: { free: 'Up to 2 linked accounts', pro: 'Unlimited linked accounts' },
-  },
-  {
-    label: 'Connections',
-    free: 'Up to 3',
-    pro: 'infinity',
-    highlight: { free: 'Up to 3 connections', pro: 'Unlimited connections' },
-  },
-  { label: 'Shareable Calendar Link', free: 'check', pro: 'check' },
-  { label: 'Choose What the Link Shows', free: 'minus', pro: 'check' },
-  {
-    label: 'Choose Which Events Sync',
-    free: 'minus',
-    pro: 'check',
-    highlight: { pro: 'Choose which events sync' },
-  },
-  {
-    label: 'AI Agent and API Access',
-    free: '25 calls/day',
-    pro: 'infinity',
-    highlight: { free: '25 agent or API calls a day', pro: 'Unlimited agent and API calls' },
-  },
-  { label: 'Email & Passkey Sign-In', free: 'check', pro: 'check' },
-  { label: 'Priority Support', free: 'minus', pro: 'check' },
-];
+export const PRICING_PLANS: PricingPlan[] = marketingCopy.pricingPlans.plans.map((plan) => {
+  const id = plan.id as PricingPlanId;
+  const tone = PLAN_TONES[id];
+
+  return {
+    id,
+    name: plan.name,
+    price: plan.price,
+    period: plan.period,
+    description: plan.description,
+    ctaLabel: plan.ctaLabel,
+    ...(tone ? { tone } : {}),
+  };
+});
+
+export const PRICING_FEATURES: PricingFeature[] = resolvePricingFeatures(marketingCopy.pricingPlans.features);
 
 /**
  * The rows where Free and Pro actually differ, in PRICING_FEATURES order. A row

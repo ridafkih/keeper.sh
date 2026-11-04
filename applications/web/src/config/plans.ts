@@ -1,4 +1,5 @@
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+import { marketingCopy } from "@/lib/marketing-copy";
 
 export interface PlanConfig {
   id: "free" | "pro";
@@ -14,32 +15,15 @@ export interface PlanConfig {
 const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
     id: "free",
-    name: "Free",
-    description: "Enough for two calendar accounts and three connections.",
+    ...marketingCopy.plans.free,
     monthlyPrice: 0,
     yearlyPrice: 0,
-    features: [
-      "Up to 2 calendar accounts",
-      "Up to 3 connections",
-      "1 shareable calendar link",
-      "Changes land every 30 minutes",
-      "25 API calls a day",
-    ],
   },
   {
     id: "pro",
-    name: "Pro",
-    description: "As many calendars as you want, and changes that land within a minute.",
+    ...marketingCopy.plans.pro,
     monthlyPrice: 5,
     yearlyPrice: 42,
-    features: [
-      "Changes land every minute",
-      "Unlimited calendar accounts",
-      "Unlimited connections",
-      "Unlimited shareable links, each with its own filters",
-      "Unlimited API and AI agent access",
-      "Priority support",
-    ],
   },
 ];
 

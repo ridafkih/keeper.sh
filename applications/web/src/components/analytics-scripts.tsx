@@ -15,7 +15,9 @@ import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
 
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
-  const { googleAdsId, visitorsNowToken } = runtimeConfig;
+  const { googleAdsId, googleAnalyticsId, visitorsNowToken } = runtimeConfig;
+  const googleTagIds = [googleAdsId, googleAnalyticsId].filter((id): id is string => id !== null);
+  const [googleTagLoaderId] = googleTagIds;
   const gdprApplies = useGdprApplies();
   const hasConsent = useEffectiveConsent();
   const location = useLocation();
@@ -66,7 +68,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
           {...(hasConsent && { "data-persist": true })}
         />
       )}
-      {googleAdsId && (
+      {googleTagLoaderId && (
         <>
           <script
             dangerouslySetInnerHTML={{
@@ -85,7 +87,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
           />
           <script
             async
-            src={`https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`}
+            src={`https://www.googletagmanager.com/gtag/js?id=${googleTagLoaderId}`}
           />
           <script
             dangerouslySetInnerHTML={{
@@ -93,7 +95,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
-                gtag('config', '${googleAdsId}');
+                ${googleTagIds.map((id) => `gtag('config', '${id}');`).join("\n")}
               `,
             }}
           />

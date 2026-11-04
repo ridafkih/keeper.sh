@@ -9,3 +9,12 @@ pre-push:
       run: bun run unused
     - name: test
       run: bun run test
+
+pre-commit:
+  jobs:
+    - name: block-infra-leak
+      run: |
+        if git diff --cached --name-only | grep -qE '^infra/.+'; then
+          echo "infra/ files are staged in the public repo. They belong in the private infra submodule."
+          exit 1
+        fi

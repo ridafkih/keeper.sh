@@ -3,12 +3,13 @@ import env from "./env";
 import { createDatabase } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";
-import { createAuth } from "@keeper.sh/auth";
+import { createAuth, parseRegistrationEmailDomains } from "@keeper.sh/auth";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createPremiumService } from "@keeper.sh/premium";
 import {
   createOAuthProviders,
   buildOAuthConfigs,
+  createGoogleInteractiveRateLimiter,
   createSyncAggregateRuntime,
   resolveWebhookConfig,
 } from "@keeper.sh/calendar";
@@ -53,6 +54,10 @@ const createRedisRefreshLockStore = (redisClient: Redis): RefreshLockStore => ({
   },
 });
 const refreshLockStore = createRedisRefreshLockStore(redis);
+const googleInteractiveRateLimiter = createGoogleInteractiveRateLimiter(
+  redis,
+  env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
+);
 
 const parseTrustedOrigins = (origins?: string): string[] => {
   if (!origins) {
@@ -99,6 +104,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   passkeyOrigin: env.PASSKEY_ORIGIN,
   mcpResourceUrl: env.MCP_PUBLIC_URL,
   mcpApiBaseUrl: env.MCP_API_URL,
+  registrationEmailDomains: parseRegistrationEmailDomains(env.REGISTRATION_EMAIL_DOMAINS),
   ...(trustedOrigins.length > MIN_TRUSTED_ORIGINS_COUNT && { trustedOrigins }),
 });
 
@@ -188,6 +194,7 @@ export {
   premiumService,
   oauthProviders,
   refreshLockStore,
+  googleInteractiveRateLimiter,
   resend,
   feedbackEmail,
   baseUrl,

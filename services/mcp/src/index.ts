@@ -1,8 +1,12 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { entry } from "entrykit";
 import { join } from "node:path";
 import { tryLoadMcpEnv } from "./env";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { destroy } from "./utils/logging";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
 
 const env = tryLoadMcpEnv();
 
@@ -25,6 +29,7 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.MCP_PORT,
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       fetch: async (request) => {
         const match = router.match(request);
 

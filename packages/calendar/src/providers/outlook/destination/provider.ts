@@ -274,11 +274,11 @@ const createOutlookSyncProvider = (config: OutlookSyncProviderConfig) => {
 
     for (const eventId of eventIds) {
       try {
-        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}`);
+        const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${eventId}/permanentDelete`);
 
         const response = await sendRequestWithRetry(url, {
           headers: { Authorization: `Bearer ${tokenState.accessToken}` },
-          method: "DELETE",
+          method: "POST",
         });
 
         if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {

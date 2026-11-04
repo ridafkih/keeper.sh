@@ -66,7 +66,7 @@ const discoverOAuthAccountCalendars = async (
   accountId: string,
   provider: string,
 ): Promise<DiscoveredCalendar[]> => {
-  const { database } = await import("@/context");
+  const { database, googleInteractiveRateLimiter } = await import("@/context");
 
   const [credential] = await database
     .select({
@@ -90,7 +90,9 @@ const discoverOAuthAccountCalendars = async (
   const accessToken = await resolveSourceAccessToken(provider, credential);
 
   if (provider === "google") {
-    return toDiscoveredGoogleCalendars(await listGoogleCalendars(accessToken));
+    return toDiscoveredGoogleCalendars(await listGoogleCalendars(accessToken, {
+      rateLimiter: googleInteractiveRateLimiter,
+    }));
   }
 
   return toDiscoveredOutlookCalendars(await listOutlookCalendars(accessToken));

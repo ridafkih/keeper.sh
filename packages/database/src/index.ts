@@ -20,3 +20,23 @@ export {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,
 } from "./database/migration-readiness";
+export {
+  claimIngests,
+  completeIngests,
+  hasSiblingReadSinceLastSuccess,
+  readIngestScheduleHealth,
+  releaseIngests,
+  wakeIngests,
+  wakeUserIngests,
+} from "./database/ingest-schedule";
+export type {
+  ClaimIngestsInput,
+  ClaimedIngest,
+  IngestCompletion,
+  IngestScheduleDatabase,
+  IngestScheduleHealth,
+  IngestScheduleLane,
+  IngestScheduleParkedReason,
+  ReleasedIngest,
+  WakeIngestsInput,
+} from "./database/ingest-schedule";

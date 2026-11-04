@@ -5,6 +5,7 @@ import {
   createDatabaseFlush,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
+  withGoogleProjectBudget,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -63,9 +64,14 @@ const createProviderRateLimiter = (
   redis: Redis,
   userId: string,
   provider: string,
+  googleProjectRequestsPerMinute?: number,
 ): RedisRateLimiter | undefined => {
   if (provider === "google") {
-    return createGoogleUserRateLimiter(redis, userId, "push");
+    return withGoogleProjectBudget(
+      redis,
+      createGoogleUserRateLimiter(redis, userId, "push"),
+      googleProjectRequestsPerMinute,
+    );
   }
   if (provider !== "outlook") {
     return;
@@ -128,6 +134,7 @@ interface SyncConfig {
   database: BunSQLDatabase;
   redis: Redis;
   encryptionKey?: string;
+  googleProjectRequestsPerMinute?: number;
   oauthConfig: OAuthConfig;
   plan: Plan;
   refreshLockStore?: RefreshLockStore | null;
@@ -872,7 +879,12 @@ const syncDestinationsForUser = async (
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
           safeFetchOptions: config.safeFetchOptions,
-          rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
+          rateLimiter: createProviderRateLimiter(
+            redis,
+            userId,
+            destination.provider,
+            config.googleProjectRequestsPerMinute,
+          ),
           signal: config.abortSignal,
         }));
         const syncProvider = providerResolve.value;

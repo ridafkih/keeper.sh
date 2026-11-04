@@ -71,6 +71,33 @@ describe("CalDAV discovery cache", () => {
     await expect(cache.read()).resolves.toBeNull();
   });
 
+  it("carries each calendar's collection time zone through the cache", async () => {
+    const cache = createCalendarDiscoveryCache(fakeRedis(), "account-1");
+    const calendars = [
+      { ctag: "1", displayName: "Work", timeZone: "Europe/Berlin", url: "https://dav.example/work/" },
+      { ctag: "2", displayName: "Home", url: "https://dav.example/home/" },
+    ];
+
+    await cache.write(calendars);
+
+    await expect(cache.read()).resolves.toEqual(calendars);
+  });
+
+  it("accepts an entry cached before calendars carried a time zone", () => {
+    expect(parseCachedCalendars('[{"ctag":"1","displayName":"Work","url":"https://dav.example/work/"}]')).toEqual(
+      CALENDARS,
+    );
+  });
+
+  it("treats an entry with a non-string time zone as a miss", () => {
+    expect(
+      parseCachedCalendars('[{"displayName":"Work","timeZone":60,"url":"https://dav.example/work/"}]'),
+    ).toBeNull();
+    expect(
+      parseCachedCalendars('[{"displayName":"Work","timeZone":null,"url":"https://dav.example/work/"}]'),
+    ).toBeNull();
+  });
+
   it("treats an unreadable entry as a miss rather than failing the ingest", () => {
     expect(parseCachedCalendars("not json")).toBeNull();
     expect(parseCachedCalendars("{}")).toBeNull();

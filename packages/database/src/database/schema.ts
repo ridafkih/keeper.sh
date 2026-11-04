@@ -96,6 +96,8 @@ const calendarAccountsTable = pgTable(
     index("calendar_accounts_user_idx").on(table.userId),
     index("calendar_accounts_provider_idx").on(table.provider),
     index("calendar_accounts_needs_reauth_idx").on(table.needsReauthentication),
+    index("calendar_accounts_oauth_credential_idx").on(table.oauthCredentialId),
+    index("calendar_accounts_caldav_credential_idx").on(table.caldavCredentialId),
     uniqueIndex("calendar_accounts_provider_account_idx").on(
       table.userId,
       table.provider,
@@ -175,6 +177,48 @@ const calendarsTable = pgTable(
     check(
       "calendars_ingest_coverage_check",
       sql`"ingestHistoricRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND "ingestFutureRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND (("ingestWindowStart" IS NULL AND "ingestWindowEnd" IS NULL AND "ingestWindowRecordedAt" IS NULL) OR ("ingestWindowStart" IS NOT NULL AND "ingestWindowEnd" IS NOT NULL AND "ingestWindowRecordedAt" IS NOT NULL AND "ingestWindowStart" < "ingestWindowEnd"))`,
+    ),
+  ],
+);
+
+const INGEST_SCHEDULE_PARKED_REASONS = ["ineligible", "credential-rejected", "unresolvable"] as const;
+
+const INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES = INGEST_SCHEDULE_PARKED_REASONS
+  .map((reason) => `'${reason}'`)
+  .join(", ");
+
+const sourceIngestScheduleTable = pgTable(
+  "source_ingest_schedule",
+  {
+    calendarId: uuid()
+      .notNull()
+      .primaryKey()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp({ withTimezone: true }),
+    failureCount: integer().notNull().default(0),
+    lastAttemptAt: timestamp({ withTimezone: true }),
+    lastFailureAt: timestamp({ withTimezone: true }),
+    lastSuccessAt: timestamp({ withTimezone: true }),
+    leaseToken: uuid(),
+    leasedUntil: timestamp({ withTimezone: true }),
+    parkedReason: text(),
+    releaseSeq: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    wakeCorrelationId: text(),
+    wakeDueAt: timestamp({ withTimezone: true }),
+    wakeReceivedAt: timestamp({ withTimezone: true }),
+    wakeSeq: integer().notNull().default(0),
+  },
+  (table) => [
+    index("source_ingest_schedule_due_idx").on(table.dueAt).where(isNotNull(table.dueAt)),
+    index("source_ingest_schedule_wake_idx").on(table.wakeDueAt).where(isNotNull(table.wakeDueAt)),
+    check(
+      "source_ingest_schedule_parked_reason_check",
+      sql`"parkedReason" IS NULL OR "parkedReason" IN (${sql.raw(INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES)})`,
     ),
   ],
 );
@@ -554,8 +598,10 @@ export {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
+  INGEST_SCHEDULE_PARKED_REASONS,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  sourceIngestScheduleTable,
   syncStatusTable,
   userSyncRequestsTable,
   userEventsTable,

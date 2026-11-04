@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { DeletionCandidate } from "../../src/utils/delete-source-calendar";
 
 const CHANNEL_ID = "provider-channel-1";
 const CALENDAR_ID = "calendar-1";
@@ -46,11 +47,10 @@ const makeDependencies = () => {
         callLog.push("deregisterPushChannels");
         return registrar.deregisterForCalendar(calendarId);
       }),
-      isOwnedByUser: vi.fn(() => {
-        callLog.push("isOwnedByUser");
-        return Promise.resolve(true);
+      loadCandidate: vi.fn((): Promise<DeletionCandidate | null> => {
+        callLog.push("loadCandidate");
+        return Promise.resolve({ capabilities: ["pull"], missingAtProvider: false });
       }),
-      loadCapabilities: vi.fn(() => Promise.resolve(["pull"])),
       recordError: vi.fn(),
     },
     registrar,
@@ -64,11 +64,11 @@ describe("runDeleteSourceCalendar", () => {
 
     await expect(
       runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
-    ).resolves.toBe(true);
+    ).resolves.toBe("deleted");
 
     expect(registrar.deregistered).toEqual([CHANNEL_ID]);
     expect(callLog).toEqual([
-      "isOwnedByUser",
+      "loadCandidate",
       "deregisterPushChannels",
       "deleteCalendarRow",
     ]);
@@ -85,10 +85,10 @@ describe("runDeleteSourceCalendar", () => {
 
     await expect(
       runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
-    ).resolves.toBe(true);
+    ).resolves.toBe("deleted");
 
     expect(callLog).toEqual([
-      "isOwnedByUser",
+      "loadCandidate",
       "deregisterPushChannels",
       "deleteCalendarRow",
     ]);
@@ -97,13 +97,23 @@ describe("runDeleteSourceCalendar", () => {
   it("leaves the provider subscription alone for a calendar the caller does not own", async () => {
     const runDeleteSourceCalendar = await loadRunner();
     const { dependencies, registrar } = makeDependencies();
-    dependencies.isOwnedByUser = vi.fn(() => Promise.resolve(false));
+    dependencies.loadCandidate = vi.fn(() => Promise.resolve(null));
 
     await expect(
       runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
-    ).resolves.toBe(false);
+    ).resolves.toBe("not-found");
 
     expect(registrar.deregistered).toEqual([]);
     expect(dependencies.deleteCalendarRow).not.toHaveBeenCalled();
+  });
+
+  it("reports a row deleted by a concurrent request as not found", async () => {
+    const runDeleteSourceCalendar = await loadRunner();
+    const { dependencies } = makeDependencies();
+    dependencies.deleteCalendarRow = vi.fn(() => Promise.resolve(false));
+
+    await expect(
+      runDeleteSourceCalendar({ calendarId: CALENDAR_ID, userId: USER_ID }, dependencies),
+    ).resolves.toBe("not-found");
   });
 });

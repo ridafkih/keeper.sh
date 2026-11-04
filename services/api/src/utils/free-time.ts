@@ -1,4 +1,5 @@
-import { instantToWallTime, resolveTimeZone, wallTimeToInstant } from "@keeper.sh/calendar";
+import { instantToWallTime, wallTimeToInstant } from "@keeper.sh/calendar";
+import { INVALID_TIME_ZONE_MESSAGE, resolveTimeZoneOrThrow } from "@/utils/request-time-zone";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 
 const MS_PER_MINUTE = 60_000;
@@ -100,6 +101,9 @@ const parseWorkingHours = (
 
   return { days: parseWorkingDays(days), endMinute, startMinute };
 };
+
+const resolveRequestTimeZone = (identifier: string): string =>
+  resolveTimeZoneOrThrow(identifier, () => new FreeTimeValidationError(INVALID_TIME_ZONE_MESSAGE));
 
 const toMsInterval = ({ start, end }: TimeInterval): MsInterval => ({
   end: end.getTime(),
@@ -216,10 +220,7 @@ const findFreeSlots = (
     throw new FreeTimeValidationError(`limit must be a whole number from 1 to ${MAX_FREE_SLOTS}`);
   }
 
-  const timeZone = resolveTimeZone(options.timezone);
-  if (!timeZone) {
-    throw new FreeTimeValidationError("timezone must be an IANA timezone identifier");
-  }
+  const timeZone = resolveRequestTimeZone(options.timezone);
 
   const msRange = toMsInterval(range);
   const busy = mergeIntervals(busyIntervals.map((interval) => toMsInterval(interval)));
@@ -240,6 +241,7 @@ export {
   MAX_FREE_SLOTS,
   mergeIntervals,
   parseWorkingHours,
+  resolveRequestTimeZone,
   subtractBusyFromWindow,
 };
 export type { FreeSlot, FreeTimeOptions, TimeInterval, WorkingHours };

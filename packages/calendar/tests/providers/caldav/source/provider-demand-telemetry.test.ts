@@ -26,7 +26,7 @@ let clientFailure: () => never = () => {
 const createFailingClient = (): Record<string, unknown> => ({
   fetchCalendarDisplayName: () => Promise.resolve(null),
   fetchCalendarObjects: () => Promise.resolve().then(() => clientFailure()),
-  resolveCalendarUrl: () => Promise.resolve().then(() => clientFailure()),
+  resolveCalendar: () => Promise.resolve().then(() => clientFailure()),
 });
 
 vi.mock("../../../../src/providers/caldav/shared/client", () => ({

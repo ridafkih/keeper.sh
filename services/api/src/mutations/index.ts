@@ -11,13 +11,18 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
-import { createCoordinatedRefresher } from "@keeper.sh/calendar";
-import type { RefreshLockStore } from "@keeper.sh/calendar";
+import { createCoordinatedRefresher, resolveIsAllDayEvent } from "@keeper.sh/calendar";
+import type { RedisRateLimiter, RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import type { EventSource } from "./resolve-credentials";
 import { resolveSyncedEventWriteError } from "./synced-event-write";
 import { getEvent } from "@/queries/get-event";
 import { parseEventReference } from "@/queries/event-read-model";
+import {
+  EventTimeInputError,
+  assertSupportedEventTimeZone,
+  toCanonicalEventTime,
+} from "@/utils/event-time-input";
 import {
   createGoogleEvent,
   updateGoogleEvent,
@@ -49,6 +54,7 @@ interface MutationDependencies {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
   encryptionKey?: string;
+  googleRateLimiter?: RedisRateLimiter | null;
   onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
@@ -116,7 +122,12 @@ const createEventViaOAuth = async (
   );
 
   if (credentials.provider === "google") {
-    const result = await createGoogleEvent(accessToken, credentials.externalCalendarId, input);
+    const result = await createGoogleEvent(
+      accessToken,
+      credentials.externalCalendarId,
+      input,
+      deps.googleRateLimiter,
+    );
     if (!result.success) {
       return { success: false, error: result.error ?? "Google create failed." };
     }
@@ -178,11 +189,59 @@ const dispatchCreateEvent = (
   return Promise.resolve({ success: false, error: "Calendar provider not supported for event creation." });
 };
 
+type CanonicalEventTimes<Value> = { success: true; value: Value } | { success: false; error: string };
+
+const readCanonicalEventTimes = <Value>(canonicalise: () => Value): CanonicalEventTimes<Value> => {
+  try {
+    return { success: true, value: canonicalise() };
+  } catch (error) {
+    if (error instanceof EventTimeInputError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+};
+
+const canonicaliseEventInput = (input: EventInput): EventInput => {
+  const options = { isAllDay: input.isAllDay ?? false };
+  return {
+    ...input,
+    endTime: toCanonicalEventTime(input.endTime, input.startTimeZone, options),
+    startTime: toCanonicalEventTime(input.startTime, input.startTimeZone, options),
+  };
+};
+
+const canonicaliseOptionalEventTime = (
+  value: string | undefined,
+  timeZone: string | undefined,
+  isAllDay: boolean,
+): string | undefined => {
+  if (typeof value !== "string") {
+    return value;
+  }
+  return toCanonicalEventTime(value, timeZone, { isAllDay });
+};
+
+const canonicaliseEventUpdates = (updates: EventUpdateInput, isAllDay: boolean): EventUpdateInput => {
+  assertSupportedEventTimeZone(updates.startTimeZone);
+  return {
+    ...updates,
+    endTime: canonicaliseOptionalEventTime(updates.endTime, updates.startTimeZone, isAllDay),
+    startTime: canonicaliseOptionalEventTime(updates.startTime, updates.startTimeZone, isAllDay),
+  };
+};
+
 const createEventMutation = async (
   deps: MutationDependencies,
   userId: string,
-  input: EventInput,
+  requestedInput: EventInput,
 ): Promise<EventCreateResult> => {
+  const canonical = readCanonicalEventTimes(() => canonicaliseEventInput(requestedInput));
+  if (!canonical.success) {
+    return canonical;
+  }
+  const input = canonical.value;
+
   const credentials = await resolveCredentialsByCalendarId(deps.database, userId, input.calendarId);
 
   if (!credentials) {
@@ -240,7 +299,13 @@ const dispatchUpdateEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return updateGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid, updates);
+      return updateGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        reference.sourceEventUid,
+        updates,
+        deps.googleRateLimiter,
+      );
     }
 
     if (credentials.provider === "outlook") {
@@ -268,11 +333,20 @@ const dispatchUpdateEvent = async (
   return { success: false, error: "Calendar provider not supported for event updates." };
 };
 
+interface StoredEventRange {
+  endTime: Date;
+  startTime: Date;
+}
+
+interface StoredEventTiming extends StoredEventRange {
+  isAllDay: boolean | null;
+}
+
 const completeUpdateRange = (
   updates: EventUpdateInput,
-  stored: { endTime: Date; startTime: Date },
+  stored: StoredEventRange,
 ): EventUpdateInput => {
-  if (!updates.startTime && !updates.endTime) {
+  if (!updates.startTime && !updates.endTime && typeof updates.startTimeZone !== "string") {
     return updates;
   }
 
@@ -301,8 +375,8 @@ const buildDbUpdates = (updates: EventUpdateInput): Record<string, unknown> => {
   if ("endTime" in updates && updates.endTime) {
     dbUpdates.endTime = new Date(updates.endTime);
   }
-  if ("startTimeZone" in updates) {
-    dbUpdates.startTimeZone = updates.startTimeZone ?? null;
+  if (typeof updates.startTimeZone === "string") {
+    dbUpdates.startTimeZone = updates.startTimeZone;
   }
   if ("isAllDay" in updates) {
     dbUpdates.isAllDay = updates.isAllDay;
@@ -318,10 +392,14 @@ const readStoredEventRange = async (
   database: KeeperDatabase,
   eventSource: EventSource,
   resourceId: string,
-): Promise<{ endTime: Date; startTime: Date } | undefined> => {
+): Promise<StoredEventTiming | undefined> => {
   if (eventSource === "synced") {
     const [stored] = await database
-      .select({ endTime: eventStatesTable.endTime, startTime: eventStatesTable.startTime })
+      .select({
+        endTime: eventStatesTable.endTime,
+        isAllDay: eventStatesTable.isAllDay,
+        startTime: eventStatesTable.startTime,
+      })
       .from(eventStatesTable)
       .where(eq(eventStatesTable.id, resourceId))
       .limit(1);
@@ -329,7 +407,11 @@ const readStoredEventRange = async (
   }
 
   const [stored] = await database
-    .select({ endTime: userEventsTable.endTime, startTime: userEventsTable.startTime })
+    .select({
+      endTime: userEventsTable.endTime,
+      isAllDay: userEventsTable.isAllDay,
+      startTime: userEventsTable.startTime,
+    })
     .from(userEventsTable)
     .where(eq(userEventsTable.id, resourceId))
     .limit(1);
@@ -367,7 +449,7 @@ const updateEventMutation = async (
   deps: MutationDependencies,
   userId: string,
   eventId: string,
-  updates: EventUpdateInput,
+  requestedUpdates: EventUpdateInput,
 ): Promise<EventActionResult> => {
   const resolved = await resolveCredentialsByEventId(deps.database, userId, eventId);
 
@@ -398,6 +480,18 @@ const updateEventMutation = async (
   if (!stored) {
     throw new Error(`Event ${reference.resourceId} resolved credentials but has no row.`);
   }
+
+  const isAllDay = requestedUpdates.isAllDay ?? resolveIsAllDayEvent({
+    endTime: stored.endTime,
+    startTime: stored.startTime,
+    ...(typeof stored.isAllDay === "boolean" && { isAllDay: stored.isAllDay }),
+  });
+
+  const canonical = readCanonicalEventTimes(() => canonicaliseEventUpdates(requestedUpdates, isAllDay));
+  if (!canonical.success) {
+    return canonical;
+  }
+  const updates = canonical.value;
 
   const completedUpdates = completeUpdateRange(updates, stored);
 
@@ -439,7 +533,12 @@ const dispatchDeleteEvent = async (
     );
 
     if (credentials.provider === "google") {
-      return deleteGoogleEvent(accessToken, credentials.externalCalendarId, reference.sourceEventUid);
+      return deleteGoogleEvent(
+        accessToken,
+        credentials.externalCalendarId,
+        reference.sourceEventUid,
+        deps.googleRateLimiter,
+      );
     }
 
     if (credentials.provider === "outlook") {
@@ -549,6 +648,7 @@ const rsvpEventMutation = async (
         { sourceEventId, sourceEventUid },
         status,
         credentials.email,
+        deps.googleRateLimiter,
       );
     }
 
@@ -601,7 +701,13 @@ const fetchOAuthPendingInvites = async (
   );
 
   if (credentials.provider === "google") {
-    const providerInvites = await getPendingGoogleInvites(accessToken, credentials.externalCalendarId, from, to);
+    const providerInvites = await getPendingGoogleInvites(
+      accessToken,
+      credentials.externalCalendarId,
+      from,
+      to,
+      deps.googleRateLimiter,
+    );
     return providerInvites.map((invite) => ({
       ...invite,
       calendarId: credentials.calendarId,

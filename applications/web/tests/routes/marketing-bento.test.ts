@@ -20,8 +20,8 @@ const PAGES = [
   {
     name: "features page",
     path: "../../../src/routes/(marketing)/features.tsx",
-    from: "const FEATURE_CARDS",
-    to: "const MCP_READ_TOOLS",
+    from: "const CARD_PRESENTATION",
+    to: "const FEATURE_CARDS",
     quote: '"',
   },
 ] as const;

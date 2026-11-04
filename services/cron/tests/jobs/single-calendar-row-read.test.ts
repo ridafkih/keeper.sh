@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { calendarsTable } from "@keeper.sh/database/schema";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const harness = vi.hoisted(() => {
   interface SelectRecord {
@@ -319,16 +319,17 @@ const gatedCalendarRowReads = (): number =>
     (record) => record.gated && record.limited && record.table === calendarsTable,
   ).length;
 
-const backoffResets = (): number =>
+const retiredBackoffWrites = (): number =>
   harness.state.updates.filter(
-    (record) => record.table === calendarsTable && record.values.ingestFailureCount === 0,
+    (record) => record.table === calendarsTable
+      && ("ingestFailureCount" in record.values || "ingestNextAttemptAt" in record.values),
   ).length;
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -344,43 +345,43 @@ beforeEach(() => {
 });
 
 describe("one ingest reads its calendar row once", () => {
-  it("serves the oauth family's backoff and source fields from a single gated read", async () => {
+  it("serves the oauth family's source fields from a single gated read and leaves backoff to the schedule", async () => {
     harness.state.oauthRows.push(oauthListingRow);
     harness.state.calendarRow = oauthCalendarRow;
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(gatedCalendarRowReads()).toBe(1);
     expect(harness.state.oauthFetcherOptions).toHaveLength(1);
     expect(harness.state.oauthFetcherOptions[0]?.externalCalendarId)
       .toBe("merged-external-id");
     expect(harness.state.oauthFetcherOptions[0]?.accessToken).toBe("merged-access-token");
-    expect(backoffResets()).toBe(1);
+    expect(retiredBackoffWrites()).toBe(0);
   });
 
-  it("serves the caldav family's backoff and source fields from a single gated read", async () => {
+  it("serves the caldav family's source fields from a single gated read and leaves backoff to the schedule", async () => {
     harness.state.caldavRows.push(caldavListingRow);
     harness.state.calendarRow = caldavCalendarRow;
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(gatedCalendarRowReads()).toBe(1);
     expect(harness.state.caldavFetcherOptions).toHaveLength(1);
     expect(harness.state.caldavFetcherOptions[0]?.calendarUrl)
       .toBe("https://dav.example.com/merged/");
-    expect(backoffResets()).toBe(1);
+    expect(retiredBackoffWrites()).toBe(0);
   });
 
-  it("serves the ics family's backoff and source fields from a single gated read", async () => {
+  it("serves the ics family's source fields from a single gated read and leaves backoff to the schedule", async () => {
     harness.state.icsRows.push(icsListingRow);
     harness.state.calendarRow = icsCalendarRow;
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(gatedCalendarRowReads()).toBe(1);
     expect(harness.state.icsFetcherOptions).toHaveLength(1);
     expect(harness.state.icsFetcherOptions[0]?.url)
       .toBe("https://feeds.example.net/merged.ics");
-    expect(backoffResets()).toBe(1);
+    expect(retiredBackoffWrites()).toBe(0);
   });
 });

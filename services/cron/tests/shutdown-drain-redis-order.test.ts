@@ -26,6 +26,7 @@ vi.mock("../src/env", () => ({
     COMMERCIAL_MODE: false,
     DATABASE_POOL_MAX: 10,
     DATABASE_URL: "postgres://cron-test/keeper",
+    INGEST_LOOP_ENABLED: false,
     REDIS_URL: "redis://cron-test:6379",
     WORKER_JOB_QUEUE_ENABLED: false,
   },

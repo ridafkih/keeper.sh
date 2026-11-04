@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/utils/cn";
 import { useStartOfToday } from "@/hooks/use-start-of-today";
 import { isEventPast } from "@/lib/time";
+import { resolveEventLocalEnd } from "@/lib/event-day";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { Text } from "@/components/ui/primitives/text";
 import { CalendarFrame } from "./calendar-frame";
@@ -103,7 +104,7 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
                   style={{ gap: EVENT_PILL_GAP_PX }}
                 >
                   {pills.slice(0, visibleCount).map((event) => (
-                    <EventPill key={event.id} event={event} past={isEventPast(event.endTime)} />
+                    <EventPill key={event.id} event={event} past={isEventPast(resolveEventLocalEnd(event))} />
                   ))}
                   {hiddenCount > 0 && <EventPillOverflow count={hiddenCount} />}
                 </div>

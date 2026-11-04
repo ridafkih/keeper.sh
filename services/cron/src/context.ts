@@ -1,7 +1,6 @@
 import { FLUSH_WRITER_CONNECTIONS } from "@/utils/flush-writer";
 import env from "./env";
 import { createFlushDrainRegistry } from "./utils/flush-drains";
-import { createInFlightDrainRegistry } from "./utils/in-flight-drains";
 import { closeDatabase, createDatabase } from "@keeper.sh/database";
 import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
@@ -20,8 +19,6 @@ const flushDatabase = await createDatabase(env.DATABASE_URL, {
 });
 
 const flushDrainRegistry = createFlushDrainRegistry();
-
-const inFlightDrainRegistry = createInFlightDrainRegistry();
 
 const FLUSH_DRAIN_DEADLINE_MS = 2000;
 /*
@@ -76,20 +73,6 @@ const refreshLockRedis = new Redis(env.REDIS_URL, {
 
 const refreshLockStore = createRedisRefreshLockStore(refreshLockRedis);
 
-/*
- * Its own connection with no command timeout: a blocking read occupies the connection for
- * as long as it waits, so sharing one would stall every other command behind it, and a
- * command timeout would abort the wait it exists to perform.
- */
-const signalReaderRedis = new Redis(env.REDIS_URL, {
-  maxRetriesPerRequest: null,
-  lazyConnect: true,
-});
-
-const shutdownSignalReaderRedis = (): void => {
-  signalReaderRedis.disconnect();
-};
-
 const shutdownRefreshLockRedis = (): void => {
   refreshLockRedis.disconnect();
 };
@@ -110,14 +93,11 @@ export {
   database,
   flushDatabase,
   flushDrainRegistry,
-  inFlightDrainRegistry,
   shutdownDatabases,
   premiumService,
   polarClient,
   refreshLockRedis,
   refreshLockStore,
   shutdownRefreshLockRedis,
-  shutdownSignalReaderRedis,
-  signalReaderRedis,
   webhookConfig,
 };

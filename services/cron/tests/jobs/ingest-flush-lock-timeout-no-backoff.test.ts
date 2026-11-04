@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * A flush that loses the advisory-lock race lost it to keeper's own write-back,
@@ -236,11 +236,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -255,14 +255,12 @@ describe("ingest flush advisory-lock statement timeout", () => {
     harness.state.icsRows.push(createIcsRow("calendar-wedged", "user-wedged"));
     harness.state.contendedCalendarIds.add("calendar-wedged");
 
-    await expect(job?.callback()).rejects.toThrow(
-      "Calendar source ingestion completed with failures",
-    );
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
-    const escalations = harness.state.backoffWrites.filter(
-      (payload) => typeof payload.ingestFailureCount === "number"
-        && payload.ingestFailureCount >= 1,
-    );
-    expect(escalations).toEqual([]);
+    expect(result?.outcomes).toEqual([
+      { calendarId: "calendar-wedged", outcome: { backoff: false, kind: "failed" } },
+    ]);
+    expect(harness.state.backoffWrites).toEqual([]);
   });
 });

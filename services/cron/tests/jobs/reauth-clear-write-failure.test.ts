@@ -220,14 +220,21 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ingestSource: () => Promise.resolve().then(ingestOutcome),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
+
+let outcomeKinds: string[] = [];
 
 const runTick = async (): Promise<void> => {
   emitted.length = 0;
   updates.length = 0;
   pushedUserIds = [];
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  const result = await Promise.resolve(runIngestPass()).catch(() => null);
+  pushedUserIds = result?.affectedUserIds ?? [];
+  outcomeKinds = result?.outcomes.map(({ outcome }) => outcome.kind) ?? [];
 };
 
 const sourceEvent = (): WideEvent => {
@@ -264,6 +271,7 @@ describe("a failing re-authentication clear write on the ingest success path", (
     await runTick();
 
     expect(backoffRow).toEqual({ failureCount: 0, nextAttemptAt: null });
+    expect(outcomeKinds).toEqual(["ingested"]);
   });
 
   it("still pushes the events it already persisted", async () => {
@@ -293,5 +301,6 @@ describe("a failing re-authentication clear write on the ingest success path", (
     }
 
     expect(backoffRow.failureCount).toBeLessThanOrEqual(1);
+    expect(outcomeKinds).toEqual(["ingested"]);
   });
 });

@@ -13,6 +13,8 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
+import { GoogleProjectBudgetExhaustedError } from "@keeper.sh/calendar";
+import type { RedisRateLimiter } from "@keeper.sh/calendar";
 import { resolveRepresentableIsoRange } from "./representable-range";
 
 const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3/";
@@ -29,6 +31,25 @@ const handleErrorResponse = async (response: Response): Promise<string> => {
   const body = await response.json();
   const { error } = googleApiErrorSchema.assert(body);
   return error?.message ?? response.statusText;
+};
+
+const requestGoogle = async (
+  url: URL,
+  init: RequestInit,
+  rateLimiter?: RedisRateLimiter | null,
+): Promise<Response> => {
+  try {
+    await rateLimiter?.acquire(1);
+  } catch (error) {
+    if (error instanceof GoogleProjectBudgetExhaustedError) {
+      return Response.json(
+        { error: { message: error.message } },
+        { status: HTTP_STATUS.TOO_MANY_REQUESTS },
+      );
+    }
+    throw error;
+  }
+  return fetch(url, init);
 };
 
 interface GoogleEventResult {
@@ -54,6 +75,7 @@ const createGoogleEvent = async (
   accessToken: string,
   externalCalendarId: string | null,
   input: EventInput,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<EventActionResult & Partial<GoogleEventResult>> => {
   const calendarId = getCalendarId(externalCalendarId);
   const url = new URL(`calendars/${encodeURIComponent(calendarId)}/events`, GOOGLE_CALENDAR_API);
@@ -78,11 +100,11 @@ const createGoogleEvent = async (
     resource.transparency = "transparent";
   }
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     body: JSON.stringify(resource),
     headers: buildHeaders(accessToken),
     method: "POST",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     const errorMessage = await handleErrorResponse(response);
@@ -97,15 +119,16 @@ const findGoogleEventByUid = async (
   accessToken: string,
   externalCalendarId: string | null,
   sourceEventUid: string,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<GoogleEventWithAttendees | null> => {
   const calendarId = getCalendarId(externalCalendarId);
   const url = new URL(`calendars/${encodeURIComponent(calendarId)}/events`, GOOGLE_CALENDAR_API);
   url.searchParams.set("iCalUID", sourceEventUid);
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     headers: buildHeaders(accessToken),
     method: "GET",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     return null;
@@ -120,16 +143,17 @@ const findGoogleEventById = async (
   accessToken: string,
   externalCalendarId: string | null,
   sourceEventId: string,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<GoogleEventWithAttendees | null> => {
   const calendarId = getCalendarId(externalCalendarId);
   const url = new URL(
     `calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(sourceEventId)}`,
     GOOGLE_CALENDAR_API,
   );
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     headers: buildHeaders(accessToken),
     method: "GET",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     return null;
@@ -142,18 +166,21 @@ const resolveGoogleEvent = (
   accessToken: string,
   externalCalendarId: string | null,
   reference: ProviderEventReference,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<GoogleEventWithAttendees | null> => {
   if (reference.sourceEventId) {
     return findGoogleEventById(
       accessToken,
       externalCalendarId,
       reference.sourceEventId,
+      rateLimiter,
     );
   }
   return findGoogleEventByUid(
     accessToken,
     externalCalendarId,
     reference.sourceEventUid,
+    rateLimiter,
   );
 };
 
@@ -170,8 +197,14 @@ const updateGoogleEvent = async (
   externalCalendarId: string | null,
   sourceEventUid: string,
   updates: EventUpdateInput,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<EventActionResult> => {
-  const existing = await findGoogleEventByUid(accessToken, externalCalendarId, sourceEventUid);
+  const existing = await findGoogleEventByUid(
+    accessToken,
+    externalCalendarId,
+    sourceEventUid,
+    rateLimiter,
+  );
 
   if (!existing?.id) {
     return { success: false, error: "Event not found on Google Calendar." };
@@ -213,11 +246,11 @@ const updateGoogleEvent = async (
     patch.transparency = resolveGoogleTransparency(updates.availability);
   }
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     body: JSON.stringify(patch),
     headers: buildHeaders(accessToken),
     method: "PATCH",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     const errorMessage = await handleErrorResponse(response);
@@ -232,8 +265,14 @@ const deleteGoogleEvent = async (
   accessToken: string,
   externalCalendarId: string | null,
   sourceEventUid: string,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<EventActionResult> => {
-  const existing = await findGoogleEventByUid(accessToken, externalCalendarId, sourceEventUid);
+  const existing = await findGoogleEventByUid(
+    accessToken,
+    externalCalendarId,
+    sourceEventUid,
+    rateLimiter,
+  );
 
   if (!existing?.id) {
     return { success: true };
@@ -245,10 +284,10 @@ const deleteGoogleEvent = async (
     GOOGLE_CALENDAR_API,
   );
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     headers: buildHeaders(accessToken),
     method: "DELETE",
-  });
+  }, rateLimiter);
 
   if (!response.ok && response.status !== HTTP_STATUS.NOT_FOUND) {
     const errorMessage = await handleErrorResponse(response);
@@ -265,8 +304,9 @@ const rsvpGoogleEvent = async (
   reference: ProviderEventReference,
   status: RsvpStatus,
   userEmail: string,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<EventActionResult> => {
-  const existing = await resolveGoogleEvent(accessToken, externalCalendarId, reference);
+  const existing = await resolveGoogleEvent(accessToken, externalCalendarId, reference, rateLimiter);
 
   if (!existing?.id) {
     return { success: false, error: "Event not found on Google Calendar." };
@@ -303,11 +343,11 @@ const rsvpGoogleEvent = async (
     });
   }
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     body: JSON.stringify({ attendees: updatedAttendees }),
     headers: buildHeaders(accessToken),
     method: "PATCH",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     const errorMessage = await handleErrorResponse(response);
@@ -373,6 +413,7 @@ const fetchGoogleEventsPage = async (
   from: string,
   to: string,
   pageToken: string | null,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<{ items: GoogleEventWithAttendees[]; nextPageToken: string | null }> => {
   const url = new URL(`calendars/${encodeURIComponent(calendarId)}/events`, GOOGLE_CALENDAR_API);
   url.searchParams.set("timeMin", from);
@@ -383,10 +424,10 @@ const fetchGoogleEventsPage = async (
     url.searchParams.set("pageToken", pageToken);
   }
 
-  const response = await fetch(url, {
+  const response = await requestGoogle(url, {
     headers: buildHeaders(accessToken),
     method: "GET",
-  });
+  }, rateLimiter);
 
   if (!response.ok) {
     return { items: [], nextPageToken: null };
@@ -405,6 +446,7 @@ const getPendingGoogleInvites = async (
   externalCalendarId: string | null,
   from: string,
   to: string,
+  rateLimiter?: RedisRateLimiter | null,
 ): Promise<PendingGoogleEvent[]> => {
   const calendarId = getCalendarId(externalCalendarId);
   const pendingEvents: PendingGoogleEvent[] = [];
@@ -412,7 +454,7 @@ const getPendingGoogleInvites = async (
   let pageToken: string | null = null;
 
   do {
-    const page = await fetchGoogleEventsPage(accessToken, calendarId, from, to, pageToken);
+    const page = await fetchGoogleEventsPage(accessToken, calendarId, from, to, pageToken, rateLimiter);
 
     for (const event of page.items) {
       const parsed = parseGooglePendingEvent(event);

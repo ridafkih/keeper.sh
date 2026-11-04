@@ -98,19 +98,25 @@ const signInWithMicrosoft = async (
     throw new TypeError("Microsoft provider is not configured");
   }
 
-  const profile = await provider.getUserInfo({
+  const tokens = {
     accessToken: "test-access-token",
     idToken: buildIdToken(claims),
-  } as never);
+  };
+  const profile = await provider.getUserInfo(tokens as never);
 
   if (!profile) {
     throw new TypeError("Microsoft provider returned no profile");
   }
 
+  const accountId = await provider.accountSubject({
+    profile: profile.data,
+    tokens,
+  } as never);
+
   return handleOAuthUserInfo({ context } as never, {
     account: {
       accessToken: "test-access-token",
-      accountId: String(profile.user.id),
+      accountId: String(accountId),
       providerId: "microsoft",
     },
     userInfo: profile.user,
@@ -120,14 +126,14 @@ const signInWithMicrosoft = async (
 interface SeedCustomerParams {
   database: HostedAuth["database"];
   email: string;
-  linkedMicrosoftSubject?: string;
+  linkedMicrosoftObjectId?: string;
   userId: string;
 }
 
 const seedVerifiedCustomer = async ({
   database,
   email,
-  linkedMicrosoftSubject,
+  linkedMicrosoftObjectId,
   userId,
 }: SeedCustomerParams) => {
   await database.insert(userTable).values({
@@ -137,9 +143,9 @@ const seedVerifiedCustomer = async ({
     name: "Existing Customer",
   });
 
-  if (linkedMicrosoftSubject) {
+  if (linkedMicrosoftObjectId) {
     await database.insert(accountTable).values({
-      accountId: linkedMicrosoftSubject,
+      accountId: linkedMicrosoftObjectId,
       id: `microsoft-account-${userId}`,
       providerId: "microsoft",
       userId,
@@ -247,7 +253,7 @@ describe("a Microsoft sign-in matching an existing customer's email", () => {
     expect(result.error).toBeNull();
     expect(result.data?.user.id).toBe("existing-customer");
     expect(await readMicrosoftAccounts(database, "existing-customer")).toEqual([
-      { accountId: "domain-verified-subject" },
+      { accountId: "entra-object-id" },
     ]);
   });
 
@@ -280,14 +286,14 @@ describe("a Microsoft sign-in to an already linked account", () => {
     await seedVerifiedCustomer({
       database,
       email,
-      linkedMicrosoftSubject: "linked-subject",
+      linkedMicrosoftObjectId: "linked-object-id",
       userId: "linked-work-customer",
     });
 
     const result = await signInWithMicrosoft(auth, {
       email,
       name: "Linked Work Account",
-      oid: "entra-object-id",
+      oid: "linked-object-id",
       sub: "linked-subject",
       tid: "contoso-tenant",
     });

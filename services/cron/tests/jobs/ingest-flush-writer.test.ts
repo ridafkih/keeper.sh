@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
 import { FLUSH_WRITER_CONNECTIONS } from "../../src/utils/flush-writer";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * Persistence stays on the dedicated flushDatabase and within its connections while
@@ -259,11 +259,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -284,7 +284,7 @@ describe("ingest flush writer", () => {
       createIcsRow("calendar-beta", "user-beta"),
     );
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     const totalTransactionCount = harness.state.transactionCounts.flush
       + harness.state.transactionCounts.pooled;
@@ -300,7 +300,7 @@ describe("ingest flush writer", () => {
       createIcsRow("calendar-beta", "user-beta"),
     );
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.transactionCounts.flush).toBe(2);
     expect(harness.state.transactionCounts.pooled).toBe(0);
@@ -322,14 +322,14 @@ describe("ingest flush writer", () => {
     );
     harness.state.failingCalendarIds.add("calendar-doomed");
 
-    await expect(job?.callback()).rejects.toThrow(
-      "Calendar source ingestion completed with failures",
-    );
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
     expect(harness.state.transactionCounts.flush).toBe(2);
-
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);
-    const [affectedUserIds] = harness.enqueueDestinationSyncsForUsers.mock.calls[0] ?? [];
-    expect([...affectedUserIds ?? []]).toEqual(["user-healthy"]);
+    expect(result?.affectedUserIds).toEqual(["user-healthy"]);
+    expect(result?.outcomes).toEqual([
+      { calendarId: "calendar-healthy", outcome: { kind: "ingested" } },
+      { calendarId: "calendar-doomed", outcome: { backoff: true, kind: "failed" } },
+    ]);
   });
 });

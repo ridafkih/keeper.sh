@@ -10,18 +10,15 @@ import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { DashboardHeading1, DashboardHeading2 } from "@/components/ui/primitives/dashboard-heading";
 import { Text } from "@/components/ui/primitives/text";
-import { isEventPast, formatDayHeader } from "@/lib/time";
+import { isEventPast } from "@/lib/time";
+import { resolveEventLocalEnd } from "@/lib/event-day";
+import { groupEventsByDay } from "@/features/dashboard/components/event-day-groups";
 import { EventCard } from "@/features/dashboard/components/event-card";
 import { useEvents, type CalendarEvent } from "@/hooks/use-events";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/events/")({
   component: EventsPage,
 });
-
-interface DayGroup {
-  label: string;
-  events: CalendarEvent[];
-}
 
 interface DaySectionProps {
   label: string;
@@ -60,20 +57,6 @@ interface LoadMoreSentinelProps {
   onLoadMore: () => void;
 }
 
-const groupEventsByDay = (events: CalendarEvent[]): DayGroup[] => {
-  const groups = new Map<string, CalendarEvent[]>();
-
-  for (const event of events) {
-    const key = event.startTime.toDateString();
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(event);
-  }
-
-  return [...groups.entries()].map(([key, dayEvents]) => ({
-    label: formatDayHeader(new Date(key)),
-    events: dayEvents,
-  }));
-};
 
 function EventsPage() {
   return (
@@ -185,7 +168,7 @@ const DaySection = memo(function DaySection({ label, events, newOrders }: DaySec
               animate={CARD_VISIBLE}
               transition={order === undefined ? undefined : resolveCardTransition(order)}
             >
-              <EventCard event={event} past={isEventPast(event.endTime)} />
+              <EventCard event={event} past={isEventPast(resolveEventLocalEnd(event))} />
             </m.div>
           );
         })}
