@@ -243,3 +243,38 @@ describe("a backoff is only claimed when one was written", () => {
     expect(event.values["retry.backoff_applied"]).toBe(true);
   });
 });
+
+const WRITER_ACCESS_BODY = JSON.stringify({
+  error: {
+    code: 403,
+    errors: [{ reason: "requiredAccessLevel" }],
+    message: "You need to have writer access to this calendar.",
+  },
+});
+
+describe("taking push away from a calendar is recorded on its wide event", () => {
+  it("records push removed and no backoff when the calendar refuses writes for missing writer access", async () => {
+    const { GoogleCalendarApiError } = await import("@keeper.sh/calendar/google");
+    syncCalendarMock.mockImplementation(() => Promise.reject(
+      new GoogleCalendarApiError(403, WRITER_ACCESS_BODY),
+    ));
+
+    await runProcessJob();
+
+    expect(calendarWrites).toEqual([{ capabilities: ["pull"] }]);
+
+    const event = firstEvent();
+    expect(event.values["destination.push_removed"]).toBe(true);
+    expect(event.values["retry.backoff_applied"]).toBe(false);
+  });
+
+  it("records push kept when a backoff was applied instead", async () => {
+    syncCalendarMock.mockImplementation(() => Promise.reject(
+      new Error("Invalid credentials"),
+    ));
+
+    await runProcessJob();
+
+    expect(firstEvent().values["destination.push_removed"]).toBe(false);
+  });
+});
