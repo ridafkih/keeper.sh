@@ -22,16 +22,17 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
-vi.mock("@/env", () => ({
-  default: { MICROSOFT_CLIENT_ID: "microsoft-client" },
-}));
-
 vi.mock("@/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
 
 vi.mock("@/context", () => ({
   baseUrl: BASE_URL,
+  microsoftCredentials: {
+    clientId: "microsoft-client",
+    clientSecret: "microsoft-secret",
+    tenant: "common",
+  },
 }));
 
 vi.mock("@/utils/destinations", () => ({
