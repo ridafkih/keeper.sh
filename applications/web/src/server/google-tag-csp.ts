@@ -18,7 +18,7 @@ const GOOGLE_REGIONAL_TLDS = [
 
 const googleTagManagerHost = "https://www.googletagmanager.com";
 
-const googleRegionalHosts = GOOGLE_REGIONAL_TLDS.map((tld) => `https://www.google.${tld}`);
+const googleRegionalHosts = GOOGLE_REGIONAL_TLDS.map((tld) => `https://*.google.${tld}`);
 
 const googleTagScriptHosts = [
   googleTagManagerHost,
