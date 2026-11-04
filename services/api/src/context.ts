@@ -92,6 +92,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   microsoftClientId: env.MICROSOFT_CLIENT_ID,
   microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
   microsoftTenantId: env.MICROSOFT_TENANT_ID,
+  microsoftAuthPrompt: env.MICROSOFT_AUTH_PROMPT,
   oidcIssuerUrl: env.OIDC_ISSUER_URL,
   oidcClientId: env.OIDC_CLIENT_ID,
   oidcClientSecret: env.OIDC_CLIENT_SECRET,

@@ -69,6 +69,7 @@ interface AuthConfig {
   microsoftClientId?: string;
   microsoftClientSecret?: string;
   microsoftTenantId?: string;
+  microsoftAuthPrompt?: "consent" | "select_account";
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcClientSecret?: string;
@@ -170,6 +171,9 @@ const createRegistrationEmailDomainError = (): APIError =>
 const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
 
+const resolveMicrosoftAuthPrompt = (prompt: AuthConfig["microsoftAuthPrompt"]) =>
+  prompt ?? "consent";
+
 const createAuth = (config: AuthConfig) => {
   const {
     database,
@@ -183,6 +187,7 @@ const createAuth = (config: AuthConfig) => {
     microsoftClientId,
     microsoftClientSecret,
     microsoftTenantId,
+    microsoftAuthPrompt,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -306,7 +311,7 @@ const createAuth = (config: AuthConfig) => {
         }
         return {};
       },
-      prompt: "consent",
+      prompt: resolveMicrosoftAuthPrompt(microsoftAuthPrompt),
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
       tenantId: microsoftTenantId,
     };

@@ -15,6 +15,7 @@ const schema = {
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
   MICROSOFT_TENANT_ID: "string?",
+  MICROSOFT_AUTH_PROMPT: "'consent' | 'select_account' | undefined?",
   OIDC_ISSUER_URL: "string.url?",
   OIDC_CLIENT_ID: "string?",
   OIDC_CLIENT_SECRET: "string?",

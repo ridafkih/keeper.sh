@@ -26,7 +26,10 @@ const encodeSegment = (value: object) =>
 const buildIdToken = (claims: Record<string, unknown>) =>
   `${encodeSegment({ alg: "RS256", kid: "test-kid", typ: "JWT" })}.${encodeSegment(claims)}.signature`;
 
-const createHostedAuth = async (microsoftTenantId?: string) => {
+const createHostedAuth = async (
+  microsoftTenantId?: string,
+  microsoftAuthPrompt?: "consent" | "select_account",
+) => {
   const client = new PGlite();
   await client.exec(AUTH_DDL);
 
@@ -40,6 +43,7 @@ const createHostedAuth = async (microsoftTenantId?: string) => {
     microsoftClientId: "test-microsoft-client-id",
     microsoftClientSecret: "test-microsoft-client-secret",
     microsoftTenantId,
+    microsoftAuthPrompt,
     secret: SECRET,
   });
 
@@ -99,6 +103,34 @@ afterEach(() => {
 });
 
 describe("an Outlook sign-in", () => {
+  describe.each([{}, { tenantId: "tenant-guid" }])("with authority %j", ({ tenantId }) => {
+    it.each<{ prompt?: "consent" | "select_account" }>([
+      {},
+      { prompt: "consent" },
+      { prompt: "select_account" },
+    ])("uses the configured sign-in prompt %j", async ({ prompt }) => {
+      const auth = await createHostedAuth(tenantId, prompt);
+      const context = await auth.$context;
+      const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
+
+      if (!provider) {
+        throw new TypeError("Microsoft social provider is not configured");
+      }
+
+      const authorizationUrl = await provider.createAuthorizationURL({
+        codeVerifier: "test-code-verifier",
+        redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
+        state: "test-state",
+      });
+
+      expect(authorizationUrl.pathname).toBe(`/${tenantId ?? "common"}/oauth2/v2.0/authorize`);
+      expect(authorizationUrl.searchParams.get("prompt")).toBe(prompt ?? "consent");
+      expect(authorizationUrl.searchParams.get("scope")?.split(" ")).toEqual(
+        expect.arrayContaining(["offline_access", "User.Read", "Calendars.ReadWrite"]),
+      );
+    });
+  });
+
   it.each<{ tenantId?: string }>([{}, { tenantId: "" }, { tenantId: "tenant-guid" }])(
     "uses the Microsoft tenant authority for configuration %j",
     async ({ tenantId }) => {
@@ -220,6 +252,25 @@ describe("an Outlook sign-in", () => {
 });
 
 describe("a Google sign-in", () => {
+  it("keeps requesting consent when Microsoft uses the account picker", async () => {
+    const auth = await createHostedAuth("tenant-guid", "select_account");
+    const context = await auth.$context;
+    const provider = context.socialProviders.find((candidate) => candidate.id === "google");
+
+    if (!provider) {
+      throw new TypeError("Google social provider is not configured");
+    }
+
+    const authorizationUrl = await provider.createAuthorizationURL({
+      codeVerifier: "test-code-verifier",
+      redirectURI: `${BASE_URL}/api/auth/callback/google`,
+      state: "test-state",
+    });
+
+    expect(authorizationUrl.searchParams.get("prompt")).toBe("consent");
+    expect(authorizationUrl.searchParams.get("access_type")).toBe("offline");
+  });
+
   it("still follows the email_verified claim Google always sends", async () => {
     const auth = await createHostedAuth();
 
