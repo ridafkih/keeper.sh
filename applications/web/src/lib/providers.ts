@@ -28,3 +28,25 @@ const providerAuthorizeIds: Record<string, string> = {
 export function providerAuthorizeId(provider: string): string | null {
   return providerAuthorizeIds[provider] ?? null;
 }
+
+interface ProviderCalendarApp {
+  label: string;
+  url: string;
+}
+
+const OUTLOOK_CALENDAR_APP: ProviderCalendarApp = {
+  label: "Open Outlook",
+  url: "https://outlook.office.com/calendar",
+};
+
+const providerCalendarApps: Record<string, ProviderCalendarApp> = {
+  google: { label: "Open Google Calendar", url: "https://calendar.google.com" },
+  outlook: OUTLOOK_CALENDAR_APP,
+  "microsoft-365": OUTLOOK_CALENDAR_APP,
+  icloud: { label: "Open iCloud Calendar", url: "https://www.icloud.com/calendar" },
+  fastmail: { label: "Open Fastmail", url: "https://app.fastmail.com/calendar" },
+};
+
+export function providerCalendarApp(provider: string): ProviderCalendarApp | null {
+  return providerCalendarApps[provider] ?? null;
+}

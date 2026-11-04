@@ -249,9 +249,9 @@ describe("CalDAV discovery against a digest server that enforces nonce counts", 
     expect(outcome).toEqual({
       kind: "resolved",
       value: [
-        { ctag: "ctag-Personal", displayName: "Personal", url: `${SERVER_URL}${PERSONAL_PATH}` },
-        { ctag: "ctag-Shared", displayName: "Shared", url: `${SERVER_URL}${SHARED_PATH}` },
-        { ctag: "ctag-Work", displayName: "Work", url: `${SERVER_URL}${WORK_PATH}` },
+        { ctag: "ctag-Personal", displayName: "Personal", url: `${SERVER_URL}${PERSONAL_PATH}`, writable: true },
+        { ctag: "ctag-Shared", displayName: "Shared", url: `${SERVER_URL}${SHARED_PATH}`, writable: true },
+        { ctag: "ctag-Work", displayName: "Work", url: `${SERVER_URL}${WORK_PATH}`, writable: true },
       ],
     });
   });

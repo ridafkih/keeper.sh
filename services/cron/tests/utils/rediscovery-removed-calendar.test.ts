@@ -23,6 +23,7 @@ const existingCalendar = (identityKey: string, id: string): ExistingCalendar => 
   id,
   identityKey,
   unavailableSince: null,
+  writable: true,
 });
 
 describe("rediscovery after a user removes a calendar", () => {

@@ -4,10 +4,11 @@ import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database } from "@/context";
 import {
   getDestinationsForSource,
-  setDestinationsForSource,
+  changeDestinationsForSource,
 } from "@/utils/source-destination-mappings";
 import {
   handleGetSourceDestinationsRoute,
+  handlePatchSourceDestinationsRoute,
   handlePutSourceDestinationsRoute,
 } from "./mapping-routes";
 
@@ -41,9 +42,19 @@ const PUT = withWideEvent(
     const payload = await request.json();
     return handlePutSourceDestinationsRoute(
       { body: payload, params, userId },
-      { setDestinationsForSource },
+      { changeDestinationsForSource },
     );
   }),
 );
 
-export { GET, PUT };
+const PATCH = withWideEvent(
+  withAuth(async ({ request, params, userId }) => {
+    const payload = await request.json();
+    return handlePatchSourceDestinationsRoute(
+      { body: payload, params, userId },
+      { changeDestinationsForSource },
+    );
+  }),
+);
+
+export { GET, PATCH, PUT };

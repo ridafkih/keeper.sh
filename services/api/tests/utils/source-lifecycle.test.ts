@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import { RequestTimeoutError } from "@keeper.sh/calendar";
+import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
 import {
   SourceLimitError,
   runSourceCreationPreflight,
@@ -43,9 +45,9 @@ describe("runSourceCreationPreflight", () => {
         {
           canAddAccount: () => Promise.resolve(false),
           countExistingAccounts: () => Promise.resolve(3),
-          validateSourceUrl: () => {
+          readSourceFeedName: () => {
             validationCalls.push("validated");
-            return Promise.resolve();
+            return Promise.resolve("Team Feed");
           },
         },
       ),
@@ -55,7 +57,10 @@ describe("runSourceCreationPreflight", () => {
   });
 
   it("wraps CalendarFetchError details in InvalidSourceUrlError", async () => {
-    const rejection = new CalendarFetchError("auth needed", 401);
+    const rejection = new CalendarFetchError("auth needed", {
+      reason: "auth_required",
+      statusCode: 401,
+    });
 
     await expect(
       runSourceCreationPreflight(
@@ -67,12 +72,68 @@ describe("runSourceCreationPreflight", () => {
         {
           canAddAccount: () => Promise.resolve(true),
           countExistingAccounts: () => Promise.resolve(0),
-          validateSourceUrl: () => Promise.reject(rejection),
+          readSourceFeedName: () => Promise.reject(rejection),
         },
       ),
     ).rejects.toMatchObject({
       authRequired: true,
       message: "auth needed",
+      reason: "auth_required",
+      feedFailureReason: "auth-required",
+    });
+  });
+
+  it("carries the feed's own name forward once the URL validates", async () => {
+    await expect(
+      runSourceCreationPreflight(
+        { url: "https://example.com/team.ics", userId: "user-1" },
+        {
+          canAddAccount: () => Promise.resolve(true),
+          countExistingAccounts: () => Promise.resolve(0),
+          readSourceFeedName: () => Promise.resolve("Holidays in Canada"),
+        },
+      ),
+    ).resolves.toEqual({
+      feedName: "Holidays in Canada",
+      url: "https://example.com/team.ics",
+      userId: "user-1",
+    });
+  });
+
+  const rejectWith = (cause: unknown) =>
+    runSourceCreationPreflight(
+      { name: "Team Feed", url: "https://example.com/team.ics", userId: "user-1" },
+      {
+        canAddAccount: () => Promise.resolve(true),
+        countExistingAccounts: () => Promise.resolve(0),
+        readSourceFeedName: () => Promise.reject(cause),
+      },
+    );
+
+  it("says a page that is not an iCal file was rejected for that reason", async () => {
+    await expect(
+      rejectWith(new CalendarFetchError("not an ics file", { reason: "not_ical" })),
+    ).rejects.toMatchObject({ reason: "not_ical", feedFailureReason: "not-calendar" });
+  });
+
+  it("says a URL pointing at a private address was refused as unsafe", async () => {
+    await expect(rejectWith(new UrlSafetyError("private address"))).rejects.toMatchObject({
+      reason: "unsafe_url",
+      feedFailureReason: "unreachable",
+    });
+  });
+
+  it("says a feed that took too long timed out", async () => {
+    await expect(rejectWith(new RequestTimeoutError(15_000))).rejects.toMatchObject({
+      reason: "timeout",
+      feedFailureReason: "unreachable",
+    });
+  });
+
+  it("says a feed that could not be reached was unreachable", async () => {
+    await expect(rejectWith(new TypeError("fetch failed"))).rejects.toMatchObject({
+      reason: "unreachable",
+      feedFailureReason: "unreachable",
     });
   });
 
@@ -87,12 +148,13 @@ describe("runSourceCreationPreflight", () => {
         {
           canAddAccount: () => Promise.resolve(true),
           countExistingAccounts: () => Promise.resolve(0),
-          validateSourceUrl: () => Promise.reject(new Error("internal detail")),
+          readSourceFeedName: () => Promise.reject(new Error("internal detail")),
         },
       ),
     ).rejects.toEqual(expect.objectContaining<Partial<InvalidSourceUrlError>>({
       authRequired: false,
       message: "Invalid calendar URL",
+      reason: "unreachable",
     }));
   });
 });
@@ -102,6 +164,7 @@ describe("runCreateSource", () => {
     await expect(
       runCreateSource(
         {
+          feedName: "Team Feed",
           name: "Team Feed",
           url: "https://example.com/team.ics",
           userId: "user-1",
@@ -134,6 +197,7 @@ describe("runCreateSource", () => {
 
     const result = await runCreateSource(
       {
+        feedName: "Team Feed",
         name: "Team Feed",
         url: "https://example.com/feed.ics",
         userId: "user-42",
@@ -179,6 +243,7 @@ describe("runCreateSource", () => {
     await expect(
       runCreateSource(
         {
+          feedName: "Team Feed",
           name: "Team Feed",
           url: "https://example.com/feed.ics",
           userId: "user-1",
@@ -201,6 +266,7 @@ describe("runCreateSource", () => {
     await expect(
       runCreateSource(
         {
+          feedName: "Team Feed",
           name: "Team Feed",
           url: "https://example.com/feed.ics",
           userId: "user-1",
@@ -218,5 +284,34 @@ describe("runCreateSource", () => {
         },
       ),
     ).rejects.toThrow("Failed to create source");
+  });
+
+  it("names a source after its feed when the request gives no name", async () => {
+    const payloads: { name: string; originalName: string }[] = [];
+
+    await runCreateSource(
+      {
+        feedName: "Holidays in Canada",
+        url: "https://example.com/holidays.ics",
+        userId: "user-1",
+      },
+      {
+        acquireAccountLock: () => Promise.resolve(),
+        canAddAccount: () => Promise.resolve(true),
+        countExistingAccounts: () => Promise.resolve(0),
+        createCalendarAccount: () => Promise.resolve("account-1"),
+        createSourceCalendar: (payload) => {
+          payloads.push({ name: payload.name, originalName: payload.originalName });
+          return Promise.resolve(createSourceRecord({ name: payload.name }));
+        },
+        fetchAndSyncSource: () => Promise.resolve(),
+        spawnBackgroundJob: Boolean,
+        enqueuePushSync: () => Promise.resolve(),
+      },
+    );
+
+    expect(payloads).toEqual([
+      { name: "Holidays in Canada", originalName: "Holidays in Canada" },
+    ]);
   });
 });

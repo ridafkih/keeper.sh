@@ -142,6 +142,7 @@ const config = (database: unknown) => ({
   database: database as never,
   redis: {} as never,
   oauthConfig: {} as never,
+  recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,
 });
 

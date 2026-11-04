@@ -90,6 +90,12 @@ describe("microsoft getAuthorizationUrl", () => {
     const { searchParams } = await buildMicrosoftUrl(LOGIN_HINT);
 
     expect(searchParams.get("login_hint")).toBe(LOGIN_HINT);
-    expect(searchParams.get("prompt")).toBe("consent");
+    expect(searchParams.get("prompt")).not.toBe("select_account");
+  });
+
+  it("does not force the consent screen on a reconnect an admin already approved", async () => {
+    const { searchParams } = await buildMicrosoftUrl(LOGIN_HINT);
+
+    expect(searchParams.get("prompt")).not.toBe("consent");
   });
 });

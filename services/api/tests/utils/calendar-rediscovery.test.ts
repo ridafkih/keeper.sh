@@ -50,6 +50,7 @@ const emptyPlan = {
   toMarkUnavailable: [] as string[],
   toRetargetUrl: [] as { id: string; calendarUrl: string }[],
   toRevive: [] as string[],
+  toSetWritable: [] as { id: string; writable: boolean }[],
   unchangedCount: 0,
 };
 

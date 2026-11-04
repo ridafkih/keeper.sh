@@ -8,6 +8,12 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import {
+  fromGoogleCalendarListEntries,
+  fromOutlookCalendarListEntries,
+  toOAuthCalendarInsert,
+} from "./external-calendars";
+import type { ExternalCalendar } from "./external-calendars";
+import {
   createSourceCalendarInsertDependencies,
   insertSourceCalendars,
 } from "./source-calendar-insert";
@@ -19,11 +25,6 @@ class AccountNotFoundError extends Error {
   constructor() {
     super("Account not found");
   }
-}
-
-interface ExternalCalendar {
-  externalId: string;
-  name: string;
 }
 
 interface ExistingCalendar {
@@ -158,12 +159,11 @@ const listProviderCalendars = async (
     const calendars = await listGoogleCalendars(accessToken, {
       rateLimiter: googleInteractiveRateLimiter,
     });
-    return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.summary }));
+    return fromGoogleCalendarListEntries(calendars);
   }
 
   if (provider === "outlook") {
-    const calendars = await listOutlookCalendars(accessToken);
-    return calendars.map((calendar) => ({ externalId: calendar.id, name: calendar.name }));
+    return fromOutlookCalendarListEntries(await listOutlookCalendars(accessToken));
   }
 
   throw new Error(`No calendar listing support for provider: ${provider}`);
@@ -246,15 +246,7 @@ const refreshAccountCalendars = async (
     await insertSourceCalendars(
       createSourceCalendarInsertDependencies(database),
       userId,
-      toInsert.map((calendar) => ({
-        accountId,
-        calendarType: OAUTH_CALENDAR_TYPE,
-        capabilities: ["pull", "push"],
-        externalCalendarId: calendar.externalId,
-        name: calendar.name,
-        originalName: calendar.name,
-        userId,
-      })),
+      toInsert.map((calendar) => toOAuthCalendarInsert(userId, accountId, calendar)),
     );
   }
 

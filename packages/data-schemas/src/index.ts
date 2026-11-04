@@ -7,6 +7,13 @@ const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPT
 type ProxyableMethods = typeof proxyableMethods.infer;
 
 const planSchema = type("'free' | 'pro'");
+
+const icsFeedFailureReasonSchema = type("'auth-required' | 'not-found' | 'not-calendar' | 'unreachable'");
+const oauthConnectFailureReasonSchema = type(
+  "'access-declined' | 'admin-approval-required' | 'expired' | 'no-mailbox' | 'unknown'",
+);
+type IcsFeedFailureReason = typeof icsFeedFailureReasonSchema.infer;
+type OAuthConnectFailureReason = typeof oauthConnectFailureReasonSchema.infer;
 type Plan = typeof planSchema.infer;
 
 const SYNC_RANGE_DEFINITIONS = [
@@ -100,7 +107,7 @@ const feedbackRequestSchema = type({
 type FeedbackRequest = typeof feedbackRequestSchema.infer;
 
 const createSourceSchema = type({
-  name: "string",
+  "name?": "string",
   url: "string",
   "+": "reject",
 });
@@ -279,6 +286,16 @@ const microsoftApiErrorSchema = type({
 });
 type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
 
+const microsoftGraphBatchResponseSchema = type({
+  responses: type({
+    "body?": "unknown",
+    "headers?": "Record<string, string>",
+    id: "string",
+    status: "number",
+  }).array(),
+});
+type MicrosoftGraphBatchResponse = typeof microsoftGraphBatchResponseSchema.infer;
+
 const authSocialProvidersSchema = type({
   google: "boolean",
   microsoft: "boolean",
@@ -335,6 +352,7 @@ const syncAggregateSchema = type({
   syncEventsProcessed: "number",
   syncEventsRemaining: "number",
   syncEventsTotal: "number",
+  "syncSecondsRemaining?": "number",
   syncing: "boolean",
   "lastSyncedAt?": "string | null",
 });
@@ -428,17 +446,22 @@ const createOAuthSourceSchema = type({
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 
-const createCalDAVSourceSchema = type({
-  authMethod: "'basic' | 'digest'",
+const caldavCalendarSelectionSchema = type({
   calendarUrl: "string",
   name: "string",
+  "+": "reject",
+});
+
+const importCalDAVCalendarsSchema = type({
+  authMethod: "'basic' | 'digest'",
+  calendars: caldavCalendarSelectionSchema.array().atLeastLength(1),
   password: "string",
   provider: "'caldav' | 'fastmail' | 'icloud'",
   serverUrl: "string",
   username: "string",
   "+": "reject",
 });
-type CreateCalDAVSource = typeof createCalDAVSourceSchema.infer;
+type ImportCalDAVCalendars = typeof importCalDAVCalendarsSchema.infer;
 
 const caldavDiscoverSourceSchema = type({
   password: "string",
@@ -574,6 +597,8 @@ const googleWatchHeadersSchema = type({
 type GoogleWatchHeaders = typeof googleWatchHeadersSchema.infer;
 
 export {
+  icsFeedFailureReasonSchema,
+  oauthConnectFailureReasonSchema,
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_SOURCE_SYNC_RULES,
@@ -614,6 +639,7 @@ export {
   outlookCalendarViewEventSchema,
   outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
+  microsoftGraphBatchResponseSchema,
   authSocialProvidersSchema,
   authCapabilitiesSchema,
   socketMessageSchema,
@@ -630,7 +656,7 @@ export {
   googleCalendarListEntrySchema,
   googleCalendarListResponseSchema,
   createOAuthSourceSchema,
-  createCalDAVSourceSchema,
+  importCalDAVCalendarsSchema,
   caldavDiscoverSourceSchema,
   oauthCalendarSourceSchema,
   updateOAuthSourceDestinationsSchema,
@@ -647,6 +673,8 @@ export {
 };
 
 export type {
+  IcsFeedFailureReason,
+  OAuthConnectFailureReason,
   ProxyableMethods,
   Plan,
   SyncRange,
@@ -671,6 +699,7 @@ export type {
   OutlookCalendarViewEvent,
   OutlookCalendarViewList,
   MicrosoftApiError,
+  MicrosoftGraphBatchResponse,
   AuthSocialProviders,
   AuthCapabilities,
   SocketMessage,
@@ -687,7 +716,7 @@ export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,
   CreateOAuthSource,
-  CreateCalDAVSource,
+  ImportCalDAVCalendars,
   CalDAVDiscoverSource,
   OAuthCalendarSource,
   UpdateOAuthSourceDestinations,

@@ -62,19 +62,44 @@ const resolveSourceAccessToken = async (
   return refreshed.accessToken;
 };
 
+interface StoredOAuthCredential {
+  accessToken: string;
+  expiresAt: Date;
+  id: string;
+  refreshToken: string;
+}
+
+const storedOAuthCredentialColumns = {
+  accessToken: oauthCredentialsTable.accessToken,
+  expiresAt: oauthCredentialsTable.expiresAt,
+  id: oauthCredentialsTable.id,
+  refreshToken: oauthCredentialsTable.refreshToken,
+};
+
+const listOAuthCredentialCalendars = async (
+  provider: string,
+  credential: StoredOAuthCredential,
+): Promise<DiscoveredCalendar[]> => {
+  const { googleInteractiveRateLimiter } = await import("@/context");
+  const accessToken = await resolveSourceAccessToken(provider, credential);
+
+  if (provider === "google") {
+    return toDiscoveredGoogleCalendars(await listGoogleCalendars(accessToken, {
+      rateLimiter: googleInteractiveRateLimiter,
+    }));
+  }
+
+  return toDiscoveredOutlookCalendars(await listOutlookCalendars(accessToken));
+};
+
 const discoverOAuthAccountCalendars = async (
   accountId: string,
   provider: string,
 ): Promise<DiscoveredCalendar[]> => {
-  const { database, googleInteractiveRateLimiter } = await import("@/context");
+  const { database } = await import("@/context");
 
   const [credential] = await database
-    .select({
-      accessToken: oauthCredentialsTable.accessToken,
-      expiresAt: oauthCredentialsTable.expiresAt,
-      id: oauthCredentialsTable.id,
-      refreshToken: oauthCredentialsTable.refreshToken,
-    })
+    .select(storedOAuthCredentialColumns)
     .from(calendarAccountsTable)
     .innerJoin(
       oauthCredentialsTable,
@@ -87,15 +112,30 @@ const discoverOAuthAccountCalendars = async (
     throw new Error(`Calendar account ${accountId} has no OAuth credential`);
   }
 
-  const accessToken = await resolveSourceAccessToken(provider, credential);
+  return listOAuthCredentialCalendars(provider, credential);
+};
 
-  if (provider === "google") {
-    return toDiscoveredGoogleCalendars(await listGoogleCalendars(accessToken, {
-      rateLimiter: googleInteractiveRateLimiter,
-    }));
+const discoverOAuthCredentialCalendars = async (
+  userId: string,
+  oauthCredentialId: string,
+  provider: string,
+): Promise<DiscoveredCalendar[]> => {
+  const { database } = await import("@/context");
+
+  const [credential] = await database
+    .select(storedOAuthCredentialColumns)
+    .from(oauthCredentialsTable)
+    .where(and(
+      eq(oauthCredentialsTable.id, oauthCredentialId),
+      eq(oauthCredentialsTable.userId, userId),
+    ))
+    .limit(FIRST_RESULT_LIMIT);
+
+  if (!credential) {
+    throw new Error(`OAuth credential ${oauthCredentialId} not found`);
   }
 
-  return toDiscoveredOutlookCalendars(await listOutlookCalendars(accessToken));
+  return listOAuthCredentialCalendars(provider, credential);
 };
 
 const discoverCalDAVAccountCalendars = async (
@@ -224,6 +264,7 @@ const loadRefreshableAccountsForUser = async (
 export {
   discoverCalDAVAccountCalendars,
   discoverOAuthAccountCalendars,
+  discoverOAuthCredentialCalendars,
   loadRefreshableAccount,
   loadRefreshableAccountsForUser,
   markAccountNeedsReauthentication,

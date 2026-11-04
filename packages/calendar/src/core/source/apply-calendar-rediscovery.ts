@@ -12,6 +12,7 @@ import {
   normalizeCalDAVCalendarKey,
   normalizeCalDAVServerHost,
 } from "../../providers/caldav/shared/calendar-identity";
+import { resolveCalendarCapabilities } from "./calendar-capabilities";
 import {
   planCalendarRediscovery,
   toExistingCalendars,
@@ -50,6 +51,7 @@ const readExistingCalendars = async (
   const rows = await transaction
     .select({
       calendarUrl: calendarsTable.calendarUrl,
+      capabilities: calendarsTable.capabilities,
       createdAt: calendarsTable.createdAt,
       externalCalendarId: calendarsTable.externalCalendarId,
       id: calendarsTable.id,
@@ -132,13 +134,6 @@ const readCrossAccountCalDAVKeys = async (
   );
 };
 
-const resolveCapabilities = (writable: boolean): string[] => {
-  if (writable) {
-    return ["pull", "push"];
-  }
-  return ["pull"];
-};
-
 const resolveIdentityColumn = (
   calendar: DiscoveredCalendar,
 ): { calendarUrl: string | null } | { externalCalendarId: string } => {
@@ -154,7 +149,7 @@ const buildInsertRow = (
 ) => applySourceSyncDefaults({
   accountId: input.accountId,
   calendarType: input.calendarType,
-  capabilities: resolveCapabilities(calendar.writable),
+  capabilities: resolveCalendarCapabilities(calendar.writable),
   name: calendar.name,
   originalName: calendar.name,
   userId: input.userId,
@@ -214,6 +209,13 @@ const applyCalendarRediscoveryPlan = (
         .update(calendarsTable)
         .set({ unavailableSince: input.now })
         .where(inArray(calendarsTable.id, plan.toMarkUnavailable));
+    }
+
+    for (const change of plan.toSetWritable) {
+      await transaction
+        .update(calendarsTable)
+        .set({ capabilities: resolveCalendarCapabilities(change.writable) })
+        .where(eq(calendarsTable.id, change.id));
     }
 
     for (const retarget of plan.toRetargetUrl) {

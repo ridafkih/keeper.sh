@@ -743,6 +743,20 @@
       "when": 1793308135831,
       "tag": "0105_drop_legacy_oauth_client_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793736782537,
+      "tag": "0106_user_milestones",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793738193787,
+      "tag": "0107_mapping_first_synced_at",
+      "breakpoints": true
     }
   ]
 }

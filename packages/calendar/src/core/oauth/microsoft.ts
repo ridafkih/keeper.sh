@@ -102,7 +102,6 @@ const createMicrosoftOAuthService = (
     url.searchParams.set("response_mode", "query");
     // A hinted reconnect targets one account, so the picker would only invite the wrong choice.
     if (options.loginHint) {
-      url.searchParams.set("prompt", "consent");
       url.searchParams.set("login_hint", options.loginHint);
     } else {
       url.searchParams.set("prompt", "select_account");

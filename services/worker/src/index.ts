@@ -1,7 +1,7 @@
 import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import { entry } from "entrykit";
 import { Worker } from "bullmq";
-import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
+import { PUSH_SYNC_QUEUE_NAME, createPushSyncQueue } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import {
   closeDatabase,
@@ -10,7 +10,8 @@ import {
 } from "@keeper.sh/database";
 import { processJob } from "./processor";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
-import { destroy } from "./utils/logging";
+import { enqueueSyncContinuation, requestsContinuation } from "./utils/sync-continuation";
+import { context, destroy, widelog } from "./utils/logging";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
@@ -54,6 +55,28 @@ await entry({
       },
     );
 
+    const continuationQueue = createPushSyncQueue({ url: env.REDIS_URL, maxRetriesPerRequest: null });
+
+    const continueCutShortJob = (job: Parameters<typeof enqueueSyncContinuation>[1]): Promise<void> => {
+      if (!requestsContinuation(job)) {
+        return Promise.resolve();
+      }
+      return context(async () => {
+        widelog.set("operation.name", "push-sync-continuation");
+        widelog.set("operation.type", "internal");
+        widelog.set("user.id", job.data.userId);
+        widelog.set("calendar.id", job.data.calendarId);
+        try {
+          await enqueueSyncContinuation(continuationQueue, job);
+          widelog.set("outcome", "success");
+        } catch (error) {
+          widelog.set("outcome", "error");
+          widelog.errorFields(error, { slug: "sync-continuation-enqueue-failed" });
+        }
+        widelog.flush();
+      });
+    };
+
     const activeDestinationJobs = createActiveDestinationJobs({
       beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
       releaseUserRun: (userId) => {
@@ -70,6 +93,7 @@ await entry({
     });
 
     worker.on("completed", (job) => {
+      continueCutShortJob(job);
       activeDestinationJobs.onSettled({
         calendarId: job.data.calendarId,
         id: job.id ?? "",
@@ -90,6 +114,7 @@ await entry({
     return async () => {
       activeDestinationJobs.close();
       await worker.close();
+      await continuationQueue.close();
       shutdownConnections();
       closeDatabase(database);
       await destroy();

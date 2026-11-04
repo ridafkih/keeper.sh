@@ -3,22 +3,26 @@ import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import {
+  createMappingSyncStatePublisher,
   createSyncAggregateRuntime,
   isRedisUnavailableError,
   mergeAbortSignals,
   RecurrenceMaterializationLimitError,
   REDIS_UNAVAILABLE_SLUG,
 } from "@keeper.sh/calendar";
-import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
+import { recordFirstSyncedMappings, syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import {
   getDatabaseErrorDetails,
+  recordUserSyncRequest,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
+import { createEventsCopiedMilestone } from "./utils/user-milestones";
+import { shouldContinueAfterDeadline } from "./utils/sync-continuation";
 import env from "./env";
 import { microsoftCredentials } from "./microsoft-credentials";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
@@ -188,6 +192,30 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
   redis: refreshLockRedis,
 });
 
+const noteEventsCopied = createEventsCopiedMilestone(database);
+
+const publishMappingSyncState = createMappingSyncStatePublisher({
+  broadcast: (broadcastUserId, eventName, payload) => {
+    broadcastService.emit(broadcastUserId, eventName, payload);
+  },
+  database,
+  redis: refreshLockRedis,
+});
+
+const publishMappingSyncStateAfterJob = (userId: string): Promise<void> =>
+  context(async () => {
+    try {
+      await publishMappingSyncState(userId);
+    } catch (error) {
+      widelog.set("operation.name", "mapping-sync-state-publish");
+      widelog.set("operation.type", "internal");
+      widelog.set("user.id", userId);
+      widelog.set("outcome", "error");
+      widelog.errorFields(error, { slug: classifySyncError(error) });
+      widelog.flush();
+    }
+  });
+
 const resolveSyncOutcome = (failed: number, total: number): "success" | "partial" | "error" => {
   if (total === 0) {
     return "success";
@@ -249,6 +277,26 @@ const processJob = (
     const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
     let needsFlush = true;
     const pendingDestinationSyncs: Promise<void>[] = [];
+    const checkpointedOperationsByCalendar = new Map<string, number>();
+
+    const requestContinuationIfCutShort = async (): Promise<boolean> => {
+      const checkpointedOperations = [...checkpointedOperationsByCalendar.values()]
+        .reduce((total, operations) => total + operations, 0);
+      if (!shouldContinueAfterDeadline({
+        checkpointedOperations,
+        deadlineReached: deadlineController.signal.aborted,
+      })) {
+        return false;
+      }
+      widelog.set("push_sync.continuation_requested", true);
+      widelog.set("push_sync.checkpointed_operations", checkpointedOperations);
+      try {
+        await recordUserSyncRequest(database, userId);
+      } catch (error) {
+        widelog.errorFields(error, { prefix: "push_sync.continuation_error", slug: "sync-continuation-request-failed" });
+      }
+      return true;
+    };
 
     try {
       const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
@@ -268,10 +316,15 @@ const processJob = (
           microsoftCredentials,
         },
         plan: job.data.plan,
+        recordFirstSyncs: (destinationCalendarId, sourceCalendarIds) =>
+          recordFirstSyncedMappings(database, destinationCalendarId, sourceCalendarIds),
       }, {
         onProgress: (update) => {
           if (signal?.aborted) {
             return;
+          }
+          if (update.stage === "processing" && update.progress) {
+            checkpointedOperationsByCalendar.set(update.calendarId, update.progress.current);
           }
           syncAggregateRuntime.onSyncProgress(update);
           job.updateProgress({
@@ -321,7 +374,12 @@ const processJob = (
           widelog.set("sync.events_removed", completion.removed);
           widelog.set("sync.events_failed", completion.addFailed + completion.removeFailed);
           widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
+          widelog.setFields(completion.firstSync);
           widelog.set("duration_ms", completion.durationMs);
+
+          if (completion.added > 0) {
+            pendingDestinationSyncs.push(noteEventsCopied(userId));
+          }
 
           if (!completion.syncEvent) {
             for (const syncError of completion.errors) {
@@ -381,11 +439,13 @@ const processJob = (
       return {
         added: result.added,
         addFailed: result.addFailed,
+        continuationRequested: await requestContinuationIfCutShort(),
         removed: result.removed,
         removeFailed: result.removeFailed,
         errors: result.errors,
       };
     } catch (error) {
+      await requestContinuationIfCutShort();
       widelog.set("outcome", "error");
       applyDatabaseErrorFields(error);
       widelog.errorFields(error, { slug: classifySyncError(error) });
@@ -405,6 +465,7 @@ const processJob = (
         recordReflectMs();
         widelog.flush();
       }
+      await publishMappingSyncStateAfterJob(userId);
     }
   });
 

@@ -98,3 +98,42 @@ describe("listUserCalendars", () => {
     expect(calendars.map((entry) => entry.id)).toEqual(["cal-no-owner"]);
   });
 });
+
+const mockGraphResponse = (createResponse: () => Response): void => {
+  const mockFetch = (): Promise<Response> => Promise.resolve(createResponse());
+  mockFetch.preconnect = originalFetch.preconnect;
+  globalThis.fetch = mockFetch;
+};
+
+const missingMailboxResponse = (): Response =>
+  Response.json(
+    {
+      error: {
+        code: "MailboxNotEnabledForRESTAPI",
+        message: "The mailbox is either inactive, soft-deleted, or is hosted on-premise.",
+      },
+    },
+    { status: 404 },
+  );
+
+const unavailableResponse = (): Response => new Response("upstream", { status: 503 });
+
+describe("listUserCalendars on a Graph error", () => {
+  it("keeps Graph's error code so a missing mailbox can be told apart from other failures", async () => {
+    mockGraphResponse(missingMailboxResponse);
+
+    await expect(listUserCalendars("token")).rejects.toMatchObject({
+      providerErrorCode: "MailboxNotEnabledForRESTAPI",
+      status: 404,
+    });
+  });
+
+  it("still fails with the status when Graph sends no error body", async () => {
+    mockGraphResponse(unavailableResponse);
+
+    await expect(listUserCalendars("token")).rejects.toMatchObject({
+      providerErrorCode: null,
+      status: 503,
+    });
+  });
+});

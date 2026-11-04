@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let fields: Record<string, unknown> = {};
 let values: Record<string, unknown> = {};
-let createCalDAVSourceResult: () => Promise<unknown> = () =>
-  Promise.resolve({ id: "source-1" });
+const IMPORTED_RESULT = {
+  accountId: "account-1",
+  calendars: [{ accountId: "account-1", calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", id: "source-1", name: "Work", status: "imported" }],
+};
+
+let importCalDAVCalendarsResult: () => Promise<unknown> = () =>
+  Promise.resolve(IMPORTED_RESULT);
 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
@@ -31,12 +36,10 @@ vi.mock("@/utils/middleware", () => ({
 }));
 
 class TestCalDAVSourceLimitError extends Error {}
-class TestDuplicateCalDAVSourceError extends Error {}
 
 vi.mock("@/utils/caldav-sources", () => ({
   CalDAVSourceLimitError: TestCalDAVSourceLimitError,
-  DuplicateCalDAVSourceError: TestDuplicateCalDAVSourceError,
-  createCalDAVSource: () => createCalDAVSourceResult(),
+  importCalDAVCalendars: () => importCalDAVCalendarsResult(),
   getUserCalDAVSources: () => Promise.resolve([]),
 }));
 
@@ -66,8 +69,7 @@ const createRequest = (): Request =>
   new Request("https://api.keeper.sh/api/sources/caldav", {
     body: JSON.stringify({
       authMethod: "basic",
-      calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work",
-      name: "Work",
+      calendars: [{ calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", name: "Work" }],
       password: "secret",
       provider: "fastmail",
       serverUrl: SERVER_URL,
@@ -89,11 +91,11 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   beforeEach(() => {
     fields = {};
     values = {};
-    createCalDAVSourceResult = () => Promise.resolve({ id: "source-1" });
+    importCalDAVCalendarsResult = () => Promise.resolve(IMPORTED_RESULT);
   });
 
   it("does not echo the queue host and port back to the caller", async () => {
-    createCalDAVSourceResult = () => Promise.reject(queueConnectionFailure());
+    importCalDAVCalendarsResult = () => Promise.reject(queueConnectionFailure());
 
     const response = await post();
     const body = await response.text();
@@ -103,7 +105,7 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   });
 
   it("does not answer a queue outage with 400 Bad Request", async () => {
-    createCalDAVSourceResult = () => Promise.reject(queueConnectionFailure());
+    importCalDAVCalendarsResult = () => Promise.reject(queueConnectionFailure());
 
     const response = await post();
 
@@ -111,7 +113,7 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   });
 
   it("does not echo an internal service URL back to the caller", async () => {
-    createCalDAVSourceResult = () => Promise.reject(planLookupFailure());
+    importCalDAVCalendarsResult = () => Promise.reject(planLookupFailure());
 
     const response = await post();
     const body = await response.text();
@@ -120,7 +122,7 @@ describe("POST /api/sources/caldav when a non-database dependency fails", () => 
   });
 
   it("answers the same way on every retry of the same outage", async () => {
-    createCalDAVSourceResult = () => Promise.reject(queueConnectionFailure());
+    importCalDAVCalendarsResult = () => Promise.reject(queueConnectionFailure());
 
     const observed: string[] = [];
     for (let attempt = 0; attempt < 3; attempt += 1) {

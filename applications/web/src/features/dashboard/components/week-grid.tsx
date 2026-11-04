@@ -2,8 +2,6 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { atom, useAtomValue, useSetAtom } from "jotai";
-import { scroll } from "motion";
-import { animate } from "motion/mini";
 import { cn } from "@/utils/cn";
 import { resolveDataAttr } from "@/utils/data-attr";
 import { eventDetailAtom } from "@/state/event-detail";
@@ -27,6 +25,7 @@ import { EventPill, EventPillOverflow } from "./event-card";
 import { EventDetailPopover } from "./event-detail-popover";
 import { NowIndicator, NowPill } from "./now-indicator";
 import { resolveNowLayout } from "./now-layout";
+import { linkAnimationToScroll } from "./scroll-linked-animation";
 import {
   EVENT_PILL_GAP_PX,
   EVENT_PILL_HEIGHT_PX,
@@ -140,7 +139,7 @@ const DayHeaderCell = memo(function DayHeaderCell({
           className="flex shrink-0 flex-col items-center justify-center gap-1"
           style={{ height: HEADER_HEIGHT }}
         >
-          <Text as="span" size="xs" tone="muted" className="font-medium uppercase tracking-wide">
+          <Text as="span" size="xs" tone="muted" className="font-medium tracking-wide">
             {day.toLocaleDateString("en-US", { weekday: "short" })}
           </Text>
           <span
@@ -263,16 +262,12 @@ export function WeekGrid({ anchor, eventsByDay, onCenterDayChange, toolbar }: We
     const row = rowRef.current;
     if (!scroller || !row) return;
     const travel = (-100 * (stripDays.length - VISIBLE_COLUMNS)) / stripDays.length;
-    const animation = animate(
-      row,
-      { transform: ["translateX(0%)", `translateX(${travel}%)`] },
-      { ease: "linear" },
-    );
-    const cancel = scroll(animation, { container: scroller, axis: "x" });
-    return () => {
-      cancel();
-      animation.cancel();
-    };
+    return linkAnimationToScroll({
+      axis: "x",
+      container: scroller,
+      keyframes: { transform: ["translateX(0%)", `translateX(${travel}%)`] },
+      target: row,
+    });
   }, [stripDays]);
 
   // The router replays cached scroll offsets after navigation; this registers after it and puts the strip back.
