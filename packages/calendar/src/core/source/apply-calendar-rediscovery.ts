@@ -1,18 +1,14 @@
 import { applySourceSyncDefaults } from "@keeper.sh/data-schemas";
 import {
   calendarAccountsTable,
-  caldavCredentialsTable,
   calendarRemovalsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { BunSQLTransactionClient } from "../database-client";
-import {
-  normalizeCalDAVCalendarKey,
-  normalizeCalDAVServerHost,
-} from "../../providers/caldav/shared/calendar-identity";
 import { resolveCalendarCapabilities } from "./calendar-capabilities";
+import { findUserCalDAVCalendarsOnServer } from "./user-caldav-calendars";
 import {
   planCalendarRediscovery,
   toExistingCalendars,
@@ -87,22 +83,6 @@ const readRemovedKeys = async (
   return toRemovedIdentityKeys(rows, input.calendarType);
 };
 
-/*
- * The host comparison stays in application code so it uses the same URL parser as the
- * CalDAV identity rule. A SQL pattern cannot reproduce punycode folding for
- * internationalized domains or bracketed IPv6 literals, and a host that parses
- * differently on each side silently disables the guard.
- */
-const toBlockedKey = (
-  row: { calendarUrl: string | null; serverUrl: string },
-  caldavServerHost: string,
-): string[] => {
-  if (!row.calendarUrl || normalizeCalDAVServerHost(row.serverUrl) !== caldavServerHost) {
-    return [];
-  }
-  return [normalizeCalDAVCalendarKey(row.calendarUrl)];
-};
-
 const readCrossAccountCalDAVKeys = async (
   transaction: BunSQLTransactionClient,
   input: CalendarRediscoveryApplyInput,
@@ -112,26 +92,13 @@ const readCrossAccountCalDAVKeys = async (
     return new Set<string>();
   }
 
-  const rows = await transaction
-    .select({
-      calendarUrl: calendarsTable.calendarUrl,
-      serverUrl: caldavCredentialsTable.serverUrl,
-    })
-    .from(calendarsTable)
-    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-    .innerJoin(
-      caldavCredentialsTable,
-      eq(calendarAccountsTable.caldavCredentialId, caldavCredentialsTable.id),
-    )
-    .where(and(
-      eq(calendarsTable.userId, input.userId),
-      ne(calendarsTable.accountId, input.accountId),
-      eq(calendarAccountsTable.authType, "caldav"),
-    ));
+  const calendars = await findUserCalDAVCalendarsOnServer(transaction, {
+    caldavServerHost,
+    excludeAccountId: input.accountId,
+    userId: input.userId,
+  });
 
-  return new Set(
-    rows.flatMap((row) => toBlockedKey(row, caldavServerHost)),
-  );
+  return new Set(calendars.map(({ identityKey }) => identityKey));
 };
 
 const resolveIdentityColumn = (
