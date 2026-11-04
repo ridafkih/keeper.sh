@@ -6,6 +6,7 @@ import { PremiumHint } from "@/components/ui/primitives/menu-hint";
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { Button, LinkButton, ButtonText } from "@/components/ui/primitives/button";
 import { apiFetch } from "@/lib/fetcher";
+import { toggleMappingId } from "@/lib/mapping-toggle";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
 import type { CalendarSource } from "@/types/api";
@@ -20,7 +21,6 @@ import { NavigationMenuEditableItem } from "@/components/ui/composites/navigatio
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { RouteShell } from "@/components/ui/shells/route-shell";
 import { canPull, canPush, getCalendarProvider } from "@/utils/calendars";
-import { resolveUpdatedIds } from "@/utils/collections";
 
 const VALID_STEPS = ["select", "rename", "destinations", "sources"] as const;
 type SetupStep = (typeof VALID_STEPS)[number];
@@ -230,39 +230,29 @@ function useCalendarMapping({
   const endpoint = calendarId ? `/api/sources/${calendarId}/${route}` : null;
   const { data, mutate } = useSWR<CalendarMappingData>(endpoint);
   const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
-
   const selectedIds = new Set(data?.[responseKey] ?? []);
 
-  const handleToggle = async (targetCalendarId: string, checked: boolean) => {
+  const handleToggle = (targetCalendarId: string, checked: boolean) => {
     if (!endpoint) return;
-    const currentIds = data?.[responseKey] ?? [];
-    const updatedIds = resolveUpdatedIds(currentIds, targetCalendarId, checked);
-    const mappingData = buildMappingData(responseKey, updatedIds);
-    const delta = checked ? 1 : -1;
-
-    adjustMappingCount(delta);
-
-    try {
-      await mutate(
-        async () => {
-          await apiFetch(endpoint, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: updatedIds }),
-          });
-          return mappingData;
-        },
-        {
-          optimisticData: mappingData,
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      );
-    } catch {
-      adjustMappingCount(-delta);
-    } finally {
-      void revalidateEntitlements();
-    }
+    adjustMappingCount(checked ? 1 : -1);
+    toggleMappingId(endpoint, targetCalendarId, checked, {
+      readCommittedIds: () => data?.[responseKey] ?? [],
+      applyOptimistic: (ids) => {
+        void mutate(buildMappingData(responseKey, ids), { revalidate: false });
+      },
+      persist: (ids) =>
+        apiFetch(endpoint, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ calendarIds: ids }),
+        }),
+      onFailure: () => {
+        void mutate();
+      },
+      onSettled: () => {
+        void revalidateEntitlements();
+      },
+    });
   };
 
   return { selectedIds, handleToggle };

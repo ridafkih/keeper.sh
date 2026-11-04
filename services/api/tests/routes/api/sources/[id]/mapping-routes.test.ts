@@ -5,7 +5,10 @@ import {
   handlePutSourceDestinationsRoute,
   handlePutSourcesForDestinationRoute,
 } from "../../../../../src/routes/api/sources/[id]/mapping-routes";
-import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
+import {
+  MAPPING_LIMIT_ERROR_MESSAGE,
+  MappingMutationBusyError,
+} from "@/utils/source-destination-mappings";
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 
@@ -116,6 +119,22 @@ describe("handlePutSourceDestinationsRoute", () => {
     expect(await readJson(response)).toEqual({
       error: MAPPING_LIMIT_ERROR_MESSAGE,
     });
+  });
+  it("returns 409 when another mapping update keeps the lock past the deadline", async () => {
+    const busy = new MappingMutationBusyError();
+    const response = await handlePutSourceDestinationsRoute(
+      {
+        body: { calendarIds: ["dest-1"] },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        setDestinationsForSource: () => Promise.reject(busy),
+      },
+    );
+
+    expect(response.status).toBe(409);
+    expect(await readJson(response)).toEqual({ error: busy.message });
   });
 });
 
