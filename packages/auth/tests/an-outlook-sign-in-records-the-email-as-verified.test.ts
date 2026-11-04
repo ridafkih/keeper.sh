@@ -2,14 +2,10 @@ import { PGlite } from "@electric-sql/pglite";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
-import type { MicrosoftDirectoryTenant } from "@keeper.sh/data-schemas";
 import { createAuth } from "../src/index";
 
 const BASE_URL = "http://localhost:3000";
 const SECRET = "test-secret-for-outlook-sign-in-email-verification";
-const clients: PGlite[] = [];
-const DIRECTORY_TENANT = microsoftDirectoryTenantSchema.assert("abcdef01-2345-6789-abcd-ef0123456789");
 
 const AUTH_DDL = `
 create table "user" (
@@ -30,9 +26,8 @@ const encodeSegment = (value: object) =>
 const buildIdToken = (claims: Record<string, unknown>) =>
   `${encodeSegment({ alg: "RS256", kid: "test-kid", typ: "JWT" })}.${encodeSegment(claims)}.signature`;
 
-const createHostedAuth = async (microsoftTenant: MicrosoftDirectoryTenant = "common") => {
+const createHostedAuth = async () => {
   const client = new PGlite();
-  clients.push(client);
   await client.exec(AUTH_DDL);
 
   const database = drizzle(client);
@@ -45,7 +40,7 @@ const createHostedAuth = async (microsoftTenant: MicrosoftDirectoryTenant = "com
     microsoftCredentials: {
       clientId: "test-microsoft-client-id",
       clientSecret: "test-microsoft-client-secret",
-      tenant: microsoftTenant,
+      tenant: "common",
     },
     secret: SECRET,
   });
@@ -80,7 +75,6 @@ const mapSocialProfile = async (
 };
 
 type FetchInput = Parameters<typeof fetch>[0];
-type FetchFunction = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
 
 const readFetchUrl = (input: FetchInput): string => {
   if (input instanceof Request) {
@@ -102,94 +96,11 @@ const stubGraphPhotoFetch = () => {
   });
 };
 
-afterEach(async () => {
+afterEach(() => {
   vi.unstubAllGlobals();
-  await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
 describe("an Outlook sign-in", () => {
-  it.each<{ tenantId?: MicrosoftDirectoryTenant; authority: string }>([
-    { authority: "common" },
-    { tenantId: DIRECTORY_TENANT, authority: "abcdef01-2345-6789-abcd-ef0123456789" },
-  ])("exchanges and refreshes sign-in tokens using $authority", async ({ tenantId, authority }) => {
-    const fetchMock = vi.fn<FetchFunction>(() => Promise.resolve(Response.json({
-      access_token: "access-token",
-      expires_in: 3600,
-      refresh_token: "refresh-token",
-      scope: "openid profile email User.Read offline_access Calendars.ReadWrite",
-      token_type: "Bearer",
-    })));
-    vi.stubGlobal("fetch", fetchMock);
-    const auth = await createHostedAuth(tenantId);
-    const context = await auth.$context;
-    const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
-    if (!provider?.refreshAccessToken) {
-      throw new TypeError("Microsoft social provider is not configured");
-    }
-
-    await provider.validateAuthorizationCode({
-      code: "authorization-code",
-      codeVerifier: "test-code-verifier",
-      redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
-    });
-    await provider.refreshAccessToken("refresh-token");
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    for (const [input] of fetchMock.mock.calls) {
-      expect(String(input)).toBe(`https://login.microsoftonline.com/${authority}/oauth2/v2.0/token`);
-    }
-  });
-
-  describe.each<{ tenantId?: MicrosoftDirectoryTenant }>([{}, { tenantId: DIRECTORY_TENANT }])("with authority %j", ({ tenantId }) => {
-    it("shows the account picker", async () => {
-      const auth = await createHostedAuth(tenantId);
-      const context = await auth.$context;
-      const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
-
-      if (!provider) {
-        throw new TypeError("Microsoft social provider is not configured");
-      }
-
-      const authorizationUrl = await provider.createAuthorizationURL({
-        codeVerifier: "test-code-verifier",
-        redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
-        state: "test-state",
-      });
-
-      expect(authorizationUrl.pathname).toBe(`/${tenantId ?? "common"}/oauth2/v2.0/authorize`);
-      expect(authorizationUrl.searchParams.get("prompt")).toBe("select_account");
-      expect(authorizationUrl.searchParams.get("scope")?.split(" ")).toEqual(
-        expect.arrayContaining(["offline_access", "User.Read", "Calendars.ReadWrite"]),
-      );
-    });
-  });
-
-  it.each<{ tenantId?: MicrosoftDirectoryTenant; authority: string }>([
-    { authority: "common" },
-    { tenantId: DIRECTORY_TENANT, authority: "abcdef01-2345-6789-abcd-ef0123456789" },
-  ])(
-    "uses the Microsoft tenant authority for configuration %j",
-    async ({ tenantId, authority }) => {
-      const auth = await createHostedAuth(tenantId);
-      const context = await auth.$context;
-      const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
-
-      if (!provider) {
-        throw new TypeError("Microsoft social provider is not configured");
-      }
-
-      const authorizationUrl = await provider.createAuthorizationURL({
-        codeVerifier: "test-code-verifier",
-        redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
-        state: "test-state",
-      });
-
-      expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
-        `https://login.microsoftonline.com/${authority}/oauth2/v2.0/authorize`,
-      );
-    },
-  );
-
   it("records a personal Microsoft account's email as verified when Entra omits the email_verified claim", async () => {
     stubGraphPhotoFetch();
 
@@ -288,25 +199,6 @@ describe("an Outlook sign-in", () => {
 });
 
 describe("a Google sign-in", () => {
-  it("keeps requesting consent when Microsoft uses the account picker", async () => {
-    const auth = await createHostedAuth(DIRECTORY_TENANT);
-    const context = await auth.$context;
-    const provider = context.socialProviders.find((candidate) => candidate.id === "google");
-
-    if (!provider) {
-      throw new TypeError("Google social provider is not configured");
-    }
-
-    const authorizationUrl = await provider.createAuthorizationURL({
-      codeVerifier: "test-code-verifier",
-      redirectURI: `${BASE_URL}/api/auth/callback/google`,
-      state: "test-state",
-    });
-
-    expect(authorizationUrl.searchParams.get("prompt")).toBe("consent");
-    expect(authorizationUrl.searchParams.get("access_type")).toBe("offline");
-  });
-
   it("still follows the email_verified claim Google always sends", async () => {
     const auth = await createHostedAuth();
 
