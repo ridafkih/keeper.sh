@@ -4,7 +4,17 @@ import { readCalendarOutcome } from "../fixtures/declared-timezones/read-corpus-
 const EXPANSION_BUDGET_MS = 2000;
 const EXPANDING_TEST_TIMEOUT_MS = 30_000;
 
-const buildCustomZoneCalendar = (observanceStart: string, rule: string): string => [
+const buildCustomZoneEvent = (uid: string, date: string): string[] => [
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  "DTSTAMP:20260101T000000Z",
+  `DTSTART;TZID=Custom Zone:${date}T090000`,
+  `DTEND;TZID=Custom Zone:${date}T100000`,
+  "SUMMARY:Standup",
+  "END:VEVENT",
+];
+
+const buildCustomZoneCalendar = (observanceStart: string, rule: string, laterEventDates: string[] = []): string => [
   "BEGIN:VCALENDAR",
   "VERSION:2.0",
   "PRODID:-//Test//Hostile zone//EN",
@@ -23,13 +33,8 @@ const buildCustomZoneCalendar = (observanceStart: string, rule: string): string 
   "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU",
   "END:DAYLIGHT",
   "END:VTIMEZONE",
-  "BEGIN:VEVENT",
-  "UID:custom-zone-event",
-  "DTSTAMP:20260101T000000Z",
-  "DTSTART;TZID=Custom Zone:20260715T090000",
-  "DTEND;TZID=Custom Zone:20260715T100000",
-  "SUMMARY:Standup",
-  "END:VEVENT",
+  ...buildCustomZoneEvent("custom-zone-event", "20260715"),
+  ...laterEventDates.flatMap((date) => buildCustomZoneEvent(`custom-zone-event-${date}`, date)),
   "END:VCALENDAR",
 ].join("\r\n");
 
@@ -73,12 +78,24 @@ describe("declared VTIMEZONE observances that would expand without bound", () =>
   it.each([
     ["FREQ=MONTHLY;BYMONTH=11;BYDAY=1SU", "16010101T020000"],
     ["FREQ=MONTHLY;INTERVAL=12;BYDAY=1SU", "16011101T020000"],
-    ["FREQ=WEEKLY;INTERVAL=520;COUNT=3", "20251102T020000"],
   ])("still reads a custom zone whose observance repeats %s from %s, as its yearly form would", (rule, observanceStart) => {
-    const { outcome } = readWithinBudget(buildCustomZoneCalendar(observanceStart, rule));
+    const { outcome } = readWithinBudget(buildCustomZoneCalendar(observanceStart, rule, ["20261120"]));
 
     expect(outcome).toEqual({
       "custom-zone-event": { end: "2026-07-15T16:00:00.000Z", start: "2026-07-15T15:00:00.000Z" },
+      "custom-zone-event-20261120": { end: "2026-11-20T17:00:00.000Z", start: "2026-11-20T16:00:00.000Z" },
+    });
+  });
+
+  it("reads a custom zone whose weekly observance recurs once a decade at the offsets its own onsets give", () => {
+    const { outcome } = readWithinBudget(
+      buildCustomZoneCalendar("20251102T020000", "FREQ=WEEKLY;INTERVAL=520;COUNT=3", ["20251110", "20261120"]),
+    );
+
+    expect(outcome).toEqual({
+      "custom-zone-event": { end: "2026-07-15T16:00:00.000Z", start: "2026-07-15T15:00:00.000Z" },
+      "custom-zone-event-20251110": { end: "2025-11-10T17:00:00.000Z", start: "2025-11-10T16:00:00.000Z" },
+      "custom-zone-event-20261120": { end: "2026-11-20T16:00:00.000Z", start: "2026-11-20T15:00:00.000Z" },
     });
   });
 });
