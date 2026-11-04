@@ -147,6 +147,14 @@ const syncCalDavResource = (ical: string): DestinationView => {
 
 const HOUR_MS = 60 * 60 * 1000;
 
+const MICROSECONDS_PER_MILLISECOND = 1000;
+
+const cpuMillisecondsSince = (startedCpu: NodeJS.CpuUsage): number => {
+  const { system, user } = process.cpuUsage(startedCpu);
+  return (user + system) / MICROSECONDS_PER_MILLISECOND;
+};
+
+
 const toIcsUtc = (isoInstant: string, offsetMilliseconds = 0): string =>
   new Date(new Date(isoInstant).getTime() + offsetMilliseconds)
     .toISOString()
@@ -534,7 +542,7 @@ const repeated = (values: number[], times: number): string =>
 
 describe("a DATE EXDATE on a series with long selector lists", () => {
   it("writes each distinct BYHOUR slot of the excluded day once however often the lists repeat them", () => {
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const normalized = applyCalendarTimeZoneToFloatingEventDates(buildCalendar([], [
       ...zonedMaster(
         "America/Los_Angeles",
@@ -548,13 +556,13 @@ describe("a DATE EXDATE on a series with long selector lists", () => {
     expect(normalized.split("\r\n").filter((line) => line.startsWith("EXDATE"))).toEqual([
       "EXDATE:20260106T170000Z,20260106T220000Z",
     ]);
-    expect(performance.now() - startedAt).toBeLessThan(2000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(2000);
   });
 
   it("withholds a series whose excluded day would cover more slots than a day of minutes, quickly", async () => {
     const hours = Array.from({ length: 24 }, (_unused, hour) => hour).join(",");
     const minutes = Array.from({ length: 60 }, (_unused, minute) => minute).join(",");
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster(
         "America/Los_Angeles",
@@ -566,7 +574,7 @@ describe("a DATE EXDATE on a series with long selector lists", () => {
     ]));
 
     expect(view.unsupportedEventUids).toEqual([SERIES_UID]);
-    expect(performance.now() - startedAt).toBeLessThan(2000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(2000);
   });
 });
 
@@ -627,7 +635,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
   });
 
   it("keeps syncing a series whose one EXDATE line of whole days passes its slot budget, quickly", async () => {
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster("America/Los_Angeles", "20261205T000000", "20261205T000001", `${MINUTE_SLOTS_RULE};COUNT=2`),
       `EXDATE;VALUE=DATE:${listDates(70).join(",")}`,
@@ -635,7 +643,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
 
     expect(view.unsupportedEventUids).toEqual([]);
     expect(view.starts).toEqual(["2026-12-05T08:00:00.000Z", "2026-12-05T08:01:00.000Z"]);
-    expect(performance.now() - startedAt).toBeLessThan(2000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(2000);
   });
 
   it("excludes whole days until a series' slot budget runs out, then only its start time of day", () => {
@@ -650,7 +658,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
   });
 
   it("keeps syncing a series whose many EXDATE lines together pass its slot budget, excluding only its start time on later days, quickly", async () => {
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const view = await syncIcsFeed(buildCalendar([], [
       ...zonedMaster("America/Edmonton", "20261205T000000", "20261205T000100", `FREQ=HOURLY;BYMINUTE=${MINUTES_OF_HOUR};COUNT=5`),
       ...Array.from({ length: 20 }, (_unused, line) => `EXDATE;VALUE=DATE:${listDates(60, line * 60).join(",")}`),
@@ -663,7 +671,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
       "2026-12-05T06:03:00.000Z",
       "2026-12-05T06:04:00.000Z",
     ]);
-    expect(performance.now() - startedAt).toBeLessThan(2000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(2000);
   });
 
   it("charges each series its own slot budget, so one series' exclusions never cost another series its days", async () => {
@@ -698,7 +706,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
     const uids = Array.from({ length: 7 }, (_unused, index) => `series-${index}@test`);
     const calendar = buildMultiEventCalendar(...uids.map((uid) =>
       buildMinuteSlotSeries(uid, [`EXDATE;VALUE=DATE:${listDates(WHOLE_DAYS_PER_SERIES_BUDGET).join(",")}`])));
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
     const view = await syncIcsFeed(calendar);
 
@@ -706,7 +714,7 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
     expect(exclusions.get("series-6@test")).toHaveLength(WHOLE_DAYS_PER_SERIES_BUDGET);
     expect(view.unsupportedEventUids).toEqual([]);
     expect(view.starts).toHaveLength(2 * uids.length);
-    expect(performance.now() - startedAt).toBeLessThan(SLOT_BUDGET_TEST_TIMEOUT_MS);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(SLOT_BUDGET_TEST_TIMEOUT_MS);
   }, SLOT_BUDGET_TEST_TIMEOUT_MS);
 });
 
@@ -745,13 +753,13 @@ describe("a DATE EXDATE on a series whose zone does not resolve", () => {
   it("withholds hourly series that exclude many days without expanding each day's hours, quickly", async () => {
     const uids = Array.from({ length: 5 }, (_unused, index) => `nowhere-${index}@test`);
     const calendar = buildMultiEventCalendar(...uids.map((uid) => buildUnresolvedZoneHourlySeries(uid)));
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
     const view = await syncIcsFeed(calendar);
 
     expect(exclusions.get("nowhere-0@test")).toHaveLength(UNRESOLVED_ZONE_EXCLUDED_DAYS);
     expect(view.unsupportedEventUids.toSorted()).toEqual(uids);
-    expect(performance.now() - startedAt).toBeLessThan(2000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(2000);
   });
 });
 
@@ -764,13 +772,13 @@ describe("DATE EXDATE dates past every slot budget", () => {
       `RRULE:${MINUTE_SLOTS_RULE};COUNT=2`,
       `EXDATE;VALUE=DATE:${excludedDates.join(",")}`,
     ]);
-    const startedAt = performance.now();
+    const startedCpu = process.cpuUsage();
     const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
 
     expect(exclusions.get(SERIES_UID)).toHaveLength(
       WHOLE_DAYS_PER_SERIES_BUDGET * 1440 + excludedDates.length - WHOLE_DAYS_PER_SERIES_BUDGET,
     );
-    expect(performance.now() - startedAt).toBeLessThan(1000);
+    expect(cpuMillisecondsSince(startedCpu)).toBeLessThan(1000);
   });
 });
 
