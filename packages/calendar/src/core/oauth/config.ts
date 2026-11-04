@@ -1,10 +1,8 @@
+import type { MicrosoftOAuthCredentials } from "./microsoft";
+
 interface OAuthCredentials {
   clientId: string;
   clientSecret: string;
-}
-
-interface MicrosoftOAuthCredentials extends OAuthCredentials {
-  tenantId?: string;
 }
 
 interface OAuthEnv {

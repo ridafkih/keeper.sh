@@ -1,10 +1,13 @@
-import { microsoftTokenResponseSchema, microsoftUserInfoSchema } from "@keeper.sh/data-schemas";
+import {
+  microsoftTenantIdSchema,
+  microsoftTokenResponseSchema,
+  microsoftUserInfoSchema,
+} from "@keeper.sh/data-schemas";
 import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-schemas";
 import { generateState, validateState } from "./state";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
 const MICROSOFT_AUTHORITY_URL = "https://login.microsoftonline.com";
-const MICROSOFT_DEFAULT_TENANT_ID = "common";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
 
 const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
@@ -26,7 +29,7 @@ const resolveMicrosoftEndpoint = (
   tenantId: string | undefined,
   endpoint: "authorize" | "token",
 ): string => {
-  const tenant = encodeURIComponent(tenantId || MICROSOFT_DEFAULT_TENANT_ID);
+  const tenant = microsoftTenantIdSchema.assert(tenantId);
   return `${MICROSOFT_AUTHORITY_URL}/${tenant}/oauth2/v2.0/${endpoint}`;
 };
 

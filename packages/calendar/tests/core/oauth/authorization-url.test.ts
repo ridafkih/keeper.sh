@@ -72,6 +72,22 @@ const buildGoogleAuthorizationUrl = async (): Promise<URL> => {
 };
 
 describe("microsoft getAuthorizationUrl", () => {
+  it("normalizes pasted tenant IDs consistently", async () => {
+    const parsed = await buildTenantMicrosoftAuthorizationUrl(
+      "  ABCDEF01-2345-6789-ABCD-EF0123456789  ",
+    );
+
+    expect(parsed.pathname).toBe("/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/authorize");
+  });
+
+  it("rejects tenant values that change the authority path", () => {
+    expect(() => createMicrosoftTokenRefresher({
+      clientId: "microsoft-test-client-id",
+      clientSecret: "microsoft-test-client-secret",
+      tenantId: "../common?unexpected=1",
+    })).toThrow();
+  });
+
   it("pins the authority, response shape and scope set", async () => {
     const parsed = await buildMicrosoftAuthorizationUrl();
     const { searchParams } = parsed;
@@ -87,10 +103,10 @@ describe("microsoft getAuthorizationUrl", () => {
   });
 
   it("uses the configured tenant authority", async () => {
-    const parsed = await buildTenantMicrosoftAuthorizationUrl("tenant-guid");
+    const parsed = await buildTenantMicrosoftAuthorizationUrl("abcdef01-2345-6789-abcd-ef0123456789");
 
     expect(`${parsed.origin}${parsed.pathname}`).toBe(
-      "https://login.microsoftonline.com/tenant-guid/oauth2/v2.0/authorize",
+      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/authorize",
     );
   });
 
@@ -98,10 +114,10 @@ describe("microsoft getAuthorizationUrl", () => {
     const configs = buildOAuthConfigs({
       MICROSOFT_CLIENT_ID: "microsoft-test-client-id",
       MICROSOFT_CLIENT_SECRET: "microsoft-test-client-secret",
-      MICROSOFT_TENANT_ID: "tenant-guid",
+      MICROSOFT_TENANT_ID: "abcdef01-2345-6789-abcd-ef0123456789",
     });
 
-    expect(configs.microsoft?.tenantId).toBe("tenant-guid");
+    expect(configs.microsoft?.tenantId).toBe("abcdef01-2345-6789-abcd-ef0123456789");
   });
 
   it("uses the configured tenant for code exchange and token refresh", async () => {
@@ -119,15 +135,15 @@ describe("microsoft getAuthorizationUrl", () => {
     const credentials = {
       clientId: "microsoft-test-client-id",
       clientSecret: "microsoft-test-client-secret",
-      tenantId: "tenant-guid",
+      tenantId: "abcdef01-2345-6789-abcd-ef0123456789",
     };
     const service = createMicrosoftOAuthService(credentials, createTestStateStore());
     await service.exchangeCodeForTokens("authorization-code", CALLBACK_URL);
     await createMicrosoftTokenRefresher(credentials)("refresh-token");
 
     expect(requestedUrls).toEqual([
-      "https://login.microsoftonline.com/tenant-guid/oauth2/v2.0/token",
-      "https://login.microsoftonline.com/tenant-guid/oauth2/v2.0/token",
+      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/token",
+      "https://login.microsoftonline.com/abcdef01-2345-6789-abcd-ef0123456789/oauth2/v2.0/token",
     ]);
   });
 

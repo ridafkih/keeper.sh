@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { microsoftTenantIdSchema } from "./microsoft-oauth";
 
 const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS'");
 
@@ -605,6 +606,7 @@ export {
   googleTokenResponseSchema,
   googleUserInfoSchema,
   microsoftTokenResponseSchema,
+  microsoftTenantIdSchema,
   microsoftUserInfoSchema,
   outlookEventSchema,
   outlookEventListSchema,

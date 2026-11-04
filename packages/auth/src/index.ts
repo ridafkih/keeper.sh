@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import { microsoftTenantIdSchema } from "@keeper.sh/data-schemas";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { signJWT } from "better-auth/crypto";
@@ -313,7 +314,7 @@ const createAuth = (config: AuthConfig) => {
       },
       prompt: resolveMicrosoftAuthPrompt(microsoftAuthPrompt),
       scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
-      tenantId: microsoftTenantId,
+      tenantId: microsoftTenantIdSchema.assert(microsoftTenantId),
     };
   }
 

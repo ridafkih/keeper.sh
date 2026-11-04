@@ -6,6 +6,7 @@ import { createAuth } from "../src/index";
 
 const BASE_URL = "http://localhost:3000";
 const SECRET = "test-secret-for-outlook-sign-in-email-verification";
+const clients: PGlite[] = [];
 
 const AUTH_DDL = `
 create table "user" (
@@ -31,6 +32,7 @@ const createHostedAuth = async (
   microsoftAuthPrompt?: "consent" | "select_account",
 ) => {
   const client = new PGlite();
+  clients.push(client);
   await client.exec(AUTH_DDL);
 
   const database = drizzle(client);
@@ -77,6 +79,7 @@ const mapSocialProfile = async (
 };
 
 type FetchInput = Parameters<typeof fetch>[0];
+type FetchFunction = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
 
 const readFetchUrl = (input: FetchInput): string => {
   if (input instanceof Request) {
@@ -98,12 +101,45 @@ const stubGraphPhotoFetch = () => {
   });
 };
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
 describe("an Outlook sign-in", () => {
-  describe.each([{}, { tenantId: "tenant-guid" }])("with authority %j", ({ tenantId }) => {
+  it.each<{ tenantId?: string; authority: string }>([
+    { authority: "common" },
+    { tenantId: " ABCDEF01-2345-6789-ABCD-EF0123456789 ", authority: "abcdef01-2345-6789-abcd-ef0123456789" },
+  ])("exchanges and refreshes sign-in tokens using $authority", async ({ tenantId, authority }) => {
+    const fetchMock = vi.fn<FetchFunction>(() => Promise.resolve(Response.json({
+      access_token: "access-token",
+      expires_in: 3600,
+      refresh_token: "refresh-token",
+      scope: "openid profile email User.Read offline_access Calendars.ReadWrite",
+      token_type: "Bearer",
+    })));
+    vi.stubGlobal("fetch", fetchMock);
+    const auth = await createHostedAuth(tenantId);
+    const context = await auth.$context;
+    const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
+    if (!provider?.refreshAccessToken) {
+      throw new TypeError("Microsoft social provider is not configured");
+    }
+
+    await provider.validateAuthorizationCode({
+      code: "authorization-code",
+      codeVerifier: "test-code-verifier",
+      redirectURI: `${BASE_URL}/api/auth/callback/microsoft`,
+    });
+    await provider.refreshAccessToken("refresh-token");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [input] of fetchMock.mock.calls) {
+      expect(String(input)).toBe(`https://login.microsoftonline.com/${authority}/oauth2/v2.0/token`);
+    }
+  });
+
+  describe.each([{}, { tenantId: "abcdef01-2345-6789-abcd-ef0123456789" }])("with authority %j", ({ tenantId }) => {
     it.each<{ prompt?: "consent" | "select_account" }>([
       {},
       { prompt: "consent" },
@@ -131,9 +167,14 @@ describe("an Outlook sign-in", () => {
     });
   });
 
-  it.each<{ tenantId?: string }>([{}, { tenantId: "" }, { tenantId: "tenant-guid" }])(
+  it.each<{ tenantId?: string; authority: string }>([
+    { authority: "common" },
+    { tenantId: "", authority: "common" },
+    { tenantId: "  ", authority: "common" },
+    { tenantId: " ABCDEF01-2345-6789-ABCD-EF0123456789 ", authority: "abcdef01-2345-6789-abcd-ef0123456789" },
+  ])(
     "uses the Microsoft tenant authority for configuration %j",
-    async ({ tenantId }) => {
+    async ({ tenantId, authority }) => {
       const auth = await createHostedAuth(tenantId);
       const context = await auth.$context;
       const provider = context.socialProviders.find((candidate) => candidate.id === "microsoft");
@@ -149,7 +190,7 @@ describe("an Outlook sign-in", () => {
       });
 
       expect(`${authorizationUrl.origin}${authorizationUrl.pathname}`).toBe(
-        `https://login.microsoftonline.com/${tenantId || "common"}/oauth2/v2.0/authorize`,
+        `https://login.microsoftonline.com/${authority}/oauth2/v2.0/authorize`,
       );
     },
   );
@@ -253,7 +294,7 @@ describe("an Outlook sign-in", () => {
 
 describe("a Google sign-in", () => {
   it("keeps requesting consent when Microsoft uses the account picker", async () => {
-    const auth = await createHostedAuth("tenant-guid", "select_account");
+    const auth = await createHostedAuth("abcdef01-2345-6789-abcd-ef0123456789", "select_account");
     const context = await auth.$context;
     const provider = context.socialProviders.find((candidate) => candidate.id === "google");
 
