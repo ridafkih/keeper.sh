@@ -665,6 +665,25 @@ describe("the DATE EXDATE slots one calendar may expand to", () => {
   }, SLOT_BUDGET_TEST_TIMEOUT_MS);
 });
 
+describe("DATE EXDATE dates past every slot budget", () => {
+  it("costs each over-budget date one slot of work, not the slots it would have expanded to", () => {
+    const excludedDates = listDates(50_000);
+    const calendar = buildCalendar([], [
+      "DTSTART:20260101T000000Z",
+      "DTEND:20260101T000001Z",
+      `RRULE:${MINUTE_SLOTS_RULE};COUNT=2`,
+      `EXDATE;VALUE=DATE:${excludedDates.join(",")}`,
+    ]);
+    const startedAt = performance.now();
+    const exclusions = readExclusionValuesByUid(applyCalendarTimeZoneToFloatingEventDates(calendar, globalThis.undefined));
+
+    expect(exclusions.get(SERIES_UID)).toHaveLength(
+      WHOLE_DAYS_PER_SERIES_BUDGET * 1440 + excludedDates.length - WHOLE_DAYS_PER_SERIES_BUDGET,
+    );
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+  });
+});
+
 describe("an override with no series master", () => {
   it("keeps resolving its floating RECURRENCE-ID in its own DTSTART zone (regression pin, passes on main)", async () => {
     const view = await syncIcsFeed(buildCalendar([], [

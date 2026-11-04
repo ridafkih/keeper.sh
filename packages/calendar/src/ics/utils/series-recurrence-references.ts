@@ -217,7 +217,18 @@ const anchorRecurrenceIdentifier = (
   return `${property};TZID=${master.zone.declared}:${toFloatingIcsDateTime(wallTime)}`;
 };
 
-const listElapsedHourInstants = (date: string, master: SeriesMasterContext): Date[] | undefined => {
+interface ElapsedHourSpan {
+  count: number;
+  firstInstant: number;
+  step: number;
+}
+
+interface ExcludedSlotPlan {
+  count: number;
+  list: () => DateExclusionSlot[];
+}
+
+const readElapsedHourSpan = (date: string, master: SeriesMasterContext): ElapsedHourSpan | undefined => {
   const dayStart = toZoneInstant(readDateWallTime(date), master.zone);
   const dayEnd = toZoneInstant(readDateWallTime(date, 1), master.zone);
   const seriesStart = toZoneInstant(master.startWallTime, master.zone);
@@ -226,18 +237,29 @@ const listElapsedHourInstants = (date: string, master: SeriesMasterContext): Dat
   }
   const step = master.rule.interval * MS_PER_HOUR;
   const firstIndex = Math.max(Math.ceil((dayStart.getTime() - seriesStart.getTime()) / step), 0);
-  const instants: Date[] = [];
-  for (let index = firstIndex; seriesStart.getTime() + index * step < dayEnd.getTime(); index++) {
-    instants.push(new Date(seriesStart.getTime() + index * step));
-  }
-  return instants;
+  const endIndex = Math.ceil((dayEnd.getTime() - seriesStart.getTime()) / step);
+  return {
+    count: Math.max(endIndex - firstIndex, 0),
+    firstInstant: seriesStart.getTime() + firstIndex * step,
+    step,
+  };
 };
 
-const listMasterTimeOfDaySlot = (date: string, master: SeriesMasterContext): Date[] => [
-  new Date(readDateWallTime(date).getTime() + timeOfDayMilliseconds(master.startWallTime)),
+const listElapsedHourInstants = (span: ElapsedHourSpan): DateExclusionSlot[] =>
+  Array.from({ length: span.count }, (_unused, index) => ({
+    instant: new Date(span.firstInstant + index * span.step),
+  }));
+
+const listMasterTimeOfDaySlot = (date: string, master: SeriesMasterContext): DateExclusionSlot[] => [
+  { wallTime: new Date(readDateWallTime(date).getTime() + timeOfDayMilliseconds(master.startWallTime)) },
 ];
 
-const listSelectedSlotWallTimes = (date: string, master: SeriesMasterContext): Date[] => {
+const planMasterTimeOfDaySlot = (date: string, master: SeriesMasterContext): ExcludedSlotPlan => ({
+  count: 1,
+  list: () => listMasterTimeOfDaySlot(date, master),
+});
+
+const planSelectedSlotWallTimes = (date: string, master: SeriesMasterContext): ExcludedSlotPlan => {
   const dayStart = readDateWallTime(date).getTime();
   const { rule, startWallTime } = master;
   let defaultHours = [startWallTime.getUTCHours()];
@@ -247,23 +269,28 @@ const listSelectedSlotWallTimes = (date: string, master: SeriesMasterContext): D
   const hours = rule.byHour ?? defaultHours;
   const minutes = rule.byMinute ?? [startWallTime.getUTCMinutes()];
   const seconds = rule.bySecond ?? [startWallTime.getUTCSeconds()];
-  if (hours.length * minutes.length * seconds.length > MAX_SLOTS_PER_EXCLUDED_DATE) {
+  const count = hours.length * minutes.length * seconds.length;
+  if (count > MAX_SLOTS_PER_EXCLUDED_DATE) {
     throw new RangeError(`DATE EXDATE ${date} covers more than ${MAX_SLOTS_PER_EXCLUDED_DATE} series slots`);
   }
-  return hours.flatMap((hour) => minutes.flatMap((minute) => seconds.map((second) =>
-    new Date(dayStart + Date.UTC(1970, 0, 1, hour, minute, second)))));
+  return {
+    count,
+    list: () => hours.flatMap((hour) => minutes.flatMap((minute) => seconds.map((second) => ({
+      wallTime: new Date(dayStart + Date.UTC(1970, 0, 1, hour, minute, second)),
+    })))),
+  };
 };
 
-const listExcludedSlots = (date: string, master: SeriesMasterContext): DateExclusionSlot[] => {
+const planExcludedSlots = (date: string, master: SeriesMasterContext): ExcludedSlotPlan => {
   if (TIME_OF_DAY_FREQUENCIES.has(master.rule.frequency)) {
-    return listMasterTimeOfDaySlot(date, master).map((wallTime) => ({ wallTime }));
+    return planMasterTimeOfDaySlot(date, master);
   }
   const stepsInElapsedHours = master.rule.frequency === "HOURLY" && !master.rule.hasSelectors;
-  const elapsedInstants = stepsInElapsedHours && listElapsedHourInstants(date, master);
-  if (elapsedInstants) {
-    return elapsedInstants.map((instant) => ({ instant }));
+  const elapsedSpan = stepsInElapsedHours && readElapsedHourSpan(date, master);
+  if (elapsedSpan) {
+    return { count: elapsedSpan.count, list: () => listElapsedHourInstants(elapsedSpan) };
   }
-  return listSelectedSlotWallTimes(date, master).map((wallTime) => ({ wallTime }));
+  return planSelectedSlotWallTimes(date, master);
 };
 
 const listAffordableSlots = (
@@ -271,11 +298,11 @@ const listAffordableSlots = (
   master: SeriesMasterContext,
   budget: ExclusionSlotBudget,
 ): DateExclusionSlot[] => {
-  const slots = listExcludedSlots(date, master);
-  if (budget.claim(master.uid, slots.length)) {
-    return slots;
+  const plan = planExcludedSlots(date, master);
+  if (budget.claim(master.uid, plan.count)) {
+    return plan.list();
   }
-  return listMasterTimeOfDaySlot(date, master).map((wallTime) => ({ wallTime }));
+  return listMasterTimeOfDaySlot(date, master);
 };
 
 const isWallTimeSlot = (slot: DateExclusionSlot): slot is { wallTime: Date } => "wallTime" in slot;
