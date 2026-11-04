@@ -21,7 +21,7 @@ import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
 import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
-import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
+import { GoogleCalendarApiError, isRateLimitApiError } from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
@@ -43,17 +43,6 @@ interface GoogleSyncProviderConfig {
   refreshAccessToken?: TokenRefresher;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
-}
-
-class GoogleCalendarApiError extends Error {
-  public readonly status: number;
-  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
-  constructor(status: number, body: string) {
-    super(`Google Calendar API ${status}: ${body}`);
-    this.name = "GoogleCalendarApiError";
-    this.status = status;
-    this.apiError = parseGoogleApiError(body);
-  }
 }
 
 const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");

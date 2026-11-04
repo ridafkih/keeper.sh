@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  planCalendarRediscovery,
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
@@ -197,5 +198,30 @@ describe("toExistingCalendars", () => {
     );
 
     expect(rows).toEqual([]);
+  });
+});
+
+describe("rediscovering a Google calendar whose access dropped to reader", () => {
+  it("takes push away from the stored calendar", () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const plan = planCalendarRediscovery({
+      discovered: toDiscoveredGoogleCalendars([
+        { accessRole: "reader", id: "shared@group.calendar.google.com", summary: "Shared" },
+      ]),
+      existing: toExistingCalendars(
+        [{
+          calendarUrl: null,
+          capabilities: ["pull", "push"],
+          createdAt,
+          externalCalendarId: "shared@group.calendar.google.com",
+          id: "calendar-1",
+          unavailableSince: null,
+        }],
+        "oauth",
+      ),
+    });
+
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.toSetWritable).toEqual([{ id: "calendar-1", writable: false }]);
   });
 });

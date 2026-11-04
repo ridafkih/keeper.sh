@@ -1,4 +1,5 @@
-import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
+import { RecurrenceMaterializationLimitError, RequestTimeoutError } from "@keeper.sh/calendar";
+import { isGoogleWriteAccessDeniedError } from "@keeper.sh/calendar/google";
 import { isDatabaseError } from "@keeper.sh/database";
 
 /**
@@ -28,6 +29,10 @@ const isBackoffEligibleError = (error: unknown): boolean => {
   // A query error's message inlines the SQL and its bound parameters, so customer data can match the patterns below.
   if (isDatabaseError(error)) {
     return false;
+  }
+
+  if (error instanceof RequestTimeoutError || isGoogleWriteAccessDeniedError(error)) {
+    return true;
   }
 
   const message = getErrorMessage(error);

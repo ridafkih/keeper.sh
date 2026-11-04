@@ -7,6 +7,8 @@ const GOOGLE_PERMISSION_REAUTH_REASONS = new Set([
   "insufficientpermissions",
 ]);
 
+const GOOGLE_WRITE_ACCESS_REASONS = new Set(["requiredaccesslevel"]);
+
 const GOOGLE_FORBIDDEN_AUTH_REASONS = new Set([
   "autherror",
   "invalidcredentials",
@@ -114,4 +116,47 @@ const parseGoogleApiErrorFromBody = (body: unknown): GoogleApiError => {
   return googleApiErrorSchema.assert(body).error ?? EMPTY_API_ERROR;
 };
 
-export { hasRateLimitMessage, isAuthError, isRateLimitApiError, isRateLimitResponseStatus, isSimpleAuthError, parseGoogleApiError, parseGoogleApiErrorFromBody };
+class GoogleCalendarApiError extends Error {
+  public readonly status: number;
+  public readonly apiError: GoogleApiError;
+  constructor(status: number, body: string) {
+    super(`Google Calendar API ${status}: ${body}`);
+    this.name = "GoogleCalendarApiError";
+    this.status = status;
+    this.apiError = parseGoogleApiError(body);
+  }
+}
+
+class GoogleBatchApiError extends Error {
+  public readonly status: number;
+  public readonly apiError: GoogleApiError;
+  constructor(status: number, body: string) {
+    super(`Google Batch API ${status}: ${body}`);
+    this.name = "GoogleBatchApiError";
+    this.status = status;
+    this.apiError = parseGoogleApiError(body);
+  }
+}
+
+const isWriteAccessDeniedApiError = (status: number, error?: GoogleApiError): boolean =>
+  status === HTTP_STATUS.FORBIDDEN && hasReason(error, GOOGLE_WRITE_ACCESS_REASONS);
+
+const isGoogleWriteAccessDeniedError = (error: unknown): boolean => {
+  if (!(error instanceof GoogleCalendarApiError) && !(error instanceof GoogleBatchApiError)) {
+    return false;
+  }
+  return isWriteAccessDeniedApiError(error.status, error.apiError);
+};
+
+export {
+  GoogleBatchApiError,
+  GoogleCalendarApiError,
+  hasRateLimitMessage,
+  isAuthError,
+  isGoogleWriteAccessDeniedError,
+  isRateLimitApiError,
+  isRateLimitResponseStatus,
+  isSimpleAuthError,
+  parseGoogleApiError,
+  parseGoogleApiErrorFromBody,
+};
