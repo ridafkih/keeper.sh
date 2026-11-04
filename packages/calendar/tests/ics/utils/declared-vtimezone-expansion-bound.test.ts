@@ -65,6 +65,22 @@ describe("declared VTIMEZONE observances that would expand without bound", () =>
     expect(elapsedMs).toBeLessThan(EXPANSION_BUDGET_MS);
   });
 
+  it.each([
+    ["FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30", "20200101T020000"],
+    ["FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=30", "16010101T020000"],
+    ["FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=30", "20200101T020000"],
+    ["FREQ=MONTHLY;BYMONTH=2;BYMONTHDAY=30", "16010101T020000"],
+    ["FREQ=MONTHLY;BYMONTHDAY=31;BYMONTH=4,6,9,11", "20200101T020000"],
+  ])("reads a zone whose observance repeats %s from %s, which never matches, at the other observance's offset, within the budget", (rule, observanceStart) => {
+    const { elapsedMs, outcome } = readWithinBudget(buildCustomZoneCalendar(observanceStart, rule, ["20261120"]));
+
+    expect(outcome).toEqual({
+      "custom-zone-event": { end: "2026-07-15T16:00:00.000Z", start: "2026-07-15T15:00:00.000Z" },
+      "custom-zone-event-20261120": { end: "2026-11-20T16:00:00.000Z", start: "2026-11-20T15:00:00.000Z" },
+    });
+    expect(elapsedMs).toBeLessThan(EXPANSION_BUDGET_MS);
+  });
+
   it("still reads a yearly custom zone declared from 1601, as Exchange writes them", () => {
     const { outcome } = readWithinBudget(
       buildCustomZoneCalendar("16010101T020000", "FREQ=YEARLY;BYMONTH=11;BYDAY=1SU"),
