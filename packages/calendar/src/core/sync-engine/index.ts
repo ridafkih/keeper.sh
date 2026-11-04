@@ -106,6 +106,7 @@ interface OperationError {
   error: string;
   errorType?: string;
   statusCode?: number;
+  writeAccessDenied?: boolean;
 }
 
 interface PushEchoCounts {
@@ -256,6 +257,7 @@ const processAddResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -323,6 +325,7 @@ const processUpdateResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -367,6 +370,7 @@ const processDeleteResults = (
           error: deleteResult.error,
           ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
           ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
+          ...(deleteResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -855,9 +859,18 @@ interface SyncCalendarOptions {
 interface SyncCalendarResult extends SyncResult {
   conflictsResolved: number;
   errors: string[];
+  writeAccessDenied: boolean;
 }
 
-const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
+const EMPTY_RESULT: SyncCalendarResult = {
+  added: 0,
+  addFailed: 0,
+  removed: 0,
+  removeFailed: 0,
+  conflictsResolved: 0,
+  errors: [],
+  writeAccessDenied: false,
+};
 
 const appendDatabaseErrorFields = (
   event: Record<string, unknown>,
@@ -1108,7 +1121,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
     const errorMessages = outcome.errors.map((operationError) => operationError.error);
-    return { ...outcome.result, conflictsResolved: outcome.conflictsResolved, errors: errorMessages };
+    return {
+      ...outcome.result,
+      conflictsResolved: outcome.conflictsResolved,
+      errors: errorMessages,
+      writeAccessDenied: outcome.errors.some((operationError) => operationError.writeAccessDenied === true),
+    };
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
