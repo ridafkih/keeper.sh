@@ -376,6 +376,7 @@ const processJob = (
           widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
           widelog.setFields(completion.firstSync);
           widelog.set("duration_ms", completion.durationMs);
+          widelog.set("destination.push_removed", completion.pushRemoved);
 
           if (completion.added > 0) {
             pendingDestinationSyncs.push(noteEventsCopied(userId));
@@ -415,6 +416,7 @@ const processJob = (
           widelog.set("provider.calendar_id", failure.calendarId);
           widelog.set("duration_ms", failure.durationMs);
           widelog.set("retry.backoff_applied", failure.backoffApplied);
+          widelog.set("destination.push_removed", failure.pushRemoved);
           widelog.set("outcome", "error");
           applyDatabaseErrorFields(failure.error);
           widelog.errorFields(failure.error, { slug: classifySyncError(failure.error) });

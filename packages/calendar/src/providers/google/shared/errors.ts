@@ -157,6 +157,7 @@ export {
   isRateLimitApiError,
   isRateLimitResponseStatus,
   isSimpleAuthError,
+  isWriteAccessDeniedApiError,
   parseGoogleApiError,
   parseGoogleApiErrorFromBody,
 };

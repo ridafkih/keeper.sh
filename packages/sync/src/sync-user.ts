@@ -14,6 +14,7 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
   overlapsTimeWindow,
+  setCalendarWriteAccess,
 } from "@keeper.sh/calendar";
 import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
@@ -595,6 +596,7 @@ interface CalendarSyncCompletion {
   conflictsResolved: number;
   errors: string[];
   durationMs: number;
+  pushRemoved: boolean;
   syncEvent?: Record<string, unknown>;
 }
 
@@ -606,6 +608,7 @@ interface CalendarSyncFailure {
   error: unknown;
   durationMs: number;
   backoffApplied: boolean;
+  pushRemoved: boolean;
   syncEvent?: Record<string, unknown>;
 }
 
@@ -745,6 +748,8 @@ const applyDestinationAttemptVerdict = async (
   }
   if (verdict === "failed") {
     await escalateDestinationBackoff(database, destination);
+  } else if (verdict === "not_writable") {
+    await setCalendarWriteAccess(database, destination.calendarId, false);
   } else if (verdict === "succeeded") {
     await resetDestinationBackoffIfNeeded(database, destination);
   }
@@ -779,6 +784,7 @@ const recordDestinationAttemptFailure = async (
     error,
     durationMs,
     backoffApplied: stillOwned && verdict === "failed",
+    pushRemoved: stillOwned && verdict === "not_writable",
     ...(syncEvent && { syncEvent }),
   });
   return [getErrorMessage(error)];
@@ -802,7 +808,8 @@ const resolveRejectedFirstSyncSources = (
   existingMappings: EventMapping[],
   verifiedSourceCalendarIds: string[],
 ): string[] => {
-  if (verdict !== "failed" || existingMappings.length > 0) {
+  const refused = verdict === "failed" || verdict === "not_writable";
+  if (!refused || existingMappings.length > 0) {
     return [];
   }
   return verifiedSourceCalendarIds;
@@ -1136,6 +1143,13 @@ const syncDestinationsForUser = async (
           sourceEventCounts: countEventsBySource(reconciliationState.localEvents),
         });
 
+        const stillOwned = await applyDestinationAttemptVerdict({
+          database,
+          destination,
+          handle,
+          verdict,
+        });
+
         callbacks?.onCalendarComplete?.({
           provider: destination.provider,
           accountId: destination.accountId,
@@ -1150,15 +1164,10 @@ const syncDestinationsForUser = async (
           conflictsResolved: result.conflictsResolved,
           errors: result.errors,
           durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
+          pushRemoved: stillOwned && verdict === "not_writable",
           ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
         });
 
-        const stillOwned = await applyDestinationAttemptVerdict({
-          database,
-          destination,
-          handle,
-          verdict,
-        });
         if (!stillOwned) {
           return;
         }

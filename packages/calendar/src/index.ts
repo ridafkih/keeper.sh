@@ -222,6 +222,7 @@ export {
   resolveCalendarCapabilities,
   type CalendarCapability,
 } from "./core/source/calendar-capabilities";
+export { setCalendarWriteAccess } from "./core/source/calendar-write-access";
 export {
   planCalendarRediscovery,
   resolveRediscoveryCalendarType,

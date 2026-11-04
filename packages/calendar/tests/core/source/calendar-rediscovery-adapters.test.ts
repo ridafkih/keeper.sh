@@ -4,7 +4,6 @@ import {
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
-  planCalendarRediscovery,
   toExistingCalendars,
 } from "../../../src/core/source/calendar-rediscovery";
 

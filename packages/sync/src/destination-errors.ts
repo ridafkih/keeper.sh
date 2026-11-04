@@ -31,7 +31,7 @@ const isBackoffEligibleError = (error: unknown): boolean => {
     return false;
   }
 
-  if (error instanceof RequestTimeoutError || isGoogleWriteAccessDeniedError(error)) {
+  if (error instanceof RequestTimeoutError) {
     return true;
   }
 
@@ -52,6 +52,7 @@ interface DestinationOperationCounts {
   conflictsResolved: number;
   removed: number;
   removeFailed: number;
+  writeAccessDenied: boolean;
 }
 
 const hasNoSuccessfulOperations = (result: DestinationOperationCounts): boolean =>
@@ -67,7 +68,7 @@ const hasAttemptedOperations = (result: DestinationOperationCounts): boolean =>
   + result.addFailed
   + result.removeFailed > 0;
 
-type DestinationAttemptVerdict = "failed" | "inconclusive" | "succeeded";
+type DestinationAttemptVerdict = "failed" | "inconclusive" | "not_writable" | "succeeded";
 
 // Escalating an unattempted run punishes a healthy destination; clearing lets a broken one oscillate between failureCount 1 and 0 forever.
 const resolveDestinationAttemptVerdict = (
@@ -77,13 +78,19 @@ const resolveDestinationAttemptVerdict = (
   if (superseded && !hasAttemptedOperations(result)) {
     return "inconclusive";
   }
-  if (hasNoSuccessfulOperations(result)) {
-    return "failed";
+  if (!hasNoSuccessfulOperations(result)) {
+    return "succeeded";
   }
-  return "succeeded";
+  if (result.writeAccessDenied) {
+    return "not_writable";
+  }
+  return "failed";
 };
 
 const resolveThrownDestinationVerdict = (error: unknown): DestinationAttemptVerdict => {
+  if (isGoogleWriteAccessDeniedError(error)) {
+    return "not_writable";
+  }
   if (isBackoffEligibleError(error)) {
     return "failed";
   }

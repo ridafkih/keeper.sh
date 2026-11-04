@@ -88,6 +88,7 @@ interface PushResult {
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
+  writeAccessDenied?: boolean;
 }
 
 interface PushEchoValueLengths {
@@ -125,6 +126,7 @@ interface DeleteResult {
   errorType?: string;
   statusCode?: number;
   shouldContinue?: boolean;
+  writeAccessDenied?: boolean;
 }
 
 interface ProviderThrottleMetrics {

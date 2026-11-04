@@ -8,6 +8,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { BunSQLTransactionClient } from "../database-client";
 import { resolveCalendarCapabilities } from "./calendar-capabilities";
+import { setCalendarWriteAccess } from "./calendar-write-access";
 import { findUserCalDAVCalendarsOnServer } from "./user-caldav-calendars";
 import {
   planCalendarRediscovery,
@@ -179,10 +180,7 @@ const applyCalendarRediscoveryPlan = (
     }
 
     for (const change of plan.toSetWritable) {
-      await transaction
-        .update(calendarsTable)
-        .set({ capabilities: resolveCalendarCapabilities(change.writable) })
-        .where(eq(calendarsTable.id, change.id));
+      await setCalendarWriteAccess(transaction, change.id, change.writable);
     }
 
     for (const retarget of plan.toRetargetUrl) {
