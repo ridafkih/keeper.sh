@@ -32,6 +32,10 @@ vi.mock("../src/utils/logging", () => ({
       current.values[key] = value;
       return { sticky: () => null };
     },
+    setFields: (fields: Record<string, unknown>) => {
+      Object.assign(current.values, fields);
+      return { sticky: () => null };
+    },
     time: {
       measure: <TResult>(_key: string, run: () => Promise<TResult>) => run(),
     },
@@ -71,6 +75,8 @@ interface CalendarCompletion {
   removed: number;
   removeFailed: number;
   syncEvent: { outcome: string };
+  firstSync: Record<string, number | string>;
+  firstSyncedSourceCalendarIds: string[];
 }
 
 interface SyncHandlers {
@@ -97,6 +103,8 @@ vi.mock("@keeper.sh/sync", () => ({
       conflictsResolved: 0,
       durationMs: SYNC_DURATION_MS,
       errors: [],
+      firstSync: {},
+      firstSyncedSourceCalendarIds: [],
       provider: "google",
       removed: 0,
       removeFailed: 0,

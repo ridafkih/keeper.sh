@@ -47,6 +47,7 @@ import {
   resolveThrownDestinationVerdict,
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
+import { countEventsBySource, describeFirstSync } from "./first-sync-report";
 import { resolveSyncProvider } from "./resolve-provider";
 import type { OAuthConfig } from "./resolve-provider";
 import {
@@ -137,6 +138,7 @@ interface SyncConfig {
   googleProjectRequestsPerMinute?: number;
   oauthConfig: OAuthConfig;
   plan: Plan;
+  recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => Promise<string[]>;
   refreshLockStore?: RefreshLockStore | null;
   safeFetchOptions?: SafeFetchOptions;
   deadlineMs?: number;
@@ -583,6 +585,8 @@ interface CalendarSyncCompletion {
   accountId: string;
   calendarId: string;
   userId: string;
+  firstSync: Record<string, number | string>;
+  firstSyncedSourceCalendarIds: string[];
   added: number;
   addFailed: number;
   removed: number;
@@ -777,6 +781,30 @@ const recordDestinationAttemptFailure = async (
     ...(syncEvent && { syncEvent }),
   });
   return [getErrorMessage(error)];
+};
+
+const recordCompletedFirstSyncs = (options: {
+  destinationCalendarId: string;
+  recordFirstSyncs: SyncConfig["recordFirstSyncs"];
+  superseded: boolean;
+  verdict: DestinationAttemptVerdict;
+  verifiedSourceCalendarIds: string[];
+}): Promise<string[]> => {
+  if (options.superseded || options.verdict !== "succeeded") {
+    return Promise.resolve([]);
+  }
+  return options.recordFirstSyncs(options.destinationCalendarId, options.verifiedSourceCalendarIds);
+};
+
+const resolveRejectedFirstSyncSources = (
+  verdict: DestinationAttemptVerdict,
+  existingMappings: EventMapping[],
+  verifiedSourceCalendarIds: string[],
+): string[] => {
+  if (verdict !== "failed" || existingMappings.length > 0) {
+    return [];
+  }
+  return verifiedSourceCalendarIds;
 };
 
 const countMappedSources = async (
@@ -1083,11 +1111,37 @@ const syncDestinationsForUser = async (
           }),
         });
 
+        const verdict = resolveDestinationAttemptVerdict(result, calendarAttempt.superseded);
+        const verifiedSourceCalendarIds = [...authoritativeSourceWindows.keys()];
+        const firstSyncedSourceCalendarIds = await recordCompletedFirstSyncs({
+          destinationCalendarId: destination.calendarId,
+          recordFirstSyncs: config.recordFirstSyncs,
+          superseded: calendarAttempt.superseded,
+          verdict,
+          verifiedSourceCalendarIds,
+        });
+
+        const firstSync = describeFirstSync({
+          awaitingSourceCalendarIds: sourceCalendarIdsAtLocalRead
+            .filter((sourceCalendarId) => !authoritativeSourceWindows.has(sourceCalendarId)),
+          completedSourceCalendarIds: firstSyncedSourceCalendarIds,
+          eventsAdded: result.added,
+          eventsAddFailed: result.addFailed,
+          rejectedSourceCalendarIds: resolveRejectedFirstSyncSources(
+            verdict,
+            reconciliationState.existingMappings,
+            verifiedSourceCalendarIds,
+          ),
+          sourceEventCounts: countEventsBySource(reconciliationState.localEvents),
+        });
+
         callbacks?.onCalendarComplete?.({
           provider: destination.provider,
           accountId: destination.accountId,
           calendarId: destination.calendarId,
           userId: destination.userId,
+          firstSync,
+          firstSyncedSourceCalendarIds,
           added: result.added,
           addFailed: result.addFailed,
           removed: result.removed,
@@ -1102,7 +1156,7 @@ const syncDestinationsForUser = async (
           database,
           destination,
           handle,
-          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
+          verdict,
         });
         if (!stillOwned) {
           return;

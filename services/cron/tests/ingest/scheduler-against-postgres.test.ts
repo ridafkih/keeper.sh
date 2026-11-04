@@ -148,6 +148,7 @@ describe.skipIf(!administrativeUrl)("the ingest scheduler against Postgres", () 
       recordError: (error) => {
         throw error;
       },
+      publishMappingSyncStates: () => Promise.resolve(),
       recordFirstIngestSyncRequests: () => Promise.resolve(),
       resolveScheduleContexts: (calendarIds) => Promise.resolve(new Map(calendarIds.map(
         (calendarId): [string, IngestScheduleContext] => [
@@ -230,6 +231,7 @@ describe.skipIf(!administrativeUrl)("the ingest scheduler against Postgres", () 
       recordError: (error) => {
         throw error;
       },
+      publishMappingSyncStates: () => Promise.resolve(),
       recordFirstIngestSyncRequests: () => Promise.resolve(),
       resolveScheduleContexts: () => Promise.resolve(new Map()),
       resources: {} as IngestLane,

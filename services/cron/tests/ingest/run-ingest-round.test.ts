@@ -58,6 +58,7 @@ interface EnqueueCall {
 }
 
 interface Harness {
+  published: string[][];
   completions: IngestCompletion[];
   dependencies: IngestRoundDependencies;
   enqueued: EnqueueCall[];
@@ -71,6 +72,7 @@ const resources = { name: "push-lane" } as unknown as IngestLane;
 
 const createHarness = (overrides: Partial<IngestRoundDependencies> = {}): Harness => {
   const harness: Harness = {
+    published: [],
     completions: [],
     dependencies: {} as IngestRoundDependencies,
     enqueued: [],
@@ -99,6 +101,10 @@ const createHarness = (overrides: Partial<IngestRoundDependencies> = {}): Harnes
     },
     observe: (fields) => {
       harness.observed.push(fields);
+    },
+    publishMappingSyncStates: (userIds) => {
+      harness.published.push(userIds);
+      return Promise.resolve();
     },
     random: () => 0,
     recordError: (_error, slug) => {
@@ -521,5 +527,35 @@ describe("runIngestRound telemetry", () => {
       "schedule.outcome.lock-held": 1,
       "schedule.written_count": 3,
     }]);
+  });
+});
+
+describe("runIngestRound mapping sync state", () => {
+  it("pushes the sync state of users whose source starts or stops failing to read", async () => {
+    const harness = createHarness({
+      ingestCalendars: () => ingested(emptyResult({
+        outcomes: outcomesFor({
+          "calendar-broken": { kind: "credential-rejected" },
+          "calendar-recovered": { kind: "ingested" },
+          "calendar-steady": { kind: "ingested" },
+        }),
+      })),
+    });
+
+    await runIngestRound("fleet", [
+      claim({ calendarId: "calendar-broken", userId: "user-broken" }),
+      claim({ calendarId: "calendar-recovered", failureCount: 2, userId: "user-recovered" }),
+      claim({ calendarId: "calendar-steady", userId: "user-steady" }),
+    ], harness.dependencies);
+
+    expect(harness.published).toEqual([["user-broken", "user-recovered"]]);
+  });
+
+  it("pushes nothing when no source changed whether it reads", async () => {
+    const harness = createHarness();
+
+    await runIngestRound("fleet", [claim()], harness.dependencies);
+
+    expect(harness.published).toEqual([]);
   });
 });

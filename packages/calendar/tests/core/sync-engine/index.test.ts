@@ -1213,6 +1213,12 @@ describe("createRedisGenerationCheck", () => {
   });
 });
 
+const selectEventStates = () => ({
+  from: () => ({
+    where: () => ({ for: () => Promise.resolve([{ id: "ev-1" }]) }),
+  }),
+});
+
 describe("createDatabaseFlush", () => {
   it("batches inserts, deletes, and mapping updates into a single transaction", async () => {
     const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
@@ -1221,6 +1227,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           update: () => ({
             set: () => {
               executedOperations.push("update");
@@ -1326,6 +1333,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -1354,6 +1362,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -1387,6 +1396,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => ({ values: () => Promise.resolve() }),
           delete: () => { deleteCallCount += 1; return { where: () => Promise.resolve() }; },
         };
@@ -1409,6 +1419,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => {
             insertCallCount += 1;
             return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) };
@@ -1441,6 +1452,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => {
             insertCallCount += 1;
             return {

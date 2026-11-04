@@ -174,6 +174,7 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
   database: database as never,
   redis: {} as never,
   oauthConfig: {} as never,
+  recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,
   ...overrides,
 });
@@ -678,5 +679,64 @@ describe("a single permanently rejected event", () => {
     expect(deleted).toEqual([]);
     expect(mappings).toHaveLength(1);
     expect(counts).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("first syncs recorded by a destination run", () => {
+  it("records the first sync of every source the run read once its copies landed", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(() => [makeEvent("ev-1", new Date("2026-03-10T09:00:00.000Z"))]);
+    const recorded: { destinationCalendarId: string; sourceCalendarIds: string[] }[] = [];
+    const completions: string[][] = [];
+    const firstSyncFields: Record<string, number | string>[] = [];
+
+    await syncDestinationsForUser(USER_ID, config(database, {
+      recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => {
+        recorded.push({ destinationCalendarId, sourceCalendarIds });
+        return Promise.resolve(sourceCalendarIds);
+      },
+    }), {
+      onCalendarComplete: (completion) => {
+        completions.push(completion.firstSyncedSourceCalendarIds);
+        firstSyncFields.push(completion.firstSync);
+      },
+    });
+
+    expect(recorded).toEqual([{ destinationCalendarId: CALENDAR_ID, sourceCalendarIds: [SOURCE_ID] }]);
+    expect(completions).toEqual([[SOURCE_ID]]);
+    expect(firstSyncFields).toEqual([{
+      "first_sync.completed_count": 1,
+      "first_sync.completed_source_calendar_ids": SOURCE_ID,
+      "first_sync.events_added": 1,
+      "first_sync.outcome": "copied",
+      "first_sync.source_events_in_window": 1,
+    }]);
+  });
+
+  it("records no first sync when every copy was rejected", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(() => [makeEvent("ev-1", new Date("2026-03-10T09:00:00.000Z"))]);
+    setProvider({
+      pushEvents: (events) => Promise.resolve(events.map(() => ({ error: "read-only", success: false }))),
+    });
+    const recorded: string[][] = [];
+    const firstSyncFields: Record<string, number | string>[] = [];
+
+    await syncDestinationsForUser(USER_ID, config(database, {
+      recordFirstSyncs: (_destinationCalendarId: string, sourceCalendarIds: string[]) => {
+        recorded.push(sourceCalendarIds);
+        return Promise.resolve(sourceCalendarIds);
+      },
+    }), {
+      onCalendarComplete: (completion) => {
+        firstSyncFields.push(completion.firstSync);
+      },
+    });
+
+    expect(recorded).toEqual([]);
+    expect(firstSyncFields).toEqual([expect.objectContaining({
+      "first_sync.events_add_failed": 1,
+      "first_sync.outcome": "destination-rejected",
+    })]);
   });
 });

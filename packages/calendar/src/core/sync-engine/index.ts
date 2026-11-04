@@ -15,6 +15,8 @@ import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
+import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
+import type { UnrecordedCopyTally } from "./unrecorded-copies";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -979,6 +981,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   const timer = createPhaseTimer();
   const timedProvider = createTimedProvider(provider, timer);
   const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
+  const unrecordedCopies: UnrecordedCopyTally = { deleteFailed: 0, deleted: 0 };
   let flushed = false;
 
   const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
@@ -1067,7 +1070,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         emitProgress("processing", localEvents.length, state.remoteEvents.length, { current: processed, total });
       },
       async (changes) => {
-        await timer.measure("checkpoint_flush", () => flush(changes));
+        await timer.measure(
+          "checkpoint_flush",
+          () => flushOrDeleteUnrecordedCopies(changes, flush, provider, unrecordedCopies),
+        );
         flushed = true;
         return true;
       },
@@ -1120,6 +1126,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
      * These two cover the same span on different clocks -- duration_ms is wall-clock and
      * sync.reconcile.duration_ms is monotonic -- and must never be differenced.
      */
+    if (unrecordedCopies.deleted > 0) {
+      wideEvent["events.unrecorded_deleted"] = unrecordedCopies.deleted;
+    }
+    if (unrecordedCopies.deleteFailed > 0) {
+      wideEvent["events.unrecorded_delete_failed"] = unrecordedCopies.deleteFailed;
+    }
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
     appendThrottleFields(wideEvent, provider.getThrottleMetrics?.());

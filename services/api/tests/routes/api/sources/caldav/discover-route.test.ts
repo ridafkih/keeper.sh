@@ -31,7 +31,7 @@ describe("handleCalDAVDiscoverRoute", () => {
         receivedCredentials.push(value);
         return Promise.resolve({
           authMethod: "digest",
-          calendars: [{ ctag: "ctag-1", displayName: "Personal", url: "https://caldav.example.com/personal/" }],
+          calendars: [{ ctag: "ctag-1", displayName: "Personal", url: "https://caldav.example.com/personal/", writable: true }],
         });
       },
     }));
@@ -40,7 +40,7 @@ describe("handleCalDAVDiscoverRoute", () => {
     expect(receivedCredentials).toEqual([credentials]);
     expect(await readJson(response)).toEqual({
       authMethod: "digest",
-      calendars: [{ ctag: "ctag-1", displayName: "Personal", url: "https://caldav.example.com/personal/" }],
+      calendars: [{ ctag: "ctag-1", displayName: "Personal", url: "https://caldav.example.com/personal/", writable: true }],
     });
   });
 

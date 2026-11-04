@@ -20,7 +20,9 @@ import {
 } from "@keeper.sh/database/schema";
 import { oauthAccessToken, session } from "@keeper.sh/database/auth-schema";
 import { and, eq, inArray, max, sql } from "drizzle-orm";
-import { database, premiumService } from "@/context";
+import { createBroadcastService } from "@keeper.sh/broadcast";
+import { createMappingSyncStatePublisher } from "@keeper.sh/calendar";
+import { database, premiumService, refreshLockRedis } from "@/context";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
 import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
 import type { IngestLane as IngestResources } from "@/utils/ingest-lanes";
@@ -139,6 +141,26 @@ const recordFirstIngestSyncRequests = async (userIds: string[]): Promise<void> =
   }
 };
 
+const broadcastService = createBroadcastService({ redis: refreshLockRedis });
+
+const publishMappingSyncState = createMappingSyncStatePublisher({
+  broadcast: (userId, eventName, payload) => {
+    broadcastService.emit(userId, eventName, payload);
+  },
+  database,
+  redis: refreshLockRedis,
+});
+
+const publishMappingSyncStates = async (userIds: string[]): Promise<void> => {
+  const settlements = await Promise.allSettled(userIds.map((userId) => publishMappingSyncState(userId)));
+  const failures = settlements
+    .filter((settlement): settlement is PromiseRejectedResult => settlement.status === "rejected")
+    .map(({ reason }) => reason);
+  if (failures.length > 0) {
+    throw new AggregateError(failures, "Mapping sync states could not be published");
+  }
+};
+
 const createScheduleContextDependencies = (dials: IngestDials): ScheduleContextDependencies => ({
   dormantAfterMs: dials.dormantAfterMs,
   now: () => new Date(),
@@ -168,6 +190,7 @@ const createRoundDependencies = (
     observe: (fields) => {
       widelog.setFields(fields);
     },
+    publishMappingSyncStates,
     random: Math.random,
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: true, slug });

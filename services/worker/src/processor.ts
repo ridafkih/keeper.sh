@@ -3,13 +3,14 @@ import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import {
+  createMappingSyncStatePublisher,
   createSyncAggregateRuntime,
   isRedisUnavailableError,
   mergeAbortSignals,
   RecurrenceMaterializationLimitError,
   REDIS_UNAVAILABLE_SLUG,
 } from "@keeper.sh/calendar";
-import { syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
+import { recordFirstSyncedMappings, syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import {
@@ -190,6 +191,28 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
 
 const noteEventsCopied = createEventsCopiedMilestone(database);
 
+const publishMappingSyncState = createMappingSyncStatePublisher({
+  broadcast: (broadcastUserId, eventName, payload) => {
+    broadcastService.emit(broadcastUserId, eventName, payload);
+  },
+  database,
+  redis: refreshLockRedis,
+});
+
+const publishMappingSyncStateAfterJob = (userId: string): Promise<void> =>
+  context(async () => {
+    try {
+      await publishMappingSyncState(userId);
+    } catch (error) {
+      widelog.set("operation.name", "mapping-sync-state-publish");
+      widelog.set("operation.type", "internal");
+      widelog.set("user.id", userId);
+      widelog.set("outcome", "error");
+      widelog.errorFields(error, { slug: classifySyncError(error) });
+      widelog.flush();
+    }
+  });
+
 const resolveSyncOutcome = (failed: number, total: number): "success" | "partial" | "error" => {
   if (total === 0) {
     return "success";
@@ -271,6 +294,8 @@ const processJob = (
           microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
         },
         plan: job.data.plan,
+        recordFirstSyncs: (destinationCalendarId, sourceCalendarIds) =>
+          recordFirstSyncedMappings(database, destinationCalendarId, sourceCalendarIds),
       }, {
         onProgress: (update) => {
           if (signal?.aborted) {
@@ -324,6 +349,7 @@ const processJob = (
           widelog.set("sync.events_removed", completion.removed);
           widelog.set("sync.events_failed", completion.addFailed + completion.removeFailed);
           widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
+          widelog.setFields(completion.firstSync);
           widelog.set("duration_ms", completion.durationMs);
 
           if (completion.added > 0) {
@@ -412,6 +438,7 @@ const processJob = (
         recordReflectMs();
         widelog.flush();
       }
+      await publishMappingSyncStateAfterJob(userId);
     }
   });
 

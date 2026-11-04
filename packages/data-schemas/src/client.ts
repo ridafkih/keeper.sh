@@ -14,6 +14,12 @@ interface SyncAggregate {
   lastSyncedAt?: string | null;
 }
 
+interface MappingSyncState {
+  failingCount: number;
+  pendingCount: number;
+  seq: number;
+}
+
 const isSocketMessage = (value: unknown): value is SocketMessage => {
   if (typeof value !== "object" || value === null) {
     return false;
@@ -42,4 +48,26 @@ const isSyncAggregate = (value: unknown): value is SyncAggregate => {
   );
 };
 
-export { type SocketMessage, type SyncAggregate, isSocketMessage, isSyncAggregate };
+const isMappingSyncState = (value: unknown): value is MappingSyncState => {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  return (
+    "failingCount" in value &&
+    typeof value.failingCount === "number" &&
+    "pendingCount" in value &&
+    typeof value.pendingCount === "number" &&
+    "seq" in value &&
+    typeof value.seq === "number"
+  );
+};
+
+export {
+  type MappingSyncState,
+  type SocketMessage,
+  type SyncAggregate,
+  isMappingSyncState,
+  isSocketMessage,
+  isSyncAggregate,
+};

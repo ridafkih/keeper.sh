@@ -207,6 +207,22 @@ export {
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
 export {
+  MAPPING_SYNC_STATE_EVENT,
+  createMappingSyncStatePublisher,
+  createMappingSyncStateReader,
+  readMappingSyncSummary,
+  type MappingSyncState,
+  type MappingSyncStateConfig,
+  type MappingSyncSummary,
+} from "./core/sync/mapping-sync-state";
+export {
+  isCalDAVPrivilegeSetWritable,
+  isGoogleAccessRoleWritable,
+  isOutlookCalendarWritable,
+  resolveCalendarCapabilities,
+  type CalendarCapability,
+} from "./core/source/calendar-capabilities";
+export {
   planCalendarRediscovery,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
