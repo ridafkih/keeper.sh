@@ -151,7 +151,14 @@ describe("declared VTIMEZONEs whose observances expand within bound one by one",
       ...zoneIds.map((zoneId, index) => buildZonedEvent(`near-limit-event-${index}`, zoneId)),
     ]));
 
-    expect(outcome["near-limit-event-0"]).not.toBe("unsupported");
+    const zonesWithinBudget = zoneIds.slice(0, -1).map((_zoneId, index) => `near-limit-event-${index}`);
+
+    expect(Object.fromEntries(zonesWithinBudget.map((uid) => [uid, outcome[uid]]))).toEqual(
+      Object.fromEntries(zonesWithinBudget.map((uid) => [
+        uid,
+        { end: "2026-07-15T17:00:00.000Z", start: "2026-07-15T16:00:00.000Z" },
+      ])),
+    );
     expect(outcome[`near-limit-event-${zoneIds.length - 1}`]).toBe("unsupported");
   }, EXPANDING_TEST_TIMEOUT_MS);
 
