@@ -62,6 +62,7 @@ const CALENDAR_ID = "destination-1";
 const START = new Date("2026-03-08T00:30:00.000Z");
 
 interface CalendarRow {
+  capabilities: string[];
   failureCount: number;
   lastFailureAt: Date | null;
   nextAttemptAt: Date | null;
@@ -69,6 +70,7 @@ interface CalendarRow {
 
 const createHarness = (initial: Partial<CalendarRow> = {}) => {
   const row: CalendarRow = {
+    capabilities: ["pull", "push"],
     failureCount: 0,
     lastFailureAt: null,
     nextAttemptAt: null,
@@ -87,13 +89,20 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
     userId: USER_ID,
   });
 
+  const pushableRows = () => {
+    if (!row.capabilities.includes("push")) {
+      return [];
+    }
+    return [attemptRow()];
+  };
+
   const database = {
     select: () => ({
       from: () => ({
         innerJoin: () => ({
-          where: () => ({ limit: () => Promise.resolve([attemptRow()]) }),
+          where: () => ({ limit: () => Promise.resolve(pushableRows()) }),
         }),
-        where: () => Promise.resolve([{ calendarId: CALENDAR_ID }]),
+        where: () => Promise.resolve(pushableRows().map(({ calendarId }) => ({ calendarId }))),
       }),
     }),
     update: () => ({
@@ -108,6 +117,28 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
   };
 
   return { database, row, writes };
+};
+
+const createCallbacks = () => {
+  const completions: { pushRemoved: boolean }[] = [];
+  const failures: { backoffApplied: boolean; pushRemoved: boolean }[] = [];
+  const skips: string[] = [];
+  return {
+    callbacks: {
+      onCalendarComplete: (completion: { pushRemoved: boolean }) => {
+        completions.push(completion);
+      },
+      onCalendarError: (failure: { backoffApplied: boolean; pushRemoved: boolean }) => {
+        failures.push(failure);
+      },
+      onCalendarSkipped: (skip: { reason: string }) => {
+        skips.push(skip.reason);
+      },
+    },
+    completions,
+    failures,
+    skips,
+  };
 };
 
 const config = (database: unknown) => ({
@@ -151,10 +182,24 @@ const WRITER_ACCESS_BODY = JSON.stringify({
   },
 });
 
+const RATE_LIMIT_BODY = JSON.stringify({
+  error: { code: 403, errors: [{ reason: "rateLimitExceeded" }], message: "Rate Limit Exceeded" },
+});
+
+const refusedRun = (writeAccessDenied: boolean) => ({
+  added: 0,
+  addFailed: 3,
+  conflictsResolved: 0,
+  errors: Array.from({ length: 3 }, () => "You need to have writer access to this calendar."),
+  removed: 0,
+  removeFailed: 0,
+  writeAccessDenied,
+});
+
 const scheduledDelayMs = (row: CalendarRow): number =>
   (row.nextAttemptAt?.getTime() ?? START.getTime()) - START.getTime();
 
-describe("a destination the provider keeps refusing backs off", () => {
+describe("a destination whose pushes time out backs off", () => {
   it("advances backoff when a push times out", async () => {
     const { database, row } = createHarness();
     syncCalendarMock.mockImplementation(() => Promise.reject(new RequestTimeoutError(30_000)));
@@ -163,6 +208,7 @@ describe("a destination the provider keeps refusing backs off", () => {
 
     expect(row.failureCount).toBe(1);
     expect(row.nextAttemptAt?.getTime()).toBeGreaterThan(START.getTime());
+    expect(row.capabilities).toEqual(["pull", "push"]);
   });
 
   it("pushes the next attempt further out on each consecutive timeout", async () => {
@@ -180,33 +226,74 @@ describe("a destination the provider keeps refusing backs off", () => {
     expect(delays[1]).toBeGreaterThan(delays[0] ?? 0);
     expect(delays[2]).toBeGreaterThan(delays[1] ?? 0);
   });
+});
 
-  it("advances backoff when the calendar refuses writes for missing writer access", async () => {
-    const { database, row } = createHarness();
+describe("a calendar that refuses writes for missing writer access stops being a destination", () => {
+  it("takes push away without backing off when Google throws the refusal", async () => {
+    const { database, row, writes } = createHarness();
+    const { callbacks, failures } = createCallbacks();
     syncCalendarMock.mockImplementation(
       () => Promise.reject(new GoogleCalendarApiError(403, WRITER_ACCESS_BODY)),
     );
 
-    await syncDestinationsForUser(USER_ID, config(database));
+    await syncDestinationsForUser(USER_ID, config(database), callbacks as never);
 
-    expect(row.failureCount).toBe(1);
-    expect(row.nextAttemptAt?.getTime()).toBeGreaterThan(START.getTime());
+    expect(row.capabilities).toEqual(["pull"]);
+    expect(row.failureCount).toBe(0);
+    expect(row.nextAttemptAt).toBeNull();
+    expect(writes).toEqual([{ capabilities: ["pull"] }]);
+    expect(failures).toMatchObject([{ backoffApplied: false, pushRemoved: true }]);
   });
 
-  it("advances backoff when every write in the run is refused for missing writer access", async () => {
+  it("takes push away without backing off when every write in the run is refused", async () => {
+    const { database, row, writes } = createHarness();
+    const { callbacks, completions } = createCallbacks();
+    syncCalendarMock.mockImplementation(() => Promise.resolve(refusedRun(true)));
+
+    await syncDestinationsForUser(USER_ID, config(database), callbacks as never);
+
+    expect(row.capabilities).toEqual(["pull"]);
+    expect(row.failureCount).toBe(0);
+    expect(writes).toEqual([{ capabilities: ["pull"] }]);
+    expect(completions).toMatchObject([{ pushRemoved: true }]);
+  });
+
+  it("no longer picks the calendar for push once push is taken away", async () => {
+    const { database } = createHarness();
+    const { callbacks, skips } = createCallbacks();
+    syncCalendarMock.mockImplementation(
+      () => Promise.reject(new GoogleCalendarApiError(403, WRITER_ACCESS_BODY)),
+    );
+
+    await syncDestinationsForUser(USER_ID, config(database), callbacks as never);
+    await syncDestinationsForUser(USER_ID, config(database), callbacks as never);
+
+    expect(syncCalendarMock).toHaveBeenCalledTimes(1);
+    expect(skips).toEqual(["destination_not_pushable"]);
+  });
+
+  it("still backs off a run whose every write failed for another reason", async () => {
     const { database, row } = createHarness();
-    syncCalendarMock.mockImplementation(() => Promise.resolve({
-      added: 0,
-      addFailed: 3,
-      conflictsResolved: 0,
-      errors: Array.from({ length: 3 }, () => "You need to have writer access to this calendar."),
-      removed: 0,
-      removeFailed: 0,
-    }));
+    const { callbacks, completions } = createCallbacks();
+    syncCalendarMock.mockImplementation(() => Promise.resolve(refusedRun(false)));
+
+    await syncDestinationsForUser(USER_ID, config(database), callbacks as never);
+
+    expect(row.capabilities).toEqual(["pull", "push"]);
+    expect(row.failureCount).toBe(1);
+    expect(completions).toMatchObject([{ pushRemoved: false }]);
+  });
+
+  it("leaves push and backoff alone when Google rate limits with a 403", async () => {
+    const { database, row, writes } = createHarness();
+    syncCalendarMock.mockImplementation(
+      () => Promise.reject(new GoogleCalendarApiError(403, RATE_LIMIT_BODY)),
+    );
 
     await syncDestinationsForUser(USER_ID, config(database));
 
-    expect(row.failureCount).toBe(1);
-    expect(row.nextAttemptAt?.getTime()).toBeGreaterThan(START.getTime());
+    expect(row.capabilities).toEqual(["pull", "push"]);
+    expect(row.failureCount).toBe(0);
+    expect(writes).toEqual([]);
   });
 });
