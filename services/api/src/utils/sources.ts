@@ -4,6 +4,7 @@ import {
   createIcsSourceFetcher,
   interpretFullDayTimedEventsAsAllDay,
   persistCalendarSnapshot,
+  resolveFeedName,
 } from "@keeper.sh/calendar/ics";
 import {
   buildEventStateInsertRow,
@@ -168,8 +169,9 @@ const getUserSources = async (userId: string): Promise<Source[]> => {
   return sources;
 };
 
-const validateSourceUrl = async (url: string): Promise<void> => {
-  await pullRemoteCalendar("json", url, safeFetchOptions);
+const readSourceFeedName = async (url: string): Promise<string> => {
+  const { ical } = await pullRemoteCalendar("ical", url, safeFetchOptions);
+  return resolveFeedName(ical, url);
 };
 
 const countExistingAccounts = async (userId: string): Promise<number> => {
@@ -180,14 +182,16 @@ const countExistingAccounts = async (userId: string): Promise<number> => {
   return result?.value ?? 0;
 };
 
-const createSource = async (userId: string, name: string, url: string): Promise<Source> => {
-  const input = { userId, name, url };
-
-  await runSourceCreationPreflight(input, {
+const createSource = async (
+  userId: string,
+  name: string | undefined,
+  url: string,
+): Promise<Source> => {
+  const input = await runSourceCreationPreflight({ userId, name, url }, {
     canAddAccount: (userIdToCheck, existingAccountCount) =>
       premiumService.canAddAccount(userIdToCheck, existingAccountCount),
     countExistingAccounts,
-    validateSourceUrl,
+    readSourceFeedName,
   });
 
   return database.transaction((tx) =>
@@ -220,7 +224,13 @@ const createSource = async (userId: string, name: string, url: string): Promise<
             .returning({ id: calendarAccountsTable.id });
           return account?.id;
         },
-        createSourceCalendar: async ({ accountId, name: sourceName, url: sourceUrl, userId: sourceUserId }) => {
+        createSourceCalendar: async ({
+          accountId,
+          name: sourceName,
+          originalName,
+          url: sourceUrl,
+          userId: sourceUserId,
+        }) => {
           const [source] = await insertSourceCalendars(
             createSourceCalendarInsertDependencies(tx),
             sourceUserId,
@@ -228,6 +238,7 @@ const createSource = async (userId: string, name: string, url: string): Promise<
               accountId,
               calendarType: ICAL_CALENDAR_TYPE,
               name: sourceName,
+              originalName,
               url: sourceUrl,
               userId: sourceUserId,
             }],

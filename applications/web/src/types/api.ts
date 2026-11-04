@@ -34,6 +34,7 @@ export interface CalendarSource {
   accountIdentifier: string | null;
   needsReauthentication: boolean;
   includeInIcalFeed: boolean;
+  excludeEventName: boolean;
   unavailableSince: string | null;
   disabled: boolean;
   providerMissingSince: string | null;

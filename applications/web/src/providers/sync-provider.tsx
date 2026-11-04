@@ -33,6 +33,7 @@ const INITIAL_SYNC_STATE: CompositeSyncState = {
   syncEventsProcessed: 0,
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
+  syncSecondsRemaining: null,
   state: "idle",
   hasReceivedAggregate: false,
   mappings: null,
@@ -176,6 +177,7 @@ const handleMessage = (
     syncEventsProcessed: action.data.syncEventsProcessed,
     syncEventsRemaining: action.data.syncEventsRemaining,
     syncEventsTotal: action.data.syncEventsTotal,
+    syncSecondsRemaining: action.data.syncSecondsRemaining ?? null,
     state: action.data.syncing ? "syncing" : "idle",
   });
 };

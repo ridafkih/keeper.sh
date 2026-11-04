@@ -1,4 +1,4 @@
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { useSWRConfig } from "swr";
@@ -33,8 +33,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Fastmail Email Address",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
-    credentialsFailure:
-      "That email or app password didn't work. Use an app password, not your Fastmail password.",
+    credentialsFailure: "Fastmail needs an app password here, not your Fastmail password.",
   },
   icloud: {
     serverUrl: "https://caldav.icloud.com/",
@@ -42,8 +41,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Apple ID",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
-    credentialsFailure:
-      "That Apple ID or app-specific password didn't work. Use an app-specific password, not your Apple ID password.",
+    credentialsFailure: "Apple needs an app-specific password here, not your Apple password.",
   },
   caldav: {
     serverUrl: "",
@@ -62,6 +60,8 @@ interface CalendarOption {
 
 interface CalDAVConnectFormProps {
   provider: CalDAVProvider;
+  credentialHelp?: ReactNode;
+  onCredentialsRejected?: () => void;
 }
 
 function readFormFieldValue(formData: FormData, fieldName: string): string {
@@ -99,7 +99,7 @@ function parseAccountId(value: unknown): string | undefined {
   return undefined;
 }
 
-export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
+export function CalDAVConnectForm({ provider, credentialHelp, onCredentialsRejected }: CalDAVConnectFormProps) {
   const config = PROVIDER_CONFIGS[provider];
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
@@ -108,10 +108,12 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setCredentialsRejected(false);
 
     const formData = new FormData(event.currentTarget);
     const serverUrl = readFormFieldValue(formData, "serverUrl");
@@ -134,6 +136,8 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       } catch (err) {
         if (err instanceof HttpError && err.status === HTTP_STATUS.UNAUTHORIZED) {
           setError(PROVIDER_CONFIGS[provider].credentialsFailure);
+          setCredentialsRejected(true);
+          onCredentialsRejected?.();
           return;
         }
         setError("Couldn't find calendars on this server. Check the details and try again.");
@@ -221,9 +225,12 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           type="password"
           placeholder={config.passwordPlaceholder}
           required
+          tone={credentialsRejected ? "error" : "neutral"}
+          aria-invalid={credentialsRejected}
         />
       </div>
       {error && <Text size="sm" tone="danger">{error}</Text>}
+      {credentialsRejected && credentialHelp}
       <Divider />
       <div className="flex items-stretch gap-2">
         <BackButton variant="border" size="standard" className="self-stretch justify-center px-3.5" />

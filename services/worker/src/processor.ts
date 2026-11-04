@@ -15,12 +15,14 @@ import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import {
   getDatabaseErrorDetails,
+  recordUserSyncRequest,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
 import { createEventsCopiedMilestone } from "./utils/user-milestones";
+import { shouldContinueAfterDeadline } from "./utils/sync-continuation";
 import env from "./env";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
 
@@ -274,6 +276,26 @@ const processJob = (
     const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
     let needsFlush = true;
     const pendingDestinationSyncs: Promise<void>[] = [];
+    const checkpointedOperationsByCalendar = new Map<string, number>();
+
+    const requestContinuationIfCutShort = async (): Promise<boolean> => {
+      const checkpointedOperations = [...checkpointedOperationsByCalendar.values()]
+        .reduce((total, operations) => total + operations, 0);
+      if (!shouldContinueAfterDeadline({
+        checkpointedOperations,
+        deadlineReached: deadlineController.signal.aborted,
+      })) {
+        return false;
+      }
+      widelog.set("push_sync.continuation_requested", true);
+      widelog.set("push_sync.checkpointed_operations", checkpointedOperations);
+      try {
+        await recordUserSyncRequest(database, userId);
+      } catch (error) {
+        widelog.errorFields(error, { prefix: "push_sync.continuation_error", slug: "sync-continuation-request-failed" });
+      }
+      return true;
+    };
 
     try {
       const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
@@ -300,6 +322,9 @@ const processJob = (
         onProgress: (update) => {
           if (signal?.aborted) {
             return;
+          }
+          if (update.stage === "processing" && update.progress) {
+            checkpointedOperationsByCalendar.set(update.calendarId, update.progress.current);
           }
           syncAggregateRuntime.onSyncProgress(update);
           job.updateProgress({
@@ -414,11 +439,13 @@ const processJob = (
       return {
         added: result.added,
         addFailed: result.addFailed,
+        continuationRequested: await requestContinuationIfCutShort(),
         removed: result.removed,
         removeFailed: result.removeFailed,
         errors: result.errors,
       };
     } catch (error) {
+      await requestContinuationIfCutShort();
       widelog.set("outcome", "error");
       applyDatabaseErrorFields(error);
       widelog.errorFields(error, { slug: classifySyncError(error) });

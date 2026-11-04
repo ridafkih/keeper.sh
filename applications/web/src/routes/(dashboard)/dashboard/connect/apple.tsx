@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CalDAVConnectPage } from "@/features/auth/components/caldav-connect-page";
+import { AppPasswordHelp } from "@/features/auth/components/app-password-help";
 
-export const Route = createFileRoute("/(oauth)/dashboard/connect/apple")({
+export const Route = createFileRoute("/(dashboard)/dashboard/connect/apple")({
   component: ConnectApplePage,
 });
 
@@ -10,7 +11,15 @@ function ConnectApplePage() {
     <CalDAVConnectPage
       provider="icloud"
       icon={<img src="/integrations/icon-icloud.svg" alt="iCloud" width={40} height={40} className="size-full rounded-lg p-3" />}
-      heading="Connect Apple Calendar"
+      heading="Connect iCloud"
+      credentialHelp={
+        <AppPasswordHelp
+          provider="icloud"
+          settingsUrl="https://account.apple.com"
+          settingsLabel="Open account.apple.com"
+          sectionLabel="Choose App-Specific Passwords"
+        />
+      }
       description="iCloud uses an app-specific password to authenticate Keeper.sh to interact with your calendar."
       steps={[
         <>

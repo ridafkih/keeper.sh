@@ -30,7 +30,11 @@ interface PushSyncJobResult {
   removed: number;
   removeFailed: number;
   errors: string[];
+  continuationRequested?: boolean;
 }
+
+const resolvePushSyncJobId = (userId: string, calendarId: string): string =>
+  `sync-${userId}-${calendarId}`;
 
 const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPayload, PushSyncJobResult> =>
   new Queue(PUSH_SYNC_QUEUE_NAME, {
@@ -40,5 +44,5 @@ const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPa
     },
   });
 
-export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue };
+export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue, resolvePushSyncJobId };
 export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };

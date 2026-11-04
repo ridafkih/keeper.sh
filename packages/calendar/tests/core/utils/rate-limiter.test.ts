@@ -120,20 +120,27 @@ describe("RateLimiter", () => {
     });
   });
 
-  describe("rate limiting", () => {
-    it("respects requestsPerMinute by delaying excess requests", async () => {
-      const limiter = new RateLimiter({ concurrency: 10, requestsPerMinute: 2 });
-      const timestamps: number[] = [];
+  describe("throughput", () => {
+    it("starts each queued request as soon as a slot frees, with no per-minute cap", async () => {
+      vi.useFakeTimers();
+      try {
+        const limiter = new RateLimiter({ concurrency: 5 });
+        let started = 0;
+        const tasks = Array.from({ length: 1200 }, () =>
+          limiter.execute(() => {
+            started++;
+            return Promise.resolve();
+          }));
 
-      const createTask = () =>
-        limiter.execute(() => {
-          timestamps.push(Date.now());
-          return Promise.resolve();
-        });
+        for (let round = 0; round < 1200; round++) {
+          await flushAsync();
+        }
 
-      await Promise.all([createTask(), createTask()]);
-
-      expect(timestamps).toHaveLength(2);
+        expect(started).toBe(1200);
+        await Promise.all(tasks);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

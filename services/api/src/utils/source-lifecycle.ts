@@ -10,14 +10,18 @@ interface SourceReference {
 
 interface CreateSourceInput {
   userId: string;
-  name: string;
+  name?: string;
   url: string;
+}
+
+interface ValidatedSourceInput extends CreateSourceInput {
+  feedName: string;
 }
 
 interface SourceCreationPreflightDependencies {
   countExistingAccounts: (userId: string) => Promise<number>;
   canAddAccount: (userId: string, existingAccountCount: number) => Promise<boolean>;
-  validateSourceUrl: (url: string) => Promise<void>;
+  readSourceFeedName: (url: string) => Promise<string>;
 }
 
 interface CreateSourceDependencies<TSource extends SourceReference> {
@@ -31,6 +35,7 @@ interface CreateSourceDependencies<TSource extends SourceReference> {
   createSourceCalendar: (payload: {
     accountId: string;
     name: string;
+    originalName: string;
     url: string;
     userId: string;
   }) => Promise<TSource | undefined>;
@@ -131,18 +136,22 @@ const assertAccountCanBeAdded = async (
 const runSourceCreationPreflight = async (
   input: CreateSourceInput,
   dependencies: SourceCreationPreflightDependencies,
-): Promise<void> => {
+): Promise<ValidatedSourceInput> => {
   await assertAccountCanBeAdded(input.userId, dependencies);
 
   try {
-    await dependencies.validateSourceUrl(input.url);
+    const feedName = await dependencies.readSourceFeedName(input.url);
+    return { ...input, feedName };
   } catch (error) {
     throw new InvalidSourceUrlError(error);
   }
 };
 
+const resolveSourceName = ({ feedName, name }: ValidatedSourceInput): string =>
+  name?.trim() || feedName;
+
 const runCreateSource = async <TSource extends SourceReference>(
-  input: CreateSourceInput,
+  input: ValidatedSourceInput,
   dependencies: CreateSourceDependencies<TSource>,
 ): Promise<TSource> => {
   await dependencies.acquireAccountLock(input.userId);
@@ -158,7 +167,8 @@ const runCreateSource = async <TSource extends SourceReference>(
 
   const source = await dependencies.createSourceCalendar({
     accountId,
-    name: input.name,
+    name: resolveSourceName(input),
+    originalName: input.feedName,
     url: input.url,
     userId: input.userId,
   });
@@ -184,6 +194,7 @@ export type {
   InvalidSourceUrlReason,
   SourceReference,
   CreateSourceInput,
+  ValidatedSourceInput,
   SourceCreationPreflightDependencies,
   CreateSourceDependencies,
 };

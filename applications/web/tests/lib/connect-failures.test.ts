@@ -4,6 +4,7 @@ import {
   describeCalendarImportFailure,
   describeIcsFeedFailure,
   describeOAuthConnectFailure,
+  isAdminApprovalFailure,
 } from "../../src/lib/connect-failures";
 
 const icsRejection = (body: unknown, status = 400) => new HttpError(status, "/api/ics", body);
@@ -28,29 +29,44 @@ describe("describeOAuthConnectFailure", () => {
   });
 });
 
-describe("describeIcsFeedFailure", () => {
-  it("asks for a login when the feed needs one", () => {
-    expect(describeIcsFeedFailure(icsRejection({ error: "x", reason: "auth-required" }))).toBe(
-      "This feed needs a login. Turn on Requires authentication and add the username and password.",
-    );
+describe("isAdminApprovalFailure", () => {
+  it("recognises a work account waiting on its admin", () => {
+    expect(isAdminApprovalFailure("admin-approval-required")).toBe(true);
   });
 
-  it("says a web page is not a calendar feed", () => {
-    expect(describeIcsFeedFailure(icsRejection({ error: "x", reason: "not-calendar" }))).toBe(
-      "This link opens a page, not a calendar feed. Copy the feed link instead, often ending in .ics.",
-    );
+  it("leaves every other failure to the plain message", () => {
+    expect(isAdminApprovalFailure("access-declined")).toBe(false);
+    expect(isAdminApprovalFailure(undefined)).toBe(false);
+  });
+});
+
+describe("describeIcsFeedFailure", () => {
+  it("asks for a login when the feed needs one", () => {
+    expect(describeIcsFeedFailure(icsRejection({ error: "x", reason: "auth-required" }))).toEqual({
+      hint: "Turn on Requires authentication and add the username and password.",
+      message: "This feed needs a login.",
+    });
+  });
+
+  it("says a web page is not a calendar and what link to look for", () => {
+    expect(describeIcsFeedFailure(icsRejection({ error: "x", reason: "not-calendar" }))).toEqual({
+      hint: "Look for a link that ends in .ics or starts with webcal://",
+      message: "This link opens a web page, not a calendar.",
+    });
   });
 
   it("keeps the plan message when the account limit is reached", () => {
-    expect(describeIcsFeedFailure(icsRejection({ error: "Account limit reached." }, 402))).toBe(
-      "Account limit reached.",
-    );
+    expect(describeIcsFeedFailure(icsRejection({ error: "Account limit reached." }, 402))).toEqual({
+      hint: null,
+      message: "Account limit reached.",
+    });
   });
 
   it("falls back to checking the link when the cause is unknown", () => {
-    expect(describeIcsFeedFailure(new Error("offline"))).toBe(
-      "This feed couldn't be reached. Check the link and try again.",
-    );
+    expect(describeIcsFeedFailure(new Error("offline"))).toEqual({
+      hint: "Check the link and try again.",
+      message: "This feed couldn't be reached.",
+    });
   });
 });
 

@@ -9,6 +9,11 @@ interface DestinationSyncResult {
 
 type SyncStage = "fetching" | "comparing" | "processing" | "error";
 
+interface SyncPace {
+  lane: string;
+  operationsPerMinute: number;
+}
+
 interface SyncProgressUpdate {
   userId: string;
   calendarId: string;
@@ -20,6 +25,7 @@ interface SyncProgressUpdate {
   lastOperation?: { type: "add" | "remove"; eventTime: string };
   inSync: false;
   error?: string;
+  pace?: SyncPace;
 }
 
-export type { DestinationSyncResult, SyncStage, SyncProgressUpdate };
+export type { DestinationSyncResult, SyncPace, SyncStage, SyncProgressUpdate };

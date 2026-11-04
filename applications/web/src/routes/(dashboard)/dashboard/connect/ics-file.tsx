@@ -6,7 +6,7 @@ import { ProviderIconPair } from "@/features/auth/components/oauth-preamble";
 import { ButtonText, LinkButton } from "@/components/ui/primitives/button";
 
 export const Route = createFileRoute(
-  "/(oauth)/dashboard/connect/ics-file",
+  "/(dashboard)/dashboard/connect/ics-file",
 )({
   component: ConnectICSFilePage,
 });

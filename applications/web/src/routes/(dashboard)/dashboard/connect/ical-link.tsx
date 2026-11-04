@@ -6,7 +6,7 @@ import { ProviderIconPair } from "@/features/auth/components/oauth-preamble";
 import { ICSFeedForm } from "@/features/auth/components/ics-connect-form";
 
 export const Route = createFileRoute(
-  "/(oauth)/dashboard/connect/ical-link",
+  "/(dashboard)/dashboard/connect/ical-link",
 )({
   component: ConnectICalLinkPage,
 });
@@ -17,9 +17,9 @@ function ConnectICalLinkPage() {
       <ProviderIconPair>
         <Link size={28} className="text-foreground-muted" />
       </ProviderIconPair>
-      <Heading2 as="h1">Subscribe to ICS Feed</Heading2>
+      <Heading2 as="h1">Subscribe with a calendar link</Heading2>
       <Text size="sm" tone="muted" align="left">
-        Subscribe to a read-only calendar feed from any ICS-compatible source, supported by most calendar providers.
+        Paste the link your calendar app gives you for sharing or subscribing.
       </Text>
       <ICSFeedForm />
     </>

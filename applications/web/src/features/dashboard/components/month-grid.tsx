@@ -61,7 +61,7 @@ export function MonthGrid({ anchor, days, eventsByDay, toolbar }: MonthGridProps
               as="span"
               size="xs"
               tone="muted"
-              className="px-2 py-2 font-medium uppercase tracking-wide"
+              className="px-2 py-2 font-medium tracking-wide"
             >
               {label}
             </Text>

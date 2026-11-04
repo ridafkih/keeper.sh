@@ -1,10 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { handleCalDAVDiscoverRoute } from "../../../../../src/routes/api/sources/caldav/discover-route";
 import type {
   CalDAVDiscoverCredentials,
   CalDAVDiscoverRouteDependencies,
 } from "../../../../../src/routes/api/sources/caldav/discover-route";
+
+const loggedFields = vi.hoisted(() => new Map<string, unknown>());
+
+vi.mock("@/utils/logging", () => ({
+  widelog: {
+    errorFields: () => null,
+    set: (key: string, value: unknown) => loggedFields.set(key, value),
+  },
+}));
 
 const readJson = (response: Response): Promise<unknown> => response.json();
 
@@ -51,6 +60,16 @@ describe("handleCalDAVDiscoverRoute", () => {
 
     expect(response.status).toBe(401);
     expect(await readJson(response)).toEqual({ error: "Invalid credentials" });
+  });
+
+  it("records that the server rejected the credentials, and which server", async () => {
+    loggedFields.clear();
+    await handleCalDAVDiscoverRoute({ body: credentials }, createDependencies({
+      discoverCalendars: () => Promise.reject(new CalDAVAuthenticationError(new Error("Invalid credentials"))),
+    }));
+
+    expect(loggedFields.get("caldav.failure")).toBe("invalid_credentials");
+    expect(loggedFields.get("caldav.server_host")).toBe("caldav.example.com");
   });
 
   it("maps other discovery failures to 400", async () => {
