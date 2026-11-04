@@ -431,6 +431,11 @@ describe("content security policy for the endpoints Google tags actually call", 
     expect(await cspAllows("connect-src", "https://www.google.co.uk/pagead/1p-user-list/1/")).toBe(true);
   });
 
+  it("lets Google Analytics reach any subdomain of a regional Google domain", async () => {
+    expect(await cspAllows("img-src", "https://adservice.google.ca/ddm/fls/z/")).toBe(true);
+    expect(await cspAllows("connect-src", "https://adservice.google.co.uk/ddm/fls/z/")).toBe(true);
+  });
+
   it("lets the Google tag load its service worker frame", async () => {
     expect(await cspAllows("frame-src", "https://www.googletagmanager.com/static/service_worker/")).toBe(true);
   });

@@ -7,6 +7,7 @@ import { createRuntime } from "./runtime";
 import type { SocketProxyData } from "./types";
 import { checkMigrationStatus } from "./migration-check";
 import { context, destroy, widelog } from "./logging";
+import { resolveTrafficSource } from "./traffic-source";
 
 checkMigrationStatus();
 
@@ -46,6 +47,13 @@ await entry({
           if (userAgent) {
             widelog.set("http.user_agent", userAgent);
           }
+
+          const trafficSource = resolveTrafficSource(request, url);
+          if (trafficSource.referrerOrigin) {
+            widelog.set("http.referrer_origin", trafficSource.referrerOrigin);
+          }
+          widelog.set("traffic.has_utm", trafficSource.hasUtmParameters);
+          widelog.set("traffic.has_gclid", trafficSource.hasGoogleClickId);
 
           try {
             return await widelog.time.measure("duration_ms", async () => {
