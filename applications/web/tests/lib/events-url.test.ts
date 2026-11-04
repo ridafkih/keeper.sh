@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEventsUrl } from "../../src/lib/events-url";
+import { buildEventsUrl, resolveViewerTimeZone } from "../../src/lib/events-url";
 import { runInTimeZone } from "../helpers/time-zone";
 
 describe("buildEventsUrl", () => {
@@ -16,5 +16,13 @@ describe("buildEventsUrl", () => {
       to: "2026-11-06T05:59:59.999Z",
       timezone: "America/Edmonton",
     });
+  });
+});
+
+describe.each(["America/Edmonton", "Asia/Tokyo", "Pacific/Auckland", "UTC"])("resolveViewerTimeZone in %s", (timeZone) => {
+  runInTimeZone(timeZone);
+
+  it("reports the browser zone as the viewer zone", () => {
+    expect(resolveViewerTimeZone()).toBe(timeZone);
   });
 });

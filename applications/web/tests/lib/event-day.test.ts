@@ -4,7 +4,6 @@ import {
   resolveEventLocalStart,
   resolveEventStartDay,
 } from "../../src/lib/event-day";
-import { resolveViewerTimeZone } from "../../src/lib/events-url";
 import { runInTimeZone } from "../helpers/time-zone";
 
 const allDayNovemberFifth = () => ({
@@ -24,10 +23,6 @@ const localDate = (date: Date): string =>
 
 describe.each(["America/Edmonton", "Asia/Tokyo", "Pacific/Auckland", "UTC"])("in %s", (timeZone) => {
   runInTimeZone(timeZone);
-
-  it("reports the browser zone as the viewer zone", () => {
-    expect(resolveViewerTimeZone()).toBe(timeZone);
-  });
 
   it("puts an all-day event on its calendar date", () => {
     const day = resolveEventStartDay(allDayNovemberFifth());
