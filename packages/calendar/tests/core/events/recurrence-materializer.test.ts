@@ -785,3 +785,151 @@ describe("materializeRecurrenceEvents", () => {
     ]);
   });
 });
+
+describe("sub-daily and gap-crossing series keep one occurrence per instant", () => {
+  const TRANSITION_WINDOW = {
+    end: new Date("2027-01-01T00:00:00.000Z"),
+    start: new Date("2026-01-01T00:00:00.000Z"),
+  };
+
+  const expectOneOccurrencePerInstant = (events: SyncableEvent[]): void => {
+    expect(new Set(occurrenceStarts(events)).size).toBe(events.length);
+    expect(new Set(events.map(({ id }) => id)).size).toBe(events.length);
+  };
+
+  const createLosAngelesHourlyMaster = (
+    start: string,
+    overrides: Partial<SyncableEvent> = {},
+  ): SyncableEvent => createEvent({
+    endTime: new Date(new Date(start).getTime() + 30 * 60 * 1000),
+    recurrenceRule: { count: 5, frequency: "HOURLY" },
+    startTime: new Date(start),
+    startTimeZone: "America/Los_Angeles",
+    ...overrides,
+  });
+
+  it("steps an HOURLY series through the spring-forward gap in elapsed hours", () => {
+    const result = materializeRecurrenceEvents(
+      [createLosAngelesHourlyMaster("2026-03-08T08:00:00.000Z")],
+      TRANSITION_WINDOW,
+    );
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-03-08T08:00:00.000Z",
+      "2026-03-08T09:00:00.000Z",
+      "2026-03-08T10:00:00.000Z",
+      "2026-03-08T11:00:00.000Z",
+      "2026-03-08T12:00:00.000Z",
+    ]);
+    expectOneOccurrencePerInstant(result);
+  });
+
+  it("keeps both copies of the repeated hour of an HOURLY series at fall-back", () => {
+    const result = materializeRecurrenceEvents(
+      [createLosAngelesHourlyMaster("2026-11-01T07:00:00.000Z")],
+      TRANSITION_WINDOW,
+    );
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-11-01T07:00:00.000Z",
+      "2026-11-01T08:00:00.000Z",
+      "2026-11-01T09:00:00.000Z",
+      "2026-11-01T10:00:00.000Z",
+      "2026-11-01T11:00:00.000Z",
+    ]);
+    expectOneOccurrencePerInstant(result);
+  });
+
+  it("gives an HOURLY series the same instants as before on a day with no transition", () => {
+    const result = materializeRecurrenceEvents(
+      [createLosAngelesHourlyMaster("2026-01-05T17:00:00.000Z")],
+      TRANSITION_WINDOW,
+    );
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-01-05T17:00:00.000Z",
+      "2026-01-05T18:00:00.000Z",
+      "2026-01-05T19:00:00.000Z",
+      "2026-01-05T20:00:00.000Z",
+      "2026-01-05T21:00:00.000Z",
+    ]);
+  });
+
+  it("emits one occurrence when a filtered HOURLY rule lands twice on the instant after the gap", () => {
+    const result = materializeRecurrenceEvents([createLosAngelesHourlyMaster(
+      "2026-03-07T09:00:00.000Z",
+      { recurrenceRule: { byHour: [1, 2, 3], count: 6, frequency: "HOURLY" } },
+    )], TRANSITION_WINDOW);
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-03-07T09:00:00.000Z",
+      "2026-03-07T10:00:00.000Z",
+      "2026-03-07T11:00:00.000Z",
+      "2026-03-08T09:00:00.000Z",
+      "2026-03-08T10:00:00.000Z",
+    ]);
+    expectOneOccurrencePerInstant(result);
+  });
+
+  it("excludes a coincident instant named by EXDATE entirely (regression pin, passes on main)", () => {
+    const result = materializeRecurrenceEvents([createLosAngelesHourlyMaster(
+      "2026-03-07T09:00:00.000Z",
+      {
+        exceptionDates: [new Date("2026-03-08T10:00:00.000Z")],
+        recurrenceRule: { byHour: [1, 2, 3], count: 6, frequency: "HOURLY" },
+      },
+    )], TRANSITION_WINDOW);
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-03-07T09:00:00.000Z",
+      "2026-03-07T10:00:00.000Z",
+      "2026-03-07T11:00:00.000Z",
+      "2026-03-08T09:00:00.000Z",
+    ]);
+  });
+
+  it("yields exactly the override for an overridden coincident instant (regression pin, passes on main)", () => {
+    const master = createLosAngelesHourlyMaster(
+      "2026-03-07T09:00:00.000Z",
+      { recurrenceRule: { byHour: [1, 2, 3], count: 6, frequency: "HOURLY" } },
+    );
+    const override = createEvent({
+      endTime: new Date("2026-03-08T12:30:00.000Z"),
+      id: "override-row-1",
+      recurrenceId: new Date("2026-03-08T10:00:00.000Z"),
+      startTime: new Date("2026-03-08T12:00:00.000Z"),
+      startTimeZone: "America/Los_Angeles",
+    });
+
+    const result = materializeRecurrenceEvents([master, override], TRANSITION_WINDOW);
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2026-03-07T09:00:00.000Z",
+      "2026-03-07T10:00:00.000Z",
+      "2026-03-07T11:00:00.000Z",
+      "2026-03-08T09:00:00.000Z",
+      "2026-03-08T12:00:00.000Z",
+    ]);
+    expect(result.filter(({ id }) => id === "override-row-1")).toHaveLength(1);
+  });
+
+  it("emits one occurrence for the day Apia skipped in 2011", () => {
+    const result = materializeRecurrenceEvents([createEvent({
+      endTime: new Date("2011-12-28T21:00:00.000Z"),
+      recurrenceRule: { count: 5, frequency: "DAILY" },
+      startTime: new Date("2011-12-28T20:00:00.000Z"),
+      startTimeZone: "Pacific/Apia",
+    })], {
+      end: new Date("2012-01-10T00:00:00.000Z"),
+      start: new Date("2011-12-20T00:00:00.000Z"),
+    });
+
+    expect(occurrenceStarts(result)).toEqual([
+      "2011-12-28T20:00:00.000Z",
+      "2011-12-29T20:00:00.000Z",
+      "2011-12-30T20:00:00.000Z",
+      "2011-12-31T20:00:00.000Z",
+    ]);
+    expectOneOccurrencePerInstant(result);
+  });
+});

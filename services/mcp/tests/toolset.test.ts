@@ -301,3 +301,153 @@ describe("pause_sync", () => {
     ).toThrow("'paused' is required");
   });
 });
+
+const eventPayload = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+  calendarId: "019c0000-0000-7000-8000-000000000010",
+  calendarName: "Personal",
+  calendarProvider: "google",
+  calendarUrl: null,
+  description: null,
+  eventStateId: "019c0000-0000-7000-8000-000000000020",
+  id: "019c0000-0000-7000-8000-000000000020",
+  location: null,
+  title: "Holiday",
+  ...overrides,
+});
+
+const allDayNovemberFifth = eventPayload({
+  endTime: "2026-11-06T00:00:00.000Z",
+  isAllDay: true,
+  startTime: "2026-11-05T00:00:00.000Z",
+});
+
+const allDayNovemberFifthToEighth = eventPayload({
+  endTime: "2026-11-08T00:00:00.000Z",
+  isAllDay: true,
+  startTime: "2026-11-05T00:00:00.000Z",
+});
+
+const timedJulyFirst = eventPayload({
+  endTime: "2026-07-01T16:00:00.000Z",
+  isAllDay: false,
+  startTime: "2026-07-01T15:00:00.000Z",
+  title: "Standup",
+});
+
+const requestEvents = (timezone: string) =>
+  createKeeperMcpToolset().get_events.execute(context, {
+    from: "2026-11-01T00:00:00.000Z",
+    timezone,
+    to: "2026-11-10T00:00:00.000Z",
+  });
+
+describe("get_events localization", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["America/Edmonton", "Pacific/Auckland", "UTC"])(
+    "returns an all-day event as its calendar dates in %s",
+    async (timezone) => {
+      stubFetch([allDayNovemberFifth]);
+
+      const [event] = await requestEvents(timezone);
+
+      expect(event).toMatchObject({
+        endTime: "2026-11-06",
+        isAllDay: true,
+        startTime: "2026-11-05",
+      });
+    },
+  );
+
+  it("never moves an all-day event to the previous evening west of UTC", async () => {
+    stubFetch([allDayNovemberFifth]);
+
+    const [event] = await requestEvents("America/Edmonton");
+
+    expect(JSON.stringify(event)).not.toContain("2026-11-04");
+  });
+
+  it.each(["America/Edmonton", "Pacific/Auckland", "UTC"])(
+    "keeps a multi-day all-day span intact in %s",
+    async (timezone) => {
+      stubFetch([allDayNovemberFifthToEighth]);
+
+      const [event] = await requestEvents(timezone);
+
+      expect(event).toMatchObject({
+        endTime: "2026-11-08",
+        isAllDay: true,
+        startTime: "2026-11-05",
+      });
+    },
+  );
+
+  it.each([
+    ["America/Edmonton", "2026-07-01T09:00:00-06:00", "2026-07-01T10:00:00-06:00"],
+    ["Pacific/Auckland", "2026-07-02T03:00:00+12:00", "2026-07-02T04:00:00+12:00"],
+    ["UTC", "2026-07-01T15:00:00+00:00", "2026-07-01T16:00:00+00:00"],
+  ])("localizes a timed event to %s", async (timezone, startTime, endTime) => {
+    stubFetch([timedJulyFirst]);
+
+    const [event] = await requestEvents(timezone);
+
+    expect(event).toMatchObject({ endTime, startTime });
+  });
+
+  it("tells clients a timed event is not all-day", async () => {
+    stubFetch([timedJulyFirst]);
+
+    const [event] = await requestEvents("America/Edmonton");
+
+    expect(event).toMatchObject({ isAllDay: false });
+  });
+
+  it("rejects an event payload that does not say whether it is all-day", async () => {
+    const { isAllDay: _omitted, ...withoutAllDayFlag } = allDayNovemberFifth;
+    stubFetch([withoutAllDayFlag]);
+
+    await expect(requestEvents("America/Edmonton")).rejects.toThrow();
+  });
+});
+
+describe("get_event", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("passes the all-day flag through with the stored UTC instants", async () => {
+    stubFetch(allDayNovemberFifth);
+
+    const event = await createKeeperMcpToolset().get_event.execute(context, {
+      eventId: "019c0000-0000-7000-8000-000000000020",
+    });
+
+    expect(event).toMatchObject({
+      endTime: "2026-11-06T00:00:00.000Z",
+      isAllDay: true,
+      startTime: "2026-11-05T00:00:00.000Z",
+    });
+  });
+});
+
+describe("get_events", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("forwards the viewer timezone to the events route", async () => {
+    const requests = stubFetch([]);
+
+    await createKeeperMcpToolset().get_events.execute(context, {
+      from: "2026-11-12T06:00:00Z",
+      timezone: "America/Chicago",
+      to: "2026-11-13T06:00:00Z",
+    });
+
+    const url = new URL(requests[0]?.url ?? "");
+    expect(url.pathname).toBe("/api/v1/events");
+    expect(url.searchParams.get("timezone")).toBe("America/Chicago");
+  });
+});

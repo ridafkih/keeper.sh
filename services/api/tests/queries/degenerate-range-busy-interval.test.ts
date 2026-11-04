@@ -19,7 +19,7 @@ describe("the busy intervals behind find_free_time", () => {
       endTime: new Date("2027-03-20T17:00:00.000Z"),
       isAllDay: false,
       startTime: new Date("2027-03-20T16:00:00.000Z"),
-    }, RANGE);
+    }, RANGE, "UTC");
 
     expect(interval.start.toISOString()).toBe("2027-03-20T16:00:00.000Z");
     expect(interval.end.toISOString()).toBe("2027-03-20T17:00:00.000Z");
@@ -31,7 +31,7 @@ describe("the busy intervals behind find_free_time", () => {
       endTime: new Date("2027-03-22T00:00:00.000Z"),
       isAllDay: true,
       startTime: new Date("2027-03-22T00:00:00.000Z"),
-    }, RANGE);
+    }, RANGE, "UTC");
 
     expect(mergeIntervals([toMs(interval)])).toHaveLength(1);
     expect(interval.start.toISOString()).toBe("2027-03-22T00:00:00.000Z");
@@ -44,7 +44,7 @@ describe("the busy intervals behind find_free_time", () => {
       endTime: new Date("2027-03-21T16:00:00.000Z"),
       isAllDay: false,
       startTime: new Date("2027-03-21T16:00:00.000Z"),
-    }, RANGE);
+    }, RANGE, "UTC");
 
     expect(mergeIntervals([toMs(interval)])).toHaveLength(1);
     expect(interval.start.toISOString()).toBe("2027-03-21T16:00:00.000Z");
@@ -57,7 +57,7 @@ describe("the busy intervals behind find_free_time", () => {
       endTime: new Date("2027-03-05T16:00:00.000Z"),
       isAllDay: false,
       startTime: new Date("2027-03-23T16:00:00.000Z"),
-    }, RANGE);
+    }, RANGE, "UTC");
 
     expect(mergeIntervals([toMs(interval)])).toHaveLength(1);
     expect(interval.start.toISOString()).toBe("2027-03-23T16:00:00.000Z");
@@ -70,7 +70,7 @@ describe("the busy intervals behind find_free_time", () => {
       endTime: new Date("2027-04-07T23:59:30.000Z"),
       isAllDay: false,
       startTime: new Date("2027-04-07T23:59:30.000Z"),
-    }, RANGE);
+    }, RANGE, "UTC");
 
     expect(interval.end.toISOString()).toBe("2027-04-08T00:00:00.000Z");
   });

@@ -51,21 +51,19 @@ const intersectSyncWindows = (
 
 const getStartOfToday = (now: Date = new Date()): Date => {
   const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   return today;
 };
 
 const shiftDateByMonths = (date: Date, months: number): Date => {
   const shifted = new Date(date);
-  const desiredDay = shifted.getDate();
-  shifted.setDate(1);
-  shifted.setMonth(shifted.getMonth() + months);
+  const desiredDay = shifted.getUTCDate();
+  shifted.setUTCDate(1);
+  shifted.setUTCMonth(shifted.getUTCMonth() + months);
   const lastDayOfTargetMonth = new Date(
-    shifted.getFullYear(),
-    shifted.getMonth() + 1,
-    0,
-  ).getDate();
-  shifted.setDate(Math.min(desiredDay, lastDayOfTargetMonth));
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  shifted.setUTCDate(Math.min(desiredDay, lastDayOfTargetMonth));
   return shifted;
 };
 
@@ -76,7 +74,7 @@ const shiftDateByRange = (date: Date, range: SyncRange, direction: -1 | 1): Date
   }
   if (definition.shift.unit === "days") {
     const shifted = new Date(date);
-    shifted.setDate(shifted.getDate() + direction * definition.shift.amount);
+    shifted.setUTCDate(shifted.getUTCDate() + direction * definition.shift.amount);
     return shifted;
   }
   return shiftDateByMonths(date, direction * definition.shift.amount);

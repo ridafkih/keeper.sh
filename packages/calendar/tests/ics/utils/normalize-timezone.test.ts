@@ -63,4 +63,33 @@ describe("normalizeTimezone", () => {
   it("returns unknown timezone as-is when not in mapping", () => {
     expect(normalizeTimezone("Invented/Timezone")).toBe("Invented/Timezone");
   });
+  it.each([
+    { identifier: "/mozilla.org/20050126_1/America/Denver", timeZone: "America/Denver" },
+    { identifier: "/citadel.org/20190914_1/Europe/London", timeZone: "Europe/London" },
+  ])("recovers the IANA zone carried by the tzurl id '$identifier'", ({ identifier, timeZone }) => {
+    expect(normalizeTimezone(identifier)).toBe(timeZone);
+  });
+
+  it.each([
+    "Customized Time Zone",
+    "Invented/Timezone",
+    "GMT+8",
+    "(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi",
+    "(UTC+08:00) Kuala Lumpur, Singapore",
+  ])("passes the unresolvable label '%s' back as given", (identifier) => {
+    expect(normalizeTimezone(identifier)).toBe(identifier);
+  });
+
+  it.each([
+    "Asia/Calcutta",
+    "US/Eastern",
+    "Asia/Rangoon",
+    "Europe/Kiev",
+  ])("keeps the IANA link '%s' as given", (identifier) => {
+    expect(normalizeTimezone(identifier)).toBe(identifier);
+  });
+
+  it("returns undefined for an empty string", () => {
+    expect(normalizeTimezone("")).toBeUndefined();
+  });
 });

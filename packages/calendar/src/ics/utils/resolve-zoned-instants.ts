@@ -2,123 +2,181 @@ import type {
   IcsCalendar,
   IcsDateObject,
   IcsEvent,
-  IcsTimezone,
   NonStandardValuesGeneric,
 } from "ts-ics";
-import { normalizeTimezone } from "./normalize-timezone";
-import {
-  formatIcsUtcOffset,
-  getTimeZoneOffsetMinutes,
-  isSupportedTimeZone,
-  wallTimeToInstant,
-} from "./timezone-instant";
+import { readDeclaredZone } from "./declared-timezone-offsets";
+import { readDeclaredTimeZoneOffsets, resolveTimeZoneIdentifier } from "./resolve-timezone-identifier";
+import type { DeclaredTimeZoneOffsets } from "./resolve-timezone-identifier";
+import { formatIcsUtcOffset, ianaOffsetAt, wallTimeToInstantWith } from "./timezone-instant";
+import type { ZoneOffsetAt } from "./timezone-instant";
 
-/*
- * The ts-ics parser turns a TZID-qualified wall time into an instant by projecting
- * the VTIMEZONE observances, and its RRULE expansion drops the time of day from the
- * onset: every projected transition is applied from local midnight instead of the
- * hour the observance DTSTART names. A wall time in the hours before a transition
- * therefore lands on the wrong side of it — Keeper reads its own CalDAV writes
- * back, so a mirrored event near a DST boundary looks moved and is deleted and
- * re-created on every run.
- *
- * ts-ics also never reads RDATE: an observance listing further onsets as RDATEs
- * counts only from its DTSTART. Full-history zones such as tzurl's Asia/Manila
- * list every later return to standard time that way, so the observance with the
- * latest DTSTART wins and a present-day wall time takes a wartime offset.
- *
- * An observance with more than one onset is therefore only trustworthy for
- * identifiers the platform cannot answer for; where the TZID names a zone IANA
- * knows, the IANA rules decide. An observance set where each DTSTART is the only
- * onset states every transition outright, ts-ics reads it correctly, and it stays
- * authoritative over IANA as RFC 5545 §3.6.5 intends.
- */
-const hasProjectedObservance = (timezone: IcsTimezone): boolean =>
-  timezone.props.some((observance) =>
-    Boolean(observance.recurrenceRule ?? observance.recurrenceDate));
-
-const collectProjectedTimeZoneIds = (timezones: IcsTimezone[] | undefined): Set<string> =>
-  new Set(
-    (timezones ?? [])
-      .filter((timezone) => hasProjectedObservance(timezone))
-      .map((timezone) => timezone.id),
-  );
-
-const collectDeclaredTimeZoneIds = (timezones: IcsTimezone[] | undefined): Set<string> =>
-  new Set((timezones ?? []).map((timezone) => timezone.id));
-
-interface ZonedInstantScope {
-  declaredTimeZoneIds: Set<string>;
-  projectedTimeZoneIds: Set<string>;
+interface ZoneSource {
+  offsetAt: ZoneOffsetAt;
+  wallTimeToInstant: (wallTime: Date) => Date;
 }
 
-const isIanaAuthoritative = (timeZoneId: string, scope: ZonedInstantScope): boolean =>
-  scope.projectedTimeZoneIds.has(timeZoneId) || !scope.declaredTimeZoneIds.has(timeZoneId);
+type ZoneSourceLookup = (timeZoneId: string) => ZoneSource | undefined;
 
-const resolveZonedInstant = (
-  value: IcsDateObject,
-  scope: ZonedInstantScope,
-): IcsDateObject => {
+const ianaZoneSource = (timeZone: string): ZoneSource => {
+  const offsetAt = ianaOffsetAt(timeZone);
+  return { offsetAt, wallTimeToInstant: (wallTime) => wallTimeToInstantWith(wallTime, offsetAt) };
+};
+
+const buildZoneSource = (
+  timeZoneId: string,
+  blocksByTimeZoneId: ReadonlyMap<string, string>,
+  declaredOffsets: DeclaredTimeZoneOffsets,
+): ZoneSource | undefined => {
+  const resolved = resolveTimeZoneIdentifier(timeZoneId, declaredOffsets);
+  if (resolved) {
+    return ianaZoneSource(resolved.timeZone);
+  }
+  const block = blocksByTimeZoneId.get(timeZoneId);
+  if (!block) {
+    return;
+  }
+  return readDeclaredZone(block);
+};
+
+const createZoneSourceLookup = (blocksByTimeZoneId: ReadonlyMap<string, string>): ZoneSourceLookup => {
+  const declaredOffsets = readDeclaredTimeZoneOffsets([...blocksByTimeZoneId.values()].join("\r\n"));
+  const sources = new Map<string, ZoneSource | undefined>();
+  return (timeZoneId) => {
+    if (!sources.has(timeZoneId)) {
+      sources.set(timeZoneId, buildZoneSource(timeZoneId, blocksByTimeZoneId, declaredOffsets));
+    }
+    return sources.get(timeZoneId);
+  };
+};
+
+const resolveInstant = (source: ZoneSource, wallTime: Date): Date | undefined => {
+  try {
+    return source.wallTimeToInstant(wallTime);
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return;
+    }
+    throw error;
+  }
+};
+
+const resolveZonedValue = (value: IcsDateObject, lookup: ZoneSourceLookup): IcsDateObject | undefined => {
   const { local } = value;
-  if (!local || !isIanaAuthoritative(local.timezone, scope)) {
+  if (!local || value.type === "DATE") {
     return value;
   }
-  const timeZone = normalizeTimezone(local.timezone);
-  if (!timeZone || !isSupportedTimeZone(timeZone)) {
-    return value;
+  const source = lookup(local.timezone);
+  if (!source) {
+    return;
   }
-  const date = wallTimeToInstant(local.date, timeZone);
-  if (date.getTime() === value.date.getTime()) {
-    return value;
+  const date = resolveInstant(source, local.date);
+  if (!date) {
+    return;
   }
   return {
     ...value,
     date,
-    local: {
-      ...local,
-      tzoffset: formatIcsUtcOffset(getTimeZoneOffsetMinutes(date, timeZone)),
-    },
+    local: { ...local, tzoffset: formatIcsUtcOffset(Math.round(source.offsetAt(date))) },
   };
+};
+
+const hasUnreadableTime = (value: IcsDateObject | undefined): boolean =>
+  Boolean(value && Number.isNaN(value.date.getTime()));
+
+const readEventEnd = (event: IcsEvent): IcsDateObject | undefined => {
+  if ("end" in event && event.end) {
+    return event.end;
+  }
+  return globalThis.undefined;
+};
+
+interface ZonedValueResolver {
+  resolve: (value: IcsDateObject) => IcsDateObject;
+  unresolvedTimeZoneIds: ReadonlySet<string>;
+}
+
+const createZonedValueResolver = (lookup: ZoneSourceLookup): ZonedValueResolver => {
+  const unresolvedTimeZoneIds = new Set<string>();
+  const resolve = (value: IcsDateObject): IcsDateObject => {
+    const resolved = resolveZonedValue(value, lookup);
+    if (resolved) {
+      return resolved;
+    }
+    unresolvedTimeZoneIds.add(value.local?.timezone ?? "");
+    return value;
+  };
+  return { resolve, unresolvedTimeZoneIds };
+};
+
+const describeUnresolvedTime = (
+  event: IcsEvent,
+  unresolvedTimeZoneIds: ReadonlySet<string>,
+): string | undefined => {
+  if (unresolvedTimeZoneIds.size > 0) {
+    return `Unsupported calendar timezone: ${[...unresolvedTimeZoneIds].join(", ")}`;
+  }
+  if (hasUnreadableTime(event.start) || hasUnreadableTime(readEventEnd(event))) {
+    return `Unreadable DTSTART or DTEND in event ${event.uid}`;
+  }
+  return globalThis.undefined;
+};
+
+const withUnresolvedTimeReason = <TNonStandardValues extends NonStandardValuesGeneric>(
+  unresolvedTimeReason: string,
+  nonStandard: Partial<TNonStandardValues> = {},
+): Partial<TNonStandardValues> => ({ ...nonStandard, unresolvedTimeReason });
+
+const markUnresolvedTime = <TNonStandardValues extends NonStandardValuesGeneric>(
+  event: IcsEvent<TNonStandardValues>,
+  unresolvedTimeReason: string | undefined,
+): IcsEvent<TNonStandardValues> => {
+  if (!unresolvedTimeReason) {
+    return event;
+  }
+  return { ...event, nonStandard: withUnresolvedTimeReason(unresolvedTimeReason, event.nonStandard) };
 };
 
 const resolveEventZonedInstants = <TNonStandardValues extends NonStandardValuesGeneric>(
   event: IcsEvent<TNonStandardValues>,
-  scope: ZonedInstantScope,
+  lookup: ZoneSourceLookup,
 ): IcsEvent<TNonStandardValues> => {
-  const resolve = (value: IcsDateObject): IcsDateObject => resolveZonedInstant(value, scope);
+  const { resolve, unresolvedTimeZoneIds } = createZonedValueResolver(lookup);
   const patch = {
-    ...event.created && { created: resolve(event.created) },
     ...event.exceptionDates && { exceptionDates: event.exceptionDates.map(resolve) },
-    ...event.lastModified && { lastModified: resolve(event.lastModified) },
     ...event.recurrenceId && {
       recurrenceId: { ...event.recurrenceId, value: resolve(event.recurrenceId.value) },
     },
     ...event.recurrenceRule?.until && {
       recurrenceRule: { ...event.recurrenceRule, until: resolve(event.recurrenceRule.until) },
     },
-    ...event.stamp && { stamp: resolve(event.stamp) },
     ...event.start && { start: resolve(event.start) },
   };
+  let resolved: IcsEvent<TNonStandardValues> = { ...event, ...patch };
   if ("end" in event && event.end) {
-    return { ...event, ...patch, end: resolve(event.end) };
+    resolved = { ...event, ...patch, end: resolve(event.end) };
   }
-  return { ...event, ...patch };
+  return markUnresolvedTime(resolved, describeUnresolvedTime(event, unresolvedTimeZoneIds));
 };
 
 const resolveCalendarZonedInstants = <TNonStandardValues extends NonStandardValuesGeneric>(
   calendar: IcsCalendar<TNonStandardValues>,
+  blocksByTimeZoneId: ReadonlyMap<string, string>,
 ): IcsCalendar<TNonStandardValues> => {
-  if (!calendar.events) {
-    return calendar;
-  }
-  const scope: ZonedInstantScope = {
-    declaredTimeZoneIds: collectDeclaredTimeZoneIds(calendar.timezones),
-    projectedTimeZoneIds: collectProjectedTimeZoneIds(calendar.timezones),
-  };
+  const lookup = createZoneSourceLookup(blocksByTimeZoneId);
   return {
     ...calendar,
-    events: calendar.events.map((event) => resolveEventZonedInstants(event, scope)),
+    ...calendar.events && {
+      events: calendar.events.map((event) => resolveEventZonedInstants(event, lookup)),
+    },
   };
 };
 
-export { resolveCalendarZonedInstants };
+const readUnresolvedTimeReason = (event: IcsEvent): string | undefined => {
+  const reason: unknown = event.nonStandard?.unresolvedTimeReason;
+  if (typeof reason === "string") {
+    return reason;
+  }
+  return globalThis.undefined;
+};
+
+export { readUnresolvedTimeReason, resolveCalendarZonedInstants };

@@ -1,3 +1,4 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import type { BroadcastData } from "@keeper.sh/broadcast";
 import { entry } from "entrykit";
 import { join } from "node:path";
@@ -12,6 +13,8 @@ import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;

@@ -133,6 +133,7 @@ export {
   resolveTimeZone,
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
+export { offsetPartsToMinutes } from "./ics/utils/utc-offset";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
 export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, createGoogleInteractiveRateLimiter, GoogleProjectBudgetExhaustedError, resolveGoogleProjectRequestsPerMinute, withGoogleProjectBudget, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
@@ -412,3 +413,4 @@ export { createManagePushChannelsDependencies } from "./core/source/manage-push-
 export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
 export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
+export { REQUIRED_TIME_ZONE_DATA_VERSION, exitUnlessTimeZoneDataCurrent } from "./utils/timezone-data-currency";

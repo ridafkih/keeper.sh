@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseICalCalendarsToRemoteEvents } from "../../../../src/providers/caldav/shared/ics";
-import { detachProjectedVtimezones } from "../../../../src/ics/utils/detach-projected-vtimezones";
+import { extractVtimezones } from "../../../../src/ics/utils/extract-vtimezones";
 
 const ZONE = "America/New_York";
 
@@ -94,30 +94,29 @@ describe("VTIMEZONE resolution correctness", () => {
 });
 
 describe("what reaches the ics library", () => {
-  it("maps a windows zone name to iana and withholds it too", () => {
+  it("takes a windows-named zone out and keeps its block under that name", () => {
     const windowsZone = buildIcs(
       [{ date: "20260315", startHour: "09", uid: "any", zoned: true }],
       true,
     ).replaceAll(ZONE, "Eastern Standard Time");
 
-    const detached = detachProjectedVtimezones(windowsZone);
+    const extracted = extractVtimezones(windowsZone);
 
-    expect(detached.icsString).not.toContain("BEGIN:VTIMEZONE");
-    expect(detached.projectedBlocks).toHaveLength(1);
+    expect(extracted.icsString).not.toContain("BEGIN:VTIMEZONE");
+    expect([...extracted.blocksByTimeZoneId.keys()]).toEqual(["Eastern Standard Time"]);
   });
 
-  it("withholds a projected zone, because expanding its rules is per-event work", () => {
-    const detached = detachProjectedVtimezones(buildIcs(
+  it("takes a projected zone out, because expanding its rules is per-event work", () => {
+    const extracted = extractVtimezones(buildIcs(
       [{ date: "20260315", startHour: "09", uid: "any", zoned: true }],
       true,
     ));
 
-    expect(detached.icsString).not.toContain("BEGIN:VTIMEZONE");
-    expect(detached.projectedBlocks).toHaveLength(1);
-    expect(detached.projectedBlocks[0]).toContain("RRULE:");
+    expect(extracted.icsString).not.toContain("BEGIN:VTIMEZONE");
+    expect(extracted.blocksByTimeZoneId.get(ZONE)).toContain("RRULE:");
   });
 
-  it("keeps a fixed-offset zone, which costs nothing to expand and may be all we have", () => {
+  it("takes a fixed-offset zone out too, so one engine reads every declared offset", () => {
     const fixedOffsetZone = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
@@ -132,21 +131,21 @@ describe("what reaches the ics library", () => {
       "END:VCALENDAR",
     ].join("\r\n");
 
-    const detached = detachProjectedVtimezones(fixedOffsetZone);
+    const extracted = extractVtimezones(fixedOffsetZone);
 
-    expect(detached.icsString).toContain("BEGIN:VTIMEZONE");
-    expect(detached.projectedBlocks).toHaveLength(0);
+    expect(extracted.icsString).not.toContain("BEGIN:VTIMEZONE");
+    expect(extracted.blocksByTimeZoneId.get("Etc/GMT+5")).toContain("TZOFFSETTO:-0500");
   });
 
-  it("keeps a zone whose id we cannot resolve ourselves, so its own rules still apply", () => {
+  it("keeps the block of a zone whose id we cannot resolve ourselves, so its own rules still apply", () => {
     const unknownZone = buildIcs(
       [{ date: "20260315", startHour: "09", uid: "any", zoned: true }],
       true,
     ).replaceAll(ZONE, "Mars/Olympus_Mons");
 
-    const detached = detachProjectedVtimezones(unknownZone);
+    const extracted = extractVtimezones(unknownZone);
 
-    expect(detached.icsString).toContain("BEGIN:VTIMEZONE");
-    expect(detached.projectedBlocks).toHaveLength(0);
+    expect(extracted.icsString).not.toContain("BEGIN:VTIMEZONE");
+    expect(extracted.blocksByTimeZoneId.get("Mars/Olympus_Mons")).toContain("RRULE:");
   });
 });

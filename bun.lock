@@ -116,6 +116,7 @@
         "entities": "^7.0.1",
         "fast-json-stable-stringify": "^2.1.0",
         "htmlparser2": "^10.1.0",
+        "ical.js": "2.2.1",
         "ioredis": "^5.10.0",
         "ipaddr.js": "^2.3.0",
         "rrule": "^2.8.1",
@@ -318,6 +319,7 @@
       "name": "@keeper.sh/mcp",
       "dependencies": {
         "@keeper.sh/auth": "workspace:*",
+        "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/database": "workspace:*",
         "@keeper.sh/otelemetry": "workspace:*",
