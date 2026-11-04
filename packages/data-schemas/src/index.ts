@@ -426,17 +426,22 @@ const createOAuthSourceSchema = type({
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 
-const createCalDAVSourceSchema = type({
-  authMethod: "'basic' | 'digest'",
+const caldavCalendarSelectionSchema = type({
   calendarUrl: "string",
   name: "string",
+  "+": "reject",
+});
+
+const importCalDAVCalendarsSchema = type({
+  authMethod: "'basic' | 'digest'",
+  calendars: caldavCalendarSelectionSchema.array().atLeastLength(1),
   password: "string",
   provider: "'caldav' | 'fastmail' | 'icloud'",
   serverUrl: "string",
   username: "string",
   "+": "reject",
 });
-type CreateCalDAVSource = typeof createCalDAVSourceSchema.infer;
+type ImportCalDAVCalendars = typeof importCalDAVCalendarsSchema.infer;
 
 const caldavDiscoverSourceSchema = type({
   password: "string",
@@ -627,7 +632,7 @@ export {
   googleCalendarListEntrySchema,
   googleCalendarListResponseSchema,
   createOAuthSourceSchema,
-  createCalDAVSourceSchema,
+  importCalDAVCalendarsSchema,
   caldavDiscoverSourceSchema,
   oauthCalendarSourceSchema,
   updateOAuthSourceDestinationsSchema,
@@ -682,7 +687,7 @@ export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,
   CreateOAuthSource,
-  CreateCalDAVSource,
+  ImportCalDAVCalendars,
   CalDAVDiscoverSource,
   OAuthCalendarSource,
   UpdateOAuthSourceDestinations,

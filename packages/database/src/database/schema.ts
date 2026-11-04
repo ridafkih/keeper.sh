@@ -584,6 +584,35 @@ const icalFeedCalendarsTable = pgTable(
   ],
 );
 
+const USER_MILESTONES = [
+  "first_calendar_connected",
+  "first_sync_created",
+  "first_events_copied",
+] as const;
+
+type UserMilestone = (typeof USER_MILESTONES)[number];
+
+const USER_MILESTONE_SQL_VALUES = USER_MILESTONES.map((milestone) => `'${milestone}'`).join(", ");
+
+const userMilestonesTable = pgTable(
+  "user_milestones",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    milestone: text().notNull().$type<UserMilestone>(),
+    reachedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("user_milestones_user_milestone_idx").on(table.userId, table.milestone),
+    check(
+      "user_milestones_milestone_check",
+      sql`"milestone" IN (${sql.raw(USER_MILESTONE_SQL_VALUES)})`,
+    ),
+  ],
+);
+
 export {
   apiTokensTable,
   caldavCredentialsTable,
@@ -605,5 +634,8 @@ export {
   syncStatusTable,
   userSyncRequestsTable,
   userEventsTable,
+  USER_MILESTONES,
+  userMilestonesTable,
   userSubscriptionsTable,
 };
+export type { UserMilestone };

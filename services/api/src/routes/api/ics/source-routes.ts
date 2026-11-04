@@ -16,9 +16,9 @@ interface ParsedCreateSourceBody {
   url: string;
 }
 
-interface InvalidSourceUrlErrorLike {
+interface InvalidSourceUrlErrorLike extends Error {
   authRequired: boolean;
-  message: string;
+  reason: string;
 }
 
 interface GetIcsSourcesDependencies {
@@ -59,6 +59,8 @@ const handlePostIcsSourceRoute = async (
     }
 
     if (dependencies.isInvalidSourceUrlError(error)) {
+      widelog.errorFields(error, { slug: "invalid-source-url" });
+      widelog.set("source.invalid_reason", error.reason);
       return Response.json(
         {
           authRequired: error.authRequired,

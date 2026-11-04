@@ -11,6 +11,7 @@ import type { database as databaseInstance } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import { spawnBackgroundJob } from "./background-task";
 import { assertAllIdsOwned } from "./owned-ids";
+import { noteUserMilestone } from "./user-milestones";
 const EMPTY_LIST_COUNT = 0;
 const USER_MAPPING_LOCK_NAMESPACE = 9001;
 const MAPPING_LIMIT_ERROR_MESSAGE = "Mapping limit reached. Upgrade to Pro for unlimited sync mappings.";
@@ -655,6 +656,13 @@ const scheduleMappingReplacementSync = (userId: string): void => {
   );
 };
 
+const noteMappingMilestone = (userId: string, mappedCalendarIds: string[]): void => {
+  if (mappedCalendarIds.length === EMPTY_LIST_COUNT) {
+    return;
+  }
+  noteUserMilestone(userId, "first_sync_created");
+};
+
 const setDestinationsForSource = async (
   userId: string,
   sourceCalendarId: string,
@@ -686,6 +694,7 @@ const setDestinationsForSource = async (
     ),
   );
   scheduleMappingReplacementSync(userId);
+  noteMappingMilestone(userId, destinationCalendarIds);
 };
 
 const setSourcesForDestination = async (
@@ -716,6 +725,7 @@ const setSourcesForDestination = async (
     ),
   );
   scheduleMappingReplacementSync(userId);
+  noteMappingMilestone(userId, sourceCalendarIds);
 };
 
 export {

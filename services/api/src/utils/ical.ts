@@ -291,6 +291,14 @@ const readFeedRevision = async (
  * The context and user modules are pulled in on demand so the query builders
  * above stay importable without booting the service environment.
  */
+const recordResolvedFeed = (
+  feed: Pick<ResolvedFeed, "feedId" | "legacyAlias" | "userId">,
+): void => {
+  widelog.set("feed.id", feed.feedId);
+  widelog.set("feed.legacy_identifier", feed.legacyAlias);
+  widelog.set("user.id", feed.userId);
+};
+
 const generateUserCalendar = async (
   identifier: string,
   ifNoneMatch: string | null,
@@ -310,8 +318,7 @@ const generateUserCalendar = async (
         return null;
       }
 
-      widelog.set("feed.id", feed.feedId);
-      widelog.set("feed.legacy_identifier", feed.legacyAlias);
+      recordResolvedFeed(feed);
 
       return {
         scope: { feedId: feed.feedId, userId: feed.userId },
@@ -338,6 +345,7 @@ export {
   findFeedByToken,
   findLegacyDefaultFeed,
   generateUserCalendar,
+  recordResolvedFeed,
   resolveFeedIdentifier,
 };
 export type { FeedCalendarScope, ResolveFeedIdentifierDependencies, ResolvedFeed };

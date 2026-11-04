@@ -1,4 +1,7 @@
+import { RequestTimeoutError } from "@keeper.sh/calendar";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import type { CalendarFetchFailureReason } from "@keeper.sh/calendar/ics";
+import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
 
 interface SourceReference {
   id: string;
@@ -46,31 +49,52 @@ class SourceLimitError extends Error {
   }
 }
 
-const getInvalidSourceUrlDetails = (cause: unknown): {
+type InvalidSourceUrlReason = CalendarFetchFailureReason | "timeout" | "unreachable" | "unsafe_url";
+
+interface InvalidSourceUrlDetails {
   authRequired: boolean;
   message: string;
-} => {
+  reason: InvalidSourceUrlReason;
+}
+
+const INVALID_CALENDAR_URL_MESSAGE = "Invalid calendar URL";
+
+const resolveUnfetchedReason = (cause: unknown): InvalidSourceUrlReason => {
+  if (cause instanceof UrlSafetyError) {
+    return "unsafe_url";
+  }
+  if (cause instanceof RequestTimeoutError) {
+    return "timeout";
+  }
+  return "unreachable";
+};
+
+const getInvalidSourceUrlDetails = (cause: unknown): InvalidSourceUrlDetails => {
   if (cause instanceof CalendarFetchError) {
     return {
       authRequired: cause.authRequired,
       message: cause.message,
+      reason: cause.reason,
     };
   }
 
   return {
     authRequired: false,
-    message: "Invalid calendar URL",
+    message: INVALID_CALENDAR_URL_MESSAGE,
+    reason: resolveUnfetchedReason(cause),
   };
 };
 
 class InvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
+  public readonly reason: InvalidSourceUrlReason;
 
   public constructor(cause?: unknown) {
     const details = getInvalidSourceUrlDetails(cause);
     super(details.message);
     this.name = "InvalidSourceUrlError";
     this.authRequired = details.authRequired;
+    this.reason = details.reason;
     this.cause = cause;
   }
 }
@@ -142,6 +166,7 @@ export {
   runCreateSource,
 };
 export type {
+  InvalidSourceUrlReason,
   SourceReference,
   CreateSourceInput,
   SourceCreationPreflightDependencies,
