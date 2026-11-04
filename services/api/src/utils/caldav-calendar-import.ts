@@ -1,3 +1,5 @@
+import { normalizeCalDAVCalendarKey } from "@keeper.sh/calendar/caldav";
+
 class CalDAVSourceLimitError extends Error {
   constructor() {
     super("Account limit reached. Upgrade to Pro for unlimited accounts.");
@@ -39,10 +41,7 @@ interface CalDAVImportResult {
 
 interface CalDAVImportTransaction {
   lockUserAccounts: () => Promise<void>;
-  findConnectedCalendars: (
-    accountId: string,
-    calendarUrls: string[],
-  ) => Promise<ConnectedCalDAVCalendar[]>;
+  findHeldCalendars: () => Promise<ConnectedCalDAVCalendar[]>;
   findReusableAccountId: () => Promise<string | null>;
   countAccounts: () => Promise<number>;
   createAccount: () => Promise<string>;
@@ -59,10 +58,12 @@ interface CalDAVImportDependencies {
   ) => Promise<TResult>;
 }
 
-const uniqueByCalendarUrl = (
+const uniqueByCalendarKey = (
   calendars: CalDAVCalendarSelection[],
 ): CalDAVCalendarSelection[] => [
-  ...new Map(calendars.map((calendar) => [calendar.calendarUrl, calendar])).values(),
+  ...new Map(
+    calendars.map((calendar) => [normalizeCalDAVCalendarKey(calendar.calendarUrl), calendar]),
+  ).values(),
 ];
 
 const createImportAccount = async (
@@ -77,40 +78,38 @@ const createImportAccount = async (
   return transaction.createAccount();
 };
 
-const toCalendarsByUrl = (
+const toCalendarsByKey = (
   calendars: ConnectedCalDAVCalendar[],
 ): Map<string, ConnectedCalDAVCalendar> =>
-  new Map(calendars.map((calendar) => [calendar.calendarUrl, calendar]));
+  new Map(calendars.map((calendar) => [normalizeCalDAVCalendarKey(calendar.calendarUrl), calendar]));
 
 const describeSelection = (
   selection: CalDAVCalendarSelection[],
-  connected: Map<string, ConnectedCalDAVCalendar>,
+  held: Map<string, ConnectedCalDAVCalendar>,
   imported: Map<string, ConnectedCalDAVCalendar>,
 ): ImportedCalDAVCalendar[] =>
   selection.map(({ calendarUrl }): ImportedCalDAVCalendar => {
-    const existing = connected.get(calendarUrl);
+    const key = normalizeCalDAVCalendarKey(calendarUrl);
+    const existing = held.get(key);
     if (existing) {
       return { ...existing, status: "already_connected" };
     }
-    const created = imported.get(calendarUrl);
+    const created = imported.get(key);
     if (!created) {
       throw new Error("A selected CalDAV calendar was neither found nor created");
     }
     return { ...created, status: "imported" };
   });
 
-const findCalendarsConnectedToAccount = (
-  transaction: CalDAVImportTransaction,
-  accountId: string | null,
-  selection: CalDAVCalendarSelection[],
-): Promise<ConnectedCalDAVCalendar[]> => {
+const resolveHoldingAccountId = (
+  reusableAccountId: string | null,
+  held: ConnectedCalDAVCalendar[],
+): string => {
+  const accountId = reusableAccountId ?? held[0]?.accountId;
   if (!accountId) {
-    return Promise.resolve([]);
+    throw new Error("A fully connected CalDAV selection has no holding account");
   }
-  return transaction.findConnectedCalendars(
-    accountId,
-    selection.map(({ calendarUrl }) => calendarUrl),
-  );
+  return accountId;
 };
 
 const importCalDAVCalendarsWithDependencies = (
@@ -120,27 +119,34 @@ const importCalDAVCalendarsWithDependencies = (
   dependencies.runInTransaction(async (transaction) => {
     await transaction.lockUserAccounts();
 
-    const selection = uniqueByCalendarUrl(requestedCalendars);
+    const selection = uniqueByCalendarKey(requestedCalendars);
     const reusableAccountId = await transaction.findReusableAccountId();
-    const connected = toCalendarsByUrl(
-      await findCalendarsConnectedToAccount(transaction, reusableAccountId, selection),
+    const held = toCalendarsByKey(await transaction.findHeldCalendars());
+    const missing = selection.filter(
+      ({ calendarUrl }) => !held.has(normalizeCalDAVCalendarKey(calendarUrl)),
     );
-    const missing = selection.filter(({ calendarUrl }) => !connected.has(calendarUrl));
+    const heldSelection = selection.flatMap(({ calendarUrl }) => {
+      const calendar = held.get(normalizeCalDAVCalendarKey(calendarUrl));
+      if (!calendar) {
+        return [];
+      }
+      return [calendar];
+    });
 
-    if (reusableAccountId && missing.length === 0) {
+    if (missing.length === 0) {
       return {
-        accountId: reusableAccountId,
-        calendars: describeSelection(selection, connected, new Map()),
+        accountId: resolveHoldingAccountId(reusableAccountId, heldSelection),
+        calendars: describeSelection(selection, held, new Map()),
       };
     }
 
     const accountId =
       reusableAccountId ?? (await createImportAccount(transaction, dependencies.accountLimit));
-    const imported = toCalendarsByUrl(await transaction.insertCalendars(accountId, missing));
+    const imported = toCalendarsByKey(await transaction.insertCalendars(accountId, missing));
 
     return {
       accountId,
-      calendars: describeSelection(selection, connected, imported),
+      calendars: describeSelection(selection, held, imported),
     };
   });
 

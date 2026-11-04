@@ -6,8 +6,8 @@ import {
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
 import { encryptPassword } from "@keeper.sh/database";
-import { resolveCalendarCapabilities } from "@keeper.sh/calendar";
-import { createCalDAVClient } from "@keeper.sh/calendar/caldav";
+import { findUserCalDAVCalendarsOnServer, resolveCalendarCapabilities } from "@keeper.sh/calendar";
+import { createCalDAVClient, normalizeCalDAVServerHost } from "@keeper.sh/calendar/caldav";
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { safeFetchOptions } from "./safe-fetch-options";
 import { database, premiumService, encryptionKey } from "@/context";
@@ -92,35 +92,22 @@ const getUserCalDAVSources = async (userId: string, provider?: string): Promise<
   });
 };
 
-const findConnectedCalDAVCalendars = async (
+const findHeldCalDAVCalendars = async (
   client: CaldavImportDatabase,
   userId: string,
-  accountId: string,
-  calendarUrls: string[],
+  credentials: CalDAVAccountCredentials,
 ): Promise<ConnectedCalDAVCalendar[]> => {
-  const rows = await client
-    .select({
-      accountId: calendarsTable.accountId,
-      calendarUrl: calendarsTable.calendarUrl,
-      id: calendarsTable.id,
-      name: calendarsTable.name,
-    })
-    .from(calendarsTable)
-    .where(
-      and(
-        eq(calendarsTable.userId, userId),
-        eq(calendarsTable.accountId, accountId),
-        eq(calendarsTable.calendarType, CALDAV_CALENDAR_TYPE),
-        inArray(calendarsTable.calendarUrl, calendarUrls),
-      ),
-    );
-
-  return rows.flatMap(({ calendarUrl, ...calendar }) => {
-    if (!calendarUrl) {
-      return [];
-    }
-    return [{ ...calendar, calendarUrl }];
+  const calendars = await findUserCalDAVCalendarsOnServer(client, {
+    caldavServerHost: normalizeCalDAVServerHost(credentials.serverUrl),
+    userId,
   });
+
+  return calendars.map(({ accountId, calendarUrl, id, name }) => ({
+    accountId,
+    calendarUrl,
+    id,
+    name,
+  }));
 };
 
 const findReusableCalDAVAccountId = async (
@@ -261,8 +248,7 @@ const createCalDAVImportTransaction = (
 ): CalDAVImportTransaction => ({
   countAccounts: () => countCalDAVImportAccounts(client, userId),
   createAccount: () => createCalDAVAccount(client, userId, credentials, resolvedEncryptionKey),
-  findConnectedCalendars: (accountId, calendarUrls) =>
-    findConnectedCalDAVCalendars(client, userId, accountId, calendarUrls),
+  findHeldCalendars: () => findHeldCalDAVCalendars(client, userId, credentials),
   findReusableAccountId: () => findReusableCalDAVAccountId(client, userId, credentials),
   insertCalendars: (accountId, calendars) =>
     insertCalDAVCalendars(client, userId, accountId, calendars, writableCalendarUrls),
