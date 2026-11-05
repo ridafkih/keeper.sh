@@ -4,7 +4,6 @@ import type { EventEmitter } from "node:events";
 import os from "node:os";
 import { createInterface } from "node:readline";
 import { SeverityNumber } from "@opentelemetry/api-logs";
-import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import {
   detectResources,
@@ -14,6 +13,7 @@ import {
   processDetector,
   resourceFromAttributes,
 } from "@opentelemetry/resources";
+import { COLLECTOR_BATCH_SETTINGS, createCollectorPipeline } from "./collector-pipeline";
 
 const PINO_SEVERITY: Record<number, SeverityNumber> = {
   10: SeverityNumber.TRACE,
@@ -52,7 +52,7 @@ const parseStructuredLogLine = (
 };
 
 const forwardToCollector = (
-  logger: ReturnType<LoggerProvider["getLogger"]>,
+  logger: ReturnType<typeof createCollectorPipeline>["logger"],
   line: string,
   entry: ReturnType<typeof parseLogLine> | undefined,
 ) => {
@@ -103,21 +103,21 @@ const createCollectorSink = (): LineSink => {
     }),
   );
 
-  const provider = new LoggerProvider({
+  const pipeline = createCollectorPipeline({
+    exporter: new OTLPLogExporter(),
     resource,
-    processors: [new BatchLogRecordProcessor(new OTLPLogExporter())],
+    scopeName: serviceName,
+    batchSettings: COLLECTOR_BATCH_SETTINGS,
   });
-
-  const logger = provider.getLogger(serviceName);
 
   return {
     write: (line) => {
       process.stdout.write(`${line}\n`);
-      forwardToCollector(logger, line, parseStructuredLogLine(line));
+      forwardToCollector(pipeline.logger, line, parseStructuredLogLine(line));
     },
     shutdown: async () => {
       const deadline = Bun.sleep(SHUTDOWN_TIMEOUT_MS);
-      await Promise.race([provider.shutdown().catch(() => null), deadline]);
+      await Promise.race([pipeline.shutdown().catch(() => null), deadline]);
     },
   };
 };
