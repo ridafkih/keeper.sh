@@ -38,11 +38,7 @@ const injectIntoHeaders = (headers: Headers) => {
   });
 };
 
-interface TraceFields {
-  trace_id?: string;
-  span_id?: string;
-  trace_flags?: number;
-}
+type TraceFields = Record<string, string | number>;
 
 const activeTraceFields = (): TraceFields => {
   const spanContext = trace.getActiveSpan()?.spanContext();

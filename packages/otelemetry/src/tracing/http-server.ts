@@ -28,11 +28,11 @@ const parentContextFor = (request: Request, options: IncomingRequestOptions) => 
   return ROOT_CONTEXT;
 };
 
-const traceIncomingRequest = (
+const traceIncomingRequest = <Outcome extends Response | undefined>(
   request: Request,
   options: IncomingRequestOptions,
-  handle: () => Promise<Response | undefined>,
-): Promise<Response | undefined> => {
+  handle: () => Promise<Outcome>,
+): Promise<Outcome> => {
   const url = new URL(request.url);
   const parentContext = parentContextFor(request, options);
   const attributes = {
@@ -49,6 +49,13 @@ const traceIncomingRequest = (
   });
 };
 
+type RequestHandler<Outcome extends Response | undefined> = (request: Request) => Outcome | Promise<Outcome>;
+
+const withRequestTracing =
+  <Outcome extends Response | undefined>(options: IncomingRequestOptions, handler: RequestHandler<Outcome>) =>
+  (request: Request): Promise<Outcome> =>
+    traceIncomingRequest(request, options, async () => await handler(request));
+
 const nameRequestRoute = (method: string, route: string) => {
   const span = trace.getActiveSpan();
   if (!span) {
@@ -58,5 +65,5 @@ const nameRequestRoute = (method: string, route: string) => {
   span.setAttribute("http.route", route);
 };
 
-export { nameRequestRoute, traceIncomingRequest };
-export type { IncomingRequestOptions };
+export { nameRequestRoute, traceIncomingRequest, withRequestTracing };
+export type { IncomingRequestOptions, RequestHandler };
