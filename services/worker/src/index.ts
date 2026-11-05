@@ -67,7 +67,7 @@ await entry({
         widelog.set("user.id", job.data.userId);
         widelog.set("calendar.id", job.data.calendarId);
         try {
-          await enqueueSyncContinuation(continuationQueue, job);
+          await widelog.time.measure("duration_ms", () => enqueueSyncContinuation(continuationQueue, job));
           widelog.set("outcome", "success");
         } catch (error) {
           widelog.set("outcome", "error");
