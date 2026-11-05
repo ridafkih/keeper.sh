@@ -92,6 +92,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.package.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package.name }}-${{ matrix.arch }}
       - name: Verify the web image carries the llms text files
@@ -172,6 +175,9 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
           cache-from: type=gha,scope=${{ matrix.package }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.package }}-${{ matrix.arch }}
 

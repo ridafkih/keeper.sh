@@ -13,6 +13,7 @@ import {
   resourceFromAttributes,
 } from "@opentelemetry/resources";
 import { createCollectorExporter } from "./collector-exporter";
+import { readCollectorIdentity } from "./collector-identity";
 import {
   COLLECTOR_BATCH_SETTINGS,
   DROP_REPORT_INTERVAL_MILLIS,
@@ -109,14 +110,15 @@ const writeDropReportToStderr = (serviceName: string) => (report: DroppedRecords
 };
 
 const createCollectorSink = (): LineSink => {
-  const serviceName = process.env.OTEL_SERVICE_NAME ?? "unknown";
+  const { serviceName, serviceVersion, deploymentEnvironment } = readCollectorIdentity(process.env);
 
   const resource = detectResources({
     detectors: [envDetector, hostDetector, osDetector, processDetector],
   }).merge(
     resourceFromAttributes({
       "service.name": serviceName,
-      "deployment.environment": process.env.ENV ?? "production",
+      "service.version": serviceVersion,
+      "deployment.environment": deploymentEnvironment,
     }),
   );
 

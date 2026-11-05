@@ -220,7 +220,7 @@ describe("runCreateSource", () => {
         },
         spawnBackgroundJob: (jobName, fields, callback) => {
           expect(jobName).toBe("ical-source-sync");
-          expect(fields).toEqual({ calendarId: "source-99", userId: "user-42" });
+          expect(fields).toEqual({ "calendar.id": "source-99", "user.id": "user-42" });
           backgroundCallback = callback;
         },
         enqueuePushSync: (userId: string) => {

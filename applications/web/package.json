@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "bun src/server/index.ts",
+    "dev": "../../scripts/with-build-identity.sh bun src/server/index.ts",
     "build": "vite build --outDir dist/client && vite build --ssr src/server.tsx --outDir dist/server && bun scripts/build.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "types": "tsc --noEmit",
     "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run",
     "preview": "vite preview",
-    "start": "bun scripts/start.ts",
-    "smoke": "bun scripts/smoke.ts"
+    "start": "../../scripts/with-build-identity.sh bun scripts/start.ts",
+    "smoke": "../../scripts/with-build-identity.sh bun scripts/smoke.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "1.7.16",

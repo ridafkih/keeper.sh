@@ -5,6 +5,13 @@ type Event = Record<string, unknown>;
 let current: Event = {};
 let flushed: Event[] = [];
 
+const appendedValues = (existing: unknown): unknown[] => {
+  if (Array.isArray(existing)) {
+    return existing;
+  }
+  return [];
+};
+
 vi.mock("@/utils/logging", () => ({
   context: (run: () => unknown) => {
     const outer = current;
@@ -16,6 +23,9 @@ vi.mock("@/utils/logging", () => ({
     }
   },
   widelog: {
+    append: (key: string, value: unknown) => {
+      current = { ...current, [key]: [...appendedValues(current[key]), value] };
+    },
     flush: () => {
       flushed.push(current);
     },
@@ -40,6 +50,24 @@ describe("authObserver", () => {
       "auth.error_code": "SESSION_EXPIRED",
       "auth.provider": "google",
       "user.id": "user-1",
+    });
+  });
+
+  it("keeps better-auth's own log lines on the request's event without emails or tokens", () => {
+    authObserver.onAuthLog({
+      level: "error",
+      message: "Polar subscriptions list failed. Error: customer person@example.com not found",
+    });
+    authObserver.onAuthLog({
+      level: "warn",
+      message: "rejected token abcdefghijklmnopqrstuvwxyz0123456789ABCD",
+    });
+
+    expect(current).toEqual({
+      "auth.log": [
+        "error: Polar subscriptions list failed. Error: customer [email] not found",
+        "warn: rejected token [redacted]",
+      ],
     });
   });
 

@@ -19,7 +19,7 @@ import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
 import { keepSignedInAccount } from "./passkey-session-owner";
-import type { AuthObserver, AuthRequestOutcome } from "./auth-observer";
+import type { AuthLogEntry, AuthObserver, AuthRequestOutcome } from "./auth-observer";
 import {
   REGISTRATION_EMAIL_DOMAIN_MESSAGE,
   isRegistrationEmailAllowed,
@@ -442,6 +442,7 @@ const createAuth = (config: AuthConfig) => {
         },
       },
     },
+    logger: observation.logger,
     hooks: {
       ...observation.hooks,
       before: createAuthMiddleware((context) => {
@@ -605,6 +606,7 @@ export {
 } from "./mcp-token-version";
 export type {
   AuthConfig,
+  AuthLogEntry,
   AuthObserver,
   AuthRequestOutcome,
   AuthResult,

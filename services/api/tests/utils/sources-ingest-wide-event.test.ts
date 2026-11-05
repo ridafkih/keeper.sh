@@ -87,7 +87,7 @@ describe("user-triggered ICS ingestion telemetry", () => {
     const { ingestIcsSource } = await import("../../src/utils/sources");
     const { spawnBackgroundJob } = await import("../../src/utils/background-task");
 
-    await spawnBackgroundJob("ical-source-sync", { calendarId: SOURCE.id }, () =>
+    await spawnBackgroundJob("ical-source-sync", { "calendar.id": SOURCE.id }, () =>
       ingestIcsSource(SOURCE as never));
 
     expect(captured.ingestOptions).toHaveLength(1);

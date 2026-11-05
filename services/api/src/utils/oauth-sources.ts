@@ -501,7 +501,7 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
   hasExistingCalendar: hasExistingOAuthCalendar,
   resolveCalendarWritable: resolveOAuthCalendarWritable,
   triggerSync: (userId, provider, accountId) => {
-    spawnBackgroundJob("oauth-source-push-enqueue", { userId, provider }, async () => {
+    spawnBackgroundJob("oauth-source-push-enqueue", { "provider.name": provider, "user.id": userId }, async () => {
       const { premiumService } = await import("@/context");
       const plan = await premiumService.getUserPlan(userId);
       if (!plan) {
@@ -509,7 +509,11 @@ const createDefaultCreateOAuthSourceDependencies = (): CreateOAuthSourceDependen
       }
       await enqueuePushSync(userId, plan);
     });
-    spawnBackgroundJob("oauth-source-push-register", { accountId, provider, userId }, () =>
+    spawnBackgroundJob("oauth-source-push-register", {
+      "provider.account_id": accountId,
+      "provider.name": provider,
+      "user.id": userId,
+    }, () =>
       registerAccountPushChannels(accountId));
   },
 });
@@ -768,7 +772,7 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
     }
   },
   triggerSync: (userId, provider, accountId) => {
-    spawnBackgroundJob("oauth-account-import-push-enqueue", { userId, provider }, async () => {
+    spawnBackgroundJob("oauth-account-import-push-enqueue", { "provider.name": provider, "user.id": userId }, async () => {
       const { premiumService } = await import("@/context");
       const plan = await premiumService.getUserPlan(userId);
       if (!plan) {
@@ -776,7 +780,11 @@ const createDefaultImportOAuthAccountDependencies = (): ImportOAuthAccountDepend
       }
       await enqueuePushSync(userId, plan);
     });
-    spawnBackgroundJob("oauth-account-import-push-register", { accountId, provider, userId }, () =>
+    spawnBackgroundJob("oauth-account-import-push-register", {
+      "provider.account_id": accountId,
+      "provider.name": provider,
+      "user.id": userId,
+    }, () =>
       registerAccountPushChannels(accountId));
   },
 });

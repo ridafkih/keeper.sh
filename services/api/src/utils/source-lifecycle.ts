@@ -3,6 +3,7 @@ import { CalendarFetchError } from "@keeper.sh/calendar/ics";
 import type { CalendarFetchFailureReason } from "@keeper.sh/calendar/ics";
 import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
 import type { IcsFeedFailureReason } from "@keeper.sh/data-schemas";
+import type { BackgroundJobFields } from "./background-task";
 
 interface SourceReference {
   id: string;
@@ -41,7 +42,7 @@ interface CreateSourceDependencies<TSource extends SourceReference> {
   }) => Promise<TSource | undefined>;
   spawnBackgroundJob: (
     jobName: string,
-    fields: Record<string, unknown>,
+    fields: BackgroundJobFields,
     callback: () => Promise<void>,
   ) => void;
   fetchAndSyncSource: (source: TSource) => Promise<void>;
@@ -176,7 +177,7 @@ const runCreateSource = async <TSource extends SourceReference>(
     throw new Error("Failed to create source");
   }
 
-  dependencies.spawnBackgroundJob("ical-source-sync", { userId: input.userId, calendarId: source.id }, async () => {
+  dependencies.spawnBackgroundJob("ical-source-sync", { "calendar.id": source.id, "user.id": input.userId }, async () => {
     await dependencies.fetchAndSyncSource(source);
     await dependencies.enqueuePushSync(input.userId);
   });

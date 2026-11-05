@@ -7,7 +7,7 @@ export const envSchema = type({
   VITE_API_URL: "string.url",
   VITE_MCP_URL: "string.url?",
   OPENAI_APPS_CHALLENGE_TOKEN: "string?",
-  ENV: "'development'|'production'|'test' = 'production'",
+  ENV: "'development'|'production'|'test'",
   PORT: "string",
 });
 
