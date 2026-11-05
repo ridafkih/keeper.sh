@@ -4,6 +4,10 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tracing": "./src/tracing/index.ts"
+  },
   "bin": {
     "keeper-otelemetry": "src/index.ts"
   },
@@ -15,12 +19,15 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/api-logs": "^0.223.0",
+    "@opentelemetry/context-async-hooks": "^2.12.0",
     "@opentelemetry/core": "^2.12.0",
     "@opentelemetry/otlp-exporter-base": "^0.223.0",
     "@opentelemetry/otlp-transformer": "^0.223.0",
     "@opentelemetry/resources": "^2.12.0",
     "@opentelemetry/sdk-logs": "^0.223.0",
-    "@opentelemetry/sdk-metrics": "^2.12.0"
+    "@opentelemetry/sdk-metrics": "^2.12.0",
+    "@opentelemetry/sdk-trace": "^2.12.0",
+    "arkenv": "^0.11.0"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",
