@@ -42,8 +42,8 @@ const buildResource = (serviceName: string, configuration: TracingConfiguration)
     resourceFromAttributes({
       "service.name": serviceName,
       "deployment.environment": configuration.environment,
-      ...(configuration.version && { "service.version": configuration.version }),
-      ...(configuration.commit && { "vcs.ref.head.revision": configuration.commit }),
+      "service.version": configuration.version,
+      "vcs.ref.head.revision": configuration.commit,
     }),
   );
 
