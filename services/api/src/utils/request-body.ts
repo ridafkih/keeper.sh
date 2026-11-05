@@ -34,6 +34,7 @@ const sourcePatchBodySchema = type({
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
   "markEventsAsPrivate?": "boolean",
+  "disableEventReminders?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;

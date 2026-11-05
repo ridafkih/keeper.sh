@@ -20,6 +20,7 @@ import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
 import type { FeedMembershipClient } from "@/utils/ical-feeds";
 import { deleteSourceCalendar } from "@/utils/source-calendars";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
+import { updatesRequestUserSync } from "@/utils/source-sync-requests";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -55,6 +56,7 @@ const GET = withWideEvent(
         ingestFailureCount: sql<number>`coalesce(${sourceIngestScheduleTable.failureCount}, 0)`,
         ingestLastFailureAt: sourceIngestScheduleTable.lastFailureAt,
         markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
+        disableEventReminders: calendarsTable.disableEventReminders,
         providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
@@ -89,12 +91,6 @@ const GET = withWideEvent(
     });
   }),
 );
-
-const SYNC_REQUESTING_FIELDS = [
-  "markEventsAsPrivate",
-  "excludeAvailabilities",
-  "excludeTitleKeywords",
-] as const;
 
 const PATCH = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
@@ -161,7 +157,7 @@ const PATCH = withWideEvent(
                   )
                   .returning();
                 const requestsSync = updated?.capabilities.includes("push")
-                  || SYNC_REQUESTING_FIELDS.some((field) => field in updates);
+                  || updatesRequestUserSync(updates);
                 if (updated && requestsSync) {
                   await requestUserSync(transaction, userIdToUpdate);
                 }
@@ -186,7 +182,7 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
-            if (updated && SYNC_REQUESTING_FIELDS.some((field) => field in updates)) {
+            if (updated && updatesRequestUserSync(updates)) {
               await requestUserSync(transaction, userIdToUpdate);
             }
             await applyFeedMembership(transaction, updated ?? null);
