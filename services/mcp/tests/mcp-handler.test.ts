@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { createKeeperMcpHandler } from "../src/mcp-handler";
+import {
+  MAX_REQUEST_BODY_BYTES,
+  MAX_TOOL_INPUT_ELEMENTS,
+  createKeeperMcpHandler,
+} from "../src/mcp-handler";
 import { createKeeperMcpToolset } from "../src/toolset";
 
 const toolset = createKeeperMcpToolset();
@@ -20,6 +24,38 @@ const listToolsResultSchema = z.object({
     tools: z.array(listedToolSchema),
   }),
 });
+
+const toolCallResultSchema = z.object({
+  result: z.object({
+    isError: z.boolean().optional(),
+  }),
+});
+
+const createReadScopedHandler = (handlerToolset = toolset) =>
+  createKeeperMcpHandler({
+    auth: {
+      api: {
+        getMcpSession: () => Promise.resolve({
+          scopes: "keeper.read",
+          userId: "user-123",
+        }),
+      },
+    },
+    mcpPublicUrl: "https://mcp.keeper.sh",
+    apiBaseUrl: "https://keeper.sh",
+    toolset: handlerToolset,
+  });
+
+const createAuthenticatedPost = (body: string) =>
+  new Request("https://mcp.keeper.sh/mcp", {
+    body,
+    headers: {
+      "Accept": "application/json, text/event-stream",
+      "Authorization": "Bearer test-token",
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
 
 describe("createKeeperMcpHandler", () => {
   it("returns protected-resource metadata when authentication is missing", async () => {
@@ -239,5 +275,45 @@ describe("createKeeperMcpHandler", () => {
         }),
       ),
     ).rejects.toThrow("database unavailable");
+  });
+
+  it("rejects a request body larger than the configured limit with 413", async () => {
+    const handler = createReadScopedHandler();
+    const oversizedBody = JSON.stringify({
+      id: "1",
+      jsonrpc: "2.0",
+      method: "tools/list",
+      params: { padding: "x".repeat(MAX_REQUEST_BODY_BYTES) },
+    });
+
+    const response = await handler(createAuthenticatedPost(oversizedBody));
+
+    expect(response.status).toBe(413);
+  });
+
+  it("refuses tool arguments with more elements than the configured limit", async () => {
+    const execute = vi.fn(() => Promise.resolve({ error: "unreachable" }));
+    const handler = createReadScopedHandler({
+      ...toolset,
+      get_event: { ...toolset.get_event, execute },
+    });
+    const oversizedArguments = Object.fromEntries(
+      Array.from({ length: MAX_TOOL_INPUT_ELEMENTS + 1 }, (_element, index) => [`key${index}`, index]),
+    );
+
+    const response = await handler(
+      createAuthenticatedPost(
+        JSON.stringify({
+          id: "1",
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { name: "get_event", arguments: { eventId: "event-1", ...oversizedArguments } },
+        }),
+      ),
+    );
+
+    const { result } = toolCallResultSchema.parse(await response.json());
+    expect(result.isError).toBe(true);
+    expect(execute).not.toHaveBeenCalled();
   });
 });

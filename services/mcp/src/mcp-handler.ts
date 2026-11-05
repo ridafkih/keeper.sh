@@ -10,6 +10,8 @@ const JSON_RPC_ERROR_FORBIDDEN = -32_003;
 const JSON_RPC_ERROR_METHOD_NOT_ALLOWED = -32_005;
 const ALLOWED_HTTP_METHODS = new Set(["DELETE", "GET", "POST"]);
 const ALLOW_HEADER_VALUE = "POST, DELETE, OPTIONS";
+const MAX_REQUEST_BODY_BYTES = 1_048_576;
+const MAX_TOOL_INPUT_ELEMENTS = 256;
 type ResponseHeaders = Headers | Record<string, string>;
 
 interface KeeperMcpAuthSession {
@@ -177,6 +179,7 @@ const createAuthenticatedMcpServer = (
     capabilities: {
       tools: {},
     },
+    maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS,
   });
 
   const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
@@ -276,6 +279,7 @@ const createKeeperMcpHandler = ({
     const server = createAuthenticatedMcpServer(toolset, toolContext, userId, serverInfo);
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse,
+      maxRequestBodySize: MAX_REQUEST_BODY_BYTES,
     });
 
     try {
@@ -288,5 +292,5 @@ const createKeeperMcpHandler = ({
   };
 };
 
-export { createKeeperMcpHandler };
+export { MAX_REQUEST_BODY_BYTES, MAX_TOOL_INPUT_ELEMENTS, createKeeperMcpHandler };
 export type { CreateKeeperMcpHandlerOptions, KeeperMcpAuth, KeeperMcpAuthSession };
