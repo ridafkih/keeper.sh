@@ -3,8 +3,8 @@
 import type { EventEmitter } from "node:events";
 import os from "node:os";
 import { createInterface } from "node:readline";
+import { metrics } from "@opentelemetry/api";
 import { SeverityNumber } from "@opentelemetry/api-logs";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import {
   detectResources,
   envDetector,
@@ -13,6 +13,7 @@ import {
   processDetector,
   resourceFromAttributes,
 } from "@opentelemetry/resources";
+import { createCollectorExporter } from "./collector-exporter";
 import { COLLECTOR_BATCH_SETTINGS, createCollectorPipeline } from "./collector-pipeline";
 
 const PINO_SEVERITY: Record<number, SeverityNumber> = {
@@ -104,7 +105,7 @@ const createCollectorSink = (): LineSink => {
   );
 
   const pipeline = createCollectorPipeline({
-    exporter: new OTLPLogExporter(),
+    exporter: createCollectorExporter(metrics.getMeterProvider()),
     resource,
     scopeName: serviceName,
     batchSettings: COLLECTOR_BATCH_SETTINGS,
