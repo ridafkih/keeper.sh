@@ -26,6 +26,7 @@
       "entry": [
         "src/main.tsx",
         "src/server.tsx",
+        "src/server/index.ts",
         "plugins/**/*.ts",
         "scripts/**/*.ts"
       ],
