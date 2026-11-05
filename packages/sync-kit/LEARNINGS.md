@@ -3281,3 +3281,1168 @@ listed a narrower or wider window than it mirrors can still retire what it no lo
 **Proved by.**
 `tests/deletion/two-windows.test.ts :: RECON-O7: an event inside proven coverage but outside the mirror window retires the mirror`;
 `tests/coverage/proven-coverage.test.ts :: RECON-O4: the same absence is reported as unresolved rather than silently dropped`.
+
+---
+
+# sync-conformance learnings ledger
+
+`@keeper.sh/sync-conformance` at `packages/sync-kit/conformance`: the executable specification every
+adapter runs against itself. One entry point, `runConformance({ name, supports, create, withinWindow })`,
+which generates the case set from the adapter's declared `Capabilities`, registers it with `describe`/`it`
+and returns a report naming every case it selected, every case it took the alternative branch of, and every
+case it skipped. It ships an in-memory reference provider that passes, plus four fixtures that truncate a
+page, expire a cursor, force a precondition conflict and stall a request forever.
+
+Numbering is prefixed `CONF-` so it appends to the protocol (1–60), sync-ical (`ICAL-I1`–`ICAL-I71`) and
+sync-reconcile (`RECON-I1`–`RECON-I85`) ledgers above without renumbering anyone. `CONF-I1`–`CONF-I60` are
+adopted. `CONF-I61`–`CONF-I68` are not applicable and say why. `CONF-I69`–`CONF-I78` are the dependency and
+process decisions. `CONF-I79`–`CONF-I82` were added by review. The module map, the public API and the
+`CONF-O` (overwrite) / `CONF-L` (lockup) test indexes are the closing sections.
+
+The suite has landed. Every citation is a **Proved by.** line naming the case id and the test file whose
+titles carry it, and `conformance/tests/hygiene/ledger-citations.test.ts` walks this section against
+`src/case-id.ts` and against the test titles themselves — the same mechanical walk `RECON-I84` added for
+sync-reconcile. `CONF-I79`–`CONF-I82` were added by the adversarial review of the first implementation
+pass and are collected in the closing **Added after review** section.
+
+A note on what "honoured" means here, because this package is unusual. sync-protocol honours a lesson by
+making the wrong thing unsayable in the type system; sync-reconcile honours it by computing the right
+answer. sync-conformance honours it by **generating a case that fails when an adapter gets it wrong**, and
+by shipping a **negative control** — a deliberately mutated provider that must fail exactly that case and no
+other. A conformance case with no negative control is an assertion nobody has ever seen fail, which is the
+same failure class as a capability flag nobody checks (CONF-I37).
+
+---
+
+## Adopted
+
+### CONF-I1. A truncated read is indistinguishable from a deletion, so it must be a different listing kind
+
+**Lesson.** `ingestSource` given a fetch that silently returned 1 of 3 stored events emitted 2 deletes, and
+those deletes reached real calendars. The repo keeps this as a characterization test, not a bug report,
+because it is the executable reason `CalDAVClient.fetchCalendarObjects` throws on a short multiget.
+**Learned from.** `packages/calendar/tests/core/sync-engine/ingest-truncation.test.ts ::
+"deletes every stored source event when a fetch silently returns a subset"`;
+`providers/caldav/shared/client.ts` (`CalDAVIncompleteMultiGetError`); RFC 6578 §3.6, which signals
+truncation with a 207 whose request-URI response carries 507 plus `DAV:number-of-matches-within-limits`.
+**Honoured by.** The flagship fixture `truncatingAfter(n)`, and the flagship case family
+`deletion-safety`. For every adapter the suite asserts: a truncated page yields `kind: "partial"` or
+`Result.ok === false`, never `snapshot`; `assertNoRemovalDerivable` passes on the result; and the cursor is
+unchanged. The type system already forbids `removals` and `coverage` on `partial` (protocol entry 1), so
+the runtime case exists to prove the **adapter** reaches that kind rather than manufacturing a `snapshot`
+from a short read.
+**Proved by.** `CONF-O1` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I2. An empty listing must never mean "the calendar is empty"
+
+**Lesson.** A failed HTTP fetch was swallowed and returned as empty, which ingest read as "the source
+authoritatively has zero events" and deleted every `event_state` row for the calendar on the next tick.
+**Learned from.** commit `0184ea19` *fix(ics): don't wipe existing events when remote fetch fails (#383)*;
+`ics/utils/fetch-adapter.ts`; test *"propagates fetch errors instead of returning empty events"*.
+**Honoured by.** An ungated case that drives the adapter with a transport that fails, and asserts
+`Result.ok === false` with a typed `ProviderFailure`. A separate case seeds a genuinely empty calendar and
+asserts the two outputs are **distinguishable** — a suite that only checked "does not throw" would pass
+both.
+**Proved by.** `CONF-O2` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I3. Deletion authority is a discriminant, not a flag, and differs per adapter
+
+**Lesson.** A delta source reports only changes, so absence means unchanged; a snapshot source re-reports
+its coverage, so absence means gone. The old code threaded `isDeltaSync?: boolean` through four call sites.
+**Learned from.** `core/source/event-diff.ts` (`buildSourceEventStateIdsToRemove`);
+`core/sync-engine/ingest.ts` (`getNonRecurringStoredEventIdsOutsideWindow`).
+**Honoured by.** `supports.deletionAuthority` selects a case set rather than removing one.
+`snapshotAbsence` gets "an event absent from a snapshot inside proven coverage is removed";
+`explicitRemovalsOnly` gets "an event absent from a listing is never removed, and a named removal is". Both
+halves are generated; neither adapter runs the other's. The report records which branch was taken so the
+adapter's own test file asserts on it.
+**Proved by.** `CONF-O3` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I4. Deletion may only be inferred inside a coverage window the listing itself proved
+
+**Lesson.** Reconciliation carries `authoritativeWindow`, `authoritativeSourceWindows` and
+`requestedWindow` as three separate values with different powers; a destination whose sources are
+unverified is limited to explicit requested-window cleanup.
+**Learned from.** `core/sync/operations.ts` (`ReconciliationScope`, `isInsideSourceAuthoritativeWindow`);
+tests *"does not reconcile a mapping inside the requested window but outside source coverage"*,
+*"limits unverified reconciliation to explicit requested-window cleanup"*.
+**Honoured by.** The suite requests a window strictly wider than the reference provider will cover, and
+asserts the returned `listing.coverage.covered` is the narrower one and that no removal is derivable for
+identities in the requested-but-uncovered band. It also asserts `coverage.calendar` equals `scope.calendar`
+— a coverage window proved for a different calendar is a foreign-calendar overwrite (RECON-I27).
+**Proved by.** `CONF-O4` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I5. A withheld event is present, not absent
+
+**Lesson.** Filtering an unrepresentable event out of the listing makes the diff see it as absent and
+delete the stored row the user still has. The ICS adapter deliberately keeps unsupported UIDs **in**
+`events` and reports them separately.
+**Learned from.** `ics/utils/fetch-adapter.ts` (`unsupportedEventUids`); `core/sync-engine/ingest.ts`
+lines 226–232, 323–336; tests *"withholds unsupported events, counts them, and keeps their stored state"*,
+*"never deletes the stored row of the event it withholds"*.
+**Honoured by.** An ungated case that seeds an event the adapter cannot represent, asserts it appears in
+`listing.withheld` with a `WithholdReason`, and asserts no removal is derivable for its identity. The
+assertion runs on **both** sides: the withheld identity must also not appear as a deletable mirror
+(CONF-I41).
+**Proved by.** `CONF-O5` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I6. One bad event must not stall the whole feed, and a real deletion in the same payload still applies
+
+**Lesson.** A single VEVENT with an hour-based all-day DURATION, a negative DURATION, a THISANDFUTURE
+override or an uninterpretable TZID used to throw out of the whole fetch — nothing applied, the token never
+advanced, the calendar never converged.
+**Learned from.** commits `fdd9ba62` (#634) and `43292a9f` (#606);
+`ics-malformed-vevent-telemetry.test.ts :: "applies a real deletion that arrives in the same feed as a
+malformed VEVENT"`, *"converges over repeated polls of the same malformed feed"*.
+**Honoured by.** A three-part case: a listing carrying one unusable item still returns `ok` with the other
+items; a genuine removal delivered in the same listing is still expressed; and polling the same input twice
+produces byte-identical output including diagnostics.
+**Proved by.** `CONF-O6` in `conformance/tests/isolation.test.ts`.
+
+### CONF-I7. An unbuildable newest revision must withhold its whole identity, not fall back to the older one
+
+**Lesson.** Letting the superseded revision win syncs the instance at a stale time — a silent wrong write,
+not a missing one.
+**Learned from.** `ics/utils/parse-ics-events.ts` lines 413–444; commit `8106280b`;
+`ics-stale-revision-telemetry.test.ts :: "never reverts a stored event to the time the publisher moved it
+away from"`.
+**Honoured by.** An overwrite case that seeds two revisions of one identity where the newer is
+unrepresentable, and asserts the older revision's time is **not** written — the adapter must withhold the
+identity, not downgrade it.
+**Proved by.** `CONF-O7` in `conformance/tests/writes.test.ts`.
+
+### CONF-I8. Revision order is a total order derived from content, never feed order
+
+**Lesson.** Producing a different winner when the same pair is listed in the opposite order churns the
+stored row on every poll.
+**Learned from.** `ics/utils/parse-ics-events.ts` (`compareEventRevisions`);
+`ics-superseded-slot-telemetry.test.ts :: "drops the same copy whichever order the feed lists the pair in"`,
+*"settles without churning the surviving row over repeated polls"*.
+**Honoured by.** The order-permutation case: the same colliding pair is fed in both orders and the two
+listings must be deeply equal after canonicalisation, then polled twice for zero further writes.
+**Proved by.** `CONF-O8` in `conformance/tests/convergence.test.ts`.
+
+### CONF-I9. Re-ingesting identical input must be no work at all, not an idempotent write
+
+**Lesson.** Any residual churn multiplies into destination writes, quota, audit-log entries and etag
+invalidation for other clients.
+**Learned from.** `degenerate-range-source-ingest.test.ts :: "re-reads an unchanged feed as no work at
+all"`; `ingest.test.ts :: "does not flush when there are no changes"`; the twelve `*convergence*` suites.
+**Honoured by.** Convergence is asserted as a **count of write operations**, not state equality.
+`CONF-O9` polls an unchanged calendar twice and asserts the provider's write log did not grow; `CONF-O28`
+writes a degenerate range, lets the provider widen it, and asserts the replay is not a fresh write; the
+reference provider is exercised by a full fixed point — list, apply, list, list — and the write log after
+convergence must equal the write log after the apply. "No work" means **no write**, never no read: see
+`CONF-I82`.
+**Proved by.** `CONF-O9` in `conformance/tests/convergence.test.ts`.
+
+### CONF-I10. An expired cursor discards the whole pagination, clears the token, and carries no tombstones
+
+**Lesson.** A 410 mid-pagination must discard every accumulated page rather than commit a partial result,
+and the sync token only advances when the whole pagination completes.
+**Learned from.** `providers/google/source/utils/fetch-events.ts` (`fullSyncRequired` returned from inside
+the page loop); the Outlook equivalent; `core/sync-engine/ingest.ts`
+(`fullSyncRequired => flush({inserts:[],deletes:[],syncToken:null})`); Google's documented 410 GONE;
+Graph's 410 `syncStateNotFound`; RFC 6578 §3.2 `DAV:valid-sync-token`.
+**Honoured by.** The `expiringCursorAfter(n)` fixture, and a case asserting all four of: the listing kind
+is `cursorLost`; no events and no removals leak out (the type forbids the fields, the case proves the
+adapter does not instead return an empty `delta`); the cursor is cleared rather than retained; and the
+resync that follows is what deletes.
+**Proved by.** `CONF-O10` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I11. A cursor is valid only for the request shape that minted it
+
+**Lesson.** Sync tokens were stored with an encoded sync-window version; widening the required window
+discards the token and forces a backfill, because a token minted under a narrower window will never report
+events in the newly added range.
+**Learned from.** `core/oauth/sync-token.ts` (`resolveSyncTokenForWindow`, `requiresBackfill`);
+`tests/core/oauth/sync-token.test.ts`.
+**Honoured by.** Gated on `supports.delta.windowBoundToCursor`. Mint a cursor under window A, request
+window B ⊃ A with the same cursor, and assert the adapter answers `cursorLost` (or a `cursorInvalid`
+failure) rather than a delta that silently omits the new range. The protocol already carries `scope` on
+`SyncCursor`, so the adapter has the information; the case proves it uses it.
+**Proved by.** `CONF-O11` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I12. Corrupt known state forces a resync and never becomes a tombstone by omission
+
+**Lesson.** A stored row that fails validation is removed only if the fetch still reports its identity; on
+a delta sync any validation failure resets the token instead of diffing against a partial picture.
+**Learned from.** `core/sync-engine/ingest.ts` lines 285–304; tests *"resets delta sync when a corrupt
+stored row requires full-sync recovery"*, *"keeps an unparseable stored row belonging to a withheld
+over-budget series"*.
+**Honoured by.** A case that seeds the provider-under-test with a corrupt known row through the
+`ProviderUnderTest.seed` seam, asserts a resync is demanded, and asserts zero removals are emitted.
+**Proved by.** `CONF-O12` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I13. An ambiguous removal is not a deletion
+
+**Lesson.** Graph's `@removed` tombstone may omit the event type, and a sparse id may name a series master
+while local state holds only expanded instances — advancing the token would strand every occurrence. The
+code declares the whole delta unusable and demands a full sync rather than guessing.
+**Learned from.** `providers/outlook/source/utils/fetch-events.ts` (the `@removed && !event.type` branch,
+the seriesMaster-in-delta branch).
+**Honoured by.** Gated on `supports.removalsAreAmbiguous`. `ProviderSeed.unattributableRemovals` is the
+seam: the case seeds a tombstone the adapter cannot attribute to an identity and asserts it produces either
+`cursorLost` or a removal the suite cannot name — never an `AuthoritativeRemoval`, and never a blank uid.
+The negative control is a mutant that blanks the uid of a removal it does report.
+**Proved by.** `CONF-O13` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I14. A replayed create is a no-op; a create conflict without a usable precondition is a refusal
+
+**Lesson.** `recoverCreateConflict` returns early when the remote copy already matches, and otherwise
+requires an ETag, throwing *"already exists but has no ETag for a safe recreation"* rather than
+delete-then-create blind.
+**Learned from.** `providers/caldav/destination/provider.ts`; `caldav/shared/client.ts`
+(412 → `CalDAVCreateConflictError`); RFC 4791 §4.1 (`CALDAV:no-uid-conflict`) and §5.3.2
+(`If-None-Match: *`).
+**Honoured by.** Two ungated cases. Replaying an identical `create` with the same `IdempotencyKey` must
+return `alreadyExists` or `unchanged` with the same `RemoteRef`, and the store must hold exactly one
+object. A conflicting create whose remote copy differs must return `conflict` carrying the observed
+precondition — never a `deleted` followed by a `created`, which the suite detects by counting the
+provider's write log.
+**Proved by.** `CONF-O14` and `CONF-O15` in `conformance/tests/writes.test.ts`.
+
+### CONF-I15. Provenance is per-provider and may be undetectable, and that must be sayable
+
+**Lesson.** Google and ICS detect our own events by a UID suffix; Outlook by a category, because Graph
+rewrites `iCalUId`; CalDAV by the `.ics` filename. Outlook's reader checks both.
+**Learned from.** `core/events/identity.ts` (`isKeeperEvent`);
+`providers/outlook/source/utils/fetch-events.ts` lines 565–573; `providers/caldav/destination/provider.ts`.
+**Honoured by.** `supports.provenanceChannel` selects the carrier, and the case is proved by **round trip**
+— write through the adapter, list back through the same adapter, assert the returned event is `OwnEvent`
+with our `InstallationId` — never by inspecting provider internals. For `none`, the alternative case
+asserts the round-tripped event is `IndeterminateEvent` and that no deletion of an indeterminate event is
+derivable.
+**Proved by.** `CONF-O16` in `conformance/tests/provenance.test.ts`.
+
+### CONF-I16. A foreign event must survive every reconciliation the suite can generate
+
+**Lesson.** Orphan cleanup skips `!remoteEvent.isKeeperEvent` and skips anything outside the authoritative
+window. Without the window check, a freshly imported calendar deletes Keeper-tagged events another row
+legitimately placed there.
+**Learned from.** `core/sync/operations.ts` lines 590–613; tests *"does not remove unmapped non-keeper
+future events"*, *"does not remove an unmapped non-keeper event after it becomes historical"*.
+**Honoured by.** `CONF-O17` seeds a `ForeignEvent` canary, writes beside it, lists, and asserts the canary
+is byte-identical afterwards; the negative control bumps the canary's revision on **any** successful create
+or update, so every write path in the reference is covered by that one mutant. The originally planned
+*shared teardown* over every write-family case was **not** built: `create` runs per case (`CONF-I57`) and a
+shared hook cannot know each case's seed, so the mutant — which disturbs the canary from inside the
+provider — is what makes the guarantee general rather than local to `CONF-O17`.
+**Proved by.** `CONF-O17` in `conformance/tests/provenance.test.ts`.
+
+### CONF-I17. Echo verification is three-state, and "no echo" is not "matched"
+
+**Lesson.** A CalDAV PUT answers 201/204 with no body, so there is nothing to compare; the code declares
+`{ comparable: false }` rather than reporting zero divergence. Only booleans and lengths ever leave the
+echo module — never field values.
+**Learned from.** `providers/caldav/destination/provider.ts` (`CALDAV_PUSH_ECHO`);
+`core/events/push-echo.ts` header comment; `core/sync-engine/index.ts` (`tallyPushEcho`).
+**Honoured by.** Gated on `supports.echoesWrites`. An adapter that cannot echo must return
+`echo: { kind: "notObserved" }`, and the suite asserts the report counts it as **not observed**, not as
+matched. A separate ungated assertion scans every `BoundedSample` the adapter emits for the seeded event's
+title, description and location strings, and fails if any appears — diagnostics carry identifiers, never
+content.
+**Proved by.** `CONF-O18` in `conformance/tests/writes.test.ts`; the content-leak scan is `CONF-O19` in
+`conformance/tests/diagnostics.test.ts`.
+
+### CONF-I18. Echo must tolerate the provider's own lossless rewrites, or the mirror churns forever
+
+**Lesson.** Timestamps compared at whole-second granularity, text CRLF-normalised and trimmed,
+availability defaulting to busy, and an unsupported OOO availability coerced to busy must not read as
+drift.
+**Learned from.** `core/events/push-echo.ts` (`isSameSerializedSecond`); `core/events/content-hash.ts`;
+tests *"does not churn when a destination serializes timestamps to whole seconds"*, *"does not churn when a
+provider coerces unsupported OOO availability to busy"*; RFC 4791 §5.3.4, which forbids returning a strong
+ETag when the stored bytes differ from the submitted bytes.
+**Honoured by.** The **reference provider deliberately rewrites what it stores** — it truncates sub-second
+precision, normalises CRLF and trims trailing whitespace — so any adapter that trusts its own submitted
+representation instead of the provider's returned `RemoteVersion`/`Fingerprint` fails the convergence case
+rather than passing it by luck.
+**Proved by.** `CONF-O20` in `conformance/tests/convergence.test.ts`.
+
+### CONF-I19. Identity is canonical and excludes mutable content
+
+**Lesson.** Key order, `undefined` vs `null`, and array order must not produce a false change; occurrence
+identity is distinct from resource identity.
+**Learned from.** `core/source/event-diff.ts` (`canonicalizeStructuredIdentityValue`,
+`buildSourceEventIdentityKey`); tests *"does not diff equivalent recurrence payloads with different key
+order"*, *"handles null/undefined timezone by treating them as equivalent"*.
+**Honoured by.** The suite's own canonical encoder follows RFC 8785 key ordering (UTF-16 code-unit order,
+**not** `localeCompare`) and is used for every deep comparison the suite makes. A generated case presents
+the same event twice with permuted key order and equivalent absent-value spellings, and asserts one
+identity and zero writes. A dedicated case covers astral-plane and combining-mark keys, because the sorting
+rule is the footgun.
+**Proved by.** `CONF-O21` in `conformance/tests/convergence.test.ts`.
+
+### CONF-I20. A repeated identity in one listing is one entry, last observation wins
+
+**Lesson.** One provider batch reporting the same occurrence several times produced duplicate inserts;
+Google's delta applies only the final version when an occurrence changes repeatedly in one delta. Graph
+documents replays explicitly and guarantees no ordering.
+**Learned from.** `core/source/event-diff.ts` (`deduplicateIncomingEvents`); `ingest.test.ts :: "applies
+only the final version when a provider occurrence changes repeatedly in one delta"`;
+learn.microsoft.com/graph/delta-query-overview §Replays.
+**Honoured by.** A case that makes the provider emit one identity N times in a single listing and asserts
+the reconciled result has exactly one entry equal to the last observation, and that feeding the repeats in
+reverse order yields the same winner (CONF-I8).
+**Proved by.** `CONF-O22` in `conformance/tests/convergence.test.ts`.
+
+### CONF-I21. Every retry path has a provable ceiling and a capped provider-supplied delay
+
+**Lesson.** `withBackoff` bounds attempts, caps `Retry-After` at 64s, uses an abortable `setTimeout`-based
+sleep that removes its listener on the timeout path and clears the timer on the abort path, and ends with
+an explicit unreachable throw so the loop cannot fall out silently.
+**Learned from.** `core/utils/backoff.ts`; `backoff.test.ts :: "caps a provider-supplied delay at the
+maximum backoff"`, *"throws after exhausting all retries"*.
+**Honoured by.** `OperationContext.retryBudget` is handed to the adapter by the suite, and the generated
+case drives a transport that answers `rateLimited` forever with a `retryAfter` in 2099. It asserts the
+transport was reached exactly `maxAttempts` times and that the injected clock advanced by no more than
+`maxAttempts * retryDelayCeilingMs`, then calls the adapter's own `retryCeilingProven` obligation. The
+abortable sleep is `TestClock.sleep`, which registers its abort listener against its own `AbortController`
+and tears it down on **both** paths, so a caller reusing one signal across a retry loop accumulates no
+listeners — asserted directly with `getEventListeners`. The backoff sleeps on a signal composed from the
+provider's lifetime and the caller's, so an abort cancels the pending delay instead of leaving it armed.
+**Proved by.** `CONF-L1` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I22. Every await on an outside resource carries a deadline, and a timeout is not a caller abort
+
+**Lesson.** `mergeAbortSignals` removes every listener on the first abort, and `buildTimeoutSignal` keeps a
+separate `isTimeout()` so a caller-initiated abort is not misreported as a provider timeout.
+**Learned from.** `core/utils/fetch-with-timeout.ts` (`RequestTimeoutError`, `isTimeoutError`);
+`fetch-with-timeout.test.ts`.
+**Honoured by.** Both the `stallingOn(predicate)` fixture and `TransportStub.stall()` answer with a
+permanently pending promise, never a long timer, so the deadline must come from outside the awaited work.
+`CONF-L2` stalls the transport, gives the call a **positive** budget, and asserts both that the transport
+was reached and that the answer is `budgetExhausted`; `CONF-L3` stalls the transport, lets the call reach
+it, then aborts mid-flight and asserts `aborted` — a different value from the deadline case. A caller that
+walks away from a flight abandons its coalescing key, so the caller after it starts a fresh flight rather
+than joining a leader nobody is waiting for.
+**Proved by.** `CONF-L2` and `CONF-L3` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I23. A single-flight leader's failure reaches every follower, and the slot is freed on the throwing path
+
+**Lesson.** The refresh coordinator deletes its in-flight entry in a `finally` guarded by an identity check
+so a later generation is not evicted, and the distributed release is best-effort with a TTL fallback so a
+release failure cannot wedge the next caller.
+**Learned from.** `core/oauth/refresh-coordinator.ts`; `refresh-coordinator.test.ts :: "coalesces
+concurrent refreshes for the same credential"`, *"releases the lock after failures"*.
+**Honoured by.** Four assertions, not two: the leader's rejection reaches every follower registered before
+it settled; the coalescing slot is freed on the rejecting path; a follower registering **after** the leader
+rejected starts a fresh attempt rather than inheriting the dead one (the gap the existing repo tests do not
+cover); and a second generation started after the first settled is not evicted by the first's `finally`.
+Gated on the adapter declaring any coalescing at all, which the suite detects by observing fewer transport
+calls than concurrent invocations.
+**Proved by.** `CONF-L4` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I24. Telemetry emitted inside a coalesced body lands on a foreign caller's context
+
+**Lesson.** Only the joining branch runs in the joining caller's async context; a shared body runs in
+whichever context created the promise, so telemetry emitted there is attributed to the wrong wide event.
+**Learned from.** `core/oauth/refresh-coordinator.ts` (the comment above
+`widelog.set("token.refresh_coalesced")`); `core/sync-engine/ingest.ts` lines 191–205 (`measureDiff`).
+**Honoured by.** A constraint on the harness rather than a generated case: `runConformance` attributes
+`ListingDiagnostics` to the call that returned them, and the concurrency case asserts that two coalesced
+callers each receive their own diagnostics object with their own `pagesFetched`, rather than one object
+shared by reference.
+**Proved by.** `CONF-L5` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I25. Multi-key acquisition must be in a canonical order
+
+**Lesson.** `withSourceIngestLocks` dedupes and sorts calendar ids before taking each advisory lock,
+because two runs touching the same pair in opposite orders deadlock.
+**Learned from.** `core/source/ingest-lock.ts`; `ingest-lock.test.ts :: "acquires every source lock before
+running work"`.
+**Honoured by.** A case that issues two concurrent `listChanges` calls over overlapping calendar sets in
+opposite orders and asserts both settle before the fake clock passes the deadline. Gated on the adapter
+enumerating more than one calendar.
+**Proved by.** `CONF-L6` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I26. A lease releases on the throwing path and leaves no timer behind
+
+**Lesson.** The sync lock's renewal records an error and clears it on the next success; loss is detected by
+reading a different holder, not by the renewal flag; release always clears the interval before the release
+script, so an abandoned handle cannot leave a timer running.
+**Learned from.** `packages/sync/src/sync-lock.ts` (`createLockHandle`).
+**Honoured by.** The suite invokes every adapter operation once with a transport that throws synchronously
+and once with one that rejects, then asserts the operation can be invoked again and succeed — a lease held
+past a throw shows up as the second call hanging, which the deadline turns into a failure rather than a CI
+hang. After each case the suite advances the fake clock past every declared budget and asserts no timer
+callback fires. The coalescing slot is released on **both** settlement paths, so a rejecting body cannot
+poison its key for the process lifetime, and the seven `ProviderConformanceSuite` obligations are not
+decoration: each is invoked by the case that owns it — `retryCeilingProven` by `CONF-L1`,
+`deadlineOnNeverResolvingStub` by `CONF-L2`, `abortMidFlightCleansUp` by `CONF-L3`,
+`followerRejectsWhenLeaderFails` by `CONF-L4`, `concurrentSameKeyDoesNotDeadlock` by `CONF-L6`,
+`leaseReleasedOnThrow` by `CONF-L7` and `deletionInputsShareOneCalendar` by `CONF-O4` — and each has a
+body that reads a different piece of the adapter's own state.
+**Proved by.** `CONF-L7` and `CONF-L8` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I27. A cancelled waiter must not strand its successors, and every poll has a ceiling
+
+**Lesson.** The sync lock's poll loop has an explicit timeout, returns `{acquired:false}` on abort, and its
+`finally` cancels the waiter on every non-acquiring exit, atomically promoting the previous live waiter.
+**Learned from.** `packages/sync/src/sync-lock.ts` (`CANCEL_WAITER_SCRIPT`).
+**Honoured by.** A case that starts three concurrent same-key operations, aborts the second mid-flight, and
+asserts the first and third both settle. The aborted one must reject; the others must not inherit its abort
+reason.
+**Proved by.** `CONF-L9` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I28. An aborted queued task is rejected, not dropped, and its slot is not lost
+
+**Lesson.** The rate limiter splices the cancelled task out, rejects it with a named error and re-runs the
+queue so the concurrency slot is not lost; `executeTask` decrements in a `finally` so a throwing task
+cannot leak a permit permanently.
+**Learned from.** `core/utils/rate-limiter.ts`; `rate-limiter.test.ts :: "rejects an aborted queued task
+without starting it"`.
+**Honoured by.** A case that queues N operations against an adapter whose declared concurrency is less than
+N, makes one throw and aborts another, and asserts the remaining N−2 all complete. A permanently leaked
+permit shows up as the tail never settling, which the deadline converts into a failure.
+**Proved by.** `CONF-L10` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I29. Fan-out returns a result for every task, and never exceeds the declared concurrency
+
+**Lesson.** `allSettledWithConcurrency` builds a bounded worker pool that catches per task, so one
+rejection cannot abort the pool or leave holes in the results.
+**Learned from.** `core/utils/concurrency.ts`.
+**Honoured by.** A case in which task k rejects and task j stalls forever: the suite asserts N results are
+returned (not N−1), that the stalled one is a deadline failure rather than a missing entry, and that
+`transport.inFlightPeak()` never exceeded the concurrency the adapter declared.
+**Proved by.** `CONF-L11` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I30. Failures are classified by discriminant, never by matching message text
+
+**Lesson.** A database error's message inlines the SQL and its bound parameters, so **customer data** can
+match a backoff pattern and put a healthy calendar into permanent backoff.
+**Learned from.** `packages/sync/src/destination-errors.ts` (`BACKOFF_ERROR_PATTERNS` and its
+`isDatabaseError` early return).
+**Honoured by.** `ProviderFailure` is already a discriminated union, so the case is hostile rather than
+structural: the suite seeds an event whose title and description contain `"rate limit exceeded"`,
+`"410 Gone"`, `"Precondition Failed"` and a NUL byte, and asserts every failure classification and every
+identity key is unchanged from the benign run.
+**Proved by.** `CONF-O23` in `conformance/tests/hostile-content.test.ts`.
+
+### CONF-I31. An unattempted run is a third state, neither success nor failure
+
+**Lesson.** `resolveDestinationAttemptVerdict` returns "inconclusive" when superseded with zero attempted
+operations — escalating punishes a healthy destination, clearing lets a broken one oscillate forever.
+**Learned from.** `packages/sync/src/destination-errors.ts`.
+**Honoured by.** A case that aborts before the first transport call and asserts the outcome is
+`notAttempted`, plus an assertion that the suite's own report counts it in neither the passed nor the
+failed tally — the third state must survive the harness, not just the adapter.
+**Proved by.** `CONF-L12` in `conformance/tests/lockups.test.ts`.
+
+### CONF-I32. A superseded run never advances the cursor
+
+**Lesson.** ingest fetches, checks `isCurrent()`, then opens the transaction; on supersession it returns
+empty with `flushed: false` and no sync token. Writing a cursor on the superseded path advances the sync
+frontier past changes that were never applied — silent, unrecoverable data loss.
+**Learned from.** `core/sync-engine/ingest.ts` lines 260–266; `ingest-superseded.test.ts :: "never writes a
+sync token on the superseded path"`.
+**Honoured by.** A case that aborts the operation after the first page and before the last, and asserts the
+adapter returns no `SyncCursor` — with that test name reused verbatim, because the name is the invariant.
+Cursor non-advancement is asserted on three separate paths: truncated read, aborted run, transport failure.
+**Proved by.** `CONF-O24` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I33. A replace whose create fails after the delete succeeded must leave a recoverable state
+
+**Lesson.** The engine checkpoints removals before adds, checkpoints a successful chunk before a later one
+fails, and keeps the stale mapping when a recreation fails after a successful delete, so a crash between
+delete and create does not orphan a real event.
+**Learned from.** commit `1c5171d2`; `index.test.ts :: "keeps the stale mapping when recreation fails after
+a successful delete"`, *"does not checkpoint the stale mapping when recreation aborts after deletion"*.
+**Honoured by.** The case performs a real replace: it deletes the original, then issues the create half
+against an identity another copy already blocks, so the second half fails the way `CONF-I14` says it must —
+a `conflict` carrying the blocking `RemoteRef`. It then asserts the deleted target is still named in the
+write log, that the blocking copy came through the failed half unchanged, and that recreating the original
+on the next run succeeds. `assertNoUnplannedRecreation` takes the removals the case *planned*, so a
+deliberate delete-then-create is expressible while an unplanned one is still a violation.
+**Proved by.** `CONF-O25` in `conformance/tests/writes.test.ts`.
+
+### CONF-I34. Storage bounds and mirror bounds are different windows
+
+**Lesson.** ICS retains the whole feed unbounded, because filtering by window would make the snapshot diff
+delete every historic stored row on the next ingest; the sync window bounds only what is mirrored.
+**Learned from.** `ics/utils/fetch-adapter.ts` (*"The whole feed is kept on purpose…"*);
+`fetch-adapter.test.ts :: "returns events far outside the sync window so stored history stays unbounded"`;
+`ingest.test.ts :: "keeps stored history a snapshot source still reports outside the sync window"`.
+**Honoured by.** A case gated on `supports.deletionAuthority` in which the source still holds an event
+outside the requested window. The adapter must either report it or leave it outside the coverage it proved
+— Google's `timeMin`/`timeMax` and Graph's `calendarView` filter, so demanding it be *returned* would fail
+an honest adapter — and in both branches no removal may be derivable for it. That second half is only
+meaningful because the removal basis carries each known identity's **time**: `derivableRemovals` calls the
+injected `withinWindow` per identity, so an identity outside the proven coverage can never be called
+absent. The negative control drops the out-of-window event **and** claims coverage 90 days past what it
+read, which is the only shape that turns window filtering into a deletion.
+**Proved by.** `CONF-O26` in `conformance/tests/window.test.ts`.
+
+### CONF-I35. Window membership is one predicate, used at every stage, swept at every boundary
+
+**Lesson.** An event that survives one stage and is dropped by the next oscillates forever.
+`overlapsTimeWindow` is a single predicate with a documented special case: a degenerate range is judged by
+`start >= windowStart && start < windowEnd`.
+**Learned from.** `core/events/time-range.ts`; `ingest-window-boundary.test.ts :: "window boundary
+agreement between adapter filter and delta pruner"`.
+**Honoured by.** `runConformance` takes `withinWindow: WindowMembership` as an **argument** and uses that
+one function for every window judgement it makes, so an adapter cannot be checked against a predicate that
+differs from the one the reconciler will use. The boundary set is generated from the requested window
+rather than hand-picked — on the lower edge, before it, on the upper edge, past it, and zero-duration — and
+each member is judged twice: at listing time (a member the predicate admits must be in the listing) and at
+removal time (a member the predicate excludes from the proven coverage must not be derivable as a removal).
+The case then polls a second time and asserts the two polls agree, and finishes on an inverted window that
+may admit nothing.
+**Proved by.** `CONF-O27` in `conformance/tests/window.test.ts`.
+
+### CONF-I36. Degenerate ranges are real events; widening at the destination must not read as drift
+
+**Lesson.** Zero-duration and inverted ranges are legitimate and must be preserved, but must be widened at
+the destination because RFC 5545 §3.6.1 requires DTEND > DTSTART and Google rejects a non-positive span.
+The source row must not then read as changed.
+**Learned from.** `core/events/time-range.ts` (`POINT_IN_TIME_DURATION_MS`); commit `b057d2e0` (#616);
+`degenerate-range-source-ingest.test.ts :: "does not treat a stored source row as changed after a
+destination widened its mirror"`.
+**Honoured by.** Gated on `supports.representableRange.zeroDuration`. The reference declares
+`minimumSpanSeconds: 900` and widens what it stores, exactly as a destination would. `accept` gets the
+mirror-and-echo case: the seeded zero-duration event must still be listed as the source holds it, the
+written copy must come back at or above the declared minimum span, and replaying the same create must
+answer `alreadyExists`/`unchanged` with the stored revision unmoved — the destination's widening must not
+read as drift. `reject` gets the alternative: the write must fail `unrepresentable` with constraint
+`minimumSpan`, and must not silently widen.
+**Proved by.** `CONF-O28` in `conformance/tests/window.test.ts`.
+
+### CONF-I37. A capability declaration that is never checked against behaviour is worthless
+
+**Lesson.** Provider representational limits must be declared up front rather than discovered at write
+time, and `supportedAvailabilities` exists so a coercion is expected rather than read as drift.
+**Learned from.** `providers/outlook/destination/provider.ts`; `operations.test.ts :: "does not churn when
+a provider coerces unsupported OOO availability to busy"`.
+**Honoured by.** `supports` drives selection in **both** directions and no capability value removes a
+case — `delta: { kind: "none" }` takes the `noDelta` branch, under which no cursor may be minted and the
+cursor cases assert exactly that instead of returning early. Every declared capability is read by a case:
+`allDay` and `representableRange.allDayGrid` by `CONF-O45`, `.minimumSpanSeconds` and `.zeroDuration` by
+`CONF-O28`, `.invertedRange` by `CONF-O29`, `throttleSignals` by `CONF-O46`, `quotaScope` by `CONF-L1`, and
+the rest by the gates. The ungated set is derived from the gate table and surfaced on the report, and a
+test drives selection with an adapter that refuses everything it can and asserts every declared case id is
+still generated.
+**Proved by.** `CONF-O29` in `conformance/tests/capabilities.test.ts`.
+
+### CONF-I38. Every drop is counted, self-authored separately, and the counts are stable across polls
+
+**Lesson.** Folding Keeper's own mirrors into `unrepresentable` made that counter permanently non-zero on
+every mirrored calendar, destroying its value as an alarm. Counters must be per-run, not accumulating, and
+must not churn between identical polls.
+**Learned from.** commit `fdd9ba62` (#634); `core/sync-engine/ingest.ts` (`DiscardedSourceEventCounts`:
+*"These counts are the only trace that removal leaves"*);
+`ics-discard-telemetry.test.ts :: "reports a clean feed as having discarded nothing"`;
+`ics-revision-collapse-telemetry.test.ts :: "keeps reporting the dropped occurrence on every later run
+without churn"`.
+**Honoured by.** `ListingDiagnostics` already separates `withheld`, `selfAuthored` and `unrepresentable`.
+Three generated cases: a clean listing reports all-zero totals; a listing with one self-authored and one
+unrepresentable event increments exactly one counter each; and the same input polled twice produces
+identical diagnostics, including sample order.
+**Proved by.** `CONF-O30` in `conformance/tests/diagnostics.test.ts`.
+
+### CONF-I39. Identifier lists are a bounded sample beside an exact uncapped total
+
+**Lesson.** An uncapped list pushed the wide event past what the log pipeline retains and took the counters
+with it, losing the alarm entirely. Capped by both entry count and total bytes.
+**Learned from.** `core/sync-engine/ingest.ts` (`WIDE_EVENT_LIST_LIMIT`, `WIDE_EVENT_LIST_MAX_LENGTH`);
+`ingest-wide-event-list-bounds.test.ts`.
+**Honoured by.** A case that seeds thousands of withheld events and one pathologically long identifier, and
+asserts `BoundedSample.sample` is bounded in both entry count and total UTF-16 length while
+`BoundedSample.total` is exact. A companion assertion checks every diagnostic value is a loggable scalar —
+never an object, never `undefined`.
+**Proved by.** `CONF-O31` in `conformance/tests/diagnostics.test.ts`.
+
+### CONF-I40. A discarded event may be missing the identifier you would log it by
+
+**Lesson.** Publishers strip DTSTART, or strip UID, before deleting.
+**Learned from.** `ics-discard-telemetry.test.ts :: "counts an event the feed publisher stripped UID from
+before deleting it"`.
+**Honoured by.** `WithheldIdentity` already requires at least one of `uid` and `id`. The fixture corpus
+includes an identity-less discard, and the case asserts it is still reported with reason `missingIdentity`
+rather than dropped silently.
+**Proved by.** `CONF-O32` in `conformance/tests/diagnostics.test.ts`.
+
+### CONF-I41. A withheld identity must not cost the user its existing mirror
+
+**Lesson.** An over-budget series was dropped from inserts but had to be kept from removals, and its
+mirrors kept too, or a widened sync range mass-deletes the user's events and pushes the calendar into
+permanent backoff.
+**Learned from.** `core/sync-engine/ingest.ts` lines 247–257; `core/sync/operations.ts`
+(`withheldSourceEventStateIds`); `operations.test.ts :: "keeps the mirrors of a series withheld for
+exceeding the occurrence budget"`, *"still retires a withheld series' mapping once it falls outside the
+requested window"*.
+**Honoured by.** The withheld case is asserted on the **destination** side as well: a mirror whose source
+identity was withheld this run must still exist afterwards, and must still be retired when it leaves the
+window. It is called out separately because a listing-only assertion would have missed the production
+incident.
+**Proved by.** `CONF-O33` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I42. A cancelled event is not an absent event
+
+**Lesson.** `STATUS:CANCELLED` is an input, never a filter; a cancelled master cancels its detached
+overrides; Google carries `cancelledEventIds` separately from `changedEventIds`.
+**Learned from.** `ics/utils/parse-ics-events.ts`; `parse-ics-events.test.ts :: "drops a cancelled master
+and all of its detached overrides"`; `providers/google/source/utils/fetch-events.ts`.
+**Honoured by.** `Removal` already distinguishes `deleted`, `cancelled` and `outOfScope`, and
+`ProviderSeed` carries `cancelled` and `unattributableRemovals` so all three states can be produced. The
+case seeds one identity the source keeps, one it reports as cancelled and one tombstone that names no
+identity, then asserts the cancellation is removed **as a cancellation**, the kept identity is not removed,
+the unnamed tombstone appears only as `outOfScope`, and that no `outOfScope` marker drives a derivable
+removal. The negative control reports the cancellation as a plain deletion.
+**Proved by.** `CONF-O34` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I43. An unsupported construct is withheld and counted, never approximated
+
+**Lesson.** Silently treating THISANDFUTURE as a plain override changes the meaning of every subsequent
+occurrence.
+**Learned from.** `parse-ics-events.test.ts :: "reports THISANDFUTURE as unsupported instead of changing
+its meaning"`.
+**Honoured by.** The generic form: for every `RepresentabilityConstraint` the adapter's capabilities say it
+cannot meet, the suite feeds an input violating it and asserts the result is `unrepresentable` with that
+exact constraint — never a "best effort" representation. The negative control is a mutant adapter that
+clamps instead of refusing.
+**Proved by.** `CONF-O35` in `conformance/tests/capabilities.test.ts`.
+
+### CONF-I44. An occurrence changing identity is a reassignment, not delete plus add
+
+**Lesson.** Treating it as delete+add makes the destination flicker and can orphan the real event; the
+reassignment must first prove the mirror is still ours.
+**Learned from.** `core/sync/operations.ts` (`OccurrenceReassignment`); `operations.test.ts :: "recreates a
+mapped event when the same event ID moves"`.
+**Honoured by.** A case that writes a recurring series, lists it back and asserts the target it is about
+to reassign is `ours` (or `indeterminate`, where the adapter declares no provenance channel), then moves the
+series' anchor with a single conditional update. It asserts exactly one update, no delete, a precondition on
+every write, and that the fingerprint changed — the anchor is part of identity, so a series moved to a new
+`DTSTART` must not hash the same as the one it left (RFC 5545 §3.8.5.3).
+**Proved by.** `CONF-O36` in `conformance/tests/writes.test.ts`.
+
+### CONF-I45. A quiet calendar still advances its cursor
+
+**Lesson.** With zero inserts and zero deletes, ingest still flushes when there is a new sync token, a
+changed snapshot or new coverage — otherwise the cursor never advances and every poll refetches from the
+same point forever.
+**Learned from.** `core/sync-engine/ingest.ts` lines 344–366; `ingest.test.ts :: "flushes sync token even
+when delta sync yields no event changes"`.
+**Honoured by.** A case that polls an unchanged calendar under a delta cursor and asserts the returned
+listing carries a `SyncCursor` different from the one supplied, while the write count is zero. "No work"
+must not mean "no cursor write" — this is the exact counterweight to CONF-I9, and the pair is generated
+together so neither can be satisfied by breaking the other.
+**Proved by.** `CONF-O37` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I46. A delta item is a patch, not a snapshot
+
+**Lesson.** Graph documents that updated instances carry the id plus *at least* the changed properties,
+that the same entity can appear multiple times in one session, and that no ordering may be assumed.
+**Learned from.** learn.microsoft.com/graph/delta-query-overview §Resource representation, §Replays.
+**Honoured by.** A case in which the provider emits a delta item carrying only the id and one changed
+field: the adapter must either fill the omitted fields from its own read or report the item as withheld —
+it must never emit a `RemoteEvent` whose omitted fields are blanked, which the case detects by comparing
+against the pre-delta content.
+**Proved by.** `CONF-O38` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I47. Servers rewrite what you submit, so the written representation is not authoritative
+
+**Lesson.** RFC 4791 §5.3.4 forbids returning a strong ETag when the stored bytes differ from the submitted
+bytes, so the client must re-read rather than assume its local copy is authoritative. Google normalises
+bodies likewise.
+**Learned from.** RFC 4791 §5.3.4; the push-echo suites.
+**Honoured by.** Every write outcome carries a `RemoteVersion`, and the reference deliberately rewrites
+what it stores, so the submitted representation is never the stored one. `CONF-O39` proves the consequence
+the caller must live with: a second write whose precondition was **not** taken from the provider's latest
+answer — the version the previous write returned — is refused as a typed `conflict`, which is what forces
+the re-read. The case is filed here rather than under `CONF-I14` because the lesson is about the
+authority of the returned version, not about create idempotency.
+**Proved by.** `CONF-O39` in `conformance/tests/writes.test.ts`.
+
+### CONF-I48. There is no universal create-idempotency primitive, so it is declared vocabulary
+
+**Lesson.** CalDAV mandates UID uniqueness within a collection and offers `If-None-Match: *`; Google has no
+conditional insert at all and must go through `events.import` with an `iCalUID`.
+**Learned from.** RFC 4791 §4.1 and §5.3.2; Google's version-resources guide (*"no support for conditional
+modifications for insert"*) and the `events.import` reference.
+**Honoured by.** `WriteIntent.create` requires both an `IdempotencyKey` and `precondition: { kind:
+"absent" }`, so the guarantee is in the type regardless of vocabulary. `supports.precondition` selects
+which mechanism the case exercises, and there is **no** value that removes the replayed-create case: an
+adapter that cannot express a conditional insert must instead prove that the caller-supplied
+`IdempotencyKey` deduplicates.
+**Proved by.** shared with CONF-I14, which owns the replayed-create case in
+`conformance/tests/writes.test.ts`; this entry adds no case of its own.
+
+### CONF-I49. A cursor is opaque, and a cursor the adapter cannot read is `cursorLost`, never an empty delta
+
+**Lesson.** Graph encodes `$select` and other query parameters inside the deltaLink, so reconstructing a
+request from a token's parts changes its meaning. An empty delta on a bad cursor is the worst possible
+answer: it reads as "nothing changed" and, to a snapshot-shaped consumer, as "everything was deleted".
+**Learned from.** learn.microsoft.com/graph/delta-query-overview §State tokens; RFC 6578 §3.2.
+**Honoured by.** The harness never parses `SyncCursor.value`. A case hands the adapter a cursor whose bytes
+have been mutated and asserts `cursorLost` or a `cursorInvalid` failure — never a throw, and never an empty
+`delta`. The suite asserts nothing about the cursor's format.
+**Proved by.** `CONF-O40` in `conformance/tests/cursor.test.ts`.
+
+### CONF-I50. Truncation and coverage are different claims, even where the RFC lets one token carry both
+
+**Lesson.** RFC 6578 §3.6 says the `DAV:sync-token` returned with a truncated result *"MUST represent the
+correct state for the partial set of changes returned"* — so a compliant CalDAV server hands back a
+resumable token on a short page. That token is safe to page with and catastrophic to treat as coverage.
+**Learned from.** RFC 6578 §3.6/§3.7 read against `ingest-truncation.test.ts :: "deletes every stored
+source event when a fetch silently returns a subset"`.
+**Honoured by.** The protocol splits the two: a truncated read is `kind: "partial"` carrying a
+`Continuation` and structurally no `cursor` and no `coverage`. The case asserts a CalDAV-shaped adapter
+surfaces the per-page token as a `Continuation` and never as a `SyncCursor` — resumability is preserved,
+coverage is not claimed.
+**Proved by.** `CONF-O41` in `conformance/tests/deletion-safety.test.ts`.
+
+### CONF-I51. Timing fixtures are built on `setTimeout` and a fake clock, never `Bun.sleep`, never real time
+
+**Lesson.** `Bun.sleep` is a native primitive `vi.useFakeTimers` cannot patch, so any test built on it burns
+real wall time in CI. The repo has paid for this twice. `bun test` is also the wrong runner and produces
+bogus *"vi.hoisted is not a function"* errors.
+**Learned from.** commits `34dc5079` (#806) and `e39851df` (#808); `core/utils/backoff.ts`;
+`packages/sync/src/sync-lock.ts`.
+**Honoured by.** The package's `TestClock` is built on `setTimeout` only, the stall fixture is
+`new Promise(() => {})` rather than a long timer, and every advance uses `vi.advanceTimersByTimeAsync` —
+the synchronous variant does not flush microtasks between callbacks and deadlocks against awaited promises.
+The hygiene test greps `src/` and `tests/` for the unfakeable primitive **and** drives a real sleep under
+fake timers, asserting the timer is armed, that advancing fake time resolves it, and that the injected
+clock moved by exactly the interval slept. The generated `CONF-L` cases run on **real** timers, because an
+adapter's own suite will; their budgets are milliseconds, not seconds. The vitest config keeps a real
+per-test timeout as a backstop so a genuine wedge fails fast instead of hanging CI.
+**Proved by.** `conformance/tests/hygiene/no-bun-sleep.test.ts`.
+
+### CONF-I52. `AbortSignal.timeout` is not patched by fake timers, so deadlines come from the injected clock
+
+**Lesson.** vitest's fake timers do not mock `AbortSignal.timeout` or `node:timers/promises`; the root cause
+is upstream in sinon fake-timers and the issue is still open.
+**Learned from.** github.com/vitest-dev/vitest/issues/3088.
+**Honoured by.** `OperationContext.deadline` is an `Instant` and `OperationContext.now` is a function, both
+supplied by the suite; the suite constructs its own `AbortController` and fires it from a `setTimeout`.
+Neither the suite nor the reference provider calls `AbortSignal.timeout`, and a hygiene test asserts that.
+**Proved by.** `conformance/tests/hygiene/no-unpatchable-timers.test.ts`.
+
+### CONF-I53. A wall-clock assertion measures the CI agent, not the algorithm
+
+**Lesson.** The repo learned to assert on structure — call counts, ordering, emitted fields — and to test
+timing attribution by injecting a clock rather than measuring.
+**Learned from.** `phase-timing-clock.test.ts`; ledger `RECON-I83`.
+**Honoured by.** The deadline obligation is phrased as *"rejected with a deadline failure after the deadline
+elapsed on the fake clock"*, never *"completed within N real milliseconds"*. No case in this package reads
+`performance.now()` or `Date.now()`; a hygiene test enforces it.
+**Proved by.** `conformance/tests/hygiene/no-wall-clock.test.ts`.
+
+### CONF-I54. Dependencies arrive as arguments, and the suite must detect an adapter that ignores them
+
+**Lesson.** Every coordinator in the codebase takes its store as a parameter, which is precisely what makes
+the lockup tests possible with stubs. An adapter that imports its own clock or `fetch` makes the deadline
+and abort obligations pass **vacuously**, which is worse than not running them.
+**Learned from.** `core/oauth/refresh-coordinator.ts`, `core/sync-engine/generation.ts`,
+`packages/sync/src/sync-lock.ts`, `core/source/ingest-lock.ts`.
+**Honoured by.** `create(environment)` receives the clock, the concurrency ceiling, the hash function, the
+installation id and the transport stub, and `runConformance` takes the `describe`/`it` runner as an
+argument rather than importing one. A dedicated **injection** case asserts the transport call count and the
+clock read count both rose across one listing; an adapter that reached past its arguments fails that case
+explicitly instead of quietly passing the whole lockup family vacuously. It is a case in the same generated
+set rather than a hook that runs before each lockup case, so it is visible in the report and in the ledger
+walk like every other guarantee.
+**Proved by.** `CONF-L13` in `conformance/tests/injection.test.ts`.
+
+### CONF-I55. The reference implementation must be adversarial about its own success
+
+**Lesson.** The repo's convergence tests re-run the whole pipeline and assert a fixed point, and several are
+named for it.
+**Learned from.** the twelve `*convergence*` suites; `vfy-shaping-fixed-point.test.ts`.
+**Honoured by.** The reference provider is exercised by a fixed-point case — list, apply, list, list,
+assert the write log did not grow — and is run through the full suite **bare**, with a companion test
+asserting the unmutated reference fails nothing at all. Each fixture is then asserted for the outcome it
+exists to produce: `truncatingAfter(1)` must answer `partial`, `expiringCursorAfter(1)` must answer
+`cursorLost` on the poll after the first, `conflictingOn(create)` must answer `conflict`, and
+`stallingOn(write)` must settle at its deadline rather than never. Separately, every case ships a negative
+control: a mutated reference provider that must fail exactly that case and no other.
+**Proved by.** `conformance/tests/reference/fixed-point.test.ts`,
+`conformance/tests/reference/negative-controls.test.ts`.
+
+### CONF-I56. A failed run must not leak state into the run that follows it
+
+**Lesson.** No phase time carried forward, no counters accumulated, no partially flushed checkpoint left
+ambiguous.
+**Learned from.** `phase-timing-failures.test.ts :: "keeps a failed run from leaking phase time into the
+runs that follow it"`; `ingest.test.ts :: "checkpoints a successful chunk before a later chunk fails"`.
+**Honoured by.** A case that fails mid-run against a provider instance and then runs again against the same
+instance, asserting the second run converges and reports fresh per-run diagnostics rather than accumulated
+ones.
+**Proved by.** `CONF-O42` in `conformance/tests/diagnostics.test.ts`.
+
+### CONF-I57. A conformance suite with a shared provider acquires order dependence
+
+**Lesson.** Order dependence in a suite whose job is proving convergence is self-defeating.
+**Learned from.** the repo's per-test factory pattern; the brief's `create` factory.
+**Honoured by.** `create` is invoked **per case**, never per suite, and `ProviderUnderTest.dispose` runs in
+`afterEach`. Case order is derived from the `as const` case-id list, so it is stable and inspectable, but no
+case may depend on it.
+**Proved by.** `conformance/tests/harness/per-case-isolation.test.ts`.
+
+### CONF-I58. Provider differences belong in declared data, not in three copies of the same describe block
+
+**Lesson.** `calendar-rediscovery-adapters.test.ts` is three near-identical describe blocks, one per
+provider — parity written three times instead of once.
+**Learned from.** `packages/calendar/tests/core/source/calendar-rediscovery-adapters.test.ts`.
+**Honoured by.** This is the whole package: one `runConformance` call per adapter, one case list, capability
+values selecting branches. The existing three-block test is the prototype, and retiring it is the
+acceptance criterion for the package.
+**Proved by.** n/a — this is the package's premise, not a case.
+
+### CONF-I59. The invariant is the test name
+
+**Lesson.** Nearly every hard-won invariant in the old code survives as prose above a boolean flag
+(`isDeltaSync`, `unchanged`, `fullSyncRequired`, `comparable`), which is exactly why the same bug classes
+recurred.
+**Learned from.** `core/sync-engine/ingest.ts` (`FetchEventsResult`: nine optional flags and four comment
+blocks).
+**Honoured by.** Every generated case's title is the invariant, prefixed with its `CONF-O`/`CONF-L` id and
+cross-referenced to its ledger entry in `src/case-id.ts`, so the ledger can be walked against the suite by
+grep — the mechanical walk `RECON-I84` added for sync-reconcile.
+**Proved by.** `conformance/tests/hygiene/ledger-citations.test.ts`.
+
+### CONF-I60. A non-IANA zone identifier must never reach a canonical event
+
+**Lesson.** Windows/CLDR identifiers must be mapped from the full CLDR table and `tzone://Microsoft/Custom`
+TZIDs resolved from their declared VTIMEZONE offsets or refused — never guessed — and a Windows id must
+never leak out as `startTimeZone`.
+**Learned from.** commits `ac6fa18c` (#244) and `7c276d8e` (#242);
+`outlook-windows-timezone.test.ts :: "does not return Windows timezone ID as startTimeZone"`.
+**Honoured by.** Zone **resolution** belongs to sync-ical (ICAL-I17), but one negative assertion is cheap
+and it caught a real production bug: every `ZoneId` an adapter returns on a `RemoteEvent` must be accepted
+by `Intl.DateTimeFormat` as an IANA identifier, or the write must fail with constraint `zoneIdentifier`.
+**Proved by.** `CONF-O43` in `conformance/tests/capabilities.test.ts`.
+
+---
+
+## Not applicable
+
+### CONF-I61. RFC 5545 nominal versus exact DURATION
+
+Weeks and days are applied in wall time (a DST day is 23 or 25 hours); hours, minutes and seconds are
+absolute. **Not applicable.** This is `ICAL-I23` and `RECON-I57`. sync-conformance computes no durations. It
+applies only indirectly: a fixture that needs a DST-crossing recurring event must take its expected values
+from `@keeper.sh/sync-ical`, never recompute them here.
+
+### CONF-I62. All-day events as a pair of UTC midnights on the UTC day grid
+
+Interpreted all-day events are anchored to the UTC midnight of their local calendar day, and re-anchoring
+must move the whole recurrence identity set together. **Not applicable** as arithmetic — that is entry 44 /
+`ICAL-I26` / `ICAL-I27`. The one transferable half **is** adopted, as `CONF-I80`: `supports.allDay` decides
+which shape the suite feeds the adapter, and `CONF-O45` asserts the adapter never silently converts between
+them.
+
+### CONF-I63. VTIMEZONE synthesis
+
+Validate-then-emit, no perpetual annual rule for zones whose transitions move, southern-hemisphere direction
+preserved, whole-minute offsets, an old event must not truncate the rules current events need.
+**Not applicable.** `ICAL-I30`/`I31`/`I22`. Recorded so its absence is a decision, not an oversight.
+
+### CONF-I64. Wall-time resolution: normal, gap, fold
+
+A gap time shifts forward by the transition, a fold takes the earlier instant, and the second pass of a
+fall-back hour must be written in UTC. **Not applicable.** `ICAL-I20`/`I32`. Conformance fixtures use UTC
+instants only, so no case here depends on a fold or gap decision. **Fixtures must not sit on a DST
+boundary** — that is a rule on the fixture corpus, and it is why this entry exists rather than being absent.
+
+### CONF-I65. Property-level lenient parsing
+
+Bare 8-digit dates are rewritten to declare `VALUE=DATE` only when they are real calendar dates, only for
+date-typed properties, only when no parameters are declared, and mixed lists are rejected wholesale.
+**Not applicable.** `ICAL-I16`. The transferable rule is that any fixture that emits a malformed feed must
+be byte-exact, so a repair regression is visible rather than absorbed.
+
+### CONF-I66. TZID applies to every value on a property
+
+A mixed multi-value EXDATE must be split across two property lines; `X-WR-TIMEZONE` never overrides an
+explicit TZID. **Not applicable.** `ICAL-I28`/`I29`. Relevant here only as a source of realistic fixture
+content.
+
+### CONF-I67. Recurrence expansion budgets
+
+The occurrence-budget arithmetic belongs elsewhere. **Not applicable** as arithmetic; its *consequence* — a
+withheld series must not lose its mirror — is adopted as `CONF-I41`.
+
+### CONF-I68. Exhaustive wall-time sweeps
+
+Every transition since 1925 across every zone. **Not applicable** as subject matter; sync-conformance
+asserts on instants, never on wall times. The **methodology** is adopted: prefer a generated sweep to a
+handful of hand-picked examples, which is what the window-boundary sweep (`CONF-I35`) and the
+property-based invariants (`CONF-I70`) do.
+
+---
+
+## Dependencies and process
+
+### CONF-I69. Zero runtime dependencies
+
+`package.json` declares one dependency, `@keeper.sh/sync-protocol` (workspace, source-consumed), and nothing
+else. Everything this package needs — a canonical encoder, a clock, a hash seam, an in-memory store — is
+under a hundred lines each and is code we must own, because it is the thing being tested.
+
+### CONF-I70. `@fast-check/vitest` is the one proposed dev dependency
+
+Proposed for exactly three invariants: canonicalisation (permuted key order and equivalent absent-value
+spellings produce identical canonical bytes), convergence (`apply(apply(x)) === apply(x)`), and a
+model-based command sequence over create/update/delete/list asserting no lost update. Official vitest 4.x
+support starts at `0.2.3`. **Not taken in this pass**: the package ships zero dev dependencies beyond
+vitest and the shared config, and each of the three invariants is currently asserted by a named case
+(`CONF-O21`, `CONF-O9`, `CONF-O44`) whose failure message says what broke. Confined to invariants if it
+is ever taken: property tests give worse failure messages and non-obvious shrink output, and **the named
+example cases are the specification** (`CONF-I59`). The suite must not become property-based.
+
+### CONF-I71. Rejected: `ical.js`, `ts-ics`, `rrule`, `tsdav`
+
+They belong to `@keeper.sh/sync-ical` and `@keeper.sh/calendar`. Pulling any of them in would drag timezone
+resolution into the conformance layer and re-litigate settled ICS learnings in a package that has no
+business owning them.
+
+### CONF-I72. Rejected: `temporal-polyfill` / `@js-temporal/polyfill`
+
+Temporal is Stage 4 and ships natively in current Firefox, Chrome and Node, but Safari is still flagged and
+the polyfills cost 35–50KB. Decisively: this package needs instants only, and the protocol already models
+them as `Instant`. A second time model in a package that does no wall-time arithmetic buys nothing. Revisit
+only if `@keeper.sh/sync-ical` migrates first.
+
+### CONF-I73. Rejected: `fast-json-stable-stringify` and any canonicalisation package
+
+We canonicalise only our own protocol objects, which are I-JSON by construction: no bigints, no `NaN`, no
+unpaired surrogates, integers only. The hard eighty percent of RFC 8785 is ECMAScript number serialisation
+we do not need. Roughly forty lines, owned here, with an explicit test for the sorting rule — UTF-16
+code-unit order, **not** `localeCompare` — including astral-plane and combining-mark keys.
+
+### CONF-I74. Rejected: an off-the-shelf conformance framework
+
+The MCP and Connect conformance suites are process-level harnesses driving out-of-process implementations
+over a wire protocol. Our adapters are in-process TypeScript functions, so an exported `runConformance` that
+calls `describe`/`it` is simpler and gives adapters native vitest reporting, watch mode and turbo caching
+for free. We own the reporting; that is a few dozen lines.
+
+### CONF-I75. `Bun.CryptoHasher` is used, but injected
+
+Native, synchronous, no import ceremony — and it is what `runConformance` injects by default, as
+`environment.hash: (input: string) => string`, per the no-module-level-dependencies rule.
+`RunConformanceOptions.hash` overrides it so a suite can substitute a collision-forcing hasher and prove the
+conflict path actually fires rather than being unreachable. A hasher that collides on equal-length inputs is
+not a seam by accident: fingerprints feed `matchesFingerprint` preconditions, so a collision would make a
+stale precondition compare equal. The package's own harness therefore hashes with `Bun.CryptoHasher` too and
+keeps the colliding one as an explicit, named seam.
+
+### CONF-I76. vitest stays; `bun test` is not adopted
+
+Bun 1.3 has landed `vi.useFakeTimers` compatibility, which makes the switch newly tempting. The repo is on
+vitest 4.1.4 with turbo caching per package, and a runner split would fragment fixtures. Revisit only if
+Bun's coverage and vitest 4 API parity are complete across every package at once. The package script stays
+`bun x --bun vitest run`.
+
+### CONF-I77. `supports` selects a branch; it never removes a guarantee
+
+The brief's flat capability record is the one thing worth challenging, and this is the resolution: no
+capability value deletes a case. Create idempotency has no `none` branch; `deletionAuthority` has two
+branches and both are generated; `provenanceChannel: "none"` gets the indeterminate-provenance case rather
+than no case; `delta: { kind: "none" }` gets the `noDelta` branch. `CaseGate` has exactly two shapes,
+`ungated` and `branch` — the `skip` shape was **deleted**, so a future gate cannot quietly drop a case, and
+`ConformanceReport` no longer carries a `skipped` list nobody could fill or a `notAttempted` list nothing
+could populate. The gate table is one `as const` record, so the gated ids and the branch selection cannot
+drift apart, and the ungated list is derived from it and surfaced on the report.
+
+### CONF-I78. Every case ships a negative control
+
+A conformance case nobody has watched fail is an assertion, not a test. Each `CONF-O`/`CONF-L` id has a
+matching mutant of the reference provider in `conformance/tests/reference/negative-controls.test.ts`, and
+the control asserts the mutant fails **that** case — a mutant that fails three cases is over-broad, and a
+mutant that fails none is a hole in the suite.
+
+---
+
+## Added after review
+
+### CONF-I79. Two writers holding one precondition must not both win
+
+**Lesson.** The mirror now writes back to real calendars, and two ticks can overlap: a scheduled sync and a
+push-triggered one both read the same version and both write. If the provider decides against the version it
+read and commits after the other has already committed, the second write silently reverts the first — an
+overwrite nobody can see in the write log, because both entries say `updated`.
+**Learned from.** the adversarial review of this package's first implementation pass, which found the brief's
+explicit obligation *"two concurrent writers cannot clobber each other without one seeing a conflict"*
+unexercised: `CONF-O39` covered only the sequential replay, and the only `concurrently` helper fanned out
+`listChanges`, never `write`.
+**Honoured by.** `CONF-O44` issues two updates carrying the same `matchesVersion` precondition without
+awaiting the first, and insists exactly one answers `updated` while the other is a typed conflict that did
+not overwrite, with the calendar left holding exactly one applied write. The negative control is a reference
+that yields between deciding a write and committing it, which is precisely the read-modify-write window a
+provider with an await in the middle would open.
+**Proved by.** `CONF-O44` in `conformance/tests/writes.test.ts`.
+
+### CONF-I80. An all-day event must never be silently converted between representations
+
+**Lesson.** `dateOnly` and `utcMidnightPair` are both legitimate; converting between them without being asked
+moves every all-day event by up to a day, in whichever direction the destination's grid disagrees.
+**Learned from.** `ICAL-I26`/`ICAL-I27` and entry 44 (`interpret-full-day-timed-events`, `build-zoned-date`),
+read against `supports.allDay`, which was declared by every adapter and consulted by nothing.
+**Honoured by.** `CONF-O45` writes an all-day event in the representation the adapter declared, lists it back,
+and asserts the returned `EventTime.kind` is the one submitted and that a `utcDay` grid really lands on UTC
+midnights. The negative control converts `allDay` to a midnight pair on the way out.
+**Proved by.** `CONF-O45` in `conformance/tests/capabilities.test.ts`.
+
+### CONF-I81. A declared throttle signal is a promise about classification
+
+**Lesson.** Backoff decisions are made from a status, and a status the adapter did not declare must not be
+backed off as a throttle — that is how a permanent failure becomes an infinite polite retry, and how a real
+throttle becomes a hard failure.
+**Learned from.** `CONF-I30` (classify by discriminant, never by message text) read against
+`supports.throttleSignals`, which was declared and consulted by nothing.
+**Honoured by.** `TransportBehaviour` carries a `status` shape, and `CONF-O46` drives every signal the adapter
+declared, asserting each is classified `rateLimited` and that `retryAfter` is present exactly when the
+declaration promised it, then drives an undeclared status and asserts it is **not** classified as a throttle.
+The negative control ignores the declaration.
+**Proved by.** `CONF-O46` in `conformance/tests/capabilities.test.ts`.
+
+### CONF-I82. "No work" means no write, never no read
+
+**Lesson.** An unchanged feed must still be re-read and re-validated: the ICS adapter reparses byte-identical
+snapshot content on purpose, because that is how a stored row that fails validation is recovered. An adapter
+that short-circuits on an unchanged ETag satisfies the convergence lesson and defeats the recovery one.
+**Learned from.** `fetch-adapter.test.ts :: "reparses unchanged snapshot content so stored-state validation
+can recover"` (`ICAL-I38`), read against `CONF-I9` and `CONF-I12`, which were in tension and said so nowhere.
+**Honoured by.** `CONF-I9`'s convergence claim is now phrased as a count of **writes**, and `CONF-O12` polls
+a feed byte-identical to the previous poll while a known row is corrupt, asserting the second poll still
+demands a resync rather than short-circuiting past the row it has to recover.
+**Proved by.** the corrupt-known-row case in `conformance/tests/deletion-safety.test.ts`, which this entry
+shares with `CONF-I12`; it adds no case of its own.
+
+---
+
+## Module map
+
+```
+src/index.ts                     the public surface and nothing else
+src/violation.ts                 ConformanceViolation — the suite's own typed failure
+src/case-id.ts                   conformanceCaseIds as const, ConformanceCaseId, ledger cross-reference
+src/options.ts                   RunConformanceOptions, ConformanceEnvironment, ProviderUnderTest
+src/report.ts                    ConformanceReport, SelectedCase, SkippedCase, ungatedCaseIds
+src/clock.ts                     TestClock — setTimeout only, injected, never Bun.sleep
+src/canonical.ts                 RFC 8785 key ordering; the one deep-comparison encoder
+src/registry/case.ts             ConformanceCase: id, title, ledger, gate, run
+src/registry/gates.ts            capability -> branch selection; never case removal
+src/single-flight.ts             the coalescing slot: released on every settlement, abandonable
+src/deadline.ts                  raceDeadline — the one place an await is given a ceiling
+src/transport.ts                 the injected transport stub and its typed failures
+src/environment.ts               createConformanceEnvironment: clock, concurrency, hash, transport
+src/limits.ts                    the suite's declared ceilings, handed to the adapter where they bind
+src/registry/suite.ts            assembles the ordered case list from the case families
+src/cases/deletion-safety.ts     truncation, cursorLost, coverage, withheld, cancelled, empty-vs-failed
+src/cases/cursor.ts              advancement, clearing, opacity, scope binding, supersession, patches
+src/cases/writes.ts              precondition required, conflict, replayed create, replace, reassignment
+src/cases/provenance.ts          own-event round trip, foreign canary, indeterminate
+src/cases/window.ts              boundary sweep, degenerate ranges, storage versus mirror bounds
+src/cases/capabilities.ts        declared refusals actually refuse; zone identifier
+src/cases/diagnostics.ts         bounded samples, zeros, idempotence, no content leakage
+src/cases/convergence.ts         second-poll no-op, order permutation, dedupe, canonicalisation
+src/cases/hostile-content.ts     failure classification is immune to event content
+src/cases/lockups.ts             deadline, abort, ceiling, lease, single-flight, fan-out, concurrency
+src/cases/injection.ts           the anti-vacuity case: the injected seams were actually used
+src/cases/isolation.ts           one bad item does not stall the feed
+src/cases/intents.ts             the write intents the cases submit
+src/assertions/no-removal.ts     assertNoRemovalDerivable — the one deletion-safety predicate
+src/assertions/listing.ts        listing kind, coverage and cursor assertions
+src/assertions/outcome.ts        write-outcome assertions
+src/reference/capabilities.ts    the reference provider's declared Capabilities
+src/reference/store.ts           in-memory calendars, versions, tombstones, write log
+src/reference/cursor.ts          opaque cursor mint and verify, scope-bound, generation log
+src/reference/normalize.ts       representability refusals and the deliberate provider-side rewrite
+src/reference/fingerprint.ts     canonical encoding fed to the injected hash
+src/reference/provider.ts        createReferenceProvider(environment) -> ProviderUnderTest
+src/fixtures/decorate.ts         ProviderDecorator and composition
+src/fixtures/truncate-page.ts    truncatingAfter(n)
+src/fixtures/expire-cursor.ts    expiringCursorAfter(n)
+src/fixtures/conflict.ts         conflictingOn(predicate)
+src/fixtures/stall.ts            stallingOn(predicate) — new Promise(() => {})
+src/fixtures/index.ts            the fixture surface
+src/run-conformance.ts           runConformance: gate, register, report
+```
+
+## Public API
+
+```ts
+const runConformance: <Provider extends ProviderId>(
+  runner: SuiteRunner,
+  options: RunConformanceOptions<Provider>,
+) => ConformanceReport
+
+interface SuiteRunner {
+  readonly describe: (name: string, body: () => void) => void
+  readonly it: (name: string, body: () => Promise<void>) => void
+}
+
+interface RunConformanceOptions<Provider extends ProviderId> {
+  readonly name: string
+  readonly supports: Capabilities<Provider>
+  readonly create: CreateProvider<Provider>
+  readonly withinWindow: WindowMembership
+  readonly hash?: (input: string) => string
+}
+
+type CreateProvider<Provider extends ProviderId> = (
+  environment: ConformanceEnvironment,
+) => Promise<ProviderUnderTest<Provider>>
+
+interface ProviderUnderTest<Provider extends ProviderId> {
+  readonly contract: ProviderContract<Provider>
+  readonly seed: (seed: ProviderSeed) => Promise<void>
+  readonly inspect: () => Promise<ProviderInspection>
+  readonly dispose: () => Promise<void>
+}
+
+interface ConformanceEnvironment {
+  readonly clock: TestClock
+  readonly concurrency: number
+  readonly hash: (input: string) => string
+  readonly installation: InstallationId
+  readonly transport: TransportStub
+}
+
+interface TestClock {
+  readonly now: () => Instant
+  readonly sleep: (milliseconds: number, signal: AbortSignal) => Promise<void>
+  readonly advance: (milliseconds: number) => Promise<void>
+}
+
+interface TransportStub {
+  readonly callCount: () => number
+  readonly inFlightPeak: () => number
+  readonly stall: () => void
+  readonly resume: () => void
+}
+
+interface ProviderInspection {
+  readonly objects: readonly RemoteEvent[]
+  readonly writeLog: readonly WriteLogEntry[]
+}
+
+interface ConformanceReport {
+  readonly name: string
+  readonly selected: readonly SelectedCase[]
+  readonly ungated: readonly ConformanceCaseId[]
+}
+
+interface ProviderSeed {
+  readonly events: readonly RemoteEvent[]
+  readonly corruptKnownRows: readonly string[]
+  readonly cancelled: readonly EventUid[]
+  readonly unattributableRemovals: readonly RemoteEventId[]
+}
+```
+
+`runConformance` takes the runner as its first argument — `runConformance({ describe, it }, options)` — so
+the one dependency this package would otherwise import into the module that uses it arrives as an argument
+like every other (`CONF-I54`). `RunConformanceOptions.hash` is optional and defaults to `Bun.CryptoHasher`
+(`CONF-I75`); `ConformanceEnvironment.concurrency` is the ceiling `CONF-L11` holds the adapter to, so the
+number is declared to the adapter rather than kept private to the suite.
+
+## Test index
+
+`CONF-O1`–`CONF-O46` are the overwrite family; `CONF-L1`–`CONF-L13` are the lockup family. Each id appears
+verbatim in its generated case title and in `src/case-id.ts` beside the ledger entry it enforces, and
+`tests/hygiene/ledger-citations.test.ts` fails if the three ever disagree.
