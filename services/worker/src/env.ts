@@ -1,4 +1,5 @@
 import arkenv from "arkenv";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
 
 const schema = {
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
@@ -10,6 +11,7 @@ const schema = {
   GOOGLE_PROJECT_REQUESTS_PER_MINUTE: "number?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
+  MICROSOFT_TENANT_ID: microsoftDirectoryTenantSchema.optional(),
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   REDIS_URL: "string.url",
   WORKER_CONCURRENCY: "string?",

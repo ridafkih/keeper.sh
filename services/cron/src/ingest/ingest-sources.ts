@@ -72,6 +72,7 @@ import {
   refreshLockStore,
 } from "@/context";
 import env from "@/env";
+import { microsoftCredentials } from "@/microsoft-credentials";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import {
   resolveMissingCalendarFailure,
@@ -590,11 +591,8 @@ const resolveTokenRefresher = (provider: string) => {
     });
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    return createMicrosoftTokenRefresher({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
-    });
+  if (provider === "outlook" && microsoftCredentials) {
+    return createMicrosoftTokenRefresher(microsoftCredentials);
   }
 
   return null;

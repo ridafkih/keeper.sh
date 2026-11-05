@@ -6,6 +6,7 @@ import { createAuth } from "../src/index";
 
 const BASE_URL = "http://localhost:3000";
 const SECRET = "test-secret-for-outlook-sign-in-email-verification";
+const clients: PGlite[] = [];
 
 const AUTH_DDL = `
 create table "user" (
@@ -28,6 +29,7 @@ const buildIdToken = (claims: Record<string, unknown>) =>
 
 const createHostedAuth = async () => {
   const client = new PGlite();
+  clients.push(client);
   await client.exec(AUTH_DDL);
 
   const database = drizzle(client);
@@ -37,8 +39,11 @@ const createHostedAuth = async () => {
     database: database as unknown as BunSQLDatabase,
     googleClientId: "test-google-client-id",
     googleClientSecret: "test-google-client-secret",
-    microsoftClientId: "test-microsoft-client-id",
-    microsoftClientSecret: "test-microsoft-client-secret",
+    microsoftCredentials: {
+      clientId: "test-microsoft-client-id",
+      clientSecret: "test-microsoft-client-secret",
+      tenant: "common",
+    },
     secret: SECRET,
   });
 
@@ -93,8 +98,9 @@ const stubGraphPhotoFetch = () => {
   });
 };
 
-afterEach(() => {
+afterEach(async () => {
   vi.unstubAllGlobals();
+  await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
 describe("an Outlook sign-in", () => {

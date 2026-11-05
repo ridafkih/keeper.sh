@@ -39,6 +39,7 @@ import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, premiumService, refreshLockRedis, refreshLockStore } from "@/context";
 import env from "@/env";
+import { microsoftCredentials } from "@/microsoft-credentials";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { releaseRefreshLock } from "@/utils/refresh-lock-release";
 import { raceAbortSignal, withAbortTimeout } from "@/utils/with-abort-timeout";
@@ -127,11 +128,8 @@ const resolveTokenRefresher = (provider: string) => {
     });
   }
 
-  if (provider === "outlook" && env.MICROSOFT_CLIENT_ID && env.MICROSOFT_CLIENT_SECRET) {
-    return createMicrosoftTokenRefresher({
-      clientId: env.MICROSOFT_CLIENT_ID,
-      clientSecret: env.MICROSOFT_CLIENT_SECRET,
-    });
+  if (provider === "outlook" && microsoftCredentials) {
+    return createMicrosoftTokenRefresher(microsoftCredentials);
   }
 
   return null;

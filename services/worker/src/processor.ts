@@ -24,6 +24,7 @@ import { applySyncEventFields } from "./utils/sync-event-fields";
 import { createEventsCopiedMilestone } from "./utils/user-milestones";
 import { shouldContinueAfterDeadline } from "./utils/sync-continuation";
 import env from "./env";
+import { microsoftCredentials } from "./microsoft-credentials";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
 
 const resolveCount = (value: unknown): number => {
@@ -312,8 +313,7 @@ const processJob = (
         oauthConfig: {
           googleClientId: env.GOOGLE_CLIENT_ID,
           googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-          microsoftClientId: env.MICROSOFT_CLIENT_ID,
-          microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+          microsoftCredentials,
         },
         plan: job.data.plan,
         recordFirstSyncs: (destinationCalendarId, sourceCalendarIds) =>

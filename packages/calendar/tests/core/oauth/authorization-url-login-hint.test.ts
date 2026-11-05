@@ -40,6 +40,7 @@ const buildMicrosoftUrl = async (loginHint?: string): Promise<URL> => {
   const service = createMicrosoftOAuthService({
     clientId: "microsoft-test-client-id",
     clientSecret: "microsoft-test-client-secret",
+    tenant: "common",
   }, createTestStateStore());
 
   return new URL(await service.getAuthorizationUrl("user-test-1", {

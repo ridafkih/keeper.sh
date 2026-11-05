@@ -1,4 +1,5 @@
 import { type } from "arktype";
+import type { MicrosoftOAuthCredentials } from "@keeper.sh/data-schemas";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { signJWT } from "better-auth/crypto";
@@ -70,8 +71,7 @@ interface AuthConfig {
   polarMode?: "sandbox" | "production";
   googleClientId?: string;
   googleClientSecret?: string;
-  microsoftClientId?: string;
-  microsoftClientSecret?: string;
+  microsoftCredentials?: MicrosoftOAuthCredentials | null;
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcClientSecret?: string;
@@ -184,8 +184,7 @@ const createAuth = (config: AuthConfig) => {
     polarMode,
     googleClientId,
     googleClientSecret,
-    microsoftClientId,
-    microsoftClientSecret,
+    microsoftCredentials,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -217,8 +216,7 @@ const createAuth = (config: AuthConfig) => {
     commercialMode,
     googleClientId,
     googleClientSecret,
-    microsoftClientId,
-    microsoftClientSecret,
+    microsoftCredentials,
     oidcIssuerUrl,
     oidcClientId,
     oidcClientSecret,
@@ -301,10 +299,10 @@ const createAuth = (config: AuthConfig) => {
     };
   }
 
-  if (microsoftClientId && microsoftClientSecret) {
+  if (microsoftCredentials) {
     socialProviders.microsoft = {
-      clientId: microsoftClientId,
-      clientSecret: microsoftClientSecret,
+      clientId: microsoftCredentials.clientId,
+      clientSecret: microsoftCredentials.clientSecret,
       mapProfileToUser: (profile) => {
         if (isMicrosoftEmailOwnershipEstablished(profile)) {
           return { emailVerified: true };
@@ -312,6 +310,7 @@ const createAuth = (config: AuthConfig) => {
         return {};
       },
       prompt: "select_account",
+      tenantId: microsoftCredentials.tenant,
     };
   }
 

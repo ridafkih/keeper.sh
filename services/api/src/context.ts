@@ -21,6 +21,9 @@ import type { OAuthStateStore, RefreshLockStore, DestinationSyncResult } from "@
 
 const MIN_TRUSTED_ORIGINS_COUNT = 0;
 
+const oauthConfigs = buildOAuthConfigs(env);
+const microsoftCredentials = oauthConfigs.microsoft;
+
 const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 const redis = new Redis(env.REDIS_URL, {
   commandTimeout: 10_000,
@@ -92,8 +95,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   polarMode: env.POLAR_MODE,
   googleClientId: env.GOOGLE_CLIENT_ID,
   googleClientSecret: env.GOOGLE_CLIENT_SECRET,
-  microsoftClientId: env.MICROSOFT_CLIENT_ID,
-  microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+  microsoftCredentials,
   oidcIssuerUrl: env.OIDC_ISSUER_URL,
   oidcClientId: env.OIDC_CLIENT_ID,
   oidcClientSecret: env.OIDC_CLIENT_SECRET,
@@ -118,7 +120,6 @@ const premiumService = createPremiumService({
   database,
 });
 
-const oauthConfigs = buildOAuthConfigs(env);
 const oauthProviders = createOAuthProviders(oauthConfigs, oauthStateStore);
 
 const persistSyncStatus = async (
@@ -200,6 +201,7 @@ export {
   database,
   redis,
   env,
+  microsoftCredentials,
   webhookConfig,
   trustedOrigins,
   auth,

@@ -10,6 +10,7 @@ export {
   type OAuthStateStore,
 } from "./core/oauth/providers";
 export {
+  buildMicrosoftOAuthCredentials,
   buildOAuthConfigs,
   type OAuthCredentials,
   type OAuthEnv,
