@@ -432,11 +432,13 @@ function CalendarsSection({
                   calendarType={calendar.calendarType}
                 />
               </NavigationMenuItemIcon>
-              <NavigationMenuItemLabel className="shrink-0">{calendar.name}</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing className="overflow-hidden">
-                <Text size="sm" tone="muted" align="right" className="flex-1 min-w-0 truncate">
-                  {calendar.accountLabel}
-                </Text>
+              <NavigationMenuItemLabel title={calendar.name}>{calendar.name}</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing className="shrink-0 overflow-hidden">
+                <div className="@container w-0 grow">
+                  <Text size="sm" tone="muted" align="right" className="truncate @max-[3rem]:hidden">
+                    {calendar.accountLabel}
+                  </Text>
+                </div>
               </NavigationMenuItemTrailing>
             </NavigationMenuCheckboxItem>
           ))

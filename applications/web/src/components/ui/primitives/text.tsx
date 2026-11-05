@@ -47,9 +47,10 @@ type TextProps = PropsWithChildren<{
   align?: "center" | "left" | "right";
   className?: string;
   style?: CSSProperties;
+  title?: string;
 }>;
 
-export function Text({ as = "p", children, size, tone, align, className, style }: TextProps) {
+export function Text({ as = "p", children, size, tone, align, className, style, title }: TextProps) {
   const Element = as;
-  return <Element className={text({ size, tone, align, className })} style={style}>{children}</Element>;
+  return <Element className={text({ size, tone, align, className })} style={style} title={title}>{children}</Element>;
 }

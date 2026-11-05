@@ -60,6 +60,7 @@ type NavigationMenuItemLabelProps = PropsWithChildren<{
   className?: string;
   /** Overrides the tone the menu variant would otherwise pick, for a row with its own status. */
   tone?: ComponentPropsWithoutRef<typeof Text>["tone"];
+  title?: string;
 }>;
 
 type NavigationMenuItemTrailingProps = PropsWithChildren<{
@@ -156,6 +157,7 @@ export function NavigationMenuItemLabel({
   children,
   className,
   tone,
+  title,
 }: NavigationMenuItemLabelProps) {
   const variant = use(MenuVariantContext);
   const disabled = use(ItemDisabledContext);
@@ -167,6 +169,7 @@ export function NavigationMenuItemLabel({
       tone={tone ?? toneMap[variant ?? "default"]}
       align="left"
       className={cn("min-w-0 truncate", className)}
+      title={title}
     >
       {children}
     </Text>
