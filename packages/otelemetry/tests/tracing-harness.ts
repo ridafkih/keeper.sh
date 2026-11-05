@@ -25,7 +25,13 @@ const startTracingHarness = ({
   });
   const provider = createTracingPipeline({
     exporter,
-    exportSettings: { maxQueueSize, maxExportBatchSize: 100, scheduledDelayMillis: 5, exportTimeoutMillis },
+    exportSettings: {
+      maxQueueSize,
+      maxExportBatchSize: 100,
+      scheduledDelayMillis: 5,
+      exportTimeoutMillis,
+      shutdownFlushTimeoutMillis: 50,
+    },
     droppedSpans,
     sampleRatio,
     slowThresholdMillis,
@@ -49,7 +55,7 @@ const startTracingHarness = ({
   const stop = async () => {
     unregister();
     droppedSpans.stop();
-    await Promise.race([provider.shutdown(), Bun.sleep(100)]);
+    await provider.shutdown();
   };
 
   return { exportedSpans, dropped, stop };

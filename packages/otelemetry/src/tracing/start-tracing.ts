@@ -21,6 +21,7 @@ const SPAN_EXPORT_SETTINGS: SpanExportSettings = {
   maxExportBatchSize: 512,
   scheduledDelayMillis: 1000,
   exportTimeoutMillis: 30_000,
+  shutdownFlushTimeoutMillis: 3000,
 };
 const MAX_BUFFERED_UNSAMPLED_SPANS = 4096;
 const DROP_REPORT_INTERVAL_MILLIS = 10_000;
@@ -59,7 +60,10 @@ const writeDropReportToStderr = (serviceName: string) => (report: DroppedSpansRe
 };
 
 const settleWithin = async (work: Promise<unknown>, timeoutMillis: number) => {
-  await Promise.race([work.catch(() => null), Bun.sleep(timeoutMillis)]);
+  const deadline = new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMillis).unref();
+  });
+  await Promise.race([work.catch(() => null), deadline]);
 };
 
 const startTracing = ({ serviceName, propagateToOrigins, environment }: TracingOptions): Tracing => {

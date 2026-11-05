@@ -15,6 +15,7 @@ const createTraceExporter = (exportTimeoutMillis: number): SpanExporter => {
     "Content-Type": "application/json",
   });
 
+  const transport = createFetchTransport({ ...configuration, attemptTimeoutMillis: configuration.timeoutMillis });
   const delegate = createOtlpNetworkExportDelegate(
     { ...configuration, timeoutMillis: exportTimeoutMillis },
     JsonTraceSerializer,
@@ -24,10 +25,20 @@ const createTraceExporter = (exportTimeoutMillis: number): SpanExporter => {
       configuration.url,
       metrics.getMeterProvider(),
     ),
-    createFetchTransport({ ...configuration, attemptTimeoutMillis: configuration.timeoutMillis }),
+    transport,
   );
+  const exporter = new OTLPExporterBase<ReadableSpan[]>(delegate);
 
-  return new OTLPExporterBase<ReadableSpan[]>(delegate);
+  return {
+    export: (spans, resultCallback) => {
+      exporter.export(spans, resultCallback);
+    },
+    forceFlush: () => exporter.forceFlush(),
+    shutdown: async () => {
+      transport.shutdown();
+      await exporter.shutdown();
+    },
+  };
 };
 
 export { createTraceExporter };

@@ -9,6 +9,7 @@ interface SpanExportSettings {
   maxExportBatchSize: number;
   scheduledDelayMillis: number;
   exportTimeoutMillis: number;
+  shutdownFlushTimeoutMillis: number;
 }
 
 interface SpanExportQueue {
@@ -100,7 +101,7 @@ const createSpanExportQueue = (
     flush,
     shutdown: async () => {
       clearInterval(timer);
-      await flush();
+      await Promise.race([flush(), timeoutAfter(settings.shutdownFlushTimeoutMillis)]);
       await exporter.shutdown();
     },
   };
