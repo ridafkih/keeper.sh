@@ -1,5 +1,6 @@
 import { withCompression } from "./compression";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
+import { nameRequestRoute } from "@keeper.sh/otelemetry/tracing";
 import { handleInternalRoute } from "./internal-routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
 import { resolveMovedPath } from "@/lib/moved-paths";
@@ -188,10 +189,12 @@ export async function handleApplicationRequest(
   }
 
   if (isMcpRequest(requestUrl) && config.mcpProxyOrigin) {
+    nameRequestRoute(request.method, "/mcp");
     return proxyRequest(request, config.mcpProxyOrigin);
   }
 
   if (isApiRequest(requestUrl)) {
+    nameRequestRoute(request.method, "/api/*");
     return proxyRequest(request, config.apiProxyOrigin);
   }
 

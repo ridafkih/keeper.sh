@@ -1,4 +1,5 @@
 import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
+import { startTracing, traceIncomingRequest } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { getServerPublicRuntimeConfig } from "@/lib/runtime-config";
 import { createServerConfig, envSchema } from "./config";
@@ -27,6 +28,11 @@ await entry({
       env,
       getServerPublicRuntimeConfig({ environment: process.env }),
     );
+    const tracing = startTracing({
+      serviceName: "keeper-web",
+      propagateToOrigins: [config.apiProxyOrigin, config.mcpProxyOrigin].filter((origin) => origin !== null),
+      environment: process.env,
+    });
     const runtime = await createRuntime(config);
 
     const server = Bun.serve<SocketProxyData>({
@@ -37,7 +43,7 @@ await entry({
           return;
         }
 
-        return context(async () => {
+        return traceIncomingRequest(request, { trustIncomingTraceContext: false }, () => context(async () => {
           const url = new URL(request.url);
           const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 
@@ -74,7 +80,7 @@ await entry({
           } finally {
             widelog.flush();
           }
-        });
+        }));
       },
       port: config.serverPort,
       websocket: websocketProxyHandlers,
@@ -86,6 +92,7 @@ await entry({
         await runtime.shutdown();
       }
       await destroy();
+      await tracing.shutdown();
     };
   },
 });
