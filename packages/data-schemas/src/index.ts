@@ -122,6 +122,10 @@ const googleEventSchema = type({
   "id?": "string",
   "location?": "string",
   "recurrence?": "string[]",
+  "reminders?": {
+    "overrides?": type({ method: "string", minutes: "number" }).array(),
+    useDefault: "boolean",
+  },
   "start?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "status?": "'confirmed' | 'tentative' | 'cancelled'",
   "summary?": "string",
@@ -238,6 +242,7 @@ const outlookEventSchema = type({
   "id?": "string",
   "isAllDay?": "boolean",
   "isCancelled?": "boolean",
+  "isReminderOn?": "boolean",
   "lastModifiedDateTime?": "string",
   "location?": { "displayName?": "string" },
   "originalEndTimeZone?": "string",

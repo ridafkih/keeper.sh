@@ -75,6 +75,16 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts disableEventReminders as boolean", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects a non-boolean disableEventReminders", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: "yes" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
   it("accepts excluded statuses", () => {
     const result = sourcePatchBodySchema({ excludeAvailabilities: ["busy", "free", "tentative"] });
     expect(result instanceof type.errors).toBe(false);

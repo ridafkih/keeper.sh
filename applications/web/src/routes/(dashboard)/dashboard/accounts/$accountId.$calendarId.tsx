@@ -107,6 +107,7 @@ const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
   { field: "markEventsAsPrivate", label: "Mark Events as Private", matchesField: true },
+  { field: "disableEventReminders", label: "Disable Reminders", matchesField: true },
 ];
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [
