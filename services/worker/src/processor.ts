@@ -18,6 +18,7 @@ import {
   recordUserSyncRequest,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
+import { markActiveSpanFailed } from "@keeper.sh/otelemetry/tracing";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
@@ -416,6 +417,7 @@ const processJob = (
           widelog.set("retry.backoff_applied", failure.backoffApplied);
           widelog.set("destination.push_removed", failure.pushRemoved);
           widelog.set("outcome", "error");
+          markActiveSpanFailed(failure.error);
           applyDatabaseErrorFields(failure.error);
           widelog.errorFields(failure.error, { slug: classifySyncError(failure.error) });
           calendarOutcomeReported = true;
@@ -426,6 +428,7 @@ const processJob = (
         let outcome = "success";
         if (result.errors.length > 0) {
           outcome = "error";
+          markActiveSpanFailed(result.errors.join("; "));
         }
         widelog.set("outcome", outcome);
         for (const syncError of result.errors) {
