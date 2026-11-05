@@ -1,4 +1,5 @@
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import { writeAuthStderr } from "./runtime-environment";
 
 interface AuthRequestOutcome {
   userId: string | null;
@@ -6,8 +7,16 @@ interface AuthRequestOutcome {
   errorCode: string | null;
 }
 
+type AuthLogLevel = "debug" | "info" | "warn" | "error";
+
+interface AuthLogEntry {
+  level: AuthLogLevel;
+  message: string;
+}
+
 interface AuthObserver {
   onRequestResolved: (outcome: AuthRequestOutcome) => void;
+  onAuthLog: (entry: AuthLogEntry) => void;
   onUserCreated: (userId: string) => void;
   onUserDeleted: (userId: string) => void;
 }
@@ -103,11 +112,19 @@ const createObserverHooks = (observer: AuthObserver | undefined) => {
   return { after: createAuthObserverHook(observer) };
 };
 
+const createObservedLogger = (observer: AuthObserver | undefined) => ({
+  log: (level: AuthLogLevel, message: string) => {
+    writeAuthStderr(`${new Date().toISOString()} ${level.toUpperCase()} [Better Auth]: ${message}\n`);
+    observer?.onAuthLog({ level, message });
+  },
+});
+
 const createAuthObservation = (observer: AuthObserver | undefined) => ({
   hooks: createObserverHooks(observer),
+  logger: createObservedLogger(observer),
   userCreated: (userId: string): void => observer?.onUserCreated(userId),
   userDeleted: (userId: string): void => observer?.onUserDeleted(userId),
 });
 
 export { createAuthObservation };
-export type { AuthObserver, AuthRequestOutcome };
+export type { AuthLogEntry, AuthObserver, AuthRequestOutcome };

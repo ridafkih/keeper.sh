@@ -4,6 +4,7 @@ import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 import { context, widelog } from "@/utils/logging";
 import { resolveOutcome } from "@/utils/middleware";
 import { labelFailure } from "@/utils/error-labelling";
+import { readAuthErrorDetail } from "@/utils/auth-error-detail";
 
 const COMPANION_COOKIE_NAME = "keeper.has_session";
 const COMPANION_COOKIE_SET = `${COMPANION_COOKIE_NAME}=1; Path=/; SameSite=Lax`;
@@ -161,6 +162,19 @@ const processAuth = async (pathname: string, request: Request): Promise<Response
   return processAuthResponse(pathname, response);
 };
 
+const recordAuthErrorDetail = async (response: Response): Promise<void> => {
+  const detail = await readAuthErrorDetail(response);
+  if (!detail) {
+    return;
+  }
+  if (detail.code) {
+    widelog.set("auth.error_code", detail.code);
+  }
+  if (detail.description) {
+    widelog.set("auth.error_description", detail.description);
+  }
+};
+
 const handleAuthRequest = (pathname: string, request: Request): Promise<Response> =>
   context(async () => {
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
@@ -176,6 +190,7 @@ const handleAuthRequest = (pathname: string, request: Request): Promise<Response
         const response = await processAuth(pathname, request);
         widelog.set("status_code", response.status);
         widelog.set("outcome", resolveOutcome(response.status));
+        await recordAuthErrorDetail(response);
         return response;
       });
     } catch (error) {

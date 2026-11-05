@@ -77,6 +77,7 @@ const createObservedAuth = async () => {
     database: database as unknown as BunSQLDatabase,
     observer: {
       onRequestResolved: (outcome) => outcomes.push(outcome),
+      onAuthLog: () => null,
       onUserCreated: (userId) => createdUserIds.push(userId),
       onUserDeleted: (userId) => deletedUserIds.push(userId),
     },

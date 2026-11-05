@@ -1,6 +1,7 @@
-import type { AuthObserver, AuthRequestOutcome } from "@keeper.sh/auth";
+import type { AuthLogEntry, AuthObserver, AuthRequestOutcome } from "@keeper.sh/auth";
 import { widelog } from "./logging";
 import { emitUserLifecycleEvent } from "./lifecycle-events";
+import { redactSensitiveText } from "./auth-error-detail";
 
 const recordAuthRequestOutcome = ({ userId, provider, errorCode }: AuthRequestOutcome): void => {
   if (userId) {
@@ -14,8 +15,13 @@ const recordAuthRequestOutcome = ({ userId, provider, errorCode }: AuthRequestOu
   }
 };
 
+const recordAuthLog = ({ level, message }: AuthLogEntry): void => {
+  widelog.append("auth.log", `${level}: ${redactSensitiveText(message)}`);
+};
+
 const authObserver: AuthObserver = {
   onRequestResolved: recordAuthRequestOutcome,
+  onAuthLog: recordAuthLog,
   onUserCreated: (userId) => emitUserLifecycleEvent("user.created", userId),
   onUserDeleted: (userId) => emitUserLifecycleEvent("user.deleted", userId),
 };
