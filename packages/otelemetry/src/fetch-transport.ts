@@ -51,10 +51,11 @@ const buildRequestHeaders = async (parameters: FetchTransportParameters) => {
 };
 
 const encodeBody = (data: Uint8Array, compression: FetchTransportParameters["compression"]) => {
+  const body = new Uint8Array(data);
   if (compression === "gzip") {
-    return Bun.gzipSync(new Uint8Array(data));
+    return Bun.gzipSync(body);
   }
-  return data;
+  return body;
 };
 
 const responseFromStatus = (response: Response, body: Uint8Array): ExportResponse => {
@@ -76,17 +77,31 @@ const responseFromStatus = (response: Response, body: Uint8Array): ExportRespons
   return { status: "failure", error };
 };
 
+const sleepUnlessStopped = (delayMillis: number, stopped: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    const timer = setTimeout(resolve, delayMillis);
+    stopped.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
 const sendOnce = async (
   parameters: FetchTransportParameters,
   data: Uint8Array,
   timeoutMillis: number,
+  stopped: AbortSignal,
 ): Promise<ExportResponse> => {
   try {
     const response = await fetch(parameters.url, {
       method: "POST",
       headers: await buildRequestHeaders(parameters),
       body: encodeBody(data, parameters.compression),
-      signal: AbortSignal.timeout(timeoutMillis),
+      signal: AbortSignal.any([AbortSignal.timeout(timeoutMillis), stopped]),
     });
     const body = new Uint8Array(await response.arrayBuffer());
     return responseFromStatus(response, body);
@@ -95,29 +110,43 @@ const sendOnce = async (
   }
 };
 
-const sendWithRetries = async (
-  parameters: FetchTransportParameters,
-  data: Uint8Array,
-  deadline: number,
-  retry: number,
-): Promise<ExportResponse> => {
-  const attemptTimeoutMillis = Math.min(parameters.attemptTimeoutMillis, deadline - Date.now());
-  const response = await sendOnce(parameters, data, Math.max(attemptTimeoutMillis, 1));
+interface ExportAttempt {
+  parameters: FetchTransportParameters;
+  data: Uint8Array;
+  deadline: number;
+  stopped: AbortSignal;
+}
+
+const sendWithRetries = async (attempt: ExportAttempt, retry: number): Promise<ExportResponse> => {
+  const attemptTimeoutMillis = Math.min(attempt.parameters.attemptTimeoutMillis, attempt.deadline - Date.now());
+  const response = await sendOnce(attempt.parameters, attempt.data, Math.max(attemptTimeoutMillis, 1), attempt.stopped);
   if (response.status !== "retryable") {
     return response;
   }
   const delay = response.retryInMillis ?? backoffMillis(retry);
-  if (Date.now() + delay >= deadline) {
+  if (attempt.stopped.aborted || Date.now() + delay >= attempt.deadline) {
     return response;
   }
-  await Bun.sleep(delay);
-  return sendWithRetries(parameters, data, deadline, retry + 1);
+  await sleepUnlessStopped(delay, attempt.stopped);
+  if (attempt.stopped.aborted) {
+    return response;
+  }
+  return sendWithRetries(attempt, retry + 1);
 };
 
-const createFetchTransport = (parameters: FetchTransportParameters): IExporterTransport => ({
-  send: (data, timeoutMillis) => sendWithRetries(parameters, data, Date.now() + timeoutMillis, 0),
-  shutdown: () => null,
-});
+const createFetchTransport = (parameters: FetchTransportParameters): IExporterTransport => {
+  const shutdownController = new AbortController();
+  return {
+    send: (data, timeoutMillis) =>
+      sendWithRetries(
+        { parameters, data, deadline: Date.now() + timeoutMillis, stopped: shutdownController.signal },
+        0,
+      ),
+    shutdown: () => {
+      shutdownController.abort();
+    },
+  };
+};
 
 export { createFetchTransport };
 export type { FetchTransportParameters };
