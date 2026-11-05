@@ -161,6 +161,20 @@ describe("the OIDC discovery URL", () => {
       "https://id.example.com/.well-known/openid-configuration",
     );
   });
+
+  it("collapses several trailing slashes into one path separator", () => {
+    expect(resolveOidcDiscoveryUrl("https://id.example.com/realms/keeper///")).toBe(
+      "https://id.example.com/realms/keeper/.well-known/openid-configuration",
+    );
+  });
+
+  it("resolves an issuer with a long run of slashes in linear time", () => {
+    const issuerUrl = `https://id.example.com${"/".repeat(100_000)}x`;
+    const startedAt = performance.now();
+    const discoveryUrl = resolveOidcDiscoveryUrl(issuerUrl);
+    expect(performance.now() - startedAt).toBeLessThan(100);
+    expect(discoveryUrl).toBe(`${issuerUrl}/.well-known/openid-configuration`);
+  });
 });
 
 describe("an OIDC profile", () => {

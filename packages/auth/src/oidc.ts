@@ -42,8 +42,16 @@ const readNonEmptyString = (value: unknown): string | null => {
   return trimmed;
 };
 
+const trimTrailingSlashes = (value: string): string => {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end -= 1;
+  }
+  return value.slice(0, end);
+};
+
 const resolveOidcDiscoveryUrl = (issuerUrl: string): string =>
-  `${issuerUrl.replace(/\/+$/, "")}/.well-known/openid-configuration`;
+  `${trimTrailingSlashes(issuerUrl)}/.well-known/openid-configuration`;
 
 const resolveOidcDisplayName = (profile: OidcProfile): string | null => {
   const name = readNonEmptyString(profile.name);
