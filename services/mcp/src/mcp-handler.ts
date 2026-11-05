@@ -9,7 +9,7 @@ const JSON_RPC_ERROR_UNAUTHORIZED = -32_001;
 const JSON_RPC_ERROR_FORBIDDEN = -32_003;
 const JSON_RPC_ERROR_METHOD_NOT_ALLOWED = -32_005;
 const ALLOWED_HTTP_METHODS = new Set(["DELETE", "GET", "POST"]);
-const ALLOW_HEADER_VALUE = "GET, POST, DELETE, OPTIONS";
+const ALLOW_HEADER_VALUE = "POST, DELETE, OPTIONS";
 type ResponseHeaders = Headers | Record<string, string>;
 
 interface KeeperMcpAuthSession {
@@ -253,6 +253,17 @@ const createKeeperMcpHandler = ({
         },
         {
           "www-authenticate": insufficientScopeHeader,
+        },
+      );
+    }
+
+    if (request.method === "GET") {
+      return createJsonRpcErrorResponse(
+        405,
+        JSON_RPC_ERROR_METHOD_NOT_ALLOWED,
+        "Method not allowed: this server does not offer a server-initiated stream",
+        {
+          Allow: ALLOW_HEADER_VALUE,
         },
       );
     }
