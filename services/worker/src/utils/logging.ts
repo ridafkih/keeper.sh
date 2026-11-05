@@ -1,3 +1,4 @@
+import { activeTraceFields } from "@keeper.sh/otelemetry/tracing";
 import { type } from "entrykit";
 import { widelogger, widelog } from "widelogger";
 
@@ -7,12 +8,18 @@ const buildIdentity = type({
   ENV: "'development' | 'production' | 'test'",
 }).assert(process.env);
 
-const { context, destroy } = widelogger({
+const { context: wideEventContext, destroy } = widelogger({
   service: "keeper-worker",
   defaultEventName: "wide_event",
   commitHash: buildIdentity.COMMIT_SHA,
   environment: buildIdentity.ENV,
   version: buildIdentity.VERSION,
 });
+
+const context = <Result>(callback: () => Result): Result =>
+  wideEventContext(() => {
+    widelog.setFields(activeTraceFields()).sticky();
+    return callback();
+  });
 
 export { context, destroy, widelog };
