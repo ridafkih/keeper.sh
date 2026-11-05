@@ -20,6 +20,7 @@ import {
   createCollectorPipeline,
 } from "./collector-pipeline";
 import type { DroppedRecordsReport } from "./dropped-records";
+import { separateTraceContext } from "./log-trace-context";
 
 const PINO_SEVERITY: Record<number, SeverityNumber> = {
   10: SeverityNumber.TRACE,
@@ -72,12 +73,14 @@ const forwardToCollector = (
     return;
   }
 
-  const { message, level, time, attributes } = entry;
+  const { message, level, time } = entry;
+  const { context, attributes } = separateTraceContext(entry.attributes);
   logger.emit({
     body: message ?? line,
     severityNumber: PINO_SEVERITY[level] ?? SeverityNumber.INFO,
     severityText: PINO_SEVERITY_TEXT[level] ?? "INFO",
     ...(time && { timestamp: new Date(time) }),
+    ...(context && { context }),
     attributes,
   });
 };
