@@ -23,6 +23,8 @@ const tryLoadMcpEnv = (): McpEnv | null => {
   }
 };
 
-export { schema, tryLoadMcpEnv };
+const resolveApiBaseUrl = (env: McpEnv): string => env.MCP_API_URL ?? env.BETTER_AUTH_URL;
+
+export { resolveApiBaseUrl, schema, tryLoadMcpEnv };
 export type { McpEnv };
 export default loadMcpEnv();

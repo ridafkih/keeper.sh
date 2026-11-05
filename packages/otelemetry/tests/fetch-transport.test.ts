@@ -102,6 +102,20 @@ describe("fetch transport", () => {
     expect(requests).toBe(3);
   });
 
+  it("abandons an export that is still retrying once the transport shuts down", async () => {
+    const url = serve(() => new Response("down", { status: 503 }));
+    const transport = createFetchTransport(parametersFor(url));
+
+    const started = performance.now();
+    const sending = transport.send(PAYLOAD, 60_000);
+    await Bun.sleep(50);
+    transport.shutdown();
+    const response = await sending;
+
+    expect(response.status).toBe("retryable");
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
   it("does not retry a request the collector rejects", async () => {
     let requests = 0;
     const url = serve(() => {

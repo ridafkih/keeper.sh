@@ -1,4 +1,5 @@
 import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
+import { startTracing } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { join } from "node:path";
 import { getAllJobs } from "./utils/get-jobs";
@@ -17,6 +18,12 @@ import type { IngestScheduler } from "./ingest/start-ingest-scheduler";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
+
+const tracing = startTracing({
+  serviceName: "keeper-cron",
+  propagateToOrigins: [],
+  environment: process.env,
+});
 
 checkWorkerMigrationStatus(env.WORKER_JOB_QUEUE_ENABLED);
 
@@ -54,6 +61,7 @@ await entry({
       destroy();
       await shutdownDatabases();
       shutdownRefreshLockRedis();
+      await tracing.shutdown();
     };
   },
   name: "cron",

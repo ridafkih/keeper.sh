@@ -1,4 +1,5 @@
 import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
+import { SpanKind, startTracing, withSpan } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { Worker } from "bullmq";
 import { PUSH_SYNC_QUEUE_NAME, createPushSyncQueue } from "@keeper.sh/queue";
@@ -15,6 +16,12 @@ import { context, destroy, widelog } from "./utils/logging";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
+
+const tracing = startTracing({
+  serviceName: "keeper-worker",
+  propagateToOrigins: [],
+  environment: process.env,
+});
 
 const DEFAULT_CONCURRENCY = 25;
 const LOCK_DURATION_MS = 360_000;
@@ -42,7 +49,22 @@ await entry({
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
       PUSH_SYNC_QUEUE_NAME,
-      (job, token, signal) => processJob(job, token, signal),
+      (job, token, signal) =>
+        withSpan(
+          `process ${PUSH_SYNC_QUEUE_NAME}`,
+          {
+            kind: SpanKind.CONSUMER,
+            root: true,
+            parent: job.data.traceContext,
+            attributes: {
+              "messaging.system": "bullmq",
+              "messaging.destination.name": PUSH_SYNC_QUEUE_NAME,
+              "messaging.operation.type": "process",
+              "messaging.message.id": job.id ?? "",
+            },
+          },
+          () => processJob(job, token, signal),
+        ),
       {
         connection: { url: env.REDIS_URL, maxRetriesPerRequest: null },
         concurrency,
@@ -118,6 +140,7 @@ await entry({
       shutdownConnections();
       closeDatabase(database);
       await destroy();
+      await tracing.shutdown();
     };
   },
   name: "worker",
