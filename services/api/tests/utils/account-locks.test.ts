@@ -158,9 +158,9 @@ beforeAll(async () => {
   }));
 
   vi.mock("../../src/utils/background-task", () => ({
-    spawnBackgroundJob: (jobName: string, fields: { userId: string }, _callback: () => Promise<void>) => {
+    spawnBackgroundJob: (jobName: string, fields: { "user.id": string }, _callback: () => Promise<void>) => {
       spawnedJobNames.push(jobName);
-      triggerSyncCalls.push(fields.userId);
+      triggerSyncCalls.push(fields["user.id"]);
     },
   }));
 
