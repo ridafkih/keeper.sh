@@ -3,7 +3,6 @@
 import type { EventEmitter } from "node:events";
 import os from "node:os";
 import { createInterface } from "node:readline";
-import { metrics } from "@opentelemetry/api";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import {
   detectResources,
@@ -14,7 +13,12 @@ import {
   resourceFromAttributes,
 } from "@opentelemetry/resources";
 import { createCollectorExporter } from "./collector-exporter";
-import { COLLECTOR_BATCH_SETTINGS, createCollectorPipeline } from "./collector-pipeline";
+import {
+  COLLECTOR_BATCH_SETTINGS,
+  DROP_REPORT_INTERVAL_MILLIS,
+  createCollectorPipeline,
+} from "./collector-pipeline";
+import type { DroppedRecordsReport } from "./dropped-records";
 
 const PINO_SEVERITY: Record<number, SeverityNumber> = {
   10: SeverityNumber.TRACE,
@@ -92,6 +96,18 @@ const createStdoutSink = (): LineSink => ({
   shutdown: () => Promise.resolve(),
 });
 
+const writeDropReportToStderr = (serviceName: string) => (report: DroppedRecordsReport) => {
+  const line = JSON.stringify({
+    level: 40,
+    time: new Date().toISOString(),
+    service: serviceName,
+    msg: "log records dropped before reaching the collector",
+    "otelemetry.dropped_records": report.total,
+    "otelemetry.drop_reasons": report.byReason,
+  });
+  process.stderr.write(`${line}\n`);
+};
+
 const createCollectorSink = (): LineSink => {
   const serviceName = process.env.OTEL_SERVICE_NAME ?? "unknown";
 
@@ -105,10 +121,12 @@ const createCollectorSink = (): LineSink => {
   );
 
   const pipeline = createCollectorPipeline({
-    exporter: createCollectorExporter(metrics.getMeterProvider()),
+    createExporter: createCollectorExporter,
     resource,
     scopeName: serviceName,
     batchSettings: COLLECTOR_BATCH_SETTINGS,
+    dropReportIntervalMillis: DROP_REPORT_INTERVAL_MILLIS,
+    writeDropReport: writeDropReportToStderr(serviceName),
   });
 
   return {

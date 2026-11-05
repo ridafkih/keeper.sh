@@ -4,6 +4,7 @@ import type { ExportResult } from "@opentelemetry/core";
 import { emptyResource } from "@opentelemetry/resources";
 import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-logs";
 import { createCollectorPipeline } from "../src/collector-pipeline";
+import type { DroppedRecordsReport } from "../src/dropped-records";
 
 const TEST_BATCH_SETTINGS = {
   maxQueueSize: 20,
@@ -12,15 +13,24 @@ const TEST_BATCH_SETTINGS = {
   exportTimeoutMillis: 50,
 };
 
-const createUnreachableCollector = () => {
-  const state = { reachable: false, exportedRecords: 0 };
+type CollectorBehaviour = "unreachable" | "accepting" | "rejecting";
+
+const createFakeCollector = () => {
+  const state: { behaviour: CollectorBehaviour; exported: ReadableLogRecord[] } = {
+    behaviour: "unreachable",
+    exported: [],
+  };
 
   const exporter: LogRecordExporter = {
     export: (records: ReadableLogRecord[], done: (result: ExportResult) => void) => {
-      if (!state.reachable) {
+      if (state.behaviour === "unreachable") {
         return;
       }
-      state.exportedRecords += records.length;
+      if (state.behaviour === "rejecting") {
+        done({ code: ExportResultCode.FAILED, error: new TypeError("rejected") });
+        return;
+      }
+      state.exported.push(...records);
       done({ code: ExportResultCode.SUCCESS });
     },
     shutdown: () => Promise.resolve(),
@@ -29,28 +39,64 @@ const createUnreachableCollector = () => {
   return { exporter, state };
 };
 
-const writeContinuously = (emit: () => void) => {
-  const writer = setInterval(emit, 2);
-  return () => clearInterval(writer);
+const startPipeline = (exporter: LogRecordExporter) => {
+  const reports: DroppedRecordsReport[] = [];
+  const pipeline = createCollectorPipeline({
+    createExporter: () => exporter,
+    resource: emptyResource(),
+    scopeName: "test",
+    batchSettings: TEST_BATCH_SETTINGS,
+    dropReportIntervalMillis: 50,
+    writeDropReport: (report) => reports.push(report),
+  });
+  const writer = setInterval(() => pipeline.logger.emit({ body: "line" }), 2);
+  const stop = async () => {
+    clearInterval(writer);
+    await pipeline.shutdown();
+  };
+  return { reports, stop };
 };
+
+const droppedFor = (reports: DroppedRecordsReport[], reason: string) =>
+  reports.reduce((total, report) => total + (report.byReason[reason] ?? 0), 0);
 
 describe("collector pipeline", () => {
   it("resumes exporting after the collector stops answering while the queue is full", async () => {
-    const collector = createUnreachableCollector();
-    const pipeline = createCollectorPipeline({
-      exporter: collector.exporter,
-      resource: emptyResource(),
-      scopeName: "test",
-      batchSettings: TEST_BATCH_SETTINGS,
-    });
-    const stopWriting = writeContinuously(() => pipeline.logger.emit({ body: "line" }));
+    const collector = createFakeCollector();
+    const pipeline = startPipeline(collector.exporter);
 
     await Bun.sleep(400);
-    collector.state.reachable = true;
+    collector.state.behaviour = "accepting";
     await Bun.sleep(400);
-    stopWriting();
-    await pipeline.shutdown();
+    await pipeline.stop();
 
-    expect(collector.state.exportedRecords).toBeGreaterThan(TEST_BATCH_SETTINGS.maxQueueSize);
+    expect(collector.state.exported.length).toBeGreaterThan(TEST_BATCH_SETTINGS.maxQueueSize);
+  });
+
+  it("reports records dropped while the queue is full and forwards the report", async () => {
+    const collector = createFakeCollector();
+    const pipeline = startPipeline(collector.exporter);
+
+    await Bun.sleep(400);
+    collector.state.behaviour = "accepting";
+    await Bun.sleep(400);
+    await pipeline.stop();
+
+    const forwardedReports = collector.state.exported.filter(
+      (record) => typeof record.attributes["otelemetry.dropped_records"] === "number",
+    );
+    expect(droppedFor(pipeline.reports, "queue_full")).toBeGreaterThan(0);
+    expect(forwardedReports.length).toBeGreaterThan(0);
+  });
+
+  it("reports records the collector rejected", async () => {
+    const collector = createFakeCollector();
+    collector.state.behaviour = "rejecting";
+    const pipeline = startPipeline(collector.exporter);
+
+    await Bun.sleep(300);
+    await pipeline.stop();
+
+    expect(droppedFor(pipeline.reports, "TypeError")).toBeGreaterThan(0);
   });
 });

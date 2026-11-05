@@ -1,6 +1,10 @@
+import type { MeterProvider } from "@opentelemetry/api";
+import { SeverityNumber } from "@opentelemetry/api-logs";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
 import type { LogRecordExporter } from "@opentelemetry/sdk-logs";
 import type { Resource } from "@opentelemetry/resources";
+import { createDroppedRecordsMonitor } from "./dropped-records";
+import type { DroppedRecordsReport } from "./dropped-records";
 
 interface BatchSettings {
   maxQueueSize: number;
@@ -16,29 +20,56 @@ const COLLECTOR_BATCH_SETTINGS: BatchSettings = {
   exportTimeoutMillis: 15_000,
 };
 
+const DROP_REPORT_INTERVAL_MILLIS = 10_000;
+
 interface CollectorPipelineOptions {
-  exporter: LogRecordExporter;
+  createExporter: (meterProvider: MeterProvider) => LogRecordExporter;
   resource: Resource;
   scopeName: string;
   batchSettings: BatchSettings;
+  dropReportIntervalMillis: number;
+  writeDropReport: (report: DroppedRecordsReport) => void;
 }
 
 const createCollectorPipeline = ({
-  exporter,
+  createExporter,
   resource,
   scopeName,
   batchSettings,
+  dropReportIntervalMillis,
+  writeDropReport,
 }: CollectorPipelineOptions) => {
-  const provider = new LoggerProvider({
-    resource,
-    processors: [new BatchLogRecordProcessor({ exporter, ...batchSettings })],
+  const droppedRecords = createDroppedRecordsMonitor(dropReportIntervalMillis);
+  const processor = new BatchLogRecordProcessor({
+    exporter: createExporter(droppedRecords.meterProvider),
+    selfObsMeterProvider: droppedRecords.meterProvider,
+    ...batchSettings,
+  });
+  const provider = new LoggerProvider({ resource, processors: [processor] });
+  const logger = provider.getLogger(scopeName);
+
+  droppedRecords.onDropped((report) => {
+    writeDropReport(report);
+    logger.emit({
+      body: "log records dropped before reaching the collector",
+      severityNumber: SeverityNumber.WARN,
+      severityText: "WARN",
+      attributes: {
+        "otelemetry.dropped_records": report.total,
+        "otelemetry.drop_reasons": JSON.stringify(report.byReason),
+      },
+    });
   });
 
   return {
-    logger: provider.getLogger(scopeName),
-    shutdown: () => provider.shutdown(),
+    logger,
+    shutdown: async () => {
+      await droppedRecords.flush();
+      await provider.shutdown();
+      await droppedRecords.shutdown();
+    },
   };
 };
 
-export { COLLECTOR_BATCH_SETTINGS, createCollectorPipeline };
+export { COLLECTOR_BATCH_SETTINGS, DROP_REPORT_INTERVAL_MILLIS, createCollectorPipeline };
 export type { BatchSettings, CollectorPipelineOptions };
