@@ -14,6 +14,7 @@ import type { Runtime, ServerConfig } from "../../src/server/types";
 const config: ServerConfig = {
   apiProxyOrigin: "http://api.test",
   mcpProxyOrigin: null,
+  contentSecurityPolicy: "default-src 'self'; frame-ancestors 'none'",
   openaiAppsChallengeToken: null,
   environment: "production",
   isProduction: true,
@@ -339,108 +340,5 @@ describe("resolveCanonicalRedirect", () => {
     expect(response?.headers.get("location")).toBe(
       "/compare/onecal-alternative?ref=newsletter",
     );
-  });
-});
-
-function cspDirectives(header: string): Map<string, string[]> {
-  return new Map(
-    header
-      .split(";")
-      .map((directive) => directive.trim())
-      .filter((directive) => directive.length > 0)
-      .map((directive) => {
-        const [name, ...sources] = directive.split(/\s+/);
-        return [name ?? "", sources] as const;
-      }),
-  );
-}
-
-async function productionCsp(): Promise<Map<string, string[]>> {
-  const response = await handleApplicationRequest(request("/"), createRuntime([]), config);
-  const header = response.headers.get("content-security-policy");
-  if (!header) throw new Error("Expected a content-security-policy header in production");
-  return cspDirectives(header);
-}
-
-describe("content security policy", () => {
-  it("allows the hosts Google Analytics sends hits to", async () => {
-    const directives = await productionCsp();
-
-    expect(directives.get("connect-src")).toContain("https://*.google-analytics.com");
-    expect(directives.get("connect-src")).toContain("https://*.google.com");
-    expect(directives.get("img-src")).toContain("https://*.google-analytics.com");
-  });
-
-  it("allows the hosts Google Ads loads conversion scripts from", async () => {
-    const scriptSrc = (await productionCsp()).get("script-src") ?? [];
-
-    expect(scriptSrc).toContain("https://www.googletagmanager.com");
-    expect(scriptSrc).toContain("https://www.googleadservices.com");
-    expect(scriptSrc).toContain("https://googleads.g.doubleclick.net");
-  });
-
-  it("allows the hosts Google Ads pings conversions to over fetch", async () => {
-    const connectSrc = (await productionCsp()).get("connect-src") ?? [];
-
-    expect(connectSrc).toContain("https://www.googleadservices.com");
-    expect(connectSrc).toContain("https://googleads.g.doubleclick.net");
-    expect(connectSrc).toContain("https://ad.doubleclick.net");
-    expect(connectSrc).toContain("https://www.google.com");
-    expect(connectSrc).toContain("https://pagead2.googlesyndication.com");
-  });
-
-  it("allows the hosts Google Ads falls back to pixel pings on", async () => {
-    const imgSrc = (await productionCsp()).get("img-src") ?? [];
-
-    expect(imgSrc).toContain("https://www.googleadservices.com");
-    expect(imgSrc).toContain("https://googleads.g.doubleclick.net");
-    expect(imgSrc).toContain("https://www.google.com");
-    expect(imgSrc).toContain("https://pagead2.googlesyndication.com");
-  });
-});
-
-function sourceMatches(source: string, url: URL): boolean {
-  const { protocol, host } = new URL(source.replace("*.", "wildcard."));
-  if (protocol !== url.protocol) return false;
-  if (!source.includes("*.")) return host === url.host;
-  return url.host.endsWith(host.slice("wildcard".length));
-}
-
-async function cspAllows(directive: string, target: string): Promise<boolean> {
-  const sources = (await productionCsp()).get(directive) ?? [];
-  return sources.some((source) => source.startsWith("https://") && sourceMatches(source, new URL(target)));
-}
-
-describe("content security policy for the endpoints Google tags actually call", () => {
-  it("lets GA4 post hits to the analytics.google.com apex", async () => {
-    expect(await cspAllows("connect-src", "https://analytics.google.com/g/collect")).toBe(true);
-  });
-
-  it("lets GA4 post hits to its regional collectors", async () => {
-    expect(await cspAllows("connect-src", "https://region1.google-analytics.com/g/collect")).toBe(true);
-    expect(await cspAllows("connect-src", "https://region1.analytics.google.com/g/collect")).toBe(true);
-  });
-
-  it("lets GA4 reach the doubleclick hosts Google Ads-linked properties use", async () => {
-    expect(await cspAllows("connect-src", "https://stats.g.doubleclick.net/g/collect")).toBe(true);
-    expect(await cspAllows("img-src", "https://stats.g.doubleclick.net/g/collect")).toBe(true);
-  });
-
-  it("lets Google Ads conversions ping regional Google domains", async () => {
-    expect(await cspAllows("img-src", "https://www.google.ca/pagead/1p-conversion/1/")).toBe(true);
-    expect(await cspAllows("connect-src", "https://www.google.co.uk/pagead/1p-user-list/1/")).toBe(true);
-  });
-
-  it("lets Google Analytics reach any subdomain of a regional Google domain", async () => {
-    expect(await cspAllows("img-src", "https://adservice.google.ca/ddm/fls/z/")).toBe(true);
-    expect(await cspAllows("connect-src", "https://adservice.google.co.uk/ddm/fls/z/")).toBe(true);
-  });
-
-  it("lets the Google tag load its service worker frame", async () => {
-    expect(await cspAllows("frame-src", "https://www.googletagmanager.com/static/service_worker/")).toBe(true);
-  });
-
-  it("still refuses hosts outside Google's documented list", async () => {
-    expect(await cspAllows("connect-src", "https://analytics.example.com/g/collect")).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { entry } from "entrykit";
+import { getServerPublicRuntimeConfig } from "@/lib/runtime-config";
 import { createServerConfig, envSchema } from "./config";
 import { handleApplicationRequest } from "./http-handler";
 import { websocketProxyHandlers, upgradeSocketProxy } from "./proxy/websocket";
@@ -22,7 +23,10 @@ await entry({
   env: envSchema,
   name: "web",
   main: async ({ env }) => {
-    const config = createServerConfig(env);
+    const config = createServerConfig(
+      env,
+      getServerPublicRuntimeConfig({ environment: process.env }),
+    );
     const runtime = await createRuntime(config);
 
     const server = Bun.serve<SocketProxyData>({
