@@ -77,18 +77,16 @@ const responseFromStatus = (response: Response, body: Uint8Array): ExportRespons
   return { status: "failure", error };
 };
 
-const sleepUnlessStopped = (delayMillis: number, stopped: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
-    const timer = setTimeout(resolve, delayMillis);
-    stopped.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+const sleepUnlessStopped = (delayMillis: number, stopped: AbortSignal): Promise<void> => {
+  const wake = AbortSignal.any([AbortSignal.timeout(delayMillis), stopped]);
+  return new Promise((resolve) => {
+    if (wake.aborted) {
+      resolve();
+      return;
+    }
+    wake.addEventListener("abort", () => resolve(), { once: true });
   });
+};
 
 const sendOnce = async (
   parameters: FetchTransportParameters,
