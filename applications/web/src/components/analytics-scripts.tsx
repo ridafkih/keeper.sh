@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+import { getGoogleTagIds } from "@/lib/google-tag";
 import {
   ANALYTICS_EVENTS,
   identify,
@@ -15,8 +16,8 @@ import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
 
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
-  const { googleAdsId, googleAnalyticsId, visitorsNowToken } = runtimeConfig;
-  const googleTagIds = [googleAdsId, googleAnalyticsId].filter((id): id is string => id !== null);
+  const { googleAdsId, visitorsNowToken } = runtimeConfig;
+  const googleTagIds = getGoogleTagIds(runtimeConfig);
   const [googleTagLoaderId] = googleTagIds;
   const gdprApplies = useGdprApplies();
   const hasConsent = useEffectiveConsent();

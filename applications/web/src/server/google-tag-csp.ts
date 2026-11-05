@@ -1,3 +1,9 @@
+import { getGoogleTagIds, type GoogleTagConfig } from "@/lib/google-tag";
+import {
+  noContentSecurityPolicySources,
+  type ContentSecurityPolicySources,
+} from "./content-security-policy-sources";
+
 const GOOGLE_REGIONAL_TLDS = [
   "ad", "ae", "com.af", "com.ag", "al", "am", "co.ao", "com.ar", "as", "at", "com.au", "az", "ba",
   "com.bd", "be", "bf", "bg", "com.bh", "bi", "bj", "com.bn", "com.bo", "com.br", "bs", "bt",
@@ -18,48 +24,44 @@ const GOOGLE_REGIONAL_TLDS = [
 
 const googleTagManagerHost = "https://www.googletagmanager.com";
 
-const googleRegionalHosts = GOOGLE_REGIONAL_TLDS.map((tld) => `https://*.google.${tld}`);
+const googleRegionalHosts = GOOGLE_REGIONAL_TLDS.map((tld) => `*.google.${tld}`);
 
-const googleTagScriptHosts = [
-  googleTagManagerHost,
-  "https://www.googleadservices.com",
-  "https://www.google.com",
-  "https://googleads.g.doubleclick.net",
-  "https://ad.doubleclick.net",
-  "https://pagead2.googlesyndication.com",
-];
-
-const googleTagImageHosts = [
-  googleTagManagerHost,
-  "https://*.google-analytics.com",
-  "https://*.google.com",
-  "https://*.g.doubleclick.net",
-  "https://www.googleadservices.com",
-  "https://googleads.g.doubleclick.net",
-  "https://pagead2.googlesyndication.com",
-  "https://ad.doubleclick.net",
-  "https://www.google.com",
-  ...googleRegionalHosts,
-];
-
-const googleTagConnectHosts = [
-  googleTagManagerHost,
-  "https://*.google-analytics.com",
-  "https://*.google.com",
-  "https://*.g.doubleclick.net",
-  "https://www.googleadservices.com",
-  "https://googleads.g.doubleclick.net",
-  "https://pagead2.googlesyndication.com",
-  "https://ad.doubleclick.net",
-  "https://www.google.com",
-  ...googleRegionalHosts,
-];
-
-const googleTagFrameHosts = [googleTagManagerHost];
-
-export {
-  googleTagConnectHosts,
-  googleTagFrameHosts,
-  googleTagImageHosts,
-  googleTagScriptHosts,
+const googleAnalyticsSources: ContentSecurityPolicySources = {
+  script: [googleTagManagerHost],
+  img: [googleTagManagerHost, "https://*.google-analytics.com"],
+  connect: [googleTagManagerHost, "https://*.google-analytics.com", "https://*.google.com"],
+  frame: [googleTagManagerHost],
 };
+
+const googleAdsBeaconHosts = [
+  googleTagManagerHost,
+  "https://*.google-analytics.com",
+  "https://*.google.com",
+  "https://*.g.doubleclick.net",
+  "https://ad.doubleclick.net",
+  "https://www.googleadservices.com",
+  "https://pagead2.googlesyndication.com",
+  ...googleRegionalHosts,
+];
+
+const googleAdsSources: ContentSecurityPolicySources = {
+  script: [
+    googleTagManagerHost,
+    "https://www.googleadservices.com",
+    "https://www.google.com",
+    "https://googleads.g.doubleclick.net",
+    "https://ad.doubleclick.net",
+    "https://pagead2.googlesyndication.com",
+  ],
+  img: googleAdsBeaconHosts,
+  connect: googleAdsBeaconHosts,
+  frame: [googleTagManagerHost],
+};
+
+const resolveGoogleTagSources = (config: GoogleTagConfig): ContentSecurityPolicySources => {
+  if (getGoogleTagIds(config).length === 0) return noContentSecurityPolicySources;
+  if (config.googleAdsId === null) return googleAnalyticsSources;
+  return googleAdsSources;
+};
+
+export { resolveGoogleTagSources };
