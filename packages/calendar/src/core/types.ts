@@ -63,6 +63,7 @@ interface SyncableEvent {
   description?: string;
   location?: string;
   isPrivate?: boolean;
+  remindersDisabled?: boolean;
   calendarId: string;
   calendarName: string | null;
   calendarUrl: string | null;
