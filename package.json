@@ -27,6 +27,7 @@
   "workspaces": {
     "packages": [
       "packages/*",
+      "packages/sync-kit/*",
       "applications/*",
       "services/*"
     ]
