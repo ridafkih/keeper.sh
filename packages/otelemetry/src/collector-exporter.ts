@@ -9,6 +9,7 @@ import type { LogRecordExporter, ReadableLogRecord } from "@opentelemetry/sdk-lo
 import { createFetchTransport } from "./fetch-transport";
 
 const LOG_EXPORTER_COMPONENT_TYPE = "otlp_http_log_exporter";
+const EXPORT_RETRY_BUDGET_MILLIS = 290_000;
 
 const createCollectorExporter = (meterProvider: MeterProvider): LogRecordExporter => {
   const configuration = convertLegacyHttpOptions({}, "LOGS", "v1/logs", {
@@ -16,7 +17,7 @@ const createCollectorExporter = (meterProvider: MeterProvider): LogRecordExporte
   });
 
   const delegate = createOtlpNetworkExportDelegate(
-    configuration,
+    { ...configuration, timeoutMillis: EXPORT_RETRY_BUDGET_MILLIS },
     JsonLogsSerializer,
     createOtlpHttpExporterMetrics(
       LOG_EXPORTER_COMPONENT_TYPE,
@@ -24,10 +25,10 @@ const createCollectorExporter = (meterProvider: MeterProvider): LogRecordExporte
       configuration.url,
       meterProvider,
     ),
-    createFetchTransport(configuration),
+    createFetchTransport({ ...configuration, attemptTimeoutMillis: configuration.timeoutMillis }),
   );
 
   return new OTLPExporterBase<ReadableLogRecord[]>(delegate);
 };
 
-export { createCollectorExporter };
+export { EXPORT_RETRY_BUDGET_MILLIS, createCollectorExporter };

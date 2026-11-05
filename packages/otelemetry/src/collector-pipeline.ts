@@ -3,6 +3,7 @@ import { SeverityNumber } from "@opentelemetry/api-logs";
 import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
 import type { LogRecordExporter } from "@opentelemetry/sdk-logs";
 import type { Resource } from "@opentelemetry/resources";
+import { EXPORT_RETRY_BUDGET_MILLIS } from "./collector-exporter";
 import { createDroppedRecordsMonitor } from "./dropped-records";
 import type { DroppedRecordsReport } from "./dropped-records";
 
@@ -14,10 +15,10 @@ interface BatchSettings {
 }
 
 const COLLECTOR_BATCH_SETTINGS: BatchSettings = {
-  maxQueueSize: 8192,
+  maxQueueSize: 16_384,
   maxExportBatchSize: 512,
   scheduledDelayMillis: 1000,
-  exportTimeoutMillis: 15_000,
+  exportTimeoutMillis: EXPORT_RETRY_BUDGET_MILLIS + 10_000,
 };
 
 const DROP_REPORT_INTERVAL_MILLIS = 10_000;

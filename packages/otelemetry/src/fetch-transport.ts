@@ -5,10 +5,10 @@ interface FetchTransportParameters {
   url: string;
   headers: () => Promise<Record<string, string>>;
   compression: "gzip" | "none";
+  attemptTimeoutMillis: number;
 }
 
 const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 504]);
-const MAX_RETRIES = 5;
 const INITIAL_BACKOFF_MILLIS = 1000;
 const MAX_BACKOFF_MILLIS = 5000;
 const BACKOFF_MULTIPLIER = 1.5;
@@ -101,8 +101,9 @@ const sendWithRetries = async (
   deadline: number,
   retry: number,
 ): Promise<ExportResponse> => {
-  const response = await sendOnce(parameters, data, Math.max(deadline - Date.now(), 1));
-  if (response.status !== "retryable" || retry >= MAX_RETRIES) {
+  const attemptTimeoutMillis = Math.min(parameters.attemptTimeoutMillis, deadline - Date.now());
+  const response = await sendOnce(parameters, data, Math.max(attemptTimeoutMillis, 1));
+  if (response.status !== "retryable") {
     return response;
   }
   const delay = response.retryInMillis ?? backoffMillis(retry);

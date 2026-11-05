@@ -10,10 +10,14 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
-const parametersFor = (url: string, compression: FetchTransportParameters["compression"] = "none") => ({
+const parametersFor = (
+  url: string,
+  compression: FetchTransportParameters["compression"] = "none",
+): FetchTransportParameters => ({
   url,
   headers: () => Promise.resolve({ "Content-Type": "application/json" }),
   compression,
+  attemptTimeoutMillis: 200,
 });
 
 const listenSilently = async () => {
@@ -77,6 +81,22 @@ describe("fetch transport", () => {
     });
 
     const response = await createFetchTransport(parametersFor(url)).send(PAYLOAD, 5000);
+
+    expect(response.status).toBe("success");
+    expect(requests).toBe(3);
+  });
+
+  it("keeps retrying a collector that stopped answering until it answers again", async () => {
+    let requests = 0;
+    const url = serve(async () => {
+      requests += 1;
+      if (requests < 3) {
+        await Bun.sleep(1000);
+      }
+      return new Response("{}");
+    });
+
+    const response = await createFetchTransport(parametersFor(url)).send(PAYLOAD, 10_000);
 
     expect(response.status).toBe("success");
     expect(requests).toBe(3);
