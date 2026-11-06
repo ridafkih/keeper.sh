@@ -79,13 +79,6 @@ vi.mock("@keeper.sh/premium", () => ({
   createPremiumService: () => ({}),
 }));
 
-vi.mock("@polar-sh/sdk", () => ({
-  // The member keeps oxlint's no-extraneous-class satisfied on this stub.
-  Polar: class FakePolar {
-    public readonly mocked = true;
-  },
-}));
-
 vi.mock("@keeper.sh/sync", () => ({
   createSyncLock: () => ({
     acquire: () => Promise.resolve({

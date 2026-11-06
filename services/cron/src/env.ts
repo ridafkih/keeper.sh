@@ -29,8 +29,6 @@ const schema = {
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
   OUTLOOK_INGEST_REQUESTS_PER_MINUTE: "number?",
-  POLAR_ACCESS_TOKEN: "string?",
-  POLAR_MODE: "'sandbox' | 'production' | undefined?",
   REDIS_URL: "string.url",
   WEBHOOK_PUBLIC_URL: "string.url?",
   WORKER_JOB_QUEUE_ENABLED: "boolean?",
