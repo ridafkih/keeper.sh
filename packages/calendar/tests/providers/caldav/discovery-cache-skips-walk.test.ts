@@ -5,6 +5,7 @@ const walks = vi.hoisted(() => ({ fetchCalendars: vi.fn() }));
 vi.mock("tsdav", () => ({
   DAVNamespaceShort: { DAV: "d" },
   createDAVClient: () => Promise.resolve({
+    createAccount: () => Promise.resolve({ homeUrl: "https://caldav.example.test/home/" }),
     fetchCalendars: walks.fetchCalendars,
   }),
 }));

@@ -20,6 +20,7 @@ const davMocks = vi.hoisted(() => ({
 vi.mock("tsdav", () => ({
   DAVNamespaceShort: { DAV: "d" },
   createDAVClient: () => Promise.resolve({
+    createAccount: () => Promise.resolve({ homeUrl: "https://caldav.example.test/home/" }),
     calendarQuery: davMocks.calendarQuery,
     fetchCalendarObjects: davMocks.fetchCalendarObjects,
     fetchCalendars: davMocks.fetchCalendars,
