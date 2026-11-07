@@ -67,17 +67,6 @@ const listedToolsSchema = z.object({
   }),
 });
 
-const securedToolsSchema = z.object({
-  result: z.object({
-    tools: z.array(z.object({
-      name: z.string(),
-      _meta: z.object({
-        securitySchemes: z.array(z.object({ type: z.string(), scopes: z.array(z.string()) })),
-      }),
-    })),
-  }),
-});
-
 const initializeResultSchema = z.object({
   result: z.object({
     capabilities: z.object({ tools: z.object({}) }),
@@ -129,25 +118,6 @@ describe("anonymous discovery", () => {
     for (const execution of executions) {
       expect(execution).not.toHaveBeenCalled();
     }
-  });
-
-  it("declares each tool's OAuth scopes in its metadata without a token", async () => {
-    const { toolset } = createSpiedToolset();
-    const { handler } = createHandler(toolset);
-
-    const response = await handler(postJsonRpc(toolsListRequest));
-    const { result } = securedToolsSchema.parse(await response.json());
-    const schemesByName = new Map(
-      result.tools.map((tool) => [tool.name, tool._meta.securitySchemes]),
-    );
-
-    expect(schemesByName.size).toBe(Object.keys(toolset).length);
-    expect(schemesByName.get("get_events")).toEqual([
-      { type: "oauth2", scopes: ["keeper.read"] },
-    ]);
-    expect(schemesByName.get("delete_event")).toEqual([
-      { type: "oauth2", scopes: ["keeper.read", "keeper.write"] },
-    ]);
   });
 
   it("challenges a tool call without a token before any tool runs", async () => {

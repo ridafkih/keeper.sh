@@ -3,7 +3,6 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
 import { isDiscoveryPayload } from "./discovery";
-import { resolveToolSecuritySchemes } from "./security-schemes";
 import { KEEPER_MCP_SERVER_INFO } from "./server-identity";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 import { widelog } from "./utils/logging";
@@ -173,7 +172,6 @@ const createMcpServer = (
     server.registerTool(
       name,
       {
-        _meta: { securitySchemes: resolveToolSecuritySchemes(tool) },
         annotations: { ...tool.annotations, title: tool.title },
         description: tool.description,
         inputSchema: tool.inputSchema,
