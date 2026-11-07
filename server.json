@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "sh.keeper/keeper",
+  "name": "io.github.ridafkih/keeper-sh",
   "title": "Keeper.sh",
-  "description": "Read and manage calendars synced from Google, Outlook, iCloud, Fastmail, CalDAV, and iCal feeds.",
-  "version": "1.0.0",
+  "description": "Keeper.sh calendar sync: read and book events, RSVP and find free time across synced calendars.",
+  "version": "1.0.1",
   "websiteUrl": "https://www.keeper.sh/docs/mcp",
   "repository": {
     "url": "https://github.com/ridafkih/keeper.sh",

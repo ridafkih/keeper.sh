@@ -1,6 +1,8 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
+import { KEEPER_MCP_SERVER_INFO } from "./server-identity";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 import { widelog } from "./utils/logging";
 
@@ -43,10 +45,7 @@ interface CreateKeeperMcpHandlerOptions {
   mcpPublicUrl: string;
   apiBaseUrl: string;
   toolset: KeeperMcpToolset;
-  serverInfo?: {
-    name: string;
-    version: string;
-  };
+  serverInfo?: Implementation;
   enableJsonResponse?: boolean;
 }
 
@@ -171,7 +170,7 @@ const createAuthenticatedMcpServer = (
   toolset: KeeperMcpToolset,
   toolContext: KeeperToolContext,
   userId: string,
-  serverInfo: { name: string; version: string },
+  serverInfo: Implementation,
 ): McpServer => {
   const server = new McpServer(serverInfo, {
     capabilities: {
@@ -190,10 +189,7 @@ const createKeeperMcpHandler = ({
   mcpPublicUrl,
   apiBaseUrl,
   toolset,
-  serverInfo = {
-    name: "keeper",
-    version: "1.0.0",
-  },
+  serverInfo = KEEPER_MCP_SERVER_INFO,
   enableJsonResponse = true,
 }: CreateKeeperMcpHandlerOptions) => {
   const protectedResourceMetadataUrl = new URL(

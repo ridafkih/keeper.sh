@@ -713,7 +713,7 @@ MCP is **not** bundled in `keeper-services` or the individual service images. To
 
 ## Registry Manifest
 
-[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and takes the `sh.keeper` namespace, which is authenticated by proving ownership of `keeper.sh` rather than by a GitHub account.
+[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and is listed as `io.github.ridafkih/keeper-sh`, the name it was first published under; a registry name cannot be changed once published. The server announces the same name, version, title, website and icons in its `initialize` response.
 
 Publishing is a manual step run with the `mcp-publisher` CLI and is deliberately not automated: a published version is permanent, so the manifest is reviewed here first and the `version` it carries can never be reused. Self-hosted instances do not need this file — it describes the hosted instance only.
 

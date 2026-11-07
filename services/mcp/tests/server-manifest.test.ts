@@ -90,7 +90,15 @@ const initializeResultSchema = z.object({
   result: z.object({
     serverInfo: z.object({
       name: z.string(),
+      title: z.string(),
       version: z.string(),
+      websiteUrl: z.string(),
+      icons: z.array(z.object({
+        src: z.string(),
+        mimeType: z.string(),
+        sizes: z.array(z.string()),
+        theme: z.enum(["light", "dark"]),
+      })),
     }),
   }),
 });
@@ -99,9 +107,9 @@ const manifest = manifestSchema.parse(
   JSON.parse(readFileSync(new URL("../../../server.json", import.meta.url), "utf8")),
 );
 
-const [namespace, serverSegment] = manifest.name.split("/");
+const [, serverSegment] = manifest.name.split("/");
 
-const readAnnouncedServerInfo = async (): Promise<{ name: string; version: string }> => {
+const readAnnouncedServerInfo = async () => {
   const handler = createKeeperMcpHandler({
     auth: {
       api: {
@@ -125,7 +133,7 @@ const readAnnouncedServerInfo = async (): Promise<{ name: string; version: strin
         params: {
           capabilities: {},
           clientInfo: { name: "test-client", version: "1.0.0" },
-          protocolVersion: "2025-06-18",
+          protocolVersion: "2025-11-25",
         },
       }),
       headers: {
@@ -142,8 +150,8 @@ const readAnnouncedServerInfo = async (): Promise<{ name: string; version: strin
 };
 
 describe("registry manifest", () => {
-  it("claims the namespace backed by the domain we can verify", () => {
-    expect(namespace).toBe("sh.keeper");
+  it("keeps the name the registry already lists, since a registry name cannot be renamed", () => {
+    expect(manifest.name).toBe("io.github.ridafkih/keeper-sh");
   });
 
   it("advertises the hosted endpoint on the canonical host, which does not redirect", () => {
@@ -204,7 +212,10 @@ describe("registry manifest", () => {
 
     expect(serverInfo).toEqual({
       name: serverSegment,
+      title: manifest.title,
       version: manifest.version,
+      websiteUrl: manifest.websiteUrl,
+      icons: manifest.icons,
     });
   });
 });
