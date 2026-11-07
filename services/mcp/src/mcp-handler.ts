@@ -1,12 +1,9 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { CallToolResult, Implementation } from "@modelcontextprotocol/sdk/types.js";
-import { isDiscoveryPayload, isSignInPromptingPayload } from "./discovery";
-import { resolveToolScopes, resolveToolSecuritySchemes } from "./security-schemes";
-import { createSignInChallengeToolResult } from "./sign-in-challenge";
-import type { SignInChallengeReason } from "./sign-in-challenge";
-import { expectsToolResultSignIn } from "./tool-result-sign-in";
+import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
+import { isDiscoveryPayload } from "./discovery";
+import { resolveToolSecuritySchemes } from "./security-schemes";
 import { KEEPER_MCP_SERVER_INFO } from "./server-identity";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 import { widelog } from "./utils/logging";
@@ -35,8 +32,6 @@ interface KeeperMcpAuth {
     getMcpSession: (input: { headers: Headers }) => Promise<KeeperMcpAuthSession | null>;
   };
 }
-
-type SignedOutReason = "missing_token" | "invalid_token" | "insufficient_scope";
 
 type McpSessionResolution =
   | {
@@ -147,45 +142,19 @@ type ToolExecutor = (
   name: string,
   tool: KeeperMcpToolDefinition<unknown>,
   input: Record<string, unknown>,
-) => Promise<CallToolResult>;
+) => Promise<unknown>;
 
 const createUserToolExecutor = (
   toolContext: KeeperToolContext,
   userId: string,
-): ToolExecutor => async (name, tool, input) => {
+): ToolExecutor => (name, tool, input) => {
   widelog.set("mcp.tool", name);
   widelog.set("user.id", userId);
-  return createToolResponse(await tool.execute(toolContext, input));
+  return tool.execute(toolContext, input);
 };
 
-const toSignInChallengeReason = (reason: SignedOutReason): SignInChallengeReason => {
-  if (reason === "insufficient_scope") {
-    return "insufficient_scope";
-  }
-
-  return "invalid_token";
-};
-
-const createSignInChallengeExecutor = (
-  resourceMetadataUrl: string,
-  reason: SignedOutReason,
-): ToolExecutor => (name, tool) => {
-  widelog.set("mcp.tool", name);
-  widelog.set("mcp.sign_in_challenge", reason);
-  return Promise.resolve(createSignInChallengeToolResult({
-    reason: toSignInChallengeReason(reason),
-    resourceMetadataUrl,
-    scopes: resolveToolScopes(tool),
-  }));
-};
-
-const canServeSignedOut = (request: Request, payload: unknown, reason: SignedOutReason): boolean => {
-  if (expectsToolResultSignIn(request, payload)) {
-    return isSignInPromptingPayload(payload);
-  }
-
-  return reason === "missing_token" && isDiscoveryPayload(payload);
-};
+const refuseAnonymousToolExecution: ToolExecutor = () =>
+  Promise.reject(new Error("Authentication required"));
 
 const createMcpServer = (
   toolset: KeeperMcpToolset,
@@ -210,7 +179,8 @@ const createMcpServer = (
         inputSchema: tool.inputSchema,
         title: tool.title,
       },
-      (input: Record<string, unknown>) => executeTool(name, tool, input),
+      async (input: Record<string, unknown>) =>
+        createToolResponse(await executeTool(name, tool, input)),
     );
   }
 
@@ -290,7 +260,33 @@ const createKeeperMcpHandler = ({
         },
       );
 
-    const insufficientScopeResponse = () => {
+    if (!request.headers.has("authorization")) {
+      const payload = await readJsonRpcPayload(request);
+
+      if (!isDiscoveryPayload(payload)) {
+        return unauthorizedResponse();
+      }
+
+      widelog.set("mcp.anonymous_discovery", true);
+      const server = createMcpServer(toolset, serverInfo, refuseAnonymousToolExecution);
+      return serveWithMcpServer(server, request, enableJsonResponse, payload);
+    }
+
+    const bearerToken = extractBearerToken(request.headers);
+
+    if (!bearerToken) {
+      return unauthorizedResponse();
+    }
+
+    const sessionResult = await resolveMcpSession(auth, request.headers, bearerToken);
+
+    if (!sessionResult.authenticated) {
+      return unauthorizedResponse();
+    }
+
+    const { userId, scopes } = sessionResult.session;
+
+    if (!hasScope(scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
         `${wwwAuthenticateHeader}, error="insufficient_scope", scope="${KEEPER_API_READ_SCOPE}"`;
 
@@ -307,52 +303,6 @@ const createKeeperMcpHandler = ({
           "www-authenticate": insufficientScopeHeader,
         },
       );
-    };
-
-    const refuseOverHttp = (reason: SignedOutReason): Response => {
-      if (reason === "insufficient_scope") {
-        return insufficientScopeResponse();
-      }
-
-      return unauthorizedResponse();
-    };
-
-    const serveSignedOut = async (reason: SignedOutReason): Promise<Response> => {
-      const payload = await readJsonRpcPayload(request);
-
-      if (!canServeSignedOut(request, payload, reason)) {
-        return refuseOverHttp(reason);
-      }
-
-      widelog.set("mcp.signed_out", reason);
-      const server = createMcpServer(
-        toolset,
-        serverInfo,
-        createSignInChallengeExecutor(protectedResourceMetadataUrl, reason),
-      );
-      return serveWithMcpServer(server, request, enableJsonResponse, payload);
-    };
-
-    if (!request.headers.has("authorization")) {
-      return serveSignedOut("missing_token");
-    }
-
-    const bearerToken = extractBearerToken(request.headers);
-
-    if (!bearerToken) {
-      return serveSignedOut("invalid_token");
-    }
-
-    const sessionResult = await resolveMcpSession(auth, request.headers, bearerToken);
-
-    if (!sessionResult.authenticated) {
-      return serveSignedOut("invalid_token");
-    }
-
-    const { userId, scopes } = sessionResult.session;
-
-    if (!hasScope(scopes, KEEPER_API_READ_SCOPE)) {
-      return serveSignedOut("insufficient_scope");
     }
 
     if (request.method === "GET") {

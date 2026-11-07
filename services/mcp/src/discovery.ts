@@ -7,32 +7,16 @@ const DISCOVERY_METHODS: ReadonlySet<string> = new Set([
   "tools/list",
 ]);
 
-const SIGN_IN_PROMPTING_METHODS: ReadonlySet<string> = new Set([
-  ...DISCOVERY_METHODS,
-  "tools/call",
-]);
+const isDiscoveryMessage = (message: unknown): boolean =>
+  (isJSONRPCRequest(message) || isJSONRPCNotification(message))
+  && DISCOVERY_METHODS.has(message.method);
 
-const listPayloadMessages = (payload: unknown): unknown[] => {
+const isDiscoveryPayload = (payload: unknown): boolean => {
   if (Array.isArray(payload)) {
-    return payload;
+    return payload.length > 0 && payload.every((message) => isDiscoveryMessage(message));
   }
 
-  return [payload];
+  return isDiscoveryMessage(payload);
 };
 
-const isMessageWithin = (methods: ReadonlySet<string>, message: unknown): boolean =>
-  (isJSONRPCRequest(message) || isJSONRPCNotification(message))
-  && methods.has(message.method);
-
-const isPayloadWithin = (methods: ReadonlySet<string>, payload: unknown): boolean => {
-  const messages = listPayloadMessages(payload);
-  return messages.length > 0 && messages.every((message) => isMessageWithin(methods, message));
-};
-
-const isDiscoveryPayload = (payload: unknown): boolean =>
-  isPayloadWithin(DISCOVERY_METHODS, payload);
-
-const isSignInPromptingPayload = (payload: unknown): boolean =>
-  isPayloadWithin(SIGN_IN_PROMPTING_METHODS, payload);
-
-export { isDiscoveryPayload, isSignInPromptingPayload, listPayloadMessages };
+export { DISCOVERY_METHODS, isDiscoveryPayload };
