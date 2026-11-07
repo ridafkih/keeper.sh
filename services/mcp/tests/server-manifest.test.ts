@@ -138,6 +138,7 @@ const readAnnouncedServerInfo = async () => {
       }),
       headers: {
         "Accept": "application/json, text/event-stream",
+        "Authorization": "Bearer test-token",
         "Content-Type": "application/json",
       },
       method: "POST",

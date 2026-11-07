@@ -22,7 +22,7 @@ const listToolsResultSchema = z.object({
 });
 
 describe("createKeeperMcpHandler", () => {
-  it("challenges an unauthenticated tool call with protected-resource metadata", async () => {
+  it("returns protected-resource metadata when authentication is missing", async () => {
     const handler = createKeeperMcpHandler({
       auth: {
         api: {
@@ -39,11 +39,9 @@ describe("createKeeperMcpHandler", () => {
         body: JSON.stringify({
           id: "1",
           jsonrpc: "2.0",
-          method: "tools/call",
-          params: { name: "get_events", arguments: {} },
+          method: "tools/list",
         }),
         headers: {
-          "Accept": "application/json, text/event-stream",
           "Content-Type": "application/json",
         },
         method: "POST",
@@ -132,9 +130,6 @@ describe("createKeeperMcpHandler", () => {
 
     const response = await handler(
       new Request("https://mcp.keeper.sh/mcp", {
-        headers: {
-          "Authorization": "Bearer expired-token",
-        },
         method: "GET",
       }),
     );
@@ -240,9 +235,6 @@ describe("createKeeperMcpHandler", () => {
     await expect(
       handler(
         new Request("https://mcp.keeper.sh/mcp", {
-          headers: {
-            "Authorization": "Bearer test-token",
-          },
           method: "GET",
         }),
       ),

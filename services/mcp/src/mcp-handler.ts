@@ -2,7 +2,6 @@ import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
-import { isDiscoveryPayload } from "./discovery";
 import { KEEPER_MCP_SERVER_INFO } from "./server-identity";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 import { widelog } from "./utils/logging";
@@ -75,12 +74,17 @@ const extractBearerToken = (headers: Headers): string | null => {
 const resolveMcpSession = async (
   auth: KeeperMcpAuth,
   headers: Headers,
-  bearerToken: string,
 ): Promise<McpSessionResolution> => {
   try {
     const session = await auth.api.getMcpSession({ headers });
 
     if (!session?.userId) {
+      return { authenticated: false };
+    }
+
+    const bearerToken = extractBearerToken(headers);
+
+    if (!bearerToken) {
       return { authenticated: false };
     }
 
@@ -137,38 +141,13 @@ const createToolResponse = (result: unknown) => ({
   ],
 });
 
-type ToolExecutor = (
-  name: string,
-  tool: KeeperMcpToolDefinition<unknown>,
-  input: Record<string, unknown>,
-) => Promise<unknown>;
-
-const createUserToolExecutor = (
+const registerToolset = (
+  server: McpServer,
+  toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
   toolContext: KeeperToolContext,
   userId: string,
-): ToolExecutor => (name, tool, input) => {
-  widelog.set("mcp.tool", name);
-  widelog.set("user.id", userId);
-  return tool.execute(toolContext, input);
-};
-
-const refuseAnonymousToolExecution: ToolExecutor = () =>
-  Promise.reject(new Error("Authentication required"));
-
-const createMcpServer = (
-  toolset: KeeperMcpToolset,
-  serverInfo: Implementation,
-  executeTool: ToolExecutor,
-): McpServer => {
-  const server = new McpServer(serverInfo, {
-    capabilities: {
-      tools: {},
-    },
-  });
-
-  const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
-
-  for (const [name, tool] of Object.entries(tools)) {
+): void => {
+  for (const [name, tool] of Object.entries(toolset)) {
     server.registerTool(
       name,
       {
@@ -177,43 +156,32 @@ const createMcpServer = (
         inputSchema: tool.inputSchema,
         title: tool.title,
       },
-      async (input: Record<string, unknown>) =>
-        createToolResponse(await executeTool(name, tool, input)),
+      async (input: Record<string, unknown>) => {
+        widelog.set("mcp.tool", name);
+        widelog.set("user.id", userId);
+        const result = await tool.execute(toolContext, input);
+        return createToolResponse(result);
+      },
     );
   }
-
-  return server;
 };
 
-const serveWithMcpServer = async (
-  server: McpServer,
-  request: Request,
-  enableJsonResponse: boolean,
-  parsedBody?: unknown,
-): Promise<Response> => {
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    enableJsonResponse,
+const createAuthenticatedMcpServer = (
+  toolset: KeeperMcpToolset,
+  toolContext: KeeperToolContext,
+  userId: string,
+  serverInfo: Implementation,
+): McpServer => {
+  const server = new McpServer(serverInfo, {
+    capabilities: {
+      tools: {},
+    },
   });
 
-  try {
-    await server.connect(transport);
-    return await transport.handleRequest(request, { parsedBody });
-  } finally {
-    await transport.close();
-    await server.close();
-  }
-};
+  const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
+  registerToolset(server, tools, toolContext, userId);
 
-const readJsonRpcPayload = async (request: Request): Promise<unknown> => {
-  if (request.method !== "POST") {
-    return null;
-  }
-
-  try {
-    return await request.json();
-  } catch {
-    return null;
-  }
+  return server;
 };
 
 const createKeeperMcpHandler = ({
@@ -258,31 +226,13 @@ const createKeeperMcpHandler = ({
         },
       );
 
-    if (!request.headers.has("authorization")) {
-      const payload = await readJsonRpcPayload(request);
-
-      if (!isDiscoveryPayload(payload)) {
-        return unauthorizedResponse();
-      }
-
-      widelog.set("mcp.anonymous_discovery", true);
-      const server = createMcpServer(toolset, serverInfo, refuseAnonymousToolExecution);
-      return serveWithMcpServer(server, request, enableJsonResponse, payload);
-    }
-
-    const bearerToken = extractBearerToken(request.headers);
-
-    if (!bearerToken) {
-      return unauthorizedResponse();
-    }
-
-    const sessionResult = await resolveMcpSession(auth, request.headers, bearerToken);
+    const sessionResult = await resolveMcpSession(auth, request.headers);
 
     if (!sessionResult.authenticated) {
       return unauthorizedResponse();
     }
 
-    const { userId, scopes } = sessionResult.session;
+    const { userId, scopes, bearerToken } = sessionResult.session;
 
     if (!hasScope(scopes, KEEPER_API_READ_SCOPE)) {
       const insufficientScopeHeader =
@@ -319,12 +269,18 @@ const createKeeperMcpHandler = ({
       apiBaseUrl,
     };
 
-    const server = createMcpServer(
-      toolset,
-      serverInfo,
-      createUserToolExecutor(toolContext, userId),
-    );
-    return serveWithMcpServer(server, request, enableJsonResponse);
+    const server = createAuthenticatedMcpServer(toolset, toolContext, userId, serverInfo);
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      enableJsonResponse,
+    });
+
+    try {
+      await server.connect(transport);
+      return await transport.handleRequest(request);
+    } finally {
+      await transport.close();
+      await server.close();
+    }
   };
 };
 
