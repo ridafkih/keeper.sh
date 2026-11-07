@@ -10,18 +10,20 @@ import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range"
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   fetchCalendarObjects: vi.fn(),
-  fetchCalendars: vi.fn(),
+  listCalendars: vi.fn(),
 }));
 
-vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve({
-    createAccount: () => Promise.resolve({ homeUrl: "https://caldav.example.test/home/" }),
-    calendarQuery: davMocks.calendarQuery,
-    fetchCalendarObjects: davMocks.fetchCalendarObjects,
-    fetchCalendars: davMocks.fetchCalendars,
-  }),
-}));
+vi.mock("tsdav", async () => {
+  const { answerDiscoveryPropfind } = await import("../discovery-propfind");
+  return {
+    DAVNamespaceShort: { DAV: "d" },
+    createDAVClient: () => Promise.resolve({
+      calendarQuery: davMocks.calendarQuery,
+      fetchCalendarObjects: davMocks.fetchCalendarObjects,
+      propfind: answerDiscoveryPropfind(() => davMocks.listCalendars()),
+    }),
+  };
+});
 
 const NOW = new Date("2026-06-15T00:00:00.000Z");
 const PLAN = createSourceIngestionPlan("1_month", "2_years", NOW);
@@ -162,7 +164,7 @@ const ingestCollection = async (
 describe("CalDAV resources returned with an empty body", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    davMocks.fetchCalendars.mockResolvedValue([]);
+    davMocks.listCalendars.mockResolvedValue([]);
   });
 
   it("fails the run and keeps the stored event when the body came back empty", async () => {

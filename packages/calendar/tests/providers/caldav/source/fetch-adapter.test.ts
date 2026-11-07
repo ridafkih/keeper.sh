@@ -9,18 +9,20 @@ import { CalDAVUnreadableResourceError } from "../../../../src/providers/caldav/
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   fetchCalendarObjects: vi.fn(),
-  fetchCalendars: vi.fn(),
+  listCalendars: vi.fn(),
 }));
 
-vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve({
-    createAccount: () => Promise.resolve({ homeUrl: "https://caldav.example.test/home/" }),
-    calendarQuery: davMocks.calendarQuery,
-    fetchCalendarObjects: davMocks.fetchCalendarObjects,
-    fetchCalendars: davMocks.fetchCalendars,
-  }),
-}));
+vi.mock("tsdav", async () => {
+  const { answerDiscoveryPropfind } = await import("../discovery-propfind");
+  return {
+    DAVNamespaceShort: { DAV: "d" },
+    createDAVClient: () => Promise.resolve({
+      calendarQuery: davMocks.calendarQuery,
+      fetchCalendarObjects: davMocks.fetchCalendarObjects,
+      propfind: answerDiscoveryPropfind(() => davMocks.listCalendars()),
+    }),
+  };
+});
 
 const SYNC_WINDOW = {
   timeMax: new Date("2026-06-01T00:00:00.000Z"),
@@ -130,7 +132,7 @@ const createFetcher = () =>
 describe("createCalDAVSourceFetcher against a capped multiget", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    davMocks.fetchCalendars.mockResolvedValue([]);
+    davMocks.listCalendars.mockResolvedValue([]);
   });
 
   it("returns a native event that falls beyond the server's multiget response cap", async () => {
@@ -167,7 +169,7 @@ const dataForNativeObject = (index: number): string => {
 describe("createCalDAVSourceFetcher against an unreadable resource", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    davMocks.fetchCalendars.mockResolvedValue([]);
+    davMocks.listCalendars.mockResolvedValue([]);
   });
 
   it("fails the fetch instead of returning a partial snapshot", async () => {
