@@ -12,6 +12,13 @@ const TEMPLATE_ID = {
   report: "problem-report",
 } as const;
 
+const describeFollowUpPreference = (wantsFollowUp: boolean): string => {
+  if (wantsFollowUp) {
+    return "yes";
+  }
+  return "no";
+};
+
 const POST = withWideEvent(
   withAuth(async ({ request, userId }) => {
     const body = await request.json();
@@ -48,7 +55,7 @@ const POST = withWideEvent(
           variables: {
             message,
             userEmail: user.email,
-            wantsFollowUp: String(wantsFollowUp),
+            wantsFollowUp: describeFollowUpPreference(wantsFollowUp),
           },
         },
         to: feedbackEmail,
