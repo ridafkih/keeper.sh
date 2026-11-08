@@ -20,6 +20,7 @@ import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 import { measureProviderRequest } from "../../../core/telemetry/segments";
+import { fetchMultiGetBatch } from "./multiget";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
 
@@ -227,6 +228,9 @@ const bindRequestToAccount = (input: string | Request | URL, serverUrl: string):
 
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
+
+const isCalendarObjectUrlOf = (calendarUrl: string) => (url: string): boolean =>
+  isCalendarObjectPath(toCalendarObjectPath(url, calendarUrl));
 
 const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
   ...new Set(
@@ -464,12 +468,13 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-      const objects = await client.fetchCalendarObjects({
-        calendar: { url: params.calendarUrl },
+      const objects = await fetchMultiGetBatch(client, {
+        calendarUrl: params.calendarUrl,
         objectUrls: [objectUrl],
+        urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
       });
 
-      return objects[0] ?? null;
+      return objects.find((object): object is CalendarObject => typeof object.data === "string") ?? null;
     });
   }
 
@@ -486,10 +491,10 @@ class CalDAVClient {
       const objects: CalendarObject[] = [];
 
       for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
-        const batch = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const batch = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         objects.push(
           ...batch.filter((object): object is CalendarObject => typeof object.data === "string"),
@@ -532,10 +537,10 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
-        const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const objects = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         batchResults.push(
           objects.filter((object): object is CalendarObject => typeof object.data === "string"),
