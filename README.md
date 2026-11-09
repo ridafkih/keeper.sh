@@ -190,6 +190,7 @@ There are seven images currently available: two designed for convenience, and fi
 | OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
 | OIDC_PROVIDER_NAME             | `api`         | Optional. Display name shown on the SSO login button. Defaults to `SSO`.<br><br>e.g. `Pocket ID`                                                                      |
 | OIDC_SCOPES                    | `api`         | Optional. Comma-separated scopes to request from the OIDC issuer. Defaults to `openid,profile,email`.<br><br>e.g. `openid,profile,email,groups`                                                                                    |
+| OIDC_TRUST_EMAIL_VERIFIED      | `api`         | Optional. Set to `true` to trust the OIDC provider's `email_verified` claim, so a sign-in links to an existing account with the same verified email. Defaults to `false`. Only enable it if your provider verifies every email address it asserts. |
 | DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up. Google and Microsoft sign-in stay available while their client credentials are set. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
@@ -307,7 +308,15 @@ Then pass the client to the container running the API (`keeper-standalone`, `kee
 
 `OIDC_ISSUER_URL` must match the `issuer` your provider publishes, including any path, such as `https://auth.example.com/realms/keeper` for Keycloak or `https://authentik.example.com/application/o/keeper/` for Authentik. `OIDC_PROVIDER_NAME` labels the sign-in button and defaults to `SSO`. `OIDC_SCOPES` is a comma-separated list that defaults to `openid,profile,email`.
 
-Signing in with the provider for the first time creates a new Keeper.sh account. It is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+Signing in with the provider for the first time creates a new Keeper.sh account. By default it is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+
+If your provider verifies every email address it asserts, you can let sign-ins link to existing accounts automatically instead:
+
+```yaml
+      OIDC_TRUST_EMAIL_VERIFIED: "true"
+```
+
+With this set, a sign-in links to an existing Keeper.sh account only when the provider sends `email_verified: true` for the address and the existing account's email is itself verified. Anything else, including a missing claim, is refused as before. Username accounts are never linked this way. Leave it off if users can set their own email at the provider without verifying it, since anyone able to claim an address there could then sign in to the matching Keeper.sh account.
 
 Once everyone who needs one has linked their account, you can turn off username and password sign-in:
 
