@@ -3,9 +3,16 @@ import type { MicrosoftTokenResponse, MicrosoftUserInfo } from "@keeper.sh/data-
 import { generateState, validateState } from "./state";
 import type { ValidatedState, OAuthStateStore } from "./state";
 
-const MICROSOFT_AUTH_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
-const MICROSOFT_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+const MICROSOFT_AUTHORITY_HOST = "https://login.microsoftonline.com";
+const MICROSOFT_TENANT_ENV = "MICROSOFT_TENANT";
+const DEFAULT_TENANT = "common";
 const MICROSOFT_USERINFO_URL = "https://graph.microsoft.com/v1.0/me";
+
+// An app registration restricted to one tenant is not reachable through the multi-tenant "common" endpoint.
+const buildOauthUrl = (endpoint: string): string => {
+  const tenant = process.env[MICROSOFT_TENANT_ENV]?.trim() || DEFAULT_TENANT;
+  return `${MICROSOFT_AUTHORITY_HOST}/${encodeURIComponent(tenant)}/oauth2/v2.0/${endpoint}`;
+};
 
 const MICROSOFT_CALENDAR_SCOPE = "Calendars.ReadWrite";
 const MICROSOFT_USER_SCOPE = "User.Read";
@@ -42,7 +49,7 @@ const createMicrosoftTokenRefresher = (
   const { clientId, clientSecret } = credentials;
 
   return async (refreshToken: string): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
+    const response = await fetch(buildOauthUrl("token"), {
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -87,7 +94,7 @@ const createMicrosoftOAuthService = (
       MICROSOFT_OFFLINE_SCOPE,
     ];
 
-    const url = new URL(MICROSOFT_AUTH_URL);
+    const url = new URL(buildOauthUrl("authorize"));
     url.searchParams.set("client_id", clientId);
     url.searchParams.set("redirect_uri", options.callbackUrl);
     url.searchParams.set("response_type", "code");
@@ -108,7 +115,7 @@ const createMicrosoftOAuthService = (
     code: string,
     callbackUrl: string,
   ): Promise<MicrosoftTokenResponse> => {
-    const response = await fetch(MICROSOFT_TOKEN_URL, {
+    const response = await fetch(buildOauthUrl("token"), {
       body: new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,

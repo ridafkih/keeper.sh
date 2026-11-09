@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createGoogleOAuthService } from "../../../src/core/oauth/google";
 import { createMicrosoftOAuthService } from "../../../src/core/oauth/microsoft";
 
 const MS_PER_SECOND = 1000;
 const CALLBACK_URL = "https://calendar.test.invalid/api/oauth/callback";
+const TENANT = "contoso.onmicrosoft.com";
 
 const createTestStateStore = () => {
   const store = new Map<string, { value: string; expiresAt: number }>();
@@ -76,6 +77,72 @@ describe("microsoft getAuthorizationUrl", () => {
     const parsed = await buildMicrosoftAuthorizationUrl();
 
     expect(parsed.searchParams.get("prompt")).toBe("select_account");
+  });
+});
+
+const buildMicrosoftUrlForTenant = async (tenant: string): Promise<URL> => {
+  vi.stubEnv("MICROSOFT_TENANT", tenant);
+  try {
+    return await buildMicrosoftAuthorizationUrl();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+};
+
+describe("microsoft tenant", () => {
+  it("keeps the multi-tenant endpoint when no tenant is configured", async () => {
+    const parsed = await buildMicrosoftUrlForTenant("");
+
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(
+      "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+    );
+  });
+
+  it("pins the authorization endpoint to the configured tenant", async () => {
+    const parsed = await buildMicrosoftUrlForTenant(TENANT);
+
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(
+      `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize`,
+    );
+  });
+
+  it("encodes a tenant name that needs it", async () => {
+    const parsed = await buildMicrosoftUrlForTenant("Fabrikam Identity");
+
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(
+      "https://login.microsoftonline.com/Fabrikam%20Identity/oauth2/v2.0/authorize",
+    );
+  });
+
+  it("sends the token exchange to the same tenant", async () => {
+    vi.stubEnv("MICROSOFT_TENANT", TENANT);
+    let requestedUrl = "";
+    vi.stubGlobal("fetch", (url: RequestInfo | URL) => {
+      requestedUrl = String(url);
+      return Promise.resolve(new Response(JSON.stringify({
+        access_token: "test-access-token",
+        expires_in: 3_600,
+        scope: "Calendars.ReadWrite",
+        token_type: "Bearer",
+      })));
+    });
+
+    try {
+      const service = createMicrosoftOAuthService({
+        clientId: "microsoft-test-client-id",
+        clientSecret: "microsoft-test-client-secret",
+      }, createTestStateStore());
+
+      await service.exchangeCodeForTokens("test-code", CALLBACK_URL);
+
+      const tokenUrl = new URL(requestedUrl);
+      expect(`${tokenUrl.origin}${tokenUrl.pathname}`).toBe(
+        `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`,
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    }
   });
 });
 
