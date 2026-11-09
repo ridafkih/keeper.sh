@@ -19,6 +19,14 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+vi.mock("@/env", () => ({
+  default: { MICROSOFT_CLIENT_ID: "microsoft-client" },
+}));
+
+vi.mock("@/env", () => ({
+  default: {},
+}));
+
 vi.mock("@/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
@@ -39,6 +47,10 @@ vi.mock("@/utils/destinations", () => ({
 
 vi.mock("@/utils/oauth-source-credentials", () => ({
   createOAuthSourceCredential: () => Promise.resolve("credential-1"),
+}));
+
+vi.mock("@/utils/user-milestones", () => ({
+  noteUserMilestone: () => Promise.resolve(),
 }));
 
 vi.mock("@/utils/oauth-sources", () => ({
