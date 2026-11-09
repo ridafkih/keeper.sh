@@ -11,7 +11,7 @@ function ConnectLayout() {
   const { returnTo } = Route.useSearch();
 
   return (
-    <div className={cn("flex flex-col gap-3", returnTo === "onboarding" && "w-full max-w-xs self-center")}>
+    <div className={cn("flex flex-col gap-3", returnTo === "onboarding" && "my-auto w-full max-w-xs self-center")}>
       <Outlet />
     </div>
   );
