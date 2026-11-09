@@ -14,7 +14,7 @@ if (!ADMIN_DATABASE_URL) {
 
 const PACKAGE_ROOT = `${import.meta.dirname}/../..`;
 const DRIZZLE_DIRECTORY = `${PACKAGE_ROOT}/drizzle`;
-const ONBOARDING_MIGRATION_TAG = "0100_onboarding_status";
+const ONBOARDING_MIGRATION_TAG = "0113_onboarding_status";
 
 interface JournalEntry {
   idx: number;
