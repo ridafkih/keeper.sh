@@ -23,7 +23,7 @@ import { InSyncsSection } from "@/features/syncs/components/in-syncs-section";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { formatDate } from "@/lib/time";
 import { resolveErrorMessage } from "@/utils/errors";
-import { canPull, canPush } from "@/utils/calendars";
+import { canPull, canPush, isMissingAtProvider } from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
@@ -51,7 +51,8 @@ import {
   calendarDetailErrorAtom,
   calendarNameAtom,
   calendarProviderAtom,
-  calendarProviderMissingSinceAtom,
+  calendarMissingSinceAtom,
+  disableEventRemindersAtom,
   calendarTypeAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
@@ -122,6 +123,7 @@ function CalendarDetailPage() {
 
   const isPullCapable = canPull(calendar);
   const isPushCapable = canPush(calendar);
+  const isRemovable = !isPushCapable || isMissingAtProvider(calendar);
 
   return (
     <div className="flex flex-col gap-1.5 lg:h-full">
@@ -138,9 +140,10 @@ function CalendarDetailPage() {
         <RenameSection calendarId={calendarId} />
         <InSyncsSection calendarId={calendarId} calendarName={calendar.name} />
         {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
+        {isPullCapable && <CopyRemindersSection calendarId={calendarId} />}
         {isPullCapable && calendar.calendarType === "ical" && <AllDayEventsSection calendarId={calendarId} />}
         <CalendarInfoSection account={account} accountId={accountId} />
-        {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
+        {isRemovable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
       </PageBody>
     </div>
   );
@@ -381,14 +384,14 @@ function ReauthNotice({ account }: { account: CalendarAccount }) {
 }
 
 function ProviderMissingNotice() {
-  const providerMissingSince = useAtomValue(calendarProviderMissingSinceAtom);
-  if (!providerMissingSince) return null;
+  const missingSince = useAtomValue(calendarMissingSinceAtom);
+  if (!missingSince) return null;
 
   return (
     <Text size="sm" tone="danger" className="px-0.5">
-      This calendar was not found the last time its connection was refreshed
-      (since {formatDate(providerMissingSince)}) - it may have been deleted or renamed at the
-      provider. Refresh the connection again to confirm, or remove the calendar below.
+      This calendar could not be found at the provider (since {formatDate(missingSince)}) - it
+      may have been deleted or renamed there. Refresh the connection to check again, or remove
+      the calendar below.
     </Text>
   );
 }
@@ -419,7 +422,7 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
     <>
       <DashboardSection
         title="Remove Calendar"
-        description="Stop syncing this calendar and remove it from Keeper.sh. It will be re-imported the next time you refresh the account's calendars, unless it no longer exists at the provider."
+        description="Stop syncing this calendar and remove it from Keeper.sh. It will not be imported again when the account's calendars are refreshed."
       />
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
@@ -501,6 +504,77 @@ function TreatFullDayTimedEventsToggle({ calendarId, locked }: { calendarId: str
 
 function TreatFullDayTimedEventsToggleIndicator({ disabled }: { disabled: boolean }) {
   const checked = useAtomValue(treatFullDayTimedEventsAsAllDayAtom);
+  const variant = use(MenuVariantContext);
+
+  return (
+    <div className={navigationMenuToggleTrack({ variant, checked, disabled, className: "ml-auto" })}>
+      <div className={navigationMenuToggleThumb({ variant, checked })} />
+    </div>
+  );
+}
+
+function CopyRemindersSection({ calendarId }: { calendarId: string }) {
+  const { data: entitlements } = useEntitlements();
+  const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
+
+  return (
+    <>
+      <DashboardSection
+        title="Reminders"
+        description="Leave reminders off the copies of this calendar's events."
+      />
+      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+        <NavigationMenu>
+          <DisableEventRemindersToggle calendarId={calendarId} locked={locked} />
+        </NavigationMenu>
+      </PremiumGate>
+    </>
+  );
+}
+
+function DisableEventRemindersToggle({ calendarId, locked }: { calendarId: string; locked: boolean }) {
+  const store = useStore();
+  const variant = use(MenuVariantContext);
+
+  const handleClick = () => {
+    if (locked) return;
+    const current = store.get(calendarDetailAtom);
+    if (!current) return;
+
+    const disableEventReminders = !current.disableEventReminders;
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+      field: "disableEventReminders",
+      enabled: disableEventReminders,
+    });
+    store.set(calendarDetailAtom, (prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return { ...prev, disableEventReminders };
+    });
+    patchSource(store, calendarId, { disableEventReminders });
+  };
+
+  return (
+    <li>
+      <ItemDisabledContext value={locked}>
+        <button
+          type="button"
+          role="switch"
+          disabled={locked}
+          onClick={handleClick}
+          className={navigationMenuItemStyle({ variant, interactive: !locked })}
+        >
+          <NavigationMenuItemLabel>Disable Reminders</NavigationMenuItemLabel>
+          <DisableEventRemindersToggleIndicator disabled={locked} />
+        </button>
+      </ItemDisabledContext>
+    </li>
+  );
+}
+
+function DisableEventRemindersToggleIndicator({ disabled }: { disabled: boolean }) {
+  const checked = useAtomValue(disableEventRemindersAtom);
   const variant = use(MenuVariantContext);
 
   return (

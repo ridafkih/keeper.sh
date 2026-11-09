@@ -1,6 +1,11 @@
 import { eventStatesTable, userEventsTable } from "@keeper.sh/database/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { resolveRepresentableTimeRange } from "@keeper.sh/calendar";
+import {
+  resolveIsAllDayEvent,
+  resolveRepresentableTimeRange,
+  wallTimeToInstant,
+} from "@keeper.sh/calendar";
+import { MS_PER_DAY } from "@keeper.sh/constants";
 import type { SQL } from "drizzle-orm";
 import type {
   KeeperDatabase,
@@ -9,7 +14,7 @@ import type {
   KeeperFreeTimeOptions,
   KeeperFreeTimeResult,
 } from "@/types";
-import { findFreeSlots } from "@/utils/free-time";
+import { findFreeSlots, resolveRequestTimeZone } from "@/utils/free-time";
 import type { TimeInterval } from "@/utils/free-time";
 import {
   buildSyncedRangeCondition,
@@ -23,6 +28,7 @@ import type { SyncedEventRow } from "./event-read-model";
 
 const EMPTY_RESULT_COUNT = 0;
 const NON_BLOCKING_AVAILABILITY = new Set(["free", "workingElsewhere"]);
+const ALL_DAY_ZONE_PROJECTION_SLACK_MS = MS_PER_DAY;
 
 interface BusyCandidate {
   availability?: string | null;
@@ -41,24 +47,59 @@ const isBlocking = (candidate: BusyCandidate, ignoreAllDayEvents: boolean): bool
   return !NON_BLOCKING_AVAILABILITY.has(candidate.availability);
 };
 
-// Shaped first: interval merging drops non-positive spans, so a degenerate event would read as free.
-const toBusyInterval = (candidate: BusyCandidate, range: TimeInterval): TimeInterval => {
-  const { endTime, startTime } = resolveRepresentableTimeRange({
+const projectAllDaySpanToZone = (span: TimeInterval, timeZone: string): TimeInterval => ({
+  end: wallTimeToInstant(span.end, timeZone),
+  start: wallTimeToInstant(span.start, timeZone),
+});
+
+const widenForZoneProjection = (range: TimeInterval): TimeInterval => ({
+  end: new Date(range.end.getTime() + ALL_DAY_ZONE_PROJECTION_SLACK_MS),
+  start: new Date(range.start.getTime() - ALL_DAY_ZONE_PROJECTION_SLACK_MS),
+});
+
+const resolveBusySpan = (candidate: BusyCandidate, timeZone: string): TimeInterval => {
+  const shape = {
     endTime: candidate.endTime,
     startTime: candidate.startTime,
     ...(typeof candidate.isAllDay === "boolean" && { isAllDay: candidate.isAllDay }),
-  });
+  };
+  const { endTime, startTime } = resolveRepresentableTimeRange(shape);
+  const span: TimeInterval = { end: endTime, start: startTime };
+
+  if (!resolveIsAllDayEvent(shape)) {
+    return span;
+  }
+  return projectAllDaySpanToZone(span, timeZone);
+};
+
+const toBusyInterval = (
+  candidate: BusyCandidate,
+  range: TimeInterval,
+  timeZone: string,
+): TimeInterval => {
+  const { end, start } = resolveBusySpan(candidate, timeZone);
 
   return {
-    end: new Date(Math.min(endTime.getTime(), range.end.getTime())),
-    start: new Date(Math.max(startTime.getTime(), range.start.getTime())),
+    end: new Date(Math.min(end.getTime(), range.end.getTime())),
+    start: new Date(Math.max(start.getTime(), range.start.getTime())),
   };
 };
+
+const toBusyIntervals = (
+  candidates: BusyCandidate[],
+  range: TimeInterval,
+  timeZone: string,
+  ignoreAllDayEvents: boolean,
+): TimeInterval[] => candidates
+  .filter((candidate) => isBlocking(candidate, ignoreAllDayEvents))
+  .map((candidate) => toBusyInterval(candidate, range, timeZone))
+  .filter(({ end, start }) => end.getTime() > start.getTime());
 
 const collectBusyIntervals = async (
   database: KeeperDatabase,
   userId: string,
   range: TimeInterval,
+  timeZone: string,
   options: KeeperFreeTimeOptions,
   filters?: KeeperEventFilters,
 ): Promise<TimeInterval[]> => {
@@ -115,14 +156,14 @@ const collectBusyIntervals = async (
     .where(and(...userConditions))
     .orderBy(asc(userEventsTable.startTime));
 
+  const candidateWindow = widenForZoneProjection(range);
   const candidates: BusyCandidate[] = [
-    ...materializeSyncedEvents(syncedRows, sourceMap, range.start, range.end),
-    ...userEvents.filter((event) => isWithinReadWindow(event, range.start, range.end)),
+    ...materializeSyncedEvents(syncedRows, sourceMap, candidateWindow.start, candidateWindow.end),
+    ...userEvents.filter((event) =>
+      isWithinReadWindow(event, candidateWindow.start, candidateWindow.end)),
   ];
 
-  return candidates
-    .filter((candidate) => isBlocking(candidate, options.ignoreAllDayEvents))
-    .map((candidate) => toBusyInterval(candidate, range));
+  return toBusyIntervals(candidates, range, timeZone, options.ignoreAllDayEvents);
 };
 
 const findFreeTime = async (
@@ -134,12 +175,20 @@ const findFreeTime = async (
 ): Promise<KeeperFreeTimeResult> => {
   const { start, end } = normalizeEventRange(rangeInput);
   const range: TimeInterval = { end, start };
-  const busyIntervals = await collectBusyIntervals(database, userId, range, options, filters);
+  const timeZone = resolveRequestTimeZone(options.timezone);
+  const busyIntervals = await collectBusyIntervals(
+    database,
+    userId,
+    range,
+    timeZone,
+    options,
+    filters,
+  );
 
   const slots = findFreeSlots(range, busyIntervals, {
     durationMinutes: options.durationMinutes,
     limit: options.limit,
-    timezone: options.timezone,
+    timezone: timeZone,
     workingHours: options.workingHours,
   });
 
@@ -152,4 +201,10 @@ const findFreeTime = async (
   };
 };
 
-export { findFreeTime, isBlocking, toBusyInterval };
+export {
+  findFreeTime,
+  isBlocking,
+  projectAllDaySpanToZone,
+  toBusyInterval,
+  toBusyIntervals,
+};

@@ -191,6 +191,35 @@ describe("createKeeperMcpHandler", () => {
     });
   });
 
+  it("rejects authenticated GET with 405 because no server-initiated stream is offered", async () => {
+    const handler = createKeeperMcpHandler({
+      auth: {
+        api: {
+          getMcpSession: () => Promise.resolve({
+            scopes: "keeper.read",
+            userId: "user-123",
+          }),
+        },
+      },
+      mcpPublicUrl: "https://mcp.keeper.sh",
+      apiBaseUrl: "https://keeper.sh",
+      toolset,
+    });
+
+    const response = await handler(
+      new Request("https://mcp.keeper.sh/mcp", {
+        headers: {
+          "Accept": "text/event-stream",
+          "Authorization": "Bearer test-token",
+        },
+        method: "GET",
+      }),
+    );
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("Allow")).toBe("POST, DELETE, OPTIONS");
+  });
+
   it("rethrows unexpected session errors", async () => {
     const handler = createKeeperMcpHandler({
       auth: {

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { RecurrenceMaterializationLimitError } from "@keeper.sh/calendar";
+import { RecurrenceMaterializationLimitError, RequestTimeoutError } from "@keeper.sh/calendar";
+import { GoogleCalendarApiError } from "@keeper.sh/calendar/google";
 import {
   hasNoSuccessfulOperations,
   isBackoffEligibleError,
   resolveDestinationAttemptVerdict,
+  resolveThrownDestinationVerdict,
 } from "../src/destination-errors";
 
 const result = (overrides: Partial<Parameters<typeof hasNoSuccessfulOperations>[0]> = {}) => ({
@@ -12,7 +14,20 @@ const result = (overrides: Partial<Parameters<typeof hasNoSuccessfulOperations>[
   conflictsResolved: 0,
   removed: 0,
   removeFailed: 0,
+  writeAccessDenied: false,
   ...overrides,
+});
+
+const WRITER_ACCESS_BODY = JSON.stringify({
+  error: {
+    code: 403,
+    errors: [{ reason: "requiredAccessLevel" }],
+    message: "You need to have writer access to this calendar.",
+  },
+});
+
+const RATE_LIMIT_BODY = JSON.stringify({
+  error: { code: 403, errors: [{ reason: "rateLimitExceeded" }], message: "Rate Limit Exceeded" },
 });
 
 describe("isBackoffEligibleError", () => {
@@ -37,6 +52,18 @@ describe("isBackoffEligibleError", () => {
     }, 10_000);
 
     expect(isBackoffEligibleError(error)).toBe(true);
+  });
+
+  it("backs off a destination whose provider request timed out", () => {
+    expect(isBackoffEligibleError(new RequestTimeoutError(30_000))).toBe(true);
+  });
+
+  it("does not back off a calendar that refuses writes for missing writer access", () => {
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(403, WRITER_ACCESS_BODY))).toBe(false);
+  });
+
+  it("does not back off a Google rate limit answered as 403", () => {
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(403, RATE_LIMIT_BODY))).toBe(false);
   });
 
   it("does not match transient 500 errors", () => {
@@ -108,5 +135,33 @@ describe("resolveDestinationAttemptVerdict", () => {
 
   it("still succeeds a superseded run that pushed something before being cut short", () => {
     expect(resolveDestinationAttemptVerdict(result({ added: 2 }), true)).toBe("succeeded");
+  });
+
+  it("finds the calendar not writable when every write was refused for missing writer access", () => {
+    expect(resolveDestinationAttemptVerdict(result({ addFailed: 3, writeAccessDenied: true }), false))
+      .toBe("not_writable");
+  });
+
+  it("succeeds a run that wrote something even though one write was refused for missing writer access", () => {
+    expect(resolveDestinationAttemptVerdict(
+      result({ added: 1, addFailed: 1, writeAccessDenied: true }),
+      false,
+    )).toBe("succeeded");
+  });
+});
+
+describe("resolveThrownDestinationVerdict", () => {
+  it("finds the calendar not writable when Google refuses a write for missing writer access", () => {
+    expect(resolveThrownDestinationVerdict(new GoogleCalendarApiError(403, WRITER_ACCESS_BODY)))
+      .toBe("not_writable");
+  });
+
+  it("fails a push that timed out", () => {
+    expect(resolveThrownDestinationVerdict(new RequestTimeoutError(30_000))).toBe("failed");
+  });
+
+  it("is inconclusive about a Google rate limit answered as 403", () => {
+    expect(resolveThrownDestinationVerdict(new GoogleCalendarApiError(403, RATE_LIMIT_BODY)))
+      .toBe("inconclusive");
   });
 });

@@ -107,7 +107,7 @@ const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   generateCorrelationId: vi.fn(() => CORRELATION_ID),
   isUnknownChannelCached: vi.fn(() => Promise.resolve(false)),
   markChannelRemoved: vi.fn(() => Promise.resolve()),
-  markPendingIngest: vi.fn(() => Promise.resolve()),
+  wakeIngest: vi.fn(() => Promise.resolve()),
   markReauthorizeRequested: vi.fn(() => Promise.resolve()),
   observe: vi.fn(),
   recordNotificationReceived: vi.fn(),
@@ -134,9 +134,9 @@ const observedFields = (
 };
 
 const markedCalendarIds = (
-  markPendingIngest: ReturnType<typeof vi.fn>,
+  wakeIngest: ReturnType<typeof vi.fn>,
 ): string[] =>
-  markPendingIngest.mock.calls.flatMap((call) => call[0] as string[]).toSorted();
+  wakeIngest.mock.calls.flatMap((call) => call[0] as string[]).toSorted();
 
 vi.mock("../../../../src/utils/middleware", () => ({
   withAuth: (handler: unknown) => handler,
@@ -245,7 +245,7 @@ describe("handleOutlookPushWebhook batches", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1", "cal-3"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1", "cal-3"]);
     expect(observedFields(dependencies.observe)["webhook.rejected_count"]).toBe(1);
     expect(observedFields(dependencies.observe)["webhook.notification_count"]).toBe(3);
   });
@@ -265,8 +265,8 @@ describe("handleOutlookPushWebhook batches", () => {
       dependencies,
     );
 
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1", "cal-2"]);
-    expect(markedCalendarIds(dependencies.markPendingIngest)).not.toContain("cal-999");
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1", "cal-2"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).not.toContain("cal-999");
     for (const [channel] of dependencies.resolveAffectedCalendarIds.mock.calls) {
       expect(["channel-1", "channel-2"]).toContain((channel as StoredPushChannel).id);
     }
@@ -288,8 +288,8 @@ describe("handleOutlookPushWebhook batches", () => {
     expect(dependencies.isUnknownChannelCached).toHaveBeenCalledOnce();
     expect(dependencies.findChannel).toHaveBeenCalledOnce();
     expect(dependencies.resolveAffectedCalendarIds).toHaveBeenCalledOnce();
-    expect(dependencies.markPendingIngest).toHaveBeenCalledOnce();
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1"]);
+    expect(dependencies.wakeIngest).toHaveBeenCalledOnce();
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1"]);
   });
 
   it("writes verification and liveness once per subscription in a batch", async () => {
@@ -343,7 +343,7 @@ describe("handleOutlookPushWebhook batches", () => {
     );
 
     expect(dependencies.claimDelivery).not.toHaveBeenCalled();
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 
   it("suppresses a replay of the same Graph notification id", async () => {
@@ -366,14 +366,14 @@ describe("handleOutlookPushWebhook batches", () => {
     };
 
     await handleOutlookPushWebhook({ request: makeRequest(payload) }, dependencies);
-    dependencies.markPendingIngest.mockClear();
+    dependencies.wakeIngest.mockClear();
     const replay = await handleOutlookPushWebhook(
       { request: makeRequest(payload) },
       dependencies,
     );
 
     expect(replay.status).toBe(202);
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 
   it("never suppresses a later change to the same event", async () => {
@@ -398,10 +398,10 @@ describe("handleOutlookPushWebhook batches", () => {
     );
 
     await deliver("notification-1");
-    dependencies.markPendingIngest.mockClear();
+    dependencies.wakeIngest.mockClear();
     await deliver("notification-2");
 
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1"]);
   });
 
   it("ingests every delivery when Graph omits the notification id", async () => {
@@ -413,11 +413,11 @@ describe("handleOutlookPushWebhook batches", () => {
     );
 
     await deliver();
-    dependencies.markPendingIngest.mockClear();
+    dependencies.wakeIngest.mockClear();
     await deliver();
 
     expect(dependencies.claimDelivery).not.toHaveBeenCalled();
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1"]);
   });
 
   it("refuses a malformed body with 400 and no lookups", async () => {
@@ -468,7 +468,7 @@ describe("handleOutlookPushWebhook lifecycle events", () => {
 
     expect(response.status).toBe(202);
     expect(dependencies.markChannelRemoved).toHaveBeenCalledWith("channel-1");
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1"]);
     expect(dependencies.resolveRegistrar).not.toHaveBeenCalled();
     expect(dependencies.resetSyncToken).not.toHaveBeenCalled();
   });
@@ -489,7 +489,7 @@ describe("handleOutlookPushWebhook lifecycle events", () => {
     expect(dependencies.markReauthorizeRequested).toHaveBeenCalledWith("channel-1");
     expect(dependencies.resolveRegistrar).not.toHaveBeenCalled();
     expect(dependencies.resetSyncToken).not.toHaveBeenCalled();
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 
   it("recovers missed notifications without resetting the sync token", async () => {
@@ -501,7 +501,7 @@ describe("handleOutlookPushWebhook lifecycle events", () => {
     );
 
     expect(response.status).toBe(202);
-    expect(markedCalendarIds(dependencies.markPendingIngest)).toEqual(["cal-1"]);
+    expect(markedCalendarIds(dependencies.wakeIngest)).toEqual(["cal-1"]);
     expect(dependencies.resetSyncToken).not.toHaveBeenCalled();
     expect(dependencies.resolveRegistrar).not.toHaveBeenCalled();
   });
@@ -520,7 +520,7 @@ describe("handleOutlookPushWebhook lifecycle events", () => {
 
     expect(response.status).toBe(401);
     expect(dependencies.markChannelRemoved).not.toHaveBeenCalled();
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 });
 
@@ -536,14 +536,14 @@ describe("handleOutlookPushWebhook when push is unconfigured", () => {
     expect(response.status).toBe(501);
     expect(dependencies.claimPushAdmission).not.toHaveBeenCalled();
     expect(dependencies.findChannel).not.toHaveBeenCalled();
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 });
 
 describe("handleOutlookPushWebhook failure handling", () => {
   it("fails closed with 503 so Graph redelivers", async () => {
     const dependencies = makeDependencies({
-      markPendingIngest: vi.fn(() => Promise.reject(new Error("redis down"))),
+      wakeIngest: vi.fn(() => Promise.reject(new Error("database down"))),
     });
 
     const response = await handleOutlookPushWebhook(

@@ -520,6 +520,15 @@ describe("parseOutlookEvents", () => {
     expect(parsedEvents[0]?.startTimeZone).toBe("America/Denver");
   });
 
+  it("retains Alberta as the event timezone for a mailbox on Windows' 2026 Alberta zone", () => {
+    const parsedEvents = parseOutlookEvents([createOutlookEvent({
+      originalEndTimeZone: "Alberta Standard Time",
+      originalStartTimeZone: "Alberta Standard Time",
+    })]);
+
+    expect(parsedEvents[0]?.startTimeZone).toBe("America/Edmonton");
+  });
+
   it("falls back to the response timezone when Outlook's original label is unsupported", () => {
     const parsedEvents = parseOutlookEvents([createOutlookEvent({
       originalStartTimeZone: "Mailbox Specific Time",

@@ -3,7 +3,13 @@ import { createWebsocketHandler } from "@keeper.sh/broadcast";
 import type { Socket } from "@keeper.sh/broadcast";
 import { syncAggregateSchema } from "@keeper.sh/data-schemas";
 import { and, eq, inArray, max } from "drizzle-orm";
-import { database, getCachedSyncAggregate, getCurrentSyncAggregate } from "@/context";
+import { MAPPING_SYNC_STATE_EVENT } from "@keeper.sh/calendar";
+import {
+  database,
+  getCachedSyncAggregate,
+  getCurrentSyncAggregate,
+  readMappingSyncState,
+} from "@/context";
 import { resolveSyncAggregatePayload } from "./websocket-payload";
 import { runSendInitialSyncStatus } from "./websocket-initial-status";
 import { context, widelog } from "@/utils/logging";
@@ -44,8 +50,18 @@ const sendInitialSyncStatus = (userId: string, socket: Socket): Promise<void> =>
     selectLatestDestinationSyncedAt,
   });
 
+const sendInitialMappingSyncState = async (userId: string, socket: Socket): Promise<void> => {
+  socket.send(JSON.stringify({
+    data: await readMappingSyncState(userId),
+    event: MAPPING_SYNC_STATE_EVENT,
+  }));
+};
+
 const baseWebsocketHandler = createWebsocketHandler({
-  onConnect: sendInitialSyncStatus,
+  onConnect: async (userId, socket) => {
+    await sendInitialSyncStatus(userId, socket);
+    await sendInitialMappingSyncState(userId, socket);
+  },
 });
 
 const runWebsocketBoundary = (
@@ -61,7 +77,9 @@ const runWebsocketBoundary = (
 
     try {
       await widelog.time.measure("duration_ms", () => callback());
+      widelog.set("outcome", "success");
     } catch (error) {
+      widelog.set("outcome", "error");
       labelFailure(error, { slug: "unclassified" });
       throw error;
     } finally {

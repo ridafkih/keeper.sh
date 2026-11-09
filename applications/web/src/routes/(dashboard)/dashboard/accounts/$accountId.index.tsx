@@ -32,6 +32,7 @@ import { DeleteConfirmation } from "@/components/ui/primitives/delete-confirmati
 import { DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { pluralize } from "@/lib/pluralize";
 import { resolveErrorMessage } from "@/utils/errors";
+import { canRefreshCalendars } from "@/utils/accounts";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/",
@@ -201,9 +202,11 @@ function AccountDetailPage() {
         <NavigationMenu>
           <CalendarList calendars={calendars} accountId={accountId} />
         </NavigationMenu>
-        <NavigationMenu>
-          <RefreshCalendarsItem accountId={accountId} />
-        </NavigationMenu>
+        {canRefreshCalendars(account) && (
+          <NavigationMenu>
+            <RefreshCalendarsItem accountId={accountId} />
+          </NavigationMenu>
+        )}
         <NavigationMenu>
           <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
             <NavigationMenuItemIcon>

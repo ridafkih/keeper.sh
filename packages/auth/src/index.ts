@@ -14,8 +14,16 @@ import { usernameOnly } from "./plugins/username-only";
 import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
+import { buildVerificationEmail } from "./verification-email";
 import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
+import { createAuthObservation } from "./auth-observer";
+import { keepSignedInAccount } from "./passkey-session-owner";
+import type { AuthLogEntry, AuthObserver, AuthRequestOutcome } from "./auth-observer";
+import {
+  REGISTRATION_EMAIL_DOMAIN_MESSAGE,
+  isRegistrationEmailAllowed,
+} from "./registration-email-domains";
 import type { McpTokenVersion } from "./mcp-token-version";
 import {
   createUnverifiedRegistrationReclaim,
@@ -30,8 +38,11 @@ import {
   jwks as jwksTable,
   oauthAccessToken as oauthAccessTokenTable,
   oauthClient as oauthClientTable,
+  oauthClientAssertion as oauthClientAssertionTable,
+  oauthClientResource as oauthClientResourceTable,
   oauthConsent as oauthConsentTable,
   oauthRefreshToken as oauthRefreshTokenTable,
+  oauthResource as oauthResourceTable,
   passkey as passkeyTable,
   session as sessionTable,
   user as userTable,
@@ -72,8 +83,10 @@ interface AuthConfig {
   passkeyRpName?: string;
   passkeyOrigin?: string;
   trustedOrigins?: string[];
+  registrationEmailDomains?: string[];
   mcpResourceUrl?: string;
   mcpApiBaseUrl?: string;
+  observer?: AuthObserver;
 }
 
 interface KeeperMcpAuthSession {
@@ -143,6 +156,21 @@ const isMicrosoftEmailOwnershipEstablished = (
   return profile.tid === MICROSOFT_CONSUMER_TENANT_ID;
 };
 
+const EMAIL_SIGN_UP_PATH = "/sign-up/email";
+
+const readSignUpEmail = (body: unknown): string | null => {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  if (!("email" in body) || typeof body.email !== "string") {
+    return null;
+  }
+  return body.email;
+};
+
+const createRegistrationEmailDomainError = (): APIError =>
+  new APIError("FORBIDDEN", { message: REGISTRATION_EMAIL_DOMAIN_MESSAGE });
+
 const AUTH_BASE_PATH = "/api/auth";
 const EMAIL_VERIFICATION_EXPIRES_IN_SECONDS = 3600;
 
@@ -169,9 +197,13 @@ const createAuth = (config: AuthConfig) => {
     passkeyRpName,
     passkeyOrigin,
     trustedOrigins,
+    registrationEmailDomains = [],
     mcpResourceUrl,
     mcpApiBaseUrl,
+    observer,
   } = config;
+
+  const observation = createAuthObservation(observer);
 
   const buildResendClient = (): Resend | null => {
     if (resendApiKey) {
@@ -241,6 +273,7 @@ const createAuth = (config: AuthConfig) => {
   if (commercialMode && passkeyRpId && passkeyOrigin) {
     plugins.push(
       passkeyPlugin({
+        authentication: { afterVerification: keepSignedInAccount },
         origin: passkeyOrigin,
         rpID: passkeyRpId,
         rpName: passkeyRpName,
@@ -262,14 +295,9 @@ const createAuth = (config: AuthConfig) => {
 
   if (googleClientId && googleClientSecret) {
     socialProviders.google = {
-      accessType: "offline",
       clientId: googleClientId,
       clientSecret: googleClientSecret,
-      prompt: "consent",
-      scope: [
-        "https://www.googleapis.com/auth/calendar.events",
-        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-      ],
+      prompt: "select_account",
     };
   }
 
@@ -283,8 +311,7 @@ const createAuth = (config: AuthConfig) => {
         }
         return {};
       },
-      prompt: "consent",
-      scope: ["offline_access", "User.Read", "Calendars.ReadWrite"],
+      prompt: "select_account",
     };
   }
 
@@ -295,13 +322,7 @@ const createAuth = (config: AuthConfig) => {
     if (!resend) {
       return;
     }
-    await resend.emails.send({
-      template: {
-        id: "email-verification",
-        variables: { name: user.name, url },
-      },
-      to: user.email,
-    });
+    await resend.emails.send(buildVerificationEmail({ url, user }));
   };
 
   const sendReclaimVerificationEmail = async (user: EmailUser) => {
@@ -323,6 +344,7 @@ const createAuth = (config: AuthConfig) => {
   if (oidcEnabled && oidcIssuerUrl && oidcClientId && oidcClientSecret) {
     plugins.push(
       createOidcPlugin({
+        baseUrl,
         clientId: oidcClientId,
         clientSecret: oidcClientSecret,
         issuerUrl: oidcIssuerUrl,
@@ -348,8 +370,11 @@ const createAuth = (config: AuthConfig) => {
         jwks: jwksTable,
         oauthAccessToken: oauthAccessTokenTable,
         oauthClient: oauthClientTable,
+        oauthClientAssertion: oauthClientAssertionTable,
+        oauthClientResource: oauthClientResourceTable,
         oauthConsent: oauthConsentTable,
         oauthRefreshToken: oauthRefreshTokenTable,
+        oauthResource: oauthResourceTable,
         passkey: passkeyTable,
         session: sessionTable,
         user: userTable,
@@ -405,17 +430,32 @@ const createAuth = (config: AuthConfig) => {
             if (oidcEnabled && isLocalAccountEmail(user.email)) {
               return Promise.resolve(false);
             }
+            if (!isRegistrationEmailAllowed(user.email, registrationEmailDomains)) {
+              return Promise.reject(createRegistrationEmailDomainError());
+            }
+            return Promise.resolve();
+          },
+          after: (user) => {
+            observation.userCreated(user.id);
             return Promise.resolve();
           },
         },
       },
     },
+    logger: observation.logger,
     hooks: {
+      ...observation.hooks,
       before: createAuthMiddleware((context) => {
         if (localAuthDisabled && isLocalAuthPath(context.path)) {
           throw new APIError("FORBIDDEN", {
             message: "Local authentication is disabled",
           });
+        }
+        if (context.path === EMAIL_SIGN_UP_PATH) {
+          const email = readSignUpEmail(context.body);
+          if (email && !isRegistrationEmailAllowed(email, registrationEmailDomains)) {
+            throw createRegistrationEmailDomainError();
+          }
         }
         return Promise.resolve();
       }),
@@ -446,6 +486,8 @@ const createAuth = (config: AuthConfig) => {
     user: {
       deleteUser: {
         afterDelete: async (user) => {
+          observation.userDeleted(user.id);
+
           if (!polarClient) {
             return;
           }
@@ -490,10 +532,10 @@ const createAuth = (config: AuthConfig) => {
           return null;
         }
 
-        const jwt = await resourceActions.verifyAccessToken(accessToken, {
+        const jwt = await resourceActions.verifyBearerToken(accessToken, {
           jwksUrl,
           verifyOptions: {
-            audience: mcpOptions.oauthProvider.validAudiences,
+            audience: mcpOptions.oauthProvider.resources,
             issuer: `${baseUrl}/api/auth`,
           },
         });
@@ -543,6 +585,8 @@ export {
   isKeeperMcpEnabledAuth,
 };
 export { resolveAuthCapabilities } from "./capabilities";
+export { routeOidcCallbackRequest } from "./oidc";
+export { parseRegistrationEmailDomains } from "./registration-email-domains";
 export {
   KEEPER_API_DEFAULT_SCOPE,
   KEEPER_API_DESTINATION_SCOPE,
@@ -562,6 +606,9 @@ export {
 } from "./mcp-token-version";
 export type {
   AuthConfig,
+  AuthLogEntry,
+  AuthObserver,
+  AuthRequestOutcome,
   AuthResult,
   KeeperMcpAuthApi,
   KeeperMcpAuthSession,

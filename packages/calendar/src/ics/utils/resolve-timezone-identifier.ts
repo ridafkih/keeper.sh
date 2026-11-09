@@ -1,80 +1,88 @@
-/**
- * Timezone identifier recovery for real-world ICS feeds.
- *
- * RFC 5545 lets a feed name its own TZID as long as a matching VTIMEZONE is
- * declared, so plenty of clients ship identifiers Intl has never heard of:
- * Thunderbird/Lightning writes tzurl-style `/mozilla.org/<version>/America/Denver`,
- * and Exchange writes labels such as `Customized Time Zone` or
- * `(UTC-07:00) Mountain Time (US & Canada)`. The zone information is still in
- * the file, so recover it instead of rejecting the event: extract the trailing
- * IANA zone from prefixed identifiers, and fall back to the offset the declared
- * VTIMEZONE uses when that VTIMEZONE never changes offset.
- *
- * A VTIMEZONE with DST transitions is deliberately not mapped onto a fixed
- * offset: half the year would be an hour wrong, which is worse than reporting
- * the event as unsupported.
- */
-
-import { normalizeTimezone } from "./normalize-timezone";
 import { visitIcsProperties } from "./apply-patches";
+import { canFormatTimeZone, listSupportedTimeZones, readTimeZoneOffsetMinutes } from "./intl-time-zone";
+import { offsetPartsToMinutes } from "./utc-offset";
+import { WINDOWS_TO_IANA } from "./windows-timezones";
 
 type DeclaredTimeZoneOffsets = ReadonlyMap<string, readonly number[]>;
 
+type ResolvedTimeZone =
+  | { kind: "iana"; timeZone: string }
+  | { kind: "fixed-offset"; timeZone: string; offsetMinutes: number };
+
 const MINUTES_PER_HOUR = 60;
-const MAX_FIXED_OFFSET_HOURS = 14;
+const MAX_FIXED_OFFSET_MINUTES = 14 * MINUTES_PER_HOUR;
 const MAX_IANA_ZONE_SEGMENTS = 3;
 const UTC_OFFSET_PATTERN = /^([+-])(\d{2})(\d{2})(\d{2})?$/;
+const FIRST_CONSTANT_OFFSET_YEAR = 1990;
+const LAST_CONSTANT_OFFSET_YEAR = 2100;
+const CONSTANT_OFFSET_SAMPLE_MONTHS = [0, 6];
+const PREFILTER_INSTANTS = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
 
-const isSupportedTimeZone = (timeZone: string): boolean => {
-  try {
-    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone });
-    return Boolean(formatter);
-  } catch {
-    return false;
+const constantOffsetZones = new Map<number, string | undefined>();
+
+const asIana = (timeZone: string): ResolvedTimeZone => ({ kind: "iana", timeZone });
+
+const resolveWindowsName = (identifier: string): ResolvedTimeZone | undefined => {
+  const timeZone = WINDOWS_TO_IANA[identifier];
+  if (!timeZone) {
+    return;
   }
+  return asIana(timeZone);
 };
 
-const extractPrefixedIanaTimeZone = (identifier: string): string | undefined => {
+const resolveIntlName = (identifier: string): ResolvedTimeZone | undefined => {
+  if (!canFormatTimeZone(identifier)) {
+    return;
+  }
+  return asIana(identifier);
+};
+
+const resolvePrefixedName = (identifier: string): ResolvedTimeZone | undefined => {
   if (!identifier.startsWith("/")) {
     return;
   }
   const segments = identifier.split("/").filter(Boolean);
   const candidates = Array.from(
     { length: Math.min(MAX_IANA_ZONE_SEGMENTS, segments.length) },
-    (value, index) => segments.slice(-(index + 1)).join("/"),
+    (_unused, index) => segments.slice(-(index + 1)).join("/"),
   ).toReversed();
-  return candidates.find((candidate) => isSupportedTimeZone(candidate));
+  const timeZone = candidates.find((candidate) => canFormatTimeZone(candidate));
+  if (!timeZone) {
+    return;
+  }
+  return asIana(timeZone);
 };
 
-const parseUtcOffsetMinutes = (offset: string): number | undefined => {
-  const match = UTC_OFFSET_PATTERN.exec(offset.trim());
-  if (!match) {
-    return;
-  }
-  const [, sign, hours, minutes] = match;
-  if (!sign || !hours || !minutes) {
-    return;
-  }
-  const magnitude = Number(hours) * MINUTES_PER_HOUR + Number(minutes);
-  if (sign === "-") {
-    return -magnitude;
-  }
-  return magnitude;
+const buildConstantOffsetSamples = (): Date[] => Array.from(
+  { length: LAST_CONSTANT_OFFSET_YEAR - FIRST_CONSTANT_OFFSET_YEAR + 1 },
+  (_unused, index) => CONSTANT_OFFSET_SAMPLE_MONTHS.map(
+    (month) => new Date(Date.UTC(FIRST_CONSTANT_OFFSET_YEAR + index, month, 1)),
+  ),
+).flat();
+
+const holdsOffsetAt = (timeZone: string, offsetMinutes: number, instants: readonly Date[]): boolean =>
+  instants.every((instant) => readTimeZoneOffsetMinutes(timeZone, instant) === offsetMinutes);
+
+const searchConstantOffsetZone = (offsetMinutes: number): string | undefined => {
+  const samples = buildConstantOffsetSamples();
+  return listSupportedTimeZones()
+    .filter((timeZone) => holdsOffsetAt(timeZone, offsetMinutes, PREFILTER_INSTANTS))
+    .filter((timeZone) => holdsOffsetAt(timeZone, offsetMinutes, samples))
+    .toSorted()
+    .at(0);
 };
 
-/**
- * `Etc/GMT+N` is the IANA zone whose UTC offset is minus N hours, so the sign is
- * inverted on purpose. Fixed zones are used rather than a bare `-07:00` because
- * destination providers require an IANA identifier.
- */
-const buildFixedOffsetTimeZone = (offsetMinutes: number): string | undefined => {
-  if (offsetMinutes % MINUTES_PER_HOUR !== 0) {
-    return;
+const findConstantOffsetIanaZone = (offsetMinutes: number): string | undefined => {
+  if (constantOffsetZones.has(offsetMinutes)) {
+    return constantOffsetZones.get(offsetMinutes);
   }
+  const timeZone = searchConstantOffsetZone(offsetMinutes);
+  constantOffsetZones.set(offsetMinutes, timeZone);
+  return timeZone;
+};
+
+const formatWholeHourTimeZone = (offsetMinutes: number): string => {
   const hours = offsetMinutes / MINUTES_PER_HOUR;
-  if (Math.abs(hours) > MAX_FIXED_OFFSET_HOURS) {
-    return;
-  }
   if (hours === 0) {
     return "Etc/UTC";
   }
@@ -82,6 +90,74 @@ const buildFixedOffsetTimeZone = (offsetMinutes: number): string | undefined => 
     return `Etc/GMT+${Math.abs(hours)}`;
   }
   return `Etc/GMT-${hours}`;
+};
+
+const timeZoneForFixedOffset = (offsetMinutes: number): string | undefined => {
+  if (offsetMinutes % MINUTES_PER_HOUR === 0) {
+    return formatWholeHourTimeZone(offsetMinutes);
+  }
+  return findConstantOffsetIanaZone(offsetMinutes);
+};
+
+const readSingleDeclaredOffset = (offsets: readonly number[]): number | undefined => {
+  const uniqueOffsets = new Set(offsets);
+  const [offsetMinutes] = uniqueOffsets;
+  if (uniqueOffsets.size !== 1 || offsetMinutes === globalThis.undefined) {
+    return;
+  }
+  if (!Number.isInteger(offsetMinutes) || Math.abs(offsetMinutes) > MAX_FIXED_OFFSET_MINUTES) {
+    return;
+  }
+  return offsetMinutes;
+};
+
+const resolveDeclaredFixedOffset = (
+  identifier: string,
+  declaredOffsets: DeclaredTimeZoneOffsets | undefined,
+): ResolvedTimeZone | undefined => {
+  const offsets = declaredOffsets?.get(identifier);
+  if (!offsets) {
+    return;
+  }
+  const offsetMinutes = readSingleDeclaredOffset(offsets);
+  if (offsetMinutes === globalThis.undefined) {
+    return;
+  }
+  const timeZone = timeZoneForFixedOffset(offsetMinutes);
+  if (!timeZone) {
+    return;
+  }
+  return { kind: "fixed-offset", offsetMinutes, timeZone };
+};
+
+const resolveTimeZoneIdentifier = (
+  identifier: string | undefined,
+  declaredOffsets?: DeclaredTimeZoneOffsets,
+): ResolvedTimeZone | undefined => {
+  if (!identifier) {
+    return;
+  }
+  return resolveWindowsName(identifier)
+    ?? resolveIntlName(identifier)
+    ?? resolvePrefixedName(identifier)
+    ?? resolveDeclaredFixedOffset(identifier, declaredOffsets);
+};
+
+const resolveDeclaredTimeZone = (
+  identifier: string | undefined,
+  declaredOffsets: DeclaredTimeZoneOffsets,
+): string | undefined => resolveTimeZoneIdentifier(identifier, declaredOffsets)?.timeZone;
+
+const parseUtcOffsetMinutes = (offset: string): number | undefined => {
+  const match = UTC_OFFSET_PATTERN.exec(offset.trim());
+  if (!match) {
+    return;
+  }
+  const [, sign, hours, minutes, seconds = "0"] = match;
+  if (!sign || !hours || !minutes) {
+    return;
+  }
+  return offsetPartsToMinutes(sign, hours, minutes, seconds);
 };
 
 const readDeclaredTimeZoneOffsets = (ical: string): DeclaredTimeZoneOffsets => {
@@ -108,31 +184,5 @@ const readDeclaredTimeZoneOffsets = (ical: string): DeclaredTimeZoneOffsets => {
   return declared;
 };
 
-const resolveDeclaredTimeZone = (
-  identifier: string | undefined,
-  declaredOffsets: DeclaredTimeZoneOffsets,
-): string | undefined => {
-  const normalized = normalizeTimezone(identifier);
-  if (!normalized) {
-    return;
-  }
-  if (isSupportedTimeZone(normalized)) {
-    return normalized;
-  }
-  const extracted = extractPrefixedIanaTimeZone(normalized);
-  if (extracted) {
-    return extracted;
-  }
-  const offsets = declaredOffsets.get(normalized)
-    ?? declaredOffsets.get(identifier ?? "")
-    ?? [];
-  const uniqueOffsets = new Set(offsets);
-  const [offsetMinutes] = uniqueOffsets;
-  if (uniqueOffsets.size !== 1 || offsetMinutes === globalThis.undefined) {
-    return;
-  }
-  return buildFixedOffsetTimeZone(offsetMinutes);
-};
-
-export { readDeclaredTimeZoneOffsets, resolveDeclaredTimeZone };
-export type { DeclaredTimeZoneOffsets };
+export { readDeclaredTimeZoneOffsets, resolveDeclaredTimeZone, resolveTimeZoneIdentifier };
+export type { DeclaredTimeZoneOffsets, ResolvedTimeZone };

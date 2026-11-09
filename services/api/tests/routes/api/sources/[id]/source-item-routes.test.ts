@@ -125,6 +125,45 @@ describe("handlePatchSourceRoute", () => {
     expect(paused).toEqual([{ calendarId: "source-1", userId: "user-1", value: false }]);
   });
 
+  it("returns 403 when free users try to disable reminders on copies", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { disableEventReminders: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        setPaused: () => Promise.resolve(null),
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("saves disabled reminders when a pro user turns them off on copies", async () => {
+    let receivedUpdates: Record<string, unknown> = {};
+    const response = await handlePatchSourceRoute(
+      {
+        body: { disableEventReminders: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        setPaused: () => Promise.resolve(null),
+        updateSource: (_userId, _sourceId, updates) => {
+          receivedUpdates = updates;
+          return Promise.resolve({ id: "source-1", ...updates });
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedUpdates).toEqual({ disableEventReminders: true });
+  });
+
   it("applies a pause alongside other fields and returns the updated calendar", async () => {
     const response = await handlePatchSourceRoute(
       { body: { name: "Work", paused: true }, params: { id: "source-1" }, userId: "user-1" },

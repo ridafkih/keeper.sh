@@ -12,19 +12,30 @@ const normalizeCalendarUrl = (url: string): string => {
   return url;
 };
 
+type CalendarFetchFailureReason =
+  | "auth_required"
+  | "http_error"
+  | "not_found"
+  | "not_ical"
+  | "partial_response"
+  | "truncated";
+
+interface CalendarFetchErrorDetails {
+  reason: CalendarFetchFailureReason;
+  statusCode?: number;
+}
+
 class CalendarFetchError extends Error {
   public readonly statusCode?: number;
+  public readonly reason: CalendarFetchFailureReason;
   public readonly authRequired: boolean;
 
-  constructor(
-    message: string,
-    statusCode?: number,
-  ) {
+  constructor(message: string, details: CalendarFetchErrorDetails) {
     super(message);
     this.name = "CalendarFetchError";
-    this.statusCode = statusCode;
-    this.authRequired =
-      statusCode === HTTP_STATUS.UNAUTHORIZED || statusCode === HTTP_STATUS.FORBIDDEN;
+    this.reason = details.reason;
+    this.statusCode = details.statusCode;
+    this.authRequired = details.reason === "auth_required";
   }
 }
 
@@ -57,6 +68,7 @@ const assertCalendarBodyComplete = (ical: string): void => {
   if (!CALENDAR_END_PATTERN.test(ical)) {
     throw new CalendarFetchError(
       "Calendar feed is truncated: missing END:VCALENDAR terminator.",
+      { reason: "truncated" },
     );
   }
 };
@@ -72,7 +84,7 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
   if (response.status === HTTP_STATUS_PARTIAL_CONTENT) {
     throw new CalendarFetchError(
       "Calendar server returned a partial (206) response; refusing to treat a fragment as the whole feed.",
-      response.status,
+      { reason: "partial_response", statusCode: response.status },
     );
   }
 
@@ -80,20 +92,20 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
     if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       throw new CalendarFetchError(
         "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
-        response.status,
+        { reason: "auth_required", statusCode: response.status },
       );
     }
 
     if (response.status === HTTP_STATUS.NOT_FOUND) {
       throw new CalendarFetchError(
         "Calendar not found. Check that the URL is correct.",
-        response.status,
+        { reason: "not_found", statusCode: response.status },
       );
     }
 
     throw new CalendarFetchError(
       `Failed to fetch calendar (HTTP ${response.status})`,
-      response.status,
+      { reason: "http_error", statusCode: response.status },
     );
   }
 
@@ -143,6 +155,7 @@ async function pullRemoteCalendar(
   if (!json.version || !json.prodId) {
     throw new CalendarFetchError(
       "URL does not return a valid iCal file. Make sure the URL points directly to an .ics file.",
+      { reason: "not_ical" },
     );
   }
 
@@ -158,3 +171,4 @@ async function pullRemoteCalendar(
 }
 
 export { CalendarFetchError, pullRemoteCalendar };
+export type { CalendarFetchFailureReason };

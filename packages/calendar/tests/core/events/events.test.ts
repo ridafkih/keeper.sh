@@ -376,6 +376,7 @@ describe("excludeWithdrawnInstances", () => {
 
 const row = (overrides: Partial<DestinationEventRow> & Pick<DestinationEventRow, "id">): DestinationEventRow => ({
   availability: "busy",
+  disableEventReminders: false,
   calendarId: "work",
   calendarName: "Work",
   calendarUrl: null,

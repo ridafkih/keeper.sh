@@ -1,5 +1,5 @@
 {
-  "id": "053d87b1-eaaa-438b-b893-bddb7f85e05c",
+  "id": "390bbcb1-43f1-468e-968e-0a7e238e5f6a",
   "prevId": "675169c3-14b4-498c-97b5-696a251f5cd7",
   "version": "7",
   "dialect": "postgresql",
@@ -892,12 +892,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -1495,12 +1489,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "createdAt": {
           "name": "createdAt",
@@ -2452,6 +2440,172 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.source_ingest_schedule": {
+      "name": "source_ingest_schedule",
+      "schema": "",
+      "columns": {
+        "calendarId": {
+          "name": "calendarId",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "dueAt": {
+          "name": "dueAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failureCount": {
+          "name": "failureCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "lastAttemptAt": {
+          "name": "lastAttemptAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lastFailureAt": {
+          "name": "lastFailureAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lastSuccessAt": {
+          "name": "lastSuccessAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "leaseToken": {
+          "name": "leaseToken",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "leasedUntil": {
+          "name": "leasedUntil",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "parkedReason": {
+          "name": "parkedReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "releaseSeq": {
+          "name": "releaseSeq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "wakeCorrelationId": {
+          "name": "wakeCorrelationId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wakeDueAt": {
+          "name": "wakeDueAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wakeReceivedAt": {
+          "name": "wakeReceivedAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "wakeSeq": {
+          "name": "wakeSeq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        }
+      },
+      "indexes": {
+        "source_ingest_schedule_due_idx": {
+          "name": "source_ingest_schedule_due_idx",
+          "columns": [
+            {
+              "expression": "dueAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"source_ingest_schedule\".\"dueAt\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "source_ingest_schedule_wake_idx": {
+          "name": "source_ingest_schedule_wake_idx",
+          "columns": [
+            {
+              "expression": "wakeDueAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"source_ingest_schedule\".\"wakeDueAt\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "source_ingest_schedule_calendarId_calendars_id_fk": {
+          "name": "source_ingest_schedule_calendarId_calendars_id_fk",
+          "tableFrom": "source_ingest_schedule",
+          "tableTo": "calendars",
+          "columnsFrom": [
+            "calendarId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "source_ingest_schedule_parked_reason_check": {
+          "name": "source_ingest_schedule_parked_reason_check",
+          "value": "\"parkedReason\" IS NULL OR \"parkedReason\" IN ('ineligible', 'credential-rejected', 'unresolvable')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.sync_status": {

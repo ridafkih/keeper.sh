@@ -12,7 +12,7 @@ import { articleLibrary } from "@/lib/article-library";
 import { findBlogPostBySlug } from "@/lib/blog-posts";
 import { selectRelatedArticles } from "@/lib/related-articles";
 import { formatIsoDate } from "@/utils/date";
-import { jsonLdScript, notFoundHead, seoHead, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
+import { jsonLdScript, markdownAlternateLink, notFoundHead, seoHead, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 
 const MARKDOWN_FAQ_TAGS: AllowedTags = {
@@ -49,6 +49,7 @@ export const Route = createFileRoute("/(marketing)/blog/$slug")({
       path: postUrl,
       type: "article",
       imagePath: blogPost.metadata.image,
+      links: [markdownAlternateLink(postUrl)],
       meta: [
         { content: blogPost.metadata.tags.join(", "), name: "keywords" },
         { content: blogPost.metadata.createdAt, property: "article:published_time" },

@@ -137,8 +137,11 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   },
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const sourceEvent = (): WideEvent => {
   const event = emitted.find(({ values }) => values["operation.name"] === "ingest-source");
@@ -153,7 +156,7 @@ describe("the ingest job reads the engine's wide event rather than discarding it
     emitted.length = 0;
     ingestOptions.length = 0;
     current = { fields: {}, values: {} };
-    await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+    await Promise.resolve(runIngestPass()).catch(() => null);
   });
 
   it("hands the engine an onIngestEvent callback", () => {

@@ -3,6 +3,7 @@ import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createOutlookSyncProvider } from "../../../../src/providers/outlook/destination/provider";
 import type { RedisRateLimiter } from "../../../../src/core/utils/redis-rate-limiter";
 import { KEEPER_CATEGORY } from "@keeper.sh/constants";
+import { graphBatchReply, readBatchRequests, throttledSubResponse } from "./graph-batch-fixtures";
 
 const createProvider = (options: {
   rateLimiter?: RedisRateLimiter;
@@ -18,12 +19,6 @@ const createProvider = (options: {
     rateLimiter: options.rateLimiter,
     signal: options.signal,
   });
-
-const throttledResponse = (status: number, retryAfter: string): Response =>
-  Response.json(
-    { error: { code: "ApplicationThrottled", message: "Application is over its MailboxConcurrency limit." } },
-    { headers: { "Retry-After": retryAfter }, status },
-  );
 
 const createEvent = (): MaterializedSyncableEvent => ({
   calendarId: "source-calendar-id",
@@ -132,12 +127,12 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("accepts a null series master ID when Graph creates a standalone event", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+    const fetchMock = vi.fn().mockResolvedValueOnce(graphBatchReply({ status: 201, body: {
       iCalUId: "created-event-uid",
       id: "created-event-id",
       seriesMasterId: null,
       type: "singleInstance",
-    }));
+    } }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createProvider().pushEvents([createEvent()])).resolves.toEqual([{
@@ -149,7 +144,7 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("compares the creation echo field by field and requests a text body echo", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+    const fetchMock = vi.fn().mockResolvedValueOnce(graphBatchReply({ status: 201, body: {
       body: { content: "agenda", contentType: "text" },
       end: { dateTime: "2026-07-17T19:00:00.0000000", timeZone: "UTC" },
       iCalUId: "created-event-uid",
@@ -158,7 +153,7 @@ describe("createOutlookSyncProvider", () => {
       showAs: "busy",
       start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
       subject: "Meeting",
-    }));
+    } }));
     vi.stubGlobal("fetch", fetchMock);
 
     const [result] = await createProvider().pushEvents([{
@@ -178,14 +173,12 @@ describe("createOutlookSyncProvider", () => {
         summary: false,
       },
     });
-    const [, requestInit] = fetchMock.mock.calls[0] as [unknown, RequestInit];
-    expect(new Headers(requestInit.headers).get("Prefer")).toContain(
-      'outlook.body-content-type="text"',
-    );
+    const [subRequest] = readBatchRequests(fetchMock, 0);
+    expect(subRequest?.headers?.Prefer).toContain('outlook.body-content-type="text"');
   });
 
   it("names the fields the creation echo rewrote", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+    const fetchMock = vi.fn().mockResolvedValueOnce(graphBatchReply({ status: 201, body: {
       body: { content: "agenda rewritten", contentType: "text" },
       end: { dateTime: "2026-07-17T19:30:00.0000000", timeZone: "UTC" },
       iCalUId: "created-event-uid",
@@ -194,7 +187,7 @@ describe("createOutlookSyncProvider", () => {
       showAs: "busy",
       start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
       subject: "Meeting",
-    }));
+    } }));
     vi.stubGlobal("fetch", fetchMock);
 
     const [result] = await createProvider().pushEvents([{
@@ -217,7 +210,7 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("marks a non-text body echo as uncomparable instead of diffing across formats", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({
+    const fetchMock = vi.fn().mockResolvedValueOnce(graphBatchReply({ status: 201, body: {
       body: { content: "<html><body>agenda</body></html>", contentType: "html" },
       end: { dateTime: "2026-07-17T19:00:00.0000000", timeZone: "UTC" },
       iCalUId: "created-event-uid",
@@ -226,7 +219,7 @@ describe("createOutlookSyncProvider", () => {
       showAs: "busy",
       start: { dateTime: "2026-07-17T18:00:00.0000000", timeZone: "UTC" },
       subject: "Meeting",
-    }));
+    } }));
     vi.stubGlobal("fetch", fetchMock);
 
     const [result] = await createProvider().pushEvents([{
@@ -396,12 +389,12 @@ describe("createOutlookSyncProvider", () => {
     expect(events.map((event) => event.uid)).toEqual(["titled-uid", "untitled-uid"]);
   });
 
-  it("retries a throttled event creation after the Retry-After delay and reports success", async () => {
+  it("retries a throttled event creation after the sub-response Retry-After delay and reports success", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(throttledResponse(429, "0.05"))
-      .mockResolvedValueOnce(Response.json({
-        iCalUId: "created-event-uid",
-        id: "created-event-id",
+      .mockResolvedValueOnce(graphBatchReply(throttledSubResponse(429, "0.05")))
+      .mockResolvedValueOnce(graphBatchReply({
+        body: { iCalUId: "created-event-uid", id: "created-event-id" },
+        status: 201,
       }));
     vi.stubGlobal("fetch", fetchMock);
     const provider = createProvider();
@@ -418,11 +411,11 @@ describe("createOutlookSyncProvider", () => {
 
   it("retries a MailboxConcurrency 503 before giving up on the occurrence", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(throttledResponse(503, "0"))
-      .mockResolvedValueOnce(throttledResponse(503, "0"))
-      .mockResolvedValueOnce(Response.json({
-        iCalUId: "created-event-uid",
-        id: "created-event-id",
+      .mockResolvedValueOnce(graphBatchReply(throttledSubResponse(503, "0")))
+      .mockResolvedValueOnce(graphBatchReply(throttledSubResponse(503, "0")))
+      .mockResolvedValueOnce(graphBatchReply({
+        body: { iCalUId: "created-event-uid", id: "created-event-id" },
+        status: 201,
       }));
     vi.stubGlobal("fetch", fetchMock);
     const provider = createProvider();
@@ -439,7 +432,7 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("reports an occurrence that stays throttled through every retry", async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(throttledResponse(429, "0")));
+    const fetchMock = vi.fn(() => Promise.resolve(graphBatchReply(throttledSubResponse(429, "0"))));
     vi.stubGlobal("fetch", fetchMock);
     const provider = createProvider();
 
@@ -455,10 +448,10 @@ describe("createOutlookSyncProvider", () => {
   });
 
   it("reports a non-throttle write failure without retrying it", async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(Response.json(
-      { error: { code: "ErrorInvalidItem", message: "Invalid event payload." } },
-      { status: 400 },
-    )));
+    const fetchMock = vi.fn(() => Promise.resolve(graphBatchReply({
+      body: { error: { code: "ErrorInvalidItem", message: "Invalid event payload." } },
+      status: 400,
+    })));
     vi.stubGlobal("fetch", fetchMock);
     const provider = createProvider();
 
@@ -472,28 +465,55 @@ describe("createOutlookSyncProvider", () => {
     expect(provider.getThrottleMetrics().retryCount).toBe(0);
   });
 
-  it("paces bulk pushes through the rate limiter, one slot per request", async () => {
+  it("paces bulk pushes through the rate limiter, one slot per sub-request", async () => {
     const acquire = vi.fn((_count: number, _signal?: AbortSignal) => Promise.resolve());
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(throttledResponse(429, "0"))
-      .mockImplementation(() => Promise.resolve(Response.json({ iCalUId: "uid", id: "id" })));
+      .mockResolvedValueOnce(graphBatchReply(
+        throttledSubResponse(429, "0"),
+        { body: { iCalUId: "uid", id: "id" }, status: 201 },
+      ))
+      .mockResolvedValueOnce(graphBatchReply({ body: { iCalUId: "uid", id: "id" }, status: 201 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await createProvider({ rateLimiter: { acquire } }).pushEvents([createEvent(), createEvent()]);
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(acquire.mock.calls.map((call) => call[0])).toEqual([1, 1, 1]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(acquire.mock.calls.map((call) => call[0])).toEqual([2, 1]);
   });
 
   it("retries a throttled delete rather than dropping it", async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(throttledResponse(429, "0"))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      .mockResolvedValueOnce(graphBatchReply(throttledSubResponse(429, "0")))
+      .mockResolvedValueOnce(graphBatchReply({ status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
       { success: true },
     ]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("permanently deletes events so they bypass the Deleted Items folder", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(graphBatchReply({ status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
+      { success: true },
+    ]);
+
+    const [subRequest] = readBatchRequests(fetchMock, 0);
+    expect(subRequest).toMatchObject({
+      method: "POST",
+      url: "/me/events/outlook-event-id/permanentDelete",
+    });
+  });
+
+  it("treats a 404 from permanentDelete as an already-removed event", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(graphBatchReply({ status: 404 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(createProvider().deleteEvents(["outlook-event-id"])).resolves.toEqual([
+      { success: true },
+    ]);
   });
 });

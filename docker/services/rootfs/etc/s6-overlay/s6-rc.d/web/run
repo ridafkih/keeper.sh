@@ -4,4 +4,4 @@ exec 2>&1
 cd /app/applications/web
 export HOSTNAME=0.0.0.0
 export PORT=3000
-exec /root/.bun/bin/bun dist/server-entry/index.js
+exec /usr/local/bin/bun dist/server-entry/index.js

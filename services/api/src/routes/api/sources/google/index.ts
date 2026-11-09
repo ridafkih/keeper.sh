@@ -12,6 +12,7 @@ import {
   getUserOAuthSources,
   createOAuthSource,
 } from "@/utils/oauth-sources";
+import { noteUserMilestone } from "@/utils/user-milestones";
 
 const GOOGLE_PROVIDER = "google";
 
@@ -41,6 +42,8 @@ const POST = withWideEvent(
         provider: GOOGLE_PROVIDER,
         userId,
       });
+
+      noteUserMilestone(userId, "first_calendar_connected");
 
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {

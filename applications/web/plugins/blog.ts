@@ -4,29 +4,20 @@ import type { Plugin } from "vite";
 import { parse as parseYaml } from "yaml";
 import { parseMetadata, type BlogPostMetadata } from "../src/lib/blog-post-metadata";
 import { buildMovedPaths, CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
+import { extractContentFaq, type ContentFaqEntry } from "../src/lib/content-faq";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
 
-interface BlogPostFaqEntry {
-  answer: string;
-  question: string;
-}
-
 export interface ProcessedBlogPost {
   content: string;
-  faq: BlogPostFaqEntry[];
+  faq: ContentFaqEntry[];
   metadata: BlogPostMetadata;
   slug: string;
 }
 
-const FAQ_ITEM_PATTERN = /<faq-item question="([^"]*)">([\s\S]*?)<\/faq-item>/g;
-
-function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[] {
-  const entries = [...content.matchAll(FAQ_ITEM_PATTERN)].map((match) => ({
-    answer: match[2].trim(),
-    question: match[1].trim(),
-  }));
+function extractFaqEntries(content: string, filePath: string): ContentFaqEntry[] {
+  const entries = extractContentFaq(content);
 
   const incomplete = entries.find(
     (entry) => entry.question.length === 0 || entry.answer.length === 0,
@@ -34,7 +25,7 @@ function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[
 
   if (incomplete) {
     throw new Error(
-      `Blog post "${filePath}" has a faq-item with an empty question or answer.`,
+      `Blog post "${filePath}" has an FAQ entry with an empty question or answer.`,
     );
   }
 

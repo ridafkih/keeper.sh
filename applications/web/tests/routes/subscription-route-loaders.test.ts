@@ -316,6 +316,7 @@ describe("dashboard route loader", () => {
     };
 
     expect(data.subscription).toBeUndefined();
+    expect(calls).not.toContain(CUSTOMER_STATE_PATH);
     expect(calls).toEqual([]);
   });
 

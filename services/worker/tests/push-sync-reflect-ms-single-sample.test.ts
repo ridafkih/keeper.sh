@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
 
@@ -6,7 +7,14 @@ interface WideEvent {
 }
 
 const emitted: WideEvent[] = [];
-let current: WideEvent = { values: {} };
+const eventContext = new AsyncLocalStorage<WideEvent>();
+const currentEvent = (): WideEvent => {
+  const event = eventContext.getStore();
+  if (!event) {
+    throw new Error("widelog used outside a context");
+  }
+  return event;
+};
 
 const SYNC_DURATION_MS = 900;
 const DEADLINE_OVERRUN_MS = 5000;
@@ -14,7 +22,7 @@ const DEADLINE_OVERRUN_MS = 5000;
 const clock = vi.hoisted(() => ({ ms: 0 }));
 
 vi.mock("../src/utils/logging", () => ({
-  context: (run: () => Promise<unknown>) => run(),
+  context: (run: () => Promise<unknown>) => eventContext.run({ values: {} }, run),
   destroy: () => null,
   widelog: {
     append: () => null,
@@ -23,13 +31,18 @@ vi.mock("../src/utils/logging", () => ({
     errorFields: () => null,
     errors: () => null,
     flush: () => {
-      emitted.push(current);
-      current = { values: {} };
+      const event = currentEvent();
+      emitted.push({ values: { ...event.values } });
+      event.values = {};
     },
     max: () => null,
     min: () => null,
     set: (key: string, value: unknown) => {
-      current.values[key] = value;
+      currentEvent().values[key] = value;
+      return { sticky: () => null };
+    },
+    setFields: (fields: Record<string, unknown>) => {
+      Object.assign(currentEvent().values, fields);
       return { sticky: () => null };
     },
     time: {
@@ -71,6 +84,8 @@ interface CalendarCompletion {
   removed: number;
   removeFailed: number;
   syncEvent: { outcome: string };
+  firstSync: Record<string, number | string>;
+  firstSyncedSourceCalendarIds: string[];
 }
 
 interface SyncHandlers {
@@ -97,6 +112,8 @@ vi.mock("@keeper.sh/sync", () => ({
       conflictsResolved: 0,
       durationMs: SYNC_DURATION_MS,
       errors: [],
+      firstSync: {},
+      firstSyncedSourceCalendarIds: [],
       provider: "google",
       removed: 0,
       removeFailed: 0,
@@ -153,7 +170,6 @@ const reflectSamples = (events: WideEvent[]): unknown[] =>
 
 beforeEach(() => {
   emitted.length = 0;
-  current = { values: {} };
   clock.ms = STARTED_AT;
   vi.useFakeTimers();
   vi.spyOn(Date, "now").mockImplementation(() => clock.ms);
@@ -165,40 +181,35 @@ afterEach(() => {
 });
 
 describe("one webhook produces one sample", () => {
-  it("records reflect_ms once when the deadline fires after the calendar already flushed", async () => {
+  it("records reflect_ms when the calendar was written, not when the deadline later fired", async () => {
     const events = await runJob(createJob({
       trigger: "push",
       webhookReceivedAt: WEBHOOK_RECEIVED_AT,
     }));
 
-    expect(events.length).toBeGreaterThan(1);
     expect(reflectSamples(events)).toEqual([
       STARTED_AT + SYNC_DURATION_MS - WEBHOOK_RECEIVED_AT,
     ]);
   });
 
-  it("does not emit a second, later sample from the deadline flush", async () => {
+  it("puts the deadline on the job's one event instead of emitting a second one", async () => {
     const events = await runJob(createJob({
       trigger: "push",
       webhookReceivedAt: WEBHOOK_RECEIVED_AT,
     }));
 
-    const deadlineEvents = events.filter(
-      (event) => event.values["timeout.kind"] === "job_deadline",
-    );
+    const pushSyncEvents = events.filter((event) => event.values["operation.name"] === "push-sync");
 
-    expect(deadlineEvents.length).toBe(1);
-    expect(
-      deadlineEvents.every(
-        (event) => !Object.hasOwn(event.values, "push_sync.reflect_ms"),
-      ),
-    ).toBe(true);
+    expect(pushSyncEvents).toHaveLength(1);
+    expect(pushSyncEvents[0]?.values["timeout.kind"]).toBe("job_deadline");
+    expect(pushSyncEvents[0]?.values.outcome).toBe("success");
   });
 
   it("leaves the field absent, never zero, on a cron job that hits the deadline", async () => {
     const events = await runJob(createJob({}));
+    const pushSyncEvent = events.find((event) => event.values["operation.name"] === "push-sync");
 
-    expect(events[0]?.values["push_sync.trigger"]).toBe("cron");
+    expect(pushSyncEvent?.values["push_sync.trigger"]).toBe("cron");
     expect(reflectSamples(events)).toEqual([]);
     for (const event of events) {
       expect(Object.hasOwn(event.values, "push_sync.reflect_ms")).toBe(false);

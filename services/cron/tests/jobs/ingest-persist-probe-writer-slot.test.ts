@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * The currency probe is a Redis command with a 10s commandTimeout, so awaiting
@@ -234,11 +234,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -254,7 +254,7 @@ describe("persist-time currency probe placement", () => {
   it("never awaits the Redis currency probe inside the open flush transaction", async () => {
     harness.state.icsRows.push(createIcsRow("calendar-alpha", "user-alpha"));
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     // Below 2 the persist-time re-probe is gone, which is a stale-flush regression, not a pass.
     expect(harness.isCurrent.mock.calls.length).toBeGreaterThanOrEqual(2);

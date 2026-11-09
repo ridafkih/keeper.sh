@@ -75,9 +75,20 @@ function canAddMore(entitlement: EntitlementLimit | undefined): boolean {
   return entitlement.current < entitlement.limit;
 }
 
+function hasConfiguredSync(entitlements: Entitlements | undefined): boolean {
+  return (entitlements?.syncs.current ?? 0) > 0;
+}
+
+function useHasConfiguredSync(): boolean {
+  const { data } = useEntitlements();
+  return hasConfiguredSync(data);
+}
+
 export {
   buildOptimisticProEntitlements,
   canAddMore,
+  hasConfiguredSync,
+  useHasConfiguredSync,
   useEntitlements,
   useMutateEntitlements,
   USAGE_CACHE_KEY,

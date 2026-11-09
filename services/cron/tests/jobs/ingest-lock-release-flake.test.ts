@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * A failed lock release must never clobber the ingest result. The release runs
@@ -234,11 +234,11 @@ vi.mock("../../src/utils/enqueue-destination-syncs", () => ({
   enqueueDestinationSyncsForUsers: harness.enqueueDestinationSyncsForUsers,
 }));
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -248,7 +248,7 @@ beforeEach(() => {
 });
 
 describe("sync-lock release flake after a successful ingest", () => {
-  it("keeps the successful result and still enqueues destination syncs", async () => {
+  it("keeps the successful result and still reports the user for a destination sync", async () => {
     harness.state.icsRows.push({
       calendarId: "calendar-alpha",
       ingestFutureRange: "6m",
@@ -259,13 +259,11 @@ describe("sync-lock release flake after a successful ingest", () => {
       userId: "user-alpha",
     });
 
-    await job?.callback();
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
-    // The flake must actually have fired for this run to prove anything.
     expect(harness.state.releaseRejections).toBeGreaterThan(0);
-
-    expect(harness.enqueueDestinationSyncsForUsers).toHaveBeenCalledTimes(1);
-    const [enqueuedUsers] = harness.enqueueDestinationSyncsForUsers.mock.calls[0] ?? [];
-    expect([...enqueuedUsers ?? []]).toContain("user-alpha");
+    expect(result?.affectedUserIds).toContain("user-alpha");
+    expect(result?.outcomes.map(({ outcome }) => outcome.kind)).toEqual(["ingested"]);
   });
 });

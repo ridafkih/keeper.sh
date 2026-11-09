@@ -73,6 +73,7 @@ const makeCalendar = (capabilities: string[]): CalendarDetail => ({
   id: CALENDAR_ID,
   ingestFailureCount: 0,
   ingestLastFailureAt: null,
+  disableEventReminders: false,
   name: "Team Calendar",
   originalName: "Team Calendar",
   provider: "outlook",

@@ -29,13 +29,14 @@ import {
   type IcsEventDraft,
 } from "@/utils/ics";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, faqSchema } from "@/lib/seo";
+import { marketingCopy } from "@/lib/marketing-copy";
 import DownloadIcon from "lucide-react/dist/esm/icons/download";
 import CopyIcon from "lucide-react/dist/esm/icons/copy";
 
 const breadcrumbs = breadcrumbTrail({ name: "ICS File Generator", path: "/tools/ics-generator" });
 
-const PAGE_DESCRIPTION =
-  "Free ICS file generator. Fill in an event, download a .ics file that opens in Google Calendar, Outlook, and Apple Calendar. It runs in your browser, so the event never leaves your machine.";
+const icsGenerator = marketingCopy.icsGenerator;
+const PAGE_DESCRIPTION = icsGenerator.seo.description;
 
 const COPIED_RESET_DELAY = 2000;
 const OBJECT_URL_RELEASE_DELAY = 1000;
@@ -49,40 +50,19 @@ const EMPTY_DRAFT: IcsEventDraft = {
   end: "",
 };
 
-const FAQ_ITEMS = [
-  {
-    question: "What is an ICS file?",
-    answer: "An ICS file is a calendar file in the format defined by RFC 5545. It is plain text describing one or more events, and every major calendar app can import it. That is why meeting invitations arrive as .ics attachments.",
-  },
-  {
-    question: "How do I open the file I just made?",
-    answer: "Double-click it, or import it from your calendar app. Google Calendar takes it under Settings, Import and export, and Apple Calendar opens it directly. New Outlook and Outlook on the web use Calendar, Add calendar, Upload from file; classic Outlook uses File, Open & Export, Import/Export, then the .ics import option.",
-  },
-  {
-    question: "Does the event get uploaded anywhere?",
-    answer: "No. The file is assembled in your browser and downloaded from there, so nothing you type is sent to Keeper.sh or anywhere else. No account is needed to use it.",
-  },
-  {
-    question: "Which time zone do the times use?",
-    answer: "The times you enter are read in your computer's time zone and written into the file as UTC, which every calendar application converts back for whoever opens the file. All-day events are written as dates with no time attached.",
-  },
-  {
-    question: "Can I make a repeating event?",
-    answer: "This tool writes one event, with a start, an end, a title, a location and a description. For a repeating event, add an RRULE line by hand to the file it gives you.",
-  },
-];
+const FAQ_ITEMS = icsGenerator.faq.items;
 
 export const Route = createFileRoute("/(marketing)/tools/ics-generator")({
   component: IcsGeneratorPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/tools/ics-generator") }],
     meta: seoMeta({
-      title: "ICS File Generator",
+      title: icsGenerator.seo.title,
       description: PAGE_DESCRIPTION,
       path: "/tools/ics-generator",
     }),
     scripts: [
-      jsonLdScript(webPageSchema("ICS File Generator", PAGE_DESCRIPTION, "/tools/ics-generator")),
+      jsonLdScript(webPageSchema(icsGenerator.seo.title, PAGE_DESCRIPTION, "/tools/ics-generator")),
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
       jsonLdScript(faqSchema("/tools/ics-generator", FAQ_ITEMS)),
     ],
@@ -152,7 +132,7 @@ function IcsGeneratorPage() {
     <div className="flex flex-col gap-6 py-16">
       <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
-        <Heading1>ICS file generator</Heading1>
+        <Heading1>{icsGenerator.header.heading}</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
           {PAGE_DESCRIPTION}
         </Text>
@@ -274,16 +254,14 @@ function IcsGeneratorPage() {
       </MarketingToolSection>
 
       <MarketingToolSection>
-        <Heading2>What the generator writes</Heading2>
+        <Heading2>{icsGenerator.writes.heading}</Heading2>
         <Text size="sm" tone="muted" className="mt-2 max-w-[64ch]">
-          The file follows RFC 5545: a VCALENDAR wrapper around a single VEVENT. It carries a UID, a timestamp, the
-          start and end you entered, and whichever of the title, location and description you filled in. Text is
-          escaped and long lines are folded, so calendar apps read it back exactly as typed.
+          {icsGenerator.writes.body}
         </Text>
       </MarketingToolSection>
 
       <MarketingFaqSection>
-        <Heading2 className="text-center">Frequently Asked Questions</Heading2>
+        <Heading2 className="text-center">{icsGenerator.faq.heading}</Heading2>
         <MarketingFaqList>
           {FAQ_ITEMS.map((item) => (
             <MarketingFaqItem key={item.question}>
@@ -298,8 +276,8 @@ function IcsGeneratorPage() {
       </MarketingFaqSection>
 
       <MarketingToolCta
-        title="Building calendar files by hand?"
-        body="Keeper.sh copies your events between Google Calendar, Outlook, iCloud, Fastmail and any CalDAV server, so nothing needs a file moved around by hand."
+        title={icsGenerator.cta.title}
+        body={icsGenerator.cta.body}
         source="ics-generator"
       />
     </div>

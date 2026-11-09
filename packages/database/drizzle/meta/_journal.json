@@ -691,15 +691,106 @@
     {
       "idx": 98,
       "version": "7",
-      "when": 1791922782826,
-      "tag": "0098_add_calendar_and_event_colors",
+      "when": 1793046269170,
+      "tag": "0098_source_ingest_schedule",
       "breakpoints": true
     },
     {
       "idx": 99,
       "version": "7",
-      "when": 1791923047679,
-      "tag": "0099_syncs",
+      "when": 1793046269528,
+      "tag": "0099_source_ingest_schedule_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793046269910,
+      "tag": "0100_session_user_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793054228574,
+      "tag": "0101_calendar_account_credential_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793055048603,
+      "tag": "0102_source_ingest_schedule_lock_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793308119183,
+      "tag": "0103_better_auth_1_7_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793308124722,
+      "tag": "0104_microsoft_account_object_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793308135831,
+      "tag": "0105_drop_legacy_oauth_client_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793736782537,
+      "tag": "0106_user_milestones",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793738193787,
+      "tag": "0107_mapping_first_synced_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1793828923421,
+      "tag": "0108_provider_missing_folds_into_unavailable",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1793849084386,
+      "tag": "0109_event_reminders_opt_out",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1794080637040,
+      "tag": "0110_ingested_user_event_placeholders",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1794190313668,
+      "tag": "0111_add_calendar_and_event_colors",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1794190314668,
+      "tag": "0112_syncs",
       "breakpoints": true
     }
   ]

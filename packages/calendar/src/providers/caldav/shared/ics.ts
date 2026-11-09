@@ -19,8 +19,9 @@ import { isKeeperEvent } from "../../../core/events/identity";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import {
   assertNoUnsupportedRecurrenceDates,
-  collectUnsupportedRecurrenceTimeZones,
+  resolveRecurrenceTimeZones,
 } from "../../../ics/utils/validate-recurrence-input";
+import { readDeclaredTimeZoneOffsets } from "../../../ics/utils/resolve-timezone-identifier";
 import type { UnsupportedRecurrenceEvent } from "../../../ics/utils/validate-recurrence-input";
 
 const normalizeIcsText = (value: string | undefined): string | undefined =>
@@ -91,6 +92,7 @@ interface ParsedCalendarEvent {
 
 interface ParseICalCalendarsOptions {
   rejectUnsupportedRecurrenceDates?: boolean;
+  calendarTimeZone?: string;
 }
 
 interface ParsedCalendarResources {
@@ -160,7 +162,7 @@ const parseCalendarResource = (
   const initialCalendar = parseIcsCalendar({ icsString });
   const normalizedIcs = applyCalendarTimeZoneToFloatingEventDates(
     icsString,
-    normalizeTimezone(initialCalendar.nonStandard?.wrTimezone),
+    normalizeTimezone(initialCalendar.nonStandard?.wrTimezone) ?? options.calendarTimeZone,
   );
   if (normalizedIcs === icsString) {
     return initialCalendar;
@@ -180,10 +182,12 @@ const parseICalCalendarsToRemoteEvents = (
   options: ParseICalCalendarsOptions = {},
 ): ParsedCalendarResources => {
   const calendars: IcsCalendar[] = [];
+  const readableIcsStrings: string[] = [];
   const failures: Error[] = [];
   for (const icsString of icsStrings) {
     try {
       calendars.push(parseCalendarResource(icsString, options));
+      readableIcsStrings.push(icsString);
     } catch (error) {
       failures.push(toResourceFailure(error));
     }
@@ -216,11 +220,21 @@ const parseICalCalendarsToRemoteEvents = (
     events: calendars.flatMap((entry) => entry.events ?? []),
   };
   const parsed = parseIcsEventsWithDiagnostics(calendar, { includeKeeperEvents: true });
+  const recurrenceTimeZones = resolveRecurrenceTimeZones(
+    parsed.events,
+    new Map(readableIcsStrings.flatMap((icsString) => [...readDeclaredTimeZoneOffsets(icsString)])),
+  );
+  const unsupportedUids = new Set(recurrenceTimeZones.unsupportedUids);
   const unsupportedEvents = [
     ...parsed.unsupportedEvents,
-    ...collectUnsupportedRecurrenceTimeZones(parsed.events),
+    ...parsed.events
+      .filter((event) => unsupportedUids.has(event.uid))
+      .map((event) => ({
+        reason: `Unsupported calendar timezone: ${event.startTimeZone ?? ""}`,
+        uid: event.uid,
+      })),
   ];
-  const events = parsed.events.map((event) => ({
+  const events = recurrenceTimeZones.events.map((event) => ({
     availability: event.availability ?? "busy",
     deleteId: event.uid,
     description: event.description,

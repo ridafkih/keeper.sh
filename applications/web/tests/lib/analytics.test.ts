@@ -7,6 +7,7 @@ const runtimeConfig: PublicRuntimeConfig = {
   googleAdsConversionLabel: "purchase-label",
   googleAdsId: "AW-1234567890",
   googleAdsSignupConversionLabel: "signup-label",
+  googleAnalyticsId: null,
   polarProMonthlyProductId: null,
   polarProYearlyProductId: null,
   visitorsNowToken: null,

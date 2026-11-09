@@ -10,6 +10,7 @@ import {
   handleGetIcsSourcesRoute,
   handlePostIcsSourceRoute,
 } from "./source-routes";
+import { noteUserMilestone } from "@/utils/user-milestones";
 
 const GET = withWideEvent(
   withAuth(({ userId }) =>
@@ -27,7 +28,11 @@ const POST = withWideEvent(
     return handlePostIcsSourceRoute(
       { body, userId },
       {
-        createSource,
+        createSource: async (sourceUserId, name, url) => {
+          const source = await createSource(sourceUserId, name, url);
+          noteUserMilestone(sourceUserId, "first_calendar_connected");
+          return source;
+        },
         isInvalidSourceUrlError: (error): error is InvalidSourceUrlError =>
           error instanceof InvalidSourceUrlError,
         isSourceLimitError: (error): error is SourceLimitError =>

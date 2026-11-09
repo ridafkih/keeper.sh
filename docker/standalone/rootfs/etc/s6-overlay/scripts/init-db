@@ -21,4 +21,4 @@ if [ -n "${POSTGRES_PASSWORD}" ]; then
     export DATABASE_URL="postgresql://keeper:${KEEPER_DB_PASSWORD}@127.0.0.1:5432/keeper"
 fi
 
-/root/.bun/bin/bun /app/packages/database/scripts/migrate.ts
+/usr/local/bin/bun /app/packages/database/scripts/migrate.ts

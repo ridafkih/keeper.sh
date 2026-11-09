@@ -1,5 +1,5 @@
-import { oauthCredentialsTable } from "@keeper.sh/database/schema";
-import { and, eq, sql } from "drizzle-orm";
+import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { and, eq, notExists, sql } from "drizzle-orm";
 import { database } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -64,4 +64,20 @@ const createOAuthSourceCredential = (
   return credential.id;
 });
 
-export { createOAuthSourceCredential };
+const discardUnusedOAuthSourceCredential = async (credentialId: string): Promise<void> => {
+  await database
+    .delete(oauthCredentialsTable)
+    .where(
+      and(
+        eq(oauthCredentialsTable.id, credentialId),
+        notExists(
+          database
+            .select({ id: calendarAccountsTable.id })
+            .from(calendarAccountsTable)
+            .where(eq(calendarAccountsTable.oauthCredentialId, credentialId)),
+        ),
+      ),
+    );
+};
+
+export { createOAuthSourceCredential, discardUnusedOAuthSourceCredential };

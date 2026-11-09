@@ -4,11 +4,13 @@ import { idParamSchema } from "@/utils/request-query";
 import { ErrorResponse } from "@/utils/responses";
 
 const SOURCE_BOOLEAN_UPDATE_FIELDS = [
+  "disableEventReminders",
   "includeInIcalFeed",
   "treatFullDayTimedEventsAsAllDay",
 ] as const;
 
 const PRO_GATED_SOURCE_FIELDS = [
+  "disableEventReminders",
   "treatFullDayTimedEventsAsAllDay",
   "syncHistoricRange",
   "syncFutureRange",

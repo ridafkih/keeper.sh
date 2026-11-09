@@ -10,4 +10,5 @@ export const calendarNameAtom = selectAtom(calendarDetailAtom, (detail) => detai
 export const calendarProviderAtom = selectAtom(calendarDetailAtom, (detail) => detail?.provider ?? "");
 export const calendarTypeAtom = selectAtom(calendarDetailAtom, (detail) => detail?.calendarType ?? "");
 export const treatFullDayTimedEventsAsAllDayAtom = selectAtom(calendarDetailAtom, (detail) => detail?.treatFullDayTimedEventsAsAllDay ?? false);
-export const calendarProviderMissingSinceAtom = selectAtom(calendarDetailAtom, (detail) => detail?.providerMissingSince ?? null);
+export const calendarMissingSinceAtom = selectAtom(calendarDetailAtom, (detail) => detail?.providerMissingSince ?? detail?.unavailableSince ?? null);
+export const disableEventRemindersAtom = selectAtom(calendarDetailAtom, (detail) => detail?.disableEventReminders ?? false);

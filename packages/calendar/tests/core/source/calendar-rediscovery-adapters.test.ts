@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  planCalendarRediscovery,
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
@@ -45,6 +46,39 @@ describe("toDiscoveredOutlookCalendars", () => {
   });
 });
 
+describe("rediscovering an Outlook account with a calendar shared by another mailbox", () => {
+  it("leaves the shared calendar untouched instead of marking it unavailable", () => {
+    const discovered = toDiscoveredOutlookCalendars([
+      { canEdit: true, id: "outlook-own-calendar", name: "Own Calendar" },
+      { canEdit: true, id: "outlook-shared-calendar", name: "Team Planning" },
+    ]);
+    const existing = toExistingCalendars([
+      {
+        calendarUrl: null,
+        capabilities: ["pull", "push"],
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        externalCalendarId: "outlook-own-calendar",
+        id: "calendar-own",
+        unavailableSince: null,
+      },
+      {
+        calendarUrl: null,
+        capabilities: ["pull", "push"],
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        externalCalendarId: "outlook-shared-calendar",
+        id: "calendar-shared",
+        unavailableSince: null,
+      },
+    ], "oauth");
+
+    const plan = planCalendarRediscovery({ discovered, existing });
+
+    expect(plan.toMarkUnavailable).toEqual([]);
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.toRevive).toEqual([]);
+  });
+});
+
 describe("toDiscoveredCalDAVCalendars", () => {
   it("keys on the normalized pathname while keeping the discovered absolute URL", () => {
     const calendars = toDiscoveredCalDAVCalendars([
@@ -52,6 +86,7 @@ describe("toDiscoveredCalDAVCalendars", () => {
         ctag: "ctag-1",
         displayName: "Work",
         url: "http://cloud.example.com:8080/remote.php/dav/calendars/bob/work/",
+        writable: true,
       },
     ]);
 
@@ -72,6 +107,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: "external-1",
         id: "calendar-1",
@@ -86,6 +122,7 @@ describe("toExistingCalendars", () => {
       id: "calendar-1",
       identityKey: "external-1",
       unavailableSince: null,
+      writable: true,
     }]);
   });
 
@@ -93,6 +130,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: "https://cloud.example.com/dav/bob/My%20Work/",
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-1",
@@ -109,6 +147,7 @@ describe("toExistingCalendars", () => {
     expect(() => toExistingCalendars(
       [{
         calendarUrl: "not-a-url",
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-broken",
@@ -123,6 +162,7 @@ describe("toExistingCalendars", () => {
       [
         {
           calendarUrl: null,
+          capabilities: ["pull", "push"],
           createdAt,
           externalCalendarId: null,
           id: "calendar-destination",
@@ -130,6 +170,7 @@ describe("toExistingCalendars", () => {
         },
         {
           calendarUrl: null,
+          capabilities: ["pull", "push"],
           createdAt,
           externalCalendarId: "external-1",
           id: "calendar-source",
@@ -146,6 +187,7 @@ describe("toExistingCalendars", () => {
     const rows = toExistingCalendars(
       [{
         calendarUrl: null,
+        capabilities: ["pull", "push"],
         createdAt,
         externalCalendarId: null,
         id: "calendar-destination",
@@ -155,5 +197,30 @@ describe("toExistingCalendars", () => {
     );
 
     expect(rows).toEqual([]);
+  });
+});
+
+describe("rediscovering a Google calendar whose access dropped to reader", () => {
+  it("takes push away from the stored calendar", () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const plan = planCalendarRediscovery({
+      discovered: toDiscoveredGoogleCalendars([
+        { accessRole: "reader", id: "shared@group.calendar.google.com", summary: "Shared" },
+      ]),
+      existing: toExistingCalendars(
+        [{
+          calendarUrl: null,
+          capabilities: ["pull", "push"],
+          createdAt,
+          externalCalendarId: "shared@group.calendar.google.com",
+          id: "calendar-1",
+          unavailableSince: null,
+        }],
+        "oauth",
+      ),
+    });
+
+    expect(plan.toInsert).toEqual([]);
+    expect(plan.toSetWritable).toEqual([{ id: "calendar-1", writable: false }]);
   });
 });

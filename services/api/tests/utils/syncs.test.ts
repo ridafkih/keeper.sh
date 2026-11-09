@@ -432,6 +432,7 @@ describe("runUpdateSync", () => {
 const createFakeLocks = (destinationsBySync: Record<string, string[]>, owned: string[]) => {
   const locked: string[][] = [];
   const events: string[] = [];
+  const written: string[][] = [];
   const locks: SyncLockDependencies = {
     deleteSync: (_userId, syncId) => {
       events.push(`delete:${syncId}`);
@@ -441,6 +442,9 @@ const createFakeLocks = (destinationsBySync: Record<string, string[]>, owned: st
       [...body.destinationCalendarIds ?? [], ...body.memberCalendarIds ?? []].filter((id) => owned.includes(id)),
     ),
     findSyncDestinationIds: (_userId, syncId) => Promise.resolve(destinationsBySync[syncId] ?? []),
+    onCalendarsWritten: (_userId, sourceCalendarIds) => {
+      written.push(sourceCalendarIds);
+    },
     scheduleSync: () => {
       events.push("schedule");
     },
@@ -451,10 +455,29 @@ const createFakeLocks = (destinationsBySync: Record<string, string[]>, owned: st
       return { destinationCalendarIds, result: await callback() };
     },
   };
-  return { events, locked, locks };
+  return { events, locked, locks, written };
 };
 
 describe("sync write locks", () => {
+  it("reports a new sync's sources once it is written", async () => {
+    const store = createFakeStore();
+    const fake = createFakeLocks({}, ["personal", "work"]);
+
+    await runLockedCreateSync(USER_ID, oneWay("Work Blocks Personal", ["work"], ["personal"]), store.dependencies, fake.locks);
+
+    expect(fake.written).toEqual([["work"]]);
+  });
+
+  it("reports nothing when an update leaves the sources alone", async () => {
+    const store = createFakeStore();
+    const syncId = await runCreateSync(USER_ID, oneWay("Work Blocks Personal", ["work"], ["personal"]), store.dependencies);
+    const fake = createFakeLocks({ [syncId]: ["personal"] }, ["family", "personal"]);
+
+    await runLockedUpdateSync(USER_ID, syncId, { destinationCalendarIds: ["family"] }, store.dependencies, fake.locks);
+
+    expect(fake.written).toEqual([]);
+  });
+
   it("locks a new sync's destinations, but not its sources, before writing", async () => {
     const store = createFakeStore();
     const fake = createFakeLocks({}, ["personal", "family", "work"]);

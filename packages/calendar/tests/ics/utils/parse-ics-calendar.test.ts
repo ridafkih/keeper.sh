@@ -23,30 +23,30 @@ describe("parseIcsCalendar", () => {
     expect(parsedCalendar.events?.[0]?.uid).toBe("malformed-rrule");
   });
 
-  it("throws on malformed timezone blocks", () => {
-    expect(() =>
-      parseIcsCalendar({
-        icsString: [
-          "BEGIN:VCALENDAR",
-          "VERSION:2.0",
-          "PRODID:-//Keeper Test//EN",
-          "BEGIN:VTIMEZONE",
-          "TZID:America/New_York",
-          "BEGIN:STANDARD",
-          "DTSTART:INVALID",
-          "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
-          "END:STANDARD",
-          "END:VTIMEZONE",
-          "BEGIN:VEVENT",
-          "UID:event-1",
-          "DTSTART;TZID=America/New_York:20260310T090000",
-          "DURATION:PT30M",
-          "SUMMARY:Timezone Event",
-          "END:VEVENT",
-          "END:VCALENDAR",
-        ].join("\r\n"),
-      }))
-      .toThrow();
+  it("reads an IANA TZID by IANA rules when its declared VTIMEZONE block is malformed", () => {
+    const parsedCalendar = parseIcsCalendar({
+      icsString: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Keeper Test//EN",
+        "BEGIN:VTIMEZONE",
+        "TZID:America/New_York",
+        "BEGIN:STANDARD",
+        "DTSTART:INVALID",
+        "RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU",
+        "END:STANDARD",
+        "END:VTIMEZONE",
+        "BEGIN:VEVENT",
+        "UID:event-1",
+        "DTSTART;TZID=America/New_York:20260310T090000",
+        "DURATION:PT30M",
+        "SUMMARY:Timezone Event",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    });
+
+    expect(parsedCalendar.events?.[0]?.start.date.toISOString()).toBe("2026-03-10T13:00:00.000Z");
   });
 
   it("parses Google calendar timezone metadata", () => {

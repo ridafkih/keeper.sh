@@ -7,7 +7,7 @@ const packageRoot = resolve(fileURLToPath(import.meta.url), "../../..");
 const flushTransactionSuites = [
   "tests/jobs/ingest-caldav-host-limiter-per-request.test.ts",
   "tests/jobs/ingest-duration-attribution.test.ts",
-  "tests/jobs/ingest-first-calendar-push.test.ts",
+  "tests/jobs/ingest-first-calendar-report.test.ts",
   "tests/jobs/ingest-flush-item-deadline-wiring.test.ts",
   "tests/jobs/ingest-flush-lock-bound.test.ts",
   "tests/jobs/ingest-flush-stored-event-count.test.ts",

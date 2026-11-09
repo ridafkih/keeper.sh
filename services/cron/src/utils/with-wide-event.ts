@@ -1,5 +1,7 @@
 import type { CronOptions } from "cronbake";
+import { REDIS_UNAVAILABLE_SLUG, isRedisUnavailableError } from "@keeper.sh/calendar";
 import { resolveDatabaseErrorClassification } from "@keeper.sh/database";
+import { markActiveSpanFailed, withSpan } from "@keeper.sh/otelemetry/tracing";
 import { context, widelog } from "./logging";
 
 interface WideEventOptions {
@@ -14,7 +16,7 @@ interface WideEventOptions {
  * in production, which is how the signalled drain lost its event.
  */
 const withWideEvent = ({ fields, name, onError, run }: WideEventOptions): Promise<void> =>
-  context(async () => {
+  withSpan(name, { root: true }, () => context(async () => {
     widelog.set("operation.name", name);
     widelog.set("operation.type", "job");
     if (fields) {
@@ -26,11 +28,19 @@ const withWideEvent = ({ fields, name, onError, run }: WideEventOptions): Promis
       widelog.set("outcome", "success");
     } catch (error) {
       widelog.set("outcome", "error");
+      markActiveSpanFailed(error);
       onError(error);
     } finally {
       widelog.flush();
     }
-  });
+  }));
+
+const resolveUnclassifiedSlug = (error: unknown): string => {
+  if (isRedisUnavailableError(error)) {
+    return REDIS_UNAVAILABLE_SLUG;
+  }
+  return "unclassified";
+};
 
 const withCronWideEvent = (options: CronOptions): CronOptions => ({
   ...options,
@@ -42,7 +52,7 @@ const withCronWideEvent = (options: CronOptions): CronOptions => ({
         if (databaseError?.sqlState) {
           widelog.set("db.error_sqlstate", databaseError.sqlState);
         }
-        widelog.errorFields(error, { slug: databaseError?.slug ?? "unclassified" });
+        widelog.errorFields(error, { slug: databaseError?.slug ?? resolveUnclassifiedSlug(error) });
         throw error;
       },
       run: options.callback,

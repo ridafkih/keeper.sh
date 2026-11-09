@@ -90,6 +90,13 @@ const orAbsentBoolean = (value: boolean | null): boolean | undefined => {
   return value;
 };
 
+const trueOrAbsent = (value: boolean): true | undefined => {
+  if (!value) {
+    return;
+  }
+  return true;
+};
+
 const isEventAvailability = (value: string | null): value is EventAvailability =>
   value === "busy"
   || value === "free"
@@ -393,6 +400,7 @@ const getMappedSourceCalendarIds = async (
 };
 
 interface DestinationEventRow extends SyncableEventProjectionRow {
+  disableEventReminders: boolean;
   calendarId: string;
   calendarUrl: string | null;
   endTime: Date;
@@ -427,6 +435,7 @@ const toSyncableEvent = (
   id: row.id,
   isAllDay: orAbsentBoolean(row.isAllDay),
   isPrivate: content.isPrivate,
+  remindersDisabled: trueOrAbsent(row.disableEventReminders),
   location: content.location,
   ...recurrence,
   sourceEventUid: row.sourceEventUid,
@@ -607,6 +616,17 @@ const getEventsForCalendarsWithDiagnostics = async (
       calendarId: eventStatesTable.calendarId,
       calendarName: calendarsTable.name,
       calendarUrl: calendarsTable.url,
+      customEventName: calendarsTable.customEventName,
+      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
+      excludeAvailabilities: calendarsTable.excludeAvailabilities,
+      excludeEventDescription: calendarsTable.excludeEventDescription,
+      excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventName: calendarsTable.excludeEventName,
+      excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      excludeTitleKeywords: calendarsTable.excludeTitleKeywords,
+      markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
+      disableEventReminders: calendarsTable.disableEventReminders,
       availability: eventStatesTable.availability,
       description: eventStatesTable.description,
       endTime: eventStatesTable.endTime,

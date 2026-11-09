@@ -51,8 +51,10 @@ import {
   USER_MAPPING_LOCK_NAMESPACE,
   requestUserSync,
   scheduleMappingReplacementSync,
+  scheduleNewlyMappedSourceReads,
   withMappingMutationLocks,
 } from "./source-destination-mappings";
+import { noteUserMilestone } from "./user-milestones";
 
 const SYNC_LIMIT_ERROR_MESSAGE = "Free plans include one sync. Upgrade to Keeper.sh Pro for unlimited syncs.";
 const SYNC_CONTENT_ERROR_MESSAGE = "This setting requires a Pro plan.";
@@ -553,6 +555,7 @@ const deleteSyncRow = async (client: DatabaseTransactionClient, userId: string, 
 
 interface SyncLockDependencies {
   deleteSync: (userId: string, syncId: string) => Promise<boolean>;
+  onCalendarsWritten: (userId: string, sourceCalendarIds: string[]) => void;
   findOwnedDestinationIds: (userId: string, body: SyncBody) => Promise<string[]>;
   findSyncDestinationIds: (userId: string, syncId: string) => Promise<string[]>;
   scheduleSync: (userId: string) => void;
@@ -569,10 +572,19 @@ const createSyncLockDependencies = async (): Promise<SyncLockDependencies> => {
     deleteSync: (userId, syncId) => database.transaction((client) => deleteSyncRow(client, userId, syncId)),
     findOwnedDestinationIds: (userId, body) => findOwnedRequestedDestinationIds(database, userId, body),
     findSyncDestinationIds: (userId, syncId) => findSyncDestinationIds(database, userId, syncId),
+    onCalendarsWritten: (userId, sourceCalendarIds) => {
+      scheduleNewlyMappedSourceReads(userId, sourceCalendarIds);
+      noteUserMilestone(userId, "first_sync_created");
+    },
     scheduleSync: scheduleMappingReplacementSync,
     withLocks: withMappingMutationLocks,
   };
 };
+
+const listBodySourceCalendarIds = (body: SyncBody): string[] => [
+  ...(body.sourceCalendarIds ?? []),
+  ...(body.memberCalendarIds ?? []),
+];
 
 const isRenameOnly = (body: PatchSyncBody): boolean =>
   Object.keys(body).every((key) => key === "name" || key === "expectedUpdatedAt");
@@ -590,6 +602,7 @@ const runLockedCreateSync = async (
     () => runCreateSync(userId, body, writes),
   );
   locks.scheduleSync(userId);
+  locks.onCalendarsWritten(userId, listBodySourceCalendarIds(body));
   return result;
 };
 
@@ -614,6 +627,10 @@ const runLockedUpdateSync = async (
   );
   if (isSyncWideChange(result)) {
     locks.scheduleSync(userId);
+  }
+  const sourceCalendarIds = listBodySourceCalendarIds(body);
+  if (result.length > 0 && sourceCalendarIds.length > 0) {
+    locks.onCalendarsWritten(userId, sourceCalendarIds);
   }
 };
 

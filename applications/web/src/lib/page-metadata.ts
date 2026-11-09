@@ -22,11 +22,11 @@ const STATIC_PAGE_UPDATED_AT = {
   "/tools/ics-generator": "2026-08-14",
   "/tools/ics-viewer": "2026-08-14",
   "/docs": "2026-08-14",
-  "/docs/mcp": "2026-08-14",
   "/guides": "2026-08-14",
   "/recipes": "2026-08-14",
   "/compare": "2026-08-14",
   "/changelog": "2026-08-14",
+  "/support": "2026-10-28",
   "/privacy": "2026-08-14",
   "/terms": "2025-12-01",
 } as const satisfies Record<string, string>;

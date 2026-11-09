@@ -5,6 +5,7 @@ import {
   createDatabaseFlush,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
+  withGoogleProjectBudget,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
@@ -14,6 +15,7 @@ import {
   getConfigurableSyncWindow,
   intersectSyncWindows,
   overlapsTimeWindow,
+  setCalendarWriteAccess,
 } from "@keeper.sh/calendar";
 import { OUTLOOK_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
@@ -47,9 +49,11 @@ import {
   resolveThrownDestinationVerdict,
 } from "./destination-errors";
 import type { DestinationAttemptVerdict } from "./destination-errors";
+import { countEventsBySource, describeFirstSync } from "./first-sync-report";
 import { resolveSyncProvider } from "./resolve-provider";
 import { recordSyncFailure, recordSyncRun } from "./sync-run-recording";
 import type { SyncRunRecordingInput } from "./sync-run-recording";
+import { withPushPace } from "./push-pace";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
@@ -66,9 +70,14 @@ const createProviderRateLimiter = (
   redis: Redis,
   userId: string,
   provider: string,
+  googleProjectRequestsPerMinute?: number,
 ): RedisRateLimiter | undefined => {
   if (provider === "google") {
-    return createGoogleUserRateLimiter(redis, userId, "push");
+    return withGoogleProjectBudget(
+      redis,
+      createGoogleUserRateLimiter(redis, userId, "push"),
+      googleProjectRequestsPerMinute,
+    );
   }
   if (provider !== "outlook") {
     return;
@@ -131,8 +140,10 @@ interface SyncConfig {
   database: BunSQLDatabase;
   redis: Redis;
   encryptionKey?: string;
+  googleProjectRequestsPerMinute?: number;
   oauthConfig: OAuthConfig;
   plan: Plan;
+  recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => Promise<string[]>;
   refreshLockStore?: RefreshLockStore | null;
   safeFetchOptions?: SafeFetchOptions;
   deadlineMs?: number;
@@ -583,6 +594,8 @@ interface CalendarSyncCompletion {
   accountId: string;
   calendarId: string;
   userId: string;
+  firstSync: Record<string, number | string>;
+  firstSyncedSourceCalendarIds: string[];
   added: number;
   addFailed: number;
   removed: number;
@@ -590,6 +603,7 @@ interface CalendarSyncCompletion {
   conflictsResolved: number;
   errors: string[];
   durationMs: number;
+  pushRemoved: boolean;
   syncEvent?: Record<string, unknown>;
 }
 
@@ -601,6 +615,7 @@ interface CalendarSyncFailure {
   error: unknown;
   durationMs: number;
   backoffApplied: boolean;
+  pushRemoved: boolean;
   syncEvent?: Record<string, unknown>;
 }
 
@@ -747,6 +762,8 @@ const applyDestinationAttemptVerdict = async (
   }
   if (verdict === "failed") {
     await escalateDestinationBackoff(database, destination);
+  } else if (verdict === "not_writable") {
+    await setCalendarWriteAccess(database, destination.calendarId, false);
   } else if (verdict === "succeeded") {
     await resetDestinationBackoffIfNeeded(database, destination);
   }
@@ -796,6 +813,7 @@ const recordDestinationAttemptFailure = async (
     error,
     durationMs,
     backoffApplied: stillOwned && verdict === "failed",
+    pushRemoved: stillOwned && verdict === "not_writable",
     ...(syncEvent && { syncEvent }),
   });
   if (!stillOwned || !recordActivity) {
@@ -809,6 +827,31 @@ const recordDestinationAttemptFailure = async (
       callbacks,
     ),
   ];
+};
+
+const recordCompletedFirstSyncs = (options: {
+  destinationCalendarId: string;
+  recordFirstSyncs: SyncConfig["recordFirstSyncs"];
+  superseded: boolean;
+  verdict: DestinationAttemptVerdict;
+  verifiedSourceCalendarIds: string[];
+}): Promise<string[]> => {
+  if (options.superseded || options.verdict !== "succeeded") {
+    return Promise.resolve([]);
+  }
+  return options.recordFirstSyncs(options.destinationCalendarId, options.verifiedSourceCalendarIds);
+};
+
+const resolveRejectedFirstSyncSources = (
+  verdict: DestinationAttemptVerdict,
+  existingMappings: EventMapping[],
+  verifiedSourceCalendarIds: string[],
+): string[] => {
+  const refused = verdict === "failed" || verdict === "not_writable";
+  if (!refused || existingMappings.length > 0) {
+    return [];
+  }
+  return verifiedSourceCalendarIds;
 };
 
 const countMappedSources = async (
@@ -911,7 +954,12 @@ const syncDestinationsForUser = async (
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
           safeFetchOptions: config.safeFetchOptions,
-          rateLimiter: createProviderRateLimiter(redis, userId, destination.provider),
+          rateLimiter: createProviderRateLimiter(
+            redis,
+            userId,
+            destination.provider,
+            config.googleProjectRequestsPerMinute,
+          ),
           signal: config.abortSignal,
         }));
         const syncProvider = providerResolve.value;
@@ -1090,7 +1138,7 @@ const syncDestinationsForUser = async (
           readState: () => Promise.resolve(reconciliationState),
           isCurrent: isAttemptCurrent,
           flush: createDatabaseFlush(database),
-          onProgress: callbacks?.onProgress,
+          onProgress: withPushPace(destination.provider, callbacks?.onProgress),
           onSyncEvent: (event) => {
             const enrichedEvent = {
               ...event,
@@ -1125,11 +1173,44 @@ const syncDestinationsForUser = async (
           }),
         });
 
+        const verdict = resolveDestinationAttemptVerdict(result, calendarAttempt.superseded);
+        const verifiedSourceCalendarIds = [...authoritativeSourceWindows.keys()];
+        const firstSyncedSourceCalendarIds = await recordCompletedFirstSyncs({
+          destinationCalendarId: destination.calendarId,
+          recordFirstSyncs: config.recordFirstSyncs,
+          superseded: calendarAttempt.superseded,
+          verdict,
+          verifiedSourceCalendarIds,
+        });
+
+        const firstSync = describeFirstSync({
+          awaitingSourceCalendarIds: sourceCalendarIdsAtLocalRead
+            .filter((sourceCalendarId) => !authoritativeSourceWindows.has(sourceCalendarId)),
+          completedSourceCalendarIds: firstSyncedSourceCalendarIds,
+          eventsAdded: result.added,
+          eventsAddFailed: result.addFailed,
+          rejectedSourceCalendarIds: resolveRejectedFirstSyncSources(
+            verdict,
+            reconciliationState.existingMappings,
+            verifiedSourceCalendarIds,
+          ),
+          sourceEventCounts: countEventsBySource(reconciliationState.localEvents),
+        });
+
+        const stillOwned = await applyDestinationAttemptVerdict({
+          database,
+          destination,
+          handle,
+          verdict,
+        });
+
         callbacks?.onCalendarComplete?.({
           provider: destination.provider,
           accountId: destination.accountId,
           calendarId: destination.calendarId,
           userId: destination.userId,
+          firstSync,
+          firstSyncedSourceCalendarIds,
           added: result.added,
           addFailed: result.addFailed,
           removed: result.removed,
@@ -1137,15 +1218,10 @@ const syncDestinationsForUser = async (
           conflictsResolved: result.conflictsResolved,
           errors: result.errors,
           durationMs: extractNumericField(calendarAttempt.syncEvent, "duration_ms"),
+          pushRemoved: stillOwned && verdict === "not_writable",
           ...(calendarAttempt.syncEvent && { syncEvent: calendarAttempt.syncEvent }),
         });
 
-        const stillOwned = await applyDestinationAttemptVerdict({
-          database,
-          destination,
-          handle,
-          verdict: resolveDestinationAttemptVerdict(result, calendarAttempt.superseded),
-        });
         if (!stillOwned) {
           return;
         }

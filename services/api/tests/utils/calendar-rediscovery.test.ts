@@ -3,6 +3,7 @@ import { CalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { CalendarListError } from "@keeper.sh/calendar/google";
 import type { DiscoveredCalendar } from "@keeper.sh/calendar";
 import {
+  CalendarAccountNotFoundError,
   CalendarRefreshUnconfiguredError,
   CalendarRefreshUnsupportedError,
   runAccountCalendarRefresh,
@@ -50,6 +51,7 @@ const emptyPlan = {
   toMarkUnavailable: [] as string[],
   toRetargetUrl: [] as { id: string; calendarUrl: string }[],
   toRevive: [] as string[],
+  toSetWritable: [] as { id: string; writable: boolean }[],
   unchangedCount: 0,
 };
 
@@ -125,6 +127,14 @@ const run = (harness: ReturnType<typeof createHarness>) =>
   );
 
 describe("runAccountCalendarRefresh", () => {
+  it("reports an account the user does not own as not found without touching it", async () => {
+    const harness = createHarness({ loadAccount: () => Promise.resolve(null) });
+
+    await expect(run(harness)).rejects.toBeInstanceOf(CalendarAccountNotFoundError);
+    expect(harness.markAttemptCalls).toEqual([]);
+    expect(harness.discoverCalls).toEqual([]);
+  });
+
   it("writes nothing and flags reauthentication when CalDAV credentials are rejected", async () => {
     const harness = createHarness({
       discoverCalendars: () =>

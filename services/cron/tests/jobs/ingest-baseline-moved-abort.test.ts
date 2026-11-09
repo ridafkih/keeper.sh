@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { calendarsTable } from "@keeper.sh/database/schema";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -259,12 +259,12 @@ const updatesWithKey = (key: string) => harness.state.calendarUpdates.filter(
   (update) => key in update.values,
 );
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
   harness.calendarsTableRef.table = calendarsTable;
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -294,7 +294,7 @@ describe("a pass whose baseline moved aborts instead of committing", () => {
       return { eventsAdded: 1, eventsRemoved: 1 };
     };
 
-    await Promise.resolve(job?.callback()).catch(() => null);
+    await Promise.resolve(ingestSourceCalendars?.(["calendar-under-test"])).catch(() => null);
 
     expect(harness.state.insertedRows).toHaveLength(0);
     expect(harness.state.deletedIds).toHaveLength(0);
@@ -317,7 +317,7 @@ describe("a pass whose baseline moved aborts instead of committing", () => {
       return { eventsAdded: 1, eventsRemoved: 1 };
     };
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(harness.state.insertedRows).toHaveLength(1);
     expect(harness.state.deletedIds).toEqual(["event-0"]);

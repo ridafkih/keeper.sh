@@ -37,7 +37,7 @@ const published = new Set([
 ]);
 
 const referenced = [
-  ...readFileSync(join(WEB_ROOT, "public/llms.txt"), "utf8").matchAll(SITE_PATH),
+  ...readFileSync(join(CONTENT_ROOT, "llms.txt"), "utf8").matchAll(SITE_PATH),
 ]
   .map((match) => match[1].replace(/\/$/, ""))
   .filter((path) => path.length > 0 && !path.includes("."));

@@ -1,10 +1,12 @@
 import { atom } from "jotai";
 import { selectAtom } from "jotai/utils";
-import type { SyncAggregate } from "@keeper.sh/data-schemas/client";
+import type { MappingSyncState, SyncAggregate } from "@keeper.sh/data-schemas/client";
 
 export type CompositeState = "idle" | "syncing";
 
 export type SyncAggregateData = SyncAggregate;
+
+export type MappingSyncStateData = MappingSyncState;
 
 export interface CompositeSyncState {
   state: CompositeState;
@@ -13,9 +15,11 @@ export interface CompositeSyncState {
   syncEventsProcessed: number;
   syncEventsRemaining: number;
   syncEventsTotal: number;
+  syncSecondsRemaining: number | null;
   lastSyncedAt: string | null;
   connected: boolean;
   hasReceivedAggregate: boolean;
+  mappings: MappingSyncStateData | null;
 }
 
 export const syncStateAtom = atom<CompositeSyncState>({
@@ -25,33 +29,38 @@ export const syncStateAtom = atom<CompositeSyncState>({
   syncEventsProcessed: 0,
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
+  syncSecondsRemaining: null,
   lastSyncedAt: null,
   connected: false,
   hasReceivedAggregate: false,
+  mappings: null,
 });
 
-export const syncStatusLabelAtom = selectAtom(syncStateAtom, (composite) => {
-  if (!composite.connected) {
+type SyncStatusLabel = "Connecting" | "Error" | "Syncing" | "Up to date" | "Paused";
+
+const resolveSyncStatusLabel = (composite: CompositeSyncState): SyncStatusLabel => {
+  if (!composite.connected || !composite.hasReceivedAggregate || !composite.mappings) {
     return "Connecting";
   }
 
-  if (!composite.hasReceivedAggregate) {
-    return "Connecting";
+  if (composite.mappings.failingCount > 0) {
+    return "Error";
   }
 
-  if (composite.state === "syncing") {
+  if (composite.state === "syncing" || composite.mappings.pendingCount > 0) {
     return "Syncing";
   }
 
   if (composite.syncEventsRemaining === 0) {
-    return "Up to Date";
+    return "Up to date";
   }
 
-  return "Sync Paused";
-});
+  return "Paused";
+};
 
-export const syncStatusShimmerAtom = selectAtom(
-  syncStateAtom,
-  (composite) =>
-    !composite.connected || !composite.hasReceivedAggregate || composite.state === "syncing",
-);
+export const syncStatusLabelAtom = selectAtom(syncStateAtom, resolveSyncStatusLabel);
+
+export const syncStatusShimmerAtom = selectAtom(syncStateAtom, (composite) => {
+  const label = resolveSyncStatusLabel(composite);
+  return label === "Connecting" || label === "Syncing";
+});

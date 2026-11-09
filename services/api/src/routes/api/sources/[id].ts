@@ -1,5 +1,9 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  sourceIngestScheduleTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq, sql } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
@@ -15,6 +19,7 @@ import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
 import type { FeedMembershipClient } from "@/utils/ical-feeds";
 import { deleteSourceCalendar } from "@/utils/source-calendars";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
+import { updatesRequestUserSync } from "@/utils/source-sync-requests";
 
 const GET = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -38,14 +43,19 @@ const GET = withWideEvent(
         treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
         unavailableSince: calendarsTable.unavailableSince,
         disabled: calendarsTable.disabled,
-        ingestFailureCount: calendarsTable.ingestFailureCount,
-        ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
+        ingestFailureCount: sql<number>`coalesce(${sourceIngestScheduleTable.failureCount}, 0)`,
+        ingestLastFailureAt: sourceIngestScheduleTable.lastFailureAt,
+        disableEventReminders: calendarsTable.disableEventReminders,
         providerMissingSince: calendarsTable.providerMissingSince,
         createdAt: calendarsTable.createdAt,
         updatedAt: calendarsTable.updatedAt,
       })
       .from(calendarsTable)
       .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+      .leftJoin(
+        sourceIngestScheduleTable,
+        eq(sourceIngestScheduleTable.calendarId, calendarsTable.id),
+      )
       .where(
         and(
           eq(calendarsTable.id, id),
@@ -112,7 +122,9 @@ const PATCH = withWideEvent(
                     ),
                   )
                   .returning();
-                if (updated?.capabilities.includes("push")) {
+                const requestsSync = updated?.capabilities.includes("push")
+                  || updatesRequestUserSync(updates);
+                if (updated && requestsSync) {
                   await requestUserSync(transaction, userIdToUpdate);
                 }
                 await applyFeedMembership(transaction, updated ?? null);
@@ -136,6 +148,9 @@ const PATCH = withWideEvent(
                 ),
               )
               .returning();
+            if (updated && updatesRequestUserSync(updates)) {
+              await requestUserSync(transaction, userIdToUpdate);
+            }
             await applyFeedMembership(transaction, updated ?? null);
             return updated ?? null;
           });
@@ -145,6 +160,9 @@ const PATCH = withWideEvent(
   }),
 );
 
+const RECEIVES_EVENTS_MESSAGE
+  = "Keeper.sh syncs events into this calendar, so it can only be removed once it no longer exists at the provider.";
+
 const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {
     if (!params.id || !idParamSchema.allows(params)) {
@@ -152,9 +170,12 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const deleted = await deleteSourceCalendar(userId, id);
-    if (!deleted) {
+    const outcome = await deleteSourceCalendar(userId, id);
+    if (outcome === "not-found") {
       return ErrorResponse.notFound().toResponse();
+    }
+    if (outcome === "receives-events") {
+      return ErrorResponse.conflict(RECEIVES_EVENTS_MESSAGE).toResponse();
     }
 
     return Response.json({ success: true });

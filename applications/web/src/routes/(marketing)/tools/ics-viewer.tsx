@@ -23,47 +23,27 @@ import {
 import { formatIcsDateValue, parseIcsFile, type ParsedIcsEvent } from "@/utils/ics";
 import { pluralize } from "@/lib/pluralize";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, faqSchema } from "@/lib/seo";
+import { marketingCopy } from "@/lib/marketing-copy";
 import UploadIcon from "lucide-react/dist/esm/icons/upload";
 
 const breadcrumbs = breadcrumbTrail({ name: "ICS File Viewer", path: "/tools/ics-viewer" });
 
-const PAGE_DESCRIPTION =
-  "Free ICS file viewer. Open a .ics file and read its events as plain dates, times, and details. It runs in your browser, so the file never leaves your machine.";
+const icsViewer = marketingCopy.icsViewer;
+const PAGE_DESCRIPTION = icsViewer.seo.description;
 
-const FAQ_ITEMS = [
-  {
-    question: "What is inside an ICS file?",
-    answer: "Plain text in the calendar file format defined by RFC 5545. Inside is a VCALENDAR block holding VEVENT entries, each with properties such as UID, DTSTART, DTEND, SUMMARY, LOCATION, and DESCRIPTION. This viewer reads those properties and lays them out in a readable form.",
-  },
-  {
-    question: "Is my file uploaded?",
-    answer: "No. The file is read and parsed in your browser, so its contents are never sent to Keeper.sh or anywhere else. No account is needed to use it.",
-  },
-  {
-    question: "Why does a time show a time zone name instead of a converted time?",
-    answer: "Times written with a TZID parameter, or with no zone at all, are shown exactly as the file records them along with the zone it names. Times written in UTC are converted to your computer's time zone.",
-  },
-  {
-    question: "Can I open a subscription link here?",
-    answer: "Download the file the link gives you and open that, or paste its contents into the box. Keeper.sh itself can subscribe to a calendar link and keep copying from it.",
-  },
-  {
-    question: "Does it show repeating events?",
-    answer: "Yes. It shows the RRULE line exactly as the file writes it, so you can read the repeat rule itself. It does not list each occurrence separately.",
-  },
-];
+const FAQ_ITEMS = icsViewer.faq.items;
 
 export const Route = createFileRoute("/(marketing)/tools/ics-viewer")({
   component: IcsViewerPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/tools/ics-viewer") }],
     meta: seoMeta({
-      title: "ICS File Viewer",
+      title: icsViewer.seo.title,
       description: PAGE_DESCRIPTION,
       path: "/tools/ics-viewer",
     }),
     scripts: [
-      jsonLdScript(webPageSchema("ICS File Viewer", PAGE_DESCRIPTION, "/tools/ics-viewer")),
+      jsonLdScript(webPageSchema(icsViewer.seo.title, PAGE_DESCRIPTION, "/tools/ics-viewer")),
       jsonLdScript(breadcrumbSchema(breadcrumbs)),
       jsonLdScript(faqSchema("/tools/ics-viewer", FAQ_ITEMS)),
     ],
@@ -123,7 +103,7 @@ function IcsViewerPage() {
     <div className="flex flex-col gap-6 py-16">
       <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
-        <Heading1>ICS file viewer</Heading1>
+        <Heading1>{icsViewer.header.heading}</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
           {PAGE_DESCRIPTION}
         </Text>
@@ -202,15 +182,14 @@ function IcsViewerPage() {
       </MarketingToolSection>
 
       <MarketingToolSection>
-        <Heading2>How the file is read</Heading2>
+        <Heading2>{icsViewer.howRead.heading}</Heading2>
         <Text size="sm" tone="muted" className="mt-2 max-w-[64ch]">
-          Folded lines are joined back together and escaped text is restored. Each VEVENT is then read for its UID,
-          start and end, title, location, organizer, status, repeat rule, and description. Your file is never changed.
+          {icsViewer.howRead.body}
         </Text>
       </MarketingToolSection>
 
       <MarketingFaqSection>
-        <Heading2 className="text-center">Frequently Asked Questions</Heading2>
+        <Heading2 className="text-center">{icsViewer.faq.heading}</Heading2>
         <MarketingFaqList>
           {FAQ_ITEMS.map((item) => (
             <MarketingFaqItem key={item.question}>
@@ -225,8 +204,8 @@ function IcsViewerPage() {
       </MarketingFaqSection>
 
       <MarketingToolCta
-        title="Reading calendar files to find a conflict?"
-        body="Keeper.sh copies your events between Google Calendar, Outlook, iCloud, Fastmail and any CalDAV server, so a clash shows up in the calendar itself."
+        title={icsViewer.cta.title}
+        body={icsViewer.cta.body}
         source="ics-viewer"
       />
     </div>

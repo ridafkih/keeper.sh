@@ -21,6 +21,8 @@ RUN bun run --cwd services/api build && \
     bun run --cwd applications/web build
 
 FROM debian:bookworm-slim AS runtime
+COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
+ENV ICU_TIMEZONE_FILES_DIR=/usr/share/icu-timezone
 
 ARG S6_OVERLAY_VERSION
 ARG TARGETARCH
@@ -29,11 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   ca-certificates \
   curl \
   xz-utils \
-  unzip \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:${PATH}"
+COPY --from=base /usr/local/bin/bun /usr/local/bin/bun
 
 RUN case "${TARGETARCH}" in \
   amd64) S6_ARCH="x86_64" ;; \
@@ -79,5 +79,11 @@ EXPOSE 3000 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f -H "Accept: text/html" http://localhost:3000/ || exit 1
+
+ARG COMMIT_SHA
+ARG VERSION
+RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV VERSION=$VERSION
 
 ENTRYPOINT ["/init"]

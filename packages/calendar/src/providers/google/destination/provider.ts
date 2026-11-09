@@ -21,7 +21,12 @@ import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_CALENDAR_API, GOOGLE_CALENDAR_MAX_RESULTS, GONE_STATUS } from "../shared/api";
 import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
-import { isRateLimitApiError, parseGoogleApiError } from "../shared/errors";
+import {
+  GoogleCalendarApiError,
+  isRateLimitApiError,
+  isWriteAccessDeniedApiError,
+  parseGoogleApiErrorFromBody,
+} from "../shared/errors";
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
@@ -45,17 +50,6 @@ interface GoogleSyncProviderConfig {
   signal?: AbortSignal;
 }
 
-class GoogleCalendarApiError extends Error {
-  public readonly status: number;
-  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
-  constructor(status: number, body: string) {
-    super(`Google Calendar API ${status}: ${body}`);
-    this.name = "GoogleCalendarApiError";
-    this.status = status;
-    this.apiError = parseGoogleApiError(body);
-  }
-}
-
 const isDirectEventId = (identifier: string): boolean => !identifier.includes("@");
 
 const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string => {
@@ -64,6 +58,19 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
     return fallback;
   }
   return googleApiErrorSchema.assert(body).error?.message ?? fallback;
+};
+
+const createFailedSubResponseResult = (response: BatchSubResponse): PushResult & DeleteResult => {
+  const result = {
+    error: extractBatchErrorMessage(response.body, response.statusCode),
+    errorType: "GoogleCalendarApiError",
+    statusCode: response.statusCode,
+    success: false,
+  };
+  if (isWriteAccessDeniedApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
+    return { ...result, writeAccessDenied: true };
+  }
+  return result;
 };
 
 const parseGoogleAvailability = (
@@ -177,15 +184,7 @@ const resolveDeleteLookup = (response: BatchSubResponse | undefined): DeleteLook
   }
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
-    return {
-      kind: "failed",
-      result: {
-        error: extractBatchErrorMessage(response.body, response.statusCode),
-        errorType: "GoogleCalendarApiError",
-        statusCode: response.statusCode,
-        success: false,
-      },
-    };
+    return { kind: "failed", result: createFailedSubResponseResult(response) };
   }
 
   if (!googleEventListSchema.allows(response.body)) {
@@ -317,12 +316,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
           compareGoogleImportEcho(entry.resource, response.body),
         );
       } else {
-        results[entry.index] = {
-          error: extractBatchErrorMessage(response.body, response.statusCode),
-          errorType: "GoogleCalendarApiError",
-          statusCode: response.statusCode,
-          success: false,
-        };
+        results[entry.index] = createFailedSubResponseResult(response);
       }
     }
 
@@ -432,13 +426,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
         // 404 (never existed) and 410 (already deleted) both mean the event is gone — the desired end state.
         results[originalIndex] = { success: true };
       } else {
-        const errorMessage = extractBatchErrorMessage(deleteResponse.body, deleteResponse.statusCode);
-        results[originalIndex] = {
-          error: errorMessage,
-          errorType: "GoogleCalendarApiError",
-          statusCode: deleteResponse.statusCode,
-          success: false,
-        };
+        results[originalIndex] = createFailedSubResponseResult(deleteResponse);
       }
     }
 

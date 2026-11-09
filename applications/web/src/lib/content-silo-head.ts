@@ -1,13 +1,14 @@
 import { findSiloPageBySlug, type ContentSilo } from "./content-silos";
 import {
-  blogPostingSchema,
   breadcrumbSchema,
   breadcrumbTrail,
   canonicalUrl,
   collectionPageSchema,
   faqPageSchema,
   jsonLdScript,
+  markdownAlternateLink,
   seoMeta,
+  techArticleSchema,
 } from "./seo";
 
 export function siloBreadcrumbs(silo: ContentSilo) {
@@ -49,7 +50,7 @@ export function contentSiloPageHead(silo: ContentSilo, slug: string) {
 
   const pagePath = `${silo.basePath}/${slug}`;
   return {
-    links: [{ rel: "canonical", href: canonicalUrl(pagePath) }],
+    links: [{ rel: "canonical", href: canonicalUrl(pagePath) }, markdownAlternateLink(pagePath)],
     meta: [
       ...seoMeta({
         title: page.metadata.title,
@@ -63,7 +64,7 @@ export function contentSiloPageHead(silo: ContentSilo, slug: string) {
       { content: page.metadata.updatedAt, property: "article:modified_time" },
     ],
     scripts: [
-      jsonLdScript(blogPostingSchema({
+      jsonLdScript(techArticleSchema({
         title: page.metadata.title,
         description: page.metadata.description,
         path: pagePath,

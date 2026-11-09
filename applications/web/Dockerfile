@@ -16,6 +16,8 @@ COPY --from=prune /app/out/full/ .
 RUN bun run --cwd applications/web build
 
 FROM base AS runtime
+COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
+ENV ICU_TIMEZONE_FILES_DIR=/usr/share/icu-timezone
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/applications/web/dist ./applications/web/dist
@@ -29,5 +31,11 @@ WORKDIR /app/applications/web
 
 ENV ENV=production
 EXPOSE 3000
+
+ARG COMMIT_SHA
+ARG VERSION
+RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV VERSION=$VERSION
 
 ENTRYPOINT ["./entrypoint.sh"]

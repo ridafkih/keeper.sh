@@ -16,6 +16,9 @@ COPY --from=prune /app/out/full/ .
 RUN bun run --cwd services/worker build
 
 FROM base AS runtime
+COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
+ENV ICU_TIMEZONE_FILES_DIR=/usr/share/icu-timezone
+ADD --chmod=644 --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /etc/ssl/certs/rds-global-bundle.pem
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=build /app/services/worker/dist ./services/worker/dist
@@ -25,5 +28,11 @@ COPY --from=source /app/services/worker/entrypoint.sh ./services/worker/entrypoi
 RUN chmod +x ./services/worker/entrypoint.sh
 
 ENV ENV=production
+
+ARG COMMIT_SHA
+ARG VERSION
+RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV VERSION=$VERSION
 
 ENTRYPOINT ["./services/worker/entrypoint.sh"]

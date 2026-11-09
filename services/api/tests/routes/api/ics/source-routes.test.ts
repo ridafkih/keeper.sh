@@ -10,6 +10,8 @@ class TestSourceLimitError extends Error {}
 
 class TestInvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
+  public readonly reason = "auth_required";
+  public readonly feedFailureReason = "auth-required" as const;
 
   constructor(message: string, authRequired: boolean) {
     super(message);
@@ -39,7 +41,7 @@ describe("handleGetIcsSourcesRoute", () => {
 
 describe("handlePostIcsSourceRoute", () => {
   it("creates source with parsed body and returns 201", async () => {
-    const receivedCreateCalls: { userId: string; name: string; url: string }[] = [];
+    const receivedCreateCalls: { userId: string; name: string | undefined; url: string }[] = [];
 
     const response = await handlePostIcsSourceRoute(
       {
@@ -121,6 +123,7 @@ describe("handlePostIcsSourceRoute", () => {
     expect(await readJson(response)).toEqual({
       authRequired: true,
       error: "requires auth",
+      reason: "auth-required",
     });
   });
 

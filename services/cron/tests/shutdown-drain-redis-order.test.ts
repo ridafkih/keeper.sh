@@ -26,6 +26,7 @@ vi.mock("../src/env", () => ({
     COMMERCIAL_MODE: false,
     DATABASE_POOL_MAX: 10,
     DATABASE_URL: "postgres://cron-test/keeper",
+    INGEST_LOOP_ENABLED: false,
     REDIS_URL: "redis://cron-test:6379",
     WORKER_JOB_QUEUE_ENABLED: false,
   },
@@ -58,13 +59,6 @@ vi.mock("@keeper.sh/database", () => ({
 
 vi.mock("@keeper.sh/premium", () => ({
   createPremiumService: (): object => ({}),
-}));
-
-vi.mock("@polar-sh/sdk", () => ({
-  // The member keeps oxlint's no-extraneous-class satisfied on this stub.
-  Polar: class FakePolar {
-    public readonly mocked = true;
-  },
 }));
 
 /* Mirrors ioredis: after disconnect() every command rejects "Connection is closed." */

@@ -81,7 +81,7 @@ describe("hasLoginCalendarScopes", () => {
 });
 
 describe("hasLoginCalendarScopes against the sign-in config", () => {
-  it("accepts exactly the scopes Google and Microsoft sign-in ask for", () => {
+  it("finds no calendar scopes in the identity-only sign-in config", () => {
     const { auth } = createAuth({
       baseUrl: "http://localhost:3000",
       database: {} as never,
@@ -93,8 +93,8 @@ describe("hasLoginCalendarScopes against the sign-in config", () => {
     });
     const providers = auth.options.socialProviders as Record<string, { scope?: string[] }> | undefined;
 
-    expect(hasLoginCalendarScopes("google", providers?.google?.scope?.join(" ") ?? null)).toBe(true);
-    expect(hasLoginCalendarScopes("outlook", providers?.microsoft?.scope?.join(" ") ?? null)).toBe(true);
+    expect(hasLoginCalendarScopes("google", providers?.google?.scope?.join(" ") ?? null)).toBe(false);
+    expect(hasLoginCalendarScopes("outlook", providers?.microsoft?.scope?.join(" ") ?? null)).toBe(false);
   });
 });
 

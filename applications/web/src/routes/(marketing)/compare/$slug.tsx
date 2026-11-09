@@ -12,7 +12,7 @@ import { articleLibrary } from "@/lib/article-library";
 import { findComparePageBySlug } from "@/lib/compare-pages";
 import { selectRelatedArticles } from "@/lib/related-articles";
 import { formatIsoDate } from "@/utils/date";
-import { canonicalUrl, jsonLdScript, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
+import { canonicalUrl, jsonLdScript, markdownAlternateLink, seoMeta, blogPostingSchema, breadcrumbSchema, breadcrumbTrail, faqPageSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 
 const MARKDOWN_FAQ_TAGS: AllowedTags = {
@@ -49,7 +49,7 @@ export const Route = createFileRoute("/(marketing)/compare/$slug")({
 
     const pageUrl = `/compare/${params.slug}`;
     return {
-      links: [{ rel: "canonical", href: canonicalUrl(pageUrl) }],
+      links: [{ rel: "canonical", href: canonicalUrl(pageUrl) }, markdownAlternateLink(pageUrl)],
       meta: [
         ...seoMeta({
           title: comparePage.metadata.title,

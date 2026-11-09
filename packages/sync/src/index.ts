@@ -1,4 +1,5 @@
 export { syncDestinationsForUser } from "./sync-user";
+export { recordFirstSyncedMappings } from "./first-sync";
 export {
   createSyncLock,
   createMappingMutationLockId,

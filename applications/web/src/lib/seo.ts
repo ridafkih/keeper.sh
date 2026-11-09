@@ -1,3 +1,5 @@
+import type { SoftwareSchemaCopy } from "./marketing-content";
+
 const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
 const SITE_ALTERNATE_NAME = "Keeper";
@@ -17,8 +19,21 @@ function entityId(path: string, fragment: string): string {
   return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
+export function markdownAlternateLink(path: string) {
+  return { rel: "alternate", type: "text/markdown", href: `${canonicalUrl(path)}.md` };
+}
+
+const SCRIPT_UNSAFE_CHARACTERS = /[<>&\u2028\u2029]/g;
+
+function escapeForScript(character: string): string {
+  return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+}
+
 export function jsonLdScript(data: Record<string, unknown>) {
-  return { type: "application/ld+json", children: JSON.stringify(data) };
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify(data).replace(SCRIPT_UNSAFE_CHARACTERS, escapeForScript),
+  };
 }
 
 export interface SeoMetaOptions {
@@ -171,14 +186,13 @@ export function faqPageSchema(
   };
 }
 
-export function softwareApplicationSchema() {
+export function softwareApplicationSchema(copy: SoftwareSchemaCopy) {
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "@id": `${SITE_URL}/#software`,
     name: SITE_NAME,
-    description:
-      "Keeper.sh keeps your personal, work and school calendars in sync, so a booking on one shows you as busy on the others. Your event titles stay private.",
+    description: copy.description,
     url: SITE_URL,
     image: `${SITE_URL}/open-graph.png`,
     applicationCategory: "BusinessApplication",
@@ -189,8 +203,7 @@ export function softwareApplicationSchema() {
         name: "Free",
         price: "0",
         priceCurrency: "USD",
-        description:
-          "For keeping two calendar accounts from double-booking each other.",
+        description: copy.offers.free,
       },
       {
         "@type": "Offer",
@@ -203,8 +216,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1M",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proMonthly,
       },
       {
         "@type": "Offer",
@@ -217,8 +229,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1Y",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proYearly,
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
@@ -366,7 +377,7 @@ export function personSchema(description: string) {
   };
 }
 
-export function blogPostingSchema(post: {
+interface ArticleSchemaInput {
   title: string;
   description: string;
   path: string;
@@ -374,12 +385,22 @@ export function blogPostingSchema(post: {
   updatedAt: string;
   tags: string[];
   imagePath?: string;
-}) {
+}
+
+export function blogPostingSchema(post: ArticleSchemaInput) {
+  return articleSchema("BlogPosting", post);
+}
+
+export function techArticleSchema(article: ArticleSchemaInput) {
+  return articleSchema("TechArticle", article);
+}
+
+function articleSchema(type: "BlogPosting" | "TechArticle", post: ArticleSchemaInput) {
   const url = canonicalUrl(post.path);
   return {
     "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    "@id": entityId(post.path, "blogposting"),
+    "@type": type,
+    "@id": entityId(post.path, type.toLowerCase()),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),

@@ -3,6 +3,7 @@ interface PublicRuntimeConfig {
   googleAdsConversionLabel: string | null;
   googleAdsId: string | null;
   googleAdsSignupConversionLabel: string | null;
+  googleAnalyticsId: string | null;
   polarProMonthlyProductId: string | null;
   polarProYearlyProductId: string | null;
   visitorsNowToken: string | null;
@@ -13,6 +14,7 @@ interface RuntimeConfigSource {
   googleAdsConversionLabel?: string | null;
   googleAdsId?: string | null;
   googleAdsSignupConversionLabel?: string | null;
+  googleAnalyticsId?: string | null;
   polarProMonthlyProductId?: string | null;
   polarProYearlyProductId?: string | null;
   visitorsNowToken?: string | null;
@@ -44,6 +46,7 @@ const getServerPublicRuntimeConfig = (
     googleAdsSignupConversionLabel: normalizeOptionalValue(
       environment.VITE_GOOGLE_ADS_SIGNUP_CONVERSION_LABEL,
     ),
+    googleAnalyticsId: normalizeOptionalValue(environment.VITE_GOOGLE_ANALYTICS_ID),
     polarProMonthlyProductId: normalizeOptionalValue(environment.POLAR_PRO_MONTHLY_PRODUCT_ID),
     polarProYearlyProductId: normalizeOptionalValue(environment.POLAR_PRO_YEARLY_PRODUCT_ID),
     visitorsNowToken: normalizeOptionalValue(environment.VITE_VISITORS_NOW_TOKEN),
@@ -63,6 +66,7 @@ const resolvePublicRuntimeConfig = (source: RuntimeConfigSource): PublicRuntimeC
   googleAdsConversionLabel: normalizeOptionalValue(source.googleAdsConversionLabel),
   googleAdsId: normalizeOptionalValue(source.googleAdsId),
   googleAdsSignupConversionLabel: normalizeOptionalValue(source.googleAdsSignupConversionLabel),
+  googleAnalyticsId: normalizeOptionalValue(source.googleAnalyticsId),
   polarProMonthlyProductId: normalizeOptionalValue(source.polarProMonthlyProductId),
   polarProYearlyProductId: normalizeOptionalValue(source.polarProYearlyProductId),
   visitorsNowToken: normalizeOptionalValue(source.visitorsNowToken),

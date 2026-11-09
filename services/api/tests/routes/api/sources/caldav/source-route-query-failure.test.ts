@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let fields: Record<string, unknown> = {};
 let values: Record<string, unknown> = {};
-let createCalDAVSourceResult: () => Promise<unknown> = () =>
-  Promise.resolve({ id: "source-1" });
+const IMPORTED_RESULT = {
+  accountId: "account-1",
+  calendars: [{ accountId: "account-1", calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", id: "source-1", name: "Work", status: "imported" }],
+};
+
+let importCalDAVCalendarsResult: () => Promise<unknown> = () =>
+  Promise.resolve(IMPORTED_RESULT);
 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
@@ -32,12 +37,10 @@ vi.mock("@/utils/middleware", () => ({
 }));
 
 class TestCalDAVSourceLimitError extends Error {}
-class TestDuplicateCalDAVSourceError extends Error {}
 
 vi.mock("@/utils/caldav-sources", () => ({
   CalDAVSourceLimitError: TestCalDAVSourceLimitError,
-  DuplicateCalDAVSourceError: TestDuplicateCalDAVSourceError,
-  createCalDAVSource: () => createCalDAVSourceResult(),
+  importCalDAVCalendars: () => importCalDAVCalendarsResult(),
   getUserCalDAVSources: () => Promise.resolve([]),
 }));
 
@@ -70,8 +73,7 @@ const createRequest = (): Request =>
   new Request("https://api.keeper.sh/api/sources/caldav", {
     body: JSON.stringify({
       authMethod: "basic",
-      calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work",
-      name: "Work",
+      calendars: [{ calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", name: "Work" }],
       password: "secret",
       provider: "fastmail",
       serverUrl: SERVER_URL,
@@ -104,13 +106,13 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   beforeEach(() => {
     fields = {};
     values = {};
-    createCalDAVSourceResult = () => Promise.resolve({ id: "source-1" });
+    importCalDAVCalendarsResult = () => Promise.resolve(IMPORTED_RESULT);
   });
 
   it.each(SERVER_SIDE_FAILURES)(
     "never blames CalDAV for %s (%s)",
     async (_name, sqlState, message) => {
-      createCalDAVSourceResult = () => Promise.reject(queryFailure(message, {
+      importCalDAVCalendarsResult = () => Promise.reject(queryFailure(message, {
         code: "ERR_POSTGRES_SERVER_ERROR",
         errno: sqlState,
       }));
@@ -124,7 +126,7 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   it.each(SERVER_SIDE_FAILURES)(
     "does not leak the failing SQL or bound params for %s (%s)",
     async (_name, sqlState, message) => {
-      createCalDAVSourceResult = () => Promise.reject(queryFailure(message, {
+      importCalDAVCalendarsResult = () => Promise.reject(queryFailure(message, {
         code: "ERR_POSTGRES_SERVER_ERROR",
         errno: sqlState,
       }));
@@ -141,7 +143,7 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   it.each(SERVER_SIDE_FAILURES)(
     "does not answer %s (%s) with 400 Bad Request",
     async (_name, sqlState, message) => {
-      createCalDAVSourceResult = () => Promise.reject(queryFailure(message, {
+      importCalDAVCalendarsResult = () => Promise.reject(queryFailure(message, {
         code: "ERR_POSTGRES_SERVER_ERROR",
         errno: sqlState,
       }));
@@ -153,7 +155,7 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   );
 
   it("records the SQLSTATE of a server-side query failure", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(queryFailure("deadlock detected", {
         code: "ERR_POSTGRES_SERVER_ERROR",
         errno: "40P01",
@@ -165,7 +167,7 @@ describe("POST /api/sources/caldav under a Postgres server-side query failure", 
   });
 
   it("converges on the same label and status across repeated attempts", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(queryFailure("deadlock detected", {
         code: "ERR_POSTGRES_SERVER_ERROR",
         errno: "40P01",

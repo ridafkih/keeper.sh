@@ -178,8 +178,12 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ingestSource: () => Promise.resolve().then(ingestOutcome),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const { resolveIngestScheduleDecision } = await import("@keeper.sh/calendar");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const postgresError = (
   message: string,
@@ -200,15 +204,22 @@ const closedPool = (): IngestionCounts => {
   }));
 };
 
+let scheduledFailureCount = 0;
+
 const runTick = async (outcome: () => IngestionCounts): Promise<void> => {
   ingestOutcome = outcome;
   emitted.length = 0;
   updates.length = 0;
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
-};
-
-const allowImmediateRetry = (): void => {
-  backoffRow = { ...backoffRow, nextAttemptAt: null };
+  const result = await Promise.resolve(runIngestPass()).catch(() => null);
+  const [reported] = result?.outcomes ?? [];
+  if (!reported) {
+    throw new Error("the pass reported no outcome for the calendar");
+  }
+  scheduledFailureCount = resolveIngestScheduleDecision(reported.outcome, {
+    failureCount: scheduledFailureCount,
+    intervalMs: 60_000,
+    jitterMs: 0,
+  }).failureCount;
 };
 
 describe("caldav ingest backoff across a pool outage and its recovery", () => {
@@ -217,14 +228,14 @@ describe("caldav ingest backoff across a pool outage and its recovery", () => {
     updates.length = 0;
     current = { fields: {}, values: {} };
     backoffRow = { failureCount: 0, nextAttemptAt: null };
+    scheduledFailureCount = 0;
   });
 
   it("raises the ingest failure count monotonically over a sustained outage", async () => {
     const counts: number[] = [];
     for (let tick = 0; tick < 4; tick += 1) {
       await runTick(closedPool);
-      counts.push(backoffRow.failureCount);
-      allowImmediateRetry();
+      counts.push(scheduledFailureCount);
     }
 
     expect(counts).toEqual(counts.toSorted((left, right) => left - right));
@@ -233,28 +244,25 @@ describe("caldav ingest backoff across a pool outage and its recovery", () => {
 
   it("clears the backoff once the pool recovers instead of leaving the source parked", async () => {
     await runTick(closedPool);
-    expect(backoffRow.failureCount).toBeGreaterThan(0);
-    allowImmediateRetry();
+    expect(scheduledFailureCount).toBeGreaterThan(0);
 
     await runTick(SUCCESSFUL_INGEST);
 
-    expect(backoffRow).toEqual({ failureCount: 0, nextAttemptAt: null });
+    expect(scheduledFailureCount).toBe(0);
   });
 
   it("does not re-arm the backoff on a second healthy tick", async () => {
     await runTick(closedPool);
-    allowImmediateRetry();
     await runTick(SUCCESSFUL_INGEST);
     await runTick(SUCCESSFUL_INGEST);
 
     expect(updates.some((values) => "ingestFailureCount" in values)).toBe(false);
-    expect(backoffRow).toEqual({ failureCount: 0, nextAttemptAt: null });
+    expect(scheduledFailureCount).toBe(0);
   });
 
   it("never writes a re-authentication demand while only the pool is failing", async () => {
     for (let tick = 0; tick < 3; tick += 1) {
       await runTick(closedPool);
-      allowImmediateRetry();
       expect(updates.some((values) => values.needsReauthentication === true)).toBe(false);
     }
   });
@@ -265,7 +273,6 @@ describe("caldav ingest backoff across a pool outage and its recovery", () => {
       await runTick(closedPool);
       const event = emitted.find(({ values }) => values["operation.name"] === "ingest-source");
       slugs.push(event?.fields.slug);
-      allowImmediateRetry();
     }
 
     expect(new Set(slugs)).toEqual(new Set(["db-connection-unavailable"]));

@@ -7,6 +7,12 @@ const calendarIdsBodySchema = type({
 });
 type CalendarIdsBody = typeof calendarIdsBodySchema.infer;
 
+const calendarToggleBodySchema = type({
+  calendarId: "string",
+  enabled: "boolean",
+  "+": "reject",
+});
+
 const sourcePatchBodySchema = type({
   "name?": "string",
   "includeInIcalFeed?": "boolean",
@@ -14,6 +20,7 @@ const sourcePatchBodySchema = type({
   "treatFullDayTimedEventsAsAllDay?": "boolean",
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
+  "disableEventReminders?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;
@@ -89,6 +96,7 @@ type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
 export {
   calendarIdsBodySchema,
+  calendarToggleBodySchema,
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,

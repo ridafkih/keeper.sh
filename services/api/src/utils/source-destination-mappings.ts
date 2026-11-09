@@ -1,6 +1,7 @@
 import { userSyncRequestsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { createMappingMutationLockId, createSyncLock } from "@keeper.sh/sync";
+import { wakeIngests } from "@keeper.sh/database";
 import type { SyncLockHandle } from "@keeper.sh/sync";
 import type { database as databaseInstance } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
@@ -164,16 +165,43 @@ const enqueueMappingReplacementSync = async (userId: string): Promise<void> => {
     ));
 };
 
+const publishMappingSyncState = async (userId: string): Promise<void> => {
+  const { publishMappingSyncState: publish } = await import("@/context");
+  await publish(userId);
+};
+
+const readNewlyMappedSources = async (sourceCalendarIds: string[]): Promise<void> => {
+  const { database } = await import("@/context");
+  await wakeIngests(database, sourceCalendarIds, { correlationId: null, debounceMs: 0 });
+};
+
 const scheduleMappingReplacementSync = (userId: string): void => {
   spawnBackgroundJob(
     "mapping-replacement-push-enqueue",
-    { userId },
+    { "user.id": userId },
     () => enqueueMappingReplacementSync(userId),
+  );
+  spawnBackgroundJob(
+    "mapping-sync-state-publish",
+    { "user.id": userId },
+    () => publishMappingSyncState(userId),
+  );
+};
+
+const scheduleNewlyMappedSourceReads = (userId: string, sourceCalendarIds: string[]): void => {
+  if (sourceCalendarIds.length === 0) {
+    return;
+  }
+  spawnBackgroundJob(
+    "mapping-source-ingest-wake",
+    { "mapping.woken_source_count": sourceCalendarIds.length, "user.id": userId },
+    () => readNewlyMappedSources(sourceCalendarIds),
   );
 };
 
 export {
   USER_MAPPING_LOCK_NAMESPACE,
+  scheduleNewlyMappedSourceReads,
   runWithMappingMutationLocks,
   withMappingMutationLocks,
   enqueueMappingReplacementSync,

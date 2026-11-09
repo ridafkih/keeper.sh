@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAddMore } from "../../src/hooks/use-entitlements";
+import { buildOptimisticProEntitlements, canAddMore, hasConfiguredSync } from "../../src/hooks/use-entitlements";
 
 describe("canAddMore", () => {
   it("does not treat missing entitlements as hitting the limit", () => {
@@ -26,5 +26,25 @@ describe("feed entitlements", () => {
 
   it("does not dead-end a lapsed pro user who is over the free limit", () => {
     expect(canAddMore({ current: 5, limit: 1 })).toBe(false);
+  });
+});
+
+describe("hasConfiguredSync", () => {
+  const entitlementsWithSyncs = (current: number) => ({
+    ...buildOptimisticProEntitlements(),
+    plan: "free" as const,
+    syncs: { current, limit: 1 },
+  });
+
+  it("is false until entitlements have loaded", () => {
+    expect(hasConfiguredSync(undefined)).toBe(false);
+  });
+
+  it("is false for a user with no sync yet", () => {
+    expect(hasConfiguredSync(entitlementsWithSyncs(0))).toBe(false);
+  });
+
+  it("is true once the user has a sync", () => {
+    expect(hasConfiguredSync(entitlementsWithSyncs(1))).toBe(true);
   });
 });

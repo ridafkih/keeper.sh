@@ -56,6 +56,7 @@ export interface CalendarDetail {
   disabled: boolean;
   ingestFailureCount: number;
   ingestLastFailureAt: string | null;
+  disableEventReminders: boolean;
   providerMissingSince: string | null;
   unavailableSince: string | null;
   createdAt: string;
@@ -81,4 +82,5 @@ export interface ApiEvent {
 export interface ApiEventSummary {
   id: string;
   startTime: string;
+  isAllDay: boolean;
 }

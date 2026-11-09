@@ -271,12 +271,15 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
     }),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const runTick = async (): Promise<void> => {
   emitted.length = 0;
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
 };
 
 const resetState = (): void => {
@@ -315,15 +318,12 @@ describe("clearing an account's re-authentication demand once the credentials wo
     expect(accountNeedsReauthentication).toBe(false);
   });
 
-  it("does not leave the demand raised while the deleted sibling sits in ingest backoff", async () => {
+  it("does not leave the demand raised after the deleted sibling keeps failing", async () => {
     deletedCalendarPresent = false;
     await runTick();
     passwordAccepted = true;
 
     await runTick();
-    const backedOff = backoff.get(DELETED_CALENDAR_ID);
-    expect(backedOff?.nextAttemptAt).toBeInstanceOf(Date);
-
     await runTick();
 
     expect(accountNeedsReauthentication).toBe(false);

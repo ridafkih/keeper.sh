@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "session_user_idx" ON "session" USING btree ("userId");

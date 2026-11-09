@@ -11,13 +11,42 @@ import {
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
+import type { RequestScopeView } from "./response-status-scope";
 import { findCalendarByStoredUrl } from "./calendar-identity";
+import { resolveCollectionTimeZone } from "./collection-timezone";
+import { CURRENT_USER_PRIVILEGE_SET_PROP, readCurrentUserPrivileges } from "./privileges";
+import { isCalDAVPrivilegeSetWritable } from "../../../core/source/calendar-capabilities";
 import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 import { measureProviderRequest } from "../../../core/telemetry/segments";
+import { fetchMultiGetBatch } from "./multiget";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
+
+const CALENDAR_DISCOVERY_PROPS = {
+  "c:calendar-description": {},
+  "c:calendar-timezone": {},
+  "c:calendar-timezone-id": {},
+  "d:displayname": {},
+  "ca:calendar-color": {},
+  "cs:getctag": {},
+  "d:resourcetype": {},
+  "c:supported-calendar-component-set": {},
+  "d:sync-token": {},
+  [CURRENT_USER_PRIVILEGE_SET_PROP]: {},
+};
+
+const CALENDAR_DISCOVERY_PROJECTED_PROPS = {
+  calendarTimezone: true,
+  calendarTimezoneId: true,
+  currentUserPrivilegeSet: true,
+};
+
+interface ResolvedCalendar {
+  url: string;
+  timeZone?: string;
+}
 
 interface CalendarObject {
   url: string;
@@ -118,6 +147,7 @@ const assertSuccessfulResponse = async (
 };
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
+type DAVCalendarListing = Awaited<ReturnType<DAVClientInstance["fetchCalendars"]>>;
 
 class CalDAVUnauthorizedResponseError extends Error {
   readonly status = HTTP_STATUS.UNAUTHORIZED;
@@ -128,7 +158,9 @@ class CalDAVUnauthorizedResponseError extends Error {
   }
 }
 
-const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Promise<Result> =>
+const mapAuthenticationFailure = <Result>(
+  operation: (requests: RequestScopeView) => Promise<Result>,
+): Promise<Result> =>
   runInRequestScope(async (requests) => {
     const raiseUnauthorizedVerdict = (cause: unknown): never => {
       if (requests.hasUnrefutedUnauthorized()) {
@@ -143,7 +175,7 @@ const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Pro
       throw cause;
     };
 
-    const result = await operation().catch((error: unknown) => {
+    const result = await operation(requests).catch((error: unknown) => {
       if (requests.isPropagatedTransportFailure(error)) {
         throw error;
       }
@@ -156,6 +188,12 @@ const mapAuthenticationFailure = <Result>(operation: () => Promise<Result>): Pro
 
     return result;
   });
+
+const isPrivilegeSetWritable = (privilegeSet: unknown): boolean =>
+  isCalDAVPrivilegeSetWritable(readCurrentUserPrivileges(privilegeSet));
+
+const isEventCalendar = ({ components }: { components?: string[] }): boolean =>
+  components?.includes("VEVENT") ?? false;
 
 const getDisplayName = (name: unknown): string => {
   if (typeof name === "string") {
@@ -190,6 +228,9 @@ const bindRequestToAccount = (input: string | Request | URL, serverUrl: string):
 
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
+
+const isCalendarObjectUrlOf = (calendarUrl: string) => (url: string): boolean =>
+  isCalendarObjectPath(toCalendarObjectPath(url, calendarUrl));
 
 const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
   ...new Set(
@@ -242,7 +283,6 @@ class CalDAVClient {
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
         credentials: this.config.credentials,
-        defaultAccountType: "caldav",
         fetch: accountBoundFetch,
         serverUrl,
       });
@@ -256,21 +296,88 @@ class CalDAVClient {
       return cached;
     }
 
-    const calendars = await mapAuthenticationFailure(async () => {
+    const calendars = await mapAuthenticationFailure(async (requests) => {
       const client = await this.getClient();
-      return measureProviderRequest(() => client.fetchCalendars());
+      return this.listDiscoverableCalendars(client, requests);
     });
 
     const discovered = calendars
-      .filter(({ components }) => components?.includes("VEVENT"))
-      .map(({ url, displayName, ctag }) => ({
-        ctag,
-        displayName: getDisplayName(displayName),
-        url: bindUrlToAccount(url, this.config.serverUrl),
-      }));
+      .filter((calendar) => isEventCalendar(calendar))
+      .map(({ url, displayName, ctag, projectedProps }): CalendarInfo => {
+        const timeZone = resolveCollectionTimeZone(projectedProps ?? {});
+        return {
+          ctag,
+          displayName: getDisplayName(displayName),
+          ...timeZone && { timeZone },
+          url: bindUrlToAccount(url, this.config.serverUrl),
+          writable: isPrivilegeSetWritable(projectedProps?.["currentUserPrivilegeSet"]),
+        };
+      });
 
     await this.config.calendarDiscoveryCache?.write(discovered);
     return discovered;
+  }
+
+  private async listDiscoverableCalendars(
+    client: DAVClientInstance,
+    requests: RequestScopeView,
+  ): Promise<DAVCalendarListing> {
+    try {
+      const listed = await this.listCalendarsFromPrincipal(client);
+      if (listed.some((calendar) => isEventCalendar(calendar)) || requests.hasUnrefutedUnauthorized()) {
+        return listed;
+      }
+      return await this.listServerUrlAsCalendar(client);
+    } catch (error) {
+      if (requests.isPropagatedTransportFailure(error) || requests.hasUnrefutedUnauthorized()) {
+        throw error;
+      }
+      const listed = await this.listServerUrlAsCalendar(client);
+      if (listed.length === 0) {
+        throw error;
+      }
+      return listed;
+    }
+  }
+
+  private async listCalendarsFromPrincipal(client: DAVClientInstance): Promise<DAVCalendarListing> {
+    const { serverUrl } = this.config;
+    const account = await measureProviderRequest(() => client.createAccount({
+      account: { accountType: "caldav", serverUrl },
+    }));
+    if (!account.homeUrl) {
+      return [];
+    }
+    return this.listCalendars(client, { depth: "1", homeUrl: account.homeUrl });
+  }
+
+  private listServerUrlAsCalendar(client: DAVClientInstance): Promise<DAVCalendarListing> {
+    return this.listCalendars(client, { depth: "0", homeUrl: this.config.serverUrl });
+  }
+
+  private listCalendars(
+    client: DAVClientInstance,
+    listing: { depth: "0" | "1"; homeUrl: string },
+  ): Promise<DAVCalendarListing> {
+    const { serverUrl } = this.config;
+    return measureProviderRequest(() => client.fetchCalendars({
+      account: { accountType: "caldav", homeUrl: listing.homeUrl, rootUrl: serverUrl, serverUrl },
+      headers: { depth: listing.depth },
+      projectedProps: CALENDAR_DISCOVERY_PROJECTED_PROPS,
+      props: CALENDAR_DISCOVERY_PROPS,
+    }));
+  }
+
+  async fetchCalendarWritable(calendarUrl: string): Promise<boolean> {
+    const [response] = await mapAuthenticationFailure(async () => {
+      const client = await this.getClient();
+      return measureProviderRequest(() => client.propfind({
+        depth: "0",
+        props: { [CURRENT_USER_PRIVILEGE_SET_PROP]: {} },
+        url: bindUrlToAccount(calendarUrl, this.config.serverUrl),
+      }));
+    });
+    return isPrivilegeSetWritable(response?.props?.["currentUserPrivilegeSet"]);
   }
 
   async fetchCalendarDisplayName(calendarUrl: string): Promise<string | null> {
@@ -279,10 +386,22 @@ class CalDAVClient {
     return findCalendarByStoredUrl(calendars, calendarUrl)?.displayName ?? null;
   }
 
-  async resolveCalendarUrl(storedUrl: string): Promise<string> {
+  async resolveCalendar(storedUrl: string): Promise<ResolvedCalendar> {
     const calendars = await this.discoverCalendars();
+    const calendar = findCalendarByStoredUrl(calendars, storedUrl);
+    if (!calendar) {
+      return { url: storedUrl };
+    }
 
-    return findCalendarByStoredUrl(calendars, storedUrl)?.url ?? storedUrl;
+    return {
+      ...calendar.timeZone && { timeZone: calendar.timeZone },
+      url: calendar.url,
+    };
+  }
+
+  async resolveCalendarUrl(storedUrl: string): Promise<string> {
+    const { url } = await this.resolveCalendar(storedUrl);
+    return url;
   }
 
   async createCalendarObject(params: {
@@ -349,12 +468,13 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-      const objects = await client.fetchCalendarObjects({
-        calendar: { url: params.calendarUrl },
+      const objects = await fetchMultiGetBatch(client, {
+        calendarUrl: params.calendarUrl,
         objectUrls: [objectUrl],
+        urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
       });
 
-      return objects[0] ?? null;
+      return objects.find((object): object is CalendarObject => typeof object.data === "string") ?? null;
     });
   }
 
@@ -371,10 +491,10 @@ class CalDAVClient {
       const objects: CalendarObject[] = [];
 
       for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
-        const batch = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const batch = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         objects.push(
           ...batch.filter((object): object is CalendarObject => typeof object.data === "string"),
@@ -417,10 +537,10 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
-        const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const objects = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         batchResults.push(
           objects.filter((object): object is CalendarObject => typeof object.data === "string"),

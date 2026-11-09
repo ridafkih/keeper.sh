@@ -10,13 +10,13 @@ interface EnqueueCall {
 
 const createDependencies = (sourcesRefreshed = 2) => {
   const state = {
-    backoffClearedFor: [] as string[],
+    woken: [] as string[],
     enqueued: [] as EnqueueCall[],
   };
 
   const dependencies: TriggerSyncDependencies = {
-    clearIngestBackoff: (userId) => {
-      state.backoffClearedFor.push(userId);
+    wakeSources: (userId) => {
+      state.woken.push(userId);
       return Promise.resolve(sourcesRefreshed);
     },
     enqueuePushSync: (userId, plan) => {
@@ -29,17 +29,17 @@ const createDependencies = (sourcesRefreshed = 2) => {
 };
 
 describe("runTriggerSync", () => {
-  it("clears the ingest backoff and enqueues a push for the user", async () => {
+  it("wakes the user's sources and enqueues a push for the user", async () => {
     const { dependencies, state } = createDependencies();
 
     const result = await runTriggerSync("user-1", "pro", dependencies);
 
-    expect(state.backoffClearedFor).toEqual(["user-1"]);
+    expect(state.woken).toEqual(["user-1"]);
     expect(state.enqueued).toEqual([{ plan: "pro", userId: "user-1" }]);
     expect(result).toEqual({ sourcesRefreshed: 2, triggered: true });
   });
 
-  it("reports how many sources had their backoff cleared", async () => {
+  it("reports how many sources were woken", async () => {
     const { dependencies } = createDependencies(0);
 
     const result = await runTriggerSync("user-1", "free", dependencies);
@@ -56,10 +56,10 @@ describe("runTriggerSync", () => {
     expect(state.enqueued[0]?.plan).toBe("free");
   });
 
-  it("propagates a failure to clear the ingest backoff without enqueuing", async () => {
+  it("propagates a failure to wake the sources without enqueuing", async () => {
     const { state } = createDependencies();
     const dependencies: TriggerSyncDependencies = {
-      clearIngestBackoff: () => Promise.reject(new Error("database unavailable")),
+      wakeSources: () => Promise.reject(new Error("database unavailable")),
       enqueuePushSync: (userId, plan) => {
         state.enqueued.push({ plan, userId });
         return Promise.resolve();
@@ -74,7 +74,7 @@ describe("runTriggerSync", () => {
 
   it("propagates a failure to enqueue the push", async () => {
     const dependencies: TriggerSyncDependencies = {
-      clearIngestBackoff: () => Promise.resolve(1),
+      wakeSources: () => Promise.resolve(1),
       enqueuePushSync: () => Promise.reject(new Error("queue unavailable")),
     };
 

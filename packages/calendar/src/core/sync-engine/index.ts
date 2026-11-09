@@ -17,6 +17,8 @@ import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations"
 import type { SyncWindow } from "../sync/sync-range";
 import { overlapsTimeWindow } from "../events/time-range";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
+import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
+import type { UnrecordedCopyTally } from "./unrecorded-copies";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -203,6 +205,7 @@ interface OperationError {
   error: string;
   errorType?: string;
   statusCode?: number;
+  writeAccessDenied?: boolean;
 }
 
 interface PushEchoCounts {
@@ -353,6 +356,7 @@ const processAddResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -420,6 +424,7 @@ const processUpdateResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -464,6 +469,7 @@ const processDeleteResults = (
           error: deleteResult.error,
           ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
           ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
+          ...(deleteResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -980,6 +986,7 @@ interface SyncCalendarResult extends SyncResult {
   errors: string[];
   // What each source calendar's events did to the destination; updates and the moving window are kept out of added and removed.
   sources: SourceSyncTallies;
+  writeAccessDenied: boolean;
 }
 
 const createEmptyResult = (): SyncCalendarResult => ({
@@ -990,6 +997,7 @@ const createEmptyResult = (): SyncCalendarResult => ({
   conflictsResolved: 0,
   errors: [],
   sources: {},
+  writeAccessDenied: false,
 });
 
 const appendDatabaseErrorFields = (
@@ -1114,6 +1122,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   const timer = createPhaseTimer();
   const timedProvider = createTimedProvider(provider, timer);
   const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
+  const unrecordedCopies: UnrecordedCopyTally = { deleteFailed: 0, deleted: 0 };
   let flushed = false;
 
   const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
@@ -1202,7 +1211,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         emitProgress("processing", localEvents.length, state.remoteEvents.length, { current: processed, total });
       },
       async (changes) => {
-        await timer.measure("checkpoint_flush", () => flush(changes));
+        await timer.measure(
+          "checkpoint_flush",
+          () => flushOrDeleteUnrecordedCopies(changes, flush, provider, unrecordedCopies),
+        );
         flushed = true;
         return true;
       },
@@ -1243,6 +1255,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       conflictsResolved: outcome.conflictsResolved,
       errors: errorMessages,
       sources: outcome.sources,
+      writeAccessDenied: outcome.errors.some((operationError) => operationError.writeAccessDenied === true),
     };
   } catch (error) {
     wideEvent["outcome"] = "error";
@@ -1261,6 +1274,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
      * These two cover the same span on different clocks -- duration_ms is wall-clock and
      * sync.reconcile.duration_ms is monotonic -- and must never be differenced.
      */
+    if (unrecordedCopies.deleted > 0) {
+      wideEvent["events.unrecorded_deleted"] = unrecordedCopies.deleted;
+    }
+    if (unrecordedCopies.deleteFailed > 0) {
+      wideEvent["events.unrecorded_delete_failed"] = unrecordedCopies.deleteFailed;
+    }
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
     appendThrottleFields(wideEvent, provider.getThrottleMetrics?.());

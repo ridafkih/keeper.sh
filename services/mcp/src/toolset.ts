@@ -12,6 +12,7 @@ const keeperEventSchema = z.object({
   calendarName: z.string(),
   calendarProvider: z.string(),
   calendarUrl: z.string().nullable(),
+  isAllDay: z.boolean(),
 });
 
 type KeeperEvent = z.infer<typeof keeperEventSchema>;
@@ -216,11 +217,25 @@ const toLocalizedTime = (utcIso: string, timeZone: string): string => {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}${normalizedOffset}`;
 };
 
-const localizeEvent = (event: KeeperEvent, timeZone: string) => ({
-  ...event,
-  startTime: toLocalizedTime(event.startTime, timeZone),
-  endTime: toLocalizedTime(event.endTime, timeZone),
-});
+const CALENDAR_DATE_LENGTH = "YYYY-MM-DD".length;
+
+const toCalendarDate = (utcIso: string): string =>
+  new Date(utcIso).toISOString().slice(0, CALENDAR_DATE_LENGTH);
+
+const localizeEvent = (event: KeeperEvent, timeZone: string): KeeperEvent => {
+  if (event.isAllDay) {
+    return {
+      ...event,
+      startTime: toCalendarDate(event.startTime),
+      endTime: toCalendarDate(event.endTime),
+    };
+  }
+  return {
+    ...event,
+    startTime: toLocalizedTime(event.startTime, timeZone),
+    endTime: toLocalizedTime(event.endTime, timeZone),
+  };
+};
 
 const FREE_TIME_OPTIONAL_PARAMS = [
   "workingHoursStart",
@@ -280,10 +295,14 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Get event count",
     annotations: READ_ONLY,
     description:
-      "Get the number of calendar events. Optionally provide a date range with 'from' and 'to' ISO 8601 datetimes.",
+      "Get the number of calendar events. Optionally provide a date range with 'from' and 'to' ISO 8601 datetimes, and an IANA timezone (e.g. America/New_York) so all-day events count on that zone's local days.",
     inputSchema: {
       from: z.string().datetime().optional().describe("Start of date range (ISO 8601)"),
       to: z.string().datetime().optional().describe("End of date range (ISO 8601)"),
+      timezone: z
+        .string()
+        .optional()
+        .describe("IANA timezone identifier (e.g. America/New_York) whose local days all-day events count on"),
     },
     execute: (context, input) => {
       const params = new URLSearchParams({ count: "true" });
@@ -293,6 +312,9 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       if (input?.to && typeof input.to === "string") {
         params.set("to", input.to);
       }
+      if (input?.timezone && typeof input.timezone === "string") {
+        params.set("timezone", input.timezone);
+      }
       return apiFetch(context, `/api/v1/events?${params}`, z.object({ count: z.number() }));
     },
   },
@@ -300,13 +322,13 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
     title: "Get events",
     annotations: READ_ONLY,
     description:
-      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to', and an IANA timezone (e.g. America/New_York) to localize event times.",
+      "Get calendar events within a date range. Provide ISO 8601 datetimes for 'from' and 'to', and an IANA timezone (e.g. America/New_York) to localize event times. All-day events (isAllDay true) return YYYY-MM-DD dates with an exclusive end.",
     inputSchema: eventRangeSchema,
     execute: async (context, input) => {
       if (!input || !isEventRangeInput(input)) {
         throw new Error("'from', 'to', and 'timezone' are required");
       }
-      const params = new URLSearchParams({ from: input.from, to: input.to });
+      const params = new URLSearchParams({ from: input.from, timezone: input.timezone, to: input.to });
       const events = await apiFetch(context, `/api/v1/events?${params}`, z.array(keeperEventSchema));
       return events.map((event) => localizeEvent(event, input.timezone));
     },

@@ -1,15 +1,19 @@
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { useSWRConfig } from "swr";
+import { useSetAtom } from "jotai";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Input } from "@/components/ui/primitives/input";
 import { Text } from "@/components/ui/primitives/text";
-import { apiFetch } from "@/lib/fetcher";
+import { apiFetch, HttpError } from "@/lib/fetcher";
 import { invalidateAccountsAndSources } from "@/lib/swr";
-import { resolveErrorMessage } from "@/utils/errors";
+import { resolveCalDAVImportNotice } from "@/lib/caldav-import-notice";
+import { showToastAtom } from "@/state/toast";
+import { HTTP_STATUS } from "@keeper.sh/constants";
+import { describeCalendarImportFailure } from "@/lib/connect-failures";
 
 export type CalDAVProvider = "fastmail" | "icloud" | "caldav";
 
@@ -19,6 +23,7 @@ interface ProviderConfig {
   usernamePlaceholder: string;
   usernameInputType: string;
   passwordPlaceholder: string;
+  credentialsFailure: string;
 }
 
 const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
@@ -28,6 +33,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Fastmail Email Address",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
+    credentialsFailure: "Fastmail needs an app password here, not your Fastmail password.",
   },
   icloud: {
     serverUrl: "https://caldav.icloud.com/",
@@ -35,6 +41,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "Apple ID",
     usernameInputType: "email",
     passwordPlaceholder: "App-Specific Password",
+    credentialsFailure: "Apple needs an app-specific password here, not your Apple password.",
   },
   caldav: {
     serverUrl: "",
@@ -42,6 +49,7 @@ const PROVIDER_CONFIGS: Record<CalDAVProvider, ProviderConfig> = {
     usernamePlaceholder: "CalDAV Server Username",
     usernameInputType: "text",
     passwordPlaceholder: "CalDAV Server Password",
+    credentialsFailure: "That username or password didn't work.",
   },
 };
 
@@ -52,6 +60,8 @@ interface CalendarOption {
 
 interface CalDAVConnectFormProps {
   provider: CalDAVProvider;
+  credentialHelp?: ReactNode;
+  onCredentialsRejected?: () => void;
 }
 
 function readFormFieldValue(formData: FormData, fieldName: string): string {
@@ -89,18 +99,21 @@ function parseAccountId(value: unknown): string | undefined {
   return undefined;
 }
 
-export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
+export function CalDAVConnectForm({ provider, credentialHelp, onCredentialsRejected }: CalDAVConnectFormProps) {
   const config = PROVIDER_CONFIGS[provider];
   const navigate = useNavigate();
   const { mutate: globalMutate } = useSWRConfig();
+  const showToast = useSetAtom(showToastAtom);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [credentialsRejected, setCredentialsRejected] = useState(false);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setCredentialsRejected(false);
 
     const formData = new FormData(event.currentTarget);
     const serverUrl = readFormFieldValue(formData, "serverUrl");
@@ -121,7 +134,13 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           body: JSON.stringify({ serverUrl, username, password }),
         });
       } catch (err) {
-        setError(resolveErrorMessage(err, "Failed to discover calendars"));
+        if (err instanceof HttpError && err.status === HTTP_STATUS.UNAUTHORIZED) {
+          setError(PROVIDER_CONFIGS[provider].credentialsFailure);
+          setCredentialsRejected(true);
+          onCredentialsRejected?.();
+          return;
+        }
+        setError("Couldn't find calendars on this server. Check the details and try again.");
         return;
       }
 
@@ -139,36 +158,39 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
       }
 
       let accountId: string | undefined;
+      let importNotice: string | null = null;
 
       try {
-        const responses = await Promise.all(
-          calendars.map((calendar) =>
-            apiFetch("/api/sources/caldav", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                authMethod,
-                calendarUrl: calendar.url,
-                name: calendar.displayName,
-                password,
-                provider,
-                serverUrl,
-                username,
-              }),
-            }),
-          ),
+        const importResponse = await apiFetch("/api/sources/caldav", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            authMethod,
+            calendars: calendars.map((calendar) => ({
+              calendarUrl: calendar.url,
+              name: calendar.displayName,
+            })),
+            password,
+            provider,
+            serverUrl,
+            username,
+          }),
+        });
+        const importPayload: unknown = await importResponse.json();
+        accountId = parseAccountId(importPayload);
+        importNotice = resolveCalDAVImportNotice(
+          isRecord(importPayload) ? importPayload.calendars : undefined,
         );
-
-        const firstResponse = responses[0];
-        if (firstResponse) {
-          accountId = parseAccountId(await firstResponse.json());
-        }
-      } catch {
-        setError("Failed to import calendars");
+      } catch (err) {
+        setError(describeCalendarImportFailure(err));
         return;
       }
 
       await invalidateAccountsAndSources(globalMutate);
+
+      if (importNotice) {
+        showToast(importNotice);
+      }
 
       navigate({ to: "/dashboard/setup", search: accountId ? { accountId } : {} });
     });
@@ -199,9 +221,12 @@ export function CalDAVConnectForm({ provider }: CalDAVConnectFormProps) {
           type="password"
           placeholder={config.passwordPlaceholder}
           required
+          tone={credentialsRejected ? "error" : "neutral"}
+          aria-invalid={credentialsRejected}
         />
       </div>
       {error && <Text size="sm" tone="danger">{error}</Text>}
+      {credentialsRejected && credentialHelp}
       <Divider />
       <div className="flex items-stretch gap-2">
         <BackButton variant="border" size="standard" className="self-stretch justify-center px-3.5" />

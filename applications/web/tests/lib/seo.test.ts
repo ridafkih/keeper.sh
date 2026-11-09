@@ -7,14 +7,17 @@ import {
   faqPageSchema,
   faqSchema,
   jsonLdScript,
+  markdownAlternateLink,
   offerCatalogSchema,
   organizationSchema,
   personSchema,
   seoHead,
   seoMeta,
   softwareApplicationSchema,
+  techArticleSchema,
   webPageSchema,
 } from "@/lib/seo";
+import { marketingCopy } from "@/lib/marketing-copy";
 
 const GENERIC_IMAGE_URL = "https://www.keeper.sh/open-graph.png";
 
@@ -231,6 +234,34 @@ describe("blogPostingSchema", () => {
   });
 });
 
+describe("techArticleSchema", () => {
+  it("types docs pages as TechArticle with their own identifier", () => {
+    const schema = techArticleSchema({ ...post, path: "/docs/plans-and-limits" });
+    expect(schema["@type"]).toBe("TechArticle");
+    expect(schema["@id"]).toBe("https://www.keeper.sh/docs/plans-and-limits/#techarticle");
+  });
+});
+
+describe("jsonLdScript", () => {
+  it("keeps markup-significant characters out of the script body", () => {
+    const text = "</script><!-- & \u2028\u2029";
+    const script = jsonLdScript({ text });
+
+    expect(script.children).not.toMatch(/[<>&\u2028\u2029]/);
+    expect(JSON.parse(script.children)).toEqual({ text });
+  });
+});
+
+describe("markdownAlternateLink", () => {
+  it("points at the page's markdown version", () => {
+    expect(markdownAlternateLink("/docs/plans-and-limits")).toEqual({
+      rel: "alternate",
+      type: "text/markdown",
+      href: "https://www.keeper.sh/docs/plans-and-limits.md",
+    });
+  });
+});
+
 describe("personSchema", () => {
   const PERSON_ID = "https://www.keeper.sh/about/#person";
 
@@ -311,7 +342,7 @@ describe("offerCatalogSchema", () => {
 
 describe("softwareApplicationSchema", () => {
   it("offers Free, monthly Pro, and yearly Pro at 45 USD", () => {
-    const { offers } = softwareApplicationSchema();
+    const { offers } = softwareApplicationSchema(marketingCopy.softwareSchema);
 
     expect(offers).toEqual([
       expect.objectContaining({
@@ -346,6 +377,6 @@ describe("softwareApplicationSchema", () => {
   });
 
   it("does not invent an aggregate rating", () => {
-    expect(softwareApplicationSchema()).not.toHaveProperty("aggregateRating");
+    expect(softwareApplicationSchema(marketingCopy.softwareSchema)).not.toHaveProperty("aggregateRating");
   });
 });
