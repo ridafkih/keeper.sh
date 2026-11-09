@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { readConnectSearch } from "@/lib/connect-return";
+import { cn } from "@/utils/cn";
 
 export const Route = createFileRoute("/(dashboard)/dashboard/connect")({
   component: ConnectLayout,
@@ -7,8 +8,10 @@ export const Route = createFileRoute("/(dashboard)/dashboard/connect")({
 });
 
 function ConnectLayout() {
+  const { returnTo } = Route.useSearch();
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3", returnTo === "onboarding" && "w-full max-w-xs self-center")}>
       <Outlet />
     </div>
   );

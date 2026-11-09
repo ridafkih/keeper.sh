@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, useRouterState, type RouterState } from "@tanstack/react-router";
 import { useAtomValue } from "jotai";
 import { AnimatePresence, LazyMotion, useReducedMotion } from "motion/react";
 import { loadMotionFeatures } from "@/lib/motion-features";
@@ -8,9 +8,10 @@ import { SyncProvider } from "@/providers/sync-provider";
 import { Toaster } from "@/components/ui/primitives/toast";
 import { needsOnboardingLookup, resolveDashboardRedirect, resolveOnboardingRedirect } from "@/lib/route-access-guards";
 import { fetchOnboardingCookie } from "@/lib/onboarding-cookie";
+import { readConnectSearch } from "@/lib/connect-return";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
-import { useSettledPathname } from "@/hooks/use-settled-pathname";
+import { settledPathnameOf, useSettledPathname } from "@/hooks/use-settled-pathname";
 import { isFullScreenPath, isSyncsListPath, resolveSyncPane, type SyncPane } from "@/lib/sidebar-width";
 import { SyncsListPanel } from "@/features/syncs/components/syncs-list-panel";
 import { SyncPage, type SyncTab } from "@/features/syncs/components/sync-page";
@@ -24,11 +25,12 @@ export const Route = createFileRoute("/(dashboard)")({
     if (redirectTarget) {
       throw redirect({ to: redirectTarget });
     }
+    const { returnTo } = readConnectSearch(location.search);
     let onboarding = context.auth.onboarding();
-    if (needsOnboardingLookup(onboarding, location.pathname)) {
+    if (needsOnboardingLookup(onboarding, location.pathname, returnTo)) {
       onboarding = await fetchOnboardingCookie(context.fetchApi);
     }
-    const onboardingTarget = resolveOnboardingRedirect(onboarding, location.pathname);
+    const onboardingTarget = resolveOnboardingRedirect(onboarding, location.pathname, returnTo);
     if (onboardingTarget) {
       throw redirect({ to: onboardingTarget });
     }
@@ -115,8 +117,13 @@ function DashboardMainPane({ pane }: { pane: SyncPane | null }) {
   );
 }
 
+const isSettledOnFullScreenPage = (state: RouterState): boolean => {
+  const settled = state.matches[state.matches.length - 1];
+  return isFullScreenPath(settledPathnameOf(state), readConnectSearch({ ...settled?.search }).returnTo);
+};
+
 function DashboardLayout() {
-  const fullScreen = isFullScreenPath(useSettledPathname());
+  const fullScreen = useRouterState({ select: isSettledOnFullScreenPage });
   if (fullScreen) return <FullScreenLayout />;
   return <SidebarLayout />;
 }
@@ -126,6 +133,7 @@ function FullScreenLayout() {
     <div className="relative flex min-h-dvh w-full flex-col px-4 pt-4 pb-12 xs:pt-[min(6rem,25vh)] lg:px-10 lg:pt-12">
       <PopoverOverlay />
       <SyncProvider />
+      <Toaster />
       <Outlet />
     </div>
   );

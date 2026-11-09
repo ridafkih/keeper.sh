@@ -24,6 +24,13 @@ describe("onboarding redirect", () => {
     expect(resolveOnboardingRedirect("pending", "/onboarding/")).toBeNull();
   });
 
+  it("lets the wizard's own connect visits through, and nobody else's", () => {
+    expect(resolveOnboardingRedirect("pending", "/dashboard/connect/caldav", "onboarding")).toBeNull();
+    expect(resolveOnboardingRedirect("pending", "/dashboard/connect/caldav")).toBe("/onboarding");
+    expect(resolveOnboardingRedirect("pending", "/dashboard/syncs/new", "onboarding")).toBe("/onboarding");
+    expect(needsOnboardingLookup(null, "/dashboard/connect/caldav", "onboarding")).toBe(false);
+  });
+
   it("trusts only a stored done, and asks the API otherwise", () => {
     expect(needsOnboardingLookup(null, "/dashboard")).toBe(true);
     expect(needsOnboardingLookup("pending", "/dashboard")).toBe(true);

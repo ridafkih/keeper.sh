@@ -28,6 +28,14 @@ describe("isFullScreenPath", () => {
   });
 });
 
+describe("isFullScreenPath during onboarding", () => {
+  it("gives the wizard's connect pages the whole window, and no other visit to them", () => {
+    expect(isFullScreenPath("/dashboard/connect/google", "onboarding")).toBe(true);
+    expect(isFullScreenPath("/dashboard/connect/google")).toBe(false);
+    expect(isFullScreenPath("/dashboard/syncs/new", "onboarding")).toBe(false);
+  });
+});
+
 describe("resolveSidebarPagePath", () => {
   it("treats every sync pane as the syncs list so the sidebar stays put between them", () => {
     expect(resolveSidebarPagePath("/dashboard/syncs/sync-1")).toBe("/dashboard/syncs");
