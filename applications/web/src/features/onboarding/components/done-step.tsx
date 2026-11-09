@@ -125,7 +125,7 @@ export function DoneStep({ syncId }: { syncId: string }) {
               <Text size="sm" tone="default" className="truncate">{sync.name}</Text>
               <Text size="xs" tone="muted" className="truncate">{summarizeSync(sync, calendarsById)}</Text>
             </div>
-            <NavigationMenuItemTrailing indicator={<Text size="xs" tone="muted">just now</Text>} />
+            <NavigationMenuItemTrailing className="shrink-0" indicator={<Text size="xs" tone="muted">just now</Text>} />
           </NavigationMenuItem>
           <li className="px-3.5 pb-2 sm:px-3">
             <div
