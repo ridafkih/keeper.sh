@@ -15,7 +15,7 @@ import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import { buildVerificationEmail } from "./verification-email";
-import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
+import { isLocalAccountEmail, isLocalAuthPath, resolveOidcPlugin } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
 import { keepSignedInAccount } from "./passkey-session-owner";
@@ -77,6 +77,7 @@ interface AuthConfig {
   oidcClientSecret?: string;
   oidcProviderName?: string;
   oidcScopes?: string[] | null;
+  oidcTrustEmailVerified?: boolean;
   disableLocalAuth?: boolean;
   resendApiKey?: string;
   passkeyRpId?: string;
@@ -191,6 +192,7 @@ const createAuth = (config: AuthConfig) => {
     oidcClientSecret,
     oidcProviderName,
     oidcScopes,
+    oidcTrustEmailVerified = false,
     disableLocalAuth,
     resendApiKey,
     passkeyRpId,
@@ -341,16 +343,18 @@ const createAuth = (config: AuthConfig) => {
 
   const oidcEnabled = capabilities.socialProviders.oidc === true;
 
-  if (oidcEnabled && oidcIssuerUrl && oidcClientId && oidcClientSecret) {
-    plugins.push(
-      createOidcPlugin({
-        baseUrl,
-        clientId: oidcClientId,
-        clientSecret: oidcClientSecret,
-        issuerUrl: oidcIssuerUrl,
-        scopes: oidcScopes,
-      }),
-    );
+  const oidcPlugin = resolveOidcPlugin({
+    baseUrl,
+    clientId: oidcClientId,
+    clientSecret: oidcClientSecret,
+    enabled: oidcEnabled,
+    issuerUrl: oidcIssuerUrl,
+    scopes: oidcScopes,
+    trustEmailVerified: oidcTrustEmailVerified,
+  });
+
+  if (oidcPlugin) {
+    plugins.push(oidcPlugin);
   }
 
   const localAuthDisabled = capabilities.disableLocalAuth === true;
@@ -359,6 +363,7 @@ const createAuth = (config: AuthConfig) => {
     account: {
       accountLinking: {
         allowDifferentEmails: true,
+        requireLocalEmailVerified: true,
       },
     },
     basePath: AUTH_BASE_PATH,

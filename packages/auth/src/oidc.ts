@@ -22,6 +22,11 @@ interface OidcConfig {
   clientId: string;
   clientSecret: string;
   scopes?: string[] | null;
+  trustEmailVerified: boolean;
+}
+
+interface OidcProfileMappingOptions {
+  trustEmailVerified: boolean;
 }
 
 interface OidcProfile {
@@ -62,16 +67,34 @@ const resolveOidcDisplayName = (profile: OidcProfile): string | null => {
   return readNonEmptyString(localPart);
 };
 
-const mapOidcProfileToUser = (profile: OidcProfile) => {
-  const name = resolveOidcDisplayName(profile);
-  if (!name) {
-    return { emailVerified: false };
-  }
-  return { emailVerified: false, name };
-};
-
 const isLocalAccountEmail = (email: string): boolean =>
   email.toLowerCase().endsWith(LOCAL_ACCOUNT_EMAIL_SUFFIX);
+
+const isOidcEmailVerified = (
+  profile: OidcProfile,
+  { trustEmailVerified }: OidcProfileMappingOptions,
+): boolean => {
+  if (!trustEmailVerified) {
+    return false;
+  }
+  if (profile.email_verified !== true) {
+    return false;
+  }
+  const email = readNonEmptyString(profile.email);
+  if (!email) {
+    return false;
+  }
+  return !isLocalAccountEmail(email);
+};
+
+const mapOidcProfileToUser = (profile: OidcProfile, options: OidcProfileMappingOptions) => {
+  const emailVerified = isOidcEmailVerified(profile, options);
+  const name = resolveOidcDisplayName(profile);
+  if (!name) {
+    return { emailVerified };
+  }
+  return { emailVerified, name };
+};
 
 const isLocalAuthPath = (path: string): boolean => LOCAL_AUTH_PATHS.has(path);
 
@@ -94,7 +117,8 @@ const createOidcPlugin = (config: OidcConfig): BetterAuthPlugin =>
         clientId: config.clientId,
         clientSecret: config.clientSecret,
         discoveryUrl: resolveOidcDiscoveryUrl(config.issuerUrl),
-        mapProfileToUser: mapOidcProfileToUser,
+        mapProfileToUser: (profile: OidcProfile) =>
+          mapOidcProfileToUser(profile, { trustEmailVerified: config.trustEmailVerified }),
         pkce: true,
         providerId: OIDC_PROVIDER_ID,
         redirectURI: resolveOidcRedirectUri(config.baseUrl),
@@ -103,13 +127,36 @@ const createOidcPlugin = (config: OidcConfig): BetterAuthPlugin =>
     ],
   });
 
+interface OidcPluginSettings {
+  baseUrl: string;
+  enabled: boolean;
+  issuerUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[] | null;
+  trustEmailVerified: boolean;
+}
+
+const resolveOidcPlugin = ({
+  enabled,
+  issuerUrl,
+  clientId,
+  clientSecret,
+  ...settings
+}: OidcPluginSettings): BetterAuthPlugin | null => {
+  if (!enabled || !issuerUrl || !clientId || !clientSecret) {
+    return null;
+  }
+  return createOidcPlugin({ ...settings, clientId, clientSecret, issuerUrl });
+};
+
 export {
   OIDC_PROVIDER_ID,
-  createOidcPlugin,
   isLocalAccountEmail,
   isLocalAuthPath,
   mapOidcProfileToUser,
   resolveOidcDiscoveryUrl,
+  resolveOidcPlugin,
   routeOidcCallbackRequest,
 };
 export type { OidcConfig };

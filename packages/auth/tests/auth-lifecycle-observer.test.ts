@@ -140,7 +140,7 @@ describe("the auth observer", () => {
 
     await handleOAuthUserInfo({ context } as never, {
       account: { accessToken: "token", accountId: profile.sub, providerId: "oidc" },
-      userInfo: { email: profile.email, id: profile.sub, ...mapOidcProfileToUser(profile) },
+      userInfo: { email: profile.email, id: profile.sub, ...mapOidcProfileToUser(profile, { trustEmailVerified: false }) },
     } as never);
 
     expect(createdUserIds).toHaveLength(1);
