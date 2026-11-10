@@ -32,6 +32,7 @@ export const Route = createFileRoute("/(marketing)/about")({
       title: about.seo.title,
       description: PAGE_DESCRIPTION,
       path: "/about",
+      brandPosition: "none",
     }),
     scripts: [
       jsonLdScript(webPageSchema(
