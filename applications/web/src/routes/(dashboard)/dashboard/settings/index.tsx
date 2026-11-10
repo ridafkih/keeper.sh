@@ -6,11 +6,13 @@ import LogIn from "lucide-react/dist/esm/icons/log-in";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Cookie from "lucide-react/dist/esm/icons/cookie";
+import Bot from "lucide-react/dist/esm/icons/bot";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import { pluralize } from "@/lib/pluralize";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { useSession } from "@/hooks/use-session";
 import { useApiTokens } from "@/hooks/use-api-tokens";
+import { useAccountSettings } from "@/hooks/use-account-settings";
 import { usePasskeys } from "@/hooks/use-passkeys";
 import { useHasPassword } from "@/hooks/use-has-password";
 import { useHasOidcAccount } from "@/hooks/use-has-oidc-account";
@@ -62,6 +64,7 @@ function SettingsPage() {
   const { data: hasOidcAccount = false } = useHasOidcAccount(oidcEnabled);
   const [oidcLinkError, setOidcLinkError] = useState<string | null>(null);
   const [isLinkingOidc, setIsLinkingOidc] = useState(false);
+  const { settings: accountSettings, setAgentFeedbackEnabled } = useAccountSettings();
   const analyticsConsent = useEffectiveConsent();
   const handleAnalyticsToggle = useCallback((checked: boolean) => {
     track(ANALYTICS_EVENTS.analytics_consent_changed, { granted: checked });
@@ -164,6 +167,16 @@ function SettingsPage() {
             <Cookie size={15} />
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>Analytics Cookies</NavigationMenuItemLabel>
+        </NavigationMenuToggleItem>
+        <NavigationMenuToggleItem
+          checked={accountSettings?.agentFeedbackEnabled ?? true}
+          disabled={!accountSettings}
+          onCheckedChange={setAgentFeedbackEnabled}
+        >
+          <NavigationMenuItemIcon>
+            <Bot size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>Agent feedback</NavigationMenuItemLabel>
         </NavigationMenuToggleItem>
       </NavigationMenu>
       <NavigationMenu>
