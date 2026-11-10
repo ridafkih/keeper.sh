@@ -1,5 +1,5 @@
 import { useSetAtom } from 'jotai'
-import { createFileRoute, useLoaderData } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema, webPageSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
@@ -49,7 +49,6 @@ import {
 } from '../../features/marketing/components/marketing-pricing-section'
 import { PRICING_FEATURE_DIFFERENCES, PRICING_PLANS, pricingPlanHighlights } from '../../features/marketing/pricing-plans'
 import { TESTIMONIALS } from '../../features/marketing/testimonials'
-import { GithubStarButton } from '../../components/ui/primitives/github-star-button'
 import { marketingCopy } from '../../lib/marketing-copy'
 import { latestArticles } from '../../lib/article-library'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
@@ -137,7 +136,6 @@ export const Route = createFileRoute('/(marketing)/')({
 
 function MarketingPage() {
   const setEmphasized = useSetAtom(calendarEmphasizedAtom)
-  const githubStars = useLoaderData({ from: '/(marketing)' })
 
   return (
     <div className="flex flex-col gap-2 pt-8">
@@ -160,7 +158,6 @@ function MarketingPage() {
               <ArrowRightIcon size={16} />
             </ButtonIcon>
           </LinkButton>
-          <GithubStarButton starCount={githubStars.count} />
         </div>
       </div>
       <div className="contents *:z-10">
