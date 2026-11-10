@@ -1,8 +1,12 @@
 import { KEEPER_API_READ_SCOPE } from "@keeper.sh/auth";
+import { MAX_AGENT_INTENT_LENGTH } from "@keeper.sh/data-schemas";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { Implementation } from "@modelcontextprotocol/sdk/types.js";
-import { KEEPER_MCP_SERVER_INFO } from "./server-identity";
+import { z } from "zod";
+import { KEEPER_MCP_INSTRUCTIONS, KEEPER_MCP_SERVER_INFO } from "./server-identity";
+import { isExpectedToolFailure } from "./tool-api";
+import type { KeeperToolCall } from "./tool-api";
 import type { KeeperMcpToolDefinition, KeeperMcpToolset, KeeperToolContext } from "./toolset";
 import { widelog } from "./utils/logging";
 
@@ -130,7 +134,48 @@ const createJsonRpcErrorResponse = (
     },
   );
 
-const stringifyToolResult = (result: unknown): string => JSON.stringify(result, null, 2);
+const intentSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_AGENT_INTENT_LENGTH)
+  .optional()
+  .describe("Optional: your high-level goal for this call, in a sentence");
+
+const separateIntent = (
+  input: Record<string, unknown>,
+): { toolInput: Record<string, unknown>; call: KeeperToolCall } => {
+  const { intent, ...toolInput } = input;
+  if (typeof intent === "string") {
+    return { call: { intent }, toolInput };
+  }
+  return { call: {}, toolInput };
+};
+
+const FEEDBACK_TOOL_NAME = "send_feedback";
+const FEEDBACK_NUDGE =
+  `If this looks like a problem with Keeper.sh rather than your input, report it with ${FEEDBACK_TOOL_NAME}.`;
+
+const stringifyToolResult = (result: unknown): string => {
+  if (typeof result === "string") {
+    return result;
+  }
+  return JSON.stringify(result, null, 2);
+};
+
+const describeError = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+};
+
+const withFeedbackNudge = (toolName: string, error: unknown): unknown => {
+  if (toolName === FEEDBACK_TOOL_NAME || isExpectedToolFailure(error)) {
+    return error;
+  }
+  return new Error(`${describeError(error)} ${FEEDBACK_NUDGE}`, { cause: error });
+};
 
 const createToolResponse = (result: unknown) => ({
   content: [
@@ -153,14 +198,22 @@ const registerToolset = (
       {
         annotations: { ...tool.annotations, title: tool.title },
         description: tool.description,
-        inputSchema: tool.inputSchema,
+        inputSchema: { ...tool.inputSchema, intent: intentSchema },
         title: tool.title,
       },
       async (input: Record<string, unknown>) => {
         widelog.set("mcp.tool", name);
         widelog.set("user.id", userId);
-        const result = await tool.execute(toolContext, input);
-        return createToolResponse(result);
+        const { toolInput, call } = separateIntent(input);
+        if (call.intent) {
+          widelog.set("mcp.intent", call.intent);
+        }
+        try {
+          const result = await tool.execute(toolContext, toolInput, call);
+          return createToolResponse(result);
+        } catch (error) {
+          throw withFeedbackNudge(name, error);
+        }
       },
     );
   }
@@ -176,6 +229,7 @@ const createAuthenticatedMcpServer = (
     capabilities: {
       tools: {},
     },
+    instructions: KEEPER_MCP_INSTRUCTIONS,
   });
 
   const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };

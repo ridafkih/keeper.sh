@@ -1,10 +1,12 @@
 import { z } from "zod";
-import { ADDITIVE, DESTRUCTIVE, READ_ONLY, apiFetch, apiFetchRaw } from "./tool-api";
+import { ADDITIVE, DESTRUCTIVE, READ_ONLY, ToolInputError, apiFetch, apiFetchRaw } from "./tool-api";
 import type { KeeperMcpToolDefinition, KeeperToolContext } from "./tool-api";
 import { createCalendarLinkToolset } from "./tools/calendar-link-tools";
 import type { KeeperCalendarLinkToolset } from "./tools/calendar-link-tools";
 import { createIcalFeedToolset } from "./tools/ical-feed-tools";
 import type { KeeperIcalFeedToolset } from "./tools/ical-feed-tools";
+import { createFeedbackToolset } from "./tools/feedback-tools";
+import type { KeeperFeedbackOptions, KeeperFeedbackToolset } from "./tools/feedback-tools";
 import { createSyncToolset } from "./tools/sync-tools";
 import type { KeeperSyncToolset } from "./tools/sync-tools";
 
@@ -79,7 +81,8 @@ interface KeeperEventToolset {
 type KeeperMcpToolset = KeeperEventToolset
   & KeeperSyncToolset
   & KeeperCalendarLinkToolset
-  & KeeperIcalFeedToolset;
+  & KeeperIcalFeedToolset
+  & KeeperFeedbackToolset;
 
 const eventRangeSchema = {
   from: z.string().datetime(),
@@ -257,7 +260,7 @@ const createEventToolset = (): KeeperEventToolset => ({
     inputSchema: eventRangeSchema,
     execute: async (context, input) => {
       if (!input || !isEventRangeInput(input)) {
-        throw new Error("'from', 'to', and 'timezone' are required");
+        throw new ToolInputError("'from', 'to', and 'timezone' are required");
       }
       const params = new URLSearchParams({ from: input.from, timezone: input.timezone, to: input.to });
       const events = await apiFetch(context, `/api/v1/events?${params}`, z.array(keeperEventSchema));
@@ -273,7 +276,7 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
-        throw new Error("'eventId' is required");
+        throw new ToolInputError("'eventId' is required");
       }
       return apiFetch(context, `/api/v1/events/${input.eventId}`, keeperEventSchema);
     },
@@ -299,7 +302,7 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.calendarId || !input?.title || !input?.startTime || !input?.endTime) {
-        throw new Error("'calendarId', 'title', 'startTime', and 'endTime' are required");
+        throw new ToolInputError("'calendarId', 'title', 'startTime', and 'endTime' are required");
       }
       return apiFetch(context, "/api/v1/events", keeperEventSchema, {
         method: "POST",
@@ -328,7 +331,7 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
-        throw new Error("'eventId' is required");
+        throw new ToolInputError("'eventId' is required");
       }
       const { eventId, ...updates } = input;
       return apiFetch(context, `/api/v1/events/${eventId}`, keeperEventSchema, {
@@ -346,7 +349,7 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: async (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
-        throw new Error("'eventId' is required");
+        throw new ToolInputError("'eventId' is required");
       }
       await apiFetchRaw(context, `/api/v1/events/${input.eventId}`, {
         method: "DELETE",
@@ -365,10 +368,10 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.eventId || typeof input.eventId !== "string") {
-        throw new Error("'eventId' is required");
+        throw new ToolInputError("'eventId' is required");
       }
       if (!input?.rsvpStatus || typeof input.rsvpStatus !== "string") {
-        throw new Error("'rsvpStatus' is required");
+        throw new ToolInputError("'rsvpStatus' is required");
       }
       return apiFetch(context, `/api/v1/events/${input.eventId}`, z.object({ rsvpStatus: z.string() }), {
         method: "PATCH",
@@ -387,10 +390,10 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.calendarId || typeof input.calendarId !== "string") {
-        throw new Error("'calendarId' is required");
+        throw new ToolInputError("'calendarId' is required");
       }
       if (!input || !isEventRangeInput(input)) {
-        throw new Error("'from', 'to', and 'timezone' are required");
+        throw new ToolInputError("'from', 'to', and 'timezone' are required");
       }
       const params = new URLSearchParams({ from: input.from, to: input.to });
       return apiFetch(context, `/api/v1/calendars/${input.calendarId}/invites?${params}`, z.array(z.unknown()));
@@ -438,10 +441,10 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: async (context, input) => {
       if (!input || !isEventRangeInput(input)) {
-        throw new Error("'from', 'to', and 'timezone' are required");
+        throw new ToolInputError("'from', 'to', and 'timezone' are required");
       }
       if (typeof input.durationMinutes !== "number") {
-        throw new TypeError("'durationMinutes' is required");
+        throw new ToolInputError("'durationMinutes' is required");
       }
       const params = buildFreeTimeParams(input, input.durationMinutes);
       const freeTime = await apiFetch(
@@ -471,10 +474,10 @@ const createEventToolset = (): KeeperEventToolset => ({
     },
     execute: (context, input) => {
       if (!input?.calendarId || typeof input.calendarId !== "string") {
-        throw new Error("'calendarId' is required");
+        throw new ToolInputError("'calendarId' is required");
       }
       if (typeof input.paused !== "boolean") {
-        throw new TypeError("'paused' is required");
+        throw new ToolInputError("'paused' is required");
       }
       return apiFetch(
         context,
@@ -489,11 +492,16 @@ const createEventToolset = (): KeeperEventToolset => ({
   },
 });
 
-const createKeeperMcpToolset = (): KeeperMcpToolset => ({
+interface KeeperMcpToolsetOptions {
+  feedback: KeeperFeedbackOptions;
+}
+
+const createKeeperMcpToolset = ({ feedback }: KeeperMcpToolsetOptions): KeeperMcpToolset => ({
   ...createEventToolset(),
   ...createSyncToolset(),
   ...createCalendarLinkToolset(),
   ...createIcalFeedToolset(),
+  ...createFeedbackToolset(feedback),
 });
 
 export { createKeeperMcpToolset, normalizeTimezoneOffset, toLocalizedTime };
@@ -503,6 +511,7 @@ export type {
   KeeperFreeTime,
   KeeperMcpToolDefinition,
   KeeperMcpToolset,
+  KeeperMcpToolsetOptions,
   KeeperSyncTrigger,
   KeeperToolContext,
 };

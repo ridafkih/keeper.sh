@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createKeeperMcpHandler } from "../src/mcp-handler";
 import { createKeeperMcpToolset } from "../src/toolset";
+import { testFeedbackOptions } from "./helpers/feedback-options";
 
 /* The www host, which serves directly. The apex redirects, and a registry
    entry cannot be edited once published, so both the endpoint and the
@@ -121,7 +122,7 @@ const readAnnouncedServerInfo = async () => {
     },
     mcpPublicUrl: "https://mcp.keeper.sh",
     apiBaseUrl: "https://keeper.sh",
-    toolset: createKeeperMcpToolset(),
+    toolset: createKeeperMcpToolset({ feedback: testFeedbackOptions }),
   });
 
   const response = await handler(

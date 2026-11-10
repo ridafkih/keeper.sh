@@ -11,12 +11,20 @@ interface KeeperMcpToolAnnotations {
   openWorldHint: boolean;
 }
 
+interface KeeperToolCall {
+  intent?: string;
+}
+
 interface KeeperMcpToolDefinition<TResult> {
   description: string;
   title: string;
   annotations: KeeperMcpToolAnnotations;
   inputSchema?: Record<string, z.ZodTypeAny>;
-  execute: (context: KeeperToolContext, input?: Record<string, unknown>) => Promise<TResult>;
+  execute: (
+    context: KeeperToolContext,
+    input?: Record<string, unknown>,
+    call?: KeeperToolCall,
+  ) => Promise<TResult>;
 }
 
 const READ_ONLY: KeeperMcpToolAnnotations = {
@@ -35,6 +43,32 @@ const DESTRUCTIVE: KeeperMcpToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: true,
   openWorldHint: false,
+};
+
+const SERVER_ERROR_STATUS = 500;
+
+class ToolInputError extends Error {
+  override name = "ToolInputError";
+}
+
+class KeeperApiError extends Error {
+  override name = "KeeperApiError";
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const isExpectedToolFailure = (error: unknown): boolean => {
+  if (error instanceof ToolInputError) {
+    return true;
+  }
+  if (error instanceof KeeperApiError) {
+    return error.status < SERVER_ERROR_STATUS;
+  }
+  return false;
 };
 
 const isErrorResponse = (value: unknown): value is { error: string } =>
@@ -58,9 +92,9 @@ const apiFetchRaw = async (
   if (!response.ok) {
     const body: unknown = await response.json().catch(() => null);
     if (isErrorResponse(body)) {
-      throw new Error(body.error);
+      throw new KeeperApiError(body.error, response.status);
     }
-    throw new Error(response.statusText);
+    throw new KeeperApiError(response.statusText, response.status);
   }
 
   if (response.status === 204) {
@@ -83,7 +117,7 @@ const apiFetch = async <TResult>(
 const requireString = (input: Record<string, unknown> | undefined, key: string): string => {
   const value = input?.[key];
   if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`'${key}' is required`);
+    throw new ToolInputError(`'${key}' is required`);
   }
   return value;
 };
@@ -91,7 +125,7 @@ const requireString = (input: Record<string, unknown> | undefined, key: string):
 const requireStringArray = (input: Record<string, unknown> | undefined, key: string): string[] => {
   const value = input?.[key];
   if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    throw new TypeError(`'${key}' must be an array of strings`);
+    throw new ToolInputError(`'${key}' must be an array of strings`);
   }
   return value;
 };
@@ -110,10 +144,12 @@ export {
   ADDITIVE,
   DESTRUCTIVE,
   READ_ONLY,
+  ToolInputError,
   apiFetch,
   apiFetchRaw,
+  isExpectedToolFailure,
   pickProvided,
   requireString,
   requireStringArray,
 };
-export type { KeeperMcpToolAnnotations, KeeperMcpToolDefinition, KeeperToolContext };
+export type { KeeperMcpToolAnnotations, KeeperMcpToolDefinition, KeeperToolCall, KeeperToolContext };

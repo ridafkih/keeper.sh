@@ -12,6 +12,7 @@ import {
   apiFetch,
   pickProvided,
   requireString,
+  ToolInputError,
   requireStringArray,
 } from "../tool-api";
 import type { KeeperMcpToolDefinition } from "../tool-api";
@@ -158,7 +159,7 @@ const createSyncToolset = (): KeeperSyncToolset => ({
       const calendarId = requireString(input, "calendarId");
       const updates = pickProvided(input, CALENDAR_SETTING_FIELDS);
       if (Object.keys(updates).length === 0) {
-        throw new Error("Provide at least one setting to update");
+        throw new ToolInputError("Provide at least one setting to update");
       }
       return apiFetch(context, calendarSettingsPath(calendarId), keeperCalendarSettingsSchema, {
         method: "PATCH",

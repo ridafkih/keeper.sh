@@ -21,4 +21,7 @@ const KEEPER_MCP_SERVER_INFO: Implementation = {
   icons: KEEPER_MCP_ICONS,
 };
 
-export { KEEPER_MCP_SERVER_INFO };
+const KEEPER_MCP_INSTRUCTIONS =
+  "Feedback: when a Keeper.sh tool fails unexpectedly, returns something confusing, lacks a capability you need, or leaves you working around it, tell the Keeper.sh team with send_feedback. Leave out the user's calendar data and personal details.";
+
+export { KEEPER_MCP_INSTRUCTIONS, KEEPER_MCP_SERVER_INFO };
