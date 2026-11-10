@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.ridafkih/keeper-sh",
   "title": "Keeper.sh",
-  "description": "Keeper.sh calendar sync: read and book events, RSVP and find free time across synced calendars.",
-  "version": "1.0.1",
+  "description": "Keeper.sh calendar sync: read and book events, find free time, and manage syncs and iCal feeds.",
+  "version": "1.1.0",
   "websiteUrl": "https://www.keeper.sh/docs/mcp",
   "repository": {
     "url": "https://github.com/ridafkih/keeper.sh",

@@ -16,7 +16,7 @@ const KEEPER_MCP_ICONS: NonNullable<Implementation["icons"]> = ICON_THEMES.flatM
 const KEEPER_MCP_SERVER_INFO: Implementation = {
   name: "keeper-sh",
   title: "Keeper.sh",
-  version: "1.0.1",
+  version: "1.1.0",
   websiteUrl: "https://www.keeper.sh/docs/mcp",
   icons: KEEPER_MCP_ICONS,
 };
