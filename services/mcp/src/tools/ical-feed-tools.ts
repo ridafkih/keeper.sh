@@ -6,6 +6,7 @@ import {
   apiFetch,
   pickProvided,
   requireString,
+  ToolInputError,
   requireStringArray,
 } from "../tool-api";
 import type { KeeperMcpToolDefinition } from "../tool-api";
@@ -96,7 +97,7 @@ const createIcalFeedToolset = (): KeeperIcalFeedToolset => ({
       const feedId = requireString(input, "feedId");
       const updates = pickProvided(input, FEED_UPDATE_FIELDS);
       if (Object.keys(updates).length === 0) {
-        throw new Error("Provide at least one field to update");
+        throw new ToolInputError("Provide at least one field to update");
       }
       return apiFetch(context, feedPath(feedId), keeperIcalFeedSchema, {
         method: "PATCH",

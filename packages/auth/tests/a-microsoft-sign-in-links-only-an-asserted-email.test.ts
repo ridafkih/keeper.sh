@@ -17,6 +17,7 @@ const MICROSOFT_CONSUMER_TENANT_ID = "9188040d-6c67-4c5b-b112-36a304b66dad";
 const AUTH_DDL = `
 create table "user" (
   "id" text primary key,
+  "agentFeedbackEnabled" boolean not null default true,
   "createdAt" timestamptz not null default now(),
   "email" text not null unique,
   "emailVerified" boolean not null default false,

@@ -730,3 +730,22 @@ export type {
   GraphNotificationCollection,
   PushChannelStateValue,
 };
+
+export {
+  AGENT_FEEDBACK_CATEGORIES,
+  AGENT_FEEDBACK_DEPLOYMENTS,
+  AGENT_FEEDBACK_SEVERITIES,
+  AGENT_FEEDBACK_TOOL_NAME_PATTERN,
+  AGENT_FEEDBACK_USER_AGENT_PREFIX,
+  DEFAULT_AGENT_FEEDBACK_SEVERITY,
+  MAX_AGENT_FEEDBACK_BODY_BYTES,
+  MAX_AGENT_FEEDBACK_MESSAGE_LENGTH,
+  MAX_AGENT_INTENT_LENGTH,
+  agentFeedbackRequestSchema,
+} from "./agent-feedback";
+export type {
+  AgentFeedbackCategory,
+  AgentFeedbackDeployment,
+  AgentFeedbackRequest,
+  AgentFeedbackSeverity,
+} from "./agent-feedback";

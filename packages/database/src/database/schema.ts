@@ -11,6 +11,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { eq, isNotNull, isNull, sql } from "drizzle-orm";
 import {
+  AGENT_FEEDBACK_CATEGORIES,
+  AGENT_FEEDBACK_DEPLOYMENTS,
+  AGENT_FEEDBACK_SEVERITIES,
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_FUTURE_SYNC_RANGE,
@@ -20,6 +23,9 @@ import {
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
+
+const toSqlValueList = (values: readonly string[]): string =>
+  values.map((value) => `'${value}'`).join(", ");
 
 const SYNC_RANGE_SQL_VALUES = SYNC_RANGE_DEFINITIONS
   .map(({ value }) => `'${value}'`)
@@ -494,6 +500,36 @@ const feedbackTable = pgTable(
   (table) => [index("feedback_user_idx").on(table.userId)],
 );
 
+const agentFeedbackTable = pgTable(
+  "agent_feedback",
+  {
+    category: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    deployment: text().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    intent: text(),
+    message: text().notNull(),
+    severity: text().notNull(),
+    toolName: text(),
+    version: text().notNull(),
+  },
+  (table) => [
+    index("agent_feedback_created_at_idx").on(table.createdAt),
+    check(
+      "agent_feedback_category_check",
+      sql`"category" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_CATEGORIES))})`,
+    ),
+    check(
+      "agent_feedback_severity_check",
+      sql`"severity" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_SEVERITIES))})`,
+    ),
+    check(
+      "agent_feedback_deployment_check",
+      sql`"deployment" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_DEPLOYMENTS))})`,
+    ),
+  ],
+);
+
 const apiTokensTable = pgTable(
   "api_tokens",
   {
@@ -616,6 +652,7 @@ const userMilestonesTable = pgTable(
 );
 
 export {
+  agentFeedbackTable,
   apiTokensTable,
   caldavCredentialsTable,
   calendarAccountsTable,

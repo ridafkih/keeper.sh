@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeeperMcpToolset } from "../src/toolset";
+import { testFeedbackOptions } from "./helpers/feedback-options";
 import { DAILY_CAP_REACHED, MISSING_WRITE_SCOPE, context, stubApi } from "./helpers/api-stub";
 
 const FEED_ID = "019c0000-0000-7000-8000-000000000010";
@@ -26,7 +27,7 @@ const storedFeed = {
   userId: "user-1",
 };
 
-const toolset = createKeeperMcpToolset();
+const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
 
 afterEach(() => {
   vi.unstubAllGlobals();
