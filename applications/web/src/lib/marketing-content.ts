@@ -4,6 +4,9 @@ import { type, type Type } from "arktype";
 import { HOW_IT_WORKS_STEP_IDS, resolveHowItWorksSteps } from "../features/marketing/how-it-works-layout";
 import { FEATURE_CELLS, PRICING_PLAN_IDS, resolvePricingFeatures } from "../features/marketing/pricing-layout";
 
+const INTERNAL_PATH = /^\/[a-z0-9/-]*$/;
+const SOURCE_HREF = /^(\/[a-z0-9/-]*|https:\/\/\S+)$/;
+
 const titledCard = type({
   "+": "reject",
   title: "string >= 1",
@@ -26,7 +29,7 @@ const homeSchema = type({
     providers: titledCard,
     details: titledCard,
     agents: titledCard,
-    openSource: { "+": "reject", title: "string >= 1", description: "string >= 1", linkLabel: "string >= 1" },
+    "openSource?": { "+": "reject", title: "string >= 1", description: "string >= 1", linkLabel: "string >= 1" },
   },
   howItWorks: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
   testimonials: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
@@ -57,7 +60,7 @@ const homeSchema = type({
 const featuresSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
-  header: { "+": "reject", heading: "string >= 1" },
+  header: { "+": "reject", heading: "string >= 1", "body?": "string >= 1" },
   cards: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
   howItWorks: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
   cta: {
@@ -72,8 +75,103 @@ const featuresSchema = type({
 const pricingSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
-  header: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  header: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    "freeLink?": { "+": "reject", lead: "string >= 1", label: "string >= 1", end: "string >= 1" },
+  },
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
+});
+
+const freeSchema = type({
+  "+": "reject",
+  seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
+  header: { "+": "reject", heading: "string >= 1", body: "string >= 1", ctaLabel: "string >= 1" },
+  includes: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    items: type({
+      "+": "reject",
+      id: "string >= 1",
+      label: "string >= 1",
+      value: "string >= 1",
+      detail: "string >= 1",
+    }).array(),
+  },
+  enough: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    setups: type({
+      "+": "reject",
+      id: "string >= 1",
+      title: "string >= 1",
+      body: "string >= 1",
+      usage: "string >= 1",
+      "href?": INTERNAL_PATH,
+    }).array(),
+  },
+  setup: {
+    "+": "reject",
+    heading: "string >= 1",
+    steps: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
+  },
+  pro: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    linkLabel: "string >= 1",
+    reasons: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
+  },
+  faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
+  cta: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    primaryLabel: "string >= 1",
+    secondaryLabel: "string >= 1",
+  },
+});
+
+const contentLink = type({ "+": "reject", label: "string >= 1", path: INTERNAL_PATH });
+
+const sourcedFigure = type({ "+": "reject", text: "string >= 1", href: SOURCE_HREF });
+
+const compareSchema = type({
+  "+": "reject",
+  seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
+  header: {
+    "+": "reject",
+    heading: "string >= 1",
+    definition: "string >= 1",
+    entity: "string >= 1",
+    guides: { "+": "reject", text: "string >= 1", link: contentLink },
+  },
+  table: {
+    "+": "reject",
+    heading: "string >= 1",
+    lead: "string >= 1",
+    columns: {
+      "+": "reject",
+      tool: "string >= 1",
+      price: "string >= 1",
+      freePlan: "string >= 1",
+      calendars: "string >= 1",
+      speed: "string >= 1",
+    },
+    rows: type({
+      "+": "reject",
+      tool: "string >= 1",
+      path: type(INTERNAL_PATH).or("null"),
+      price: sourcedFigure,
+      freePlan: sourcedFigure,
+      calendars: sourcedFigure,
+      speed: sourcedFigure,
+    }).array(),
+  },
+  groups: type({ "+": "reject", heading: "string >= 1", links: contentLink.array() }).array(),
 });
 
 const planCopy = type({
@@ -143,16 +241,24 @@ const aboutSchema = type({
       p3LinkLabel: "string >= 1",
       p3End: "string >= 1",
     },
+    "data?": {
+      "+": "reject",
+      title: "string >= 1",
+      p1: "string >= 1",
+      p2Lead: "string >= 1",
+      p2LinkLabel: "string >= 1",
+      p2End: "string >= 1",
+    },
     code: {
       "+": "reject",
       title: "string >= 1",
       p1Lead: "string >= 1",
       p1LinkLabel: "string >= 1",
       p1End: "string >= 1",
-      p2: "string >= 1",
-      p3Lead: "string >= 1",
-      p3LinkLabel: "string >= 1",
-      p3End: "string >= 1",
+      "p2?": "string >= 1",
+      "p3Lead?": "string >= 1",
+      "p3LinkLabel?": "string >= 1",
+      "p3End?": "string >= 1",
     },
     support: {
       "+": "reject",
@@ -249,11 +355,19 @@ const selfHostingSchema = type({
   },
 });
 
+const toolSyncGuides = type({
+  "+": "reject",
+  heading: "string >= 1",
+  body: "string >= 1",
+  links: type({ "+": "reject", label: "string >= 1", path: /^\/[a-z0-9/-]+$/ }).array(),
+});
+
 const icsViewerSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
   header: { "+": "reject", heading: "string >= 1" },
   howRead: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  "syncGuides?": toolSyncGuides,
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
   cta: { "+": "reject", title: "string >= 1", body: "string >= 1" },
 });
@@ -263,6 +377,7 @@ const icsGeneratorSchema = type({
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
   header: { "+": "reject", heading: "string >= 1" },
   writes: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  "syncGuides?": toolSyncGuides,
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
   cta: { "+": "reject", title: "string >= 1", body: "string >= 1" },
 });
@@ -276,6 +391,8 @@ const softwareSchemaSchema = type({
 export type HomeCopy = typeof homeSchema.infer;
 export type FeaturesCopy = typeof featuresSchema.infer;
 export type PricingCopy = typeof pricingSchema.infer;
+export type FreeCopy = typeof freeSchema.infer;
+export type CompareCopy = typeof compareSchema.infer;
 export type PlansCopy = typeof plansSchema.infer;
 export type PricingPlansCopy = typeof pricingPlansSchema.infer;
 export type HowItWorksCopy = typeof howItWorksSchema.infer;
@@ -290,6 +407,8 @@ export interface MarketingCopy {
   home: HomeCopy;
   features: FeaturesCopy;
   pricing: PricingCopy;
+  free: FreeCopy;
+  compare: CompareCopy;
   plans: PlansCopy;
   pricingPlans: PricingPlansCopy;
   howItWorks: HowItWorksCopy;
@@ -317,6 +436,12 @@ function readSurface<T>(directory: string, name: string, schema: Type<T>): T {
   return result as T;
 }
 
+function readSurfaceOrFallback<T>(directory: string, name: string, schema: Type<T>, fallback: T): T {
+  if (!existsSync(join(directory, `${name}.json`))) return fallback;
+
+  return readSurface(directory, name, schema);
+}
+
 export function marketingContentPresent(directory: string): boolean {
   return existsSync(directory) && readdirSync(directory).some((entry) => entry.endsWith(".json"));
 }
@@ -334,7 +459,6 @@ export const fallbackMarketingCopy: MarketingCopy = {
       providers: emptyCard,
       details: emptyCard,
       agents: emptyCard,
-      openSource: { title: "Keeper.sh", description: "Keeper.sh", linkLabel: "Keeper.sh" },
     },
     howItWorks: { heading: "Keeper.sh", subheading: "Keeper.sh" },
     testimonials: { heading: "Keeper.sh", subheading: "Keeper.sh" },
@@ -360,6 +484,32 @@ export const fallbackMarketingCopy: MarketingCopy = {
     seo: emptySeo,
     header: { heading: "Keeper.sh", body: "Keeper.sh" },
     faq: { heading: "Keeper.sh", items: [] },
+  },
+  free: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh", body: "Keeper.sh", ctaLabel: "Keeper.sh" },
+    includes: { heading: "Keeper.sh", body: "Keeper.sh", items: [] },
+    enough: { heading: "Keeper.sh", body: "Keeper.sh", setups: [] },
+    setup: { heading: "Keeper.sh", steps: [] },
+    pro: { heading: "Keeper.sh", body: "Keeper.sh", linkLabel: "Keeper.sh", reasons: [] },
+    faq: { heading: "Keeper.sh", items: [] },
+    cta: emptyCta,
+  },
+  compare: {
+    seo: emptySeo,
+    header: {
+      heading: "Keeper.sh",
+      definition: "Keeper.sh",
+      entity: "Keeper.sh",
+      guides: { text: "Keeper.sh", link: { label: "Keeper.sh", path: "/blog" } },
+    },
+    table: {
+      heading: "Keeper.sh",
+      lead: "Keeper.sh",
+      columns: { tool: "Keeper.sh", price: "Keeper.sh", freePlan: "Keeper.sh", calendars: "Keeper.sh", speed: "Keeper.sh" },
+      rows: [],
+    },
+    groups: [],
   },
   plans: {
     free: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
@@ -411,10 +561,6 @@ export const fallbackMarketingCopy: MarketingCopy = {
         p1Lead: "Keeper.sh",
         p1LinkLabel: "Keeper.sh",
         p1End: "Keeper.sh",
-        p2: "Keeper.sh",
-        p3Lead: "Keeper.sh",
-        p3LinkLabel: "Keeper.sh",
-        p3End: "Keeper.sh",
       },
       support: {
         title: "Keeper.sh",
@@ -520,6 +666,8 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
     home: readSurface(directory, "home", homeSchema),
     features: readSurface(directory, "features", featuresSchema),
     pricing: readSurface(directory, "pricing", pricingSchema),
+    free: readSurfaceOrFallback(directory, "free", freeSchema, fallbackMarketingCopy.free),
+    compare: readSurfaceOrFallback(directory, "compare", compareSchema, fallbackMarketingCopy.compare),
     plans: readSurface(directory, "plans", plansSchema),
     pricingPlans,
     howItWorks,

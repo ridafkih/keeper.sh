@@ -2,7 +2,7 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
+import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { ExternalTextLink, TextLink } from "@/components/ui/primitives/text-link";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, personSchema } from "@/lib/seo";
@@ -10,7 +10,6 @@ import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
 import { marketingCopy } from "@/lib/marketing-copy";
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const breadcrumbs = breadcrumbTrail({ name: "About", path: "/about" });
 
@@ -33,6 +32,7 @@ export const Route = createFileRoute("/(marketing)/about")({
       title: about.seo.title,
       description: PAGE_DESCRIPTION,
       path: "/about",
+      brandPosition: "none",
     }),
     scripts: [
       jsonLdScript(webPageSchema(
@@ -97,6 +97,19 @@ function AboutPage() {
           </Text>
         </Section>
 
+        {aboutSections.data && (
+          <Section title={aboutSections.data.title}>
+            <Text size="sm">
+              {aboutSections.data.p1}
+            </Text>
+            <Text size="sm">
+              {aboutSections.data.p2Lead}{" "}
+              <TextLink align="left" size="sm" to="/privacy" tone="default">{aboutSections.data.p2LinkLabel}</TextLink>
+              {" "}{aboutSections.data.p2End}
+            </Text>
+          </Section>
+        )}
+
         <Section title={aboutSections.code.title}>
           <Text size="sm">
             {aboutSections.code.p1Lead}{" "}
@@ -105,14 +118,18 @@ function AboutPage() {
             </ExternalTextLink>
             {aboutSections.code.p1End}
           </Text>
-          <Text size="sm">
-            {aboutSections.code.p2}
-          </Text>
-          <Text size="sm">
-            {aboutSections.code.p3Lead}{" "}
-            <TextLink align="left" size="sm" to="/pricing" tone="default">{aboutSections.code.p3LinkLabel}</TextLink>
-            {" "}{aboutSections.code.p3End}
-          </Text>
+          {aboutSections.code.p2 && (
+            <Text size="sm">
+              {aboutSections.code.p2}
+            </Text>
+          )}
+          {aboutSections.code.p3Lead && aboutSections.code.p3LinkLabel && aboutSections.code.p3End && (
+            <Text size="sm">
+              {aboutSections.code.p3Lead}{" "}
+              <TextLink align="left" size="sm" to="/pricing" tone="default">{aboutSections.code.p3LinkLabel}</TextLink>
+              {" "}{aboutSections.code.p3End}
+            </Text>
+          )}
         </Section>
 
         <Section title={aboutSections.support.title}>
@@ -149,18 +166,9 @@ function AboutPage() {
                 <ArrowRightIcon size={16} />
               </ButtonIcon>
             </LinkButton>
-            <ExternalLinkButton
-              href={REPOSITORY_URL}
-              target="_blank"
-              rel="noreferrer"
-              size="compact"
-              variant="inverse-ghost"
-            >
+            <LinkButton to="/pricing" size="compact" variant="inverse-ghost">
               <ButtonText>{about.cta.secondaryLabel}</ButtonText>
-              <ButtonIcon>
-                <ArrowUpRightIcon size={16} />
-              </ButtonIcon>
-            </ExternalLinkButton>
+            </LinkButton>
           </div>
         </MarketingCtaCard>
       </MarketingCtaSection>
