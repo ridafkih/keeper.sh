@@ -167,6 +167,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
       remoteReadDurationMs: 42.25,
       sourceCalendarIdsAtLocalRead: ["source-1", "source-2"],
       sourceCalendarIdsBeforeRemoteRead: ["source-1", "source-2"],
+      suppressedNativeDuplicateCount: 2,
       verifiedSourceCalendarCount: 2,
     })).toEqual({
       "local_event_states.candidate_count": 8,
@@ -178,6 +179,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
       "local_event_states.outside_reconciliation_window_count": 1,
       "local_event_states.over_budget_series_count": 1,
       "local_event_states.over_budget_series_uids": "pathological-series",
+      "local_event_states.suppressed_native_duplicate_count": 2,
       "local_event_states.syncable_count": 4,
       "reconciliation.local_read.duration_ms": 12.5,
       "reconciliation.remote_read.duration_ms": 42.25,
@@ -212,6 +214,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
       remoteReadDurationMs: 2,
       sourceCalendarIdsAtLocalRead: ["source-1"],
       sourceCalendarIdsBeforeRemoteRead: ["source-1"],
+      suppressedNativeDuplicateCount: 0,
       verifiedSourceCalendarCount: 1,
     });
 
@@ -238,6 +241,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
       remoteReadDurationMs: 2,
       sourceCalendarIdsAtLocalRead: ["source-2", "source-1"],
       sourceCalendarIdsBeforeRemoteRead: ["source-1", "source-2"],
+      suppressedNativeDuplicateCount: 0,
       verifiedSourceCalendarCount: 2,
     });
     const replaced = createDestinationReconciliationWideEventFields({
@@ -254,6 +258,7 @@ describe("createDestinationReconciliationWideEventFields", () => {
       remoteReadDurationMs: 2,
       sourceCalendarIdsAtLocalRead: ["source-1", "source-3"],
       sourceCalendarIdsBeforeRemoteRead: ["source-1", "source-2"],
+      suppressedNativeDuplicateCount: 0,
       verifiedSourceCalendarCount: 2,
     });
 
