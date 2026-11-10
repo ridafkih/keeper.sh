@@ -280,7 +280,12 @@ describe("personSchema", () => {
   });
 
   it("is the author a blog post points at and the organization's founder", () => {
-    const reference = { "@id": PERSON_ID, "@type": "Person", name: "Rida F'kih" };
+    const reference = {
+      "@id": PERSON_ID,
+      "@type": "Person",
+      name: "Rida F'kih",
+      url: "https://www.keeper.sh/about",
+    };
 
     expect(blogPostingSchema(post).author).toEqual(reference);
     expect(organizationSchema["@graph"][0]).toMatchObject({ founder: reference });

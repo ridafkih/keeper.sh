@@ -7,7 +7,7 @@ const SITE_ALTERNATE_NAME = "Keeper";
 // Search engines only. This must never appear in visible page copy — it reads as a
 // defensive aside about a competitor the reader was not thinking about.
 export const BRAND_DISAMBIGUATION =
-  "Keeper.sh is a calendar syncing tool. It is not affiliated with Keeper Security, the password manager.";
+  "Keeper.sh is a calendar sync service. It is not affiliated with Keeper Security, the password manager.";
 const DEFAULT_IMAGE_PATH = "/open-graph.png";
 
 export function canonicalUrl(path: string): string {
@@ -107,7 +107,12 @@ const PERSON_ID = entityId("/about", "person");
 // Consumers resolve @id within one page's graph, not across pages, and the Person
 // node itself is only emitted on /about. Carrying the type and name alongside the
 // id keeps the reference meaningful everywhere else it appears.
-export const authorReference = { "@id": PERSON_ID, "@type": "Person", name: AUTHOR_NAME };
+export const authorReference = {
+  "@id": PERSON_ID,
+  "@type": "Person",
+  name: AUTHOR_NAME,
+  url: canonicalUrl("/about"),
+};
 
 export const organizationSchema = {
   "@context": "https://schema.org",
@@ -125,7 +130,7 @@ export const organizationSchema = {
         height: 512,
       },
       disambiguatingDescription: BRAND_DISAMBIGUATION,
-      sameAs: ["https://github.com/ridafkih/keeper.sh"],
+      sameAs: ["https://github.com/ridafkih/keeper.sh", "https://toolradar.com/tools/keeper-sh"],
       founder: authorReference,
     },
     {
