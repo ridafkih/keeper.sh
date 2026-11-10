@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading2, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
 import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
@@ -58,10 +58,25 @@ function FreeListRow({ children }: PropsWithChildren) {
   return <li className="flex flex-col gap-1.5 p-4 md:p-6 bg-background">{children}</li>;
 }
 
-function FreeListRowHeading({ children, trailing }: PropsWithChildren<{ trailing?: string }>) {
+function FreeListRowTitle({ children, to }: PropsWithChildren<{ to?: string }>) {
+  if (!to) return children;
+
+  return (
+    <Link
+      to={to}
+      className="rounded-sm underline underline-offset-4 hover:text-foreground-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      {children}
+    </Link>
+  );
+}
+
+function FreeListRowHeading({ children, trailing, to }: PropsWithChildren<{ trailing?: string; to?: string }>) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-      <Heading3 as="h3">{children}</Heading3>
+      <Heading3 as="h3">
+        <FreeListRowTitle to={to}>{children}</FreeListRowTitle>
+      </Heading3>
       {trailing && <Text as="span" size="sm" tone="default">{trailing}</Text>}
     </div>
   );
@@ -109,7 +124,7 @@ function FreePage() {
         <FreeList>
           {free.enough.setups.map((setup) => (
             <FreeListRow key={setup.id}>
-              <FreeListRowHeading trailing={setup.usage}>{setup.title}</FreeListRowHeading>
+              <FreeListRowHeading trailing={setup.usage} to={setup.href}>{setup.title}</FreeListRowHeading>
               <Text size="sm" tone="muted">{setup.body}</Text>
             </FreeListRow>
           ))}

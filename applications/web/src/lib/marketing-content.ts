@@ -4,6 +4,9 @@ import { type, type Type } from "arktype";
 import { HOW_IT_WORKS_STEP_IDS, resolveHowItWorksSteps } from "../features/marketing/how-it-works-layout";
 import { FEATURE_CELLS, PRICING_PLAN_IDS, resolvePricingFeatures } from "../features/marketing/pricing-layout";
 
+const INTERNAL_PATH = /^\/[a-z0-9/-]*$/;
+const SOURCE_HREF = /^(\/[a-z0-9/-]*|https:\/\/\S+)$/;
+
 const titledCard = type({
   "+": "reject",
   title: "string >= 1",
@@ -107,6 +110,7 @@ const freeSchema = type({
       title: "string >= 1",
       body: "string >= 1",
       usage: "string >= 1",
+      "href?": INTERNAL_PATH,
     }).array(),
   },
   setup: {
@@ -129,6 +133,45 @@ const freeSchema = type({
     primaryLabel: "string >= 1",
     secondaryLabel: "string >= 1",
   },
+});
+
+const contentLink = type({ "+": "reject", label: "string >= 1", path: INTERNAL_PATH });
+
+const sourcedFigure = type({ "+": "reject", text: "string >= 1", href: SOURCE_HREF });
+
+const compareSchema = type({
+  "+": "reject",
+  seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
+  header: {
+    "+": "reject",
+    heading: "string >= 1",
+    definition: "string >= 1",
+    entity: "string >= 1",
+    guides: { "+": "reject", text: "string >= 1", link: contentLink },
+  },
+  table: {
+    "+": "reject",
+    heading: "string >= 1",
+    lead: "string >= 1",
+    columns: {
+      "+": "reject",
+      tool: "string >= 1",
+      price: "string >= 1",
+      freePlan: "string >= 1",
+      calendars: "string >= 1",
+      speed: "string >= 1",
+    },
+    rows: type({
+      "+": "reject",
+      tool: "string >= 1",
+      path: type(INTERNAL_PATH).or("null"),
+      price: sourcedFigure,
+      freePlan: sourcedFigure,
+      calendars: sourcedFigure,
+      speed: sourcedFigure,
+    }).array(),
+  },
+  groups: type({ "+": "reject", heading: "string >= 1", links: contentLink.array() }).array(),
 });
 
 const planCopy = type({
@@ -349,6 +392,7 @@ export type HomeCopy = typeof homeSchema.infer;
 export type FeaturesCopy = typeof featuresSchema.infer;
 export type PricingCopy = typeof pricingSchema.infer;
 export type FreeCopy = typeof freeSchema.infer;
+export type CompareCopy = typeof compareSchema.infer;
 export type PlansCopy = typeof plansSchema.infer;
 export type PricingPlansCopy = typeof pricingPlansSchema.infer;
 export type HowItWorksCopy = typeof howItWorksSchema.infer;
@@ -364,6 +408,7 @@ export interface MarketingCopy {
   features: FeaturesCopy;
   pricing: PricingCopy;
   free: FreeCopy;
+  compare: CompareCopy;
   plans: PlansCopy;
   pricingPlans: PricingPlansCopy;
   howItWorks: HowItWorksCopy;
@@ -389,6 +434,12 @@ function readSurface<T>(directory: string, name: string, schema: Type<T>): T {
   }
 
   return result as T;
+}
+
+function readSurfaceOrFallback<T>(directory: string, name: string, schema: Type<T>, fallback: T): T {
+  if (!existsSync(join(directory, `${name}.json`))) return fallback;
+
+  return readSurface(directory, name, schema);
 }
 
 export function marketingContentPresent(directory: string): boolean {
@@ -443,6 +494,22 @@ export const fallbackMarketingCopy: MarketingCopy = {
     pro: { heading: "Keeper.sh", body: "Keeper.sh", linkLabel: "Keeper.sh", reasons: [] },
     faq: { heading: "Keeper.sh", items: [] },
     cta: emptyCta,
+  },
+  compare: {
+    seo: emptySeo,
+    header: {
+      heading: "Keeper.sh",
+      definition: "Keeper.sh",
+      entity: "Keeper.sh",
+      guides: { text: "Keeper.sh", link: { label: "Keeper.sh", path: "/blog" } },
+    },
+    table: {
+      heading: "Keeper.sh",
+      lead: "Keeper.sh",
+      columns: { tool: "Keeper.sh", price: "Keeper.sh", freePlan: "Keeper.sh", calendars: "Keeper.sh", speed: "Keeper.sh" },
+      rows: [],
+    },
+    groups: [],
   },
   plans: {
     free: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
@@ -599,7 +666,8 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
     home: readSurface(directory, "home", homeSchema),
     features: readSurface(directory, "features", featuresSchema),
     pricing: readSurface(directory, "pricing", pricingSchema),
-    free: readSurface(directory, "free", freeSchema),
+    free: readSurfaceOrFallback(directory, "free", freeSchema, fallbackMarketingCopy.free),
+    compare: readSurfaceOrFallback(directory, "compare", compareSchema, fallbackMarketingCopy.compare),
     plans: readSurface(directory, "plans", plansSchema),
     pricingPlans,
     howItWorks,
