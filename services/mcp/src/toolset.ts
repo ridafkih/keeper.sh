@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { ADDITIVE, DESTRUCTIVE, READ_ONLY, apiFetch, apiFetchRaw } from "./tool-api";
+import type { KeeperMcpToolDefinition, KeeperToolContext } from "./tool-api";
 
 const keeperEventSchema = z.object({
   id: z.string(),
@@ -16,43 +18,6 @@ const keeperEventSchema = z.object({
 });
 
 type KeeperEvent = z.infer<typeof keeperEventSchema>;
-
-interface KeeperToolContext {
-  bearerToken: string;
-  apiBaseUrl: string;
-}
-
-interface KeeperMcpToolAnnotations {
-  readOnlyHint: boolean;
-  destructiveHint: boolean;
-  openWorldHint: boolean;
-}
-
-interface KeeperMcpToolDefinition<TResult> {
-  description: string;
-  title: string;
-  annotations: KeeperMcpToolAnnotations;
-  inputSchema?: Record<string, z.ZodTypeAny>;
-  execute: (context: KeeperToolContext, input?: Record<string, unknown>) => Promise<TResult>;
-}
-
-const READ_ONLY: KeeperMcpToolAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  openWorldHint: false,
-};
-
-const ADDITIVE: KeeperMcpToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  openWorldHint: false,
-};
-
-const DESTRUCTIVE: KeeperMcpToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: true,
-  openWorldHint: false,
-};
 
 const keeperCalendarSchema = z.object({
   id: z.string(),
@@ -89,7 +54,7 @@ const keeperCalendarPauseSchema = z.object({
 });
 type KeeperCalendarPause = z.infer<typeof keeperCalendarPauseSchema>;
 
-interface KeeperMcpToolset {
+interface KeeperEventToolset {
   list_calendars: KeeperMcpToolDefinition<KeeperCalendar[]>;
   get_event_count: KeeperMcpToolDefinition<{ count: number }>;
   get_events: KeeperMcpToolDefinition<KeeperEvent[]>;
@@ -100,54 +65,13 @@ interface KeeperMcpToolset {
   get_pending_invites: KeeperMcpToolDefinition<unknown[]>;
   rsvp_event: KeeperMcpToolDefinition<{ rsvpStatus: string } | { error: string }>;
   list_accounts: KeeperMcpToolDefinition<unknown[]>;
-  get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
   find_free_time: KeeperMcpToolDefinition<KeeperFreeTime>;
   trigger_sync: KeeperMcpToolDefinition<KeeperSyncTrigger>;
+  get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
   pause_sync: KeeperMcpToolDefinition<KeeperCalendarPause>;
 }
 
-const isErrorResponse = (value: unknown): value is { error: string } =>
-  typeof value === "object" && value !== null && "error" in value && typeof value.error === "string";
-
-const apiFetchRaw = async (
-  context: KeeperToolContext,
-  path: string,
-  options?: RequestInit,
-): Promise<unknown> => {
-  const url = `${context.apiBaseUrl}${path}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${context.bearerToken}`,
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const body: unknown = await response.json().catch(() => null);
-    if (isErrorResponse(body)) {
-      throw new Error(body.error);
-    }
-    throw new Error(response.statusText);
-  }
-
-  if (response.status === 204) {
-    return {};
-  }
-
-  return response.json();
-};
-
-const apiFetch = async <TResult>(
-  context: KeeperToolContext,
-  path: string,
-  schema: z.ZodType<TResult>,
-  options?: RequestInit,
-): Promise<TResult> => {
-  const raw = await apiFetchRaw(context, path, options);
-  return schema.parse(raw);
-};
+type KeeperMcpToolset = KeeperEventToolset;
 
 const eventRangeSchema = {
   from: z.string().datetime(),
@@ -282,7 +206,7 @@ const localizeFreeTime = (freeTime: KeeperFreeTime): KeeperFreeTime => ({
   })),
 });
 
-const createKeeperMcpToolset = (): KeeperMcpToolset => ({
+const createEventToolset = (): KeeperEventToolset => ({
   list_calendars: {
     title: "List calendars",
     annotations: READ_ONLY,
@@ -561,6 +485,10 @@ const createKeeperMcpToolset = (): KeeperMcpToolset => ({
       );
     },
   },
+});
+
+const createKeeperMcpToolset = (): KeeperMcpToolset => ({
+  ...createEventToolset(),
 });
 
 export { createKeeperMcpToolset, normalizeTimezoneOffset, toLocalizedTime };
