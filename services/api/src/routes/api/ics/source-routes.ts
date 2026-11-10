@@ -23,6 +23,15 @@ interface InvalidSourceUrlErrorLike extends Error {
   feedFailureReason: IcsFeedFailureReason;
 }
 
+interface IcsItemRouteContext extends IcsRouteContext {
+  params: Record<string, string>;
+}
+
+interface DeleteIcsSourceDependencies {
+  findLinkAccountId: (userId: string, calendarId: string) => Promise<string | null>;
+  deleteAccount: (userId: string, accountId: string) => Promise<boolean>;
+}
+
 interface GetIcsSourcesDependencies {
   getUserSources: (userId: string) => Promise<unknown[]>;
 }
@@ -82,4 +91,26 @@ const handlePostIcsSourceRoute = async (
   }
 };
 
-export { handleGetIcsSourcesRoute, handlePostIcsSourceRoute };
+const handleDeleteIcsSourceRoute = async (
+  context: IcsItemRouteContext,
+  dependencies: DeleteIcsSourceDependencies,
+): Promise<Response> => {
+  const calendarId = context.params.id;
+  if (!calendarId) {
+    return ErrorResponse.badRequest("Calendar ID is required").toResponse();
+  }
+
+  const accountId = await dependencies.findLinkAccountId(context.userId, calendarId);
+  if (!accountId) {
+    return ErrorResponse.notFound("Calendar link not found").toResponse();
+  }
+
+  const deleted = await dependencies.deleteAccount(context.userId, accountId);
+  if (!deleted) {
+    return ErrorResponse.notFound("Calendar link not found").toResponse();
+  }
+
+  return Response.json({ success: true });
+};
+
+export { handleDeleteIcsSourceRoute, handleGetIcsSourcesRoute, handlePostIcsSourceRoute };
