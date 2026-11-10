@@ -73,7 +73,6 @@ interface KeeperEventToolset {
   list_accounts: KeeperMcpToolDefinition<unknown[]>;
   find_free_time: KeeperMcpToolDefinition<KeeperFreeTime>;
   trigger_sync: KeeperMcpToolDefinition<KeeperSyncTrigger>;
-  get_ical_feed: KeeperMcpToolDefinition<{ url: string }>;
   pause_sync: KeeperMcpToolDefinition<KeeperCalendarPause>;
 }
 
@@ -402,12 +401,6 @@ const createEventToolset = (): KeeperEventToolset => ({
     annotations: READ_ONLY,
     description: "List all connected calendar accounts with provider information.",
     execute: (context) => apiFetch(context, "/api/v1/accounts", z.array(z.unknown())),
-  },
-  get_ical_feed: {
-    title: "Get iCal feed URL",
-    annotations: READ_ONLY,
-    description: "Get the user's iCal feed URL for subscribing in other calendar apps.",
-    execute: (context) => apiFetch(context, "/api/v1/ical", z.object({ url: z.string() })),
   },
   find_free_time: {
     title: "Find free time",
