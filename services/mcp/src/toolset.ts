@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { ADDITIVE, DESTRUCTIVE, READ_ONLY, apiFetch, apiFetchRaw } from "./tool-api";
 import type { KeeperMcpToolDefinition, KeeperToolContext } from "./tool-api";
+import { createCalendarLinkToolset } from "./tools/calendar-link-tools";
+import type { KeeperCalendarLinkToolset } from "./tools/calendar-link-tools";
+import { createIcalFeedToolset } from "./tools/ical-feed-tools";
+import type { KeeperIcalFeedToolset } from "./tools/ical-feed-tools";
+import { createSyncToolset } from "./tools/sync-tools";
+import type { KeeperSyncToolset } from "./tools/sync-tools";
 
 const keeperEventSchema = z.object({
   id: z.string(),
@@ -71,7 +77,10 @@ interface KeeperEventToolset {
   pause_sync: KeeperMcpToolDefinition<KeeperCalendarPause>;
 }
 
-type KeeperMcpToolset = KeeperEventToolset;
+type KeeperMcpToolset = KeeperEventToolset
+  & KeeperSyncToolset
+  & KeeperCalendarLinkToolset
+  & KeeperIcalFeedToolset;
 
 const eventRangeSchema = {
   from: z.string().datetime(),
@@ -489,6 +498,9 @@ const createEventToolset = (): KeeperEventToolset => ({
 
 const createKeeperMcpToolset = (): KeeperMcpToolset => ({
   ...createEventToolset(),
+  ...createSyncToolset(),
+  ...createCalendarLinkToolset(),
+  ...createIcalFeedToolset(),
 });
 
 export { createKeeperMcpToolset, normalizeTimezoneOffset, toLocalizedTime };
