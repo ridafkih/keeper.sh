@@ -41,8 +41,14 @@ export interface SeoMetaOptions {
   description: string;
   path: string;
   type?: string;
-  brandPosition?: "before" | "after";
+  brandPosition?: "before" | "after" | "none";
   imagePath?: string;
+}
+
+function formatTitle(title: string, brandPosition: SeoMetaOptions["brandPosition"]): string {
+  if (brandPosition === "none") return title;
+  if (brandPosition === "before") return `${SITE_NAME} — ${title}`;
+  return `${title} · ${SITE_NAME}`;
 }
 
 export function seoMeta({
@@ -53,9 +59,7 @@ export function seoMeta({
   brandPosition = "after",
   imagePath = DEFAULT_IMAGE_PATH,
 }: SeoMetaOptions) {
-  const fullTitle = brandPosition === "before"
-    ? `${SITE_NAME} — ${title}`
-    : `${title} · ${SITE_NAME}`;
+  const fullTitle = formatTitle(title, brandPosition);
   const imageUrl = canonicalUrl(imagePath);
   return [
     { title: fullTitle },

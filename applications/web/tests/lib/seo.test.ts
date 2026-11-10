@@ -112,6 +112,17 @@ describe("seoMeta", () => {
     });
   });
 
+  it("leaves a title that already names the brand without a suffix", () => {
+    const meta = seoMeta({
+      title: "Keeper.sh pricing: free plan and $5 a month Pro",
+      description: "Plans and pricing.",
+      path: "/pricing",
+      brandPosition: "none",
+    });
+
+    expect(meta[0]).toEqual({ title: "Keeper.sh pricing: free plan and $5 a month Pro" });
+  });
+
   it("keeps the declared image dimensions at 1200x630", () => {
     const meta = seoMeta({
       title: "Pricing",
