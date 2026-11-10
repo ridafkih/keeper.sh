@@ -1,4 +1,5 @@
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { idParamSchema } from "@/utils/request-query";
 import {
@@ -7,17 +8,17 @@ import {
 } from "@/utils/account-calendar-refresh";
 import { handleAccountRefreshRoute } from "./refresh-route";
 
-const POST = withWideEvent(
-  withAuth(({ params, userId }) => {
-    if (!params.id || !idParamSchema.allows(params)) {
-      return ErrorResponse.badRequest("Account ID is required").toResponse();
-    }
+const refreshAccount: AuthenticatedRouteCallback = ({ params, userId }) => {
+  if (!params.id || !idParamSchema.allows(params)) {
+    return ErrorResponse.badRequest("Account ID is required").toResponse();
+  }
 
-    return handleAccountRefreshRoute({ accountId: params.id, userId }, {
-      acquireRefreshLock: acquireAccountRefreshLock,
-      refreshCalendars: refreshAccountCalendars,
-    });
-  }),
-);
+  return handleAccountRefreshRoute({ accountId: params.id, userId }, {
+    acquireRefreshLock: acquireAccountRefreshLock,
+    refreshCalendars: refreshAccountCalendars,
+  });
+};
 
-export { POST };
+const POST = withWideEvent(withAuth(refreshAccount));
+
+export { POST, refreshAccount };

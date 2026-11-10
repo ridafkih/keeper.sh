@@ -1,6 +1,7 @@
 import { icalFeedNameSchema } from "@keeper.sh/data-schemas";
 import { HTTP_STATUS } from "@keeper.sh/constants";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { database } from "@/context";
 import { ErrorResponse } from "@/utils/responses";
 import { icalFeedCreateBodySchema } from "@/utils/request-body";
@@ -62,29 +63,36 @@ const handleGetIcalFeedsRoute = async <TFeed>(
   return Response.json(feeds);
 };
 
-const GET = withWideEvent(
-  withAuth(async ({ userId }) => await handleGetIcalFeedsRoute(
-    { userId },
-    {
-      ensureDefaultFeed: (resolvedUserId) =>
-        ensureDefaultFeedForClient(database, resolvedUserId),
-      listFeeds: async (resolvedUserId) => {
-        const feeds = await buildFeedListQuery(database, resolvedUserId);
-        return feeds.map((feed) => withFeedUrl(feed));
-      },
+const listIcalFeeds: AuthenticatedRouteCallback = async ({ userId }) => await handleGetIcalFeedsRoute(
+  { userId },
+  {
+    ensureDefaultFeed: (resolvedUserId) =>
+      ensureDefaultFeedForClient(database, resolvedUserId),
+    listFeeds: async (resolvedUserId) => {
+      const feeds = await buildFeedListQuery(database, resolvedUserId);
+      return feeds.map((feed) => withFeedUrl(feed));
     },
-  )),
+  },
 );
 
-const POST = withWideEvent(
-  withAuth(async ({ request, userId }) => {
-    const payload = await request.json();
+const postIcalFeed: AuthenticatedRouteCallback = async ({ request, userId }) => {
+  const payload = await request.json();
 
-    return await handlePostIcalFeedRoute(
-      { body: payload, userId },
-      { createFeed: async (resolvedUserId, name) => withFeedUrl(await createFeed(resolvedUserId, name)) },
-    );
-  }),
-);
+  return await handlePostIcalFeedRoute(
+    { body: payload, userId },
+    { createFeed: async (resolvedUserId, name) => withFeedUrl(await createFeed(resolvedUserId, name)) },
+  );
+};
 
-export { GET, POST, handleGetIcalFeedsRoute, handlePostIcalFeedRoute };
+const GET = withWideEvent(withAuth(listIcalFeeds));
+
+const POST = withWideEvent(withAuth(postIcalFeed));
+
+export {
+  GET,
+  POST,
+  handleGetIcalFeedsRoute,
+  handlePostIcalFeedRoute,
+  listIcalFeeds,
+  postIcalFeed,
+};
