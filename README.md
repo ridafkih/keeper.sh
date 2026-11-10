@@ -177,7 +177,7 @@ There are seven images currently available: two designed for convenience, and fi
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
 | ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
 | RESEND_API_KEY                 | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
-| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to. Requires `RESEND_API_KEY`.                                                                        |
+| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to, through the `user-feedback` and `problem-report` Resend templates. Agent feedback received at `/api/v1/agent-feedback` goes to the same address through the `agent-feedback` template, under an `Agent feedback:` subject. Requires `RESEND_API_KEY`. |
 | PASSKEY_RP_ID                  | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |
 | PASSKEY_RP_NAME                | `api`         | Optional. Relying party display name for passkeys.                                                                                                                  |
 | PASSKEY_ORIGIN                 | `api`         | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`).                                                                                    |
@@ -664,6 +664,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | `PATCH`  | `/api/v1/ical/feeds/{id}`                | Rename an iCal feed or change its settings. Settings other than the name require Pro.                                                                          |
 | `PUT`    | `/api/v1/ical/feeds/{id}/calendars`      | Replace the calendars an iCal feed publishes. Send `calendarIds`.                                                                                              |
 | `DELETE` | `/api/v1/ical/feeds/{id}`                | Delete an iCal feed. The default feed cannot be deleted.                                                                                                       |
+| `POST`   | `/api/v1/agent-feedback`                 | Intake for `send_feedback`. Takes no token and is called by MCP servers, not users. On Keeper.sh it stores the feedback and notifies the team.                 |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
 
@@ -711,6 +712,15 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | `update_ical_feed`    | Rename an iCal feed or change what its events show.                                                                                            |
 | `set_ical_feed_calendars` | Set which calendars an iCal feed publishes.                                                                                                |
 | `delete_ical_feed`    | Delete an iCal feed.                                                                                                                           |
+| `send_feedback`       | Send the Keeper.sh team feedback about the MCP tools and API: an unexpected error, a confusing result, a missing capability, unclear docs or a workaround. |
+
+Every tool also accepts an optional `intent`, up to 300 characters, where an agent can say what it is trying to do. It is recorded with the tool name on the request's log event, is never sent to the API or echoed back, and has no effect on what the tool does.
+
+## Agent Feedback
+
+`send_feedback` takes a `message` (the goal, what was tried and where it got stuck, up to 2,000 characters), a `category` (`tool_error`, `missing_capability`, `confusing_output`, `documentation` or `other`), an optional `toolName` and an optional `severity` (`high` when blocked, `medium` when a workaround was found, `low` for an annoyance; defaults to `medium`).
+
+Feedback always goes to the Keeper.sh team at `https://www.keeper.sh/api/v1/agent-feedback`, including from self-hosted instances, so problems with the tools reach the people who maintain them. It carries only the message, category, severity, tool name, the intent given on that call, the instance's Keeper.sh version, and whether the instance is hosted or self-hosted. It never carries the user's token, ID, email, calendar data or the instance's hostname.
 
 ## Connecting an MCP Client
 
