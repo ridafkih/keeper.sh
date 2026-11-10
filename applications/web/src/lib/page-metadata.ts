@@ -25,7 +25,7 @@ const STATIC_PAGE_UPDATED_AT = {
   "/docs": "2026-08-14",
   "/guides": "2026-08-14",
   "/recipes": "2026-08-14",
-  "/compare": "2026-08-14",
+  "/compare": "2026-11-10",
   "/changelog": "2026-08-14",
   "/support": "2026-10-28",
   "/privacy": "2026-08-14",
