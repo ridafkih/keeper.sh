@@ -54,21 +54,41 @@ describe("createKeeperMcpToolset", () => {
     const toolset = createKeeperMcpToolset();
 
     expect(Object.keys(toolset).toSorted()).toEqual([
+      "add_calendar_link",
       "create_event",
+      "create_ical_feed",
       "delete_event",
+      "delete_ical_feed",
       "find_free_time",
+      "get_calendar_settings",
       "get_event",
       "get_event_count",
       "get_events",
-      "get_ical_feed",
       "get_pending_invites",
       "list_accounts",
       "list_calendars",
+      "list_ical_feeds",
+      "list_syncs",
       "pause_sync",
+      "refresh_calendars",
+      "remove_calendar_link",
+      "rename_calendar",
       "rsvp_event",
+      "set_ical_feed_calendars",
+      "set_sync_destinations",
       "trigger_sync",
+      "update_calendar_settings",
       "update_event",
+      "update_ical_feed",
     ]);
+  });
+
+  it("names the product Keeper.sh in every description", () => {
+    const toolset = createKeeperMcpToolset();
+
+    for (const [name, tool] of Object.entries(toolset)) {
+      expect(tool.description, name).not.toMatch(/Keeper(?!\.sh)/);
+    }
   });
 
   it("each tool has a title and description", () => {
@@ -99,12 +119,41 @@ describe("createKeeperMcpToolset", () => {
 
     expect(destructive).toEqual([
       "delete_event",
+      "delete_ical_feed",
       "pause_sync",
+      "remove_calendar_link",
+      "rename_calendar",
       "rsvp_event",
+      "set_ical_feed_calendars",
+      "set_sync_destinations",
+      "update_calendar_settings",
       "update_event",
+      "update_ical_feed",
     ]);
     expect(toolset.create_event.annotations.destructiveHint).toBe(false);
     expect(toolset.get_events.annotations.readOnlyHint).toBe(true);
+  });
+
+  it("marks only the tools that change nothing as read-only", () => {
+    const toolset = createKeeperMcpToolset();
+
+    const readOnly = Object.entries(toolset)
+      .filter(([, tool]) => tool.annotations.readOnlyHint)
+      .map(([name]) => name)
+      .toSorted();
+
+    expect(readOnly).toEqual([
+      "find_free_time",
+      "get_calendar_settings",
+      "get_event",
+      "get_event_count",
+      "get_events",
+      "get_pending_invites",
+      "list_accounts",
+      "list_calendars",
+      "list_ical_feeds",
+      "list_syncs",
+    ]);
   });
 
   it("accepts the opaque occurrence IDs returned by event reads", () => {

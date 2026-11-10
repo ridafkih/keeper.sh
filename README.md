@@ -651,6 +651,19 @@ curl https://keeper.example.com/api/v1/calendars \
 | `GET`    | `/api/v1/events/free-time`               | Find free slots of at least `durationMinutes` in a date range. Requires `timezone`, and accepts working-hours options.                                          |
 | `POST`   | `/api/v1/sync`                           | Trigger a sync immediately. Throttled to one request per minute per user.                                                                                      |
 | `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
+| `GET`    | `/api/v1/mappings`                       | List which calendars sync into which, as source and destination calendar ID pairs.                                                                              |
+| `PUT`    | `/api/v1/calendars/{calendarId}/destinations` | Replace the calendars a calendar syncs to. Send `calendarIds`.                                                                                             |
+| `GET`    | `/api/v1/calendars/{calendarId}/settings` | Get a calendar's sync settings and the calendars it syncs to and from.                                                                                         |
+| `PATCH`  | `/api/v1/calendars/{calendarId}/settings` | Rename a calendar with `name`, or change its sync settings. Settings other than the name require Pro.                                                          |
+| `POST`   | `/api/v1/accounts/{id}/refresh`          | Re-discover the calendars on one connected account.                                                                                                            |
+| `POST`   | `/api/v1/accounts/refresh-calendars`     | Re-discover the calendars on every connected account. Throttled to one request per minute per user.                                                            |
+| `POST`   | `/api/v1/ics`                            | Subscribe to a calendar from its iCal link. Send `url`, and optionally `name`.                                                                                 |
+| `DELETE` | `/api/v1/ics/{calendarId}`               | Remove a calendar added from an iCal link.                                                                                                                     |
+| `GET`    | `/api/v1/ical/feeds`                     | List your iCal feeds with their URLs, settings and calendar IDs.                                                                                               |
+| `POST`   | `/api/v1/ical/feeds`                     | Create an iCal feed. Send `name`.                                                                                                                              |
+| `PATCH`  | `/api/v1/ical/feeds/{id}`                | Rename an iCal feed or change its settings. Settings other than the name require Pro.                                                                          |
+| `PUT`    | `/api/v1/ical/feeds/{id}/calendars`      | Replace the calendars an iCal feed publishes. Send `calendarIds`.                                                                                              |
+| `DELETE` | `/api/v1/ical/feeds/{id}`                | Delete an iCal feed. The default feed cannot be deleted.                                                                                                       |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
 
@@ -685,11 +698,23 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
 | `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
 | `pause_sync`          | Pause or resume syncing for a single calendar without disconnecting it.                                                                        |
-| `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
+| `list_syncs`          | List which calendars sync into which.                                                                                                          |
+| `set_sync_destinations` | Set the calendars a calendar syncs to, replacing its current destinations.                                                                   |
+| `get_calendar_settings` | Get a calendar's sync settings.                                                                                                              |
+| `update_calendar_settings` | Change how a calendar's events are copied: the copy title, excluded events and details, privacy, reminders and the sync window. Requires Pro. |
+| `rename_calendar`     | Rename a calendar in Keeper.sh.                                                                                                                |
+| `refresh_calendars`   | Re-discover the calendars on one connected account, or on every account.                                                                      |
+| `add_calendar_link`   | Subscribe to a read-only calendar from its iCal link.                                                                                          |
+| `remove_calendar_link` | Remove a calendar added from an iCal link.                                                                                                    |
+| `list_ical_feeds`     | List your iCal feeds with their subscription URLs, settings and calendars.                                                                     |
+| `create_ical_feed`    | Create an iCal feed.                                                                                                                           |
+| `update_ical_feed`    | Rename an iCal feed or change what its events show.                                                                                            |
+| `set_ical_feed_calendars` | Set which calendars an iCal feed publishes.                                                                                                |
+| `delete_ical_feed`    | Delete an iCal feed.                                                                                                                           |
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, and pause or force a sync, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, pause or force a sync, change which calendars sync where and how, and manage calendar links and iCal feeds, not just read them.
 
 Example Claude Code MCP configuration:
 
