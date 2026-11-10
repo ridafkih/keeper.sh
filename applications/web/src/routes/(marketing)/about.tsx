@@ -17,7 +17,7 @@ const REPOSITORY_URL = "https://github.com/ridafkih/keeper.sh";
 const PROFILE_URL = "https://github.com/ridafkih";
 const PERSONAL_SITE_URL = "https://rida.dev";
 const LICENSE_URL = "https://www.gnu.org/licenses/agpl-3.0.en.html";
-const ORIGIN_POST_SLUG = "why-i-built-an-open-source-calendar-syncing-tool";
+const ORIGIN_POST_SLUG = "how-to-stop-double-booking-across-calendars";
 
 const about = marketingCopy.about;
 const aboutSections = about.sections;
