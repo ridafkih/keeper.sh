@@ -103,12 +103,12 @@ const MARKETING_FEATURES: MarketingFeature[] = [
   {
     id: 3,
     ...home.features.details,
-    gridClassName: 'sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-2',
+    gridClassName: 'lg:col-start-1 lg:col-span-5 lg:row-start-2',
   },
   {
     id: 4,
     ...home.features.agents,
-    gridClassName: 'sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-3',
+    gridClassName: 'lg:col-start-6 lg:col-span-5 lg:row-start-2',
   },
 ]
 
