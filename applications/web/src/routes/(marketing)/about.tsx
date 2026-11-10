@@ -97,6 +97,19 @@ function AboutPage() {
           </Text>
         </Section>
 
+        {aboutSections.data && (
+          <Section title={aboutSections.data.title}>
+            <Text size="sm">
+              {aboutSections.data.p1}
+            </Text>
+            <Text size="sm">
+              {aboutSections.data.p2Lead}{" "}
+              <TextLink align="left" size="sm" to="/privacy" tone="default">{aboutSections.data.p2LinkLabel}</TextLink>
+              {" "}{aboutSections.data.p2End}
+            </Text>
+          </Section>
+        )}
+
         <Section title={aboutSections.code.title}>
           <Text size="sm">
             {aboutSections.code.p1Lead}{" "}
@@ -105,14 +118,18 @@ function AboutPage() {
             </ExternalTextLink>
             {aboutSections.code.p1End}
           </Text>
-          <Text size="sm">
-            {aboutSections.code.p2}
-          </Text>
-          <Text size="sm">
-            {aboutSections.code.p3Lead}{" "}
-            <TextLink align="left" size="sm" to="/pricing" tone="default">{aboutSections.code.p3LinkLabel}</TextLink>
-            {" "}{aboutSections.code.p3End}
-          </Text>
+          {aboutSections.code.p2 && (
+            <Text size="sm">
+              {aboutSections.code.p2}
+            </Text>
+          )}
+          {aboutSections.code.p3Lead && aboutSections.code.p3LinkLabel && aboutSections.code.p3End && (
+            <Text size="sm">
+              {aboutSections.code.p3Lead}{" "}
+              <TextLink align="left" size="sm" to="/pricing" tone="default">{aboutSections.code.p3LinkLabel}</TextLink>
+              {" "}{aboutSections.code.p3End}
+            </Text>
+          )}
         </Section>
 
         <Section title={aboutSections.support.title}>
