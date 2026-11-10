@@ -49,6 +49,7 @@ interface CreateKeeperMcpHandlerOptions {
   mcpPublicUrl: string;
   apiBaseUrl: string;
   toolset: KeeperMcpToolset;
+  isAgentFeedbackEnabled: (userId: string) => Promise<boolean>;
   serverInfo?: Implementation;
   enableJsonResponse?: boolean;
 }
@@ -186,14 +187,19 @@ const createToolResponse = (result: unknown) => ({
   ],
 });
 
+interface KeeperMcpSession {
+  toolContext: KeeperToolContext;
+  userId: string;
+  agentFeedbackEnabled: boolean;
+}
+
 const registerToolset = (
   server: McpServer,
   toolset: Record<string, KeeperMcpToolDefinition<unknown>>,
-  toolContext: KeeperToolContext,
-  userId: string,
+  { toolContext, userId, agentFeedbackEnabled }: KeeperMcpSession,
 ): void => {
   for (const [name, tool] of Object.entries(toolset)) {
-    server.registerTool(
+    const registeredTool = server.registerTool(
       name,
       {
         annotations: { ...tool.annotations, title: tool.title },
@@ -205,6 +211,9 @@ const registerToolset = (
         widelog.set("mcp.tool", name);
         widelog.set("user.id", userId);
         const { toolInput, call } = separateIntent(input);
+        if (!agentFeedbackEnabled) {
+          return createToolResponse(await tool.execute(toolContext, toolInput));
+        }
         if (call.intent) {
           widelog.set("mcp.intent", call.intent);
         }
@@ -216,24 +225,26 @@ const registerToolset = (
         }
       },
     );
+    if (name === FEEDBACK_TOOL_NAME && !agentFeedbackEnabled) {
+      registeredTool.disable();
+    }
   }
 };
 
 const createAuthenticatedMcpServer = (
   toolset: KeeperMcpToolset,
-  toolContext: KeeperToolContext,
-  userId: string,
+  session: KeeperMcpSession,
   serverInfo: Implementation,
 ): McpServer => {
   const server = new McpServer(serverInfo, {
     capabilities: {
       tools: {},
     },
-    instructions: KEEPER_MCP_INSTRUCTIONS,
+    ...(session.agentFeedbackEnabled && { instructions: KEEPER_MCP_INSTRUCTIONS }),
   });
 
   const tools: Record<string, KeeperMcpToolDefinition<unknown>> = { ...toolset };
-  registerToolset(server, tools, toolContext, userId);
+  registerToolset(server, tools, session);
 
   return server;
 };
@@ -243,6 +254,7 @@ const createKeeperMcpHandler = ({
   mcpPublicUrl,
   apiBaseUrl,
   toolset,
+  isAgentFeedbackEnabled,
   serverInfo = KEEPER_MCP_SERVER_INFO,
   enableJsonResponse = true,
 }: CreateKeeperMcpHandlerOptions) => {
@@ -323,7 +335,12 @@ const createKeeperMcpHandler = ({
       apiBaseUrl,
     };
 
-    const server = createAuthenticatedMcpServer(toolset, toolContext, userId, serverInfo);
+    const agentFeedbackEnabled = await isAgentFeedbackEnabled(userId);
+    const server = createAuthenticatedMcpServer(
+      toolset,
+      { agentFeedbackEnabled, toolContext, userId },
+      serverInfo,
+    );
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse,
     });

@@ -123,6 +123,7 @@ const readAnnouncedServerInfo = async () => {
     mcpPublicUrl: "https://mcp.keeper.sh",
     apiBaseUrl: "https://keeper.sh",
     toolset: createKeeperMcpToolset({ feedback: testFeedbackOptions }),
+    isAgentFeedbackEnabled: () => Promise.resolve(true),
   });
 
   const response = await handler(

@@ -1,6 +1,7 @@
 import { isKeeperMcpEnabledAuth, createAuth } from "@keeper.sh/auth";
-import { createDatabase } from "@keeper.sh/database";
+import { createDatabase, readUserAgentFeedbackEnabled } from "@keeper.sh/database";
 import env, { resolveApiBaseUrl } from "./env";
+import { createAgentFeedbackAvailability } from "./agent-feedback-availability";
 import { createKeeperMcpHandler } from "./mcp-handler";
 import { buildIdentity } from "./build-identity";
 import { resolveDeployment } from "./tools/feedback-tools";
@@ -34,6 +35,10 @@ const handleMcpRequest = createKeeperMcpHandler({
   mcpPublicUrl: env.MCP_PUBLIC_URL,
   apiBaseUrl: resolveApiBaseUrl(env),
   toolset: keeperMcpToolset,
+  isAgentFeedbackEnabled: createAgentFeedbackAvailability({
+    instanceDisabled: env.AGENT_FEEDBACK_DISABLED ?? false,
+    readUserPreference: (userId) => readUserAgentFeedbackEnabled(database, userId),
+  }),
 });
 
 export { auth, database, env, handleMcpRequest, keeperMcpToolset, withWideEvent };

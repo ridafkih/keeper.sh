@@ -33,6 +33,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -65,6 +66,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -92,6 +94,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -127,6 +130,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -154,6 +158,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -205,6 +210,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     const response = await handler(
@@ -231,6 +237,7 @@ describe("createKeeperMcpHandler", () => {
       mcpPublicUrl: "https://mcp.keeper.sh",
       apiBaseUrl: "https://keeper.sh",
       toolset,
+      isAgentFeedbackEnabled: () => Promise.resolve(true),
     });
 
     await expect(
@@ -267,6 +274,7 @@ const createAuthenticatedHandler = () =>
     mcpPublicUrl: "https://mcp.keeper.sh",
     apiBaseUrl: "https://keeper.sh",
     toolset,
+    isAgentFeedbackEnabled: () => Promise.resolve(true),
   });
 
 const sendRpc = (method: string, params: Record<string, unknown>) =>

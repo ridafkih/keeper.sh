@@ -26,6 +26,7 @@ const handler = createKeeperMcpHandler({
   mcpPublicUrl: "https://mcp.keeper.sh",
   apiBaseUrl: "https://keeper.example.com",
   toolset,
+  isAgentFeedbackEnabled: () => Promise.resolve(true),
 });
 
 const sendRpc = async (method: string, params: Record<string, unknown>): Promise<unknown> => {
