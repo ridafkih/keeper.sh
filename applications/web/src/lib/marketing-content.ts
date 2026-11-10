@@ -72,7 +72,12 @@ const featuresSchema = type({
 const pricingSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
-  header: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  header: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    "freeLink?": { "+": "reject", lead: "string >= 1", label: "string >= 1", end: "string >= 1" },
+  },
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
 });
 
