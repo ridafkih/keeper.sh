@@ -81,6 +81,56 @@ const pricingSchema = type({
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
 });
 
+const freeSchema = type({
+  "+": "reject",
+  seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
+  header: { "+": "reject", heading: "string >= 1", body: "string >= 1", ctaLabel: "string >= 1" },
+  includes: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    items: type({
+      "+": "reject",
+      id: "string >= 1",
+      label: "string >= 1",
+      value: "string >= 1",
+      detail: "string >= 1",
+    }).array(),
+  },
+  enough: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    setups: type({
+      "+": "reject",
+      id: "string >= 1",
+      title: "string >= 1",
+      body: "string >= 1",
+      usage: "string >= 1",
+    }).array(),
+  },
+  setup: {
+    "+": "reject",
+    heading: "string >= 1",
+    steps: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
+  },
+  pro: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    linkLabel: "string >= 1",
+    reasons: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
+  },
+  faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
+  cta: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    primaryLabel: "string >= 1",
+    secondaryLabel: "string >= 1",
+  },
+});
+
 const planCopy = type({
   "+": "reject",
   name: "string >= 1",
@@ -298,6 +348,7 @@ const softwareSchemaSchema = type({
 export type HomeCopy = typeof homeSchema.infer;
 export type FeaturesCopy = typeof featuresSchema.infer;
 export type PricingCopy = typeof pricingSchema.infer;
+export type FreeCopy = typeof freeSchema.infer;
 export type PlansCopy = typeof plansSchema.infer;
 export type PricingPlansCopy = typeof pricingPlansSchema.infer;
 export type HowItWorksCopy = typeof howItWorksSchema.infer;
@@ -312,6 +363,7 @@ export interface MarketingCopy {
   home: HomeCopy;
   features: FeaturesCopy;
   pricing: PricingCopy;
+  free: FreeCopy;
   plans: PlansCopy;
   pricingPlans: PricingPlansCopy;
   howItWorks: HowItWorksCopy;
@@ -381,6 +433,16 @@ export const fallbackMarketingCopy: MarketingCopy = {
     seo: emptySeo,
     header: { heading: "Keeper.sh", body: "Keeper.sh" },
     faq: { heading: "Keeper.sh", items: [] },
+  },
+  free: {
+    seo: emptySeo,
+    header: { heading: "Keeper.sh", body: "Keeper.sh", ctaLabel: "Keeper.sh" },
+    includes: { heading: "Keeper.sh", body: "Keeper.sh", items: [] },
+    enough: { heading: "Keeper.sh", body: "Keeper.sh", setups: [] },
+    setup: { heading: "Keeper.sh", steps: [] },
+    pro: { heading: "Keeper.sh", body: "Keeper.sh", linkLabel: "Keeper.sh", reasons: [] },
+    faq: { heading: "Keeper.sh", items: [] },
+    cta: emptyCta,
   },
   plans: {
     free: { name: "Keeper.sh", description: "Keeper.sh", features: [] },
@@ -537,6 +599,7 @@ export function processMarketingDirectory(directory: string): MarketingCopy {
     home: readSurface(directory, "home", homeSchema),
     features: readSurface(directory, "features", featuresSchema),
     pricing: readSurface(directory, "pricing", pricingSchema),
+    free: readSurface(directory, "free", freeSchema),
     plans: readSurface(directory, "plans", plansSchema),
     pricingPlans,
     howItWorks,

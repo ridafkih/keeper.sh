@@ -30,6 +30,7 @@ vi.mock("../../src/lib/blog-posts", () => ({
 import { Route as HomeRoute } from "../../src/routes/(marketing)/index";
 import { Route as FeaturesRoute } from "../../src/routes/(marketing)/features";
 import { Route as PricingRoute } from "../../src/routes/(marketing)/pricing";
+import { Route as FreeRoute } from "../../src/routes/(marketing)/free";
 import { Route as PrivacyRoute } from "../../src/routes/(marketing)/privacy";
 import { Route as TermsRoute } from "../../src/routes/(marketing)/terms";
 import { Route as SupportRoute } from "../../src/routes/(marketing)/support";
@@ -63,6 +64,7 @@ const indexableRoutes: Record<string, HeadRoute> = {
   "/compare": CompareIndexRoute as unknown as HeadRoute,
   "/docs": DocsIndexRoute as unknown as HeadRoute,
   "/features": FeaturesRoute as unknown as HeadRoute,
+  "/free": FreeRoute as unknown as HeadRoute,
   "/guides": GuidesIndexRoute as unknown as HeadRoute,
   "/pricing": PricingRoute as unknown as HeadRoute,
   "/privacy": PrivacyRoute as unknown as HeadRoute,

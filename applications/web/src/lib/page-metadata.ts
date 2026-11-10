@@ -17,6 +17,7 @@ const STATIC_PAGE_UPDATED_AT = {
   "/": "2026-11-10",
   "/features": "2026-11-10",
   "/pricing": "2026-11-10",
+  "/free": "2026-11-10",
   "/self-hosting": "2026-08-14",
   "/about": "2026-11-10",
   "/tools/ics-generator": "2026-11-10",
