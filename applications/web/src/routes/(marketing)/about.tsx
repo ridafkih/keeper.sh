@@ -2,7 +2,7 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
+import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { ExternalTextLink, TextLink } from "@/components/ui/primitives/text-link";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, personSchema } from "@/lib/seo";
@@ -10,7 +10,6 @@ import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
 import { marketingCopy } from "@/lib/marketing-copy";
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const breadcrumbs = breadcrumbTrail({ name: "About", path: "/about" });
 
@@ -166,18 +165,9 @@ function AboutPage() {
                 <ArrowRightIcon size={16} />
               </ButtonIcon>
             </LinkButton>
-            <ExternalLinkButton
-              href={REPOSITORY_URL}
-              target="_blank"
-              rel="noreferrer"
-              size="compact"
-              variant="inverse-ghost"
-            >
+            <LinkButton to="/pricing" size="compact" variant="inverse-ghost">
               <ButtonText>{about.cta.secondaryLabel}</ButtonText>
-              <ButtonIcon>
-                <ArrowUpRightIcon size={16} />
-              </ButtonIcon>
-            </ExternalLinkButton>
+            </LinkButton>
           </div>
         </MarketingCtaCard>
       </MarketingCtaSection>
