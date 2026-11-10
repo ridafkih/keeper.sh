@@ -23,10 +23,6 @@ vi.mock("@/env", () => ({
   default: { MICROSOFT_CLIENT_ID: "microsoft-client" },
 }));
 
-vi.mock("@/env", () => ({
-  default: {},
-}));
-
 vi.mock("@/utils/middleware", () => ({
   withWideEvent: (handler: unknown) => handler,
 }));
