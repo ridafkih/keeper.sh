@@ -30,6 +30,7 @@ const pricing = marketingCopy.pricing;
 const PAGE_DESCRIPTION = pricing.seo.description;
 
 const FAQ_ITEMS = pricing.faq.items;
+const FREE_PLAN_LINK = pricing.header.freeLink;
 
 export const Route = createFileRoute("/(marketing)/pricing")({
   component: PricingPage,
@@ -59,6 +60,13 @@ function PricingPage() {
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
           {pricing.header.body}
         </Text>
+        {FREE_PLAN_LINK && (
+          <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
+            {FREE_PLAN_LINK.lead}{" "}
+            <a href="/free" className="text-foreground underline underline-offset-2">{FREE_PLAN_LINK.label}</a>
+            {" "}{FREE_PLAN_LINK.end}
+          </Text>
+        )}
       </header>
 
       <MarketingPricingSection>
