@@ -134,7 +134,11 @@ export const organizationSchema = {
         height: 512,
       },
       disambiguatingDescription: BRAND_DISAMBIGUATION,
-      sameAs: ["https://github.com/ridafkih/keeper.sh", "https://toolradar.com/tools/keeper-sh"],
+      sameAs: [
+        "https://github.com/ridafkih/keeper.sh",
+        "https://toolradar.com/tools/keeper-sh",
+        "https://glama.ai/mcp/connectors/io.github.ridafkih/keeper-sh",
+      ],
       founder: authorReference,
     },
     {
