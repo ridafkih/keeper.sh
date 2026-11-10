@@ -26,7 +26,7 @@ const homeSchema = type({
     providers: titledCard,
     details: titledCard,
     agents: titledCard,
-    openSource: { "+": "reject", title: "string >= 1", description: "string >= 1", linkLabel: "string >= 1" },
+    "openSource?": { "+": "reject", title: "string >= 1", description: "string >= 1", linkLabel: "string >= 1" },
   },
   howItWorks: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
   testimonials: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
@@ -57,7 +57,7 @@ const homeSchema = type({
 const featuresSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
-  header: { "+": "reject", heading: "string >= 1" },
+  header: { "+": "reject", heading: "string >= 1", "body?": "string >= 1" },
   cards: type({ "+": "reject", id: "string >= 1", title: "string >= 1", body: "string >= 1" }).array(),
   howItWorks: { "+": "reject", heading: "string >= 1", subheading: "string >= 1" },
   cta: {
@@ -72,7 +72,12 @@ const featuresSchema = type({
 const pricingSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
-  header: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  header: {
+    "+": "reject",
+    heading: "string >= 1",
+    body: "string >= 1",
+    "freeLink?": { "+": "reject", lead: "string >= 1", label: "string >= 1", end: "string >= 1" },
+  },
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
 });
 
@@ -143,16 +148,24 @@ const aboutSchema = type({
       p3LinkLabel: "string >= 1",
       p3End: "string >= 1",
     },
+    "data?": {
+      "+": "reject",
+      title: "string >= 1",
+      p1: "string >= 1",
+      p2Lead: "string >= 1",
+      p2LinkLabel: "string >= 1",
+      p2End: "string >= 1",
+    },
     code: {
       "+": "reject",
       title: "string >= 1",
       p1Lead: "string >= 1",
       p1LinkLabel: "string >= 1",
       p1End: "string >= 1",
-      p2: "string >= 1",
-      p3Lead: "string >= 1",
-      p3LinkLabel: "string >= 1",
-      p3End: "string >= 1",
+      "p2?": "string >= 1",
+      "p3Lead?": "string >= 1",
+      "p3LinkLabel?": "string >= 1",
+      "p3End?": "string >= 1",
     },
     support: {
       "+": "reject",
@@ -249,11 +262,19 @@ const selfHostingSchema = type({
   },
 });
 
+const toolSyncGuides = type({
+  "+": "reject",
+  heading: "string >= 1",
+  body: "string >= 1",
+  links: type({ "+": "reject", label: "string >= 1", path: /^\/[a-z0-9/-]+$/ }).array(),
+});
+
 const icsViewerSchema = type({
   "+": "reject",
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
   header: { "+": "reject", heading: "string >= 1" },
   howRead: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  "syncGuides?": toolSyncGuides,
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
   cta: { "+": "reject", title: "string >= 1", body: "string >= 1" },
 });
@@ -263,6 +284,7 @@ const icsGeneratorSchema = type({
   seo: { "+": "reject", title: "string >= 1", description: "string >= 1" },
   header: { "+": "reject", heading: "string >= 1" },
   writes: { "+": "reject", heading: "string >= 1", body: "string >= 1" },
+  "syncGuides?": toolSyncGuides,
   faq: { "+": "reject", heading: "string >= 1", items: faqItem.array() },
   cta: { "+": "reject", title: "string >= 1", body: "string >= 1" },
 });
@@ -334,7 +356,6 @@ export const fallbackMarketingCopy: MarketingCopy = {
       providers: emptyCard,
       details: emptyCard,
       agents: emptyCard,
-      openSource: { title: "Keeper.sh", description: "Keeper.sh", linkLabel: "Keeper.sh" },
     },
     howItWorks: { heading: "Keeper.sh", subheading: "Keeper.sh" },
     testimonials: { heading: "Keeper.sh", subheading: "Keeper.sh" },
@@ -411,10 +432,6 @@ export const fallbackMarketingCopy: MarketingCopy = {
         p1Lead: "Keeper.sh",
         p1LinkLabel: "Keeper.sh",
         p1End: "Keeper.sh",
-        p2: "Keeper.sh",
-        p3Lead: "Keeper.sh",
-        p3LinkLabel: "Keeper.sh",
-        p3End: "Keeper.sh",
       },
       support: {
         title: "Keeper.sh",
