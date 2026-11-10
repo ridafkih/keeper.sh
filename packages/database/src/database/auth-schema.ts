@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 const user = pgTable("user", {
+  agentFeedbackEnabled: boolean().notNull().default(true),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   email: text().notNull().unique(),
   emailVerified: boolean().notNull().default(false),
