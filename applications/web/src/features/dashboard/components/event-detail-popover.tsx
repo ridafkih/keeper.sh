@@ -9,10 +9,12 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { formatDayHeader, formatTimeRange } from "@/lib/time";
 import { ALL_DAY_LABEL, resolveEventStartDay } from "@/lib/event-day";
+import { findPrimaryEventLink } from "@/lib/event-links";
 import { eventDetailAtom } from "@/state/event-detail";
 import type { EventDetailSelection } from "@/state/event-detail";
 import { EventCardGridBody, EventText } from "./event-card";
 import { EVENT_COLORS } from "./event-card.styles";
+import { EventLinkButton, LinkifiedText } from "./event-links";
 
 const PANEL_WIDTH = 320;
 const FRAME_MARGIN = 8;
@@ -65,6 +67,28 @@ export function EventDetailPopover({ onClose }: EventDetailPopoverProps) {
   );
 }
 
+/** Cycles Tab through the panel's links, falling back to the panel itself when it has none. */
+const trapTab = (keyEvent: KeyboardEvent, panel: HTMLElement | null) => {
+  if (!panel) return;
+  const focusables = Array.from(panel.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"));
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (!first || !last) {
+    keyEvent.preventDefault();
+    panel.focus();
+    return;
+  }
+  const active = document.activeElement;
+  const atStart = active === first || active === panel || !panel.contains(active);
+  if (keyEvent.shiftKey && atStart) {
+    keyEvent.preventDefault();
+    last.focus();
+  } else if (!keyEvent.shiftKey && (active === last || !panel.contains(active))) {
+    keyEvent.preventDefault();
+    first.focus();
+  }
+};
+
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 interface EventDetailPanelProps {
@@ -96,11 +120,7 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
   useEffect(() => {
     const onKeyDown = (keyEvent: KeyboardEvent) => {
       if (keyEvent.key === "Escape") onClose();
-      // No focusable descendants: keep Tab inside the dialog.
-      if (keyEvent.key === "Tab") {
-        keyEvent.preventDefault();
-        panelRef.current?.focus();
-      }
+      if (keyEvent.key === "Tab") trapTab(keyEvent, panelRef.current);
     };
     const onPointerDown = (pointerEvent: PointerEvent) => {
       if (
@@ -139,6 +159,7 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
   }, [onClose]);
 
   const title = event.title ?? event.calendarName;
+  const primaryLink = findPrimaryEventLink(event);
 
   return (
     <m.div
@@ -199,14 +220,15 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
               {event.location && (
                 <div className="flex items-start gap-1.5">
                   <MapPin size={13} className="mt-0.5 shrink-0 text-(--event-ink)/70" />
-                  <EventText as="span" size="xs" muted>
-                    {event.location}
+                  <EventText as="span" size="xs" muted className="min-w-0">
+                    <LinkifiedText text={event.location} />
                   </EventText>
                 </div>
               )}
+              {primaryLink && <EventLinkButton link={primaryLink} size="md" className="my-1 w-full" />}
               {event.description && (
                 <EventText size="xs" muted className="whitespace-pre-line">
-                  {event.description}
+                  <LinkifiedText text={event.description} />
                 </EventText>
               )}
             </div>
