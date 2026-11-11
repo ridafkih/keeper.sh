@@ -757,3 +757,12 @@ export {
   parseSignUpAttribution,
 } from "./sign-up-attribution";
 export type { SignUpAttribution } from "./sign-up-attribution";
+export { BILLING_LIMIT_TYPES, FUNNEL_EVENT_PATH, ONBOARDING_FUNNEL_STEPS } from "./funnel-events";
+export type {
+  BillingLimitShownEvent,
+  BillingLimitType,
+  BillingUpgradeViewedEvent,
+  FunnelEvent,
+  OnboardingFunnelStep,
+  OnboardingStepViewedEvent,
+} from "./funnel-events";
