@@ -73,7 +73,7 @@ function OnboardingStepContent({ state }: { state: OnboardingState }) {
   if (step === "add-destination" && origin) {
     return (
       <>
-        <AddDestinationStep origin={origin} sameAccountDestinations={sameAccountDestinations} />
+        <AddDestinationStep calendars={calendars} origin={origin} sameAccountDestinations={sameAccountDestinations} />
         <LeaveSetup />
       </>
     );
