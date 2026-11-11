@@ -19,6 +19,7 @@ import {
   MarkdownTableSection,
   MarkdownUnorderedList,
 } from "./markdown-components";
+import { MarkdownImage } from "./markdown-image";
 
 export const markdownComponents: Components = {
   a: MarkdownLink,
@@ -28,6 +29,7 @@ export const markdownComponents: Components = {
   h2: MarkdownHeadingTwo,
   h3: MarkdownHeadingThree,
   hr: MarkdownRule,
+  img: MarkdownImage,
   inlineCode: MarkdownInlineCode,
   li: MarkdownListItem,
   ol: MarkdownOrderedList,
