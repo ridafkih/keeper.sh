@@ -10,6 +10,7 @@ const { blogPost } = vi.hoisted(() => ({
   blogPost: {
     content: "",
     faq: [],
+    images: [],
     metadata: {
       blurb: "How syncing works.",
       createdAt: "2026-08-01",
