@@ -73,3 +73,9 @@ export {
   isSocketMessage,
   isSyncAggregate,
 };
+export {
+  MAX_LANDING_PATH_LENGTH,
+  MAX_UTM_VALUE_LENGTH,
+  parseSignUpAttribution,
+  type SignUpAttribution,
+} from "./sign-up-attribution";
