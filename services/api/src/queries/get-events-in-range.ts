@@ -7,12 +7,10 @@ import {
 import { normalizeDateRange } from "@/utils/date-range";
 import { and, arrayContains, asc, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
-import {
-  overlapsRepresentableTimeWindow,
-  REPRESENTABLE_RANGE_SLACK_MS,
-} from "@keeper.sh/calendar";
+import { REPRESENTABLE_RANGE_SLACK_MS } from "@keeper.sh/calendar";
 import type { KeeperDatabase, KeeperEvent, KeeperEventFilters, KeeperEventRangeInput } from "@/types";
 import { projectSyncedEvents, toKeeperEvent, toUserProjection } from "./event-read-model";
+import { overlapsViewerReadWindow } from "./viewer-read-window";
 import type {
   KeeperEventProjection,
   SourceInfo,
@@ -90,12 +88,14 @@ const flattenSyncedEvents = (
   windowStart: Date,
   windowEnd: Date,
   filters?: KeeperEventFilters,
+  timeZone?: string,
 ): KeeperEventProjection[] => projectSyncedEvents(
   rows,
   sourceMap,
   windowStart,
   windowEnd,
   filters,
+  timeZone,
 );
 
 // Scan wider than the window — the clause sees only stored columns — and let isWithinReadWindow decide.
@@ -150,7 +150,8 @@ const isWithinReadWindow = (
   row: { endTime: Date; isAllDay?: boolean | null; startTime: Date },
   start: Date,
   end: Date,
-): boolean => overlapsRepresentableTimeWindow(
+  timeZone?: string,
+): boolean => overlapsViewerReadWindow(
   {
     endTime: row.endTime,
     startTime: row.startTime,
@@ -158,6 +159,7 @@ const isWithinReadWindow = (
   },
   start,
   new Date(end.getTime() + INCLUSIVE_WINDOW_END_MS),
+  timeZone,
 );
 
 const getEventsInRange = async (
@@ -203,7 +205,7 @@ const getEventsInRange = async (
     .where(and(...syncedConditions))
     .orderBy(asc(eventStatesTable.startTime));
 
-  const syncedEvents = flattenSyncedEvents(syncedRows, sourceMap, start, end, filters);
+  const syncedEvents = flattenSyncedEvents(syncedRows, sourceMap, start, end, filters, range.timeZone);
 
   const userConditions: SQL[] = [
     inArray(userEventsTable.calendarId, calendarIds),
@@ -239,7 +241,7 @@ const getEventsInRange = async (
   const allEvents: KeeperEventProjection[] = [
     ...syncedEvents,
     ...userEventRows
-      .filter((event) => isWithinReadWindow(event, start, end))
+      .filter((event) => isWithinReadWindow(event, start, end, range.timeZone))
       .map((event) => toUserProjection(event)),
   ];
   allEvents.sort((left, right) => left.startTime.getTime() - right.startTime.getTime());

@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface WideEvent {
@@ -12,7 +13,18 @@ interface CalendarRow {
 }
 
 const emitted: WideEvent[] = [];
-let current: WideEvent = { fields: {}, values: {} };
+interface EventScope extends WideEvent {
+  sticky: Record<string, unknown>;
+}
+
+const eventContext = new AsyncLocalStorage<EventScope>();
+const currentEvent = (): EventScope => {
+  const event = eventContext.getStore();
+  if (!event) {
+    throw new Error("widelog used outside a context");
+  }
+  return event;
+};
 
 const syncCalendarMock = vi.fn();
 const listRemoteEventsMock = vi.fn(() => Promise.resolve([]));
@@ -62,22 +74,30 @@ const fakeDatabase = {
 };
 
 vi.mock("../src/utils/logging", () => ({
-  context: (run: () => Promise<unknown>) => run(),
+  context: (run: () => Promise<unknown>) => eventContext.run({ fields: {}, sticky: {}, values: {} }, run),
   destroy: () => null,
   widelog: {
     append: () => null,
     error: () => null,
     errorFields: (_error: unknown, fields: Record<string, unknown>) => {
-      current.fields = { ...current.fields, ...fields };
+      const event = currentEvent();
+      event.fields = { ...event.fields, ...fields };
     },
     errors: () => null,
     flush: () => {
-      emitted.push(current);
-      current = { fields: {}, values: {} };
+      const event = currentEvent();
+      emitted.push({ fields: { ...event.fields }, values: { ...event.values } });
+      event.fields = {};
+      event.values = { ...event.sticky };
     },
     set: (key: string, value: unknown) => {
-      current.values[key] = value;
-      return { sticky: () => null };
+      const event = currentEvent();
+      event.values[key] = value;
+      return {
+        sticky: () => {
+          event.sticky[key] = value;
+        },
+      };
     },
     time: {
       measure: <TResult>(_key: string, run: () => Promise<TResult>) => run(),
@@ -178,7 +198,6 @@ const firstEvent = (): WideEvent => {
 
 beforeEach(() => {
   emitted.length = 0;
-  current = { fields: {}, values: {} };
   calendarWrites.length = 0;
   destinationRow.failureCount = 0;
   destinationRow.lastFailureAt = null;
@@ -241,5 +260,67 @@ describe("a backoff is only claimed when one was written", () => {
     const event = firstEvent();
     expect(event.values.outcome).toBe("error");
     expect(event.values["retry.backoff_applied"]).toBe(true);
+  });
+});
+
+const WRITER_ACCESS_BODY = JSON.stringify({
+  error: {
+    code: 403,
+    errors: [{ reason: "requiredAccessLevel" }],
+    message: "You need to have writer access to this calendar.",
+  },
+});
+
+describe("taking push away from a calendar is recorded on its wide event", () => {
+  it("records push removed and no backoff when the calendar refuses writes for missing writer access", async () => {
+    const { GoogleCalendarApiError } = await import("@keeper.sh/calendar/google");
+    syncCalendarMock.mockImplementation(() => Promise.reject(
+      new GoogleCalendarApiError(403, WRITER_ACCESS_BODY),
+    ));
+
+    await runProcessJob();
+
+    expect(calendarWrites).toEqual([{ capabilities: ["pull"] }]);
+
+    const event = firstEvent();
+    expect(event.values["destination.push_removed"]).toBe(true);
+    expect(event.values["retry.backoff_applied"]).toBe(false);
+  });
+
+  it("records push kept when a backoff was applied instead", async () => {
+    syncCalendarMock.mockImplementation(() => Promise.reject(
+      new Error("Invalid credentials"),
+    ));
+
+    await runProcessJob();
+
+    expect(firstEvent().values["destination.push_removed"]).toBe(false);
+  });
+});
+
+describe("a push-sync job is one wide event", () => {
+  it("records a failed push once, with the provider and the error together", async () => {
+    syncCalendarMock.mockImplementation(() => Promise.reject(
+      new Error("Invalid credentials"),
+    ));
+
+    await runProcessJob();
+
+    const pushSyncEvents = emitted.filter((event) => event.values["sync.direction"] === "push");
+    expect(pushSyncEvents).toHaveLength(1);
+    expect(pushSyncEvents[0]?.values.outcome).toBe("error");
+    expect(pushSyncEvents[0]?.values["provider.name"]).toBe("google");
+    expect(pushSyncEvents[0]?.fields.slug).toBeDefined();
+  });
+
+  it("records a skipped push once, as skipped", async () => {
+    acquireMock.mockImplementation(() => Promise.resolve({ acquired: false }));
+
+    await runProcessJob();
+
+    const pushSyncEvents = emitted.filter((event) => event.values["sync.direction"] === "push");
+    expect(pushSyncEvents).toHaveLength(1);
+    expect(pushSyncEvents[0]?.values.outcome).toBe("skipped");
+    expect(pushSyncEvents[0]?.values["push_sync.skipped"]).toBe("lock_not_acquired");
   });
 });

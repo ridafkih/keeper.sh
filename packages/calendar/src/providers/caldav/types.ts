@@ -86,6 +86,8 @@ interface CalendarInfo {
   displayName: string;
   ctag?: string;
   color?: string;
+  timeZone?: string;
+  writable: boolean;
 }
 
 export type {

@@ -1,6 +1,6 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import useSWR, { preload, useSWRConfig } from "swr";
+import useSWR, { preload, SWRConfig, useSWRConfig } from "swr";
 import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
@@ -46,10 +46,17 @@ import { SyncStatus } from "@/features/dashboard/components/sync-status";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/reauth-notice";
-import CreditCard from "lucide-react/dist/esm/icons/credit-card";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
-import { openCustomerPortal } from "@/utils/checkout";
+import { useHasConfiguredSync } from "@/hooks/use-entitlements";
+import { PlanMenuItem } from "@/features/dashboard/components/plan-menu";
+import { isPlanShownOnHome } from "@/features/dashboard/components/plan-placement";
+import { useOnboarding } from "@/features/onboarding/use-onboarding";
+import { useSyncPairs } from "@/features/onboarding/use-sync-pairs";
+import { Onboarding } from "@/features/onboarding/components/onboarding";
+import { SyncPairRow } from "@/features/onboarding/components/sync-pair-row";
+import { USAGE_CACHE_KEY } from "@/hooks/use-entitlements";
+import { showToastAtom } from "@/state/toast";
+import { useSetAtom } from "jotai";
 
 async function loadSubscription(context: {
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -64,15 +71,69 @@ async function loadSubscription(context: {
   }
 }
 
+const SETUP_DATA_PATHS = ["/api/sources", "/api/accounts", USAGE_CACHE_KEY, "/api/mappings"] as const;
+
+async function loadSetupData(context: {
+  fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
+}): Promise<Record<string, unknown>> {
+  const entries = await Promise.all(SETUP_DATA_PATHS.map(async (path) => {
+    try {
+      return [[path, await context.fetchApi<unknown>(path)]];
+    } catch (error) {
+      console.error(`[setup] dashboard loader preload of ${path} failed, deferring to the client read:`, error);
+      return [];
+    }
+  }));
+  return Object.fromEntries(entries.flat());
+}
+
+interface DashboardSearch {
+  connected?: string;
+}
+
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
-  loader: async ({ context }) => ({
-    commercialMode: context.runtimeConfig.commercialMode,
-    subscription: await loadSubscription(context),
+  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
+    connected: typeof search.connected === "string" ? search.connected : undefined,
   }),
+  loader: async ({ context }) => {
+    const [subscription, setupData] = await Promise.all([loadSubscription(context), loadSetupData(context)]);
+    return { commercialMode: context.runtimeConfig.commercialMode, setupData, subscription };
+  },
   component: DashboardPage,
 });
 
 function DashboardPage() {
+  const { setupData } = Route.useLoaderData();
+  return (
+    <SWRConfig value={{ fallback: setupData }}>
+      <DashboardContent />
+    </SWRConfig>
+  );
+}
+
+function useConnectedToast(accounts: CalendarAccount[] | undefined) {
+  const { connected } = Route.useSearch();
+  const navigate = useNavigate();
+  const showToast = useSetAtom(showToastAtom);
+  const account = accounts?.find(({ id }) => id === connected);
+
+  useEffect(() => {
+    if (!connected || !accounts) return;
+    if (account) showToast(`${account.providerName} connected`);
+    navigate({ replace: true, search: {}, to: "/dashboard" });
+  }, [connected, accounts, account, showToast, navigate]);
+}
+
+function DashboardContent() {
+  const onboarding = useOnboarding();
+  useConnectedToast(onboarding?.accounts);
+
+  if (!onboarding) return null;
+  if (onboarding.step !== "home") return <Onboarding state={onboarding} />;
+  return <Home />;
+}
+
+function Home() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -87,34 +148,26 @@ function DashboardPage() {
       <EventGraph />
       <div className="flex flex-col gap-1.5">
         <DashboardReauthNotice />
-        <CalendarSourcesMenu />
         <CalendarsMenu />
+        <SyncPairsMenu />
+        <PlanMenu />
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
             <NavigationMenuItemIcon>
               <MessageSquare size={15} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Submit Feedback</NavigationMenuItemLabel>
+            <NavigationMenuItemLabel>Submit feedback</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
           <NavigationMenuLinkItem to="/dashboard/report">
             <NavigationMenuItemIcon>
               <Bug size={15} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Report a Problem</NavigationMenuItemLabel>
+            <NavigationMenuItemLabel>Report a problem</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
         </NavigationMenu>
-        <PlanMenu />
-        <AccountsMenu />
-        <NavigationMenu>
-          <NavigationMenuButtonItem onClick={handleLogout}>
-            <NavigationMenuItemIcon>
-              <LogOut size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Logout</NavigationMenuItemLabel>
-          </NavigationMenuButtonItem>
-        </NavigationMenu>
+        <AccountsMenu onLogout={handleLogout} />
       </div>
       <div className="pt-8 flex justify-center">
         <KeeperLogo className="size-8 text-border-elevated self-center" />
@@ -129,51 +182,31 @@ interface RefreshStatus {
 }
 
 function PlanMenu() {
-  const navigate = useNavigate();
   const { commercialMode, subscription: loaderSubscription } = Route.useLoaderData();
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription({
     fallbackData: loaderSubscription,
   });
   const isPro = subscription?.plan === "pro";
-  const [isManaging, setIsManaging] = useState(false);
+  const hasConfiguredSync = useHasConfiguredSync();
 
-  const handleManagePlan = async () => {
-    if (!isPro) {
-      navigate({ to: "/dashboard/upgrade" });
-      return;
-    }
-    setIsManaging(true);
-    try {
-      await openCustomerPortal();
-    } catch {
-      setIsManaging(false);
-    }
-  };
-
-  if (!commercialMode) {
+  if (!commercialMode || !isPlanShownOnHome({ isPro, hasConfiguredSync })) {
     return null;
   }
 
   return (
     <NavigationMenu variant={isPro ? "default" : "highlight"}>
-      <NavigationMenuButtonItem onClick={handleManagePlan} disabled={isManaging || subscriptionLoading}>
-        <NavigationMenuItemIcon>
-          {isPro ? <CreditCard size={15} /> : <Sparkles size={15} />}
-        </NavigationMenuItemIcon>
-        <NavigationMenuItemLabel>{isPro ? "Manage Plan" : "Upgrade to Pro"}</NavigationMenuItemLabel>
-        <NavigationMenuItemTrailing />
-      </NavigationMenuButtonItem>
+      <PlanMenuItem subscription={subscription} subscriptionLoading={subscriptionLoading} />
     </NavigationMenu>
   );
 }
 
-function CalendarSourcesMenu() {
+function useRefreshCalendars() {
   const { mutate: globalMutate } = useSWRConfig();
   const [isRefreshing, startRefreshTransition] = useTransition();
   const [status, setStatus] = useState<RefreshStatus | null>(null);
   const { secondsRemaining, start: startCooldown } = useCountdown();
 
-  const handleRefresh = () => {
+  const refresh = () => {
     setStatus(null);
 
     startRefreshTransition(async () => {
@@ -198,35 +231,18 @@ function CalendarSourcesMenu() {
     });
   };
 
-  const isCoolingDown = secondsRemaining > 0;
+  return { isRefreshing, refresh, secondsRemaining, status };
+}
+
+function SyncPairsMenu() {
+  const { data: calendars } = useSWR<CalendarSource[]>("/api/sources");
+  const pairs = useSyncPairs(calendars);
+  if (pairs.length === 0) return null;
 
   return (
-    <>
-      <NavigationMenu>
-        <NavigationMenuLinkItem to="/dashboard/connect">
-          <NavigationMenuItemIcon>
-            <CalendarPlus size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>Import Calendars</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuLinkItem>
-        <NavigationMenuButtonItem
-          onClick={isRefreshing || isCoolingDown ? undefined : handleRefresh}
-          disabled={isRefreshing || isCoolingDown}
-        >
-          <NavigationMenuItemIcon>
-            <RefreshCw size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>
-            {isRefreshing ? "Refreshing..." : "Refresh Calendars"}
-          </NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {isCoolingDown && <Text size="sm" tone="muted">{secondsRemaining}s</Text>}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuButtonItem>
-      </NavigationMenu>
-      {status && <Text size="sm" tone={status.tone}>{status.message}</Text>}
-    </>
+    <NavigationMenu>
+      {pairs.map(({ pair, source }) => <SyncPairRow key={pair.key} pair={pair} source={source} />)}
+    </NavigationMenu>
   );
 }
 
@@ -244,98 +260,125 @@ function CalendarsMenu() {
   const { data: eventCountData, error: eventCountError } = useSWR<{ count: number }>("/api/events/count");
   const eventCount = eventCountError ? undefined : eventCountData?.count;
 
+  const { isRefreshing, refresh, secondsRemaining, status } = useRefreshCalendars();
+  const isCoolingDown = secondsRemaining > 0;
+
   return (
-    <NavigationMenu>
-      <NavigationMenuPopover
-        disabled={calendars.length === 0 && !calendarsLoading}
-        trigger={
-          <>
-            <NavigationMenuItemIcon>
-              <Calendar size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>
-              {calendars.length > 0 ? "Calendars" : "No Calendars"}
-            </NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing>
-              <ProviderIconStack
-                providers={calendars}
-                leading={
-                  calendars.some((calendar) => reauthIds.has(calendar.accountId))
-                    ? <AttentionDot />
+    <>
+      <NavigationMenu>
+        <NavigationMenuPopover
+          disabled={calendars.length === 0 && !calendarsLoading}
+          trigger={
+            <>
+              <NavigationMenuItemIcon>
+                <Calendar size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>
+                {calendars.length > 0 ? "Calendars" : "No calendars"}
+              </NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing>
+                <ProviderIconStack
+                  providers={calendars}
+                  leading={
+                    calendars.some((calendar) => reauthIds.has(calendar.accountId))
+                      ? <AttentionDot />
+                      : undefined
+                  }
+                />
+              </NavigationMenuItemTrailing>
+            </>
+          }
+        >
+          {error && <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />}
+          {calendarsLoading && (
+            <div className="flex justify-center py-4">
+              <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
+            </div>
+          )}
+          {calendars.map((calendar) => (
+            <NavigationMenuLinkItem
+              key={calendar.id}
+              to={`/dashboard/accounts/${calendar.accountId}/${calendar.id}`}
+              onMouseEnter={() => {
+                preload(`/api/accounts/${calendar.accountId}`, fetcher);
+                preload(`/api/sources/${calendar.id}`, fetcher);
+              }}
+            >
+              <NavigationMenuItemIcon>
+                <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel
+                className="shrink-0"
+                tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
+              >
+                {calendar.name}
+              </NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing
+                className="overflow-hidden"
+                indicator={
+                  reauthIds.has(calendar.accountId)
+                    ? <TriangleAlert size={15} className="shrink-0 text-attention" />
                     : undefined
                 }
-              />
-            </NavigationMenuItemTrailing>
-          </>
-        }
-      >
-        {error && <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />}
-        {calendarsLoading && (
-          <div className="flex justify-center py-4">
-            <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
-          </div>
-        )}
-        {calendars.map((calendar) => (
-          <NavigationMenuLinkItem
-            key={calendar.id}
-            to={`/dashboard/accounts/${calendar.accountId}/${calendar.id}`}
-            onMouseEnter={() => {
-              preload(`/api/accounts/${calendar.accountId}`, fetcher);
-              preload(`/api/sources/${calendar.id}`, fetcher);
-            }}
-          >
-            <NavigationMenuItemIcon>
-              <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel
-              className="shrink-0"
-              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
-            >
-              {calendar.name}
-            </NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing
-              className="overflow-hidden"
-              indicator={
-                reauthIds.has(calendar.accountId)
-                  ? <TriangleAlert size={15} className="shrink-0 text-attention" />
-                  : undefined
-              }
-            >
-              <Text
-                size="sm"
-                tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
-                align="right"
-                className="flex-1 min-w-0 truncate"
               >
-                {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
-              </Text>
-            </NavigationMenuItemTrailing>
-          </NavigationMenuLinkItem>
-        ))}
-      </NavigationMenuPopover>
-      <AnimatedReveal show={calendars.length > 0} skipInitial={!animateCalendars}>
-        <NavigationMenuLinkItem to="/dashboard/events">
+                <Text
+                  size="sm"
+                  tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
+                  align="right"
+                  className="flex-1 min-w-0 truncate"
+                >
+                  {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
+                </Text>
+              </NavigationMenuItemTrailing>
+            </NavigationMenuLinkItem>
+          ))}
+        </NavigationMenuPopover>
+        <NavigationMenuLinkItem to="/dashboard/connect">
           <NavigationMenuItemIcon>
-            <CalendarDays size={15} />
+            <CalendarPlus size={15} />
           </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>View Events</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuLinkItem>
-        <NavigationMenuLinkItem to="/dashboard/ical">
-          <NavigationMenuItemIcon>
-            <Link2 size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>iCal Feeds</NavigationMenuItemLabel>
+          <NavigationMenuItemLabel>Add a calendar</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuLinkItem>
-      </AnimatedReveal>
-    </NavigationMenu>
+        <NavigationMenuButtonItem
+          onClick={isRefreshing || isCoolingDown ? undefined : refresh}
+          disabled={isRefreshing || isCoolingDown}
+        >
+          <NavigationMenuItemIcon>
+            <RefreshCw size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>
+            {isRefreshing ? "Refreshing..." : "Refresh calendars"}
+          </NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            {isCoolingDown && <Text size="sm" tone="muted">{secondsRemaining}s</Text>}
+          </NavigationMenuItemTrailing>
+        </NavigationMenuButtonItem>
+        <AnimatedReveal show={calendars.length > 0} skipInitial={!animateCalendars}>
+          <NavigationMenuLinkItem to="/dashboard/events">
+            <NavigationMenuItemIcon>
+              <CalendarDays size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>View events</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing>
+              {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
+            </NavigationMenuItemTrailing>
+          </NavigationMenuLinkItem>
+          <NavigationMenuLinkItem to="/dashboard/ical">
+            <NavigationMenuItemIcon>
+              <Link2 size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>iCal feeds</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuLinkItem>
+        </AnimatedReveal>
+      </NavigationMenu>
+      {status && <Text size="sm" tone={status.tone}>{status.message}</Text>}
+    </>
   );
 }
 
-function AccountsMenu() {
+function AccountsMenu({ onLogout }: { onLogout: () => void }) {
   const reauthAccounts = useReauthAccounts();
   const reauthIds = new Set(reauthAccounts.map((account) => account.id));
   return (
@@ -348,6 +391,12 @@ function AccountsMenu() {
         <NavigationMenuItemLabel>Settings</NavigationMenuItemLabel>
         <NavigationMenuItemTrailing />
       </NavigationMenuLinkItem>
+      <NavigationMenuButtonItem onClick={onLogout}>
+        <NavigationMenuItemIcon>
+          <LogOut size={15} />
+        </NavigationMenuItemIcon>
+        <NavigationMenuItemLabel>Log out</NavigationMenuItemLabel>
+      </NavigationMenuButtonItem>
     </NavigationMenu>
   );
 }
@@ -365,7 +414,7 @@ function AccountsPopover({ reauthIds }: { reauthIds: Set<string> }) {
             <User size={15} />
           </NavigationMenuItemIcon>
           <NavigationMenuItemLabel>
-            {accounts.length > 0 ? "Calendar Sources" : "No Calendar Sources"}
+            {accounts.length > 0 ? "Calendar sources" : "No calendar sources"}
           </NavigationMenuItemLabel>
           <NavigationMenuItemTrailing>
             <ProviderIconStack

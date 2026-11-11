@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { EventsFetchError, fetchCalendarEvents, parseGoogleEvents } from "../../../../../src/providers/google/source/utils/fetch-events";
+import {
+  EventsFetchError,
+  fetchCalendarEvents,
+  parseGoogleEvents,
+  parseGoogleEventsWithDiagnostics,
+} from "../../../../../src/providers/google/source/utils/fetch-events";
 import type { GoogleCalendarEvent } from "../../../../../src/providers/google/source/types";
 
 const createGoogleEvent = (overrides: Partial<GoogleCalendarEvent>): GoogleCalendarEvent => ({
@@ -367,5 +372,32 @@ describe("parseGoogleEvents", () => {
 
     expect(parsedEvents).toHaveLength(1);
     expect(parsedEvents[0]?.availability).toBe("busy");
+  });
+});
+
+describe("parseGoogleEventsWithDiagnostics with off-contract times", () => {
+  it("reads an offset-less dateTime in its timeZone", () => {
+    const { events } = parseGoogleEventsWithDiagnostics([createGoogleEvent({
+      end: { dateTime: "2026-11-03T10:00:00", timeZone: "America/Edmonton" },
+      start: { dateTime: "2026-11-03T09:00:00", timeZone: "America/Edmonton" },
+    })]);
+
+    expect(events.map((event) => event.startTime.toISOString()))
+      .toEqual(["2026-11-03T15:00:00.000Z"]);
+  });
+
+  it("counts one zone-less offset-less item as unrepresentable and keeps the rest", () => {
+    const zoneless = createGoogleEvent({
+      end: { dateTime: "2026-11-03T10:00:00" },
+      iCalUID: "zoneless-uid",
+      id: "zoneless-id",
+      start: { dateTime: "2026-11-03T09:00:00" },
+    });
+    const valid = createGoogleEvent({ iCalUID: "valid-uid", id: "valid-id" });
+
+    const diagnostics = parseGoogleEventsWithDiagnostics([zoneless, valid]);
+
+    expect(diagnostics.unrepresentableCount).toBe(1);
+    expect(diagnostics.events.map((event) => event.uid)).toEqual(["valid-uid"]);
   });
 });

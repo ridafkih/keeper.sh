@@ -1,4 +1,7 @@
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
+import { startTracing, traceIncomingRequest } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
+import { getServerPublicRuntimeConfig } from "@/lib/runtime-config";
 import { createServerConfig, envSchema } from "./config";
 import { handleApplicationRequest } from "./http-handler";
 import { websocketProxyHandlers, upgradeSocketProxy } from "./proxy/websocket";
@@ -6,6 +9,7 @@ import { createRuntime } from "./runtime";
 import type { SocketProxyData } from "./types";
 import { checkMigrationStatus } from "./migration-check";
 import { context, destroy, widelog } from "./logging";
+import { resolveTrafficSource } from "./traffic-source";
 
 checkMigrationStatus();
 
@@ -20,17 +24,26 @@ await entry({
   env: envSchema,
   name: "web",
   main: async ({ env }) => {
-    const config = createServerConfig(env);
+    const config = createServerConfig(
+      env,
+      getServerPublicRuntimeConfig({ environment: process.env }),
+    );
+    const tracing = startTracing({
+      serviceName: "keeper-web",
+      propagateToOrigins: [config.apiProxyOrigin, config.mcpProxyOrigin].filter((origin) => origin !== null),
+      environment: process.env,
+    });
     const runtime = await createRuntime(config);
 
     const server = Bun.serve<SocketProxyData>({
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       fetch: (request, httpServer) => {
         const upgraded = upgradeSocketProxy(request, httpServer, config);
         if (upgraded) {
           return;
         }
 
-        return context(async () => {
+        return traceIncomingRequest(request, { trustIncomingTraceContext: false }, () => context(async () => {
           const url = new URL(request.url);
           const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
 
@@ -44,6 +57,13 @@ await entry({
           if (userAgent) {
             widelog.set("http.user_agent", userAgent);
           }
+
+          const trafficSource = resolveTrafficSource(request, url);
+          if (trafficSource.referrerOrigin) {
+            widelog.set("http.referrer_origin", trafficSource.referrerOrigin);
+          }
+          widelog.set("traffic.has_utm", trafficSource.hasUtmParameters);
+          widelog.set("traffic.has_gclid", trafficSource.hasGoogleClickId);
 
           try {
             return await widelog.time.measure("duration_ms", async () => {
@@ -60,7 +80,7 @@ await entry({
           } finally {
             widelog.flush();
           }
-        });
+        }));
       },
       port: config.serverPort,
       websocket: websocketProxyHandlers,
@@ -72,6 +92,7 @@ await entry({
         await runtime.shutdown();
       }
       await destroy();
+      await tracing.shutdown();
     };
   },
 });

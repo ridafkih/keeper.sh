@@ -1,32 +1,25 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { parse as parseYaml } from "yaml";
 import { parseMetadata, type BlogPostMetadata } from "../src/lib/blog-post-metadata";
 import { buildMovedPaths, CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
+import { extractContentFaq, type ContentFaqEntry } from "../src/lib/content-faq";
+import { collectContentImages, renderContentCollectionModule, type ContentImageFile } from "../src/lib/content-images";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
 
-interface BlogPostFaqEntry {
-  answer: string;
-  question: string;
-}
-
 export interface ProcessedBlogPost {
   content: string;
-  faq: BlogPostFaqEntry[];
+  faq: ContentFaqEntry[];
+  images: ContentImageFile[];
   metadata: BlogPostMetadata;
   slug: string;
 }
 
-const FAQ_ITEM_PATTERN = /<faq-item question="([^"]*)">([\s\S]*?)<\/faq-item>/g;
-
-function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[] {
-  const entries = [...content.matchAll(FAQ_ITEM_PATTERN)].map((match) => ({
-    answer: match[2].trim(),
-    question: match[1].trim(),
-  }));
+function extractFaqEntries(content: string, filePath: string): ContentFaqEntry[] {
+  const entries = extractContentFaq(content);
 
   const incomplete = entries.find(
     (entry) => entry.question.length === 0 || entry.answer.length === 0,
@@ -34,7 +27,7 @@ function extractFaqEntries(content: string, filePath: string): BlogPostFaqEntry[
 
   if (incomplete) {
     throw new Error(
-      `Blog post "${filePath}" has a faq-item with an empty question or answer.`,
+      `Blog post "${filePath}" has an FAQ entry with an empty question or answer.`,
     );
   }
 
@@ -144,6 +137,8 @@ export function processBlogDirectory(
 ): ProcessedBlogPost[] {
   if (!existsSync(blogDir)) return [];
 
+  const contentRoot = dirname(blogDir);
+
   const files = readdirSync(blogDir)
     .filter((f) => f.endsWith(".mdx"))
     .sort();
@@ -172,7 +167,13 @@ export function processBlogDirectory(
     slugCounts.set(baseSlug, seenCount + 1);
     const slug = seenCount === 0 ? baseSlug : `${baseSlug}-${seenCount + 1}`;
 
-    return { content, faq: extractFaqEntries(content, file), metadata, slug };
+    return {
+      content,
+      faq: extractFaqEntries(content, file),
+      images: collectContentImages(content, filePath, contentRoot),
+      metadata,
+      slug,
+    };
   });
 
   return posts.sort((a, b) =>
@@ -207,8 +208,10 @@ function contentCollectionPlugin(collection: ContentCollection): Plugin {
     load(id) {
       if (id !== resolvedId) return;
 
-      const posts = processBlogDirectory(contentDir, publicDir);
-      return `export const ${collection.exportName} = ${JSON.stringify(posts)};`;
+      return renderContentCollectionModule(
+        collection.exportName,
+        processBlogDirectory(contentDir, publicDir),
+      );
     },
 
     handleHotUpdate({ file, server }) {

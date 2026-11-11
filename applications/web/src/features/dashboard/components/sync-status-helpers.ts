@@ -21,6 +21,10 @@ const resolveSyncPercent = (composite: CompositeSyncState): number | null => {
     return clampPercent(composite.progressPercent);
   }
 
+  if ((composite.mappings?.pendingCount ?? 0) > 0) {
+    return 0;
+  }
+
   if (composite.connected && composite.syncEventsRemaining === 0) {
     return 100;
   }

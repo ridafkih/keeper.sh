@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+import { getGoogleTagIds } from "@/lib/google-tag";
 import {
   ANALYTICS_EVENTS,
   identify,
@@ -9,13 +10,15 @@ import {
   track,
   updateGoogleConsent,
 } from "@/lib/analytics";
-import { stripSignupMarker } from "@/lib/signup-marker";
+import { consumeSignupMarker } from "@/lib/signup-marker";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
 
 function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfig }) {
   const { googleAdsId, visitorsNowToken } = runtimeConfig;
+  const googleTagIds = getGoogleTagIds(runtimeConfig);
+  const [googleTagLoaderId] = googleTagIds;
   const gdprApplies = useGdprApplies();
   const hasConsent = useEffectiveConsent();
   const location = useLocation();
@@ -40,10 +43,8 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
   }, [hasConsent]);
 
   useEffect(() => {
-    const cleanedUrl = stripSignupMarker(globalThis.location.href);
-    if (cleanedUrl === null) return;
+    if (!consumeSignupMarker()) return;
 
-    globalThis.history.replaceState(null, "", cleanedUrl);
     track(ANALYTICS_EVENTS.signup_completed, { provider: "oauth" });
     reportSignupConversion(runtimeConfig);
   }, [runtimeConfig]);
@@ -66,7 +67,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
           {...(hasConsent && { "data-persist": true })}
         />
       )}
-      {googleAdsId && (
+      {googleTagLoaderId && (
         <>
           <script
             dangerouslySetInnerHTML={{
@@ -85,7 +86,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
           />
           <script
             async
-            src={`https://www.googletagmanager.com/gtag/js?id=${googleAdsId}`}
+            src={`https://www.googletagmanager.com/gtag/js?id=${googleTagLoaderId}`}
           />
           <script
             dangerouslySetInnerHTML={{
@@ -93,7 +94,7 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
                 window.dataLayer = window.dataLayer || [];
                 function gtag(){dataLayer.push(arguments);}
                 gtag('js', new Date());
-                gtag('config', '${googleAdsId}');
+                ${googleTagIds.map((id) => `gtag('config', '${id}');`).join("\n")}
               `,
             }}
           />

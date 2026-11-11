@@ -4,6 +4,8 @@ import type { SQL } from "drizzle-orm";
 import type { IcsExceptionDates, IcsRecurrenceRule } from "ts-ics";
 import type { SourceEvent } from "../types";
 import { serializeStoredIcsRecurrenceRule } from "../events/stored-recurrence";
+import { adoptPlaceholderIds, removeIngestedPlaceholders } from "./user-event-placeholders";
+import type { UserEventPlaceholderClient } from "./user-event-placeholders";
 
 const EMPTY_ROW_COUNT = 0;
 
@@ -106,7 +108,7 @@ interface EventStateConflictConfig {
   set: Record<string, SQL>;
 }
 
-interface EventStateInsertClient {
+interface EventStateInsertClient extends UserEventPlaceholderClient {
   insert: (table: typeof eventStatesTable) => {
     values: {
       (row: EventStateInsertRow): {
@@ -138,10 +140,11 @@ const insertEventStateRows = async (
   }
 
   for (let offset = 0; offset < rows.length; offset += INSERT_CHUNK_SIZE) {
+    const chunk = await adoptPlaceholderIds(database, rows.slice(offset, offset + INSERT_CHUNK_SIZE));
     onStatement?.();
     await database
       .insert(eventStatesTable)
-      .values(rows.slice(offset, offset + INSERT_CHUNK_SIZE))
+      .values(chunk)
       .onConflictDoUpdate(conflictConfig);
   }
 };
@@ -180,6 +183,11 @@ const insertEventStatesWithConflictResolution = async (
     target: LEGACY_NON_RECURRING_EVENT_STATE_CONFLICT_TARGET,
     targetWhere: sql`${eventStatesTable.sourceEventId} is null and ${eventStatesTable.recurrenceId} is null`,
   }, onStatement);
+
+  if (rows.length > EMPTY_ROW_COUNT) {
+    onStatement?.();
+    await removeIngestedPlaceholders(database, rows.map((row) => row.calendarId));
+  }
 };
 
 export { buildEventStateInsertRow, insertEventStatesWithConflictResolution };

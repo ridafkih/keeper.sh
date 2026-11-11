@@ -57,14 +57,12 @@ export {
   getOAuthSyncTokenVersion,
 } from "./core/oauth/sync-window";
 export {
-  FULL_POLL_INTERVAL_MS,
   LIVE_PUSH_CHANNEL_STATES,
-  PUSH_HEALTHY_POLL_FLOOR_MS,
   STALE_REGISTERING_MS,
   isPushChannelGoneError,
   planPushChannelActions,
   resolveAffectedCalendarIds,
-  resolveIngestPollFloorMs,
+  isIngestPushHealthy,
   resolvePushChannelHealth,
   shouldRetainPushChannelAction,
   toPushChannelState,
@@ -94,22 +92,7 @@ export {
   resolveRenewalLeadMs,
 } from "./core/source/push-provider-profile";
 export type { PushProviderProfile } from "./core/source/push-provider-profile";
-export {
-  buildUnknownChannelKey,
-  PENDING_CORRELATION_KEY,
-  PENDING_FAILURES_KEY,
-  PENDING_INGEST_KEY,
-  PENDING_REWAKE_KEY,
-  PENDING_SIGNAL_KEY,
-  SIGNAL_READER_HEARTBEAT_KEY,
-  UNKNOWN_CHANNEL_PREFIX,
-} from "./core/source/push-keys";
-export {
-  PENDING_SIGNAL_MAX_LENGTH,
-  PENDING_SIGNAL_TTL_SECONDS,
-  signalPendingCalendars,
-  type PendingSignalRedis,
-} from "./core/source/pending-signal";
+export { buildUnknownChannelKey } from "./core/source/push-keys";
 export { resolvePushRegistrar } from "./core/source/push-registry";
 export {
   generatePushSecret,
@@ -159,8 +142,9 @@ export {
   resolveTimeZone,
   wallTimeToInstant,
 } from "./ics/utils/timezone-instant";
+export { offsetPartsToMinutes } from "./ics/utils/utc-offset";
 export { RateLimiter, type RateLimiterConfig } from "./core/utils/rate-limiter";
-export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
+export { CALDAV_ACCOUNT_REQUESTS_PER_MINUTE, FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE, ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE, createCalDAVAccountRateLimiter, createGoogleUserRateLimiter, createHostRateLimiter, createOutlookAccountRequestLimiter, createOutlookAccountSemaphore, createOutlookRequestLimiter, createRedisRateLimiter, createGoogleInteractiveRateLimiter, GoogleProjectBudgetExhaustedError, resolveGoogleProjectRequestsPerMinute, withGoogleProjectBudget, type HostRateLimiterOptions, type OutlookAccountSemaphore, type RedisRateLimiter, type RedisRateLimiterConfig } from "./core/utils/redis-rate-limiter";
 export { createLeasedSemaphore, type LeasedSemaphore, type LeasedSemaphoreConfig, type RedisLeaseClient, type SemaphoreLease } from "./core/utils/leased-semaphore";
 export { flagPacingParkAbortReason, isIngestPacingParkAbortError } from "./core/utils/pacing-park";
 export { allSettledGroupedWithConcurrency, allSettledWithConcurrency, type AllSettledGroupedOptions, type AllSettledWithConcurrencyOptions } from "./core/utils/concurrency";
@@ -169,8 +153,28 @@ export { createSerialFlushWorker, isSerialFlushReserveAbortError, isSerialFlushR
 export {
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
+  resolveCalendarBackoffDelayMs,
   type CalendarBackoffState,
 } from "./core/utils/calendar-backoff";
+export {
+  BASELINE_MOVED_RETRY_MS,
+  CREDENTIAL_PROBE_MS,
+  DEFAULT_INGEST_INTERVAL_DIALS,
+  LOCK_HELD_RETRY_MS,
+  UNBACKED_FAILURE_RETRY_MS,
+  UNRESOLVABLE_PROBE_MS,
+  resolveIngestIntervalMs,
+  resolveIngestJitterMs,
+  resolveIngestScheduleDecision,
+  resolveWakeDebounceMs,
+  type IngestIntervalDials,
+  type IngestIntervalInput,
+  type IngestOutcome,
+  type IngestParkedReason,
+  type IngestPlan,
+  type IngestScheduleDecision,
+  type IngestScheduleDecisionInput,
+} from "./core/source/ingest-schedule-policy";
 export {
   RequestTimeoutError,
   fetchWithTimeout,
@@ -178,6 +182,7 @@ export {
   isTimeoutError,
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
+export { REDIS_UNAVAILABLE_SLUG, isRedisUnavailableError } from "./core/utils/redis-errors";
 export {
   getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
@@ -211,6 +216,23 @@ export {
   type SourceEventDiffOptions,
 } from "./core/source/event-diff";
 export {
+  MAPPING_SYNC_STATE_EVENT,
+  createMappingSyncStatePublisher,
+  createMappingSyncStateReader,
+  readMappingSyncSummary,
+  type MappingSyncState,
+  type MappingSyncStateConfig,
+  type MappingSyncSummary,
+} from "./core/sync/mapping-sync-state";
+export {
+  isCalDAVPrivilegeSetWritable,
+  isGoogleAccessRoleWritable,
+  isOutlookCalendarWritable,
+  resolveCalendarCapabilities,
+  type CalendarCapability,
+} from "./core/source/calendar-capabilities";
+export { setCalendarWriteAccess } from "./core/source/calendar-write-access";
+export {
   planCalendarRediscovery,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
@@ -238,6 +260,11 @@ export {
   type CalendarRediscoveryApplyResult,
   type InsertedCalendar,
 } from "./core/source/apply-calendar-rediscovery";
+export {
+  findUserCalDAVCalendarsOnServer,
+  type UserCalDAVCalendar,
+  type UserCalDAVCalendarsQuery,
+} from "./core/source/user-caldav-calendars";
 export {
   SOURCE_INGEST_LOCK_NAMESPACE,
   SOURCE_INGEST_LOCK_TIMEOUT_MS,
@@ -285,6 +312,7 @@ export {
 } from "./core/sync/required-source-ranges";
 export {
   type DestinationSyncResult,
+  type SyncPace,
   type SyncProgressUpdate,
   type SyncStage,
 } from "./core/sync/types";
@@ -417,3 +445,4 @@ export { createManagePushChannelsDependencies } from "./core/source/manage-push-
 export type { ManagePushChannelsConfig } from "./core/source/manage-push-channels-dependencies";
 export { createRegistrarContextFactory } from "./core/source/push-registrar-context";
 export type { RegistrarContextConfig } from "./core/source/push-registrar-context";
+export { REQUIRED_TIME_ZONE_DATA_VERSION, exitUnlessTimeZoneDataCurrent } from "./utils/timezone-data-currency";

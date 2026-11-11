@@ -35,7 +35,6 @@ interface PushWebhookDependencies {
   generateCorrelationId: () => string;
   isUnknownChannelCached: (provider: string, channelKey: string) => Promise<boolean>;
   markChannelRemoved?: (channelId: string) => Promise<void>;
-  markPendingIngest: (calendarIds: string[], correlationId: string) => Promise<void>;
   markReauthorizeRequested?: (channelId: string) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError?: (error: unknown, slug: string) => void;
@@ -47,8 +46,8 @@ interface PushWebhookDependencies {
     ttlSeconds: number,
   ) => Promise<void>;
   resolveAffectedCalendarIds: (channel: StoredPushChannel) => Promise<string[]>;
-  signalPendingIngest?: (calendarIds: string[]) => Promise<void>;
   verifySecret: (presented: string, storedHash: string) => boolean;
+  wakeIngest: (calendarIds: string[], correlationId: string) => Promise<void>;
   webhookPublicUrl: string | null;
 }
 
@@ -401,19 +400,6 @@ const readAdmittedBody = async (
   return { body };
 };
 
-const signalWoken = async (
-  calendarIds: string[],
-  dependencies: PushWebhookDependencies,
-): Promise<void> => {
-  try {
-    await dependencies.signalPendingIngest?.(calendarIds);
-  } catch (error) {
-    // The pending set already holds these calendars for the periodic tick.
-    dependencies.recordError?.(error, "webhook-drain-signal-failed");
-    dependencies.observe({ "webhook.signal_failed": true });
-  }
-};
-
 const processClaims = async (
   claims: PushClaim[],
   correlationId: string,
@@ -447,8 +433,7 @@ const processClaims = async (
 
   if (pendingCalendarIds.size > 0) {
     const woken = [...pendingCalendarIds];
-    await dependencies.markPendingIngest(woken, correlationId);
-    await signalWoken(woken, dependencies);
+    await dependencies.wakeIngest(woken, correlationId);
   }
 
   dependencies.observe({

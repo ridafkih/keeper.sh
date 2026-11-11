@@ -20,13 +20,13 @@ import {
   type AuthCapabilities,
 } from "@/lib/auth-capabilities";
 import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
-import { withSignupMarker } from "@/lib/signup-marker";
+import { readSignUpAttribution } from "@/lib/sign-up-attribution";
+import { resolveNewUserCallbackURL } from "@/lib/sign-up-continuation";
 import { track, ANALYTICS_EVENTS, reportSignupConversion } from "@/lib/analytics";
 import { getPublicRuntimeConfig } from "@/lib/runtime-config";
 import {
   Button,
   LinkButton,
-  ExternalLinkButton,
   ButtonText,
   ButtonIcon,
 } from "@/components/ui/primitives/button";
@@ -70,13 +70,12 @@ export type AuthScreenCopy = {
 type SocialAuthProvider = {
   id: "google" | "microsoft";
   label: string;
-  to: "/auth/google" | "/auth/outlook";
   iconSrc: string;
 };
 
 const SOCIAL_AUTH_PROVIDERS: readonly SocialAuthProvider[] = [
-  { id: "google", label: "Google", to: "/auth/google", iconSrc: "/integrations/icon-google.svg" },
-  { id: "microsoft", label: "Outlook", to: "/auth/outlook", iconSrc: "/integrations/icon-outlook.svg" },
+  { id: "google", label: "Google", iconSrc: "/integrations/icon-google.svg" },
+  { id: "microsoft", label: "Microsoft", iconSrc: "/integrations/icon-outlook.svg" },
 ];
 
 const submitTextVariants: Record<AuthFormStatus, Variants[string]> = {
@@ -229,20 +228,18 @@ function SocialAuthButtons({
   return (
     <>
       {visibleProviders.map((provider) => (
-        <ExternalLinkButton
+        <SocialSignInButton
           key={provider.id}
-          href={resolvePathWithSearch(provider.to, authorizationSearch)}
-          className="w-full justify-center"
-          variant="border"
-        >
-          <ButtonIcon>
-            <img src={provider.iconSrc} alt="" width={16} height={16} />
-          </ButtonIcon>
-          <ButtonText>{`${oauthActionLabel} with ${provider.label}`}</ButtonText>
-        </ExternalLinkButton>
+          provider={provider.id}
+          actionLabel={oauthActionLabel}
+          providerName={provider.label}
+          iconSrc={provider.iconSrc}
+          authorizationSearch={authorizationSearch}
+        />
       ))}
       {showOidc && (
-        <OidcSignInButton
+        <SocialSignInButton
+          provider="oidc"
           actionLabel={oauthActionLabel}
           providerName={resolveOidcProviderName(capabilities)}
           authorizationSearch={authorizationSearch}
@@ -252,13 +249,17 @@ function SocialAuthButtons({
   );
 }
 
-function OidcSignInButton({
+function SocialSignInButton({
+  provider,
   actionLabel,
   providerName,
+  iconSrc,
   authorizationSearch,
 }: {
+  provider: SocialAuthProvider["id"] | "oidc";
   actionLabel: string;
   providerName: string;
+  iconSrc?: string;
   authorizationSearch?: StringSearchParams;
 }) {
   const status = useAtomValue(authFormStatusAtom);
@@ -276,12 +277,14 @@ function OidcSignInButton({
 
     const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
     const fallbackMessage = `Couldn't reach ${providerName}.`;
+    const attribution = readSignUpAttribution();
 
     try {
-      const { error } = await authClient.signIn.oauth2({
+      const { error } = await authClient.signIn.social({
+        ...(attribution && { additionalData: { attribution } }),
         callbackURL,
-        newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
-        providerId: "oidc",
+        newUserCallbackURL: resolveNewUserCallbackURL(provider, callbackURL, globalThis.location.origin),
+        provider,
       });
 
       if (error) {
@@ -300,6 +303,11 @@ function OidcSignInButton({
       className="w-full justify-center"
       variant="border"
     >
+      {iconSrc && (
+        <ButtonIcon>
+          <img src={iconSrc} alt="" width={16} height={16} />
+        </ButtonIcon>
+      )}
       <ButtonText>{`${actionLabel} with ${providerName}`}</ButtonText>
     </Button>
   );

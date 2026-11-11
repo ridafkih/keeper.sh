@@ -9,14 +9,7 @@ import {
   isProviderTokenRefreshFailure,
 } from "@/utils/calendar-rediscovery";
 import type { AccountCalendarRefreshSummary } from "@/utils/calendar-rediscovery";
-
-interface RefreshLockHandle {
-  release: () => Promise<void>;
-}
-
-type RefreshLockClaim =
-  | { acquired: true; handle: RefreshLockHandle }
-  | { acquired: false };
+import type { RefreshLockClaim, RefreshLockHandle } from "@/utils/account-calendar-refresh";
 
 type RefreshCooldownClaim =
   | { allowed: true }

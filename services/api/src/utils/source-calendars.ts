@@ -3,13 +3,16 @@ import { and, eq } from "drizzle-orm";
 import { database, redis } from "@/context";
 import { widelog } from "@/utils/logging";
 import { runDeleteSourceCalendar } from "@/utils/delete-source-calendar";
+import type { DeleteSourceCalendarOutcome } from "@/utils/delete-source-calendar";
 import { deregisterCalendarPushChannels } from "@/utils/push-notifications/deregister-account-channels";
 
 const INVALIDATION_PREFIX = "sync:invalidated:";
 const INVALIDATION_TTL_SECONDS = 300;
-const EMPTY_RESULT_COUNT = 0;
 
-const deleteSourceCalendar = async (userId: string, calendarId: string): Promise<boolean> =>
+const deleteSourceCalendar = async (
+  userId: string,
+  calendarId: string,
+): Promise<DeleteSourceCalendarOutcome> =>
   await runDeleteSourceCalendar({ calendarId, userId }, {
     deleteCalendarRow: async (context) => {
       const removed = await database.transaction(async (tx) => {
@@ -59,9 +62,13 @@ const deleteSourceCalendar = async (userId: string, calendarId: string): Promise
       return true;
     },
     deregisterPushChannels: deregisterCalendarPushChannels,
-    isOwnedByUser: async (context) => {
-      const rows = await database
-        .select({ id: calendarsTable.id })
+    loadCandidate: async (context) => {
+      const [row] = await database
+        .select({
+          capabilities: calendarsTable.capabilities,
+          providerMissingSince: calendarsTable.providerMissingSince,
+          unavailableSince: calendarsTable.unavailableSince,
+        })
         .from(calendarsTable)
         .where(
           and(
@@ -70,21 +77,13 @@ const deleteSourceCalendar = async (userId: string, calendarId: string): Promise
           ),
         )
         .limit(1);
-      return rows.length > EMPTY_RESULT_COUNT;
-    },
-    loadCapabilities: async (context) => {
-      const rows = await database
-        .select({ capabilities: calendarsTable.capabilities })
-        .from(calendarsTable)
-        .where(
-          and(
-            eq(calendarsTable.id, context.calendarId),
-            eq(calendarsTable.userId, context.userId),
-          ),
-        )
-        .limit(1);
-      const [row] = rows;
-      return row?.capabilities ?? [];
+      if (!row) {
+        return null;
+      }
+      return {
+        capabilities: row.capabilities,
+        missingAtProvider: row.providerMissingSince !== null || row.unavailableSince !== null,
+      };
     },
     recordError: (error, slug) => {
       widelog.errorFields(error, { retriable: false, slug });

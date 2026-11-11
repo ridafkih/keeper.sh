@@ -9,6 +9,7 @@ import { resolveIcsColor } from "../../core/colors/normalize";
 import { KEEPER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { normalizeTimezone } from "./normalize-timezone";
 import { addIcsDuration } from "./recurrence-duration";
+import { readUnresolvedTimeReason } from "./resolve-zoned-instants";
 import { MS_PER_DAY } from "@keeper.sh/constants";
 
 const getEventStartTimeZone = (event: IcsEvent): string | undefined =>
@@ -41,12 +42,18 @@ const resolveEventEndTime = (event: IcsEvent, startTime: Date): Date | null => {
   return startTime;
 };
 
+const isInvalidDate = (date: Date): boolean => Number.isNaN(date.getTime());
+
 const isUnbuildableEvent = (event: IcsEvent): boolean => {
   const startTime = event.start?.date;
   if (!startTime) {
     return false;
   }
-  return resolveEventEndTime(event, startTime) === null;
+  if (isInvalidDate(startTime)) {
+    return true;
+  }
+  const endTime = resolveEventEndTime(event, startTime);
+  return endTime === null || isInvalidDate(endTime);
 };
 
 const getEventEndTime = (event: IcsEvent, startTime: Date): Date => {
@@ -467,6 +474,16 @@ const collectStaleRevisions = (
   return { identities, unsupported: [...unsupported.values()] };
 };
 
+const collectUnresolvedTimeEvents = (
+  events: readonly IcsEvent[],
+): UnsupportedIcsEvent[] => events.flatMap((event) => {
+  const reason = readUnresolvedTimeReason(event);
+  if (!reason || !event.uid) {
+    return [];
+  }
+  return [{ reason, uid: event.uid }];
+});
+
 const mergeUnsupportedEvents = (
   ...groups: readonly UnsupportedIcsEvent[][]
 ): UnsupportedIcsEvent[] => [
@@ -540,6 +557,7 @@ const parseIcsEventsWithDiagnostics = (
     unsupportedEvents: mergeUnsupportedEvents(
       collectRangedOverrideEvents(canonicalEvents),
       stale.unsupported,
+      collectUnresolvedTimeEvents(rawEvents),
     ),
   };
 };

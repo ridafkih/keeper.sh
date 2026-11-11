@@ -5,6 +5,7 @@ type KeeperDatabase = BunSQLDatabase;
 
 interface KeeperEventRangeInput {
   from: Date | string;
+  timeZone?: string;
   to: Date | string;
 }
 
@@ -27,6 +28,7 @@ interface KeeperSource {
   accountIdentifier: string;
   needsReauthentication: boolean;
   includeInIcalFeed: boolean;
+  excludeEventName: boolean;
   unavailableSince: Date | null;
   disabled: boolean;
   providerMissingSince: string | null;
@@ -166,7 +168,7 @@ interface KeeperApi {
   listSources: (userId: string) => Promise<KeeperSource[]>;
   getEventsInRange: (userId: string, range: KeeperEventRangeInput, filters?: KeeperEventFilters) => Promise<KeeperEvent[]>;
   getEvent: (userId: string, eventId: string) => Promise<KeeperEvent | null>;
-  getEventCount: (userId: string, options?: { from: Date; to: Date }) => Promise<number>;
+  getEventCount: (userId: string, options?: { from: Date; to: Date; timeZone?: string }) => Promise<number>;
   findFreeTime: (
     userId: string,
     range: KeeperEventRangeInput,

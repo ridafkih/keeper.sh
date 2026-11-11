@@ -16,6 +16,7 @@ const PLAN_KEYS = [
   "toRetargetUrl",
   "toRevive",
   "toSetColor",
+  "toSetWritable",
   "unchangedCount",
 ];
 
@@ -36,6 +37,7 @@ const existing = (overrides: Partial<ExistingCalendar> = {}): ExistingCalendar =
   id: "calendar-1",
   identityKey: "external-1",
   unavailableSince: null,
+  writable: true,
   ...overrides,
 });
 
@@ -174,6 +176,7 @@ describe("planCalendarRediscovery", () => {
         id: "calendar-1",
         identityKey: "/dav/bob/My Work",
         unavailableSince: null,
+        writable: true,
       }],
     });
 
@@ -446,5 +449,34 @@ describe("planCalendarRediscovery", () => {
     expect(plan.toInsert).toEqual([]);
     expect(plan.toRetargetUrl).toEqual([]);
     expect(plan.duplicateCount).toBe(1);
+  });
+});
+
+describe("planCalendarRediscovery write access", () => {
+  it("demotes a stored calendar the provider now reports as read-only", () => {
+    const plan = planCalendarRediscovery({
+      discovered: [discovered({ writable: false })],
+      existing: [existing({ id: "calendar-1", writable: true })],
+    });
+
+    expect(plan.toSetWritable).toEqual([{ id: "calendar-1", writable: false }]);
+  });
+
+  it("promotes a stored calendar the provider now reports as writable", () => {
+    const plan = planCalendarRediscovery({
+      discovered: [discovered({ writable: true })],
+      existing: [existing({ id: "calendar-1", writable: false })],
+    });
+
+    expect(plan.toSetWritable).toEqual([{ id: "calendar-1", writable: true }]);
+  });
+
+  it("leaves a calendar whose write access is unchanged alone", () => {
+    const plan = planCalendarRediscovery({
+      discovered: [discovered({ writable: true })],
+      existing: [existing({ writable: true })],
+    });
+
+    expect(plan.toSetWritable).toEqual([]);
   });
 });

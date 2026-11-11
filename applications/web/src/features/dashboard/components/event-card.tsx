@@ -4,6 +4,7 @@ import { tv } from "tailwind-variants/lite";
 import { cn } from "@/utils/cn";
 import { Text } from "@/components/ui/primitives/text";
 import { formatTime, formatTimeRange, formatTimeUntil } from "@/lib/time";
+import { ALL_DAY_LABEL, resolveEventLocalStart } from "@/lib/event-day";
 import type { CalendarEvent } from "@/hooks/use-events";
 import { EVENT_COLORS } from "./event-card.styles";
 import type { EventColor } from "./event-card.styles";
@@ -139,10 +140,10 @@ export const EventCard = memo(function EventCard({
     <div className={classes} style={style}>
       <div className="flex items-center justify-between gap-2">
         <EventText size="sm" muted className="tabular-nums">
-          {formatTime(event.startTime)} - {formatTime(event.endTime)}
+          {event.isAllDay ? ALL_DAY_LABEL : `${formatTime(event.startTime)} - ${formatTime(event.endTime)}`}
         </EventText>
         <EventText size="xs" muted className="tabular-nums whitespace-nowrap">
-          {formatTimeUntil(event.startTime)}
+          {formatTimeUntil(resolveEventLocalStart(event))}
         </EventText>
       </div>
       <EventText size="sm" className="truncate font-semibold">

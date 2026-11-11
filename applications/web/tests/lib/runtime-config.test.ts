@@ -9,6 +9,7 @@ describe("resolvePublicRuntimeConfig", () => {
     const config = resolvePublicRuntimeConfig({
       googleAdsConversionLabel: "runtime-conversion",
       googleAdsId: "runtime-google",
+      googleAnalyticsId: "G-RUNTIME",
       visitorsNowToken: "runtime-visitors",
     });
 
@@ -17,6 +18,7 @@ describe("resolvePublicRuntimeConfig", () => {
       googleAdsConversionLabel: "runtime-conversion",
       googleAdsId: "runtime-google",
       googleAdsSignupConversionLabel: null,
+      googleAnalyticsId: "G-RUNTIME",
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
       visitorsNowToken: "runtime-visitors",
@@ -35,6 +37,7 @@ describe("resolvePublicRuntimeConfig", () => {
       googleAdsConversionLabel: null,
       googleAdsId: null,
       googleAdsSignupConversionLabel: null,
+      googleAnalyticsId: null,
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
       visitorsNowToken: null,
@@ -49,6 +52,7 @@ describe("serializePublicRuntimeConfig", () => {
       googleAdsConversionLabel: "conversion",
       googleAdsId: "ads-123",
       googleAdsSignupConversionLabel: null,
+      googleAnalyticsId: null,
       polarProMonthlyProductId: null,
       polarProYearlyProductId: null,
       visitorsNowToken: "</script><script>alert(1)</script>",

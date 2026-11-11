@@ -35,6 +35,7 @@ export interface CalendarSource {
   accountIdentifier: string | null;
   needsReauthentication: boolean;
   includeInIcalFeed: boolean;
+  excludeEventName: boolean;
   unavailableSince: string | null;
   disabled: boolean;
   providerMissingSince: string | null;
@@ -68,6 +69,7 @@ export interface CalendarDetail {
   ingestFailureCount: number;
   ingestLastFailureAt: string | null;
   markEventsAsPrivate: boolean;
+  disableEventReminders: boolean;
   providerMissingSince: string | null;
   destinationIds: string[];
   sourceIds: string[];
@@ -98,4 +100,5 @@ export interface ApiEvent {
 export interface ApiEventSummary {
   id: string;
   startTime: string;
+  isAllDay: boolean;
 }

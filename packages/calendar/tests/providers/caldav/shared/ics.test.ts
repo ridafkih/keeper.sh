@@ -228,6 +228,27 @@ describe("eventToICalString", () => {
   });
 });
 
+const buildDeclaredZoneSeries = (timeZoneId: string, offset: string, uid: string): string => [
+  "BEGIN:VCALENDAR",
+  "VERSION:2.0",
+  "PRODID:-//Test//Test//EN",
+  "BEGIN:VTIMEZONE",
+  `TZID:${timeZoneId}`,
+  "BEGIN:STANDARD",
+  "DTSTART:16010101T000000",
+  `TZOFFSETFROM:${offset}`,
+  `TZOFFSETTO:${offset}`,
+  "END:STANDARD",
+  "END:VTIMEZONE",
+  "BEGIN:VEVENT",
+  `UID:${uid}`,
+  `DTSTART;TZID="${timeZoneId}":20260701T090000`,
+  `DTEND;TZID="${timeZoneId}":20260701T100000`,
+  "RRULE:FREQ=WEEKLY;COUNT=3",
+  "END:VEVENT",
+  "END:VCALENDAR",
+].join("\r\n");
+
 describe("unsupported recurrence input", () => {
   it("rejects RDATE instead of silently truncating a CalDAV recurrence", () => {
     const calendar = buildIcs([buildVevent({
@@ -241,30 +262,45 @@ describe("unsupported recurrence input", () => {
       .toThrow("ICS RDATE recurrence is not supported");
   });
 
-  it("rejects custom-timezone CalDAV recurrence before persistence", () => {
+  it("keeps a custom fixed-offset CalDAV series at its declared offset", () => {
+    const [event] = parseICalToRemoteEvents(
+      buildDeclaredZoneSeries("Custom/Eastern", "-0500", "custom-caldav"),
+    );
+
+    expect(event?.startTime.toISOString()).toBe("2026-07-01T14:00:00.000Z");
+    expect(event?.recurrenceRule).toBeDefined();
+  });
+
+  it("keeps an Outlook-labelled CalDAV series instead of dropping it", () => {
+    const resources = parseICalCalendarsToRemoteEvents([
+      buildDeclaredZoneSeries(
+        "(UTC+05:30) Chennai, Kolkata, Mumbai, New Delhi",
+        "+0530",
+        "chennai-weekly",
+      ),
+    ]);
+
+    expect(resources.unsupportedEvents).toEqual([]);
+    expect(resources.events.map((event) => event.startTime.toISOString()))
+      .toEqual(["2026-07-01T03:30:00.000Z"]);
+  });
+
+  it("rejects a CalDAV series whose zone is neither known nor declared", () => {
     const calendar = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
       "PRODID:-//Test//Test//EN",
-      "BEGIN:VTIMEZONE",
-      "TZID:Custom/Eastern",
-      "BEGIN:STANDARD",
-      "DTSTART:19700101T000000",
-      "TZOFFSETFROM:-0500",
-      "TZOFFSETTO:-0500",
-      "END:STANDARD",
-      "END:VTIMEZONE",
       "BEGIN:VEVENT",
-      "UID:custom-caldav",
-      "DTSTART;TZID=Custom/Eastern:20260701T090000",
-      "DTEND;TZID=Custom/Eastern:20260701T100000",
+      "UID:undeclared-caldav",
+      "DTSTART;TZID=Nowhere/Land:20260701T090000",
+      "DTEND;TZID=Nowhere/Land:20260701T100000",
       "RRULE:FREQ=DAILY;COUNT=2",
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");
 
     expect(() => parseICalToRemoteEvents(calendar))
-      .toThrow("Unsupported calendar timezone: Custom/Eastern");
+      .toThrow("Unsupported calendar timezone: Nowhere/Land");
   });
 });
 

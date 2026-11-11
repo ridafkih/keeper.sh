@@ -78,7 +78,7 @@ const createCalDAVSourceProvider = (
       DEFAULT_FUTURE_SYNC_RANGE,
     );
 
-    const calendarUrl = await client.resolveCalendarUrl(account.calendarUrl);
+    const { timeZone: calendarTimeZone, url: calendarUrl } = await client.resolveCalendar(account.calendarUrl);
 
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
@@ -95,6 +95,7 @@ const createCalDAVSourceProvider = (
         }
         return [data];
       }),
+      { calendarTimeZone },
     );
     /*
      * This path returns bare events with no wide-event channel to report a

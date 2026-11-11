@@ -1,6 +1,7 @@
 import arkenv from "arkenv";
 
 const schema = {
+  AGENT_FEEDBACK_DISABLED: "boolean?",
   BETTER_AUTH_SECRET: "string",
   BETTER_AUTH_URL: "string.url",
   COMMERCIAL_MODE: "boolean?",
@@ -23,6 +24,8 @@ const tryLoadMcpEnv = (): McpEnv | null => {
   }
 };
 
-export { schema, tryLoadMcpEnv };
+const resolveApiBaseUrl = (env: McpEnv): string => env.MCP_API_URL ?? env.BETTER_AUTH_URL;
+
+export { resolveApiBaseUrl, schema, tryLoadMcpEnv };
 export type { McpEnv };
 export default loadMcpEnv();

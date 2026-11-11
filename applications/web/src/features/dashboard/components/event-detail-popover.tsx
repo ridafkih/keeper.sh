@@ -8,6 +8,7 @@ import { cn } from "@/utils/cn";
 import { loadMotionFeatures } from "@/lib/motion-features";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { formatDayHeader, formatTimeRange } from "@/lib/time";
+import { ALL_DAY_LABEL, resolveEventStartDay } from "@/lib/event-day";
 import { eventDetailAtom } from "@/state/event-detail";
 import type { EventDetailSelection } from "@/state/event-detail";
 import { EventCardGridBody, EventText } from "./event-card";
@@ -187,7 +188,7 @@ function EventDetailPanel({ selection, onClose }: EventDetailPanelProps) {
                 {title}
               </EventText>
               <EventText size="xs" muted className="tabular-nums">
-                {formatDayHeader(event.startTime)} · {formatTimeRange(event.startTime, event.endTime)}
+                {formatDayHeader(resolveEventStartDay(event))} · {event.isAllDay ? ALL_DAY_LABEL : formatTimeRange(event.startTime, event.endTime)}
               </EventText>
               <div className="flex items-center gap-1.5">
                 <ProviderIcon provider={event.calendarProvider} size={13} />

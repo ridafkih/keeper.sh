@@ -7,14 +7,17 @@ import {
   faqPageSchema,
   faqSchema,
   jsonLdScript,
+  markdownAlternateLink,
   offerCatalogSchema,
   organizationSchema,
   personSchema,
   seoHead,
   seoMeta,
   softwareApplicationSchema,
+  techArticleSchema,
   webPageSchema,
 } from "@/lib/seo";
+import { marketingCopy } from "@/lib/marketing-copy";
 
 const GENERIC_IMAGE_URL = "https://www.keeper.sh/open-graph.png";
 
@@ -107,6 +110,17 @@ describe("seoMeta", () => {
       content: "https://www.keeper.sh/open-graph/pricing.png",
       name: "twitter:image",
     });
+  });
+
+  it("leaves a title that already names the brand without a suffix", () => {
+    const meta = seoMeta({
+      title: "Keeper.sh pricing: free plan and $5 a month Pro",
+      description: "Plans and pricing.",
+      path: "/pricing",
+      brandPosition: "none",
+    });
+
+    expect(meta[0]).toEqual({ title: "Keeper.sh pricing: free plan and $5 a month Pro" });
   });
 
   it("keeps the declared image dimensions at 1200x630", () => {
@@ -231,6 +245,34 @@ describe("blogPostingSchema", () => {
   });
 });
 
+describe("techArticleSchema", () => {
+  it("types docs pages as TechArticle with their own identifier", () => {
+    const schema = techArticleSchema({ ...post, path: "/docs/plans-and-limits" });
+    expect(schema["@type"]).toBe("TechArticle");
+    expect(schema["@id"]).toBe("https://www.keeper.sh/docs/plans-and-limits/#techarticle");
+  });
+});
+
+describe("jsonLdScript", () => {
+  it("keeps markup-significant characters out of the script body", () => {
+    const text = "</script><!-- & \u2028\u2029";
+    const script = jsonLdScript({ text });
+
+    expect(script.children).not.toMatch(/[<>&\u2028\u2029]/);
+    expect(JSON.parse(script.children)).toEqual({ text });
+  });
+});
+
+describe("markdownAlternateLink", () => {
+  it("points at the page's markdown version", () => {
+    expect(markdownAlternateLink("/docs/plans-and-limits")).toEqual({
+      rel: "alternate",
+      type: "text/markdown",
+      href: "https://www.keeper.sh/docs/plans-and-limits.md",
+    });
+  });
+});
+
 describe("personSchema", () => {
   const PERSON_ID = "https://www.keeper.sh/about/#person";
 
@@ -249,7 +291,12 @@ describe("personSchema", () => {
   });
 
   it("is the author a blog post points at and the organization's founder", () => {
-    const reference = { "@id": PERSON_ID, "@type": "Person", name: "Rida F'kih" };
+    const reference = {
+      "@id": PERSON_ID,
+      "@type": "Person",
+      name: "Rida F'kih",
+      url: "https://www.keeper.sh/about",
+    };
 
     expect(blogPostingSchema(post).author).toEqual(reference);
     expect(organizationSchema["@graph"][0]).toMatchObject({ founder: reference });
@@ -311,7 +358,7 @@ describe("offerCatalogSchema", () => {
 
 describe("softwareApplicationSchema", () => {
   it("offers Free, monthly Pro, and yearly Pro at 45 USD", () => {
-    const { offers } = softwareApplicationSchema();
+    const { offers } = softwareApplicationSchema(marketingCopy.softwareSchema);
 
     expect(offers).toEqual([
       expect.objectContaining({
@@ -346,6 +393,6 @@ describe("softwareApplicationSchema", () => {
   });
 
   it("does not invent an aggregate rating", () => {
-    expect(softwareApplicationSchema()).not.toHaveProperty("aggregateRating");
+    expect(softwareApplicationSchema(marketingCopy.softwareSchema)).not.toHaveProperty("aggregateRating");
   });
 });

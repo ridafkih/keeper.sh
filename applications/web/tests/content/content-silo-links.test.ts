@@ -18,6 +18,7 @@ const STATIC_PATHS = [
   "/compare",
   "/docs",
   "/features",
+  "/free",
   "/guides",
   "/pricing",
   "/privacy",
@@ -59,6 +60,16 @@ function readCollection(directory: string): ContentPage[] {
     });
 }
 
+function readChangelogPaths(): string[] {
+  const changelogDirectory = join(CONTENT_ROOT, "changelog");
+
+  if (!existsSync(changelogDirectory)) return [];
+
+  return readdirSync(changelogDirectory)
+    .filter((entry) => existsSync(join(changelogDirectory, entry, "index.mdx")))
+    .map((entry) => `/changelog/${entry}`);
+}
+
 const knownPaths = new Set([
   ...STATIC_PATHS,
   ...parseIndexableRoutePaths(
@@ -70,6 +81,7 @@ const knownPaths = new Set([
   ...LINKED_DIRECTORIES.flatMap((directory) =>
     readCollection(directory).map((page) => page.path),
   ),
+  ...readChangelogPaths(),
 ]);
 
 const linkedPages = LINKED_DIRECTORIES.flatMap((directory) => readCollection(directory));

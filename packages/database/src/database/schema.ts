@@ -11,6 +11,9 @@ import {
 } from "drizzle-orm/pg-core";
 import { eq, isNotNull, isNull, sql } from "drizzle-orm";
 import {
+  AGENT_FEEDBACK_CATEGORIES,
+  AGENT_FEEDBACK_DEPLOYMENTS,
+  AGENT_FEEDBACK_SEVERITIES,
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_FUTURE_SYNC_RANGE,
@@ -20,6 +23,9 @@ import {
 import { user } from "./auth-schema";
 
 const DEFAULT_EVENT_COUNT = 0;
+
+const toSqlValueList = (values: readonly string[]): string =>
+  values.map((value) => `'${value}'`).join(", ");
 
 const SYNC_RANGE_SQL_VALUES = SYNC_RANGE_DEFINITIONS
   .map(({ value }) => `'${value}'`)
@@ -96,6 +102,8 @@ const calendarAccountsTable = pgTable(
     index("calendar_accounts_user_idx").on(table.userId),
     index("calendar_accounts_provider_idx").on(table.provider),
     index("calendar_accounts_needs_reauth_idx").on(table.needsReauthentication),
+    index("calendar_accounts_oauth_credential_idx").on(table.oauthCredentialId),
+    index("calendar_accounts_caldav_credential_idx").on(table.caldavCredentialId),
     uniqueIndex("calendar_accounts_provider_account_idx").on(
       table.userId,
       table.provider,
@@ -126,6 +134,7 @@ const calendarsTable = pgTable(
     treatFullDayTimedEventsAsAllDay: boolean().notNull().default(false),
     customEventName: text().notNull().default("{{calendar_name}}"),
     markEventsAsPrivate: boolean().notNull().default(false),
+    disableEventReminders: boolean().notNull().default(false),
     disabled: boolean().notNull().default(false),
     failureCount: integer().notNull().default(0),
     lastFailureAt: timestamp({ withTimezone: true }),
@@ -176,6 +185,48 @@ const calendarsTable = pgTable(
     check(
       "calendars_ingest_coverage_check",
       sql`"ingestHistoricRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND "ingestFutureRange" IN (${sql.raw(SYNC_RANGE_SQL_VALUES)}) AND (("ingestWindowStart" IS NULL AND "ingestWindowEnd" IS NULL AND "ingestWindowRecordedAt" IS NULL) OR ("ingestWindowStart" IS NOT NULL AND "ingestWindowEnd" IS NOT NULL AND "ingestWindowRecordedAt" IS NOT NULL AND "ingestWindowStart" < "ingestWindowEnd"))`,
+    ),
+  ],
+);
+
+const INGEST_SCHEDULE_PARKED_REASONS = ["ineligible", "credential-rejected", "unresolvable"] as const;
+
+const INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES = INGEST_SCHEDULE_PARKED_REASONS
+  .map((reason) => `'${reason}'`)
+  .join(", ");
+
+const sourceIngestScheduleTable = pgTable(
+  "source_ingest_schedule",
+  {
+    calendarId: uuid()
+      .notNull()
+      .primaryKey()
+      .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp({ withTimezone: true }),
+    failureCount: integer().notNull().default(0),
+    lastAttemptAt: timestamp({ withTimezone: true }),
+    lastFailureAt: timestamp({ withTimezone: true }),
+    lastSuccessAt: timestamp({ withTimezone: true }),
+    leaseToken: uuid(),
+    leasedUntil: timestamp({ withTimezone: true }),
+    parkedReason: text(),
+    releaseSeq: integer().notNull().default(0),
+    updatedAt: timestamp({ withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+    wakeCorrelationId: text(),
+    wakeDueAt: timestamp({ withTimezone: true }),
+    wakeReceivedAt: timestamp({ withTimezone: true }),
+    wakeSeq: integer().notNull().default(0),
+  },
+  (table) => [
+    index("source_ingest_schedule_due_idx").on(table.dueAt).where(isNotNull(table.dueAt)),
+    index("source_ingest_schedule_wake_idx").on(table.wakeDueAt).where(isNotNull(table.wakeDueAt)),
+    check(
+      "source_ingest_schedule_parked_reason_check",
+      sql`"parkedReason" IS NULL OR "parkedReason" IN (${sql.raw(INGEST_SCHEDULE_PARKED_REASON_SQL_VALUES)})`,
     ),
   ],
 );
@@ -420,6 +471,7 @@ const sourceDestinationMappingsTable = pgTable(
     destinationCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    firstSyncedAt: timestamp({ withTimezone: true }),
     id: uuid().notNull().primaryKey().defaultRandom(),
     sourceCalendarId: uuid()
       .notNull()
@@ -448,6 +500,36 @@ const feedbackTable = pgTable(
     wantsFollowUp: boolean().notNull().default(false),
   },
   (table) => [index("feedback_user_idx").on(table.userId)],
+);
+
+const agentFeedbackTable = pgTable(
+  "agent_feedback",
+  {
+    category: text().notNull(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    deployment: text().notNull(),
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    intent: text(),
+    message: text().notNull(),
+    severity: text().notNull(),
+    toolName: text(),
+    version: text().notNull(),
+  },
+  (table) => [
+    index("agent_feedback_created_at_idx").on(table.createdAt),
+    check(
+      "agent_feedback_category_check",
+      sql`"category" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_CATEGORIES))})`,
+    ),
+    check(
+      "agent_feedback_severity_check",
+      sql`"severity" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_SEVERITIES))})`,
+    ),
+    check(
+      "agent_feedback_deployment_check",
+      sql`"deployment" IN (${sql.raw(toSqlValueList(AGENT_FEEDBACK_DEPLOYMENTS))})`,
+    ),
+  ],
 );
 
 const apiTokensTable = pgTable(
@@ -542,7 +624,50 @@ const icalFeedCalendarsTable = pgTable(
   ],
 );
 
+const USER_MILESTONES = [
+  "first_calendar_connected",
+  "first_sync_created",
+  "first_events_copied",
+] as const;
+
+type UserMilestone = (typeof USER_MILESTONES)[number];
+
+const USER_MILESTONE_SQL_VALUES = USER_MILESTONES.map((milestone) => `'${milestone}'`).join(", ");
+
+const userMilestonesTable = pgTable(
+  "user_milestones",
+  {
+    id: uuid().notNull().primaryKey().defaultRandom(),
+    milestone: text().notNull().$type<UserMilestone>(),
+    reachedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    userId: text()
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("user_milestones_user_milestone_idx").on(table.userId, table.milestone),
+    check(
+      "user_milestones_milestone_check",
+      sql`"milestone" IN (${sql.raw(USER_MILESTONE_SQL_VALUES)})`,
+    ),
+  ],
+);
+
+const userSignUpAttributionsTable = pgTable("user_sign_up_attributions", {
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  landingPath: text(),
+  referrerOrigin: text(),
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  utmCampaign: text(),
+  utmMedium: text(),
+  utmSource: text(),
+});
+
 export {
+  agentFeedbackTable,
   apiTokensTable,
   caldavCredentialsTable,
   calendarAccountsTable,
@@ -556,10 +681,16 @@ export {
   icalFeedCalendarsTable,
   icalFeedSettingsTable,
   icalFeedsTable,
+  INGEST_SCHEDULE_PARKED_REASONS,
   oauthCredentialsTable,
   sourceDestinationMappingsTable,
+  sourceIngestScheduleTable,
   syncStatusTable,
   userSyncRequestsTable,
   userEventsTable,
+  USER_MILESTONES,
+  userMilestonesTable,
+  userSignUpAttributionsTable,
   userSubscriptionsTable,
 };
+export type { UserMilestone };

@@ -5,6 +5,7 @@ import {
   parseIncomingSocketAction,
   resolveAggregateLastSyncedAt,
   shouldAcceptAggregatePayload,
+  shouldAcceptMappingSyncState,
 } from "./sync-provider-logic";
 
 interface ConnectionState {
@@ -15,6 +16,7 @@ interface ConnectionState {
   attempts: number;
   disposed: boolean;
   hasReceivedSocketAggregate: boolean;
+  lastMappingSeq: number;
   lastSeq: number;
   currentState: CompositeSyncState;
 }
@@ -31,8 +33,10 @@ const INITIAL_SYNC_STATE: CompositeSyncState = {
   syncEventsProcessed: 0,
   syncEventsRemaining: 0,
   syncEventsTotal: 0,
+  syncSecondsRemaining: null,
   state: "idle",
   hasReceivedAggregate: false,
+  mappings: null,
 };
 
 const getWebSocketProtocol = (): string =>
@@ -133,6 +137,18 @@ const handleMessage = (
     return;
   }
 
+  if (action.kind === "mappings") {
+    if (!shouldAcceptMappingSyncState(connectionState.lastMappingSeq, action.data)) {
+      return;
+    }
+    connectionState.lastMappingSeq = action.data.seq;
+    applyState(connectionState, setSyncState, {
+      ...connectionState.currentState,
+      mappings: action.data,
+    });
+    return;
+  }
+
   const decision = shouldAcceptAggregatePayload(
     connectionState.currentState,
     connectionState.lastSeq,
@@ -152,6 +168,7 @@ const handleMessage = (
   );
 
   applyState(connectionState, setSyncState, {
+    ...connectionState.currentState,
     connected: true,
     hasReceivedAggregate: true,
     lastSyncedAt,
@@ -160,6 +177,7 @@ const handleMessage = (
     syncEventsProcessed: action.data.syncEventsProcessed,
     syncEventsRemaining: action.data.syncEventsRemaining,
     syncEventsTotal: action.data.syncEventsTotal,
+    syncSecondsRemaining: action.data.syncSecondsRemaining ?? null,
     state: action.data.syncing ? "syncing" : "idle",
   });
 };
@@ -195,6 +213,7 @@ const connect = async (
 
     socket.addEventListener("open", () => {
       connectionState.attempts = 0;
+      connectionState.lastMappingSeq = -1;
       connectionState.lastSeq = -1;
       connectionState.hasReceivedSocketAggregate = false;
       setConnected(connectionState, setSyncState, false);
@@ -243,6 +262,7 @@ export function SyncProvider() {
       disposed: false,
       hasReceivedSocketAggregate: false,
       initialAggregateTimer: null,
+      lastMappingSeq: -1,
       lastSeq: -1,
       reconnectTimer: null,
       socket: null,

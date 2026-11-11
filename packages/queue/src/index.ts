@@ -1,5 +1,7 @@
 import { Queue } from "bullmq";
-import type { ConnectionOptions } from "bullmq";
+import type { ConnectionOptions, Job, JobsOptions } from "bullmq";
+import { SpanKind, captureTraceContext, withSpan } from "@keeper.sh/otelemetry/tracing";
+import type { TraceCarrier } from "@keeper.sh/otelemetry/tracing";
 import type { Plan } from "@keeper.sh/data-schemas";
 
 const PUSH_SYNC_QUEUE_NAME = "push-sync-v2";
@@ -22,6 +24,7 @@ interface PushSyncJobPayload {
   correlationId: string;
   trigger?: PushSyncTrigger;
   webhookReceivedAt?: number;
+  traceContext?: TraceCarrier;
 }
 
 interface PushSyncJobResult {
@@ -30,15 +33,58 @@ interface PushSyncJobResult {
   removed: number;
   removeFailed: number;
   errors: string[];
+  continuationRequested?: boolean;
 }
 
-const createPushSyncQueue = (connection: ConnectionOptions): Queue<PushSyncJobPayload, PushSyncJobResult> =>
-  new Queue(PUSH_SYNC_QUEUE_NAME, {
+const resolvePushSyncJobId = (userId: string, calendarId: string): string =>
+  `sync-${userId}-${calendarId}`;
+
+interface PushSyncBulkJob {
+  name: string;
+  data: PushSyncJobPayload;
+  opts?: JobsOptions;
+}
+
+const MESSAGING_ATTRIBUTES = {
+  "messaging.system": "bullmq",
+  "messaging.destination.name": PUSH_SYNC_QUEUE_NAME,
+  "messaging.operation.type": "send",
+};
+
+const withTraceContext = (data: PushSyncJobPayload): PushSyncJobPayload => ({
+  ...data,
+  traceContext: captureTraceContext(),
+});
+
+class PushSyncQueue extends Queue<PushSyncJobPayload, PushSyncJobResult> {
+  override add(
+    name: string,
+    data: PushSyncJobPayload,
+    opts?: JobsOptions,
+  ): Promise<Job<PushSyncJobPayload, PushSyncJobResult>> {
+    return withSpan(
+      `send ${PUSH_SYNC_QUEUE_NAME}`,
+      { kind: SpanKind.PRODUCER, attributes: { ...MESSAGING_ATTRIBUTES, "messaging.batch.message_count": 1 } },
+      () => super.add(name, withTraceContext(data), opts),
+    );
+  }
+
+  override addBulk(jobs: PushSyncBulkJob[]): Promise<Job<PushSyncJobPayload, PushSyncJobResult>[]> {
+    return withSpan(
+      `send ${PUSH_SYNC_QUEUE_NAME}`,
+      { kind: SpanKind.PRODUCER, attributes: { ...MESSAGING_ATTRIBUTES, "messaging.batch.message_count": jobs.length } },
+      () => super.addBulk(jobs.map((job) => ({ ...job, data: withTraceContext(job.data) }))),
+    );
+  }
+}
+
+const createPushSyncQueue = (connection: ConnectionOptions): PushSyncQueue =>
+  new PushSyncQueue(PUSH_SYNC_QUEUE_NAME, {
     connection,
     defaultJobOptions: {
       attempts: 1,
     },
   });
 
-export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, createPushSyncQueue };
+export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, PushSyncQueue, createPushSyncQueue, resolvePushSyncJobId };
 export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };

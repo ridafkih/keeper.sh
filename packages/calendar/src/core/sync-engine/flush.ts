@@ -1,7 +1,8 @@
 import type { BunSQLClient } from "../database-client";
-import { eventMappingsTable } from "@keeper.sh/database/schema";
+import { eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { eq, inArray } from "drizzle-orm";
-import type { PendingChanges } from "./types";
+import type { BunSQLTransactionClient } from "../database-client";
+import type { PendingChanges, PendingInsert } from "./types";
 
 const FLUSH_BATCH_SIZE = 5000;
 
@@ -11,6 +12,28 @@ const chunk = <TItem>(items: TItem[], size: number): TItem[][] => {
     chunks.push(items.slice(offset, offset + size));
   }
   return chunks;
+};
+
+const lockSurvivingEventStates = async (
+  transaction: BunSQLTransactionClient,
+  inserts: PendingInsert[],
+): Promise<Set<string>> => {
+  const rows = await transaction
+    .select({ id: eventStatesTable.id })
+    .from(eventStatesTable)
+    .where(inArray(eventStatesTable.id, [...new Set(inserts.map(({ eventStateId }) => eventStateId))]))
+    .for("key share");
+  return new Set(rows.map(({ id }) => id));
+};
+
+const resolveSurvivingEventStateId = (
+  insert: PendingInsert,
+  survivingEventStateIds: ReadonlySet<string>,
+): string | null => {
+  if (survivingEventStateIds.has(insert.eventStateId)) {
+    return insert.eventStateId;
+  }
+  return null;
 };
 
 const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) => Promise<void> =>
@@ -33,9 +56,10 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
       if (changes.inserts.length > 0) {
         const insertBatches = chunk(changes.inserts, FLUSH_BATCH_SIZE);
         for (const batch of insertBatches) {
+          const survivingEventStateIds = await lockSurvivingEventStates(transaction, batch);
           await transaction.insert(eventMappingsTable).values(
             batch.map((insert) => ({
-              eventStateId: insert.eventStateId,
+              eventStateId: resolveSurvivingEventStateId(insert, survivingEventStateIds),
               sourceCalendarId: insert.sourceCalendarId,
               syncEventId: insert.syncEventId,
               calendarId: insert.calendarId,

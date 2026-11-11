@@ -4,7 +4,7 @@ import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/databas
 import { createCoordinatedRefresher } from "../oauth/coordinated-refresher";
 import { createGoogleTokenRefresher } from "../oauth/google";
 import { createMicrosoftTokenRefresher } from "../oauth/microsoft";
-import { createRedisRateLimiter } from "../utils/redis-rate-limiter";
+import { createRedisRateLimiter, withGoogleProjectBudget } from "../utils/redis-rate-limiter";
 import { ensureValidToken } from "../oauth/ensure-valid-token";
 import type { TokenState } from "../oauth/ensure-valid-token";
 import type { RegistrarContext } from "./push-channel";
@@ -28,6 +28,7 @@ interface RegistrarContextConfig {
   database: BunSQLDatabase;
   googleClientId?: string;
   googleClientSecret?: string;
+  googleProjectRequestsPerMinute?: number;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
   rateLimiterRedis: Parameters<typeof createRedisRateLimiter>[0];
@@ -128,10 +129,14 @@ const createRegistrarContextFactory = (config: RegistrarContextConfig) =>
     now: new Date(),
     ...(request.provider === "google" && {
       rateLimiter: {
-        acquire: () => createRedisRateLimiter(
+        acquire: () => withGoogleProjectBudget(
           config.rateLimiterRedis,
-          `ratelimit:${request.scope.userId}:google`,
-          { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+          createRedisRateLimiter(
+            config.rateLimiterRedis,
+            `ratelimit:${request.scope.userId}:google`,
+            { requestsPerMinute: GOOGLE_REQUESTS_PER_MINUTE },
+          ),
+          config.googleProjectRequestsPerMinute,
         ).acquire(SINGLE_REQUEST_SLOT),
       },
     }),

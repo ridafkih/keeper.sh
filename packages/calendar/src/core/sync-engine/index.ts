@@ -15,6 +15,8 @@ import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
+import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
+import type { UnrecordedCopyTally } from "./unrecorded-copies";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -104,6 +106,7 @@ interface OperationError {
   error: string;
   errorType?: string;
   statusCode?: number;
+  writeAccessDenied?: boolean;
 }
 
 interface PushEchoCounts {
@@ -254,6 +257,7 @@ const processAddResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -321,6 +325,7 @@ const processUpdateResults = (
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
+          ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -365,6 +370,7 @@ const processDeleteResults = (
           error: deleteResult.error,
           ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
           ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
+          ...(deleteResult.writeAccessDenied && { writeAccessDenied: true }),
         });
       }
       continue;
@@ -853,9 +859,18 @@ interface SyncCalendarOptions {
 interface SyncCalendarResult extends SyncResult {
   conflictsResolved: number;
   errors: string[];
+  writeAccessDenied: boolean;
 }
 
-const EMPTY_RESULT: SyncCalendarResult = { added: 0, addFailed: 0, removed: 0, removeFailed: 0, conflictsResolved: 0, errors: [] };
+const EMPTY_RESULT: SyncCalendarResult = {
+  added: 0,
+  addFailed: 0,
+  removed: 0,
+  removeFailed: 0,
+  conflictsResolved: 0,
+  errors: [],
+  writeAccessDenied: false,
+};
 
 const appendDatabaseErrorFields = (
   event: Record<string, unknown>,
@@ -979,6 +994,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
   const timer = createPhaseTimer();
   const timedProvider = createTimedProvider(provider, timer);
   const timedIsCurrent = () => timer.measure("currency_check", isCurrent);
+  const unrecordedCopies: UnrecordedCopyTally = { deleteFailed: 0, deleted: 0 };
   let flushed = false;
 
   const emitProgress = (stage: SyncProgressUpdate["stage"], localEventCount: number, remoteEventCount: number, progress?: { current: number; total: number }): void => {
@@ -1067,7 +1083,10 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         emitProgress("processing", localEvents.length, state.remoteEvents.length, { current: processed, total });
       },
       async (changes) => {
-        await timer.measure("checkpoint_flush", () => flush(changes));
+        await timer.measure(
+          "checkpoint_flush",
+          () => flushOrDeleteUnrecordedCopies(changes, flush, provider, unrecordedCopies),
+        );
         flushed = true;
         return true;
       },
@@ -1102,7 +1121,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     wideEvent["flush.deletes"] = outcome.changes.deletes.length;
 
     const errorMessages = outcome.errors.map((operationError) => operationError.error);
-    return { ...outcome.result, conflictsResolved: outcome.conflictsResolved, errors: errorMessages };
+    return {
+      ...outcome.result,
+      conflictsResolved: outcome.conflictsResolved,
+      errors: errorMessages,
+      writeAccessDenied: outcome.errors.some((operationError) => operationError.writeAccessDenied === true),
+    };
   } catch (error) {
     wideEvent["outcome"] = "error";
     wideEvent["flushed"] = flushed;
@@ -1120,6 +1144,12 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
      * These two cover the same span on different clocks -- duration_ms is wall-clock and
      * sync.reconcile.duration_ms is monotonic -- and must never be differenced.
      */
+    if (unrecordedCopies.deleted > 0) {
+      wideEvent["events.unrecorded_deleted"] = unrecordedCopies.deleted;
+    }
+    if (unrecordedCopies.deleteFailed > 0) {
+      wideEvent["events.unrecorded_delete_failed"] = unrecordedCopies.deleteFailed;
+    }
     wideEvent["duration_ms"] = Date.now() - startTime;
     timer.appendFields(wideEvent, performance.now() - reconcileStartedAt);
     appendThrottleFields(wideEvent, provider.getThrottleMetrics?.());

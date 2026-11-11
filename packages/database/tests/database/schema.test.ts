@@ -32,6 +32,23 @@ describe("calendar account schema", () => {
       "accountId",
     ]);
   });
+
+  it.each([
+    ["calendar_accounts_oauth_credential_idx", "oauthCredentialId"],
+    ["calendar_accounts_caldav_credential_idx", "caldavCredentialId"],
+  ])("finds the accounts behind a credential through %s", (indexName, columnName) => {
+    const tableConfig = getTableConfig(calendarAccountsTable);
+    const credentialIndex = tableConfig.indexes.find(
+      (index) => index.config.name === indexName,
+    );
+
+    expect(credentialIndex?.config.columns.map((column) => {
+      if ("name" in column && typeof column.name === "string") {
+        return column.name;
+      }
+      return null;
+    })).toEqual([columnName]);
+  });
 });
 
 describe("calendar schema", () => {

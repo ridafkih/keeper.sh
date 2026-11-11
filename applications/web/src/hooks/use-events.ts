@@ -1,6 +1,7 @@
 import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import { fetcher } from "@/lib/fetcher";
+import { buildEventsUrl } from "@/lib/events-url";
 import { useStartOfToday } from "./use-start-of-today";
 import type { ApiEvent } from "@/types/api";
 
@@ -23,15 +24,6 @@ export interface CalendarEvent {
 }
 
 const DAYS_PER_PAGE = 7;
-
-// Relative: Bun has no `globalThis.location`, and an eagerly built absolute key would throw in SSR.
-const buildEventsUrl = (from: Date, to: Date): string => {
-  const params = new URLSearchParams({
-    from: from.toISOString(),
-    to: to.toISOString(),
-  });
-  return `/api/events?${params.toString()}`;
-};
 
 const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
   const data = await fetcher<ApiEvent[]>(url);

@@ -2,6 +2,7 @@ import { calendarSnapshotsTable, calendarsTable } from "@keeper.sh/database/sche
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import type { CalendarSnapshotChange } from "../../core/sync-engine/ingest";
+import { resolveRefreshedFeedNames } from "./feed-name";
 
 const computeContentHash = async (content: string): Promise<string> => {
   const encoded = new TextEncoder().encode(content);
@@ -61,8 +62,39 @@ const prepareCalendarSnapshot = async (
   return prepareCalendarSnapshotChange(ical, true, existing?.contentHash);
 };
 
+type SnapshotWriter = Pick<BunSQLDatabase, "insert" | "select" | "update">;
+
+const followFeedName = async (
+  database: SnapshotWriter,
+  calendarId: string,
+  ical: string,
+): Promise<void> => {
+  const [stored] = await database
+    .select({
+      name: calendarsTable.name,
+      originalName: calendarsTable.originalName,
+      url: calendarsTable.url,
+    })
+    .from(calendarsTable)
+    .where(eq(calendarsTable.id, calendarId));
+
+  if (!stored) {
+    return;
+  }
+
+  const refreshed = resolveRefreshedFeedNames(stored, ical);
+  if (!refreshed) {
+    return;
+  }
+
+  await database
+    .update(calendarsTable)
+    .set(refreshed)
+    .where(eq(calendarsTable.id, calendarId));
+};
+
 const persistCalendarSnapshot = async (
-  database: Pick<BunSQLDatabase, "insert">,
+  database: SnapshotWriter,
   calendarId: string,
   snapshot: CalendarSnapshotChange,
 ): Promise<void> => {
@@ -81,6 +113,8 @@ const persistCalendarSnapshot = async (
         ical: snapshot.ical,
       },
     });
+
+  await followFeedName(database, calendarId, snapshot.ical);
 };
 
 export {

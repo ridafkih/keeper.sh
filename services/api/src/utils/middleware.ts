@@ -9,6 +9,7 @@ import { auth, database, premiumService, redis } from "@/context";
 import { checkAndIncrementApiUsage } from "./api-rate-limit";
 import { context, widelog } from "./logging";
 import { labelFailure } from "./error-labelling";
+import { isFailedResponse } from "./response-outcome";
 
 const MS_PER_DAY = 86_400_000;
 
@@ -31,6 +32,13 @@ const resolveOutcome = (statusCode: number): "success" | "error" => {
     return "error";
   }
   return "success";
+};
+
+const resolveResponseOutcome = (response: Response): "success" | "error" => {
+  if (isFailedResponse(response)) {
+    return "error";
+  }
+  return resolveOutcome(response.status);
 };
 
 const fetchUserPlan = async (userId: string): Promise<"free" | "pro" | null> => {
@@ -112,7 +120,7 @@ const withWideEvent =
         return await widelog.time.measure("duration_ms", async () => {
           const response = await handler({ params, request });
           widelog.set("status_code", response.status);
-          widelog.set("outcome", resolveOutcome(response.status));
+          widelog.set("outcome", resolveResponseOutcome(response));
           return response;
         });
       } catch (error) {
@@ -251,4 +259,4 @@ const withV1Auth =
   };
 
 export { resolveOutcome, withAuth, withV1Auth, withWideEvent };
-export type { RouteHandler };
+export type { AuthenticatedRouteCallback, RouteHandler };

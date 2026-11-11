@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { calendarsTable } from "@keeper.sh/database/schema";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const harness = vi.hoisted(() => {
   interface IcsSourceRow {
@@ -229,12 +229,12 @@ const storedEventCountUpdates = () => harness.state.calendarUpdates.filter(
   (update) => "storedEventCount" in update.values,
 );
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
   harness.calendarsTableRef.table = calendarsTable;
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -258,7 +258,7 @@ describe("ingest flush stored-event count maintenance", () => {
       return { eventsAdded: 3, eventsRemoved: 2 };
     };
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     const updates = storedEventCountUpdates();
     expect(updates).toHaveLength(1);
@@ -277,7 +277,7 @@ describe("ingest flush stored-event count maintenance", () => {
       return { eventsAdded: 0, eventsRemoved: 4 };
     };
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     const updates = storedEventCountUpdates();
     expect(updates).toHaveLength(1);
@@ -295,7 +295,7 @@ describe("ingest flush stored-event count maintenance", () => {
       return { eventsAdded: 0, eventsRemoved: 0 };
     };
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(storedEventCountUpdates()).toHaveLength(0);
     expect(harness.state.calendarUpdates.length).toBeGreaterThan(0);

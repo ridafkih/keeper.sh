@@ -5,6 +5,7 @@ import { loadMotionFeatures } from "@/lib/motion-features";
 import * as m from "motion/react-m";
 import { popoverOverlayAtom } from "@/state/popover-overlay";
 import { SyncProvider } from "@/providers/sync-provider";
+import { Toaster } from "@/components/ui/primitives/toast";
 import { resolveDashboardRedirect } from "@/lib/route-access-guards";
 import { CalendarView } from "@/features/dashboard/components/calendar-view";
 import { SidebarPageTransition } from "@/features/dashboard/components/sidebar-page-transition";
@@ -51,6 +52,7 @@ function DashboardLayout() {
           </AnimatePresence>
         </LazyMotion>
         <SyncProvider />
+        <Toaster />
         <SidebarPageTransition>
           <Outlet />
         </SidebarPageTransition>

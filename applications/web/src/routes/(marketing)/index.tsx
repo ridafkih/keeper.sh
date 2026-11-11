@@ -1,5 +1,5 @@
 import { useSetAtom } from 'jotai'
-import { createFileRoute, useLoaderData, type LinkProps } from '@tanstack/react-router'
+import { createFileRoute, useLoaderData } from '@tanstack/react-router'
 import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema, webPageSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
@@ -8,7 +8,7 @@ import { MarketingArticleCard, MarketingArticleGrid, MarketingArticleSection } f
 import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/components/marketing-cta'
 import { Collapsible } from '../../components/ui/primitives/collapsible'
 import { TextLink } from '../../components/ui/primitives/text-link'
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/primitives/button'
+import { ButtonIcon, ButtonText, LinkButton } from '../../components/ui/primitives/button'
 import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, type Skew, type SkewTuple } from '../../features/marketing/components/marketing-illustration-calendar'
 import {
   MarketingFeatureBentoBody,
@@ -17,7 +17,6 @@ import {
   MarketingFeatureBentoIllustration,
   MarketingFeatureBentoSection,
 } from '../../features/marketing/components/marketing-feature-bento'
-import { MarketingIllustrationContributors } from '../../illustrations/marketing-illustration-contributors'
 import { MarketingIllustrationProviders } from '../../illustrations/marketing-illustration-providers'
 import { MarketingIllustrationSync } from '../../illustrations/marketing-illustration-sync'
 import {
@@ -51,14 +50,14 @@ import {
 import { PRICING_FEATURE_DIFFERENCES, PRICING_PLANS, pricingPlanHighlights } from '../../features/marketing/pricing-plans'
 import { TESTIMONIALS } from '../../features/marketing/testimonials'
 import { GithubStarButton } from '../../components/ui/primitives/github-star-button'
+import { marketingCopy } from '../../lib/marketing-copy'
 import { latestArticles } from '../../lib/article-library'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
-const PAGE_DESCRIPTION =
-  "Keeper.sh copies your events between Google Calendar, Outlook, iCloud and Fastmail so all of them show you as busy at the same times. Event titles stay private."
+const home = marketingCopy.home
+const PAGE_DESCRIPTION = home.seo.description
 
 const createSkew = (rotate: number, x: number, y: number): Skew => ({ rotate, x, y });
 
@@ -86,48 +85,30 @@ type MarketingFeature = {
   description: string
   gridClassName: string
   illustration?: React.ReactNode
-  link?: { to: LinkProps["to"]; label: string }
 }
 
 const MARKETING_FEATURES: MarketingFeature[] = [
   {
     id: 1,
-    title: 'One booking blocks every calendar',
-    description:
-      'Book something in one calendar and that time shows as busy in all the others.',
+    ...home.features.sync,
     gridClassName: 'lg:col-start-1 lg:col-span-6 lg:row-start-1',
     illustration: <MarketingIllustrationSync />,
   },
   {
     id: 2,
-    title: 'Works with the calendars you already use',
-    description:
-      'Google, Outlook, iCloud and Fastmail sign in directly. For anything else, paste a calendar link.',
+    ...home.features.providers,
     gridClassName: 'lg:col-start-7 lg:col-span-4 lg:row-start-1',
     illustration: <MarketingIllustrationProviders />,
   },
   {
     id: 3,
-    title: 'Sync only the details you want shared',
-    description:
-      'A copy shows the calendar it came from. Your title, description, location and guest list stay behind.',
-    gridClassName: 'sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-2',
+    ...home.features.details,
+    gridClassName: 'lg:col-start-1 lg:col-span-5 lg:row-start-2',
   },
   {
     id: 4,
-    title: 'Let AI agents view and manage your calendar',
-    description:
-      'Connect Claude or any MCP client and let it check your week, book events and reschedule.',
-    gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-3',
-  },
-  {
-    id: 5,
-    title: 'Anyone can read the code',
-    description:
-      'Check exactly what Keeper.sh sends to your calendars, or run it on your own server.',
-    gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-3',
-    illustration: <MarketingIllustrationContributors />,
-    link: { to: '/about', label: 'Who builds Keeper.sh' },
+    ...home.features.agents,
+    gridClassName: 'lg:col-start-6 lg:col-span-5 lg:row-start-2',
   },
 ]
 
@@ -137,50 +118,18 @@ type FaqItem = {
   content?: React.ReactNode
 }
 
-const FAQ_ITEMS: FaqItem[] = [
-  {
-    question: 'What if my calendar only gives me a share link?',
-    answer:
-      'Paste the link and those events copy into your other calendars. The copying runs one way, so nothing you change later reaches the original calendar.',
-  },
-  {
-    question: 'Which calendars does Keeper.sh work with?',
-    answer:
-      'Google Calendar, Outlook, iCloud and Fastmail sign in directly. Most others work too, as long as yours gives you a calendar link or a login.',
-  },
-  {
-    question: 'Can my colleagues see what my personal events are?',
-    answer:
-      'No. A copy shows the name of the calendar it came from, with no title, description, location or guest list. Pro lets you pass the title, description and location through, and the guest list is never copied on any plan.',
-  },
-  {
-    question: 'How often do calendars update?',
-    answer:
-      'On Pro, Google and Outlook notify Keeper.sh as changes happen, so copies land within seconds. Free checks every minute and copies every 30. iCloud, Fastmail and other CalDAV calendars are always checked on a timer, because Apple offers no way to be told.',
-  },
-  {
-    question: 'Can I run Keeper.sh myself?',
-    answer:
-      'Yes. Keeper.sh is open source under AGPL-3.0. The self-hosting page covers what you get, and the README on GitHub has the setup steps.',
-    content: <>Yes. Keeper.sh is open source under AGPL-3.0. The <TextLink align="left" size="sm" to="/self-hosting" tone="default">self-hosting page</TextLink> covers what you get, and the <a href="https://github.com/ridafkih/keeper.sh#readme" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">README on GitHub</a> has the setup steps.</>,
-  },
-  {
-    question: 'Can I cancel any time?',
-    answer:
-      'Yes. Cancel in your account settings and keep access until the period you paid for ends.',
-  },
-]
+const FAQ_ITEMS: FaqItem[] = home.faq.items
 
 export const Route = createFileRoute('/(marketing)/')({
   component: MarketingPage,
   head: () => seoHead({
-    title: "Sync Google Calendar with Outlook & iCloud",
+    title: home.seo.title,
     description: PAGE_DESCRIPTION,
     path: "/",
     brandPosition: "before",
     scripts: [
       jsonLdScript(webPageSchema("Keeper.sh", PAGE_DESCRIPTION, "/")),
-      jsonLdScript(softwareApplicationSchema()),
+      jsonLdScript(softwareApplicationSchema(marketingCopy.softwareSchema)),
       jsonLdScript(faqSchema("", FAQ_ITEMS)),
     ],
   }),
@@ -192,9 +141,9 @@ function MarketingPage() {
 
   return (
     <div className="flex flex-col gap-2 pt-8">
-      <Heading1 className="text-center">Stop double-booking yourself.</Heading1>
+      <Heading1 className="text-center">{home.hero.heading}</Heading1>
       <Text align="center" className="max-w-[48ch] mx-auto">
-        Keeper.sh copies your events between your personal, work and school calendars, so all of them show you as busy at the same times. Works with Google Calendar, Outlook, iCloud and Fastmail.
+        {home.hero.body}
       </Text>
       <div className="contents *:z-20">
         <div className="flex items-center gap-2 mx-auto pt-1">
@@ -206,7 +155,7 @@ function MarketingPage() {
             data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked}
             data-visitors-cta="hero"
           >
-            <ButtonText>Sync Calendars</ButtonText>
+            <ButtonText>{home.hero.cta}</ButtonText>
             <ButtonIcon>
               <ArrowRightIcon size={16} />
             </ButtonIcon>
@@ -233,11 +182,6 @@ function MarketingPage() {
                     <Text size="sm" className="text-left">
                       {feature.description}
                     </Text>
-                    {feature.link && (
-                      <TextLink align="left" size="sm" to={feature.link.to} tone="muted">
-                        {feature.link.label}
-                      </TextLink>
-                    )}
                   </MarketingFeatureBentoBody>
                 </MarketingFeatureBentoCard>
               ))}
@@ -245,15 +189,15 @@ function MarketingPage() {
           </MarketingFeatureBentoSection>
 
           <MarketingHowItWorksSection>
-            <Heading2 className="text-center">How your calendars stay in step</Heading2>
+            <Heading2 className="text-center">{home.howItWorks.heading}</Heading2>
             <Text size="sm" align="center" tone="muted" className="mt-2">
-              You set a connection up once. After that, Keeper.sh keeps the copies right.
+              {home.howItWorks.subheading}
             </Text>
             <MarketingHowItWorksCard>
               <MarketingHowItWorksRow>
                 <MarketingHowItWorksStepBody step={1}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[0].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[0].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.connect.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.connect.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="right">
                   <HowItWorksConnect />
@@ -262,8 +206,8 @@ function MarketingPage() {
 
               <MarketingHowItWorksRow reverse>
                 <MarketingHowItWorksStepBody step={2}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[1].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[1].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.configure.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.configure.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="left">
                   <HowItWorksConfigure />
@@ -272,8 +216,8 @@ function MarketingPage() {
 
               <MarketingHowItWorksRow>
                 <MarketingHowItWorksStepBody step={3}>
-                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS[2].title}</Heading3>
-                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS[2].body}</Text>
+                  <Heading3 as="h3">{HOW_IT_WORKS_STEPS.sync.title}</Heading3>
+                  <Text size="sm" tone="muted">{HOW_IT_WORKS_STEPS.sync.body}</Text>
                 </MarketingHowItWorksStepBody>
                 <MarketingHowItWorksStepIllustration align="right">
                   <HowItWorksSync />
@@ -284,9 +228,9 @@ function MarketingPage() {
 
           {TESTIMONIALS.length > 0 && (
             <MarketingTestimonialsSection id="testimonials">
-              <Heading2 className="text-center">What people say</Heading2>
+              <Heading2 className="text-center">{home.testimonials.heading}</Heading2>
               <Text size="sm" align="center" tone="muted" className="mt-2">
-                Quotes from Reddit, X and email, each shown with who wrote it.
+                {home.testimonials.subheading}
               </Text>
               <MarketingTestimonialsGrid>
                 {TESTIMONIALS.map((testimonial) => (
@@ -298,10 +242,10 @@ function MarketingPage() {
 
           <MarketingPricingSection id="pricing">
             <MarketingPricingIntro>
-              <Heading2 className="text-center">Pricing</Heading2>
+              <Heading2 className="text-center">{home.pricing.heading}</Heading2>
               <Text size="sm" align="center" tone="muted">
-                Not sure which you need?{' '}
-                <TextLink to="/pricing" size="sm" tone="default">See what each plan includes</TextLink>.
+                {home.pricing.subheadingLead}{' '}
+                <TextLink to="/pricing" size="sm" tone="default">{home.pricing.subheadingLinkLabel}</TextLink>.
               </Text>
             </MarketingPricingIntro>
 
@@ -340,12 +284,11 @@ function MarketingPage() {
           </MarketingPricingSection>
 
           <MarketingArticleSection>
-            <Heading2 className="text-center">Latest content</Heading2>
+            <Heading2 className="text-center">{home.articles.heading}</Heading2>
             <Text size="sm" align="center" className="mt-2 max-w-[48ch] mx-auto">
-              Step-by-step guides for the calendars you use, and comparisons with the other
-              sync tools. Browse them all on the{' '}
-              <TextLink size="sm" to="/blog">blog</TextLink> and the{' '}
-              <TextLink size="sm" to="/compare">comparison pages</TextLink>.
+              {home.articles.bodyLead}{' '}
+              <TextLink size="sm" to="/blog">{home.articles.blogLinkLabel}</TextLink> {home.articles.bodyAnd}{' '}
+              <TextLink size="sm" to="/compare">{home.articles.compareLinkLabel}</TextLink>.
             </Text>
             <MarketingArticleGrid>
               {latestArticles.map((article) => (
@@ -360,9 +303,9 @@ function MarketingPage() {
           </MarketingArticleSection>
 
           <MarketingFaqSection>
-            <Heading2 className="text-center">Frequently Asked Questions</Heading2>
+            <Heading2 className="text-center">{home.faq.heading}</Heading2>
             <Text size="sm" align="center" className="mt-2 max-w-[48ch] mx-auto">
-              Anything else, write to{' '}
+              {home.faq.bodyLead}{' '}
               <a href="mailto:support@keeper.sh" className="text-foreground underline underline-offset-2">support@keeper.sh</a>.
             </Text>
             <MarketingFaqList>
@@ -380,29 +323,20 @@ function MarketingPage() {
 
           <MarketingCtaSection>
             <MarketingCtaCard>
-              <Heading2 className="text-center text-white">Ready to sync your calendars?</Heading2>
+              <Heading2 className="text-center text-white">{home.cta.heading}</Heading2>
               <Text size="sm" align="center" tone="highlight" className="max-w-[46ch]">
-                Free for two calendar accounts. No credit card.
+                {home.cta.body}
               </Text>
               <div className="flex items-center gap-2 mt-2">
                 <LinkButton to="/register" size="compact" variant="inverse" data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked} data-visitors-cta="bottom">
-                  <ButtonText>Sync Calendars</ButtonText>
+                  <ButtonText>{home.cta.primaryLabel}</ButtonText>
                   <ButtonIcon>
                     <ArrowRightIcon size={16} />
                   </ButtonIcon>
                 </LinkButton>
-                <ExternalLinkButton
-                  href="https://github.com/ridafkih/keeper.sh"
-                  target="_blank"
-                  rel="noreferrer"
-                  size="compact"
-                  variant="inverse-ghost"
-                >
-                  <ButtonText>GitHub</ButtonText>
-                  <ButtonIcon>
-                    <ArrowUpRightIcon size={16} />
-                  </ButtonIcon>
-                </ExternalLinkButton>
+                <LinkButton to="/features" size="compact" variant="inverse-ghost">
+                  <ButtonText>{home.cta.secondaryLabel}</ButtonText>
+                </LinkButton>
               </div>
             </MarketingCtaCard>
           </MarketingCtaSection>

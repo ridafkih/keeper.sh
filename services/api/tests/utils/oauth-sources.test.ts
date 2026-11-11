@@ -10,7 +10,7 @@ let createAccountCalls: unknown[] = [];
 let createSourceCalls: unknown[] = [];
 let insertCalendarsCalls: unknown[] = [];
 let triggerSyncCalls: { provider: string; userId: string }[] = [];
-let listedCalendars: { externalId: string; name: string; color: string | null }[] = [];
+let listedCalendars: { color: string | null; externalId: string; name: string; writable: boolean }[] = [];
 
 beforeEach(() => {
   canAddAccountCalls = [];
@@ -59,7 +59,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
   });
 
   it("reuses an existing OAuth account without checking the account limit", async () => {
-    listedCalendars = [{ color: null, externalId: "external-1", name: "Team Calendar" }];
+    listedCalendars = [{ color: null, externalId: "external-1", name: "Team Calendar", writable: true }];
 
     const accountId = await importOAuthAccountCalendarsWithDependencies(
       {
@@ -93,7 +93,7 @@ describe("importOAuthAccountCalendarsWithDependencies", () => {
 
     expect(accountId).toBe("account-1");
     expect(canAddAccountCalls).toHaveLength(0);
-    expect(insertCalendarsCalls).toEqual([[{ color: null, externalId: "external-1", name: "Team Calendar" }]]);
+    expect(insertCalendarsCalls).toEqual([[{ color: null, externalId: "external-1", name: "Team Calendar", writable: true }]]);
     expect(triggerSyncCalls).toEqual([{ provider: "google", userId: "user-1" }]);
   });
 });
@@ -125,6 +125,7 @@ describe("createOAuthSourceWithDependencies", () => {
         findCredentialEmail: () => Promise.resolve({ email: null, exists: true }),
         findExistingAccountId: () => Promise.resolve(null),
         hasExistingCalendar: () => Promise.resolve(false),
+        resolveCalendarWritable: () => Promise.resolve(true),
         triggerSync: (userId, provider) => {
           triggerSyncCalls.push({ provider, userId });
         },
@@ -171,6 +172,7 @@ describe("createOAuthSourceWithDependencies", () => {
         findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
         findExistingAccountId: () => Promise.resolve("account-1"),
         hasExistingCalendar: () => Promise.resolve(false),
+        resolveCalendarWritable: () => Promise.resolve(true),
         triggerSync: (userId, provider) => {
           triggerSyncCalls.push({ provider, userId });
         },
@@ -219,6 +221,7 @@ describe("createOAuthSourceWithDependencies", () => {
           findCredentialEmail: () => Promise.resolve({ email: "person@example.com", exists: true }),
           findExistingAccountId: () => Promise.resolve(null),
           hasExistingCalendar: () => Promise.resolve(false),
+          resolveCalendarWritable: () => Promise.resolve(true),
           triggerSync: () => null,
         },
       ),
@@ -228,5 +231,36 @@ describe("createOAuthSourceWithDependencies", () => {
     expect(createAccountCalls).toHaveLength(0);
     expect(createSourceCalls).toHaveLength(0);
     expect(triggerSyncCalls).toHaveLength(0);
+  });
+});
+
+describe("createOAuthSourceWithDependencies write access", () => {
+  it("creates a calendar the user can only read without push", async () => {
+    await createOAuthSourceWithDependencies(
+      {
+        externalCalendarId: "holidays",
+        name: "Holidays",
+        oauthCredentialId: "credential-1",
+        provider: "google",
+        userId: "user-1",
+      },
+      {
+        canAddAccount: () => Promise.resolve(true),
+        countUserAccounts: () => Promise.resolve(0),
+        createCalendarAccount: () => Promise.resolve("account-1"),
+        createSource: (payload) => {
+          createSourceCalls.push(payload);
+          return Promise.resolve({ id: "source-1", name: "Holidays" });
+        },
+        findCredentialEmail: () => Promise.resolve({ email: null, exists: true }),
+        findExistingAccountId: () => Promise.resolve("account-1"),
+        hasExistingCalendar: () => Promise.resolve(false),
+        resolveCalendarWritable: ({ externalCalendarId }) =>
+          Promise.resolve(externalCalendarId !== "holidays"),
+        triggerSync: () => null,
+      },
+    );
+
+    expect(createSourceCalls).toEqual([expect.objectContaining({ writable: false })]);
   });
 });

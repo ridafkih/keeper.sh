@@ -665,6 +665,59 @@ describe("syncCalendar", () => {
     expect(checkpoints[0]?.inserts).toHaveLength(50);
   });
 
+  it("reports a destination that refused a write for missing write access", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{
+        error: "You need to have writer access to this calendar.",
+        errorType: "GoogleCalendarApiError",
+        statusCode: 403,
+        success: false,
+        writeAccessDenied: true,
+      }]),
+    });
+
+    const result = await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      reconciliationScope: TEST_RECONCILIATION_SCOPE,
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+    });
+
+    expect(result.addFailed).toBe(1);
+    expect(result.writeAccessDenied).toBe(true);
+  });
+
+  it("does not report missing write access for other failed writes", async () => {
+    const { syncCalendar } = await import("../../../src/core/sync-engine/index");
+    const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
+    const provider = makeProvider({
+      pushEvents: () => Promise.resolve([{
+        error: "Rate Limit Exceeded",
+        errorType: "GoogleCalendarApiError",
+        statusCode: 403,
+        success: false,
+      }]),
+    });
+
+    const result = await syncCalendar({
+      userId: "user-1",
+      calendarId: "dest-cal-1",
+      reconciliationScope: TEST_RECONCILIATION_SCOPE,
+      provider,
+      readState: () => Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] }),
+      isCurrent: () => Promise.resolve(true),
+      flush: () => Promise.resolve(),
+    });
+
+    expect(result.addFailed).toBe(1);
+    expect(result.writeAccessDenied).toBe(false);
+  });
+
   it("returns empty result when there are no operations", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const provider = makeProvider();
@@ -1213,6 +1266,12 @@ describe("createRedisGenerationCheck", () => {
   });
 });
 
+const selectEventStates = () => ({
+  from: () => ({
+    where: () => ({ for: () => Promise.resolve([{ id: "ev-1" }]) }),
+  }),
+});
+
 describe("createDatabaseFlush", () => {
   it("batches inserts, deletes, and mapping updates into a single transaction", async () => {
     const { createDatabaseFlush } = await import("../../../src/core/sync-engine/flush");
@@ -1221,6 +1280,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           update: () => ({
             set: () => {
               executedOperations.push("update");
@@ -1326,6 +1386,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -1354,6 +1415,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => { executedOperations.push("insert"); return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) }; },
           delete: () => { executedOperations.push("delete"); return { where: () => Promise.resolve() }; },
         };
@@ -1387,6 +1449,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => ({ values: () => Promise.resolve() }),
           delete: () => { deleteCallCount += 1; return { where: () => Promise.resolve() }; },
         };
@@ -1409,6 +1472,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => {
             insertCallCount += 1;
             return { values: () => ({ onConflictDoNothing: () => Promise.resolve() }) };
@@ -1441,6 +1505,7 @@ describe("createDatabaseFlush", () => {
     const fakeDatabase = {
       transaction: (callback: (tx: unknown) => Promise<void>) => {
         const tx = {
+          select: selectEventStates,
           insert: () => {
             insertCallCount += 1;
             return {

@@ -1,12 +1,11 @@
 import type { Plan } from "@keeper.sh/data-schemas";
-import { calendarsTable } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq, isNotNull } from "drizzle-orm";
+import { wakeUserIngests } from "@keeper.sh/database";
 import type { KeeperSyncTriggerResult } from "@/types";
 import { enqueuePushSync } from "./enqueue-push-sync";
 
 interface TriggerSyncDependencies {
-  clearIngestBackoff: (userId: string) => Promise<number>;
   enqueuePushSync: (userId: string, plan: Plan) => Promise<void>;
+  wakeSources: (userId: string) => Promise<number>;
 }
 
 const runTriggerSync = async (
@@ -14,7 +13,7 @@ const runTriggerSync = async (
   plan: Plan,
   dependencies: TriggerSyncDependencies,
 ): Promise<KeeperSyncTriggerResult> => {
-  const sourcesRefreshed = await dependencies.clearIngestBackoff(userId);
+  const sourcesRefreshed = await dependencies.wakeSources(userId);
   await dependencies.enqueuePushSync(userId, plan);
 
   return { sourcesRefreshed, triggered: true };
@@ -24,21 +23,14 @@ const triggerSync = async (userId: string, plan: Plan): Promise<KeeperSyncTrigge
   const { database } = await import("@/context");
 
   return runTriggerSync(userId, plan, {
-    clearIngestBackoff: async (backoffUserId) => {
-      const cleared = await database
-        .update(calendarsTable)
-        .set({ ingestNextAttemptAt: null })
-        .where(and(
-          eq(calendarsTable.userId, backoffUserId),
-          eq(calendarsTable.disabled, false),
-          arrayContains(calendarsTable.capabilities, ["pull"]),
-          isNotNull(calendarsTable.ingestNextAttemptAt),
-        ))
-        .returning({ id: calendarsTable.id });
-
-      return cleared.length;
-    },
     enqueuePushSync,
+    wakeSources: async (wakeUserId) => {
+      const woken = await wakeUserIngests(database, wakeUserId, {
+        correlationId: null,
+        debounceMs: 0,
+      });
+      return woken.length;
+    },
   });
 };
 

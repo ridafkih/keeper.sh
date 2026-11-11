@@ -1,4 +1,6 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import type { BroadcastData } from "@keeper.sh/broadcast";
+import { nameRequestRoute, startTracing, withRequestTracing } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { join } from "node:path";
 import { withCors } from "./middleware/cors";
@@ -7,10 +9,19 @@ import { websocketHandler } from "./handlers/websocket";
 import { validateSocketToken } from "./utils/state";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { socketQuerySchema } from "./utils/request-query";
+import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
+
+const tracing = startTracing({
+  serviceName: "keeper-api",
+  propagateToOrigins: [],
+  environment: process.env,
+});
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
@@ -28,15 +39,18 @@ await entry({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.API_PORT,
+      idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       websocket: websocketHandler,
-      fetch: withCors(async (request) => {
+      fetch: withRequestTracing({ trustIncomingTraceContext: true }, withCors(async (request) => {
         const url = new URL(request.url);
 
         if (url.pathname.startsWith("/api/auth")) {
+          nameRequestRoute(request.method, "/api/auth/*");
           return handleAuthRequest(url.pathname, request);
         }
 
         if (url.pathname === "/api/socket") {
+          nameRequestRoute(request.method, "/api/socket");
           const token = url.searchParams.get("token");
           const query = Object.fromEntries(url.searchParams.entries());
           if (!token || !socketQuerySchema.allows(query)) {
@@ -68,6 +82,8 @@ await entry({
           return new Response("Not found", { status: HTTP_NOT_FOUND });
         }
 
+        nameRequestRoute(request.method, match.name);
+
         const module: unknown = await import(match.filePath);
 
         if (!isRouteModule(module)) {
@@ -87,16 +103,17 @@ await entry({
         }
 
         return handler(request, match.params, match.name);
-      }),
+      })),
     });
 
     await broadcastService.startSubscriber();
 
-    return () => {
+    return async () => {
       destroy();
       server.stop();
       closeDatabase(database);
       redis.disconnect();
+      await tracing.shutdown();
     };
   },
   name: "api",

@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 const capturedOptions: Record<string, unknown>[] = [];
 
@@ -25,7 +25,7 @@ const fakeDatabase = {
   update: () => ({ set: () => ({ where: () => Promise.resolve([]) }) }),
 };
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 /* ENCRYPTION_KEY set so the CalDAV family does not early-return before its call site. */
 vi.mock("../../src/env", () => ({ default: { ENCRYPTION_KEY: "test-key" } }));
@@ -65,8 +65,8 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
 
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -84,7 +84,7 @@ const budgets = (key: string): number[] =>
 
 describe("global source throttle removal", () => {
   it("runs oauth and caldav unbounded and keeps ics at its cpu-bound parse budget", async () => {
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     expect(capturedOptions).toHaveLength(3);
 

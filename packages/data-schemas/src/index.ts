@@ -5,6 +5,13 @@ const proxyableMethods = type("'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPT
 type ProxyableMethods = typeof proxyableMethods.infer;
 
 const planSchema = type("'free' | 'pro'");
+
+const icsFeedFailureReasonSchema = type("'auth-required' | 'not-found' | 'not-calendar' | 'unreachable'");
+const oauthConnectFailureReasonSchema = type(
+  "'access-declined' | 'admin-approval-required' | 'expired' | 'no-mailbox' | 'unknown'",
+);
+type IcsFeedFailureReason = typeof icsFeedFailureReasonSchema.infer;
+type OAuthConnectFailureReason = typeof oauthConnectFailureReasonSchema.infer;
 type Plan = typeof planSchema.infer;
 
 const SYNC_RANGE_DEFINITIONS = [
@@ -98,7 +105,7 @@ const feedbackRequestSchema = type({
 type FeedbackRequest = typeof feedbackRequestSchema.infer;
 
 const createSourceSchema = type({
-  name: "string",
+  "name?": "string",
   url: "string",
   "+": "reject",
 });
@@ -116,6 +123,10 @@ const googleEventSchema = type({
   "id?": "string",
   "location?": "string",
   "recurrence?": "string[]",
+  "reminders?": {
+    "overrides?": type({ method: "string", minutes: "number" }).array(),
+    useDefault: "boolean",
+  },
   "start?": { "date?": "string", "dateTime?": "string", "timeZone?": "string" },
   "status?": "'confirmed' | 'tentative' | 'cancelled'",
   "summary?": "string",
@@ -232,6 +243,7 @@ const outlookEventSchema = type({
   "id?": "string",
   "isAllDay?": "boolean",
   "isCancelled?": "boolean",
+  "isReminderOn?": "boolean",
   "lastModifiedDateTime?": "string",
   "location?": { "displayName?": "string" },
   "originalEndTimeZone?": "string",
@@ -290,6 +302,16 @@ const microsoftApiErrorSchema = type({
 });
 type MicrosoftApiError = typeof microsoftApiErrorSchema.infer;
 
+const microsoftGraphBatchResponseSchema = type({
+  responses: type({
+    "body?": "unknown",
+    "headers?": "Record<string, string>",
+    id: "string",
+    status: "number",
+  }).array(),
+});
+type MicrosoftGraphBatchResponse = typeof microsoftGraphBatchResponseSchema.infer;
+
 const authSocialProvidersSchema = type({
   google: "boolean",
   microsoft: "boolean",
@@ -346,6 +368,7 @@ const syncAggregateSchema = type({
   syncEventsProcessed: "number",
   syncEventsRemaining: "number",
   syncEventsTotal: "number",
+  "syncSecondsRemaining?": "number",
   syncing: "boolean",
   "lastSyncedAt?": "string | null",
 });
@@ -439,17 +462,22 @@ const createOAuthSourceSchema = type({
 });
 type CreateOAuthSource = typeof createOAuthSourceSchema.infer;
 
-const createCalDAVSourceSchema = type({
-  authMethod: "'basic' | 'digest'",
+const caldavCalendarSelectionSchema = type({
   calendarUrl: "string",
   name: "string",
+  "+": "reject",
+});
+
+const importCalDAVCalendarsSchema = type({
+  authMethod: "'basic' | 'digest'",
+  calendars: caldavCalendarSelectionSchema.array().atLeastLength(1),
   password: "string",
   provider: "'caldav' | 'fastmail' | 'icloud'",
   serverUrl: "string",
   username: "string",
   "+": "reject",
 });
-type CreateCalDAVSource = typeof createCalDAVSourceSchema.infer;
+type ImportCalDAVCalendars = typeof importCalDAVCalendarsSchema.infer;
 
 const caldavDiscoverSourceSchema = type({
   password: "string",
@@ -585,6 +613,8 @@ const googleWatchHeadersSchema = type({
 type GoogleWatchHeaders = typeof googleWatchHeadersSchema.infer;
 
 export {
+  icsFeedFailureReasonSchema,
+  oauthConnectFailureReasonSchema,
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_SOURCE_SYNC_RULES,
@@ -594,6 +624,7 @@ export {
   DEFAULT_FUTURE_SYNC_RANGE,
   DEFAULT_HISTORIC_SYNC_RANGE,
   SYNC_RANGE_DEFINITIONS,
+  EXCLUDABLE_AVAILABILITY_DEFINITIONS,
   MAX_EXCLUDE_TITLE_KEYWORDS,
   MAX_EXCLUDE_TITLE_KEYWORD_LENGTH,
   canExcludeAvailability,
@@ -626,6 +657,7 @@ export {
   outlookCalendarViewEventSchema,
   outlookCalendarViewListSchema,
   microsoftApiErrorSchema,
+  microsoftGraphBatchResponseSchema,
   authSocialProvidersSchema,
   authCapabilitiesSchema,
   socketMessageSchema,
@@ -642,7 +674,7 @@ export {
   googleCalendarListEntrySchema,
   googleCalendarListResponseSchema,
   createOAuthSourceSchema,
-  createCalDAVSourceSchema,
+  importCalDAVCalendarsSchema,
   caldavDiscoverSourceSchema,
   oauthCalendarSourceSchema,
   updateOAuthSourceDestinationsSchema,
@@ -659,6 +691,8 @@ export {
 };
 
 export type {
+  IcsFeedFailureReason,
+  OAuthConnectFailureReason,
   ProxyableMethods,
   Plan,
   SyncRange,
@@ -683,6 +717,7 @@ export type {
   OutlookCalendarViewEvent,
   OutlookCalendarViewList,
   MicrosoftApiError,
+  MicrosoftGraphBatchResponse,
   AuthSocialProviders,
   AuthCapabilities,
   SocketMessage,
@@ -699,7 +734,7 @@ export type {
   GoogleCalendarListEntry,
   GoogleCalendarListResponse,
   CreateOAuthSource,
-  CreateCalDAVSource,
+  ImportCalDAVCalendars,
   CalDAVDiscoverSource,
   OAuthCalendarSource,
   UpdateOAuthSourceDestinations,
@@ -712,3 +747,39 @@ export type {
   GraphNotificationCollection,
   PushChannelStateValue,
 };
+
+export {
+  AGENT_FEEDBACK_CATEGORIES,
+  AGENT_FEEDBACK_DEPLOYMENTS,
+  AGENT_FEEDBACK_SEVERITIES,
+  AGENT_FEEDBACK_TOOL_NAME_PATTERN,
+  AGENT_FEEDBACK_USER_AGENT_PREFIX,
+  DEFAULT_AGENT_FEEDBACK_SEVERITY,
+  MAX_AGENT_FEEDBACK_BODY_BYTES,
+  MAX_AGENT_FEEDBACK_MESSAGE_LENGTH,
+  MAX_AGENT_INTENT_LENGTH,
+  agentFeedbackRequestSchema,
+} from "./agent-feedback";
+export type {
+  AgentFeedbackCategory,
+  AgentFeedbackDeployment,
+  AgentFeedbackRequest,
+  AgentFeedbackSeverity,
+} from "./agent-feedback";
+export {
+  MAX_LANDING_PATH_LENGTH,
+  MAX_REFERRER_ORIGIN_LENGTH,
+  MAX_UTM_VALUE_LENGTH,
+  SIGN_UP_ATTRIBUTION_FIELDS,
+  parseSignUpAttribution,
+} from "./sign-up-attribution";
+export type { SignUpAttribution } from "./sign-up-attribution";
+export { BILLING_LIMIT_TYPES, FUNNEL_EVENT_PATH, ONBOARDING_FUNNEL_STEPS } from "./funnel-events";
+export type {
+  BillingLimitShownEvent,
+  BillingLimitType,
+  BillingUpgradeViewedEvent,
+  FunnelEvent,
+  OnboardingFunnelStep,
+  OnboardingStepViewedEvent,
+} from "./funnel-events";

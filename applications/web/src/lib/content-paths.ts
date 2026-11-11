@@ -10,10 +10,13 @@ export const CONTENT_DIRECTORIES = {
   compare: `${SEO_CONTENT_ROOT}/compare`,
   docs: `${SEO_CONTENT_ROOT}/docs`,
   guides: `${SEO_CONTENT_ROOT}/guides`,
+  marketing: `${SEO_CONTENT_ROOT}/marketing`,
   recipes: `${SEO_CONTENT_ROOT}/recipes`,
 } as const;
 
 export const MOVED_PATHS_FILE = "moved-paths.json";
+
+export const LLMS_TEXT_FILES = ["llms.txt", "llms-full.txt"] as const;
 
 export interface SupersedingPage {
   basePath: string;

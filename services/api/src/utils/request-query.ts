@@ -4,6 +4,7 @@ const sourceAuthorizeQuerySchema = type({
   provider: "string",
   "credentialId?": "string",
   "accountId?": "string",
+  "account?": "'sign-in'",
   "+": "reject",
 });
 type SourceAuthorizeQuery = typeof sourceAuthorizeQuerySchema.infer;
@@ -28,9 +29,13 @@ const socketQuerySchema = type({
 type SocketQuery = typeof socketQuerySchema.infer;
 
 const oauthCallbackQuerySchema = type({
+  "admin_consent?": "string",
+  "tenant?": "string",
+  "scope?": "string",
   "code?": "string",
   "state?": "string",
   "error?": "string",
+  "error_description?": "string",
 });
 type OAuthCallbackQuery = typeof oauthCallbackQuerySchema.infer;
 

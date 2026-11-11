@@ -75,6 +75,16 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts disableEventReminders as boolean", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects a non-boolean disableEventReminders", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: "yes" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
   it("accepts excluded statuses", () => {
     const result = sourcePatchBodySchema({ excludeAvailabilities: ["busy", "free", "tentative"] });
     expect(result instanceof type.errors).toBe(false);
@@ -146,6 +156,23 @@ describe("icalSettingsPatchBodySchema", () => {
 });
 
 describe("eventCreateBodySchema", () => {
+  it("passes a wall time and its timezone through to the event time parser", () => {
+    const result = eventCreateBodySchema({
+      calendarId: "abc-123",
+      title: "Team Meeting",
+      startTime: "2026-11-05T09:00:00",
+      endTime: "2026-11-05T10:00:00",
+      timezone: "America/Edmonton",
+    });
+    expect(result).toEqual({
+      calendarId: "abc-123",
+      title: "Team Meeting",
+      startTime: "2026-11-05T09:00:00",
+      endTime: "2026-11-05T10:00:00",
+      timezone: "America/Edmonton",
+    });
+  });
+
   it("accepts valid event creation body", () => {
     const result = eventCreateBodySchema({
       calendarId: "abc-123",
@@ -199,6 +226,11 @@ describe("eventCreateBodySchema", () => {
 });
 
 describe("eventPatchBodySchema", () => {
+  it("accepts an update that only changes the timezone", () => {
+    const result = eventPatchBodySchema({ timezone: "America/Edmonton" });
+    expect(result).toEqual({ timezone: "America/Edmonton" });
+  });
+
   it("accepts partial event update", () => {
     const result = eventPatchBodySchema({ title: "Updated Title" });
     expect(result instanceof type.errors).toBe(false);
