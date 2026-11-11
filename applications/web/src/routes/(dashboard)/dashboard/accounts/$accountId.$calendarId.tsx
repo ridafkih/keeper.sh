@@ -223,7 +223,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
         title="Sync Window"
         description="Choose how far back and ahead Keeper syncs events into this calendar. Narrowing a range removes already-synced events outside it from this calendar."
       />
-      <PremiumGate locked={locked} hint="Custom sync windows are a Pro feature.">
+      <PremiumGate limit="sync_window" locked={locked} hint="Custom sync windows are a Pro feature.">
         <NavigationMenu>
           <SyncRangeItem
             calendarId={calendarId}
@@ -544,7 +544,7 @@ function DestinationsSection({ calendarId }: { calendarId: string }) {
           ))
         )}
       </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
+      {atLimit && <PremiumHint limit="mappings">Mapping limit reached.</PremiumHint>}
     </>
   );
 }
@@ -624,7 +624,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         title="Sync Settings"
         description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+      <PremiumGate limit="advanced_sync" locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
@@ -832,7 +832,7 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
         title="Exclusions"
         description={`Choose which events to exclude from syncing. Separate title keywords with commas. Up to ${MAX_EXCLUDE_TITLE_KEYWORDS} keywords of ${MAX_EXCLUDE_TITLE_KEYWORD_LENGTH} characters each, matched ignoring case.`}
       />
-      <PremiumGate locked={locked} hint="Event exclusions are a Pro feature.">
+      <PremiumGate limit="event_exclusions" locked={locked} hint="Event exclusions are a Pro feature.">
         <NavigationMenu>
           {exclusionSettings.map((setting) => (
             <ExcludeFieldToggle

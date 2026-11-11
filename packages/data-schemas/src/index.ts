@@ -749,3 +749,20 @@ export type {
   AgentFeedbackRequest,
   AgentFeedbackSeverity,
 } from "./agent-feedback";
+export {
+  MAX_LANDING_PATH_LENGTH,
+  MAX_REFERRER_ORIGIN_LENGTH,
+  MAX_UTM_VALUE_LENGTH,
+  SIGN_UP_ATTRIBUTION_FIELDS,
+  parseSignUpAttribution,
+} from "./sign-up-attribution";
+export type { SignUpAttribution } from "./sign-up-attribution";
+export { BILLING_LIMIT_TYPES, FUNNEL_EVENT_PATH, ONBOARDING_FUNNEL_STEPS } from "./funnel-events";
+export type {
+  BillingLimitShownEvent,
+  BillingLimitType,
+  BillingUpgradeViewedEvent,
+  FunnelEvent,
+  OnboardingFunnelStep,
+  OnboardingStepViewedEvent,
+} from "./funnel-events";

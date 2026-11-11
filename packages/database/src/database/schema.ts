@@ -651,6 +651,19 @@ const userMilestonesTable = pgTable(
   ],
 );
 
+const userSignUpAttributionsTable = pgTable("user_sign_up_attributions", {
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  landingPath: text(),
+  referrerOrigin: text(),
+  userId: text()
+    .notNull()
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  utmCampaign: text(),
+  utmMedium: text(),
+  utmSource: text(),
+});
+
 export {
   agentFeedbackTable,
   apiTokensTable,
@@ -675,6 +688,7 @@ export {
   userEventsTable,
   USER_MILESTONES,
   userMilestonesTable,
+  userSignUpAttributionsTable,
   userSubscriptionsTable,
 };
 export type { UserMilestone };

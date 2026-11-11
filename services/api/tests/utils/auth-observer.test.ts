@@ -35,11 +35,21 @@ vi.mock("@/utils/logging", () => ({
   },
 }));
 
+let createdUsers: { userId: string; attribution: unknown }[] = [];
+
+vi.mock("@/utils/user-created", () => ({
+  noteUserCreated: (userId: string, attribution: unknown) => {
+    createdUsers.push({ attribution, userId });
+    return Promise.resolve();
+  },
+}));
+
 const { authObserver } = await import("@/utils/auth-observer");
 
 beforeEach(() => {
   current = {};
   flushed = [];
+  createdUsers = [];
 });
 
 describe("authObserver", () => {
@@ -77,17 +87,12 @@ describe("authObserver", () => {
     expect(current).toEqual({});
   });
 
-  it("emits user.created as its own lifecycle event without touching the request's event", () => {
+  it("hands a created user and their attribution to the user.created event", () => {
     current = { "operation.name": "POST /api/auth/sign-up/email" };
 
-    authObserver.onUserCreated("user-1");
+    authObserver.onUserCreated("user-1", { landingPath: "/pricing" });
 
-    expect(flushed).toEqual([{
-      "operation.name": "user.created",
-      "operation.type": "lifecycle",
-      outcome: "success",
-      "user.id": "user-1",
-    }]);
+    expect(createdUsers).toEqual([{ attribution: { landingPath: "/pricing" }, userId: "user-1" }]);
     expect(current).toEqual({ "operation.name": "POST /api/auth/sign-up/email" });
   });
 
