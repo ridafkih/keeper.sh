@@ -4,6 +4,7 @@ import { useSWRConfig } from "swr";
 import KeeperLogo from "@/assets/keeper.svg?react";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { reportFunnelEvent } from "@/lib/funnel-events";
 import { isEventsKey } from "@/lib/swr";
 import { onboardingRunAtom } from "@/state/onboarding";
 import { syncStateAtom } from "@/state/sync";
@@ -38,6 +39,12 @@ function useStepViewed({ step, origin, sameAccountDestinations }: OnboardingStat
       onboarding_same_account_calendars: sameAccountCalendars,
       onboarding_step: STEP_NUMBERS[step],
       ui_screen: `onboarding.${step}`,
+    });
+    reportFunnelEvent({
+      event: "onboarding.step_viewed",
+      firstAccountProvider,
+      sameAccountCalendars,
+      step,
     });
   }, [step, firstAccountProvider, sameAccountCalendars]);
 }

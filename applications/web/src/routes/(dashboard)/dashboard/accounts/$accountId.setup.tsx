@@ -467,7 +467,7 @@ function DestinationsSection({
           );
         })}
       </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
+      {atLimit && <PremiumHint limit="mappings">Mapping limit reached.</PremiumHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}
@@ -528,7 +528,7 @@ function SourcesSection({
           );
         })}
       </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
+      {atLimit && <PremiumHint limit="mappings">Mapping limit reached.</PremiumHint>}
       <Button
         className="w-full justify-center"
         onClick={onNext}
