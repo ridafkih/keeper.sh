@@ -12,11 +12,10 @@ const secondLink = calendar("second-link", "ical", ["pull"]);
 const readOnlyCaldav = calendar("shared", "caldav", ["pull"]);
 
 describe("resolveDestinationPrompt", () => {
-  it("suggests the first other writable calendar on the same account", () => {
+  it("offers the other writable calendars on the same account, in the order given", () => {
     expect(resolveDestinationPrompt([work, personal, family, holidays], [personal, family])).toEqual({
-      alternatives: [family],
+      destinations: [personal, family],
       kind: "same-account",
-      suggested: personal,
     });
   });
 

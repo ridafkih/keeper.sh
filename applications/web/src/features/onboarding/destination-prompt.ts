@@ -4,7 +4,7 @@ interface PromptCalendar {
 }
 
 type DestinationPrompt<TCalendar extends PromptCalendar> =
-  | { kind: "same-account"; suggested: TCalendar; alternatives: TCalendar[] }
+  | { kind: "same-account"; destinations: TCalendar[] }
   | { kind: "read-only-links" }
   | { kind: "read-only" }
   | { kind: "connect" };
@@ -19,8 +19,7 @@ const resolveDestinationPrompt = <TCalendar extends PromptCalendar>(
   calendars: TCalendar[],
   sameAccountDestinations: TCalendar[],
 ): DestinationPrompt<TCalendar> => {
-  const [suggested, ...alternatives] = sameAccountDestinations;
-  if (suggested) return { alternatives, kind: "same-account", suggested };
+  if (sameAccountDestinations.length > 0) return { destinations: sameAccountDestinations, kind: "same-account" };
   if (calendars.some(isWritable)) return { kind: "connect" };
   if (calendars.every(isCalendarLink)) return { kind: "read-only-links" };
   return { kind: "read-only" };

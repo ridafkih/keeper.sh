@@ -3,6 +3,7 @@ import { useSetAtom } from "jotai";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Check from "lucide-react/dist/esm/icons/check";
+import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -12,7 +13,7 @@ import {
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
-import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { navigationMenuItemIconStyle } from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
 import { useIcalFeeds } from "@/hooks/use-ical-feeds";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { chosenDestinationIdAtom } from "@/state/onboarding";
@@ -39,7 +40,7 @@ const READ_ONLY_DESCRIPTIONS: Record<"read-only-links" | "read-only", (origin: C
 
 function describePrompt(prompt: DestinationPrompt<CalendarSource>, origin: CalendarSource): string {
   if (prompt.kind === "same-account") {
-    return `Keeper.sh can copy events from ${origin.name} into ${prompt.suggested.name}, or into a calendar you connect.`;
+    return `Keeper.sh can copy events from ${origin.name} into another calendar on this account, or into one you connect.`;
   }
   if (prompt.kind === "connect") {
     return `Keeper.sh copies events from ${origin.name} into a second calendar. Connect the one that should show you as busy.`;
@@ -55,8 +56,8 @@ export function AddDestinationStep({ calendars, origin, sameAccountDestinations 
   const chooseDestination = useSetAtom(chosenDestinationIdAtom);
   const prompt = resolveDestinationPrompt(calendars, sameAccountDestinations);
 
-  const chooseSameAccount = (calendar: CalendarSource, path: "same_account_suggested" | "same_account") => {
-    track(ANALYTICS_EVENTS.onboarding_destination_chosen, { destination_path: path });
+  const chooseSameAccount = (calendar: CalendarSource) => {
+    track(ANALYTICS_EVENTS.onboarding_destination_chosen, { destination_path: "same_account" });
     chooseDestination(calendar.id);
   };
 
@@ -66,33 +67,27 @@ export function AddDestinationStep({ calendars, origin, sameAccountDestinations 
         title="Where should your busy time show?"
         description={describePrompt(prompt, origin)}
       />
-      <NavigationMenu>
-        <NavigationMenuItem>
-          <NavigationMenuItemIcon>
-            <ProviderIcon provider={getCalendarProvider(origin)} calendarType={origin.calendarType} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel tone="default">{origin.name}</NavigationMenuItemLabel>
-        </NavigationMenuItem>
-      </NavigationMenu>
-      {prompt.kind === "same-account" && (
-        <>
-          <Button className="w-full justify-center" onClick={() => chooseSameAccount(prompt.suggested, "same_account_suggested")}>
-            <ButtonText>{`Use ${prompt.suggested.name}`}</ButtonText>
-          </Button>
-          {prompt.alternatives.length > 0 && (
-            <NavigationMenu>
-              {prompt.alternatives.map((calendar) => (
-                <NavigationMenuButtonItem key={calendar.id} onClick={() => chooseSameAccount(calendar, "same_account")}>
-                  <NavigationMenuItemIcon>
-                    <ProviderIcon provider={getCalendarProvider(calendar)} calendarType={calendar.calendarType} />
-                  </NavigationMenuItemIcon>
-                  <NavigationMenuItemLabel>{calendar.name}</NavigationMenuItemLabel>
-                  <NavigationMenuItemTrailing />
-                </NavigationMenuButtonItem>
-              ))}
-            </NavigationMenu>
-          )}
-        </>
+      {prompt.kind === "same-account" ? (
+        <NavigationMenu>
+          {prompt.destinations.map((calendar) => (
+            <NavigationMenuButtonItem key={calendar.id} onClick={() => chooseSameAccount(calendar)}>
+              <NavigationMenuItemIcon>
+                <ProviderIcon provider={getCalendarProvider(calendar)} calendarType={calendar.calendarType} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>{calendar.name}</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing indicator={<ArrowRight size={15} className={navigationMenuItemIconStyle()} />} />
+            </NavigationMenuButtonItem>
+          ))}
+        </NavigationMenu>
+      ) : (
+        <NavigationMenu>
+          <NavigationMenuItem>
+            <NavigationMenuItemIcon>
+              <ProviderIcon provider={getCalendarProvider(origin)} calendarType={origin.calendarType} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel tone="default">{origin.name}</NavigationMenuItemLabel>
+          </NavigationMenuItem>
+        </NavigationMenu>
       )}
       <ProviderOptions step="add-destination" includeCalendarLinks={!isReadOnlyPrompt(prompt)} />
       <SubscribeLinkOption />
