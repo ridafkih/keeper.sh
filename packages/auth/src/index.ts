@@ -18,6 +18,7 @@ import { buildVerificationEmail } from "./verification-email";
 import { isLocalAccountEmail, isLocalAuthPath, resolveOidcPlugin } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
+import { readSignUpAttribution } from "./sign-up-attribution";
 import { keepSignedInAccount } from "./passkey-session-owner";
 import type { AuthLogEntry, AuthObserver, AuthRequestOutcome } from "./auth-observer";
 import {
@@ -440,9 +441,8 @@ const createAuth = (config: AuthConfig) => {
             }
             return Promise.resolve();
           },
-          after: (user) => {
-            observation.userCreated(user.id);
-            return Promise.resolve();
+          after: async (user, context) => {
+            observation.userCreated(user.id, await readSignUpAttribution(context));
           },
         },
       },
