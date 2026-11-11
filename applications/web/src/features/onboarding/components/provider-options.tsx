@@ -17,9 +17,15 @@ const COMMON_PROVIDERS = [
 
 interface ProviderOptionsProps {
   step: string;
+  includeCalendarLinks?: boolean;
 }
 
-export function ProviderOptions({ step }: ProviderOptionsProps) {
+function resolveOtherProvidersLabel(includeCalendarLinks: boolean): string {
+  if (includeCalendarLinks) return "Fastmail, CalDAV or a calendar link";
+  return "Fastmail or CalDAV";
+}
+
+export function ProviderOptions({ step, includeCalendarLinks = true }: ProviderOptionsProps) {
   const choose = (provider: string) => {
     track(ANALYTICS_EVENTS.onboarding_provider_chosen, { onboarding_step: step, provider_name: provider });
   };
@@ -45,7 +51,7 @@ export function ProviderOptions({ step }: ProviderOptionsProps) {
             <NavigationMenuItemIcon>
               <MoreHorizontal size={15} />
             </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Fastmail, CalDAV or a calendar link</NavigationMenuItemLabel>
+            <NavigationMenuItemLabel>{resolveOtherProvidersLabel(includeCalendarLinks)}</NavigationMenuItemLabel>
             <NavigationMenuItemTrailing />
           </NavigationMenuLinkItem>
         </div>

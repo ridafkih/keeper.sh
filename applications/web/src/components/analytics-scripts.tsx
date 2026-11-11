@@ -10,7 +10,7 @@ import {
   track,
   updateGoogleConsent,
 } from "@/lib/analytics";
-import { stripSignupMarker } from "@/lib/signup-marker";
+import { consumeSignupMarker } from "@/lib/signup-marker";
 import { useEffectiveConsent } from "@/hooks/use-effective-consent";
 import { useGdprApplies } from "@/hooks/use-gdpr-applies";
 import { useSession } from "@/hooks/use-session";
@@ -43,10 +43,8 @@ function AnalyticsScripts({ runtimeConfig }: { runtimeConfig: PublicRuntimeConfi
   }, [hasConsent]);
 
   useEffect(() => {
-    const cleanedUrl = stripSignupMarker(globalThis.location.href);
-    if (cleanedUrl === null) return;
+    if (!consumeSignupMarker()) return;
 
-    globalThis.history.replaceState(null, "", cleanedUrl);
     track(ANALYTICS_EVENTS.signup_completed, { provider: "oauth" });
     reportSignupConversion(runtimeConfig);
   }, [runtimeConfig]);
