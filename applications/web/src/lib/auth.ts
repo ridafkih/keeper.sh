@@ -1,4 +1,5 @@
 import { authClient } from "./auth-client";
+import { withSignUpAttribution } from "./sign-up-attribution";
 import type { AuthCapabilities } from "./auth-capabilities";
 import {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
@@ -63,19 +64,20 @@ export const signUpWithCredential = async (
   callbackURL = "/dashboard",
 ): Promise<void> => {
   if (capabilities.credentialMode === "username") {
-    await authJsonPost("/api/auth/username-only/sign-up", {
+    await authJsonPost("/api/auth/username-only/sign-up", withSignUpAttribution({
       password,
       username: credential,
-    });
+    }));
     return;
   }
 
-  const { error } = await authClient.signUp.email({
+  const signUpBody = withSignUpAttribution({
     callbackURL,
     email: credential,
     name: credential.split("@")[0] ?? credential,
     password,
   });
+  const { error } = await authClient.signUp.email(signUpBody);
   if (!error) return;
   if (error.code === "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL") {
     throw new Error("This email is already registered. Please sign in instead.");
