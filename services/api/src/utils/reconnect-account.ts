@@ -1,6 +1,11 @@
-import { calendarAccountsTable, caldavCredentialsTable } from "@keeper.sh/database/schema";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  caldavCredentialsTable,
+} from "@keeper.sh/database/schema";
 import { encryptPassword } from "@keeper.sh/database";
-import { and, eq } from "drizzle-orm";
+import { RESET_CALENDAR_BACKOFF_STATE } from "@keeper.sh/calendar";
+import { and, eq, gt } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 
 const FIRST_RESULT_LIMIT = 1;
@@ -87,6 +92,19 @@ const applyCalDAVReconnect = async (
       .update(calendarAccountsTable)
       .set({ needsReauthentication: false, reauthenticationSource: null })
       .where(eq(calendarAccountsTable.id, target.accountId));
+
+    /* The schedule triggers release this account's reads when the password changes, but
+       nothing clears the push backoff the refused password built up, so its destinations
+       would otherwise sit out the old delay of up to six hours. */
+    await transaction
+      .update(calendarsTable)
+      .set(RESET_CALENDAR_BACKOFF_STATE)
+      .where(
+        and(
+          eq(calendarsTable.accountId, target.accountId),
+          gt(calendarsTable.failureCount, 0),
+        ),
+      );
   });
 };
 

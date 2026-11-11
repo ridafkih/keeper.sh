@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { calendarsTable } from "@keeper.sh/database/schema";
 
 import {
   applyCalDAVReconnect,
@@ -110,6 +111,39 @@ describe("applyCalDAVReconnect", () => {
     expect(updates).toContainEqual({
       needsReauthentication: false,
       reauthenticationSource: null,
+    });
+  });
+
+  it("clears the push backoff the refused password left on the account's calendars", async () => {
+    const updates: { table: unknown; values: Record<string, unknown> }[] = [];
+    const database = {
+      transaction: (run: (tx: unknown) => Promise<unknown>) =>
+        run({
+          update: (table: unknown) => ({
+            set: (values: Record<string, unknown>) => {
+              updates.push({ table, values });
+              return { where: () => Promise.resolve() };
+            },
+          }),
+        }),
+    } as unknown as KeeperDatabase;
+
+    await applyCalDAVReconnect(
+      database,
+      {
+        accountId: ACCOUNT_ID,
+        credentialId: caldavRow.credentialId,
+        serverUrl: caldavRow.serverUrl,
+        username: caldavRow.username,
+      },
+      "new-app-password",
+      "basic",
+    );
+
+    // Without this a repaired destination waits out the old delay before its next push.
+    expect(updates).toContainEqual({
+      table: calendarsTable,
+      values: { failureCount: 0, lastFailureAt: null, nextAttemptAt: null },
     });
   });
 });
