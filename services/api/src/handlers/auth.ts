@@ -11,6 +11,7 @@ import {
   readCheckoutCreation,
 } from "@/utils/billing-funnel";
 import type { CheckoutCreation } from "@/utils/billing-funnel";
+import { ONBOARDING_COOKIE_CLEAR } from "@/utils/onboarding-cookie";
 
 const COMPANION_COOKIE_NAME = "keeper.has_session";
 const COMPANION_COOKIE_SET = `${COMPANION_COOKIE_NAME}=1; Path=/; SameSite=Lax`;
@@ -35,6 +36,7 @@ const clearSessionCookies = (response: Response): Response => {
   headers.append("Set-Cookie", `better-auth.session_token=; ${expiredCookie}`);
   headers.append("Set-Cookie", `better-auth.session_data=; ${expiredCookie}`);
   headers.append("Set-Cookie", COMPANION_COOKIE_CLEAR);
+  headers.append("Set-Cookie", ONBOARDING_COOKIE_CLEAR);
   return new Response(response.body, {
     headers,
     status: response.status,
@@ -56,9 +58,14 @@ const hasSessionTokenCleared = (response: Response): boolean => {
   );
 };
 
-const withCompanionCookie = (response: Response, cookie: string): Response => {
+// The onboarding cookie belongs to whoever was signed in, so signing in or out makes the web app ask again.
+// Refreshing a session through get-session keeps the same person, so it leaves the cookie alone.
+const withCompanionCookie = (response: Response, cookie: string, clearOnboarding: boolean): Response => {
   const headers = new Headers(response.headers);
   headers.append("Set-Cookie", cookie);
+  if (clearOnboarding) {
+    headers.append("Set-Cookie", ONBOARDING_COOKIE_CLEAR);
+  }
   return new Response(response.body, {
     headers,
     status: response.status,
@@ -68,11 +75,11 @@ const withCompanionCookie = (response: Response, cookie: string): Response => {
 
 const processAuthResponse = async (pathname: string, response: Response): Promise<Response> => {
   if (hasSessionTokenSet(response)) {
-    return withCompanionCookie(response, COMPANION_COOKIE_SET);
+    return withCompanionCookie(response, COMPANION_COOKIE_SET, pathname !== "/api/auth/get-session");
   }
 
   if (hasSessionTokenCleared(response)) {
-    return withCompanionCookie(response, COMPANION_COOKIE_CLEAR);
+    return withCompanionCookie(response, COMPANION_COOKIE_CLEAR, true);
   }
 
   if (pathname !== "/api/auth/get-session") {

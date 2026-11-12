@@ -6,6 +6,7 @@ import EyeOff from "lucide-react/dist/esm/icons/eye-off";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
 import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
 import KeeperLogo from "@/assets/keeper.svg?react";
+import { useConnectReturnTo } from "@/lib/connect-return";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
@@ -126,10 +127,11 @@ interface LinkOAuthPreambleProps {
 }
 
 export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
+  const returnTo = useConnectReturnTo();
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     track(ANALYTICS_EVENTS.oauth_authorize_started, { oauth_is_reconnect: false, provider_name: provider });
-    window.location.href = buildCalendarConsentUrl(provider, { forSignedInAccount: false });
+    window.location.href = buildCalendarConsentUrl(provider, { forSignedInAccount: false, returnTo });
   };
 
   return (

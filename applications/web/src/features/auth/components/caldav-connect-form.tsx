@@ -1,5 +1,5 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigateAfterConnect } from "@/lib/connect-return";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import { useSWRConfig } from "swr";
 import { useSetAtom } from "jotai";
@@ -101,7 +101,7 @@ function parseAccountId(value: unknown): string | undefined {
 
 export function CalDAVConnectForm({ provider, credentialHelp, onCredentialsRejected }: CalDAVConnectFormProps) {
   const config = PROVIDER_CONFIGS[provider];
-  const navigate = useNavigate();
+  const navigateAfterConnect = useNavigateAfterConnect();
   const { mutate: globalMutate } = useSWRConfig();
   const showToast = useSetAtom(showToastAtom);
   const formRef = useRef<HTMLFormElement>(null);
@@ -192,7 +192,7 @@ export function CalDAVConnectForm({ provider, credentialHelp, onCredentialsRejec
         showToast(importNotice);
       }
 
-      navigate({ to: "/dashboard/setup", search: accountId ? { accountId } : {} });
+      await navigateAfterConnect(accountId);
     });
   };
 

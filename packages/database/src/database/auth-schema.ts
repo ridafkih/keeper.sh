@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -8,6 +10,11 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { ONBOARDING_STATUSES } from "@keeper.sh/data-schemas";
+
+const ONBOARDING_STATUS_SQL_VALUES = ONBOARDING_STATUSES
+  .map((status) => `'${status}'`)
+  .join(", ");
 
 const user = pgTable("user", {
   agentFeedbackEnabled: boolean().notNull().default(true),
@@ -17,9 +24,15 @@ const user = pgTable("user", {
   id: text().notNull().primaryKey(),
   image: text(),
   name: text().notNull(),
+  onboardingStatus: text().notNull().default("pending"),
   updatedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   username: text().unique(),
-});
+}, () => [
+  check(
+    "user_onboarding_status_check",
+    sql`"onboardingStatus" IN (${sql.raw(ONBOARDING_STATUS_SQL_VALUES)})`,
+  ),
+]);
 
 const session = pgTable("session", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),

@@ -1,3 +1,4 @@
+import type { ConnectReturnTo } from "./connect-return";
 import { withSignupMarker } from "./signup-marker";
 
 type SignUpProvider = "google" | "microsoft" | "oidc";
@@ -28,10 +29,11 @@ const isConsentContinuation = (value: unknown): value is typeof CONSENT_CONTINUA
 
 const buildCalendarConsentUrl = (
   provider: CalendarConsentProvider,
-  { forSignedInAccount }: { forSignedInAccount: boolean },
+  { forSignedInAccount, returnTo }: { forSignedInAccount: boolean; returnTo?: ConnectReturnTo },
 ): string => {
   const search = new URLSearchParams({ provider });
   if (forSignedInAccount) search.set("account", "sign-in");
+  if (returnTo) search.set("returnTo", returnTo);
   return `/api/sources/authorize?${search.toString()}`;
 };
 

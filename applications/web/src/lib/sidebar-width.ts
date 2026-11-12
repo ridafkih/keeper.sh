@@ -1,3 +1,6 @@
+import type { ConnectReturnTo } from "./connect-return";
+import { isOnboardingConnectPath } from "./route-access-guards";
+
 const SYNCS_ROOT = "/dashboard/syncs";
 
 const normalizePath = (pathname: string): string => pathname.replace(/\/+$/, "") || "/";
@@ -13,10 +16,11 @@ export const resolveSyncPane = (pathname: string): SyncPane | null => {
   return rest === "new" ? { kind: "new" } : { kind: "sync", syncId: rest };
 };
 
-const FULL_SCREEN_PATHS = new Set(["/dashboard/setup"]);
+const FULL_SCREEN_PATHS = new Set(["/dashboard/setup", "/onboarding"]);
 
 // Onboarding needs the whole window for the editor and its preview, so it drops the sidebar and calendar.
-export const isFullScreenPath = (pathname: string): boolean => FULL_SCREEN_PATHS.has(normalizePath(pathname));
+export const isFullScreenPath = (pathname: string, returnTo?: ConnectReturnTo): boolean =>
+  FULL_SCREEN_PATHS.has(normalizePath(pathname)) || isOnboardingConnectPath(pathname, returnTo);
 
 export const isSyncsListPath = (pathname: string): boolean => normalizePath(pathname) === SYNCS_ROOT;
 

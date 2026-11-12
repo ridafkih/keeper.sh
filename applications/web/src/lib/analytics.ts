@@ -79,6 +79,7 @@ export const ANALYTICS_EVENTS = {
   setup_skipped: "setup_skipped",
   setup_completed: "setup_completed",
   setup_blank_selected: "setup_blank_selected",
+  onboarding_skipped: "onboarding_skipped",
   password_changed: "password_changed",
   passkey_created: "passkey_created",
   passkey_deleted: "passkey_deleted",

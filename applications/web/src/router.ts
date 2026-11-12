@@ -5,6 +5,8 @@ import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runt
 import type { PublicRuntimeConfig } from "./lib/runtime-config";
 import { hasSessionCookie } from "./lib/session-cookie";
 import { parseQueryString, stringifyQueryRecord } from "./lib/search-params";
+import { readOnboardingCookie } from "./lib/onboarding-cookie";
+import type { OnboardingCookie } from "./lib/onboarding-cookie";
 import type { AppRouterContext } from "./lib/router-context";
 
 import type { ViteAssets } from "./lib/router-context";
@@ -87,6 +89,17 @@ function createSessionChecker(
   return () => hasSessionCookie();
 }
 
+function createOnboardingReader(
+  request: Request | undefined,
+): () => OnboardingCookie | null {
+  if (request) {
+    const serverOnboarding = readOnboardingCookie(request.headers.get("cookie") ?? "");
+    return () => serverOnboarding;
+  }
+
+  return () => readOnboardingCookie();
+}
+
 function buildRouterContext(
   request: Request | undefined,
   viteAssets: ViteAssets | undefined,
@@ -94,6 +107,7 @@ function buildRouterContext(
   return {
     auth: {
       hasSession: createSessionChecker(request),
+      onboarding: createOnboardingReader(request),
     },
     fetchApi: createApiFetcher(request),
     fetchWeb: createWebFetcher(request),

@@ -1,7 +1,9 @@
+import type { OnboardingCookie } from "./onboarding-cookie";
 import type { PublicRuntimeConfig } from "./runtime-config";
 
 export interface AppAuthContext {
   hasSession: () => boolean;
+  onboarding: () => OnboardingCookie | null;
 }
 
 export type AppJsonFetcher = <T>(path: string, init?: RequestInit) => Promise<T>;

@@ -1,7 +1,7 @@
 import { googleTokenResponseSchema, googleUserInfoSchema } from "@keeper.sh/data-schemas";
 import type { GoogleTokenResponse, GoogleUserInfo } from "@keeper.sh/data-schemas";
 import { generateState } from "./state";
-import type { ValidatedState, OAuthStateStore } from "./state";
+import type { OAuthReturnTo, ValidatedState, OAuthStateStore } from "./state";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -27,6 +27,7 @@ interface AuthorizationUrlOptions {
   scopes?: string[];
   destinationId?: string;
   sourceCredentialId?: string;
+  returnTo?: OAuthReturnTo;
   /** Pins the consent screen to one account, so a reconnect cannot reauthorize the wrong one. */
   loginHint?: string;
 }
@@ -210,6 +211,7 @@ const createGoogleOAuthService = (
   const getAuthorizationUrl = async (userId: string, options: AuthorizationUrlOptions): Promise<string> => {
     const state = await generateState(stateStore, userId, {
       destinationId: options.destinationId,
+      returnTo: options.returnTo,
       sourceCredentialId: options.sourceCredentialId,
     });
     const scopes = options.scopes ?? [
@@ -224,9 +226,12 @@ const createGoogleOAuthService = (
     url.searchParams.set("response_type", "code");
     url.searchParams.set("scope", scopes.join(" "));
     url.searchParams.set("access_type", "offline");
-    url.searchParams.set("prompt", "consent");
+    // Without the account chooser, Google reuses whichever account is signed in, so a second account can't be added.
     if (options.loginHint) {
+      url.searchParams.set("prompt", "consent");
       url.searchParams.set("login_hint", options.loginHint);
+    } else {
+      url.searchParams.set("prompt", "select_account consent");
     }
     url.searchParams.set("state", state);
 

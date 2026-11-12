@@ -39,6 +39,11 @@ describe("buildCalendarConsentUrl", () => {
     expect(buildCalendarConsentUrl("outlook", { forSignedInAccount: false }))
       .toBe("/api/sources/authorize?provider=outlook");
   });
+
+  it("brings a connect started in onboarding back to it", () => {
+    expect(buildCalendarConsentUrl("google", { forSignedInAccount: false, returnTo: "onboarding" }))
+      .toBe("/api/sources/authorize?provider=google&returnTo=onboarding");
+  });
 });
 
 describe("isConsentContinuation", () => {

@@ -1,6 +1,6 @@
-import { useEffect, useRef, type PropsWithChildren } from "react";
+import { useRef, type PropsWithChildren } from "react";
 import { cn } from "@/utils/cn";
-import { resolveScrollParent } from "@/lib/scroll-parent";
+import { useScrolledFlag } from "@/hooks/use-scrolled-flag";
 
 // Sits under the popover blur overlay (z-10) but above page content, and reaches up over the column's top padding
 // (1rem on phones, all of it at lg) so it keeps that breathing room once stuck to the top.
@@ -10,33 +10,7 @@ export function StickyPageHeader({ children, className, stickyFrom }: PropsWithC
 
   // The fade exists to soften content passing beneath the header, so it only earns its
   // place once something is actually under there; at rest it would wash out the first row.
-  useEffect(() => {
-    let frame = 0;
-
-    const update = () => {
-      frame = 0;
-      const element = ref.current;
-      if (!element) return;
-      const parent = resolveScrollParent(element);
-      const body = element.parentElement?.querySelector<HTMLElement>("[data-page-scroller]");
-      const offset = (parent ? parent.scrollTop : window.scrollY) + (body?.scrollTop ?? 0);
-      element.dataset.scrolled = offset > 0 ? "true" : "false";
-    };
-
-    const schedule = () => {
-      if (frame === 0) frame = requestAnimationFrame(update);
-    };
-
-    update();
-    // Scroll events don't bubble, so the capture phase is what sees the column or the window scrolling.
-    window.addEventListener("scroll", schedule, { capture: true, passive: true });
-    window.addEventListener("resize", schedule);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", schedule, { capture: true });
-      window.removeEventListener("resize", schedule);
-    };
-  }, []);
+  useScrolledFlag(ref);
 
   return (
     <div
