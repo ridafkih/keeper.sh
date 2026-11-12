@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
   excludeFocusTime: false,
   excludeOutOfOffice: false,
   customEventName: "Busy",
+  feedName: "Work",
 };
 
 const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
@@ -79,6 +80,23 @@ describe("formatEventsAsIcal", () => {
       );
 
       expect(ics).not.toContain("TRANSP:TRANSPARENT");
+    });
+  });
+
+  describe("calendar name", () => {
+    it("publishes the feed name as X-WR-CALNAME", () => {
+      const ics = formatEventsAsIcal(
+        [makeEvent()],
+        { ...DEFAULT_SETTINGS, feedName: "Team Schedule" },
+      );
+
+      expect(ics).toContain("X-WR-CALNAME:Team Schedule");
+    });
+
+    it("omits X-WR-CALNAME when the feed name is empty", () => {
+      const ics = formatEventsAsIcal([makeEvent()], { ...DEFAULT_SETTINGS, feedName: "" });
+
+      expect(ics).not.toContain("X-WR-CALNAME");
     });
   });
 
