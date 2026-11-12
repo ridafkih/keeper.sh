@@ -259,4 +259,4 @@ const withV1Auth =
   };
 
 export { resolveOutcome, withAuth, withV1Auth, withWideEvent };
-export type { RouteHandler };
+export type { AuthenticatedRouteCallback, RouteHandler };

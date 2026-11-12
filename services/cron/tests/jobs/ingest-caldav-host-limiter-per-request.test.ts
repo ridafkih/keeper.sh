@@ -185,6 +185,7 @@ const harness = vi.hoisted(() => {
   });
 
   const calendarUrl = "https://caldav.example.net/calendars/user-1/personal/";
+  const calendarHomeUrl = "https://caldav.example.net/calendars/user-1/";
   const objectPaths = Array.from(
     { length: 251 },
     (_unused, index) => `/calendars/user-1/personal/event-${index}.ics`,
@@ -204,13 +205,27 @@ const harness = vi.hoisted(() => {
         url,
       }));
     },
-    fetchCalendars: async (): Promise<unknown[]> => {
+    propfind: async (params: { depth: "0" | "1"; url: string }): Promise<unknown[]> => {
+      if (params.depth === "0") {
+        await sendOriginRequest("propfind-context");
+        return [{
+          href: params.url,
+          ok: true,
+          props: { calendarHomeSet: { href: calendarHomeUrl } },
+          status: 200,
+        }];
+      }
       await sendOriginRequest("propfind-calendars");
       return [{
-        components: ["VEVENT"],
-        ctag: "ctag-1",
-        displayName: "Personal",
-        url: calendarUrl,
+        href: calendarUrl,
+        ok: true,
+        props: {
+          displayname: "Personal",
+          getctag: "ctag-1",
+          resourcetype: { calendar: {}, collection: {} },
+          supportedCalendarComponentSet: { comp: [{ _attributes: { name: "VEVENT" } }] },
+        },
+        status: 200,
       }];
     },
   }) as unknown as Record<string, (params: never) => Promise<unknown>>;
@@ -226,7 +241,7 @@ const harness = vi.hoisted(() => {
 });
 
 vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
+  DAVNamespaceShort: { CALDAV: "c", DAV: "d" },
   /*
    * Real tsdav sends every operation through the fetch it was constructed
    * with; the fake must too, because the host-limiter charge lives there.
@@ -345,8 +360,9 @@ describe("CalDAV limiter consumption", () => {
     expect(harness.state.accountFactoryIds).toEqual(["account-caldav-1"]);
     expect(harness.state.hostFactoryHosts).toEqual([]);
 
-    // 251 objects: a discovery PROPFIND, a calendar-query, then ceil(251 / 250) multigets.
+    // 251 objects: a context PROPFIND, a calendar-home listing PROPFIND, a calendar-query, then ceil(251 / 250) multigets.
     expect(harness.state.providerRequests).toEqual([
+      "propfind-context",
       "propfind-calendars",
       "calendar-query",
       "multiget:250",

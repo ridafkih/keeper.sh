@@ -5,6 +5,7 @@ const { blogPost } = vi.hoisted(() => ({
   blogPost: {
     content: "Read [the docs](/docs).",
     faq: [],
+    images: [],
     metadata: {
       blurb: "Blurb.",
       createdAt: "2026-10-01",

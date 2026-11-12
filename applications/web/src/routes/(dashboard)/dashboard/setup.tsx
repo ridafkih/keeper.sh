@@ -227,7 +227,7 @@ function SetupPage() {
               />
             )}
             <div className="flex flex-col gap-1.5 pt-3">
-              {atLimit && <PremiumHint>Free plans include one sync.</PremiumHint>}
+              {atLimit && <PremiumHint limit="syncs">Free plans include one sync.</PremiumHint>}
               <LinkButton to="/dashboard" variant="ghost" className="w-full justify-center" onClick={() => track(ANALYTICS_EVENTS.setup_skipped)}>
                 <ButtonText>Skip for Now</ButtonText>
               </LinkButton>

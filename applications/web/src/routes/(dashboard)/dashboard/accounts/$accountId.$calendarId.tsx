@@ -162,7 +162,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
         title="Sync Window"
         description="Choose how far back and ahead Keeper syncs events into this calendar. Narrowing a range removes already-synced events outside it from this calendar."
       />
-      <PremiumGate locked={locked} hint="Custom sync windows are a Pro feature.">
+      <PremiumGate limit="sync_window" locked={locked} hint="Custom sync windows are a Pro feature.">
         <NavigationMenu>
           <SyncRangeItem
             calendarId={calendarId}
@@ -452,7 +452,7 @@ function AllDayEventsSection({ calendarId }: { calendarId: string }) {
         title="All-Day Events"
         description="Treat timed events that span a whole day as all-day when copying them."
       />
-      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+      <PremiumGate limit="advanced_sync" locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <TreatFullDayTimedEventsToggle calendarId={calendarId} locked={locked} />
         </NavigationMenu>
@@ -523,7 +523,7 @@ function CopyRemindersSection({ calendarId }: { calendarId: string }) {
         title="Reminders"
         description="Leave reminders off the copies of this calendar's events."
       />
-      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+      <PremiumGate limit="advanced_sync" locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <DisableEventRemindersToggle calendarId={calendarId} locked={locked} />
         </NavigationMenu>

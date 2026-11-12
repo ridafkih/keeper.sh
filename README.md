@@ -178,7 +178,7 @@ There are seven images currently available: two designed for convenience, and fi
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
 | ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
 | RESEND_API_KEY                 | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
-| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to. Requires `RESEND_API_KEY`.                                                                        |
+| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to, through the `user-feedback` and `problem-report` Resend templates. Agent feedback received at `/api/v1/agent-feedback` goes to the same address through the `agent-feedback` template, under an `Agent feedback:` subject. Requires `RESEND_API_KEY`. |
 | PASSKEY_RP_ID                  | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |
 | PASSKEY_RP_NAME                | `api`         | Optional. Relying party display name for passkeys.                                                                                                                  |
 | PASSKEY_ORIGIN                 | `api`         | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`).                                                                                    |
@@ -191,6 +191,7 @@ There are seven images currently available: two designed for convenience, and fi
 | OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
 | OIDC_PROVIDER_NAME             | `api`         | Optional. Display name shown on the SSO login button. Defaults to `SSO`.<br><br>e.g. `Pocket ID`                                                                      |
 | OIDC_SCOPES                    | `api`         | Optional. Comma-separated scopes to request from the OIDC issuer. Defaults to `openid,profile,email`.<br><br>e.g. `openid,profile,email,groups`                                                                                    |
+| OIDC_TRUST_EMAIL_VERIFIED      | `api`         | Optional. Set to `true` to trust the OIDC provider's `email_verified` claim, so a sign-in links to an existing account with the same verified email. Defaults to `false`. Only enable it if your provider verifies every email address it asserts. |
 | DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up. Google and Microsoft sign-in stay available while their client credentials are set. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
@@ -220,6 +221,7 @@ There are seven images currently available: two designed for convenience, and fi
 | OPENAI_APPS_CHALLENGE_TOKEN    | `web`         | Optional. Domain verification token from the OpenAI Platform plugin submission, served at `/.well-known/openai-apps-challenge`. Only needed when submitting the MCP server to the ChatGPT Plugins Directory.<br><br>e.g. `abc123` |
 | MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on. Pre-set to `3002` in the `keeper-standalone` image.<br><br>e.g. `3002`                                          |
 | MCP_API_URL                    | `api`, `mcp`  | Optional. Internal URL used to reach the Keeper.sh API when serving MCP — for tool calls, and for fetching the signing keys that validate MCP tokens. Defaults to `BETTER_AUTH_URL`, which requires both services to be able to reach your instance's public URL. Pre-set to the bundled API in the `keeper-standalone` image.<br><br>e.g. `http://api:3001` |
+| AGENT_FEEDBACK_DISABLED        | `mcp`         | Optional. Set to `true` to turn agent feedback off for every user on the instance: `send_feedback` is not offered, tools give no hint to send feedback, and `intent` is not recorded. Defaults to on. Any value other than `true` or `false` stops the service at startup.<br><br>e.g. `true` |
 | OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs and traces to an OpenTelemetry collector. Logs go through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which starts the service as a child process, forwards its output and stop signals, and does not affect application performance. Traces are exported in-process to `/v1/traces` on the same endpoint from a bounded queue that drops spans rather than slowing requests down, and every wide event carries the `trace_id` and `span_id` of its trace.<br><br>e.g. `https://otel-collector.example.com:4318` |
 | TRACE_SAMPLE_RATIO             | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Share of new traces exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, between `0` and `1`. Downstream services follow the decision made where the trace started. Traces that end in an error or run longer than `TRACE_SLOW_THRESHOLD_MS` are exported regardless. Defaults to `0.1`.<br><br>e.g. `0.25` |
 | TRACE_SLOW_THRESHOLD_MS        | `api`, `cron`, `worker`, `mcp`, `web` | Optional. A request, job or ingest round that takes at least this long is exported even when the sample ratio left it out. Defaults to `2000`.<br><br>e.g. `5000` |
@@ -308,7 +310,15 @@ Then pass the client to the container running the API (`keeper-standalone`, `kee
 
 `OIDC_ISSUER_URL` must match the `issuer` your provider publishes, including any path, such as `https://auth.example.com/realms/keeper` for Keycloak or `https://authentik.example.com/application/o/keeper/` for Authentik. `OIDC_PROVIDER_NAME` labels the sign-in button and defaults to `SSO`. `OIDC_SCOPES` is a comma-separated list that defaults to `openid,profile,email`.
 
-Signing in with the provider for the first time creates a new Keeper.sh account. It is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+Signing in with the provider for the first time creates a new Keeper.sh account. By default it is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+
+If your provider verifies every email address it asserts, you can let sign-ins link to existing accounts automatically instead:
+
+```yaml
+      OIDC_TRUST_EMAIL_VERIFIED: "true"
+```
+
+With this set, a sign-in links to an existing Keeper.sh account only when the provider sends `email_verified: true` for the address and the existing account's email is itself verified. Anything else, including a missing claim, is refused as before. Username accounts are never linked this way. Leave it off if users can set their own email at the provider without verifying it, since anyone able to claim an address there could then sign in to the matching Keeper.sh account.
 
 Once everyone who needs one has linked their account, you can turn off username and password sign-in:
 
@@ -643,6 +653,20 @@ curl https://keeper.example.com/api/v1/calendars \
 | `GET`    | `/api/v1/events/free-time`               | Find free slots of at least `durationMinutes` in a date range. Requires `timezone`, and accepts working-hours options.                                          |
 | `POST`   | `/api/v1/sync`                           | Trigger a sync immediately. Throttled to one request per minute per user.                                                                                      |
 | `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
+| `GET`    | `/api/v1/mappings`                       | List which calendars sync into which, as source and destination calendar ID pairs.                                                                              |
+| `PUT`    | `/api/v1/calendars/{calendarId}/destinations` | Replace the calendars a calendar syncs to. Send `calendarIds`.                                                                                             |
+| `GET`    | `/api/v1/calendars/{calendarId}/settings` | Get a calendar's sync settings and the calendars it syncs to and from.                                                                                         |
+| `PATCH`  | `/api/v1/calendars/{calendarId}/settings` | Rename a calendar with `name`, or change its sync settings. Settings other than the name require Pro.                                                          |
+| `POST`   | `/api/v1/accounts/{id}/refresh`          | Re-discover the calendars on one connected account.                                                                                                            |
+| `POST`   | `/api/v1/accounts/refresh-calendars`     | Re-discover the calendars on every connected account. Throttled to one request per minute per user.                                                            |
+| `POST`   | `/api/v1/ics`                            | Subscribe to a calendar from its iCal link. Send `url`, and optionally `name`.                                                                                 |
+| `DELETE` | `/api/v1/ics/{calendarId}`               | Remove a calendar added from an iCal link.                                                                                                                     |
+| `GET`    | `/api/v1/ical/feeds`                     | List your iCal feeds with their URLs, settings and calendar IDs.                                                                                               |
+| `POST`   | `/api/v1/ical/feeds`                     | Create an iCal feed. Send `name`.                                                                                                                              |
+| `PATCH`  | `/api/v1/ical/feeds/{id}`                | Rename an iCal feed or change its settings. Settings other than the name require Pro.                                                                          |
+| `PUT`    | `/api/v1/ical/feeds/{id}/calendars`      | Replace the calendars an iCal feed publishes. Send `calendarIds`.                                                                                              |
+| `DELETE` | `/api/v1/ical/feeds/{id}`                | Delete an iCal feed. The default feed cannot be deleted.                                                                                                       |
+| `POST`   | `/api/v1/agent-feedback`                 | Intake for `send_feedback`. Takes no token and is called by MCP servers, not users. On Keeper.sh it stores the feedback and notifies the team.                 |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
 
@@ -677,11 +701,32 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
 | `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
 | `pause_calendar`      | Pause or resume one calendar without disconnecting it, in every sync it belongs to. It does not pause a single sync.                           |
-| `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
+| `get_calendar_settings` | Get a calendar's own settings: its sync window, all-day handling and reminders on copies.                                                    |
+| `update_calendar_settings` | Change a calendar's sync window, all-day handling or reminders on copies. Requires Pro.                                                   |
+| `rename_calendar`     | Rename a calendar in Keeper.sh.                                                                                                                |
+| `refresh_calendars`   | Re-discover the calendars on one connected account, or on every account.                                                                      |
+| `add_calendar_link`   | Subscribe to a read-only calendar from its iCal link.                                                                                          |
+| `remove_calendar_link` | Remove a calendar added from an iCal link.                                                                                                    |
+| `list_ical_feeds`     | List your iCal feeds with their subscription URLs, settings and calendars.                                                                     |
+| `create_ical_feed`    | Create an iCal feed.                                                                                                                           |
+| `update_ical_feed`    | Rename an iCal feed or change what its events show.                                                                                            |
+| `set_ical_feed_calendars` | Set which calendars an iCal feed publishes.                                                                                                |
+| `delete_ical_feed`    | Delete an iCal feed.                                                                                                                           |
+| `send_feedback`       | Send the Keeper.sh team feedback about the MCP tools and API: an unexpected error, a confusing result, a missing capability, unclear docs or a workaround. |
+
+Every tool also accepts an optional `intent`, up to 300 characters, where an agent can say what it is trying to do. Unless the user has turned agent feedback off, it is recorded with the tool name on the request's log event, is never sent to the API or echoed back, and has no effect on what the tool does.
+
+## Agent Feedback
+
+`send_feedback` takes a `message` (the goal, what was tried and where it got stuck, up to 2,000 characters), a `category` (`tool_error`, `missing_capability`, `confusing_output`, `documentation` or `other`), an optional `toolName` and an optional `severity` (`high` when blocked, `medium` when a workaround was found, `low` for an annoyance; defaults to `medium`).
+
+Feedback always goes to the Keeper.sh team at `https://www.keeper.sh/api/v1/agent-feedback`, including from self-hosted instances, so problems with the tools reach the people who maintain them. It carries only the message, category, severity, tool name, the intent given on that call, the instance's Keeper.sh version, and whether the instance is hosted or self-hosted. It never carries the user's token, ID, email, calendar data or the instance's hostname.
+
+Each user can turn this off with **Agent feedback** in **Settings**, stored per account and served at `GET` and `PATCH /api/account/settings`. With it off, `send_feedback` is left out of that user's tool list and a call to it sends nothing, the server's instructions and error messages stop mentioning it, and `intent` is still accepted but not recorded. Operators can turn it off for the whole instance with `AGENT_FEEDBACK_DISABLED`.
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, pause a calendar, and force a sync, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, pause a calendar, force a sync, rename and refresh calendars, and manage calendar links and iCal feeds, not just read them.
 
 Example Claude Code MCP configuration:
 
@@ -714,7 +759,7 @@ MCP is **not** bundled in `keeper-services` or the individual service images. To
 
 ## Registry Manifest
 
-[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and takes the `sh.keeper` namespace, which is authenticated by proving ownership of `keeper.sh` rather than by a GitHub account.
+[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and is listed as `io.github.ridafkih/keeper-sh`, the name it was first published under; a registry name cannot be changed once published. The server announces the same name, version, title, website and icons in its `initialize` response.
 
 Publishing is a manual step run with the `mcp-publisher` CLI and is deliberately not automated: a published version is permanent, so the manifest is reviewed here first and the `version` it carries can never be reused. Self-hosted instances do not need this file — it describes the hosted instance only.
 

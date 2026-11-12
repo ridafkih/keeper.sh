@@ -306,6 +306,26 @@ describe("AuthForm", () => {
     );
   });
 
+  it("sends a new Google user on to calendar consent instead of the welcome step", async () => {
+    socialSignInMock.mockClear();
+
+    await renderInDom(
+      <AuthForm
+        capabilities={{ ...capabilities, socialProviders: { google: true, microsoft: false } }}
+        copy={copy}
+      />,
+      async (container) => {
+        await clickButtonWithText(container, "Sign in with Google");
+
+        expect(socialSignInMock).toHaveBeenCalledWith({
+          callbackURL: "/dashboard",
+          newUserCallbackURL: "/dashboard/connect/google?continue=consent&keeper_signup=1",
+          provider: "google",
+        });
+      },
+    );
+  });
+
   it("recovers the form when the OIDC redirect request throws", async () => {
     socialSignInMock.mockClear();
     socialSignInMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));

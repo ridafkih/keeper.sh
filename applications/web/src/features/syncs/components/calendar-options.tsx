@@ -84,7 +84,7 @@ export function CalendarOptions({ role, calendars, selectedIds, otherEndIds, cap
           })}
         </NavigationMenu>
       )}
-      {full && capacity.byPlan && <PremiumHint>{where} is at the free plan's {capacity.max}-calendar limit.</PremiumHint>}
+      {full && capacity.byPlan && <PremiumHint limit="sync_calendars">{where} is at the free plan's {capacity.max}-calendar limit.</PremiumHint>}
       {full && !capacity.byPlan && <MenuHint>{where} fits up to {capacity.max} calendars.</MenuHint>}
       {onConnect && (
         <NavigationMenu>
@@ -108,7 +108,7 @@ export function CalendarOptions({ role, calendars, selectedIds, otherEndIds, cap
           ))}
         </NavigationMenu>
       )}
-      {onConnect && atLimit && <PremiumHint>Account limit reached.</PremiumHint>}
+      {onConnect && atLimit && <PremiumHint limit="accounts">Account limit reached.</PremiumHint>}
     </div>
   );
 }

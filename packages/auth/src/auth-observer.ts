@@ -1,5 +1,7 @@
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import type { SignUpAttribution } from "@keeper.sh/data-schemas";
 import { writeAuthStderr } from "./runtime-environment";
+import { readBodySignUpAttribution } from "./sign-up-attribution";
 
 interface AuthRequestOutcome {
   userId: string | null;
@@ -17,7 +19,7 @@ interface AuthLogEntry {
 interface AuthObserver {
   onRequestResolved: (outcome: AuthRequestOutcome) => void;
   onAuthLog: (entry: AuthLogEntry) => void;
-  onUserCreated: (userId: string) => void;
+  onUserCreated: (userId: string, attribution: SignUpAttribution | null) => void;
   onUserDeleted: (userId: string) => void;
 }
 
@@ -95,7 +97,7 @@ const observeAuthRequest = (observer: AuthObserver, context: AfterHookContext): 
   observer.onRequestResolved(outcome);
 
   if (context.path === USERNAME_SIGN_UP_PATH && !outcome.errorCode && outcome.userId) {
-    observer.onUserCreated(outcome.userId);
+    observer.onUserCreated(outcome.userId, readBodySignUpAttribution(context.body));
   }
 };
 
@@ -122,7 +124,8 @@ const createObservedLogger = (observer: AuthObserver | undefined) => ({
 const createAuthObservation = (observer: AuthObserver | undefined) => ({
   hooks: createObserverHooks(observer),
   logger: createObservedLogger(observer),
-  userCreated: (userId: string): void => observer?.onUserCreated(userId),
+  userCreated: (userId: string, attribution: SignUpAttribution | null): void =>
+    observer?.onUserCreated(userId, attribution),
   userDeleted: (userId: string): void => observer?.onUserDeleted(userId),
 });
 

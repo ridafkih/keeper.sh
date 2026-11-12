@@ -95,4 +95,23 @@ describe("signUpWithCredential", () => {
       method: "POST",
     });
   });
+
+  it("sends where the visit started with an email sign-up", async () => {
+    const entries = new Map([["keeper.sign_up_attribution", JSON.stringify({ landingPath: "/pricing", utmSource: "github" })]]);
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: (key: string, value: string) => entries.set(key, value),
+    });
+
+    await signUpWithCredential("person@example.com", "password", commercialCapabilities, "/dashboard");
+
+    expect(authClientMock.signUp.email).toHaveBeenCalledWith({
+      attribution: { landingPath: "/pricing", utmSource: "github" },
+      callbackURL: "/dashboard",
+      email: "person@example.com",
+      name: "person",
+      password: "password",
+    });
+    vi.unstubAllGlobals();
+  });
 });

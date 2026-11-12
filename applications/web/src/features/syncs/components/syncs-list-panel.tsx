@@ -36,7 +36,7 @@ export function SyncsListPanel({ active = null }: { active?: SyncPane | null }) 
           ))}
           <NewSyncRow atLimit={atLimit} active={active?.kind === "new"} />
         </NavigationMenu>
-        {atLimit && <PremiumHint>Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
+        {atLimit && <PremiumHint limit="syncs">Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
       </PageBody>
     </div>
   );

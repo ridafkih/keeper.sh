@@ -1,6 +1,7 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
+import { TextLink } from "@/components/ui/primitives/text-link";
 import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
@@ -40,6 +41,30 @@ export function MarketingToolField({ children, htmlFor, label, hint }: Marketing
 
 export function MarketingToolActions({ children }: PropsWithChildren) {
   return <div className="flex flex-wrap items-center gap-2">{children}</div>;
+}
+
+type MarketingToolSyncGuidesProps = {
+  heading: string;
+  body: string;
+  links: { label: string; path: string }[];
+};
+
+export function MarketingToolSyncGuides({ heading, body, links }: MarketingToolSyncGuidesProps) {
+  return (
+    <MarketingToolSection>
+      <Heading2>{heading}</Heading2>
+      <Text size="sm" tone="muted" className="mt-2 max-w-[64ch]">
+        {body}
+      </Text>
+      <ul className="mt-2 flex flex-col gap-1 list-none">
+        {links.map((link) => (
+          <li key={link.path}>
+            <TextLink to={link.path} align="left" size="sm">{link.label}</TextLink>
+          </li>
+        ))}
+      </ul>
+    </MarketingToolSection>
+  );
 }
 
 type MarketingToolCtaProps = {

@@ -1,6 +1,7 @@
 import { allSettledWithConcurrency } from "@keeper.sh/calendar";
 import { handleRefreshCalendarsRoute } from "./refresh-calendars-route";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { redis } from "@/context";
 import {
   CALENDAR_REFRESH_COOLDOWN_SECONDS,
@@ -14,17 +15,17 @@ import { loadRefreshableAccountsForUser } from "@/utils/account-calendar-discove
 
 const REFRESH_CONCURRENCY = 3;
 
-const POST = withWideEvent(
-  withAuth(({ userId }) =>
-    handleRefreshCalendarsRoute({ userId }, {
-      acquireRefreshLock: acquireAccountRefreshLock,
-      claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
-      cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
-      loadAccounts: loadRefreshableAccountsForUser,
-      refreshCalendars: refreshAccountCalendars,
-      runConcurrently: (tasks) =>
-        allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
-    })),
-);
+const refreshAllAccountCalendars: AuthenticatedRouteCallback = ({ userId }) =>
+  handleRefreshCalendarsRoute({ userId }, {
+    acquireRefreshLock: acquireAccountRefreshLock,
+    claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
+    cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
+    loadAccounts: loadRefreshableAccountsForUser,
+    refreshCalendars: refreshAccountCalendars,
+    runConcurrently: (tasks) =>
+      allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
+  });
 
-export { POST };
+const POST = withWideEvent(withAuth(refreshAllAccountCalendars));
+
+export { POST, refreshAllAccountCalendars };

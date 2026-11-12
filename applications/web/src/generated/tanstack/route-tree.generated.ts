@@ -19,6 +19,7 @@ import { Route as marketingSupportRouteImport } from './../../routes/(marketing)
 import { Route as marketingSelfHostingRouteImport } from './../../routes/(marketing)/self-hosting'
 import { Route as marketingPrivacyRouteImport } from './../../routes/(marketing)/privacy'
 import { Route as marketingPricingRouteImport } from './../../routes/(marketing)/pricing'
+import { Route as marketingFreeRouteImport } from './../../routes/(marketing)/free'
 import { Route as marketingFeaturesRouteImport } from './../../routes/(marketing)/features'
 import { Route as marketingAboutRouteImport } from './../../routes/(marketing)/about'
 import { Route as marketingSplatRouteImport } from './../../routes/(marketing)/$'
@@ -127,6 +128,11 @@ const marketingPrivacyRoute = marketingPrivacyRouteImport.update({
 const marketingPricingRoute = marketingPricingRouteImport.update({
   id: '/pricing',
   path: '/pricing',
+  getParentRoute: () => marketingRouteRoute,
+} as any)
+const marketingFreeRoute = marketingFreeRouteImport.update({
+  id: '/free',
+  path: '/free',
   getParentRoute: () => marketingRouteRoute,
 } as any)
 const marketingFeaturesRoute = marketingFeaturesRouteImport.update({
@@ -492,6 +498,7 @@ export interface FileRoutesByFullPath {
   '/$': typeof marketingSplatRoute
   '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
+  '/free': typeof marketingFreeRoute
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/self-hosting': typeof marketingSelfHostingRoute
@@ -561,6 +568,7 @@ export interface FileRoutesByTo {
   '/$': typeof marketingSplatRoute
   '/about': typeof marketingAboutRoute
   '/features': typeof marketingFeaturesRoute
+  '/free': typeof marketingFreeRoute
   '/pricing': typeof marketingPricingRoute
   '/privacy': typeof marketingPrivacyRoute
   '/self-hosting': typeof marketingSelfHostingRoute
@@ -633,6 +641,7 @@ export interface FileRoutesById {
   '/(marketing)/$': typeof marketingSplatRoute
   '/(marketing)/about': typeof marketingAboutRoute
   '/(marketing)/features': typeof marketingFeaturesRoute
+  '/(marketing)/free': typeof marketingFreeRoute
   '/(marketing)/pricing': typeof marketingPricingRoute
   '/(marketing)/privacy': typeof marketingPrivacyRoute
   '/(marketing)/self-hosting': typeof marketingSelfHostingRoute
@@ -706,6 +715,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/features'
+    | '/free'
     | '/pricing'
     | '/privacy'
     | '/self-hosting'
@@ -775,6 +785,7 @@ export interface FileRouteTypes {
     | '/$'
     | '/about'
     | '/features'
+    | '/free'
     | '/pricing'
     | '/privacy'
     | '/self-hosting'
@@ -846,6 +857,7 @@ export interface FileRouteTypes {
     | '/(marketing)/$'
     | '/(marketing)/about'
     | '/(marketing)/features'
+    | '/(marketing)/free'
     | '/(marketing)/pricing'
     | '/(marketing)/privacy'
     | '/(marketing)/self-hosting'
@@ -982,6 +994,13 @@ declare module '@tanstack/react-router' {
       path: '/pricing'
       fullPath: '/pricing'
       preLoaderRoute: typeof marketingPricingRouteImport
+      parentRoute: typeof marketingRouteRoute
+    }
+    '/(marketing)/free': {
+      id: '/(marketing)/free'
+      path: '/free'
+      fullPath: '/free'
+      preLoaderRoute: typeof marketingFreeRouteImport
       parentRoute: typeof marketingRouteRoute
     }
     '/(marketing)/features': {
@@ -1641,6 +1660,7 @@ interface marketingRouteRouteChildren {
   marketingSplatRoute: typeof marketingSplatRoute
   marketingAboutRoute: typeof marketingAboutRoute
   marketingFeaturesRoute: typeof marketingFeaturesRoute
+  marketingFreeRoute: typeof marketingFreeRoute
   marketingPricingRoute: typeof marketingPricingRoute
   marketingPrivacyRoute: typeof marketingPrivacyRoute
   marketingSelfHostingRoute: typeof marketingSelfHostingRoute
@@ -1665,6 +1685,7 @@ const marketingRouteRouteChildren: marketingRouteRouteChildren = {
   marketingSplatRoute: marketingSplatRoute,
   marketingAboutRoute: marketingAboutRoute,
   marketingFeaturesRoute: marketingFeaturesRoute,
+  marketingFreeRoute: marketingFreeRoute,
   marketingPricingRoute: marketingPricingRoute,
   marketingPrivacyRoute: marketingPrivacyRoute,
   marketingSelfHostingRoute: marketingSelfHostingRoute,

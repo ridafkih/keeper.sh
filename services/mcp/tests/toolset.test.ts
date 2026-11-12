@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeeperMcpToolset } from "../src/toolset";
+import { testFeedbackOptions } from "./helpers/feedback-options";
 import type { KeeperToolContext } from "../src/toolset";
 
 const context: KeeperToolContext = {
@@ -51,28 +52,47 @@ const freeTimePayload = {
 
 describe("createKeeperMcpToolset", () => {
   it("exposes the full tool surface", () => {
-    const toolset = createKeeperMcpToolset();
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
 
     expect(Object.keys(toolset).toSorted()).toEqual([
+      "add_calendar_link",
       "create_event",
+      "create_ical_feed",
       "delete_event",
+      "delete_ical_feed",
       "find_free_time",
+      "get_calendar_settings",
       "get_event",
       "get_event_count",
       "get_events",
-      "get_ical_feed",
       "get_pending_invites",
       "list_accounts",
       "list_calendars",
+      "list_ical_feeds",
       "pause_calendar",
+      "refresh_calendars",
+      "remove_calendar_link",
+      "rename_calendar",
       "rsvp_event",
+      "send_feedback",
+      "set_ical_feed_calendars",
       "trigger_sync",
+      "update_calendar_settings",
       "update_event",
+      "update_ical_feed",
     ]);
   });
 
+  it("names the product Keeper.sh in every description", () => {
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
+
+    for (const [name, tool] of Object.entries(toolset)) {
+      expect(tool.description, name).not.toMatch(/Keeper(?!\.sh)/);
+    }
+  });
+
   it("each tool has a title and description", () => {
-    const toolset = createKeeperMcpToolset();
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
 
     for (const [, tool] of Object.entries(toolset)) {
       expect(tool.title).toBeTruthy();
@@ -81,16 +101,16 @@ describe("createKeeperMcpToolset", () => {
   });
 
   it("annotates every tool with hints clients can gate confirmation on", () => {
-    const toolset = createKeeperMcpToolset();
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
 
-    for (const [, tool] of Object.entries(toolset)) {
-      expect(tool.annotations.openWorldHint).toBe(false);
+    for (const [name, tool] of Object.entries(toolset)) {
+      expect(tool.annotations.openWorldHint, name).toBe(name === "send_feedback");
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
   });
 
   it("marks the tools that change existing calendar state as destructive", () => {
-    const toolset = createKeeperMcpToolset();
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
 
     const destructive = Object.entries(toolset)
       .filter(([, tool]) => tool.annotations.destructiveHint === true)
@@ -99,16 +119,43 @@ describe("createKeeperMcpToolset", () => {
 
     expect(destructive).toEqual([
       "delete_event",
+      "delete_ical_feed",
       "pause_calendar",
+      "remove_calendar_link",
+      "rename_calendar",
       "rsvp_event",
+      "set_ical_feed_calendars",
+      "update_calendar_settings",
       "update_event",
+      "update_ical_feed",
     ]);
     expect(toolset.create_event.annotations.destructiveHint).toBe(false);
     expect(toolset.get_events.annotations.readOnlyHint).toBe(true);
   });
 
+  it("marks only the tools that change nothing as read-only", () => {
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
+
+    const readOnly = Object.entries(toolset)
+      .filter(([, tool]) => tool.annotations.readOnlyHint)
+      .map(([name]) => name)
+      .toSorted();
+
+    expect(readOnly).toEqual([
+      "find_free_time",
+      "get_calendar_settings",
+      "get_event",
+      "get_event_count",
+      "get_events",
+      "get_pending_invites",
+      "list_accounts",
+      "list_calendars",
+      "list_ical_feeds",
+    ]);
+  });
+
   it("accepts the opaque occurrence IDs returned by event reads", () => {
-    const toolset = createKeeperMcpToolset();
+    const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
     const occurrenceId = "occurrence:019c0000-0000-7000-8000-000000000001:1772445600000";
     const eventIdSchemas = [
       toolset.get_event.inputSchema?.eventId,
@@ -134,7 +181,7 @@ describe("find_free_time", () => {
   it("forwards the range, timezone and duration to the free-time route", async () => {
     const requests = stubFetch(freeTimePayload);
 
-    await createKeeperMcpToolset().find_free_time.execute(context, {
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       durationMinutes: 30,
       from: "2026-03-02T00:00:00Z",
       timezone: "America/New_York",
@@ -152,7 +199,7 @@ describe("find_free_time", () => {
   it("forwards optional working-hour and filter parameters", async () => {
     const requests = stubFetch(freeTimePayload);
 
-    await createKeeperMcpToolset().find_free_time.execute(context, {
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       calendarId: "calendar-1,calendar-2",
       durationMinutes: 45,
       from: "2026-03-02T00:00:00Z",
@@ -177,7 +224,7 @@ describe("find_free_time", () => {
   it("omits optional parameters that were not supplied", async () => {
     const requests = stubFetch(freeTimePayload);
 
-    await createKeeperMcpToolset().find_free_time.execute(context, {
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       durationMinutes: 30,
       from: "2026-03-02T00:00:00Z",
       timezone: "America/New_York",
@@ -192,7 +239,7 @@ describe("find_free_time", () => {
   it("localizes returned slots to the requested timezone", async () => {
     stubFetch(freeTimePayload);
 
-    const result = await createKeeperMcpToolset().find_free_time.execute(context, {
+    const result = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       durationMinutes: 30,
       from: "2026-03-02T00:00:00Z",
       timezone: "America/New_York",
@@ -211,7 +258,7 @@ describe("find_free_time", () => {
   it("requires a duration", async () => {
     stubFetch(freeTimePayload);
 
-    await expect(createKeeperMcpToolset().find_free_time.execute(context, {
+    await expect(createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       from: "2026-03-02T00:00:00Z",
       timezone: "America/New_York",
       to: "2026-03-03T00:00:00Z",
@@ -221,7 +268,7 @@ describe("find_free_time", () => {
   it("requires the full range", async () => {
     stubFetch(freeTimePayload);
 
-    await expect(createKeeperMcpToolset().find_free_time.execute(context, {
+    await expect(createKeeperMcpToolset({ feedback: testFeedbackOptions }).find_free_time.execute(context, {
       durationMinutes: 30,
       from: "2026-03-02T00:00:00Z",
     })).rejects.toThrow("'from', 'to', and 'timezone' are required");
@@ -236,7 +283,7 @@ describe("trigger_sync", () => {
   it("posts to the sync route", async () => {
     const requests = stubFetch({ sourcesRefreshed: 3, triggered: true });
 
-    const result = await createKeeperMcpToolset().trigger_sync.execute(context);
+    const result = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).trigger_sync.execute(context);
 
     expect(requests[0]?.url).toBe("https://api.test/api/v1/sync");
     expect(requests[0]?.method).toBe("POST");
@@ -250,7 +297,7 @@ describe("trigger_sync", () => {
         { status: 429 },
       )));
 
-    await expect(createKeeperMcpToolset().trigger_sync.execute(context)).rejects.toThrow(
+    await expect(createKeeperMcpToolset({ feedback: testFeedbackOptions }).trigger_sync.execute(context)).rejects.toThrow(
       "Try again in 42 seconds",
     );
   });
@@ -265,7 +312,7 @@ describe("pause_calendar", () => {
     const calendarId = "019c0000-0000-7000-8000-000000000001";
     const requests = stubFetch({ calendarId, paused: true });
 
-    const result = await createKeeperMcpToolset().pause_calendar.execute(context, {
+    const result = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, {
       calendarId,
       paused: true,
     });
@@ -277,7 +324,7 @@ describe("pause_calendar", () => {
   });
 
   it("tells clients it pauses a calendar, and that repeating it is safe", () => {
-    const tool = createKeeperMcpToolset().pause_calendar;
+    const tool = createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar;
 
     expect(tool.description).toContain("not a single sync");
     expect(tool.annotations.idempotentHint).toBe(true);
@@ -287,7 +334,7 @@ describe("pause_calendar", () => {
     const calendarId = "019c0000-0000-7000-8000-000000000001";
     const requests = stubFetch({ calendarId, paused: false });
 
-    await createKeeperMcpToolset().pause_calendar.execute(context, { calendarId, paused: false });
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { calendarId, paused: false });
 
     expect(requests[0]?.body).toBe(JSON.stringify({ paused: false }));
   });
@@ -296,7 +343,7 @@ describe("pause_calendar", () => {
     stubFetch({});
 
     expect(
-      () => createKeeperMcpToolset().pause_calendar.execute(context, { paused: true }),
+      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { paused: true }),
     ).toThrow("'calendarId' is required");
   });
 
@@ -304,7 +351,7 @@ describe("pause_calendar", () => {
     stubFetch({});
 
     expect(
-      () => createKeeperMcpToolset().pause_calendar.execute(context, { calendarId: "calendar-1" }),
+      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { calendarId: "calendar-1" }),
     ).toThrow("'paused' is required");
   });
 });
@@ -342,7 +389,7 @@ const timedJulyFirst = eventPayload({
 });
 
 const requestEvents = (timezone: string) =>
-  createKeeperMcpToolset().get_events.execute(context, {
+  createKeeperMcpToolset({ feedback: testFeedbackOptions }).get_events.execute(context, {
     from: "2026-11-01T00:00:00.000Z",
     timezone,
     to: "2026-11-10T00:00:00.000Z",
@@ -427,7 +474,7 @@ describe("get_event", () => {
   it("passes the all-day flag through with the stored UTC instants", async () => {
     stubFetch(allDayNovemberFifth);
 
-    const event = await createKeeperMcpToolset().get_event.execute(context, {
+    const event = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).get_event.execute(context, {
       eventId: "019c0000-0000-7000-8000-000000000020",
     });
 
@@ -447,7 +494,7 @@ describe("get_events", () => {
   it("forwards the viewer timezone to the events route", async () => {
     const requests = stubFetch([]);
 
-    await createKeeperMcpToolset().get_events.execute(context, {
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).get_events.execute(context, {
       from: "2026-11-12T06:00:00Z",
       timezone: "America/Chicago",
       to: "2026-11-13T06:00:00Z",
