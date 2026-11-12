@@ -30,21 +30,21 @@ describe("feed entitlements", () => {
 });
 
 describe("hasConfiguredSync", () => {
-  const entitlementsWithMappings = (current: number) => ({
+  const entitlementsWithSyncs = (current: number) => ({
     ...buildOptimisticProEntitlements(),
     plan: "free" as const,
-    mappings: { current, limit: 3 },
+    syncs: { current, limit: 1 },
   });
 
   it("is false until entitlements have loaded", () => {
     expect(hasConfiguredSync(undefined)).toBe(false);
   });
 
-  it("is false for a user with no mapping yet", () => {
-    expect(hasConfiguredSync(entitlementsWithMappings(0))).toBe(false);
+  it("is false for a user with no sync yet", () => {
+    expect(hasConfiguredSync(entitlementsWithSyncs(0))).toBe(false);
   });
 
-  it("is true once a source syncs to a destination", () => {
-    expect(hasConfiguredSync(entitlementsWithMappings(1))).toBe(true);
+  it("is true once the user has a sync", () => {
+    expect(hasConfiguredSync(entitlementsWithSyncs(1))).toBe(true);
   });
 });

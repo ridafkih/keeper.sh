@@ -45,7 +45,10 @@ type NavigationMenuItemProps = PropsWithChildren<{
 
 type NavigationMenuLinkItemProps = PropsWithChildren<{
   to?: ComponentPropsWithoutRef<typeof Link>["to"];
+  search?: Record<string, string>;
   onMouseEnter?: () => void;
+  // Fires for mouse, touch and keyboard activation alike, before the navigation.
+  onClick?: () => void;
   disabled?: boolean;
   className?: string;
 }>;
@@ -53,6 +56,8 @@ type NavigationMenuLinkItemProps = PropsWithChildren<{
 type NavigationMenuButtonItemProps = PropsWithChildren<{
   onClick?: () => void;
   disabled?: boolean;
+  /** Marks the picked option when the menu works as a select. */
+  selected?: boolean;
   className?: string;
 }>;
 
@@ -87,7 +92,9 @@ export function NavigationMenuItem({
 
 export function NavigationMenuLinkItem({
   to,
+  search,
   onMouseEnter,
+  onClick,
   disabled,
   className,
   children,
@@ -106,8 +113,11 @@ export function NavigationMenuLinkItem({
           <Link
             draggable="false"
             to={to}
+            // A dynamic `to` narrows Link's search type to never; the router takes a plain object at runtime.
+            search={search as never}
             className={itemClass}
             onMouseEnter={onMouseEnter}
+            onClick={onClick}
           >
             {content}
           </Link>
@@ -124,6 +134,7 @@ export function NavigationMenuLinkItem({
 export function NavigationMenuButtonItem({
   onClick,
   disabled,
+  selected,
   className,
   children,
 }: NavigationMenuButtonItemProps) {
@@ -137,7 +148,7 @@ export function NavigationMenuButtonItem({
   return (
     <Wrapper>
       <ItemDisabledContext value={Boolean(disabled)}>
-        <button type="button" onClick={onClick} disabled={disabled} className={itemClass}>
+        <button type="button" onClick={onClick} disabled={disabled} aria-pressed={selected} className={itemClass}>
           {content}
         </button>
       </ItemDisabledContext>

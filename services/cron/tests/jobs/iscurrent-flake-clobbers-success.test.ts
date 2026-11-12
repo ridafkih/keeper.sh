@@ -19,7 +19,7 @@ const harness = vi.hoisted(() => {
     accountId: "account-1",
     accessToken: "access-token",
     calendarId: "calendar-1",
-    excludeAvailabilities: [],
+    excludesTentative: false,
     expiresAt: new Date(Date.now() + FUTURE_EXPIRY_MS),
     externalCalendarId: "external-calendar-1",
     ingestFutureRange: "6m",

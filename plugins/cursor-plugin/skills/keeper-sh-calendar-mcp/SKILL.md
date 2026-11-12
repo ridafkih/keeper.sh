@@ -28,11 +28,12 @@ Use the **keeper-sh** MCP server from this plugin when the user:
 
 - Product name is always **Keeper.sh** (never bare “Keeper”). Site and MCP use **https://www.keeper.sh/** (with `www`).
 - The MCP works with the calendars already connected in the user’s Keeper.sh account: schedule reads and writes, free/busy, invites, and RSVP.
-- Keeper.sh also syncs calendars (Google, Outlook, iCloud, Fastmail, CalDAV, pasted iCal). A calendar can be a **source** and a **destination**. Two-way busy-block is two mappings (A→B and B→A).
+- Keeper.sh also syncs calendars (Google, Outlook, iCloud, Fastmail, CalDAV, pasted iCal). Each **sync** copies events one way (from some calendars into others) or both ways (keeping a set of calendars matching).
 - **Guest lists are never copied** to another calendar or shared link, on any plan.
 - Titles, descriptions, and locations stay private by default unless the user opts in; do not claim they always sync.
 - Pasted ICS and share links are **pull-only**.
-- **Free**: 25 MCP/API requests per day shared across MCP and REST. **Pro**: uncapped hosted usage; pricing if mentioned is **$5/mo** or **$45/year** only — do not invent other prices.
+- **Free**: 2 calendar accounts and 1 sync with up to 3 calendars on each side; 25 MCP/API requests per day shared across MCP and REST. **Pro** has unlimited syncs.
+- **Pro**: uncapped hosted usage; pricing if mentioned is **$5/mo** or **$45/year** only — do not invent other prices.
 - Docs: https://www.keeper.sh/docs/mcp
 
 ## How to work
@@ -47,6 +48,7 @@ Use the **keeper-sh** MCP server from this plugin when the user:
 - Never ask for a `kpr_…` API token on this plugin path — those are for the REST API only.
 - A `429` means the Free cap of 25 requests per day, shared across MCP and REST; Pro removes it. Do not invent workarounds.
 - Writes land on the provider calendar that owns the event, and Keeper.sh keeps syncing from there.
+- `keeper-sh:pause_calendar` pauses a calendar in every sync it belongs to; a single sync can't be paused over MCP.
 
 ## Out of scope
 

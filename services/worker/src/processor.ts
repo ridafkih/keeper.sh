@@ -409,6 +409,17 @@ const processJob = (
           widelog.set("outcome", "skipped");
           calendarOutcomeReported = true;
         },
+        onActivityRecordError: (failure) => {
+          widelog.set("provider.calendar_id", failure.calendarId);
+          widelog.set("sync_activity.record_failed", true);
+          widelog.set("outcome", "error");
+          applyDatabaseErrorFields(failure.error);
+          widelog.errorFields(failure.error, {
+            prefix: "sync_activity.error",
+            slug: classifySyncError(failure.error),
+          });
+          calendarOutcomeReported = true;
+        },
         onCalendarError: (failure) => {
           widelog.set("provider.name", failure.provider);
           widelog.set("provider.account_id", failure.accountId);

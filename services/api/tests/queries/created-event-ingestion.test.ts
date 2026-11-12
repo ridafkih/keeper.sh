@@ -40,6 +40,7 @@ create table calendars (
   "capabilities" text[] not null default '{"pull"}'
 );
 create table event_states (
+  "color" text,
   "createdAt" timestamptz not null default now(),
   "id" uuid primary key default gen_random_uuid(),
   "calendarId" uuid not null,

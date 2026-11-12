@@ -69,15 +69,13 @@ describe("createKeeperMcpToolset", () => {
       "list_accounts",
       "list_calendars",
       "list_ical_feeds",
-      "list_syncs",
-      "pause_sync",
+      "pause_calendar",
       "refresh_calendars",
       "remove_calendar_link",
       "rename_calendar",
       "rsvp_event",
       "send_feedback",
       "set_ical_feed_calendars",
-      "set_sync_destinations",
       "trigger_sync",
       "update_calendar_settings",
       "update_event",
@@ -122,12 +120,11 @@ describe("createKeeperMcpToolset", () => {
     expect(destructive).toEqual([
       "delete_event",
       "delete_ical_feed",
-      "pause_sync",
+      "pause_calendar",
       "remove_calendar_link",
       "rename_calendar",
       "rsvp_event",
       "set_ical_feed_calendars",
-      "set_sync_destinations",
       "update_calendar_settings",
       "update_event",
       "update_ical_feed",
@@ -154,7 +151,6 @@ describe("createKeeperMcpToolset", () => {
       "list_accounts",
       "list_calendars",
       "list_ical_feeds",
-      "list_syncs",
     ]);
   });
 
@@ -307,7 +303,7 @@ describe("trigger_sync", () => {
   });
 });
 
-describe("pause_sync", () => {
+describe("pause_calendar", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -316,7 +312,7 @@ describe("pause_sync", () => {
     const calendarId = "019c0000-0000-7000-8000-000000000001";
     const requests = stubFetch({ calendarId, paused: true });
 
-    const result = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_sync.execute(context, {
+    const result = await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, {
       calendarId,
       paused: true,
     });
@@ -327,11 +323,18 @@ describe("pause_sync", () => {
     expect(result).toEqual({ calendarId, paused: true });
   });
 
+  it("tells clients it pauses a calendar, and that repeating it is safe", () => {
+    const tool = createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar;
+
+    expect(tool.description).toContain("not a single sync");
+    expect(tool.annotations.idempotentHint).toBe(true);
+  });
+
   it("resumes a calendar", async () => {
     const calendarId = "019c0000-0000-7000-8000-000000000001";
     const requests = stubFetch({ calendarId, paused: false });
 
-    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_sync.execute(context, { calendarId, paused: false });
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { calendarId, paused: false });
 
     expect(requests[0]?.body).toBe(JSON.stringify({ paused: false }));
   });
@@ -340,7 +343,7 @@ describe("pause_sync", () => {
     stubFetch({});
 
     expect(
-      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_sync.execute(context, { paused: true }),
+      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { paused: true }),
     ).toThrow("'calendarId' is required");
   });
 
@@ -348,7 +351,7 @@ describe("pause_sync", () => {
     stubFetch({});
 
     expect(
-      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_sync.execute(context, { calendarId: "calendar-1" }),
+      () => createKeeperMcpToolset({ feedback: testFeedbackOptions }).pause_calendar.execute(context, { calendarId: "calendar-1" }),
     ).toThrow("'paused' is required");
   });
 });

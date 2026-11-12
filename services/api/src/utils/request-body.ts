@@ -1,9 +1,5 @@
 import { type } from "arktype";
-import {
-  excludableAvailabilitySchema,
-  excludeTitleKeywordsSchema,
-  syncRangeSchema,
-} from "@keeper.sh/data-schemas";
+import { syncRangeSchema } from "@keeper.sh/data-schemas";
 
 const calendarIdsBodySchema = type({
   calendarIds: "string[]",
@@ -19,21 +15,11 @@ const calendarToggleBodySchema = type({
 
 const sourcePatchBodySchema = type({
   "name?": "string",
-  "customEventName?": "string",
-  "excludeAllDayEvents?": "boolean",
-  "excludeAvailabilities?": excludableAvailabilitySchema.array(),
-  "excludeEventDescription?": "boolean",
-  "excludeEventLocation?": "boolean",
-  "excludeEventName?": "boolean",
-  "excludeFocusTime?": "boolean",
-  "excludeFreeEvents?": "boolean",
-  "excludeOutOfOffice?": "boolean",
-  "excludeTitleKeywords?": excludeTitleKeywordsSchema,
   "includeInIcalFeed?": "boolean",
+  "paused?": "boolean",
   "treatFullDayTimedEventsAsAllDay?": "boolean",
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
-  "markEventsAsPrivate?": "boolean",
   "disableEventReminders?": "boolean",
   "+": "reject",
 });

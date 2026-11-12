@@ -1,8 +1,5 @@
 const SYNC_REQUESTING_FIELDS = [
-  "markEventsAsPrivate",
   "disableEventReminders",
-  "excludeAvailabilities",
-  "excludeTitleKeywords",
 ] as const;
 
 const updatesRequestUserSync = (updates: Record<string, unknown>): boolean =>

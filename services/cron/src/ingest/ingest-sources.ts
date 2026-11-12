@@ -1190,6 +1190,18 @@ const buildOAuthSourceQuery = (calendarIds: string[]) =>
     )
     .orderBy(asc(calendarsTable.id));
 
+// Outlook refetches a window once to classify tentative events, only for calendars a sync skips tentative events from.
+const excludesTentativeSql = sql<boolean>`exists (
+  select 1 from "sync_calendars" member
+  inner join "syncs" sync on sync."id" = member."syncId"
+  where member."calendarId" = ${calendarsTable.id}
+    and member."role" in ('source', 'member')
+    and (
+      sync."skipAvailabilities" @> '["tentative"]'::jsonb
+      or jsonb_path_exists(sync."rules", '$[*].conditions[*] ? (@.kind == "tentative")')
+    )
+)`;
+
 const ingestOAuthSources = async (
   calendarIds: string[],
   options: IngestRunOptions = {},
@@ -1228,7 +1240,7 @@ const ingestOAuthSources = async (
                   .select({
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
-                    excludeAvailabilities: calendarsTable.excludeAvailabilities,
+                    excludesTentative: excludesTentativeSql,
                     expiresAt: oauthCredentialsTable.expiresAt,
                     externalCalendarId: calendarsTable.externalCalendarId,
                     failureCount: calendarsTable.ingestFailureCount,
@@ -1307,7 +1319,7 @@ const ingestOAuthSources = async (
                 const fetcher = resolveOAuthFetcher(currentSource.provider, {
                   accessToken: tokenState.accessToken,
                   calendarId: source.calendarId,
-                  excludesTentative: currentSource.excludeAvailabilities.includes("tentative"),
+                  excludesTentative: currentSource.excludesTentative,
                   externalCalendarId: currentSource.externalCalendarId,
                   syncToken: ingestionState.syncToken,
                   rateLimiter,

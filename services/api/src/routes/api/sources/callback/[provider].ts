@@ -205,12 +205,12 @@ const GET = withWideEvent(async ({ request, params }) => {
     noteUserMilestone(userId, "first_calendar_connected");
 
     /* A reconnect already has its calendars chosen, so only a first connection — which
-       carries no source credential in its state — belongs in the setup wizard. */
-    let successPath = `/dashboard/accounts/${accountId}/setup`;
+       carries no source credential in its state — belongs in the setup sentence. */
+    let successUrl = buildRedirectUrl("/dashboard/setup", baseUrl, { accountId });
     if (sourceCredentialId) {
-      successPath = `/dashboard/accounts/${accountId}`;
+      successUrl = buildRedirectUrl(`/dashboard/accounts/${accountId}`, baseUrl);
     }
-    return Response.redirect(buildRedirectUrl(successPath, baseUrl).toString());
+    return Response.redirect(successUrl.toString());
   } catch (error) {
     if (error instanceof OAuthError) {
       widelog.errorFields(error, { slug: "oauth-callback-failed" });

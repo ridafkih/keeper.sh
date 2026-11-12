@@ -192,11 +192,7 @@ export function CalDAVConnectForm({ provider, credentialHelp, onCredentialsRejec
         showToast(importNotice);
       }
 
-      if (accountId) {
-        navigate({ to: "/dashboard/accounts/$accountId/setup", params: { accountId } });
-      } else {
-        navigate({ to: "/dashboard" });
-      }
+      navigate({ to: "/dashboard/setup", search: accountId ? { accountId } : {} });
     });
   };
 

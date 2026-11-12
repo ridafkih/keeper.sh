@@ -4,7 +4,6 @@ import { testFeedbackOptions } from "./helpers/feedback-options";
 import { DAILY_CAP_REACHED, MISSING_WRITE_SCOPE, context, stubApi } from "./helpers/api-stub";
 
 const CALENDAR_ID = "019c0000-0000-7000-8000-000000000001";
-const DESTINATION_ID = "019c0000-0000-7000-8000-000000000002";
 const ACCOUNT_ID = "019c0000-0000-7000-8000-000000000003";
 
 const toolset = createKeeperMcpToolset({ feedback: testFeedbackOptions });
@@ -13,71 +12,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("list_syncs", () => {
-  it("returns each source and destination pair", async () => {
-    const mappings = [{ destinationCalendarId: DESTINATION_ID, sourceCalendarId: CALENDAR_ID }];
-    const requests = stubApi({ mappings });
-
-    const result = await toolset.list_syncs.execute(context);
-
-    expect(requests).toEqual([{ body: null, method: null, url: "https://api.test/api/v1/mappings" }]);
-    expect(result).toEqual(mappings);
-  });
-
-  it("surfaces the daily request cap", async () => {
-    stubApi(DAILY_CAP_REACHED, 429);
-
-    await expect(toolset.list_syncs.execute(context)).rejects.toThrow("Daily API limit exceeded");
-  });
-});
-
-describe("set_sync_destinations", () => {
-  it("replaces the calendar's destinations", async () => {
-    const requests = stubApi({ success: true });
-
-    const result = await toolset.set_sync_destinations.execute(context, {
-      calendarId: CALENDAR_ID,
-      destinationCalendarIds: [DESTINATION_ID],
-    });
-
-    expect(requests).toEqual([{
-      body: { calendarIds: [DESTINATION_ID] },
-      method: "PUT",
-      url: `https://api.test/api/v1/calendars/${CALENDAR_ID}/destinations`,
-    }]);
-    expect(result).toEqual({ calendarId: CALENDAR_ID, destinationCalendarIds: [DESTINATION_ID] });
-  });
-
-  it("surfaces the Free plan sync limit", async () => {
-    stubApi({ error: "Mapping limit reached. Upgrade to Pro for unlimited sync mappings." }, 402);
-
-    await expect(toolset.set_sync_destinations.execute(context, {
-      calendarId: CALENDAR_ID,
-      destinationCalendarIds: [DESTINATION_ID],
-    })).rejects.toThrow("Mapping limit reached");
-  });
-
-  it("surfaces a token without the write scope", async () => {
-    stubApi(MISSING_WRITE_SCOPE, 403);
-
-    await expect(toolset.set_sync_destinations.execute(context, {
-      calendarId: CALENDAR_ID,
-      destinationCalendarIds: [],
-    })).rejects.toThrow("missing the keeper.write scope");
-  });
-
-  it("requires the destination list", async () => {
-    stubApi({});
-
-    await expect(
-      toolset.set_sync_destinations.execute(context, { calendarId: CALENDAR_ID }),
-    ).rejects.toThrow("'destinationCalendarIds' must be an array of strings");
-  });
-});
-
 describe("get_calendar_settings", () => {
   it("reads the calendar's settings", async () => {
-    const settings = { destinationIds: [DESTINATION_ID], id: CALENDAR_ID, syncFutureRange: "2_years" };
+    const settings = { id: CALENDAR_ID, syncFutureRange: "2_years" };
     const requests = stubApi(settings);
 
     const result = await toolset.get_calendar_settings.execute(context, { calendarId: CALENDAR_ID });
@@ -98,21 +35,17 @@ describe("get_calendar_settings", () => {
 
 describe("update_calendar_settings", () => {
   it("patches only the settings provided", async () => {
-    const requests = stubApi({ excludeEventName: true, id: CALENDAR_ID });
+    const requests = stubApi({ disableEventReminders: true, id: CALENDAR_ID });
 
     await toolset.update_calendar_settings.execute(context, {
       calendarId: CALENDAR_ID,
-      excludeAvailabilities: ["free"],
-      excludeEventName: true,
-      excludeTitleKeywords: ["Lunch"],
+      disableEventReminders: true,
       syncFutureRange: "3_months",
     });
 
     expect(requests).toEqual([{
       body: {
-        excludeAvailabilities: ["free"],
-        excludeEventName: true,
-        excludeTitleKeywords: ["Lunch"],
+        disableEventReminders: true,
         syncFutureRange: "3_months",
       },
       method: "PATCH",
@@ -125,7 +58,7 @@ describe("update_calendar_settings", () => {
 
     await expect(toolset.update_calendar_settings.execute(context, {
       calendarId: CALENDAR_ID,
-      markEventsAsPrivate: true,
+      treatFullDayTimedEventsAsAllDay: true,
     })).rejects.toThrow("This setting requires a Pro plan.");
   });
 
@@ -134,7 +67,7 @@ describe("update_calendar_settings", () => {
 
     await expect(toolset.update_calendar_settings.execute(context, {
       calendarId: CALENDAR_ID,
-      excludeAllDayEvents: true,
+      disableEventReminders: true,
     })).rejects.toThrow("missing the keeper.write scope");
   });
 
@@ -154,6 +87,18 @@ describe("update_calendar_settings", () => {
       () => toolset.update_calendar_settings.execute(context, { calendarId: CALENDAR_ID, name: "New" }),
     ).toThrow("Provide at least one setting to update");
     expect(requests).toEqual([]);
+  });
+
+  it("leaves copy titles, filters and privacy to each sync", () => {
+    const fields = Object.keys(toolset.update_calendar_settings.inputSchema ?? {}).toSorted();
+
+    expect(fields).toEqual([
+      "calendarId",
+      "disableEventReminders",
+      "syncFutureRange",
+      "syncHistoricRange",
+      "treatFullDayTimedEventsAsAllDay",
+    ]);
   });
 
   it("only accepts the sync ranges the API accepts", () => {

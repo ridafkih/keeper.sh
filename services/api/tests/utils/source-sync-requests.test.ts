@@ -11,7 +11,7 @@ describe("source updates that request a user sync", () => {
   });
 
   it("requests a sync when copies are marked private", () => {
-    expect(updatesRequestUserSync({ markEventsAsPrivate: true })).toBe(true);
+    expect(updatesRequestUserSync({ disableEventReminders: true })).toBe(true);
   });
 
   it("does not request a sync for a rename", () => {

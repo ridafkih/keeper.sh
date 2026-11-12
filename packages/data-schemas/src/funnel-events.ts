@@ -17,6 +17,8 @@ const BILLING_LIMIT_TYPES = [
   "sync_window",
   "advanced_sync",
   "event_exclusions",
+  "syncs",
+  "sync_calendars",
 ] as const;
 
 const FUNNEL_EVENT_PATH = "/api/funnel";

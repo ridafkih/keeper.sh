@@ -58,6 +58,7 @@ const createMigrationReadinessDatabase = (
             AND index_class.relnamespace = 'public'::regnamespace
             AND index_state.indisvalid
         )
+        AND to_regclass('public.syncs') IS NOT NULL
         AND EXISTS (
           SELECT 1
           FROM pg_trigger

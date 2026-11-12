@@ -1113,6 +1113,50 @@ describe("computeSyncOperations", () => {
     }]);
   });
 
+  it("freezes a paused source's copies while its sibling sources keep syncing", () => {
+    const pausedEvent = createLocalEvent({ calendarId: "paused-source", id: "paused-new-event" });
+    const liveEvent = createLocalEvent({ calendarId: "live-source", id: "live-event" });
+    const pausedMapping = createEventMapping({
+      id: "paused-mapping",
+      sourceCalendarId: "paused-source",
+      syncEventId: "paused-deleted-event",
+    });
+
+    const result = computeSyncOperationsStrict(
+      [pausedEvent, liveEvent],
+      [pausedMapping],
+      [],
+      {
+        authoritativeSourceWindows: new Map([["paused-source", TEST_WINDOW], ["live-source", TEST_WINDOW]]),
+        authoritativeWindow: TEST_WINDOW,
+        configuredSourceCalendarIds: new Set(["paused-source", "live-source"]),
+        frozenSourceCalendarIds: new Set(["paused-source"]),
+        requestedWindow: TEST_WINDOW,
+      },
+    );
+
+    expect(result.operations).toEqual([{ event: liveEvent, type: "add" }]);
+  });
+
+  it("still retires a paused source's copies that fall outside the requested window", () => {
+    const outsideMapping = createEventMapping({
+      endTime: new Date("1999-06-01T01:00:00.000Z"),
+      id: "paused-outside-mapping",
+      sourceCalendarId: "paused-source",
+      startTime: new Date("1999-06-01T00:00:00.000Z"),
+    });
+
+    const result = computeSyncOperationsStrict([], [outsideMapping], [], {
+      authoritativeSourceWindows: new Map([["paused-source", TEST_WINDOW]]),
+      authoritativeWindow: TEST_WINDOW,
+      configuredSourceCalendarIds: new Set(["paused-source"]),
+      frozenSourceCalendarIds: new Set(["paused-source"]),
+      requestedWindow: TEST_WINDOW,
+    });
+
+    expect(result.operations.map((operation) => operation.type)).toEqual(["remove"]);
+  });
+
   it("does not re-add an event whose mapping sits between recorded coverage and the requested edge", () => {
     const coverageEdge = new Date("2028-08-05T00:00:00.000Z");
     const requestedWindow = {

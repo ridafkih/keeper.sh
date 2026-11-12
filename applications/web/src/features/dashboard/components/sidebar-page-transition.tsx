@@ -3,6 +3,8 @@ import { useLocation, useRouterState } from "@tanstack/react-router";
 import { LazyMotion, useReducedMotion, type Variants } from "motion/react";
 import * as m from "motion/react-m";
 import { loadMotionFeatures } from "@/lib/motion-features";
+import { resolveSidebarPagePath } from "@/lib/sidebar-width";
+import { settledPathnameOf } from "@/hooks/use-settled-pathname";
 import { resolveScrollParent } from "@/lib/scroll-parent";
 import {
   resolveSidebarDirection,
@@ -90,10 +92,7 @@ function ExitingPageLayer({ page, onDone }: { page: ExitingPage; onDone: () => v
 }
 
 export function SidebarPageTransition({ children }: PropsWithChildren) {
-  // Matches swap when the loader resolves, later than `location`; keying on them keeps the outgoing DOM intact.
-  const pathname = useRouterState({
-    select: (state) => state.matches[state.matches.length - 1]?.pathname ?? state.location.pathname,
-  });
+  const pathname = useRouterState({ select: (state) => resolveSidebarPagePath(settledPathnameOf(state)) });
   const index = useLocation({ select: (location) => location.state.__TSR_index });
   const declared = useLocation({ select: (location) => location.state.sidebarDirection });
   const reduceMotion = useReducedMotion() ?? false;
@@ -129,7 +128,8 @@ export function SidebarPageTransition({ children }: PropsWithChildren) {
     detachedRef.current = null;
     if (!detached || !container || !tracked.direction) return;
     if (tracked.direction === "forward") scrollToTop(container);
-    if (reduceMotion) return;
+    // On phones the sidebar hides behind a sync pane, so its page left nothing on screen to animate out.
+    if (reduceMotion || detached.box.width === 0 || detached.box.height === 0) return;
     const { pathname: to, index: at } = tracked.location;
     setExiting({ ...detached, key: `${to}:${at}`, direction: tracked.direction });
   }, [tracked, reduceMotion]);

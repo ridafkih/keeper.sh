@@ -43,6 +43,11 @@ const applyPendingChanges = (changes: PendingChanges): void => {
   }
 };
 
+vi.mock("../src/sync-run-recording", () => ({
+  recordSyncFailure: () => Promise.resolve(),
+  recordSyncRun: () => Promise.resolve(),
+}));
+
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const original = await importOriginal<Record<string, unknown>>();
   return {
@@ -67,6 +72,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: localEventsMock(),
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+    getPausedSourceCalendarIds: () => Promise.resolve(new Set<string>()),
     withSourceIngestLocks: (
       database: unknown,
       _ids: string[],

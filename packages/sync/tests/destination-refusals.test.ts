@@ -32,6 +32,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       events: [],
     }),
     getMappedSourceCalendarIds: () => Promise.resolve([]),
+    getPausedSourceCalendarIds: () => Promise.resolve(new Set<string>()),
     syncCalendar: (options: unknown) => syncCalendarMock(options),
     withSourceIngestLocks: (
       database: unknown,

@@ -1,6 +1,7 @@
 import { authClient } from "./auth-client";
 import { withSignUpAttribution } from "./sign-up-attribution";
 import type { AuthCapabilities } from "./auth-capabilities";
+import { clearSetupSession, resolveSessionStorage } from "@/features/setup/setup-draft-storage";
 import {
   ACCOUNT_DELETION_REAUTHENTICATION_PATH,
   resolveAccountDeletionOutcome,
@@ -85,7 +86,11 @@ export const signUpWithCredential = async (
   throw new Error(error.message ?? "Sign up failed");
 };
 
-export const signOut = () => authPost("/api/auth/sign-out");
+// A tab can be handed to someone else after signing out, so nothing from this user's setup survives in it.
+export const signOut = () => {
+  clearSetupSession(resolveSessionStorage());
+  return authPost("/api/auth/sign-out");
+};
 
 export const forgotPassword = async (email: string): Promise<void> => {
   const { error } = await authClient.requestPasswordReset({
@@ -105,7 +110,11 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
 
 export const deleteAccount = async (password?: string): Promise<AccountDeletionOutcome> => {
   const { error } = await authClient.deleteUser({ ...(password && { password }) });
-  return resolveAccountDeletionOutcome(error);
+  const outcome = resolveAccountDeletionOutcome(error);
+  if (outcome === "deleted") {
+    clearSetupSession(resolveSessionStorage());
+  }
+  return outcome;
 };
 
 interface ReauthenticatingUser {

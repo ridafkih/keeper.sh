@@ -175,12 +175,12 @@ export {
 } from "./core/utils/fetch-with-timeout";
 export { REDIS_UNAVAILABLE_SLUG, isRedisUnavailableError } from "./core/utils/redis-errors";
 export {
-  getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
-  getEventsForDestination,
   getMappedSourceCalendarIds,
+  getPausedSourceCalendarIds,
   shouldExcludeSyncEvent,
   type DestinationEventReadDiagnostics,
+  type SourceProjectionOutcome,
   type DestinationEventReadResult,
 } from "./core/events/events";
 export {
@@ -398,7 +398,10 @@ export {
 export type {
   CalendarSyncProvider,
   PendingChanges,
+  SourceSyncTallies,
+  SourceSyncTally,
   SyncCalendarOptions,
+  SyncCalendarResult,
 } from "./core/sync-engine";
 export { createRedisGenerationCheck } from "./core/sync-engine/generation";
 export type { GenerationStore } from "./core/sync-engine/generation";

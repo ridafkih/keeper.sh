@@ -1,6 +1,6 @@
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import useSWR, { preload, SWRConfig, useSWRConfig } from "swr";
+import useSWR, { preload, useSWRConfig } from "swr";
 import { AnimatedReveal } from "@/components/ui/primitives/animated-reveal";
 import Calendar from "lucide-react/dist/esm/icons/calendar";
 import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
@@ -14,6 +14,8 @@ import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import User from "lucide-react/dist/esm/icons/user";
 import { ErrorState } from "@/components/ui/primitives/error-state";
+import { PageBody } from "@/components/ui/primitives/page-body";
+import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
 import { signOut } from "@/lib/auth";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { apiFetch, fetcher } from "@/lib/fetcher";
@@ -47,16 +49,14 @@ import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import { useReauthAccounts } from "@/features/dashboard/components/reauth/use-reauth-accounts";
 import { DashboardReauthNotice } from "@/features/dashboard/components/reauth/reauth-notice";
 import { useSubscription, fetchSubscriptionStateWithApi } from "@/hooks/use-subscription";
+import { useIcalFeeds } from "@/hooks/use-ical-feeds";
+import { SetupCard } from "@/features/setup/components/setup-card";
+import { SyncsMenu } from "@/features/syncs/components/syncs-menu";
+import { canFormSync, resolveSetupSteps } from "@/features/setup/setup-card-steps";
+import { useSyncs } from "@/features/syncs/use-syncs";
 import { useHasConfiguredSync } from "@/hooks/use-entitlements";
 import { PlanMenuItem } from "@/features/dashboard/components/plan-menu";
 import { isPlanShownOnHome } from "@/features/dashboard/components/plan-placement";
-import { useOnboarding } from "@/features/onboarding/use-onboarding";
-import { useSyncPairs } from "@/features/onboarding/use-sync-pairs";
-import { Onboarding } from "@/features/onboarding/components/onboarding";
-import { SyncPairRow } from "@/features/onboarding/components/sync-pair-row";
-import { USAGE_CACHE_KEY } from "@/hooks/use-entitlements";
-import { showToastAtom } from "@/state/toast";
-import { useSetAtom } from "jotai";
 
 async function loadSubscription(context: {
   fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -71,69 +71,15 @@ async function loadSubscription(context: {
   }
 }
 
-const SETUP_DATA_PATHS = ["/api/sources", "/api/accounts", USAGE_CACHE_KEY, "/api/mappings"] as const;
-
-async function loadSetupData(context: {
-  fetchApi: <T>(path: string, init?: RequestInit) => Promise<T>;
-}): Promise<Record<string, unknown>> {
-  const entries = await Promise.all(SETUP_DATA_PATHS.map(async (path) => {
-    try {
-      return [[path, await context.fetchApi<unknown>(path)]];
-    } catch (error) {
-      console.error(`[setup] dashboard loader preload of ${path} failed, deferring to the client read:`, error);
-      return [];
-    }
-  }));
-  return Object.fromEntries(entries.flat());
-}
-
-interface DashboardSearch {
-  connected?: string;
-}
-
 export const Route = createFileRoute("/(dashboard)/dashboard/")({
-  validateSearch: (search: Record<string, unknown>): DashboardSearch => ({
-    connected: typeof search.connected === "string" ? search.connected : undefined,
+  loader: async ({ context }) => ({
+    commercialMode: context.runtimeConfig.commercialMode,
+    subscription: await loadSubscription(context),
   }),
-  loader: async ({ context }) => {
-    const [subscription, setupData] = await Promise.all([loadSubscription(context), loadSetupData(context)]);
-    return { commercialMode: context.runtimeConfig.commercialMode, setupData, subscription };
-  },
   component: DashboardPage,
 });
 
 function DashboardPage() {
-  const { setupData } = Route.useLoaderData();
-  return (
-    <SWRConfig value={{ fallback: setupData }}>
-      <DashboardContent />
-    </SWRConfig>
-  );
-}
-
-function useConnectedToast(accounts: CalendarAccount[] | undefined) {
-  const { connected } = Route.useSearch();
-  const navigate = useNavigate();
-  const showToast = useSetAtom(showToastAtom);
-  const account = accounts?.find(({ id }) => id === connected);
-
-  useEffect(() => {
-    if (!connected || !accounts) return;
-    if (account) showToast(`${account.providerName} connected`);
-    navigate({ replace: true, search: {}, to: "/dashboard" });
-  }, [connected, accounts, account, showToast, navigate]);
-}
-
-function DashboardContent() {
-  const onboarding = useOnboarding();
-  useConnectedToast(onboarding?.accounts);
-
-  if (!onboarding) return null;
-  if (onboarding.step !== "home") return <Onboarding state={onboarding} />;
-  return <Home />;
-}
-
-function Home() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -143,35 +89,40 @@ function Home() {
   };
 
   return (
-    <div className="flex flex-col">
-      <SyncStatus />
-      <EventGraph />
-      <div className="flex flex-col gap-1.5">
-        <DashboardReauthNotice />
-        <CalendarsMenu />
-        <SyncPairsMenu />
-        <PlanMenu />
-        <NavigationMenu>
-          <NavigationMenuLinkItem to="/dashboard/feedback">
-            <NavigationMenuItemIcon>
-              <MessageSquare size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Submit feedback</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-          <NavigationMenuLinkItem to="/dashboard/report">
-            <NavigationMenuItemIcon>
-              <Bug size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>Report a problem</NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing />
-          </NavigationMenuLinkItem>
-        </NavigationMenu>
-        <AccountsMenu onLogout={handleLogout} />
-      </div>
-      <div className="pt-8 flex justify-center">
-        <KeeperLogo className="size-8 text-border-elevated self-center" />
-      </div>
+    <div className="flex flex-col lg:h-full">
+      <StickyPageHeader stickyFrom="lg">
+        <SyncStatus />
+        <EventGraph />
+      </StickyPageHeader>
+      <PageBody>
+        <div className="flex flex-col gap-1.5">
+          <DashboardReauthNotice />
+          <DashboardSetupCard />
+          <DashboardSyncsMenu />
+          <CalendarsMenu />
+          <NavigationMenu>
+            <NavigationMenuLinkItem to="/dashboard/feedback">
+              <NavigationMenuItemIcon>
+                <MessageSquare size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Submit feedback</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+            <NavigationMenuLinkItem to="/dashboard/report">
+              <NavigationMenuItemIcon>
+                <Bug size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>Report a problem</NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing />
+            </NavigationMenuLinkItem>
+          </NavigationMenu>
+          <PlanMenu />
+          <AccountsMenu onLogout={handleLogout} />
+        </div>
+        <div className="pt-8 flex justify-center">
+          <KeeperLogo className="size-8 text-border-elevated self-center" />
+        </div>
+      </PageBody>
     </div>
   );
 }
@@ -179,6 +130,31 @@ function Home() {
 interface RefreshStatus {
   message: string;
   tone: "muted" | "danger";
+}
+
+// Counts come from the lists themselves: entitlements can be an optimistic stand-in whose counts are all zero.
+function DashboardSetupCard() {
+  const { data: sources, shouldAnimate } = useAnimatedSWR<CalendarSource[]>("/api/sources");
+  const { data: syncs } = useSyncs();
+  const { data: feeds, error: feedsError } = useIcalFeeds();
+  const ready = Boolean(sources && syncs && (feeds || feedsError));
+  const sourceCount = sources?.length ?? 0;
+  const syncCount = syncs?.length ?? 0;
+  const pairable = canFormSync(sources ?? []);
+  const usesFeeds = (feeds ?? []).some((feed) => (feed.calendarCount ?? 0) > 0);
+  const { show } = resolveSetupSteps({ pairable, sourceCount, syncCount, usesFeeds });
+
+  return (
+    <AnimatedReveal show={ready && show} skipInitial={!shouldAnimate}>
+      <SetupCard sourceCount={sourceCount} pairable={pairable} syncCount={syncCount} usesFeeds={usesFeeds} />
+    </AnimatedReveal>
+  );
+}
+
+function DashboardSyncsMenu() {
+  const { data: syncs } = useSyncs();
+  if (!syncs || syncs.length === 0) return null;
+  return <SyncsMenu />;
 }
 
 function PlanMenu() {
@@ -232,18 +208,6 @@ function useRefreshCalendars() {
   };
 
   return { isRefreshing, refresh, secondsRemaining, status };
-}
-
-function SyncPairsMenu() {
-  const { data: calendars } = useSWR<CalendarSource[]>("/api/sources");
-  const pairs = useSyncPairs(calendars);
-  if (pairs.length === 0) return null;
-
-  return (
-    <NavigationMenu>
-      {pairs.map(({ pair, source }) => <SyncPairRow key={pair.key} pair={pair} source={source} />)}
-    </NavigationMenu>
-  );
 }
 
 function AttentionDot() {

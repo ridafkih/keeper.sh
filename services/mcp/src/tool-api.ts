@@ -8,6 +8,7 @@ interface KeeperToolContext {
 interface KeeperMcpToolAnnotations {
   readOnlyHint: boolean;
   destructiveHint: boolean;
+  idempotentHint?: boolean;
   openWorldHint: boolean;
 }
 

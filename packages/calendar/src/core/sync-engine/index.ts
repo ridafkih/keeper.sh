@@ -14,6 +14,8 @@ import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
 import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
+import type { SyncWindow } from "../sync/sync-range";
+import { overlapsTimeWindow } from "../events/time-range";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
 import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
 import type { UnrecordedCopyTally } from "./unrecorded-copies";
@@ -25,6 +27,103 @@ import type { UnrecordedCopyTally } from "./unrecorded-copies";
  * bounded while still reporting the true scale of the failure.
  */
 const OPERATION_ERROR_SAMPLE_SIZE = 20;
+
+// An add starting this close to the window's far edge is an occurrence the moving window just reached, not a new copy.
+const WINDOW_ENTRY_MARGIN_MS = 24 * 60 * 60 * 1000;
+
+interface SourceSyncTally {
+  added: number;
+  failed: number;
+  removed: number;
+  updated: number;
+}
+
+type SourceSyncTallies = Record<string, SourceSyncTally>;
+
+interface SourceAttribution {
+  mappingsById: ReadonlyMap<string, EventMapping>;
+  mappingsByRemoteIdentity: ReadonlyMap<string, EventMapping>;
+  requestedWindow: SyncWindow | null;
+}
+
+const tallySource = (
+  tallies: SourceSyncTallies,
+  sourceCalendarId: string | null | undefined,
+  field: keyof SourceSyncTally,
+): void => {
+  if (!sourceCalendarId) {
+    return;
+  }
+  const tally = tallies[sourceCalendarId] ?? { added: 0, failed: 0, removed: 0, updated: 0 };
+  tally[field] += 1;
+  tallies[sourceCalendarId] = tally;
+};
+
+const mergeSourceTallies = (target: SourceSyncTallies, source: SourceSyncTallies): void => {
+  for (const [sourceCalendarId, tally] of Object.entries(source)) {
+    const current = target[sourceCalendarId] ?? { added: 0, failed: 0, removed: 0, updated: 0 };
+    target[sourceCalendarId] = {
+      added: current.added + tally.added,
+      failed: current.failed + tally.failed,
+      removed: current.removed + tally.removed,
+      updated: current.updated + tally.updated,
+    };
+  }
+};
+
+const isEnteringWindow = (event: MaterializedSyncableEvent, window: SyncWindow | null): boolean =>
+  window !== null && event.startTime.getTime() >= window.timeMax.getTime() - WINDOW_ENTRY_MARGIN_MS;
+
+const isLeavingWindow = (mapping: EventMapping, window: SyncWindow | null): boolean =>
+  window !== null && !overlapsTimeWindow(mapping, window.timeMin, window.timeMax);
+
+const tallyAddResults = (
+  adds: Extract<SyncOperation, { type: "add" }>[],
+  pushResults: PushResult[],
+  attribution: SourceAttribution,
+): SourceSyncTallies => {
+  const tallies: SourceSyncTallies = {};
+  for (const [index, operation] of adds.entries()) {
+    const pushResult = pushResults[index];
+    const sourceCalendarId = operation.event.calendarId;
+    if (!pushResult?.success) {
+      tallySource(tallies, sourceCalendarId, "failed");
+    } else if (pushResult.remoteId && operation.staleMappingId) {
+      tallySource(tallies, sourceCalendarId, "updated");
+    } else if (pushResult.remoteId && !isEnteringWindow(operation.event, attribution.requestedWindow)) {
+      tallySource(tallies, sourceCalendarId, "added");
+    }
+  }
+  return tallies;
+};
+
+const findRemovedMapping = (
+  operation: Extract<SyncOperation, { type: "remove" }>,
+  attribution: SourceAttribution,
+): EventMapping | undefined => {
+  if (operation.mappingId) {
+    return attribution.mappingsById.get(operation.mappingId);
+  }
+  return attribution.mappingsByRemoteIdentity.get(`${operation.uid}\u0000${operation.deleteId}`);
+};
+
+// Window cleanup and orphaned copies with no mapping are nobody's doing, so they count against no source.
+const tallyRemoveResults = (
+  removes: Extract<SyncOperation, { type: "remove" }>[],
+  deleteResults: DeleteResult[],
+  attribution: SourceAttribution,
+): SourceSyncTallies => {
+  const tallies: SourceSyncTallies = {};
+  for (const [index, operation] of removes.entries()) {
+    const mapping = findRemovedMapping(operation, attribution);
+    if (!deleteResults[index]?.success) {
+      tallySource(tallies, mapping?.sourceCalendarId, "failed");
+    } else if (mapping && !isLeavingWindow(mapping, attribution.requestedWindow)) {
+      tallySource(tallies, mapping.sourceCalendarId, "removed");
+    }
+  }
+  return tallies;
+};
 
 const SYNC_PHASES = [
   "read_state",
@@ -393,6 +492,7 @@ interface ExecuteRemoteResult {
   conflictsResolved: number;
   errors: OperationError[];
   pushEcho: PushEchoCounts;
+  sources: SourceSyncTallies;
   superseded: boolean;
   checkpointRejected: boolean;
   updateFallbacks: number;
@@ -404,6 +504,7 @@ interface RunResult {
   conflictsResolved: number;
   errors: OperationError[];
   pushEcho?: PushEchoCounts;
+  sources?: SourceSyncTallies;
 }
 
 interface UpdateRunResult {
@@ -415,6 +516,7 @@ const executeAddRun = async (
   adds: Extract<SyncOperation, { type: "add" }>[],
   calendarId: string,
   provider: CalendarSyncProvider,
+  attribution: SourceAttribution,
 ): Promise<RunResult> => {
   const addEvents = adds.map((op) => op.event);
   const pushResults = await provider.pushEvents(addEvents);
@@ -427,6 +529,7 @@ const executeAddRun = async (
     conflictsResolved,
     errors,
     pushEcho,
+    sources: tallyAddResults(adds, pushResults, attribution),
   };
 };
 
@@ -442,6 +545,12 @@ const executeUpdateRun = async (
   const { updated, conflictsResolved, changes, errors, unresolved } = processUpdateResults(replacements, pushResults);
   const pushEcho = createPushEchoCounts();
   tallyPushEcho(pushEcho, pushResults);
+  const sources: SourceSyncTallies = {};
+  for (const [index, operation] of replacements.entries()) {
+    if (pushResults[index]?.success) {
+      tallySource(sources, operation.event.calendarId, "updated");
+    }
+  }
   return {
     runResult: {
       changes,
@@ -449,6 +558,7 @@ const executeUpdateRun = async (
       conflictsResolved,
       errors,
       pushEcho,
+      sources,
     },
     unresolved,
   };
@@ -458,6 +568,7 @@ const executeRemoveRun = async (
   removes: Extract<SyncOperation, { type: "remove" }>[],
   provider: CalendarSyncProvider,
   mappingsByRemoteIdentity: Map<string, EventMapping>,
+  attribution: SourceAttribution,
 ): Promise<RunResult> => {
   const idsToDelete = removes.map((op) => op.deleteId);
   const deleteResults = await provider.deleteEvents(idsToDelete);
@@ -467,6 +578,7 @@ const executeRemoveRun = async (
     result: { added: 0, addFailed: 0, removed, removeFailed },
     conflictsResolved: 0,
     errors,
+    sources: tallyRemoveResults(removes, deleteResults, attribution),
   };
 };
 
@@ -490,6 +602,9 @@ const mergeRunResult = (
   };
   state.conflictsResolved += runResult.conflictsResolved;
   state.errors.push(...runResult.errors);
+  if (runResult.sources) {
+    mergeSourceTallies(state.sources, runResult.sources);
+  }
   if (runResult.pushEcho) {
     for (const key of Object.keys(state.pushEcho) as (keyof PushEchoCounts)[]) {
       state.pushEcho[key] += runResult.pushEcho[key];
@@ -522,6 +637,8 @@ interface ChunkedExecutionState {
   errors: OperationError[];
   processed: number;
   pushEcho: PushEchoCounts;
+  sources: SourceSyncTallies;
+  attribution: SourceAttribution;
   superseded: boolean;
   checkpointRejected: boolean;
   protectedRemoteUids: Set<string>;
@@ -575,7 +692,7 @@ const executeAdds = async (
     return;
   }
 
-  const runResult = await executeAddRun(adds, calendarId, provider);
+  const runResult = await executeAddRun(adds, calendarId, provider, state.attribution);
   mergeRunResult(state, runResult);
   if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
     return;
@@ -601,7 +718,7 @@ const executeRemoves = async (
 
   const actionable = removes.filter((operation) => !state.protectedRemoteUids.has(operation.uid));
   if (actionable.length > 0) {
-    const runResult = await executeRemoveRun(actionable, provider, mappingsByRemoteIdentity);
+    const runResult = await executeRemoveRun(actionable, provider, mappingsByRemoteIdentity, state.attribution);
     mergeRunResult(state, runResult);
     if (!(await checkpointRun(state, runResult.changes, checkpoint))) {
       return;
@@ -628,6 +745,19 @@ const replaceViaDeleteThenAdd = async (
   }));
   const deleteResults = await provider.deleteEvents(removes.map((operation) => operation.deleteId));
   const processedRemoves = processDeleteResults(removes, deleteResults, mappingsByRemoteIdentity);
+  const failedDeletes: SourceSyncTallies = {};
+  const adds: Extract<SyncOperation, { type: "add" }>[] = [];
+  for (const [index, replacement] of replacements.entries()) {
+    if (deleteResults[index]?.success) {
+      adds.push({
+        event: replacement.event,
+        staleMappingId: replacement.staleMappingId,
+        type: "add",
+      });
+    } else {
+      tallySource(failedDeletes, replacement.event.calendarId, "failed");
+    }
+  }
   mergeRunResult(state, {
     changes: { inserts: [], deletes: processedRemoves.deleteIds },
     result: {
@@ -638,24 +768,11 @@ const replaceViaDeleteThenAdd = async (
     },
     conflictsResolved: 0,
     errors: processedRemoves.errors,
+    sources: failedDeletes,
   }, false);
 
-  const adds: Extract<SyncOperation, { type: "add" }>[] = [];
-  for (let index = 0; index < replacements.length; index++) {
-    if (deleteResults[index]?.success) {
-      const replacement = replacements[index];
-      if (replacement) {
-        adds.push({
-          event: replacement.event,
-          staleMappingId: replacement.staleMappingId,
-          type: "add",
-        });
-      }
-    }
-  }
-
   if (adds.length > 0) {
-    const addResult = await executeAddRun(adds, calendarId, provider);
+    const addResult = await executeAddRun(adds, calendarId, provider, state.attribution);
     mergeRunResult(state, addResult);
     if (!(await checkpointRun(state, addResult.changes, checkpoint))) {
       return false;
@@ -747,6 +864,7 @@ const executeRemoteOperations = async (
   isCurrent?: () => Promise<boolean>,
   onRunComplete?: ProgressCallback,
   checkpoint?: CheckpointCallback,
+  requestedWindow: SyncWindow | null = null,
 ): Promise<ExecuteRemoteResult> => {
   const mappingsByRemoteIdentity = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
@@ -765,6 +883,12 @@ const executeRemoteOperations = async (
     errors: [],
     processed: 0,
     pushEcho: createPushEchoCounts(),
+    sources: {},
+    attribution: {
+      mappingsById: new Map(existingMappings.map((mapping) => [mapping.id, mapping])),
+      mappingsByRemoteIdentity,
+      requestedWindow,
+    },
     superseded: false,
     checkpointRejected: false,
     protectedRemoteUids: new Set<string>(),
@@ -834,6 +958,7 @@ const executeRemoteOperations = async (
     conflictsResolved: state.conflictsResolved,
     errors: state.errors,
     pushEcho: state.pushEcho,
+    sources: state.sources,
     superseded: state.superseded,
     checkpointRejected: state.checkpointRejected,
     updateFallbacks: state.updateFallbacks,
@@ -859,18 +984,21 @@ interface SyncCalendarOptions {
 interface SyncCalendarResult extends SyncResult {
   conflictsResolved: number;
   errors: string[];
+  // What each source calendar's events did to the destination; updates and the moving window are kept out of added and removed.
+  sources: SourceSyncTallies;
   writeAccessDenied: boolean;
 }
 
-const EMPTY_RESULT: SyncCalendarResult = {
+const createEmptyResult = (): SyncCalendarResult => ({
   added: 0,
   addFailed: 0,
   removed: 0,
   removeFailed: 0,
   conflictsResolved: 0,
   errors: [],
+  sources: {},
   writeAccessDenied: false,
-};
+});
 
 const appendDatabaseErrorFields = (
   event: Record<string, unknown>,
@@ -1028,7 +1156,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     if (!stillCurrent) {
       wideEvent["outcome"] = "superseded";
       wideEvent["flushed"] = false;
-      return EMPTY_RESULT;
+      return createEmptyResult();
     }
 
     emitProgress("comparing", localEvents.length, state.remoteEvents.length);
@@ -1065,7 +1193,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["events.add_failed"] = 0;
       wideEvent["events.removed"] = 0;
       wideEvent["events.remove_failed"] = 0;
-      return EMPTY_RESULT;
+      return createEmptyResult();
     }
 
     emitProgress("processing", localEvents.length, state.remoteEvents.length, {
@@ -1090,6 +1218,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         flushed = true;
         return true;
       },
+      reconciliationScope.requestedWindow,
     );
 
     wideEvent["events.added"] = outcome.result.added;
@@ -1125,6 +1254,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       ...outcome.result,
       conflictsResolved: outcome.conflictsResolved,
       errors: errorMessages,
+      sources: outcome.sources,
       writeAccessDenied: outcome.errors.some((operationError) => operationError.writeAccessDenied === true),
     };
   } catch (error) {
@@ -1159,4 +1289,11 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 };
 
 export { executeRemoteOperations, syncCalendar, OPERATION_ERROR_SAMPLE_SIZE };
-export type { CalendarSyncProvider, PendingChanges, SyncCalendarOptions };
+export type {
+  CalendarSyncProvider,
+  PendingChanges,
+  SourceSyncTallies,
+  SourceSyncTally,
+  SyncCalendarOptions,
+  SyncCalendarResult,
+};
