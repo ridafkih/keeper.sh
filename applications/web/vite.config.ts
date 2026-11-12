@@ -7,6 +7,8 @@ import react, { reactCompilerPreset } from '@vitejs/plugin-react'
 import babel from '@rolldown/plugin-babel'
 import { blogPlugin, comparePlugin, docsPlugin, guidesPlugin, movedPathsPlugin, recipesPlugin } from "./plugins/blog";
 import { changelogPlugin } from "./plugins/changelog";
+import { llmsTxtPlugin } from "./plugins/llms-txt";
+import { marketingPlugin } from "./plugins/marketing";
 import { feedPlugin } from "./plugins/feed";
 import { changelogFeedPlugin } from "./plugins/changelog-feed";
 import { sitemapPlugin } from "./plugins/sitemap";
@@ -20,6 +22,7 @@ export default defineConfig(({ isSsrBuild }) => ({
   plugins: [
     blogPlugin(),
     changelogPlugin(),
+    marketingPlugin(),
     comparePlugin(),
     docsPlugin(),
     guidesPlugin(),
@@ -42,6 +45,7 @@ export default defineConfig(({ isSsrBuild }) => ({
     !isSsrBuild && sitemapPlugin(),
     !isSsrBuild && feedPlugin(),
     !isSsrBuild && changelogFeedPlugin(),
+    !isSsrBuild && llmsTxtPlugin(),
   ].filter(Boolean),
   build: {
     manifest: !isSsrBuild,

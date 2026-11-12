@@ -14,17 +14,20 @@ const CALENDAR_ID = "calendar-id";
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   fetchCalendarObjects: vi.fn(),
-  fetchCalendars: vi.fn(),
+  listCalendars: vi.fn(),
 }));
 
-vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve({
-    calendarQuery: davMocks.calendarQuery,
-    fetchCalendarObjects: davMocks.fetchCalendarObjects,
-    fetchCalendars: davMocks.fetchCalendars,
-  }),
-}));
+vi.mock("tsdav", async () => {
+  const { answerDiscoveryPropfind } = await import("../../providers/caldav/discovery-propfind");
+  return {
+    DAVNamespaceShort: { DAV: "d" },
+    createDAVClient: () => Promise.resolve({
+      calendarQuery: davMocks.calendarQuery,
+      fetchCalendarObjects: davMocks.fetchCalendarObjects,
+      propfind: answerDiscoveryPropfind(() => davMocks.listCalendars()),
+    }),
+  };
+});
 
 const storedEvent = (
   overrides: Partial<StoredSourceEventState> & Pick<StoredSourceEventState, "id">,
@@ -382,7 +385,7 @@ const createCalDAVFetcher = () => createCalDAVSourceFetcher({
 describe("CalDAV discards", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    davMocks.fetchCalendars.mockResolvedValue([]);
+    davMocks.listCalendars.mockResolvedValue([]);
   });
 
   it("fails the run instead of deleting the stored event of an unreadable resource", async () => {

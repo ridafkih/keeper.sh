@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   type MappingMutationSyncLock,
+  runChangeDestinationsForSource,
   runSetDestinationsForSource,
   runSetSourcesForDestination,
   runWithMappingMutationLocks,
 } from "../../src/utils/source-destination-mappings";
+import {
+  describeMappingChange,
+  listNewlyMappedIds,
+  listNewlyMappedSourcesOfSource,
+} from "../../src/utils/mapping-change";
 
 const createMappingKey = (sourceCalendarId: string, destinationCalendarId: string): string =>
   `${sourceCalendarId}::${destinationCalendarId}`;
@@ -202,6 +208,7 @@ describe("runSetDestinationsForSource", () => {
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
             findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
+            listSourceDestinationIds: () => Promise.resolve([]),
             replaceSourceMappings: () => Promise.resolve(),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
             sourceExists: () => Promise.resolve(false),
@@ -219,6 +226,7 @@ describe("runSetDestinationsForSource", () => {
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
             findOwnedDestinationIds: () => Promise.resolve(["dest-1"]),
+            listSourceDestinationIds: () => Promise.resolve([]),
             replaceSourceMappings: () => Promise.resolve(),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
             sourceExists: () => Promise.resolve(true),
@@ -242,6 +250,7 @@ describe("runSetDestinationsForSource", () => {
             return Promise.resolve();
           },
           findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-2"]),
+          listSourceDestinationIds: () => Promise.resolve([]),
           replaceSourceMappings: (_sourceCalendarId, destinationIds) => {
             operationLog.push(`replace:${destinationIds.join(",")}`);
             return Promise.resolve();
@@ -270,7 +279,7 @@ describe("runSetDestinationsForSource", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
-            countMappingsForSource: () => Promise.resolve(1),
+            listSourceDestinationIds: () => Promise.resolve(["dest-0"]),
             countUserMappings: () => Promise.resolve(3),
             ensureDestinationSyncStatuses: () => Promise.resolve(),
             findOwnedDestinationIds: () => Promise.resolve(["dest-1", "dest-2", "dest-3"]),
@@ -303,6 +312,7 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
+        listSourceDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
         replaceSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
@@ -321,6 +331,7 @@ describe("mapping transaction adversarial behavior", () => {
           ensureDestinationSyncStatuses: () => Promise.resolve(),
           findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
             Promise.resolve(destinationCalendarIds),
+          listSourceDestinationIds: () => Promise.resolve([]),
           replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
             const mappingKeys = [...draftMappings];
             for (const mappingKey of mappingKeys) {
@@ -372,6 +383,7 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
+        listSourceDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
         replaceSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
@@ -386,6 +398,7 @@ describe("mapping transaction adversarial behavior", () => {
           Promise.reject(new Error("status upsert failed")),
         findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
           Promise.resolve(destinationCalendarIds),
+        listSourceDestinationIds: () => Promise.resolve([]),
         replaceSourceMappings: (sourceCalendarId, destinationCalendarIds) => {
           const mappingKeys = [...draftMappings];
           for (const mappingKey of mappingKeys) {
@@ -430,6 +443,7 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           destinationCalendarIds: string[],
         ) => Promise<string[]>;
+        listSourceDestinationIds: (sourceCalendarId: string) => Promise<string[]>;
         replaceSourceMappings: (
           sourceCalendarId: string,
           destinationCalendarIds: string[],
@@ -447,6 +461,7 @@ describe("mapping transaction adversarial behavior", () => {
           ensureDestinationSyncStatuses: () => Promise.resolve(),
           findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
             Promise.resolve(destinationCalendarIds),
+          listSourceDestinationIds: () => Promise.resolve([]),
           replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
             const mappingKeys = [...mappings];
             for (const mappingKey of mappingKeys) {
@@ -478,6 +493,7 @@ describe("mapping transaction adversarial behavior", () => {
           userId: string,
           sourceCalendarIds: string[],
         ) => Promise<string[]>;
+        listDestinationSourceIds: (destinationCalendarId: string) => Promise<string[]>;
         replaceDestinationMappings: (
           destinationCalendarId: string,
           sourceCalendarIds: string[],
@@ -496,6 +512,7 @@ describe("mapping transaction adversarial behavior", () => {
           ensureDestinationSyncStatus: () => Promise.resolve(),
           findOwnedSourceIds: (_userId, sourceCalendarIds) =>
             Promise.resolve(sourceCalendarIds),
+          listDestinationSourceIds: () => Promise.resolve([]),
           replaceDestinationMappings: async (destinationCalendarId, sourceCalendarIds) => {
             const mappingKeys = [...mappings];
             for (const mappingKey of mappingKeys) {
@@ -553,6 +570,7 @@ describe("runSetSourcesForDestination", () => {
             destinationExists: () => Promise.resolve(false),
             ensureDestinationSyncStatus: () => Promise.resolve(),
             findOwnedSourceIds: () => Promise.resolve(["source-1"]),
+            listDestinationSourceIds: () => Promise.resolve([]),
             replaceDestinationMappings: () => Promise.resolve(),
           }),
       }),
@@ -568,6 +586,7 @@ describe("runSetSourcesForDestination", () => {
             destinationExists: () => Promise.resolve(true),
             ensureDestinationSyncStatus: () => Promise.resolve(),
             findOwnedSourceIds: () => Promise.resolve(["source-1"]),
+            listDestinationSourceIds: () => Promise.resolve([]),
             replaceDestinationMappings: () => Promise.resolve(),
           }),
       }),
@@ -590,6 +609,7 @@ describe("runSetSourcesForDestination", () => {
             return Promise.resolve();
           },
           findOwnedSourceIds: () => Promise.resolve([]),
+          listDestinationSourceIds: () => Promise.resolve([]),
           replaceDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
             operationLog.push(`replace:${sourceCalendarIds.length}`);
             return Promise.resolve();
@@ -621,6 +641,7 @@ describe("runSetSourcesForDestination", () => {
             return Promise.resolve();
           },
           findOwnedSourceIds: () => Promise.resolve(["source-1"]),
+          listDestinationSourceIds: () => Promise.resolve([]),
           replaceDestinationMappings: (_destinationCalendarId, sourceCalendarIds) => {
             operationLog.push(`replace:${sourceCalendarIds.join(",")}`);
             return Promise.resolve();
@@ -642,7 +663,7 @@ describe("runSetSourcesForDestination", () => {
         withTransaction: (transactionCallback) =>
           transactionCallback({
             acquireUserLock: () => Promise.resolve(),
-            countMappingsForDestination: () => Promise.resolve(1),
+            listDestinationSourceIds: () => Promise.resolve(["source-0"]),
             countUserMappings: () => Promise.resolve(3),
             destinationExists: () => Promise.resolve(true),
             ensureDestinationSyncStatus: () => Promise.resolve(),
@@ -657,5 +678,136 @@ describe("runSetSourcesForDestination", () => {
 
     expect(replaceCalled).toBe(false);
 
+  });
+});
+
+describe("toggling one mapping at a time", () => {
+  const createSourceStore = (initial: string[]) => {
+    let mappings = new Set(initial.map((destinationId) => createMappingKey("source-1", destinationId)));
+    const lockManager = createUserLockManager();
+
+    const withTransaction = async <TResult>(
+      transactionCallback: Parameters<Parameters<typeof runChangeDestinationsForSource>[3]["withTransaction"]>[0],
+    ): Promise<TResult> => {
+      let draftMappings = new Set(mappings);
+      let releaseLock: () => void = releaseLockNoop;
+      try {
+        const result = await transactionCallback({
+          acquireUserLock: async (userId) => {
+            releaseLock = await lockManager.acquire(userId);
+            draftMappings = new Set(mappings);
+          },
+          ensureDestinationSyncStatuses: () => Promise.resolve(),
+          findOwnedDestinationIds: (_userId, destinationCalendarIds) =>
+            Promise.resolve(destinationCalendarIds),
+          listSourceDestinationIds: (sourceCalendarId) =>
+            Promise.resolve(collectDestinationIds(draftMappings, sourceCalendarId)),
+          replaceSourceMappings: async (sourceCalendarId, destinationCalendarIds) => {
+            for (const mappingKey of new Set(draftMappings)) {
+              if (parseMappingKey(mappingKey).sourceCalendarId === sourceCalendarId) {
+                draftMappings.delete(mappingKey);
+              }
+            }
+            await new Promise((resolve) => { setTimeout(resolve, 5); });
+            for (const destinationCalendarId of destinationCalendarIds) {
+              draftMappings.add(createMappingKey(sourceCalendarId, destinationCalendarId));
+            }
+          },
+          sourceExists: () => Promise.resolve(true),
+        });
+        mappings = draftMappings;
+        return result as TResult;
+      } finally {
+        releaseLock();
+      }
+    };
+
+    return { read: () => collectDestinationIds(mappings, "source-1"), withTransaction };
+  };
+
+  it("keeps every destination toggled on in the same tick", async () => {
+    const store = createSourceStore([]);
+
+    await Promise.all([
+      runChangeDestinationsForSource("user-1", "source-1", { calendarId: "dest-a", enabled: true, kind: "toggle" }, store),
+      runChangeDestinationsForSource("user-1", "source-1", { calendarId: "dest-b", enabled: true, kind: "toggle" }, store),
+    ]);
+
+    expect(store.read()).toEqual(["dest-a", "dest-b"]);
+  });
+
+  it("removes only the toggled destination and reports the mapping before and after", async () => {
+    const store = createSourceStore(["dest-a", "dest-b"]);
+
+    const result = await runChangeDestinationsForSource(
+      "user-1",
+      "source-1",
+      { calendarId: "dest-a", enabled: false, kind: "toggle" },
+      store,
+    );
+
+    expect(store.read()).toEqual(["dest-b"]);
+    expect(result).toEqual({ nextIds: ["dest-b"], previousIds: ["dest-a", "dest-b"] });
+  });
+
+  it("lets a user over the mapping limit remove a mapping", async () => {
+    const result = await runChangeDestinationsForSource(
+      "user-1",
+      "source-1",
+      { calendarId: "dest-a", enabled: false, kind: "toggle" },
+      {
+        resolveMappingLimit: () => Promise.resolve(0),
+        withTransaction: (transactionCallback) =>
+          transactionCallback({
+            acquireUserLock: () => Promise.resolve(),
+            countUserMappings: () => Promise.resolve(5),
+            ensureDestinationSyncStatuses: () => Promise.resolve(),
+            findOwnedDestinationIds: () => Promise.resolve([]),
+            listSourceDestinationIds: () => Promise.resolve(["dest-a", "dest-b"]),
+            replaceSourceMappings: () => Promise.resolve(),
+            sourceExists: () => Promise.resolve(true),
+          }),
+      },
+    );
+
+    expect(result.nextIds).toEqual(["dest-b"]);
+  });
+});
+
+describe("sources a mapping change asks to read now", () => {
+  it("reads the source when it gains a destination", () => {
+    expect(listNewlyMappedSourcesOfSource("source-1", { nextIds: ["dest-1", "dest-2"], previousIds: ["dest-1"] }))
+      .toEqual(["source-1"]);
+  });
+
+  it("reads nothing when the source only loses destinations", () => {
+    expect(listNewlyMappedSourcesOfSource("source-1", { nextIds: [], previousIds: ["dest-1"] })).toEqual([]);
+  });
+
+  it("reads each source a destination gains", () => {
+    expect(listNewlyMappedIds({ nextIds: ["source-1", "source-2"], previousIds: ["source-1"] }))
+      .toEqual(["source-2"]);
+  });
+});
+
+describe("describeMappingChange", () => {
+  it("records how many mappings a save added and removed", () => {
+    expect(describeMappingChange(
+      { calendarIds: ["dest-2", "dest-3"], kind: "replace" },
+      { nextIds: ["dest-2", "dest-3"], previousIds: ["dest-1", "dest-2"] },
+    )).toEqual({
+      "mappings.added_count": 1,
+      "mappings.after_count": 2,
+      "mappings.before_count": 2,
+      "mappings.change": "replace",
+      "mappings.removed_count": 1,
+    });
+  });
+
+  it("records a toggle that changed nothing", () => {
+    expect(describeMappingChange(
+      { calendarId: "dest-1", enabled: true, kind: "toggle" },
+      { nextIds: ["dest-1"], previousIds: ["dest-1"] },
+    )).toMatchObject({ "mappings.added_count": 0, "mappings.change": "toggle", "mappings.removed_count": 0 });
   });
 });

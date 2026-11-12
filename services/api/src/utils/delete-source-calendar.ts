@@ -3,14 +3,20 @@ interface DeleteSourceCalendarContext {
   userId: string;
 }
 
+interface DeletionCandidate {
+  capabilities: string[];
+  missingAtProvider: boolean;
+}
+
+type DeleteSourceCalendarOutcome = "deleted" | "not-found" | "receives-events";
+
 const DEREGISTRATION_FAILED_SLUG = "webhook-deregistration-failed";
 const PUSH_CAPABILITY = "push";
 
 interface DeleteSourceCalendarDependencies {
   deleteCalendarRow: (context: DeleteSourceCalendarContext) => Promise<boolean>;
   deregisterPushChannels: (calendarId: string) => Promise<number>;
-  isOwnedByUser: (context: DeleteSourceCalendarContext) => Promise<boolean>;
-  loadCapabilities: (context: DeleteSourceCalendarContext) => Promise<string[]>;
+  loadCandidate: (context: DeleteSourceCalendarContext) => Promise<DeletionCandidate | null>;
   recordError: (error: unknown, slug: string) => void;
 }
 
@@ -25,23 +31,35 @@ const stopPushChannels = async (
   }
 };
 
+const isDeletable = (candidate: DeletionCandidate): boolean =>
+  candidate.missingAtProvider || !candidate.capabilities.includes(PUSH_CAPABILITY);
+
 const runDeleteSourceCalendar = async (
   context: DeleteSourceCalendarContext,
   dependencies: DeleteSourceCalendarDependencies,
-): Promise<boolean> => {
-  if (!await dependencies.isOwnedByUser(context)) {
-    return false;
+): Promise<DeleteSourceCalendarOutcome> => {
+  const candidate = await dependencies.loadCandidate(context);
+  if (!candidate) {
+    return "not-found";
   }
 
-  const capabilities = await dependencies.loadCapabilities(context);
-  if (capabilities.includes(PUSH_CAPABILITY)) {
-    return false;
+  if (!isDeletable(candidate)) {
+    return "receives-events";
   }
 
   await stopPushChannels(context.calendarId, dependencies);
 
-  return await dependencies.deleteCalendarRow(context);
+  if (!await dependencies.deleteCalendarRow(context)) {
+    return "not-found";
+  }
+
+  return "deleted";
 };
 
 export { DEREGISTRATION_FAILED_SLUG, runDeleteSourceCalendar };
-export type { DeleteSourceCalendarContext, DeleteSourceCalendarDependencies };
+export type {
+  DeleteSourceCalendarContext,
+  DeleteSourceCalendarDependencies,
+  DeleteSourceCalendarOutcome,
+  DeletionCandidate,
+};

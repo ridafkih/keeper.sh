@@ -22,6 +22,7 @@ type MarketingPricingPlanCardProps = {
   period: string;
   description: string;
   ctaLabel: string;
+  headingLevel?: "h2" | "h3";
   /**
    * Short differentiating bullets, rendered below `md` only. Above `md` the
    * feature matrix does the comparing, so the two never appear together. Omit
@@ -152,6 +153,7 @@ export function MarketingPricingPlanCard({
   period,
   description,
   ctaLabel,
+  headingLevel = "h3",
   features,
 }: MarketingPricingPlanCardProps) {
   const copyTone = resolveCopyTone(tone);
@@ -159,7 +161,7 @@ export function MarketingPricingPlanCard({
   return (
     <MarketingPricingCard tone={tone}>
       <MarketingPricingCardBody>
-        <Heading3 className={pricingPlanHeading({ tone })}>{name}</Heading3>
+        <Heading3 as={headingLevel} className={pricingPlanHeading({ tone })}>{name}</Heading3>
         <div className="flex items-baseline gap-1">
           <Heading2 as="p" className={pricingPlanHeading({ tone })}>{price}</Heading2>
           <Text size="sm" tone={copyTone} align="left">

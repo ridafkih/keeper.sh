@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createCalDAVEvent, updateCalDAVEvent, deleteCalDAVEvent, rsvpCalDAVEvent, getPendingCalDAVInvites } from "../../../src/mutations/providers/caldav";
+import { completeUpdateRange } from "../../../src/mutations";
 
 const {
   createCalendarObjectMock,
@@ -124,6 +125,22 @@ describe("caldav provider mutations", () => {
       expect(result.success).toBe(true);
     });
 
+    it("looks the event up by UID when it is not at the Keeper.sh object URL", async () => {
+      fetchCalendarObjectsMock
+        .mockRejectedValueOnce(new Error("404"))
+        .mockResolvedValueOnce([
+          { url: "https://dav.com/cal/server-assigned.ics", data: "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:uid\nEND:VEVENT\nEND:VCALENDAR" },
+        ]);
+
+      const result = await updateCalDAVEvent(mockCredentials, "uid", { title: "New" });
+
+      expect(result.success).toBe(true);
+      expect(fetchCalendarObjectsMock.mock.calls[1]?.[0]?.filters).toBeDefined();
+      expect(updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.url).toBe(
+        "https://dav.com/cal/server-assigned.ics",
+      );
+    });
+
     it("emits a TZID-qualified DTSTART when the update carries a timezone", async () => {
       const result = await updateCalDAVEvent(mockCredentials, "uid", {
         startTime: "2026-06-17T10:45:00Z",
@@ -166,10 +183,87 @@ describe("caldav provider mutations", () => {
     });
   });
 
+  describe("a zone-only update", () => {
+    const storedRange = {
+      endTime: new Date("2026-11-05T15:00:00.000Z"),
+      startTime: new Date("2026-11-05T14:00:00.000Z"),
+    };
+
+    const torontoEvent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Test//Test//EN",
+      "BEGIN:VEVENT",
+      "UID:uid",
+      "SUMMARY:Existing",
+      "DTSTART;TZID=America/Toronto:20261105T090000",
+      "DTEND;TZID=America/Toronto:20261105T100000",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+
+    it("fills both stored instants when only the timezone changes", () => {
+      expect(completeUpdateRange({ startTimeZone: "America/Edmonton" }, storedRange)).toEqual({
+        endTime: "2026-11-05T15:00:00.000Z",
+        startTime: "2026-11-05T14:00:00.000Z",
+        startTimeZone: "America/Edmonton",
+      });
+    });
+
+    it("leaves an update without time or timezone changes as it is", () => {
+      expect(completeUpdateRange({ title: "Renamed" }, storedRange)).toEqual({ title: "Renamed" });
+    });
+
+    it("re-expresses the stored instants in the new timezone on the server", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([{ url: "url", data: torontoEvent }]);
+
+      const result = await updateCalDAVEvent(
+        mockCredentials,
+        "uid",
+        completeUpdateRange({ startTimeZone: "America/Edmonton" }, storedRange),
+      );
+      const icsString = String(updateCalendarObjectMock.mock.calls[0]?.[0]?.calendarObject?.data ?? "");
+
+      expect(result.success).toBe(true);
+      expect({
+        end: /^DTEND[^\r\n]*/m.exec(icsString)?.[0],
+        start: /^DTSTART[^\r\n]*/m.exec(icsString)?.[0],
+      }).toEqual({
+        end: "DTEND;TZID=America/Edmonton:20261105T090000",
+        start: "DTSTART;TZID=America/Edmonton:20261105T080000",
+      });
+    });
+  });
+
   describe("deleteCalDAVEvent", () => {
     it("deletes event", async () => {
       const result = await deleteCalDAVEvent(mockCredentials, "uid");
       expect(result.success).toBe(true);
+      expect(deleteCalendarObjectMock).toHaveBeenCalledWith({ calendarObject: { url: "url" } });
+    });
+
+    it("deletes an event stored at a server-assigned href", async () => {
+      fetchCalendarObjectsMock
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { url: "https://dav.com/cal/server-assigned.ics", data: "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:uid\nEND:VEVENT\nEND:VCALENDAR" },
+        ]);
+
+      const result = await deleteCalDAVEvent(mockCredentials, "uid");
+
+      expect(result.success).toBe(true);
+      expect(deleteCalendarObjectMock).toHaveBeenCalledWith({
+        calendarObject: { url: "https://dav.com/cal/server-assigned.ics" },
+      });
+    });
+
+    it("fails when no object on the server has the UID", async () => {
+      fetchCalendarObjectsMock.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      const result = await deleteCalDAVEvent(mockCredentials, "uid");
+
+      expect(result).toEqual({ success: false, error: "Event not found on CalDAV server." });
+      expect(deleteCalendarObjectMock).not.toHaveBeenCalled();
     });
   });
 

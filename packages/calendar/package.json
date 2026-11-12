@@ -15,7 +15,7 @@
   },
   "scripts": {
     "types": "tsc --noEmit",
-    "test": "TZ=UTC bun x --bun vitest run",
+    "test": "TZ=UTC ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run",
     "lint": "oxlint ."
   },
   "dependencies": {
@@ -27,6 +27,7 @@
     "entities": "^7.0.1",
     "fast-json-stable-stringify": "^2.1.0",
     "htmlparser2": "^10.1.0",
+    "ical.js": "2.2.1",
     "ioredis": "^5.10.0",
     "ipaddr.js": "^2.3.0",
     "rrule": "^2.8.1",

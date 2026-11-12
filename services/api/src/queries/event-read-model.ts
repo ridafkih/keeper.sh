@@ -1,6 +1,5 @@
 import {
   materializeRecurrenceEvents,
-  overlapsRepresentableTimeWindow,
   parseStoredRecurrenceForMaterialization,
   REPRESENTABLE_RANGE_SLACK_MS,
   resolveIsAllDayEvent,
@@ -9,6 +8,7 @@ import {
 import type { MaterializedSyncableEvent, SyncableEvent } from "@keeper.sh/calendar";
 
 import type { KeeperEvent, KeeperEventFilters } from "@/types";
+import { overlapsViewerReadWindow } from "./viewer-read-window";
 
 const API_OCCURRENCE_PREFIX = "occurrence";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -230,6 +230,7 @@ const materializeSyncedEvents = (
   sourceMap: Map<string, SourceInfo>,
   windowStart: Date,
   windowEnd: Date,
+  timeZone?: string,
 ): MaterializedSyncableEvent[] => {
   const events = rows.flatMap((row) => {
     const source = sourceMap.get(row.calendarId);
@@ -247,7 +248,7 @@ const materializeSyncedEvents = (
   });
 
   return occurrences.filter((occurrence) =>
-    overlapsRepresentableTimeWindow(occurrence, windowStart, exclusiveWindowEnd));
+    overlapsViewerReadWindow(occurrence, windowStart, exclusiveWindowEnd, timeZone));
 };
 
 const projectSyncedEvents = (
@@ -256,8 +257,9 @@ const projectSyncedEvents = (
   windowStart: Date,
   windowEnd: Date,
   filters?: KeeperEventFilters,
+  timeZone?: string,
 ): KeeperEventProjection[] =>
-  materializeSyncedEvents(rows, sourceMap, windowStart, windowEnd)
+  materializeSyncedEvents(rows, sourceMap, windowStart, windowEnd, timeZone)
     .filter((occurrence) => isIncludedByFilters(occurrence, filters))
     .map((occurrence) => toSyncedProjection(occurrence));
 

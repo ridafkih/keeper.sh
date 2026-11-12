@@ -3,8 +3,14 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import useSWR, { preload, useSWRConfig } from "swr";
 import CheckIcon from "lucide-react/dist/esm/icons/check";
 import { useAtomValue, useStore } from "jotai";
-import type { SyncRange } from "@keeper.sh/data-schemas";
-import { useEntitlements, useMutateEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import {
+  MAX_EXCLUDE_TITLE_KEYWORDS,
+  MAX_EXCLUDE_TITLE_KEYWORD_LENGTH,
+  getExcludableAvailabilities,
+} from "@keeper.sh/data-schemas";
+import type { ExcludableAvailability, SyncRange } from "@keeper.sh/data-schemas";
+import { useEntitlements, canAddMore } from "@/hooks/use-entitlements";
+import { useMappingToggles } from "@/hooks/use-mapping-toggles";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { PageBody } from "@/components/ui/primitives/page-body";
 import { StickyPageHeader } from "@/components/ui/primitives/sticky-page-header";
@@ -19,11 +25,19 @@ import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
 import { DashboardHeading1, DashboardSection } from "@/components/ui/primitives/dashboard-heading";
 import { apiFetch, fetcher } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
-import { serializedPatch, serializedCall } from "@/lib/serialized-mutate";
+import { serializedPatch } from "@/lib/serialized-mutate";
 import { invalidateAccountsAndSources } from "@/lib/swr";
 import { formatDate } from "@/lib/time";
 import { resolveErrorMessage } from "@/utils/errors";
-import { canPull, canPush } from "@/utils/calendars";
+import {
+  areTitleKeywordsEqual,
+  canPull,
+  canPush,
+  formatTitleKeywords,
+  isMissingAtProvider,
+  parseTitleKeywords,
+  toggleExcludedAvailability,
+} from "@/utils/calendars";
 import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
 import {
   NavigationMenu,
@@ -58,11 +72,13 @@ import {
   calendarDetailErrorAtom,
   calendarNameAtom,
   calendarProviderAtom,
-  calendarProviderMissingSinceAtom,
+  calendarMissingSinceAtom,
   calendarTypeAtom,
   customEventNameAtom,
+  excludeAvailabilitiesAtom,
   excludeEventNameAtom,
   excludeFieldAtoms,
+  excludeTitleKeywordsAtom,
   treatFullDayTimedEventsAsAllDayAtom,
 } from "@/state/calendar-detail";
 import type { ExcludeField } from "@/state/calendar-detail";
@@ -92,6 +108,7 @@ const SYNC_SETTINGS: SyncSetting[] = [
   { field: "excludeEventDescription", label: "Sync Event Description", matchesField: false },
   { field: "excludeEventLocation", label: "Sync Event Location", matchesField: false },
   { field: "markEventsAsPrivate", label: "Mark Events as Private", matchesField: true },
+  { field: "disableEventReminders", label: "Disable Reminders", matchesField: true },
 ];
 
 const EXCLUSION_SETTINGS: SyncSetting[] = [
@@ -160,6 +177,7 @@ function CalendarDetailPage() {
 
   const isPullCapable = canPull(calendar);
   const isPushCapable = canPush(calendar);
+  const isRemovable = !isPushCapable || isMissingAtProvider(calendar);
 
   return (
     <div className="flex flex-col gap-1.5 lg:h-full">
@@ -187,7 +205,7 @@ function CalendarDetailPage() {
         {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
         {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
         <CalendarInfoSection account={account} accountId={accountId} />
-        {!isPushCapable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
+        {isRemovable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
       </PageBody>
     </div>
   );
@@ -206,7 +224,7 @@ function SyncWindowSection({ calendarId }: { calendarId: string }) {
         title="Sync Window"
         description="Choose how far back and ahead Keeper syncs events into this calendar. Narrowing a range removes already-synced events outside it from this calendar."
       />
-      <PremiumGate locked={locked} hint="Custom sync windows are a Pro feature.">
+      <PremiumGate limit="sync_window" locked={locked} hint="Custom sync windows are a Pro feature.">
         <NavigationMenu>
           <SyncRangeItem
             calendarId={calendarId}
@@ -428,14 +446,14 @@ function ReauthNotice({ account }: { account: CalendarAccount }) {
 }
 
 function ProviderMissingNotice() {
-  const providerMissingSince = useAtomValue(calendarProviderMissingSinceAtom);
-  if (!providerMissingSince) return null;
+  const missingSince = useAtomValue(calendarMissingSinceAtom);
+  if (!missingSince) return null;
 
   return (
     <Text size="sm" tone="danger" className="px-0.5">
-      This calendar was not found the last time its connection was refreshed
-      (since {formatDate(providerMissingSince)}) - it may have been deleted or renamed at the
-      provider. Refresh the connection again to confirm, or remove the calendar below.
+      This calendar could not be found at the provider (since {formatDate(missingSince)}) - it
+      may have been deleted or renamed there. Refresh the connection to check again, or remove
+      the calendar below.
     </Text>
   );
 }
@@ -466,7 +484,7 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
     <>
       <DashboardSection
         title="Remove Calendar"
-        description="Stop syncing this calendar and remove it from Keeper.sh. It will be re-imported the next time you refresh the account's calendars, unless it no longer exists at the provider."
+        description="Stop syncing this calendar and remove it from Keeper.sh. It will not be imported again when the account's calendars are refreshed."
       />
       <NavigationMenu>
         <NavigationMenuButtonItem onClick={() => setDeleteOpen(true)}>
@@ -528,7 +546,7 @@ function DestinationsSection({ calendarId }: { calendarId: string }) {
           ))
         )}
       </NavigationMenu>
-      {atLimit && <PremiumHint>Mapping limit reached.</PremiumHint>}
+      {atLimit && <PremiumHint limit="mappings">Mapping limit reached.</PremiumHint>}
     </>
   );
 }
@@ -548,9 +566,8 @@ function DestinationCheckboxItem({
 }) {
   const store = useStore();
   const variant = use(MenuVariantContext);
-  const { mutate } = useSWRConfig();
   const { data: entitlements } = useEntitlements();
-  const { adjustMappingCount, revalidateEntitlements } = useMutateEntitlements();
+  const { toggle } = useMappingToggles(calendarId, "destinations");
 
   const checkedAtom = useMemo(() => selectDestinationInclusion(destinationId), [destinationId]);
   const checked = useAtomValue(checkedAtom);
@@ -560,45 +577,9 @@ function DestinationCheckboxItem({
   const handleClick = () => {
     if (disabled) return;
 
-    const currentIds = store.get(destinationIdsAtom);
-    const willCheck = !currentIds.has(destinationId);
+    const willCheck = !store.get(destinationIdsAtom).has(destinationId);
     track(ANALYTICS_EVENTS.destination_toggled, { enabled: willCheck });
-    const updatedSet = new Set(currentIds);
-
-    if (willCheck) {
-      updatedSet.add(destinationId);
-      adjustMappingCount(1);
-    } else {
-      updatedSet.delete(destinationId);
-      adjustMappingCount(-1);
-    }
-
-    store.set(destinationIdsAtom, updatedSet);
-
-    const swrKey = `/api/sources/${calendarId}/destinations`;
-    serializedCall(swrKey, () => {
-      const latestIds = Array.from(store.get(destinationIdsAtom));
-      return mutate(
-        swrKey,
-        async () => {
-          await apiFetch(swrKey, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ calendarIds: latestIds }),
-          });
-          return { destinationIds: latestIds };
-        },
-        {
-          optimisticData: { destinationIds: latestIds },
-          rollbackOnError: true,
-          revalidate: false,
-        },
-      ).catch(() => {
-        void mutate(swrKey);
-      }).finally(() => {
-        void revalidateEntitlements();
-      });
-    });
+    toggle(destinationId, willCheck);
   };
 
   return (
@@ -645,7 +626,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
         title="Sync Settings"
         description={<>Choose which event details are synced to destination calendars. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
       />
-      <PremiumGate locked={locked} hint="Advanced sync settings are a Pro feature.">
+      <PremiumGate limit="advanced_sync" locked={locked} hint="Advanced sync settings are a Pro feature.">
         <NavigationMenu>
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
@@ -851,9 +832,9 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
     <>
       <DashboardSection
         title="Exclusions"
-        description="Choose which event types to exclude from syncing."
+        description={`Choose which events to exclude from syncing. Separate title keywords with commas. Up to ${MAX_EXCLUDE_TITLE_KEYWORDS} keywords of ${MAX_EXCLUDE_TITLE_KEYWORD_LENGTH} characters each, matched ignoring case.`}
       />
-      <PremiumGate locked={locked} hint="Event exclusions are a Pro feature.">
+      <PremiumGate limit="event_exclusions" locked={locked} hint="Event exclusions are a Pro feature.">
         <NavigationMenu>
           {exclusionSettings.map((setting) => (
             <ExcludeFieldToggle
@@ -865,9 +846,112 @@ function ExclusionsSection({ calendarId, provider }: { calendarId: string; provi
               locked={locked}
             />
           ))}
+          <ExcludeAvailabilitiesItem calendarId={calendarId} provider={provider} locked={locked} />
+          <ExcludeTitleKeywordsItem calendarId={calendarId} locked={locked} />
         </NavigationMenu>
       </PremiumGate>
     </>
+  );
+}
+
+function ExcludeAvailabilitiesItem({
+  calendarId,
+  provider,
+  locked,
+}: {
+  calendarId: string;
+  provider: string;
+  locked: boolean;
+}) {
+  const store = useStore();
+  const excluded = useAtomValue(excludeAvailabilitiesAtom);
+  const options = getExcludableAvailabilities(provider);
+
+  const toggleAvailability = (availability: ExcludableAvailability) => {
+    if (locked) return;
+    const excludeAvailabilities = toggleExcludedAvailability(excluded, availability);
+    track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+      field: "excludeAvailabilities",
+      value: availability,
+      enabled: excludeAvailabilities.includes(availability),
+    });
+    store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, excludeAvailabilities } : prev));
+    patchSource(store, calendarId, { excludeAvailabilities });
+  };
+
+  const summary = options
+    .filter(({ value }) => excluded.includes(value))
+    .map(({ label }) => label)
+    .join(", ");
+
+  return (
+    <NavigationMenuPopover
+      disabled={locked}
+      trigger={
+        <>
+          <NavigationMenuItemLabel>Exclude by Status</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            <Text size="sm" tone={locked ? "disabled" : "muted"}>
+              {summary || "None"}
+            </Text>
+          </NavigationMenuItemTrailing>
+        </>
+      }
+    >
+      {options.map((option) => (
+        <NavigationMenuButtonItem
+          key={option.value}
+          onClick={() => toggleAvailability(option.value)}
+        >
+          <NavigationMenuItemLabel>{option.label}</NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            {excluded.includes(option.value) && <CheckIcon size={14} />}
+          </NavigationMenuItemTrailing>
+        </NavigationMenuButtonItem>
+      ))}
+    </NavigationMenuPopover>
+  );
+}
+
+function ExcludeTitleKeywordsItem({ calendarId, locked }: { calendarId: string; locked: boolean }) {
+  const store = useStore();
+  const keywords = useAtomValue(excludeTitleKeywordsAtom);
+
+  return (
+    <NavigationMenuEditableItem
+      label="Exclude Titles Containing"
+      value={formatTitleKeywords(keywords)}
+      disabled={locked}
+      allowEmpty
+      onCommit={(value) => {
+        const excludeTitleKeywords = parseTitleKeywords(value);
+        if (areTitleKeywordsEqual(excludeTitleKeywords, store.get(excludeTitleKeywordsAtom))) return;
+        track(ANALYTICS_EVENTS.calendar_setting_toggled, {
+          field: "excludeTitleKeywords",
+          enabled: excludeTitleKeywords.length > 0,
+        });
+        store.set(calendarDetailAtom, (prev) => (prev ? { ...prev, excludeTitleKeywords } : prev));
+        patchSource(store, calendarId, { excludeTitleKeywords });
+      }}
+    >
+      <ExcludeTitleKeywordsValue />
+    </NavigationMenuEditableItem>
+  );
+}
+
+function ExcludeTitleKeywordsValue() {
+  const keywords = useAtomValue(excludeTitleKeywordsAtom);
+  const variant = use(MenuVariantContext);
+  const disabled = use(ItemDisabledContext);
+
+  return (
+    <Text
+      size="sm"
+      tone={(disabled ? DISABLED_LABEL_TONE : LABEL_TONE)[variant ?? "default"]}
+      className="min-w-0 flex-1 truncate text-right"
+    >
+      {keywords.length > 0 ? formatTitleKeywords(keywords) : "None"}
+    </Text>
   );
 }
 

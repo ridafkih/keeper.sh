@@ -1,15 +1,8 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { KEEPER_API_RESOURCE_SCOPES } from "@keeper.sh/constants";
 import { GDPR_COUNTRIES } from "@/config/gdpr";
 import { getGithubStarsSnapshot } from "./github-stars";
 import { proxyRequest } from "./proxy/http";
 import type { ServerConfig } from "./types";
-
-const staticTextFiles: Record<string, string> = {
-  "/llms.txt": "text/plain; charset=UTF-8",
-  "/llms-full.txt": "text/plain; charset=UTF-8",
-};
 
 // OAuth clients discover the authorization server via /.well-known/* at
 // the resource origin. The auth server lives under /api/auth, so these
@@ -38,6 +31,8 @@ const buildProtectedResourceMetadata = (requestOrigin: string) => ({
   authorization_servers: [`${requestOrigin}/api/auth`],
   scopes_supported: KEEPER_API_RESOURCE_SCOPES,
 });
+
+const OPENAI_APPS_CHALLENGE_PATH = "/.well-known/openai-apps-challenge";
 
 const MCP_SERVER_CARD_PATH = "/mcp/server-card";
 const MCP_SERVER_CARD_MEDIA_TYPE = "application/mcp-server-card+json";
@@ -87,24 +82,6 @@ const buildMcpServerCard = (requestOrigin: string) => ({
   ],
 });
 
-async function serveStaticTextFile(pathname: string): Promise<Response | null> {
-  const contentType = staticTextFiles[pathname];
-  if (!contentType) return null;
-
-  const filePath = path.resolve(process.cwd(), `public${pathname}`);
-  try {
-    const content = await fs.readFile(filePath, "utf-8");
-    return new Response(content, {
-      headers: {
-        "content-type": contentType,
-        "cache-control": "public, max-age=3600",
-      },
-    });
-  } catch {
-    return new Response("Not Found", { status: 404 });
-  }
-}
-
 const resolvePublicOrigin = (request: Request): string => {
   const url = new URL(request.url);
   const proto = request.headers.get("x-forwarded-proto");
@@ -133,6 +110,15 @@ export async function handleInternalRoute(
 
   if (requestUrl.pathname === "/.well-known/oauth-protected-resource") {
     return Response.json(buildProtectedResourceMetadata(resolvePublicOrigin(request)));
+  }
+
+  if (requestUrl.pathname === OPENAI_APPS_CHALLENGE_PATH && config.openaiAppsChallengeToken) {
+    return new Response(config.openaiAppsChallengeToken, {
+      headers: {
+        "content-type": "text/plain; charset=UTF-8",
+        "cache-control": "no-store",
+      },
+    });
   }
 
   if (requestUrl.pathname === MCP_SERVER_CARD_PATH) {
@@ -183,9 +169,6 @@ export async function handleInternalRoute(
       );
     }
   }
-
-  const staticResponse = await serveStaticTextFile(requestUrl.pathname);
-  if (staticResponse) return staticResponse;
 
   return null;
 }

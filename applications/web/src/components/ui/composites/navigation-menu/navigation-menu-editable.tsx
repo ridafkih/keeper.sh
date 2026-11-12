@@ -10,6 +10,7 @@ import {
 } from "./navigation-menu.styles";
 import { NavigationMenuItemLabel } from "./navigation-menu-items";
 import { Text } from "@/components/ui/primitives/text";
+import { shouldSkipEditableCommit } from "./navigation-menu-editable-logic";
 
 type NavigationMenuEditableItemProps = {
   onCommit: (value: string) => Promise<void> | void;
@@ -17,6 +18,7 @@ type NavigationMenuEditableItemProps = {
   children?: ReactNode;
   defaultEditing?: boolean;
   disabled?: boolean;
+  allowEmpty?: boolean;
   className?: string;
 } & ({ value: string } | { getValue: () => string });
 
@@ -27,6 +29,7 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
     children,
     defaultEditing,
     disabled,
+    allowEmpty,
     className,
   } = props;
 
@@ -42,6 +45,7 @@ export function NavigationMenuEditableItem(props: NavigationMenuEditableItemProp
       <EditableItemInput
         value={resolveValue()}
         label={label}
+        allowEmpty={allowEmpty}
         className={className}
         onCommit={async (trimmed) => {
           await onCommit(trimmed);
@@ -126,6 +130,7 @@ function useEditableCommit(
   value: string,
   onCommit: (value: string) => Promise<void> | void,
   onCancel: () => void,
+  allowEmpty = false,
 ) {
   const inputRef = useRef<HTMLInputElement>(null);
   const committingRef = useRef(false);
@@ -133,8 +138,13 @@ function useEditableCommit(
   const commit = async () => {
     if (committingRef.current) return;
 
-    const trimmed = inputRef.current?.value.trim();
-    if (!trimmed || trimmed === value) {
+    if (!inputRef.current) {
+      onCancel();
+      return;
+    }
+
+    const trimmed = inputRef.current.value.trim();
+    if (shouldSkipEditableCommit(trimmed, value, allowEmpty)) {
       onCancel();
       return;
     }
@@ -176,18 +186,20 @@ function useEditableCommit(
 function EditableItemInput({
   value,
   label,
+  allowEmpty,
   className,
   onCommit,
   onCancel,
 }: {
   value: string;
   label?: string;
+  allowEmpty?: boolean;
   className?: string;
   onCommit: (value: string) => Promise<void> | void;
   onCancel: () => void;
 }) {
   const variant = use(MenuVariantContext);
-  const { inputProps } = useEditableCommit(value, onCommit, onCancel);
+  const { inputProps } = useEditableCommit(value, onCommit, onCancel, allowEmpty);
   const inputClass = cn(
     "min-w-0 text-sm tracking-tight bg-transparent cursor-text outline-none",
     label ? "flex-1 text-right" : "flex-1",

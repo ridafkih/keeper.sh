@@ -1,5 +1,9 @@
 import { type } from "arktype";
-import { syncRangeSchema } from "@keeper.sh/data-schemas";
+import {
+  excludableAvailabilitySchema,
+  excludeTitleKeywordsSchema,
+  syncRangeSchema,
+} from "@keeper.sh/data-schemas";
 
 const calendarIdsBodySchema = type({
   calendarIds: "string[]",
@@ -7,20 +11,30 @@ const calendarIdsBodySchema = type({
 });
 type CalendarIdsBody = typeof calendarIdsBodySchema.infer;
 
+const calendarToggleBodySchema = type({
+  calendarId: "string",
+  enabled: "boolean",
+  "+": "reject",
+});
+
 const sourcePatchBodySchema = type({
   "name?": "string",
   "customEventName?": "string",
   "excludeAllDayEvents?": "boolean",
+  "excludeAvailabilities?": excludableAvailabilitySchema.array(),
   "excludeEventDescription?": "boolean",
   "excludeEventLocation?": "boolean",
   "excludeEventName?": "boolean",
   "excludeFocusTime?": "boolean",
+  "excludeFreeEvents?": "boolean",
   "excludeOutOfOffice?": "boolean",
+  "excludeTitleKeywords?": excludeTitleKeywordsSchema,
   "includeInIcalFeed?": "boolean",
   "treatFullDayTimedEventsAsAllDay?": "boolean",
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
   "markEventsAsPrivate?": "boolean",
+  "disableEventReminders?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;
@@ -94,8 +108,15 @@ const tokenCreateBodySchema = type({
 });
 type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
+const accountSettingsPatchBodySchema = type({
+  agentFeedbackEnabled: "boolean",
+  "+": "reject",
+});
+
 export {
+  accountSettingsPatchBodySchema,
   calendarIdsBodySchema,
+  calendarToggleBodySchema,
   calendarPausePatchBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,

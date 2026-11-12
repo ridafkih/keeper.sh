@@ -193,45 +193,74 @@ const findTimeZoneTransitions = (
   return transitions;
 };
 
-// Premise: no zone transitions twice within a day either side of a wall time, so two probes name every candidate offset.
-const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
+type ZoneOffsetAt = (instant: Date) => number;
+
+const PROBE_WINDOW_MS = MS_PER_DAY;
+const MS_PER_MINUTE = 60_000;
+
+const ianaOffsetAt = (timeZone: string): ZoneOffsetAt => (instant) =>
+  getTimeZoneOffsetMilliseconds(instant, timeZone) / MS_PER_MINUTE;
+
+const offsetMillisecondsAt = (offsetAt: ZoneOffsetAt, instant: number): number =>
+  Math.round(offsetAt(new Date(instant)) * MS_PER_MINUTE);
+
+const earliestMatchingInstant = (
+  desiredTime: number,
+  candidateOffsets: number[],
+  offsetAt: ZoneOffsetAt,
+): number | null => {
+  const matches = candidateOffsets
+    .map((offset) => desiredTime - offset)
+    .filter((instant) => offsetMillisecondsAt(offsetAt, instant) === desiredTime - instant);
+  if (matches.length === 0) {
+    return null;
+  }
+  return Math.min(...matches);
+};
+
+const shiftAcrossGap = (desiredTime: number, offsetBefore: number): number =>
+  desiredTime - offsetBefore;
+
+const wallTimeToInstantWith = (wallTime: Date, offsetAt: ZoneOffsetAt): Date => {
   const desiredTime = wallTime.getTime();
-  const offsetBefore = getTimeZoneOffsetMilliseconds(
-    new Date(desiredTime - MS_PER_DAY),
-    timeZone,
-  );
-  const offsetAfter = getTimeZoneOffsetMilliseconds(
-    new Date(desiredTime + MS_PER_DAY),
-    timeZone,
-  );
+  const offsetBefore = offsetMillisecondsAt(offsetAt, desiredTime - PROBE_WINDOW_MS);
+  const offsetAfter = offsetMillisecondsAt(offsetAt, desiredTime + PROBE_WINDOW_MS);
   if (offsetBefore === offsetAfter) {
     return new Date(desiredTime - offsetBefore);
   }
 
-  const matches = [offsetBefore, offsetAfter]
-    .map((offset) => desiredTime - offset)
-    .filter((instant) =>
-      getTimeZoneOffsetMilliseconds(new Date(instant), timeZone) === desiredTime - instant);
-  if (matches.length > 0) {
-    // During a fold, choose the earlier of the two valid instants.
-    return new Date(Math.min(...matches));
+  const earliest = earliestMatchingInstant(desiredTime, [offsetBefore, offsetAfter], offsetAt);
+  if (earliest !== null) {
+    return new Date(earliest);
   }
 
   if (offsetAfter > offsetBefore) {
-    // During a gap, shift forward by the size of the timezone transition.
-    return new Date(desiredTime - offsetBefore);
+    return new Date(shiftAcrossGap(desiredTime, offsetBefore));
   }
 
-  throw new RangeError(`Unable to resolve wall time in timezone ${timeZone}`);
+  throw new RangeError(`Unable to resolve wall time ${wallTime.toISOString()}`);
+};
+
+const wallTimeToInstant = (wallTime: Date, timeZone: string): Date => {
+  try {
+    return wallTimeToInstantWith(wallTime, ianaOffsetAt(timeZone));
+  } catch (error) {
+    if (error instanceof RangeError) {
+      throw new RangeError(`Unable to resolve wall time in timezone ${timeZone}`, { cause: error });
+    }
+    throw error;
+  }
 };
 
 export {
   findTimeZoneTransitions,
   formatIcsUtcOffset,
   getTimeZoneOffsetMinutes,
+  ianaOffsetAt,
   instantToWallTime,
   isSupportedTimeZone,
   resolveTimeZone,
   wallTimeToInstant,
+  wallTimeToInstantWith,
 };
-export type { TimeZoneTransition };
+export type { TimeZoneTransition, ZoneOffsetAt };

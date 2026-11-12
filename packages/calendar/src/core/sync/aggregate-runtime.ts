@@ -83,6 +83,10 @@ const isSyncAggregateMessage = (value: unknown): value is SyncAggregateMessage =
     return false;
   }
 
+  if ("syncSecondsRemaining" in value && typeof value.syncSecondsRemaining !== "number") {
+    return false;
+  }
+
   return (
     isNumberField(value.progressPercent) &&
     isNumberField(value.seq) &&

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   handleGetSourceDestinationsRoute,
   handleGetSourcesForDestinationRoute,
+  handlePatchSourceDestinationsRoute,
+  handlePatchSourcesForDestinationRoute,
   handlePutSourceDestinationsRoute,
   handlePutSourcesForDestinationRoute,
 } from "../../../../../src/routes/api/sources/[id]/mapping-routes";
@@ -57,7 +59,7 @@ describe("handlePutSourceDestinationsRoute", () => {
         userId: "user-1",
       },
       {
-        setDestinationsForSource: () => Promise.resolve(),
+        changeDestinationsForSource: () => Promise.resolve({ nextIds: [], previousIds: [] }),
       },
     );
 
@@ -72,7 +74,7 @@ describe("handlePutSourceDestinationsRoute", () => {
         userId: "user-1",
       },
       {
-        setDestinationsForSource: () =>
+        changeDestinationsForSource: () =>
           Promise.reject(new Error("Source calendar not found")),
       },
     );
@@ -88,7 +90,7 @@ describe("handlePutSourceDestinationsRoute", () => {
         userId: "user-1",
       },
       {
-        setDestinationsForSource: () =>
+        changeDestinationsForSource: () =>
           Promise.reject(new Error("Some destination calendars not found")),
       },
     );
@@ -107,7 +109,7 @@ describe("handlePutSourceDestinationsRoute", () => {
         userId: "user-1",
       },
       {
-        setDestinationsForSource: () =>
+        changeDestinationsForSource: () =>
           Promise.reject(new Error(MAPPING_LIMIT_ERROR_MESSAGE)),
       },
     );
@@ -167,7 +169,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
         userId: "user-1",
       },
       {
-        setSourcesForDestination: () => Promise.resolve(),
+        changeSourcesForDestination: () => Promise.resolve({ nextIds: [], previousIds: [] }),
       },
     );
 
@@ -182,7 +184,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
         userId: "user-1",
       },
       {
-        setSourcesForDestination: () =>
+        changeSourcesForDestination: () =>
           Promise.reject(new Error("Destination calendar not found")),
       },
     );
@@ -198,7 +200,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
         userId: "user-1",
       },
       {
-        setSourcesForDestination: () =>
+        changeSourcesForDestination: () =>
           Promise.reject(new Error("Some source calendars not found")),
       },
     );
@@ -217,7 +219,7 @@ describe("handlePutSourcesForDestinationRoute", () => {
         userId: "user-1",
       },
       {
-        setSourcesForDestination: () =>
+        changeSourcesForDestination: () =>
           Promise.reject(new Error(MAPPING_LIMIT_ERROR_MESSAGE)),
       },
     );
@@ -226,5 +228,46 @@ describe("handlePutSourcesForDestinationRoute", () => {
     expect(await readJson(response)).toEqual({
       error: MAPPING_LIMIT_ERROR_MESSAGE,
     });
+  });
+});
+
+describe("handlePatchSourceDestinationsRoute", () => {
+  it("applies one toggle and returns the destinations the source now has", async () => {
+    const changes: unknown[] = [];
+    const response = await handlePatchSourceDestinationsRoute(
+      { body: { calendarId: "dest-2", enabled: true }, params: { id: "source-1" }, userId: "user-1" },
+      {
+        changeDestinationsForSource: (_userId, _sourceId, change) => {
+          changes.push(change);
+          return Promise.resolve({ nextIds: ["dest-1", "dest-2"], previousIds: ["dest-1"] });
+        },
+      },
+    );
+
+    expect(changes).toEqual([{ calendarId: "dest-2", enabled: true, kind: "toggle" }]);
+    expect(await readJson(response)).toEqual({ destinationIds: ["dest-1", "dest-2"] });
+  });
+
+  it("rejects a toggle without a calendar id", async () => {
+    const response = await handlePatchSourceDestinationsRoute(
+      { body: { enabled: true }, params: { id: "source-1" }, userId: "user-1" },
+      { changeDestinationsForSource: () => Promise.resolve({ nextIds: [], previousIds: [] }) },
+    );
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("handlePatchSourcesForDestinationRoute", () => {
+  it("applies one toggle and returns the sources the destination now has", async () => {
+    const response = await handlePatchSourcesForDestinationRoute(
+      { body: { calendarId: "source-2", enabled: false }, params: { id: "dest-1" }, userId: "user-1" },
+      {
+        changeSourcesForDestination: () =>
+          Promise.resolve({ nextIds: ["source-1"], previousIds: ["source-1", "source-2"] }),
+      },
+    );
+
+    expect(await readJson(response)).toEqual({ sourceIds: ["source-1"] });
   });
 });

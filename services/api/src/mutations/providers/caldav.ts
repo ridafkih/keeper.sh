@@ -1,7 +1,7 @@
 import { convertIcsCalendar, generateIcsCalendar, generateIcsEvent } from "ts-ics";
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import ICAL from "ical.js";
-import { HTTP_STATUS, KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
+import { KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
 import { materializeRecurrenceEvents } from "@keeper.sh/calendar";
@@ -121,6 +121,24 @@ const createCalDAVEvent = async (
   }
 };
 
+const buildUidFilter = (sourceEventUid: string) => [
+  {
+    "comp-filter": {
+      _attributes: { name: "VCALENDAR" },
+      "comp-filter": {
+        _attributes: { name: "VEVENT" },
+        "prop-filter": {
+          _attributes: { name: "UID" },
+          "text-match": {
+            _attributes: { collation: "i;octet" },
+            _text: sourceEventUid,
+          },
+        },
+      },
+    },
+  },
+];
+
 const fetchCalendarObject = async (
   client: Awaited<ReturnType<typeof createDAVClient>>,
   calendarUrl: string,
@@ -129,17 +147,26 @@ const fetchCalendarObject = async (
   const objectUrl = `${ensureTrailingSlash(calendarUrl)}${sourceEventUid}.ics`;
 
   try {
-    const objects = await client.fetchCalendarObjects({
+    const [object] = await client.fetchCalendarObjects({
       calendar: { url: calendarUrl },
       objectUrls: [objectUrl],
     });
 
-    const [object] = objects;
     if (object?.data) {
       return { url: object.url, data: object.data };
     }
   } catch {
     // Object may not exist at that URL
+  }
+
+  // Objects Keeper.sh did not create live at a server-assigned href, so find them by UID.
+  const [object] = await client.fetchCalendarObjects({
+    calendar: { url: calendarUrl },
+    filters: buildUidFilter(sourceEventUid),
+  });
+
+  if (object?.data) {
+    return { url: object.url, data: object.data };
   }
 
   return null;
@@ -243,22 +270,15 @@ const deleteCalDAVEvent = async (
 ): Promise<EventActionResult> => {
   try {
     const client = await getClient(credentials);
-    const objectUrl = `${ensureTrailingSlash(credentials.calendarUrl)}${sourceEventUid}.ics`;
+    const existing = await fetchCalendarObject(client, credentials.calendarUrl, sourceEventUid);
 
-    try {
-      await client.deleteCalendarObject({
-        calendarObject: { url: objectUrl },
-      });
-    } catch (error) {
-      if (error instanceof Error && "status" in error) {
-        const { status } = error;
-        if (status !== HTTP_STATUS.NOT_FOUND) {
-          throw error;
-        }
-      }
-
-      throw error;
+    if (!existing) {
+      return { success: false, error: "Event not found on CalDAV server." };
     }
+
+    await client.deleteCalendarObject({
+      calendarObject: { url: existing.url },
+    });
 
     return { success: true };
   } catch (error) {

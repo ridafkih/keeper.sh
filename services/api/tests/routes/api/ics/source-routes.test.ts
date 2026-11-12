@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  handleDeleteIcsSourceRoute,
   handleGetIcsSourcesRoute,
   handlePostIcsSourceRoute,
 } from "../../../../src/routes/api/ics/source-routes";
@@ -10,6 +11,8 @@ class TestSourceLimitError extends Error {}
 
 class TestInvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
+  public readonly reason = "auth_required";
+  public readonly feedFailureReason = "auth-required" as const;
 
   constructor(message: string, authRequired: boolean) {
     super(message);
@@ -39,7 +42,7 @@ describe("handleGetIcsSourcesRoute", () => {
 
 describe("handlePostIcsSourceRoute", () => {
   it("creates source with parsed body and returns 201", async () => {
-    const receivedCreateCalls: { userId: string; name: string; url: string }[] = [];
+    const receivedCreateCalls: { userId: string; name: string | undefined; url: string }[] = [];
 
     const response = await handlePostIcsSourceRoute(
       {
@@ -121,6 +124,7 @@ describe("handlePostIcsSourceRoute", () => {
     expect(await readJson(response)).toEqual({
       authRequired: true,
       error: "requires auth",
+      reason: "auth-required",
     });
   });
 
@@ -137,6 +141,69 @@ describe("handlePostIcsSourceRoute", () => {
         parseCreateSourceBody: () => {
           throw new Error("parse failed");
         },
+      },
+    );
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("handleDeleteIcsSourceRoute", () => {
+  it("deletes the account behind the user's calendar link", async () => {
+    const deleted: [string, string][] = [];
+
+    const response = await handleDeleteIcsSourceRoute(
+      { params: { id: "calendar-1" }, userId: "user-1" },
+      {
+        deleteAccount: (userId, accountId) => {
+          deleted.push([userId, accountId]);
+          return Promise.resolve(true);
+        },
+        findLinkAccountId: () => Promise.resolve("account-1"),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await readJson(response)).toEqual({ success: true });
+    expect(deleted).toEqual([["user-1", "account-1"]]);
+  });
+
+  it("returns not found when the calendar is not one of the user's links", async () => {
+    let deleteCalled = false;
+
+    const response = await handleDeleteIcsSourceRoute(
+      { params: { id: "calendar-1" }, userId: "user-1" },
+      {
+        deleteAccount: () => {
+          deleteCalled = true;
+          return Promise.resolve(true);
+        },
+        findLinkAccountId: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(404);
+    expect(deleteCalled).toBe(false);
+  });
+
+  it("returns not found when the account is gone by the time it is deleted", async () => {
+    const response = await handleDeleteIcsSourceRoute(
+      { params: { id: "calendar-1" }, userId: "user-1" },
+      {
+        deleteAccount: () => Promise.resolve(false),
+        findLinkAccountId: () => Promise.resolve("account-1"),
+      },
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it("requires a calendar ID", async () => {
+    const response = await handleDeleteIcsSourceRoute(
+      { params: {}, userId: "user-1" },
+      {
+        deleteAccount: () => Promise.resolve(true),
+        findLinkAccountId: () => Promise.resolve("account-1"),
       },
     );
 

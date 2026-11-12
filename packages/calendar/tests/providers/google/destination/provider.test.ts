@@ -33,6 +33,29 @@ const batchResponse = (statusCode: number, body: unknown) => ({
   statusCode,
 });
 
+const WRITER_ACCESS_REFUSAL = {
+  error: {
+    code: 403,
+    errors: [{
+      domain: "calendar",
+      message: "You need to have writer access to this calendar.",
+      reason: "requiredAccessLevel",
+    }],
+    message: "You need to have writer access to this calendar.",
+  },
+};
+
+const MEETING = {
+  calendarId: "source-calendar",
+  calendarName: "Source",
+  calendarUrl: null,
+  endTime: new Date("2026-03-15T10:00:00Z"),
+  id: "event-state-id",
+  sourceEventUid: "source-event-uid",
+  startTime: new Date("2026-03-15T09:00:00Z"),
+  summary: "Meeting",
+};
+
 describe("createGoogleSyncProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -379,6 +402,53 @@ describe("createGoogleSyncProvider", () => {
       errorType: "GoogleBatchProtocolError",
       statusCode: 200,
       success: false,
+    }]);
+  });
+
+  it("marks an import Google refused for missing writer access", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(403, WRITER_ACCESS_REFUSAL),
+    ]);
+
+    const [result] = await createProvider().pushEvents([MEETING]);
+
+    expect(result).toEqual({
+      error: "You need to have writer access to this calendar.",
+      errorType: "GoogleCalendarApiError",
+      statusCode: 403,
+      success: false,
+      writeAccessDenied: true,
+    });
+  });
+
+  it("does not mark an import rate limited with a 403 as missing writer access", async () => {
+    batchMocks.executeBatchChunked.mockResolvedValueOnce([
+      batchResponse(403, {
+        error: { code: 403, errors: [{ reason: "rateLimitExceeded" }], message: "Rate Limit Exceeded" },
+      }),
+    ]);
+
+    const [result] = await createProvider().pushEvents([MEETING]);
+
+    expect(result).toEqual({
+      error: "Rate Limit Exceeded",
+      errorType: "GoogleCalendarApiError",
+      statusCode: 403,
+      success: false,
+    });
+  });
+
+  it("marks a delete Google refused for missing writer access", async () => {
+    batchMocks.executeBatchChunked
+      .mockResolvedValueOnce([batchResponse(200, { items: [{ id: "google-event-id" }] })])
+      .mockResolvedValueOnce([batchResponse(403, WRITER_ACCESS_REFUSAL)]);
+
+    await expect(createProvider().deleteEvents(["keeper-event@keeper.sh"])).resolves.toEqual([{
+      error: "You need to have writer access to this calendar.",
+      errorType: "GoogleCalendarApiError",
+      statusCode: 403,
+      success: false,
+      writeAccessDenied: true,
     }]);
   });
 

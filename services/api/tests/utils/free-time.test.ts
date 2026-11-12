@@ -6,6 +6,7 @@ import {
   MAX_FREE_SLOTS,
   mergeIntervals,
   parseWorkingHours,
+  resolveRequestTimeZone,
   subtractBusyFromWindow,
 } from "../../src/utils/free-time";
 import type { FreeTimeOptions, TimeInterval } from "../../src/utils/free-time";
@@ -311,5 +312,55 @@ describe("findFreeSlots", () => {
       [],
       baseOptions({ timezone: "Mars/Olympus_Mons" }),
     )).toThrow(RangeError);
+  });
+});
+
+describe("resolveRequestTimeZone", () => {
+  it("rejects an identifier that names no time zone as a validation error", () => {
+    expect(() => resolveRequestTimeZone("Not/AZone")).toThrow(FreeTimeValidationError);
+    expect(() => resolveRequestTimeZone("Not/AZone")).toThrow(
+      "timezone must be an IANA timezone identifier",
+    );
+  });
+
+  it("accepts an IANA link name", () => {
+    expect(typeof resolveRequestTimeZone("US/Eastern")).toBe("string");
+  });
+
+  it("returns a canonical zone unchanged", () => {
+    expect(resolveRequestTimeZone("Pacific/Auckland")).toBe("Pacific/Auckland");
+  });
+
+  it("is the validation findFreeSlots applies", () => {
+    expect(() => findFreeSlots(
+      interval("2026-03-02T09:00:00Z", "2026-03-02T17:00:00Z"),
+      [],
+      baseOptions({ timezone: "Not/AZone" }),
+    )).toThrow(FreeTimeValidationError);
+  });
+});
+
+describe("findFreeSlots against local whole-day busy spans", () => {
+  const workingHours = { days: null, endMinute: 17 * 60, startMinute: 9 * 60 };
+
+  it("leaves only Friday working hours when Thursday is busy at UTC+14", () => {
+    expect(findFreeSlots(
+      interval("2026-11-04T10:00:00Z", "2026-11-06T10:00:00Z"),
+      [interval("2026-11-04T10:00:00Z", "2026-11-05T10:00:00Z")],
+      baseOptions({ timezone: "Pacific/Kiritimati", workingHours }),
+    )).toEqual([
+      { durationMinutes: 480, end: "2026-11-06T03:00:00.000Z", start: "2026-11-05T19:00:00.000Z" },
+    ]);
+  });
+
+  it("leaves Wednesday and Friday working hours when Thursday is busy at UTC-11", () => {
+    expect(findFreeSlots(
+      interval("2026-11-04T11:00:00Z", "2026-11-07T11:00:00Z"),
+      [interval("2026-11-05T11:00:00Z", "2026-11-06T11:00:00Z")],
+      baseOptions({ timezone: "Pacific/Pago_Pago", workingHours }),
+    )).toEqual([
+      { durationMinutes: 480, end: "2026-11-05T04:00:00.000Z", start: "2026-11-04T20:00:00.000Z" },
+      { durationMinutes: 480, end: "2026-11-07T04:00:00.000Z", start: "2026-11-06T20:00:00.000Z" },
+    ]);
   });
 });

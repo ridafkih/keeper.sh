@@ -1,7 +1,9 @@
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { user as userTable } from "@keeper.sh/database/auth-schema";
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
+import { widelog } from "@/utils/logging";
 import { getAuthorizationUrl, isOAuthProvider } from "@/utils/destinations";
 import { sourceAuthorizeQuerySchema } from "@/utils/request-query";
 import { baseUrl, database } from "@/context";
@@ -50,6 +52,20 @@ const resolveReconnectTarget = async (
   return { credentialId: account.credentialId, loginHint: email };
 };
 
+const resolveSignedInLoginHint = async (userId: string): Promise<string | null> => {
+  const [signedInUser] = await database
+    .select({ email: userTable.email })
+    .from(userTable)
+    .where(eq(userTable.id, userId))
+    .limit(FIRST_RESULT_LIMIT);
+
+  const email = signedInUser?.email.trim();
+  if (!email) {
+    return null;
+  }
+  return email;
+};
+
 const userOwnsSourceCredential = async (userId: string, credentialId: string): Promise<boolean> => {
   const [credential] = await database
     .select({ id: oauthCredentialsTable.id })
@@ -82,12 +98,20 @@ const GET = withWideEvent(
       return ErrorResponse.badRequest("Unsupported provider").toResponse();
     }
 
+    widelog.set("provider.name", provider);
+    widelog.set("oauth.is_reconnect", Boolean(accountId ?? credentialId));
+
     if (accountId) {
       const target = await resolveReconnectTarget(userId, accountId);
       if (!target) {
         return ErrorResponse.notFound("Calendar account not found").toResponse();
       }
       ({ credentialId, loginHint } = target);
+    }
+
+    if (!accountId && !credentialId && url.searchParams.get("account") === "sign-in") {
+      loginHint = await resolveSignedInLoginHint(userId);
+      widelog.set("oauth.after_sign_up", true);
     }
 
     if (credentialId) {

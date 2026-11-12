@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseIcsCalendar } from "../../../src/ics";
 import {
@@ -100,7 +101,7 @@ describe("resolving TZID wall times against projected observances", () => {
     expect(event?.start.date.toISOString()).toBe("2027-10-31T00:59:30.000Z");
   });
 
-  it("keeps an explicit observance set with no projection authoritative", () => {
+  it("follows IANA rules for an IANA TZID even when its declared observances disagree", () => {
     const icsString = buildCalendar([
       "BEGIN:VTIMEZONE",
       "TZID:America/New_York",
@@ -121,7 +122,60 @@ describe("resolving TZID wall times against projected observances", () => {
     const calendar = parseIcsCalendar({ icsString });
     const [event] = calendar.events ?? [];
 
-    expect(event?.start.date.toISOString()).toBe("2027-07-01T17:00:00.000Z");
+    expect(event?.start.date.toISOString()).toBe("2027-07-01T16:00:00.000Z");
+  });
+
+  it("resolves a zone whose later onsets are listed as RDATEs by its current offset", () => {
+    const icsString = buildCalendar([
+      "BEGIN:VTIMEZONE",
+      "TZID:Asia/Manila",
+      "BEGIN:STANDARD",
+      "DTSTART:18990906T120352",
+      "TZOFFSETFROM:+080352",
+      "TZOFFSETTO:+0800",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19361101T000000",
+      "RDATE:19411216T000000",
+      "RDATE:19540412T000000",
+      "RDATE:19770328T000000",
+      "RDATE:19900521T000000",
+      "TZOFFSETFROM:+0800",
+      "TZOFFSETTO:+0900",
+      "END:DAYLIGHT",
+      "BEGIN:STANDARD",
+      "DTSTART:19370116T000000",
+      "RDATE:19451201T000000",
+      "RDATE:19540605T000000",
+      "RDATE:19770922T000000",
+      "RDATE:19900729T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0800",
+      "END:STANDARD",
+      "BEGIN:STANDARD",
+      "DTSTART:19420212T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0900",
+      "END:STANDARD",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:19450304T000000",
+      "TZOFFSETFROM:+0900",
+      "TZOFFSETTO:+0900",
+      "END:DAYLIGHT",
+      "END:VTIMEZONE",
+      "BEGIN:VEVENT",
+      "UID:listed-onsets",
+      "DTSTART;TZID=Asia/Manila:20261105T100000",
+      "DTEND;TZID=Asia/Manila:20261105T110000",
+      "SUMMARY:Standup",
+      "END:VEVENT",
+    ]);
+
+    const calendar = parseIcsCalendar({ icsString });
+    const [event] = calendar.events ?? [];
+
+    expect(event?.start.date.toISOString()).toBe("2026-11-05T02:00:00.000Z");
+    expect(event?.end?.date.toISOString()).toBe("2026-11-05T03:00:00.000Z");
   });
 
   it("leaves a TZID the platform cannot resolve to its declared observances", () => {
@@ -198,5 +252,52 @@ describe("writing an instant a wall clock cannot name", () => {
 
     expect(parsedEvent?.startTime.toISOString()).toBe("2027-10-31T00:59:30.000Z");
     expect(parsedEvent?.startTimeZone).toBe("Europe/Berlin");
+  });
+});
+
+const MANILA_HISTORY_BLOCK = [
+  "BEGIN:VTIMEZONE",
+  "TZID:Philippine Time",
+  "BEGIN:STANDARD",
+  "DTSTART:18990906T120352",
+  "TZOFFSETFROM:+080352",
+  "TZOFFSETTO:+0800",
+  "END:STANDARD",
+  "END:VTIMEZONE",
+].join("\r\n");
+
+const LOCAL_MEAN_TIME_MINUTES = 29_032 / 60;
+
+describe("reading offsets from a declared VTIMEZONE", () => {
+  it("keeps a seconds-precision offset before the first onset unrounded", async () => {
+    const { declaredZoneOffsetAt } = await import("../../../src/ics/utils/declared-timezone-offsets");
+    const offsetAt = declaredZoneOffsetAt(MANILA_HISTORY_BLOCK);
+
+    expect(offsetAt?.(new Date("1899-01-01T00:00:00.000Z"))).toBeCloseTo(LOCAL_MEAN_TIME_MINUTES, 10);
+    expect(offsetAt?.(new Date("1900-01-01T00:00:00.000Z"))).toBe(480);
+  });
+
+  it("has no offsets for a block without a usable observance", async () => {
+    const { declaredZoneOffsetAt } = await import("../../../src/ics/utils/declared-timezone-offsets");
+
+    expect(declaredZoneOffsetAt(["BEGIN:VTIMEZONE", "TZID:Empty", "END:VTIMEZONE"].join("\r\n")))
+      .toBeUndefined();
+    expect(declaredZoneOffsetAt("not a calendar component")).toBeUndefined();
+  });
+});
+
+const readSource = (name: string): string =>
+  readFileSync(new URL(`../../../src/ics/utils/${name}`, import.meta.url), "utf8");
+
+const COMMENT_PATTERN = /\/\*[\s\S]*?\*\/|^\s*\/\/|\s\/\/\s/m;
+const ZONE_LITERAL_PATTERN = /["'`](?:Africa|America|Antarctica|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)\/[A-Za-z_]+/;
+
+describe("the zoned instant engine sources", () => {
+  it.each(["resolve-zoned-instants.ts", "declared-timezone-offsets.ts"])("%s carries no comments", (name) => {
+    expect(readSource(name)).not.toMatch(COMMENT_PATTERN);
+  });
+
+  it.each(["resolve-zoned-instants.ts", "declared-timezone-offsets.ts"])("%s names no zone", (name) => {
+    expect(readSource(name)).not.toMatch(ZONE_LITERAL_PATTERN);
   });
 });

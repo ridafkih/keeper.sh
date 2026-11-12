@@ -5,7 +5,7 @@ import { ShimmerText } from "@/components/ui/primitives/shimmer-text";
 import { Tooltip } from "@/components/ui/primitives/tooltip";
 import { clampPercent, resolveSyncPercent } from "./sync-status-helpers";
 
-function SyncProgressCircle({ percent }: { percent: number }) {
+export function SyncProgressCircle({ percent }: { percent: number }) {
   const radius = 5;
   const circumference = 2 * Math.PI * radius;
   const clampedPercent = clampPercent(percent);

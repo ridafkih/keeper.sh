@@ -77,12 +77,12 @@ const streamingRequest = (callLog: string[], payload: string): Request => new Re
 
 const makeDependencies = (overrides: Record<string, unknown> = {}) => ({
   claimDelivery: vi.fn((_deliveryKey: string) => Promise.resolve(true)),
-  claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) =>
+  claimPushAdmission: vi.fn((_provider: string) =>
     Promise.resolve(true)),
   findChannel: vi.fn(() => Promise.resolve(makeChannel())),
   generateCorrelationId: vi.fn(() => CORRELATION_ID),
   isUnknownChannelCached: vi.fn(() => Promise.resolve(false)),
-  markPendingIngest: vi.fn(() => Promise.resolve()),
+  wakeIngest: vi.fn(() => Promise.resolve()),
   observe: vi.fn(),
   recordNotificationReceived: vi.fn(),
   recordVerified: vi.fn(() => Promise.resolve()),
@@ -147,7 +147,7 @@ describe("handleGooglePushWebhook when push is unconfigured", () => {
     expect(dependencies.isUnknownChannelCached).not.toHaveBeenCalled();
     expect(dependencies.findChannel).not.toHaveBeenCalled();
     expect(dependencies.claimDelivery).not.toHaveBeenCalled();
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
     expect(dependencies.recordVerified).not.toHaveBeenCalled();
   });
 });
@@ -162,8 +162,8 @@ describe("handleGooglePushWebhook routing", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(dependencies.markPendingIngest).toHaveBeenCalledOnce();
-    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
+    expect(dependencies.wakeIngest).toHaveBeenCalledOnce();
+    expect(dependencies.wakeIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
     expect(dependencies.findChannel).toHaveBeenCalledWith("google", CHANNEL_KEY);
   });
 
@@ -183,7 +183,7 @@ describe("handleGooglePushWebhook routing", () => {
     expect(response.status).toBe(200);
     expect(dependencies.recordVerified).toHaveBeenCalledOnce();
     expect(dependencies.recordVerified).toHaveBeenCalledWith("channel-1");
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 });
 
@@ -202,7 +202,7 @@ describe("handleGooglePushWebhook verification", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(dependencies.markPendingIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
+    expect(dependencies.wakeIngest).toHaveBeenCalledWith(["cal-1"], CORRELATION_ID);
     expect(observedFields(dependencies.observe)["webhook.channel_state"]).toBe("registering");
   });
 
@@ -215,7 +215,7 @@ describe("handleGooglePushWebhook verification", () => {
     );
 
     expect(response.status).toBe(401);
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
   });
 
   it("returns an indistinguishable 401 for an unknown channel and for a secret mismatch", async () => {
@@ -238,8 +238,8 @@ describe("handleGooglePushWebhook verification", () => {
     expect(await unknown.text()).toBe(await mismatch.text());
     expect([...unknown.headers.entries()].toSorted())
       .toEqual([...mismatch.headers.entries()].toSorted());
-    expect(unknownDependencies.markPendingIngest).not.toHaveBeenCalled();
-    expect(mismatchDependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(unknownDependencies.wakeIngest).not.toHaveBeenCalled();
+    expect(mismatchDependencies.wakeIngest).not.toHaveBeenCalled();
   });
 
   it("records which of the two rejections happened only on the wide event", async () => {
@@ -301,7 +301,7 @@ describe("handleGooglePushWebhook duplicate suppression", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(dependencies.markPendingIngest).not.toHaveBeenCalled();
+    expect(dependencies.wakeIngest).not.toHaveBeenCalled();
     expect(observedFields(dependencies.observe)["webhook.duplicate"]).toBe(true);
   });
 
@@ -324,7 +324,7 @@ describe("handleGooglePushWebhook failure handling", () => {
 
   it("fails closed with 503 when the admission counter is unavailable", async () => {
     const dependencies = makeDependencies({
-      claimPushAdmission: vi.fn(() => Promise.reject(new Error("redis down"))),
+      claimPushAdmission: vi.fn(() => Promise.reject(new Error("database down"))),
     });
 
     const response = await handleGooglePushWebhook(
@@ -350,7 +350,7 @@ describe("handleGooglePushWebhook failure handling", () => {
 
   it("fails closed with 503 when the pending ingest write is unavailable", async () => {
     const dependencies = makeDependencies({
-      markPendingIngest: vi.fn(() => Promise.reject(new Error("redis down"))),
+      wakeIngest: vi.fn(() => Promise.reject(new Error("database down"))),
     });
 
     const response = await handleGooglePushWebhook(
@@ -381,7 +381,7 @@ describe("handleGooglePushWebhook failure handling", () => {
   it("admits the delivery before the request body is read", async () => {
     const callLog: string[] = [];
     const dependencies = makeDependencies({
-      claimPushAdmission: vi.fn((_input: { channelKey: string | null; provider: string }) => {
+      claimPushAdmission: vi.fn((_provider: string) => {
         callLog.push("admission");
         return Promise.resolve(true);
       }),

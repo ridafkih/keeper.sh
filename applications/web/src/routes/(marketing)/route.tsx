@@ -98,6 +98,7 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/register">Create an Account</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/free">Free Plan</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/self-hosting">Self-Hosting</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>
@@ -111,6 +112,7 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/blog">Blog</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/changelog">Changelog</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/about">About</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/support">Support</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-generator">ICS File Generator</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/tools/ics-viewer">ICS File Viewer</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/compare">Compare</MarketingFooterNavItem>

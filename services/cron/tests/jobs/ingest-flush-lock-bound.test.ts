@@ -1,5 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type ingestSourcesJob from "../../src/jobs/ingest-sources";
+import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
 /*
  * The flush takes pg_advisory_xact_lock(9003, calendarId) while holding the single
@@ -273,11 +273,11 @@ const createIcsRow = (calendarId: string, userId: string) => ({
   userId,
 });
 
-let job: typeof ingestSourcesJob | null = null;
+let ingestSourceCalendars: typeof IngestSourceCalendars | null = null;
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources");
-  job = module.default;
+  const module = await import("../../src/ingest/ingest-sources");
+  ({ ingestSourceCalendars } = module);
 });
 
 beforeEach(() => {
@@ -293,7 +293,7 @@ describe("ingest flush advisory-lock wait bound", () => {
   it("caps the statement_timeout in effect at pg_advisory_xact_lock to a small constant", async () => {
     harness.state.icsRows.push(createIcsRow("calendar-alpha", "user-alpha"));
 
-    await job?.callback();
+    await ingestSourceCalendars?.(["calendar-under-test"]);
 
     const lockTimeoutMs = harness.state.lockStatementTimeoutMs.get("calendar-alpha");
     expect(lockTimeoutMs).toBeDefined();
@@ -308,10 +308,10 @@ describe("ingest flush advisory-lock wait bound", () => {
     );
     harness.state.contendedCalendarIds.add("calendar-contended");
 
-    await expect(job?.callback()).rejects.toThrow(
-      "Calendar source ingestion completed with failures",
-    );
+    const ingestion = await ingestSourceCalendars?.(["calendar-under-test"]);
+    const result = ingestion?.result;
 
+    expect(result?.errors).toBe(1);
     expect(harness.state.lockStatementsSeen).toContain("calendar-peer");
   }, 15_000);
 });

@@ -19,6 +19,7 @@ const harness = vi.hoisted(() => {
     accountId: "account-1",
     accessToken: "access-token",
     calendarId: "calendar-1",
+    excludeAvailabilities: [],
     expiresAt: new Date(Date.now() + FUTURE_EXPIRY_MS),
     externalCalendarId: "external-calendar-1",
     ingestFutureRange: "6m",
@@ -209,14 +210,14 @@ let ingestOAuthSources: IngestOAuthSources = () => {
 };
 
 beforeAll(async () => {
-  const module = await import("../../src/jobs/ingest-sources") as unknown as Record<string, unknown>;
+  const module = await import("../../src/ingest/ingest-sources") as unknown as Record<string, unknown>;
   expect(typeof module.ingestOAuthSources).toBe("function");
   ingestOAuthSources = module.ingestOAuthSources as IngestOAuthSources;
 });
 
 describe("lease release rejection after a successful ingest", () => {
   it("keeps the successful result and applies no backoff", async () => {
-    const result = await ingestOAuthSources();
+    const result = await ingestOAuthSources(["calendar-under-test"]);
 
     expect(harness.state.fetchCallCount).toBe(1);
     expect(harness.state.ingestCallCount).toBe(1);

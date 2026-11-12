@@ -67,6 +67,25 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  ingest:
+    image: ghcr.io/ridafkih/keeper-cron:2
+    env_file: .env
+    deploy:
+      replicas: ${INGEST_REPLICAS:-0}
+    environment:
+      ENV: production
+      CRON_JOBS_ENABLED: "false"
+      DATABASE_POOL_MAX: ${INGEST_DATABASE_POOL_MAX:-25}
+      NODE_EXTRA_CA_CERTS: /certs/global-bundle.pem
+      WORKER_JOB_QUEUE_ENABLED: "true"
+      BLOCK_PRIVATE_RESOLUTION: "true"
+    volumes:
+      - ./global-bundle.pem:/certs/global-bundle.pem:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
   worker:
     image: ghcr.io/ridafkih/keeper-worker:2
     env_file: .env

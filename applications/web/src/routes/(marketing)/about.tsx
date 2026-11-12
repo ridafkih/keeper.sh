@@ -2,14 +2,14 @@ import type { PropsWithChildren } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Heading1, Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
+import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { ExternalTextLink, TextLink } from "@/components/ui/primitives/text-link";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
 import { canonicalUrl, jsonLdScript, seoMeta, webPageSchema, breadcrumbSchema, breadcrumbTrail, personSchema } from "@/lib/seo";
 import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
+import { marketingCopy } from "@/lib/marketing-copy";
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const breadcrumbs = breadcrumbTrail({ name: "About", path: "/about" });
 
@@ -17,27 +17,27 @@ const REPOSITORY_URL = "https://github.com/ridafkih/keeper.sh";
 const PROFILE_URL = "https://github.com/ridafkih";
 const PERSONAL_SITE_URL = "https://rida.dev";
 const LICENSE_URL = "https://www.gnu.org/licenses/agpl-3.0.en.html";
-const ORIGIN_POST_SLUG = "why-i-built-an-open-source-calendar-syncing-tool";
+const ORIGIN_POST_SLUG = "how-to-stop-double-booking-across-calendars";
 
-const PAGE_DESCRIPTION =
-  "Keeper.sh stops your calendars double-booking each other. Rida F'kih built it for his own four calendars, and still writes and maintains it.";
-
-const PERSON_DESCRIPTION =
-  "Rida F'kih writes and maintains Keeper.sh, which copies your events between Google Calendar, Outlook, iCloud, and Fastmail so they all show you as busy at the same times. He writes the posts on its blog.";
+const about = marketingCopy.about;
+const aboutSections = about.sections;
+const PAGE_DESCRIPTION = about.seo.description;
+const PERSON_DESCRIPTION = about.personDescription;
 
 export const Route = createFileRoute("/(marketing)/about")({
   component: AboutPage,
   head: () => ({
     links: [{ rel: "canonical", href: canonicalUrl("/about") }],
     meta: seoMeta({
-      title: "About",
+      title: about.seo.title,
       description: PAGE_DESCRIPTION,
       path: "/about",
+      brandPosition: "none",
     }),
     scripts: [
       jsonLdScript(webPageSchema(
-        "About Keeper.sh",
-        "Who builds Keeper.sh, the calendar sync service that stops double-booking, why it exists, and why anyone can read its code.",
+        about.header.heading,
+        about.seo.schemaDescription,
         "/about",
       )),
       jsonLdScript(personSchema(PERSON_DESCRIPTION)),
@@ -51,85 +51,94 @@ function AboutPage() {
     <div className="flex flex-col gap-6 py-16">
       <Breadcrumb items={breadcrumbs} />
       <header className="flex flex-col gap-1.5">
-        <Heading1>About Keeper.sh</Heading1>
+        <Heading1>{about.header.heading}</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
           {PAGE_DESCRIPTION}
         </Text>
       </header>
 
       <div className="flex flex-col gap-8">
-        <Section title="Who builds Keeper.sh">
+        <Section title={aboutSections.who.title}>
           <Text size="sm">
-            Rida F&apos;kih writes and maintains Keeper.sh, and holds the copyright on it. The sync code, the
-            API, the MCP server and this website all live in one public repository. You can read every
-            change as it lands.
+            {aboutSections.who.intro}
           </Text>
           <Text size="sm">
-            He also writes the posts on the{" "}
-            <TextLink align="left" size="sm" to="/blog" tone="default">blog</TextLink>
-            , where the comparisons and the provider guides live. You can find him on{" "}
+            {aboutSections.who.linksLead}{" "}
+            <TextLink align="left" size="sm" to="/blog" tone="default">{aboutSections.who.blogLinkLabel}</TextLink>
+            {aboutSections.who.afterBlog}{" "}
             <ExternalTextLink align="left" href={PROFILE_URL} rel="noopener noreferrer" size="sm" target="_blank" tone="default">
               GitHub
             </ExternalTextLink>{" "}
-            and at{" "}
+            {aboutSections.who.afterGithub}{" "}
             <ExternalTextLink align="left" href={PERSONAL_SITE_URL} rel="noopener noreferrer" size="sm" target="_blank" tone="default">
               rida.dev
             </ExternalTextLink>
-            .
+            {aboutSections.who.end}
           </Text>
         </Section>
 
-        <Section title="Why Keeper.sh exists">
+        <Section title={aboutSections.why.title}>
           <Text size="sm">
-            It started with four calendars: two on Google, one on Fastmail and one on iCloud. Anyone trying
-            to book time saw a different, incomplete week. Meetings kept landing on top of each other.
+            {aboutSections.why.p1}
           </Text>
           <Text size="sm">
-            The tools that already existed charged more the more calendars you had, and none of them read
-            Fastmail. They also copied the event contents across. Keeper.sh does the smaller job: block the
-            same time everywhere, and keep the details private until you turn them on.
+            {aboutSections.why.p2}
           </Text>
           <Text size="sm">
-            The longer version of that story is in{" "}
+            {aboutSections.why.p3Lead}{" "}
             <Link
               className="text-foreground underline underline-offset-2"
               params={{ slug: ORIGIN_POST_SLUG }}
               to="/blog/$slug"
             >
-              the post about building it
+              {aboutSections.why.p3LinkLabel}
             </Link>
-            .
+            {aboutSections.why.p3End}
           </Text>
         </Section>
 
-        <Section title="Why anyone can read the code">
+        {aboutSections.data && (
+          <Section title={aboutSections.data.title}>
+            <Text size="sm">
+              {aboutSections.data.p1}
+            </Text>
+            <Text size="sm">
+              {aboutSections.data.p2Lead}{" "}
+              <TextLink align="left" size="sm" to="/privacy" tone="default">{aboutSections.data.p2LinkLabel}</TextLink>
+              {" "}{aboutSections.data.p2End}
+            </Text>
+          </Section>
+        )}
+
+        <Section title={aboutSections.code.title}>
           <Text size="sm">
-            Keeper.sh has to read your whole events to work out when you are busy. You should be able to
-            check what it does with them, so the code is public and licensed under{" "}
+            {aboutSections.code.p1Lead}{" "}
             <ExternalTextLink align="left" href={LICENSE_URL} rel="noopener noreferrer" size="sm" target="_blank" tone="default">
-              AGPL-3.0
+              {aboutSections.code.p1LinkLabel}
             </ExternalTextLink>
-            . The hosted service at keeper.sh runs the same code that is in the repository.
+            {aboutSections.code.p1End}
           </Text>
-          <Text size="sm">
-            AGPL was chosen because this software normally runs as a service. Anyone who runs a changed
-            version has to publish their changes under the same licence. Improvements stay in the open.
-          </Text>
-          <Text size="sm">
-            Every account on a self-hosted instance gets every paid sync feature, with no plan limits.
-            Paying for the{" "}
-            <TextLink align="left" size="sm" to="/pricing" tone="default">hosted version</TextLink>
-            {" "}buys you the server, the upgrades and the backups. It funds the work on both.
-          </Text>
+          {aboutSections.code.p2 && (
+            <Text size="sm">
+              {aboutSections.code.p2}
+            </Text>
+          )}
+          {aboutSections.code.p3Lead && aboutSections.code.p3LinkLabel && aboutSections.code.p3End && (
+            <Text size="sm">
+              {aboutSections.code.p3Lead}{" "}
+              <TextLink align="left" size="sm" to="/pricing" tone="default">{aboutSections.code.p3LinkLabel}</TextLink>
+              {" "}{aboutSections.code.p3End}
+            </Text>
+          )}
         </Section>
 
-        <Section title="How to report a bug or ask a question">
+        <Section title={aboutSections.support.title}>
           <Text size="sm">
-            File bugs and feature requests as{" "}
+            {aboutSections.support.lead}{" "}
             <ExternalTextLink align="left" href={`${REPOSITORY_URL}/issues`} rel="noopener noreferrer" size="sm" target="_blank" tone="default">
-              issues on GitHub
+              {aboutSections.support.issuesLinkLabel}
             </ExternalTextLink>
-            . They are triaged in public. For anything else, email{" "}
+            {aboutSections.support.afterIssues}{" "}
             <a href="mailto:support@keeper.sh" className="text-foreground underline underline-offset-2">
               support@keeper.sh
             </a>
@@ -140,9 +149,9 @@ function AboutPage() {
 
       <MarketingCtaSection>
         <MarketingCtaCard>
-          <Heading2 className="text-center text-white">Ready to stop double-booking?</Heading2>
+          <Heading2 className="text-center text-white">{about.cta.heading}</Heading2>
           <Text size="sm" align="center" tone="highlight" className="max-w-[46ch]">
-            Connect your calendars and they all show you as busy at the same times. Or read the code first.
+            {about.cta.body}
           </Text>
           <div className="flex items-center gap-2 mt-2">
             <LinkButton
@@ -152,23 +161,14 @@ function AboutPage() {
               data-visitors-event={ANALYTICS_EVENTS.marketing_cta_clicked}
               data-visitors-cta="about"
             >
-              <ButtonText>Sync Calendars</ButtonText>
+              <ButtonText>{about.cta.primaryLabel}</ButtonText>
               <ButtonIcon>
                 <ArrowRightIcon size={16} />
               </ButtonIcon>
             </LinkButton>
-            <ExternalLinkButton
-              href={REPOSITORY_URL}
-              target="_blank"
-              rel="noreferrer"
-              size="compact"
-              variant="inverse-ghost"
-            >
-              <ButtonText>View on GitHub</ButtonText>
-              <ButtonIcon>
-                <ArrowUpRightIcon size={16} />
-              </ButtonIcon>
-            </ExternalLinkButton>
+            <LinkButton to="/pricing" size="compact" variant="inverse-ghost">
+              <ButtonText>{about.cta.secondaryLabel}</ButtonText>
+            </LinkButton>
           </div>
         </MarketingCtaCard>
       </MarketingCtaSection>

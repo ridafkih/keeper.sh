@@ -160,21 +160,24 @@ There are seven images currently available: two designed for convenience, and fi
 | REDIS_URL                      | `api`, `cron`, `worker` | Redis connection URL. Must be the same Redis instance across all services.<br><br>e.g. `redis://redis:6379`                                                        |
 | DATABASE_POOL_MAX              | `api`, `cron`, `worker`, `mcp` | Optional. Maximum Postgres connections the service's pool opens. Defaults to `10` per service, and the `keeper-standalone` and `keeper-services` images ship a smaller per-service value sized to the Postgres they run against. Every co-located service adds its own pool, so the sum of these plus `CRON_FLUSH_POOL_MAX` must stay under your Postgres `max_connections` with room left to connect for yourself.<br><br>e.g. `15` |
 | CRON_FLUSH_POOL_MAX            | `cron`        | Optional. Size of the second pool cron holds for ingest writes, separate from and additional to `DATABASE_POOL_MAX`. Defaults to `16`; the bundled images ship `8`.<br><br>e.g. `16` |
-| WORKER_JOB_QUEUE_ENABLED       | `cron`        | Required. Set to `true` to enqueue sync jobs to the worker queue, or `false` to disable. If unset, the cron service will exit with a migration notice.              |
+| RUN_MIGRATIONS                 | `api`         | Optional. Set to `false` to skip applying database migrations when the API container starts, for deployments that run them as a separate step before rolling the services. Defaults to `true`.<br><br>e.g. `false` |
+| WORKER_JOB_QUEUE_ENABLED       | `cron`        | Required. Set to `true` to enqueue sync jobs to the worker queue. Setting `false` stops the cron service from enqueuing destination syncs, so source events are still ingested but never pushed to destination calendars. If unset, the cron service will exit with a migration notice. |
 | WORKER_CONCURRENCY             | `worker`      | Optional. Number of sync jobs the worker processes concurrently. Defaults to `25`.                                                                                  |
 | BETTER_AUTH_URL                | `api`, `mcp`  | The base URL used for auth redirects.<br><br>e.g. `http://localhost:3000`                                                                                           |
 | BETTER_AUTH_SECRET             | `api`, `mcp`  | Secret key for session signing.<br><br>e.g. `openssl rand -base64 32`                                                                                               |
 | API_PORT                       | `api`         | Required. Port the Bun API listens on. Pre-set to `3001` in the `keeper-standalone` and `keeper-services` images.                                                    |
-| ENV                            | `web`         | Optional. Runtime environment. One of `development`, `production`, or `test`. Defaults to `production`.                                                             |
+| ENV                            | `api`, `cron`, `worker`, `mcp`, `web` | Required. Runtime environment. One of `development`, `production`, or `test`. Pre-set to `production` in the published images. |
+| COMMIT_SHA                     | `api`, `cron`, `worker`, `mcp`, `web` | Required. The git commit the service was built from, recorded on every log event. Baked into the published images; `bun dev` and `bun run start` read it from git. When building an image yourself, pass `--build-arg COMMIT_SHA=$(git rev-parse HEAD)`. |
+| VERSION                        | `api`, `cron`, `worker`, `mcp`, `web` | Required. The release version the service was built from, recorded on every log event. Baked into the published images; `bun dev` and `bun run start` read it from git. When building an image yourself, pass `--build-arg VERSION=$(git describe --tags --always)`. |
 | PORT                           | `web`         | Required. Port the web server listens on. Pre-set to `3000` in the `keeper-standalone` and `keeper-services` images.                                                 |
 | VITE_API_URL                   | `web`         | The URL the web server uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                         |
 | COMMERCIAL_MODE                | `api`, `cron`, `mcp`, `web` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                            |
-| POLAR_ACCESS_TOKEN             | `api`, `cron` | Optional. Polar API token for subscription management.                                                                                                              |
-| POLAR_MODE                     | `api`, `cron` | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
+| POLAR_ACCESS_TOKEN             | `api`         | Optional. Polar API token for subscription management.                                                                                                              |
+| POLAR_MODE                     | `api`         | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
 | ENCRYPTION_KEY                 | `api`, `cron`, `worker` | Key for encrypting CalDAV credentials at rest.<br><br>e.g. `openssl rand -base64 32`                                                                                |
 | RESEND_API_KEY                 | `api`         | Optional. API key for sending emails via Resend.                                                                                                                    |
-| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to. Requires `RESEND_API_KEY`.                                                                        |
+| FEEDBACK_EMAIL                 | `api`         | Optional. Address that in-app feedback submissions are emailed to, through the `user-feedback` and `problem-report` Resend templates. Agent feedback received at `/api/v1/agent-feedback` goes to the same address through the `agent-feedback` template, under an `Agent feedback:` subject. Requires `RESEND_API_KEY`. |
 | PASSKEY_RP_ID                  | `api`         | Optional. Relying party ID for passkey authentication.                                                                                                              |
 | PASSKEY_RP_NAME                | `api`         | Optional. Relying party display name for passkeys.                                                                                                                  |
 | PASSKEY_ORIGIN                 | `api`         | Optional. Origin allowed for passkey flows (e.g., `https://keeper.example.com`).                                                                                    |
@@ -182,18 +185,45 @@ There are seven images currently available: two designed for convenience, and fi
 | GOOGLE_CLIENT_SECRET           | `api`, `cron`, `worker` | Optional. Required for Google Calendar integration.                                                                                                                 |
 | MICROSOFT_CLIENT_ID            | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
 | MICROSOFT_CLIENT_SECRET        | `api`, `cron`, `worker` | Optional. Required for Microsoft Outlook integration.                                                                                                               |
+| OIDC_ISSUER_URL                | `api`         | Optional. Issuer URL of an OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, ...), exactly as the provider publishes it. Discovery is read from `<issuer>/.well-known/openid-configuration`. Requires `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET`.<br><br>e.g. `https://id.example.com` or `https://auth.example.com/realms/keeper`                                                                              |
+| OIDC_CLIENT_ID                 | `api`         | Optional. OAuth client ID registered with the OIDC issuer.                                                                                                           |
+| OIDC_CLIENT_SECRET             | `api`         | Optional. OAuth client secret registered with the OIDC issuer.                                                                                                       |
+| OIDC_PROVIDER_NAME             | `api`         | Optional. Display name shown on the SSO login button. Defaults to `SSO`.<br><br>e.g. `Pocket ID`                                                                      |
+| OIDC_SCOPES                    | `api`         | Optional. Comma-separated scopes to request from the OIDC issuer. Defaults to `openid,profile,email`.<br><br>e.g. `openid,profile,email,groups`                                                                                    |
+| OIDC_TRUST_EMAIL_VERIFIED      | `api`         | Optional. Set to `true` to trust the OIDC provider's `email_verified` claim, so a sign-in links to an existing account with the same verified email. Defaults to `false`. Only enable it if your provider verifies every email address it asserts. |
+| DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up. Google and Microsoft sign-in stay available while their client credentials are set. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
 | BLOCK_PRIVATE_RESOLUTION       | `api`, `cron` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
+| REGISTRATION_EMAIL_DOMAINS     | `api`         | Optional. Comma-separated email domains that may create an account. When set, sign-up and first-time sign-in from any other domain are refused; existing accounts are unaffected. Unset or empty allows every domain.<br><br>e.g. `keeper.sh,example.com` |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
-| WEBHOOK_PUBLIC_URL             | `api`, `cron` | Optional. Public HTTPS origin that Google Calendar and Microsoft Graph can reach your instance on. Setting it turns on realtime push, so Keeper.sh picks up calendar changes within seconds instead of waiting for the next poll. Leave it unset and nothing changes: polling continues exactly as before and no subscription is ever registered with a provider. Realtime push is a Pro feature, and self-hosted instances with `COMMERCIAL_MODE` off are treated as Pro. Must be a public `https://` origin with no query string or fragment — `localhost`, private-range and `.local` addresses are rejected at boot, since no provider could deliver to them.<br><br>e.g. `https://keeper.example.com` |
-| PUSH_REDUCED_POLLING           | `cron`        | Optional. Reserved for a future release that lengthens the polling interval for calendars with a proven-healthy push subscription. Has no effect today.              |
+| WEBHOOK_PUBLIC_URL             | `api`, `cron` | Optional. Public HTTPS origin that Google Calendar and Microsoft Graph can reach your instance on. Setting it turns on realtime push, so Keeper.sh picks up calendar changes within seconds instead of waiting for the next poll. Leave it unset and nothing changes: polling continues exactly as before and no subscription is ever registered with a provider. Subscriptions are registered for every plan; on the free plan, notifications that arrive within five minutes of each other are folded into one read, and destinations still update on the free plan's 30-minute cadence. Must be a public `https://` origin with no query string or fragment — `localhost`, private-range and `.local` addresses are rejected at boot, since no provider could deliver to them.<br><br>e.g. `https://keeper.example.com` |
+| CRON_JOBS_ENABLED              | `cron`        | Optional. Set to `false` to run only the ingest loop in this process, for extra `cron` containers that add ingest capacity alongside the one that runs the scheduled jobs. Defaults to `true`. |
+| INGEST_LOOP_ENABLED            | `cron`        | Optional. Set to `false` to stop this process from reading source calendars. Defaults to `true`. Any number of processes can run the loop at once: each claims the calendars that are due and holds them under a lease, so no calendar is read twice. |
+| INGEST_FLEET_CONCURRENCY       | `cron`        | Optional. Calendars one process reads at once on their regular schedule. Defaults to `64`. |
+| INGEST_WAKE_CONCURRENCY        | `cron`        | Optional. Calendars one process reads at once after a push notification, sync request or sign-in. Kept apart from the regular schedule so a backlog there never delays them. Defaults to `16`. |
+| INGEST_CLAIM_BATCH             | `cron`        | Optional. Most calendars one process claims per query. Defaults to `50`. |
+| INGEST_FLEET_IDLE_MS           | `cron`        | Optional. How long the loop waits before looking again when no calendar is due. Defaults to `2000`. |
+| INGEST_WAKE_IDLE_MS            | `cron`        | Optional. The same wait for push notifications and other wakes. Defaults to `1000`. |
+| INGEST_LEASE_SECONDS           | `cron`        | Optional. How long a claimed calendar stays with the process that claimed it. A calendar whose process dies is read again once its lease runs out. Defaults to `900`. |
+| INGEST_PRO_POLL_SECONDS        | `cron`        | Optional. How often a Pro calendar is read when no healthy push subscription covers it. Defaults to `60`. |
+| INGEST_FREE_POLL_SECONDS       | `cron`        | Optional. The same interval for free calendars. Defaults to `600`. |
+| INGEST_PRO_SAFETY_POLL_SECONDS | `cron`        | Optional. How often a Pro calendar with a healthy push subscription is read anyway, to catch a notification the provider dropped. Defaults to `300`. |
+| INGEST_FREE_SAFETY_POLL_SECONDS | `cron`       | Optional. The same safety interval for free calendars. Defaults to `3600`. |
+| INGEST_DORMANT_POLL_SECONDS    | `cron`        | Optional. How often a dormant calendar is read: one that feeds no destination or feed, owned by someone who has not signed in or used the API for `INGEST_DORMANT_AFTER_DAYS`. Signing in reads it at once. Defaults to `86400`. |
+| INGEST_DORMANT_AFTER_DAYS      | `cron`        | Optional. Days of inactivity before a calendar counts as dormant. Set to `0` to never treat a calendar as dormant. Defaults to `30`. |
+| GOOGLE_PROJECT_REQUESTS_PER_MINUTE | `api`, `cron`, `worker` | Optional. Most Google Calendar requests per minute for the whole Google Cloud project. Background work (reading source calendars, writing to destinations, registering push channels, rediscovering calendars) uses up to 90% of it; the rest is kept for requests a person is waiting on, such as connecting an account or creating an event through the API, which skip ahead of queued background work. Defaults to `10000`, Google's published per-project limit; set it to your project's quota if that differs. Set to `0` for no project-wide limit beyond Google's per-user one. |
+| OUTLOOK_INGEST_REQUESTS_PER_MINUTE | `cron`    | Optional. Most Microsoft Graph requests per minute across every process reading calendars. Microsoft Graph limits Outlook per mailbox, which Keeper.sh already paces, so this is unset by default and means no limit. |
 | WEBSOCKET_URL                  | `api`         | Optional. External URL clients should open the realtime socket against. When unset, clients connect to the API's own `/api/socket` path.<br><br>e.g. `wss://socket.keeper.example.com` |
 | MCP_PUBLIC_URL                 | `api`, `mcp`  | Optional on `api`, required by `mcp`. Public URL of the MCP resource. Enables OAuth on the API and identifies the MCP server to clients. In `keeper-standalone` it defaults to `BETTER_AUTH_URL` with `/mcp` appended.<br><br>e.g. `https://keeper.example.com/mcp` |
 | VITE_MCP_URL                   | `web`         | Optional. Internal URL the web server uses to proxy `/mcp` requests to the MCP service.<br><br>e.g. `http://mcp:3002`                                              |
+| OPENAI_APPS_CHALLENGE_TOKEN    | `web`         | Optional. Domain verification token from the OpenAI Platform plugin submission, served at `/.well-known/openai-apps-challenge`. Only needed when submitting the MCP server to the ChatGPT Plugins Directory.<br><br>e.g. `abc123` |
 | MCP_PORT                       | `mcp`         | Required by `mcp`. Port the MCP server listens on. Pre-set to `3002` in the `keeper-standalone` image.<br><br>e.g. `3002`                                          |
 | MCP_API_URL                    | `api`, `mcp`  | Optional. Internal URL used to reach the Keeper.sh API when serving MCP — for tool calls, and for fetching the signing keys that validate MCP tokens. Defaults to `BETTER_AUTH_URL`, which requires both services to be able to reach your instance's public URL. Pre-set to the bundled API in the `keeper-standalone` image.<br><br>e.g. `http://api:3001` |
-| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs to an OpenTelemetry collector. Each service pipes its stdout through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which runs as a separate process and does not affect application performance.<br><br>e.g. `https://otel-collector.example.com:4318` |
+| AGENT_FEEDBACK_DISABLED        | `mcp`         | Optional. Set to `true` to turn agent feedback off for every user on the instance: `send_feedback` is not offered, tools give no hint to send feedback, and `intent` is not recorded. Defaults to on. Any value other than `true` or `false` stops the service at startup.<br><br>e.g. `true` |
+| OTEL_EXPORTER_OTLP_ENDPOINT    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. When set, enables forwarding structured logs and traces to an OpenTelemetry collector. Logs go through the `keeper-otelemetry` binary from [`@keeper.sh/otelemetry`](./packages/otelemetry), which starts the service as a child process, forwards its output and stop signals, and does not affect application performance. Traces are exported in-process to `/v1/traces` on the same endpoint from a bounded queue that drops spans rather than slowing requests down, and every wide event carries the `trace_id` and `span_id` of its trace.<br><br>e.g. `https://otel-collector.example.com:4318` |
+| TRACE_SAMPLE_RATIO             | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Share of new traces exported when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, between `0` and `1`. Downstream services follow the decision made where the trace started. Traces that end in an error or run longer than `TRACE_SLOW_THRESHOLD_MS` are exported regardless. Defaults to `0.1`.<br><br>e.g. `0.25` |
+| TRACE_SLOW_THRESHOLD_MS        | `api`, `cron`, `worker`, `mcp`, `web` | Optional. A request, job or ingest round that takes at least this long is exported even when the sample ratio left it out. Defaults to `2000`.<br><br>e.g. `5000` |
 | OTEL_EXPORTER_OTLP_PROTOCOL    | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Protocol used by the OTLP exporter. Defaults to `http/protobuf` per the OpenTelemetry spec.<br><br>e.g. `http/protobuf`, `grpc`, `http/json` |
 | OTEL_EXPORTER_OTLP_HEADERS     | `api`, `cron`, `worker`, `mcp`, `web` | Optional. Headers sent with every OTLP export request. Use this for authentication (e.g. Basic auth or API keys).<br><br>e.g. `Authorization=Basic dXNlcjpwYXNz` |
 
@@ -207,6 +237,7 @@ The following environment variables are read by the `web` server at **runtime** 
 | VITE_GOOGLE_ADS_ID                | Optional. Google Ads conversion tracking ID (e.g., `AW-123456789`) |
 | VITE_GOOGLE_ADS_CONVERSION_LABEL  | Optional. Google Ads conversion label for purchase tracking        |
 | VITE_GOOGLE_ADS_SIGNUP_CONVERSION_LABEL | Optional. Google Ads conversion label for signup tracking     |
+| VITE_GOOGLE_ANALYTICS_ID                | Optional. Google Analytics 4 measurement ID (e.g., `G-XXXXXXXXXX`) |
 
 > [!NOTE]
 >
@@ -253,6 +284,48 @@ Once this is configured, set the client ID and client secret as the `GOOGLE_CLIE
 > Once again, this is optional. If you do not configure this, you will not be able to configure Microsoft Outlook as a destination.
 
 The clearest non-legacy walkthrough for configuring OAuth is this [community thread.](https://learn.microsoft.com/en-us/answers/questions/4705805/how-to-set-up-oauth-2-0-for-outlook). The required scopes are `Calendars.ReadWrite`, `User.Read`, and `offline_access`; `MailboxSettings.Read` is optional and only used to import Outlook category colors. The client ID and secret for Microsoft go into the `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` environment variables respectively.
+
+If people will sign in with work or school (Entra ID) accounts, add the `xms_edov` optional claim to the app registration under **Token configuration → Add optional claim → ID → `xms_edov`**. Entra sets it when the tenant has verified the domain of the account's email, and Keeper.sh uses it to record that email as verified. Without it, a work or school sign-in is recorded as unverified and can't be linked automatically to an existing account with the same email; it can still be linked from settings while signed in. Personal Microsoft accounts don't need the claim.
+
+### OIDC / SSO
+
+Self-hosters can delegate sign-in to any OIDC-compliant identity provider (Authentik, Keycloak, Pocket ID, Zitadel, ...). Nothing changes until the variables below are set.
+
+Register a confidential client with your provider using this redirect URI:
+
+```
+https://<your-keeper-origin>/api/auth/oauth2/callback/oidc
+```
+
+Then pass the client to the container running the API (`keeper-standalone`, `keeper-services`, or `keeper-api`):
+
+```yaml
+    environment:
+      OIDC_ISSUER_URL: https://id.example.com
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      OIDC_PROVIDER_NAME: Pocket ID
+```
+
+`OIDC_ISSUER_URL` must match the `issuer` your provider publishes, including any path, such as `https://auth.example.com/realms/keeper` for Keycloak or `https://authentik.example.com/application/o/keeper/` for Authentik. `OIDC_PROVIDER_NAME` labels the sign-in button and defaults to `SSO`. `OIDC_SCOPES` is a comma-separated list that defaults to `openid,profile,email`.
+
+Signing in with the provider for the first time creates a new Keeper.sh account. By default it is never merged into an existing account automatically: if the provider's email address already belongs to a Keeper.sh account, the sign-in is refused instead. To move an existing account to SSO, sign in the usual way and choose **Link SSO** in settings; from then on either method signs in to the same account.
+
+If your provider verifies every email address it asserts, you can let sign-ins link to existing accounts automatically instead:
+
+```yaml
+      OIDC_TRUST_EMAIL_VERIFIED: "true"
+```
+
+With this set, a sign-in links to an existing Keeper.sh account only when the provider sends `email_verified: true` for the address and the existing account's email is itself verified. Anything else, including a missing claim, is refused as before. Username accounts are never linked this way. Leave it off if users can set their own email at the provider without verifying it, since anyone able to claim an address there could then sign in to the matching Keeper.sh account.
+
+Once everyone who needs one has linked their account, you can turn off username and password sign-in:
+
+```yaml
+      DISABLE_LOCAL_AUTH: "true"
+```
+
+This turns off username and password sign-in and sign-up on the server, not just in the interface. Google and Microsoft sign-in aren't affected: they stay available while `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` or `MICROSOFT_CLIENT_ID`/`MICROSOFT_CLIENT_SECRET` are set, which calendar sync with those providers also needs. It only takes effect when the OIDC client is fully configured, so setting it alone can't lock you out.
 
 ## Standalone Container
 
@@ -571,7 +644,7 @@ curl https://keeper.example.com/api/v1/calendars \
 | `PATCH`  | `/api/v1/calendars/{calendarId}`         | Pause or resume syncing for a calendar. Send `paused` as `true` to halt it in both directions without disconnecting it.                                         |
 | `GET`    | `/api/v1/calendars/{calendarId}/invites` | List invitations on a calendar that have not been responded to, within a date range.                                                                            |
 | `GET`    | `/api/v1/accounts`                       | List connected calendar accounts and how many calendars each has. Accepts an optional comma-delimited `provider` filter.                                        |
-| `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, and `count=true` to return only a count.                             |
+| `GET`    | `/api/v1/events`                         | List events in a date range. Accepts `calendarId`, `availability`, and `isAllDay` filters, a `timezone` whose local days all-day events fall on, and `count=true` to return only a count. |
 | `POST`   | `/api/v1/events`                         | Create an event. Requires `calendarId`, `title`, `startTime`, and `endTime`.                                                                                    |
 | `GET`    | `/api/v1/events/{id}`                    | Get a single event.                                                                                                                                            |
 | `PATCH`  | `/api/v1/events/{id}`                    | Update an event's fields, or send `rsvpStatus` to respond to an invitation.                                                                                     |
@@ -579,8 +652,24 @@ curl https://keeper.example.com/api/v1/calendars \
 | `GET`    | `/api/v1/events/free-time`               | Find free slots of at least `durationMinutes` in a date range. Requires `timezone`, and accepts working-hours options.                                          |
 | `POST`   | `/api/v1/sync`                           | Trigger a sync immediately. Throttled to one request per minute per user.                                                                                      |
 | `GET`    | `/api/v1/ical`                           | Get the URL of your iCal feed.                                                                                                                                 |
+| `GET`    | `/api/v1/mappings`                       | List which calendars sync into which, as source and destination calendar ID pairs.                                                                              |
+| `PUT`    | `/api/v1/calendars/{calendarId}/destinations` | Replace the calendars a calendar syncs to. Send `calendarIds`.                                                                                             |
+| `GET`    | `/api/v1/calendars/{calendarId}/settings` | Get a calendar's sync settings and the calendars it syncs to and from.                                                                                         |
+| `PATCH`  | `/api/v1/calendars/{calendarId}/settings` | Rename a calendar with `name`, or change its sync settings. Settings other than the name require Pro.                                                          |
+| `POST`   | `/api/v1/accounts/{id}/refresh`          | Re-discover the calendars on one connected account.                                                                                                            |
+| `POST`   | `/api/v1/accounts/refresh-calendars`     | Re-discover the calendars on every connected account. Throttled to one request per minute per user.                                                            |
+| `POST`   | `/api/v1/ics`                            | Subscribe to a calendar from its iCal link. Send `url`, and optionally `name`.                                                                                 |
+| `DELETE` | `/api/v1/ics/{calendarId}`               | Remove a calendar added from an iCal link.                                                                                                                     |
+| `GET`    | `/api/v1/ical/feeds`                     | List your iCal feeds with their URLs, settings and calendar IDs.                                                                                               |
+| `POST`   | `/api/v1/ical/feeds`                     | Create an iCal feed. Send `name`.                                                                                                                              |
+| `PATCH`  | `/api/v1/ical/feeds/{id}`                | Rename an iCal feed or change its settings. Settings other than the name require Pro.                                                                          |
+| `PUT`    | `/api/v1/ical/feeds/{id}/calendars`      | Replace the calendars an iCal feed publishes. Send `calendarIds`.                                                                                              |
+| `DELETE` | `/api/v1/ical/feeds/{id}`                | Delete an iCal feed. The default feed cannot be deleted.                                                                                                       |
+| `POST`   | `/api/v1/agent-feedback`                 | Intake for `send_feedback`. Takes no token and is called by MCP servers, not users. On Keeper.sh it stores the feedback and notifies the team.                 |
 
 Range parameters `from` and `to` are ISO 8601 datetimes. If omitted, `from` defaults to now and `to` defaults to a week after `from`. A range may not exceed 732 days.
+
+On `POST` and `PATCH /api/v1/events`, a `startTime` or `endTime` without a UTC offset is read in `timezone`, which is then required; times with `Z` or an offset are used as given, and all-day events take the calendar date as written.
 
 `/api/v1/events/free-time` treats events marked free or working-elsewhere as non-blocking and everything else, including all-day events, as busy; pass `ignoreAllDayEvents=true` to stop all-day events blocking. `workingHoursStart` and `workingHoursEnd` are 24-hour local times such as `09:00`, and `workingDays` is a comma-delimited list where `0` is Sunday. All three are read against `timezone`, so the hours hold across daylight saving transitions.
 
@@ -599,8 +688,8 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | Tool                  | Description                                                                                                                                   |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `list_calendars`      | List all calendars connected to Keeper.sh, including provider name and account.                                                                   |
-| `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes.                                  |
-| `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times.              |
+| `get_event_count`     | Get the number of calendar events. Optionally scoped to a date range with `from` and `to` ISO 8601 datetimes, and an IANA timezone whose local days all-day events count on. |
+| `get_events`          | Get calendar events within a date range. Accepts ISO 8601 datetimes and an IANA timezone identifier used to localize event times. All-day events return `YYYY-MM-DD` dates with an exclusive end. |
 | `get_event`           | Get a single calendar event by its ID.                                                                                                         |
 | `find_free_time`      | Find open slots of at least a given duration across every synced calendar in a date range.                                                     |
 | `create_event`        | Create an event on a connected calendar. Requires a calendar ID, title, start time, and end time.                                               |
@@ -611,11 +700,34 @@ Keeper.sh includes an optional MCP server that lets AI agents (such as Claude) a
 | `list_accounts`       | List all connected calendar accounts with provider information.                                                                                |
 | `trigger_sync`        | Force a sync now instead of waiting for the next scheduled run. Throttled to one request per minute.                                           |
 | `pause_sync`          | Pause or resume syncing for a single calendar without disconnecting it.                                                                        |
-| `get_ical_feed`       | Get your iCal feed URL for subscribing in other calendar apps.                                                                                 |
+| `list_syncs`          | List which calendars sync into which.                                                                                                          |
+| `set_sync_destinations` | Set the calendars a calendar syncs to, replacing its current destinations.                                                                   |
+| `get_calendar_settings` | Get a calendar's sync settings.                                                                                                              |
+| `update_calendar_settings` | Change how a calendar's events are copied: the copy title, excluded events and details, privacy, reminders and the sync window. Requires Pro. |
+| `rename_calendar`     | Rename a calendar in Keeper.sh.                                                                                                                |
+| `refresh_calendars`   | Re-discover the calendars on one connected account, or on every account.                                                                      |
+| `add_calendar_link`   | Subscribe to a read-only calendar from its iCal link.                                                                                          |
+| `remove_calendar_link` | Remove a calendar added from an iCal link.                                                                                                    |
+| `list_ical_feeds`     | List your iCal feeds with their subscription URLs, settings and calendars.                                                                     |
+| `create_ical_feed`    | Create an iCal feed.                                                                                                                           |
+| `update_ical_feed`    | Rename an iCal feed or change what its events show.                                                                                            |
+| `set_ical_feed_calendars` | Set which calendars an iCal feed publishes.                                                                                                |
+| `delete_ical_feed`    | Delete an iCal feed.                                                                                                                           |
+| `send_feedback`       | Send the Keeper.sh team feedback about the MCP tools and API: an unexpected error, a confusing result, a missing capability, unclear docs or a workaround. |
+
+Every tool also accepts an optional `intent`, up to 300 characters, where an agent can say what it is trying to do. Unless the user has turned agent feedback off, it is recorded with the tool name on the request's log event, is never sent to the API or echoed back, and has no effect on what the tool does.
+
+## Agent Feedback
+
+`send_feedback` takes a `message` (the goal, what was tried and where it got stuck, up to 2,000 characters), a `category` (`tool_error`, `missing_capability`, `confusing_output`, `documentation` or `other`), an optional `toolName` and an optional `severity` (`high` when blocked, `medium` when a workaround was found, `low` for an annoyance; defaults to `medium`).
+
+Feedback always goes to the Keeper.sh team at `https://www.keeper.sh/api/v1/agent-feedback`, including from self-hosted instances, so problems with the tools reach the people who maintain them. It carries only the message, category, severity, tool name, the intent given on that call, the instance's Keeper.sh version, and whether the instance is hosted or self-hosted. It never carries the user's token, ID, email, calendar data or the instance's hostname.
+
+Each user can turn this off with **Agent feedback** in **Settings**, stored per account and served at `GET` and `PATCH /api/account/settings`. With it off, `send_feedback` is left out of that user's tool list and a call to it sends nothing, the server's instructions and error messages stop mentioning it, and `intent` is still accepted but not recorded. Operators can turn it off for the whole instance with `AGENT_FEEDBACK_DISABLED`.
 
 ## Connecting an MCP Client
 
-To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, and pause or force a sync, not just read them.
+To connect an MCP-compatible client (e.g. Claude Code, Claude Desktop), point it at your MCP server URL. The client will be guided through the OAuth consent flow to authorize read and write access to your calendar data — the toolset can create, update, delete, and RSVP to events, find open time, pause or force a sync, change which calendars sync where and how, and manage calendar links and iCal feeds, not just read them.
 
 Example Claude Code MCP configuration:
 
@@ -648,7 +760,7 @@ MCP is **not** bundled in `keeper-services` or the individual service images. To
 
 ## Registry Manifest
 
-[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and takes the `sh.keeper` namespace, which is authenticated by proving ownership of `keeper.sh` rather than by a GitHub account.
+[`server.json`](./server.json) at the repository root describes the hosted server for the [official MCP Registry](https://registry.modelcontextprotocol.io). It carries a single `streamable-http` remote pointing at `https://www.keeper.sh/mcp`, and is listed as `io.github.ridafkih/keeper-sh`, the name it was first published under; a registry name cannot be changed once published. The server announces the same name, version, title, website and icons in its `initialize` response.
 
 Publishing is a manual step run with the `mcp-publisher` CLI and is deliberately not automated: a published version is permanent, so the manifest is reviewed here first and the `version` it carries can never be reused. Self-hosted instances do not need this file — it describes the hosted instance only.
 

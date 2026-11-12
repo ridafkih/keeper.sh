@@ -4,4 +4,4 @@ exec 2>&1
 export DATABASE_POOL_MAX="${DATABASE_POOL_MAX:-10}"
 
 cd /app
-exec /root/.bun/bin/bun run services/api/dist/index.js
+exec /usr/local/bin/bun run services/api/dist/index.js

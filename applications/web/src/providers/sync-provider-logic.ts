@@ -1,11 +1,12 @@
-import { isSocketMessage, isSyncAggregate } from "@keeper.sh/data-schemas/client";
-import type { CompositeSyncState, SyncAggregateData } from "@/state/sync";
+import { isMappingSyncState, isSocketMessage, isSyncAggregate } from "@keeper.sh/data-schemas/client";
+import type { CompositeSyncState, MappingSyncStateData, SyncAggregateData } from "@/state/sync";
 
 type IncomingSocketAction =
   | { kind: "ignore" }
   | { kind: "pong" }
   | { kind: "reconnect" }
-  | { kind: "aggregate"; data: SyncAggregateData };
+  | { kind: "aggregate"; data: SyncAggregateData }
+  | { kind: "mappings"; data: MappingSyncStateData };
 
 interface AggregateDecision {
   accepted: boolean;
@@ -83,6 +84,13 @@ const parseIncomingSocketAction = (
     return { kind: "pong" };
   }
 
+  if (parsed.event === "sync:mappings") {
+    if (!isMappingSyncState(parsed.data)) {
+      return { kind: "reconnect" };
+    }
+    return { data: parsed.data, kind: "mappings" };
+  }
+
   if (parsed.event !== "sync:aggregate") {
     return { kind: "ignore" };
   }
@@ -116,9 +124,15 @@ const shouldAcceptAggregatePayload = (
   };
 };
 
+const shouldAcceptMappingSyncState = (
+  lastMappingSeq: number,
+  next: MappingSyncStateData,
+): boolean => next.seq > lastMappingSeq;
+
 export {
   parseIncomingSocketAction,
   resolveAggregateLastSyncedAt,
   shouldAcceptAggregatePayload,
+  shouldAcceptMappingSyncState,
 };
 export type { IncomingSocketAction, AggregateDecision };

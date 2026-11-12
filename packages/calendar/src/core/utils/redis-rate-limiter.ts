@@ -1,5 +1,6 @@
 import {
   FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
+  GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
   GOOGLE_PUSH_REQUESTS_PER_MINUTE,
   GOOGLE_REQUESTS_PER_MINUTE,
   ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
@@ -29,6 +30,7 @@ interface RedisRateLimiter {
 }
 
 interface RedisRateLimiterConfig {
+  priority?: boolean;
   requestsPerMinute: number;
 }
 
@@ -132,6 +134,29 @@ const ACQUIRE_SCRIPT = `
   return {1000, current, depth}
 `;
 
+const PRIORITY_ACQUIRE_SCRIPT = `
+  redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1])
+  local current = redis.call('ZCARD', KEYS[1])
+  local count = tonumber(ARGV[3])
+  local limit = tonumber(ARGV[4])
+  local now = tonumber(ARGV[2])
+
+  if current + count <= limit then
+    for i = 1, count do
+      redis.call('ZADD', KEYS[1], now, now .. ':' .. i .. ':' .. math.random(1000000))
+    end
+    redis.call('PEXPIRE', KEYS[1], 60000)
+    return {0, current}
+  end
+
+  local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+  if #oldest >= 2 then
+    return {tonumber(oldest[2]) + 60000 - now, current}
+  end
+
+  return {1000, current}
+`;
+
 /* KEYS[1] = sorted set key, ARGV[1] = waiter token. */
 const LEAVE_QUEUE_SCRIPT = `
   redis.call('ZREM', KEYS[1] .. ':queue', ARGV[1])
@@ -188,16 +213,25 @@ const waitForRetry = (delayMs: number, signal?: AbortSignal): Promise<void> => {
   });
 };
 
+const resolveAcquireScript = (priority: boolean): string => {
+  if (priority) {
+    return PRIORITY_ACQUIRE_SCRIPT;
+  }
+  return ACQUIRE_SCRIPT;
+};
+
 const createRedisRateLimiter = (
   redis: RedisScriptClient,
   key: string,
   config: RedisRateLimiterConfig,
 ): RedisRateLimiter => {
-  const { requestsPerMinute } = config;
+  const { priority = false, requestsPerMinute } = config;
+  const script = resolveAcquireScript(priority);
 
   const acquire = async (count: number, signal?: AbortSignal): Promise<void> => {
     widelog.count("ratelimit.acquire_count", 1);
     const startedAt = performance.now();
+    let parked = false;
     let waiterToken = "";
     let joinedQueue = false;
     let granted = false;
@@ -223,7 +257,7 @@ const createRedisRateLimiter = (
         }
 
         const { occupancy, queueDepth, waitTimeMs } = parseAcquireDecision(
-          await measureRedisCommand(() => redis.eval(ACQUIRE_SCRIPT, 1, ...scriptArguments)),
+          await measureRedisCommand(() => redis.eval(script, 1, ...scriptArguments)),
         );
         widelog.max("ratelimit.window_occupancy_max", occupancy);
         if (typeof queueDepth === "number") {
@@ -236,10 +270,13 @@ const createRedisRateLimiter = (
         }
 
         widelog.count("ratelimit.throttled_count", 1);
-        if (waiterToken === "") {
-          waiterToken = crypto.randomUUID();
+        if (!parked) {
+          parked = true;
           /* Only a parked acquire names its key: an unthrottled one waited on nothing. */
           widelog.set("wait.rate_limiter_key", key);
+          if (!priority) {
+            waiterToken = crypto.randomUUID();
+          }
         }
 
         const sleepMs = Math.max(RETRY_POLL_MS, Math.min(waitTimeMs, QUEUE_POLL_CEILING_MS));
@@ -278,6 +315,86 @@ const createGoogleUserRateLimiter = (
   `ratelimit:${userId}:google`,
   { requestsPerMinute: GOOGLE_LANE_REQUESTS_PER_MINUTE[lane] },
 );
+
+const GOOGLE_PROJECT_RATE_LIMIT_KEY = "ratelimit:google:project";
+const GOOGLE_BACKGROUND_SHARE_OF_PROJECT = 0.9;
+const GOOGLE_INTERACTIVE_MAX_WAIT_MS = 5000;
+
+class GoogleProjectBudgetExhaustedError extends Error {
+  constructor() {
+    super("Google Calendar's request quota for Keeper.sh is used up for this minute. Try again shortly.");
+    this.name = "GoogleProjectBudgetExhaustedError";
+  }
+}
+
+const resolveGoogleProjectRequestsPerMinute = (configured?: number): number | null => {
+  if (configured === 0) {
+    return null;
+  }
+  if (typeof configured === "number" && Number.isFinite(configured) && configured > 0) {
+    return configured;
+  }
+  return GOOGLE_PROJECT_REQUESTS_PER_MINUTE;
+};
+
+const withGoogleProjectBudget = (
+  redis: RedisScriptClient,
+  userLimiter: RedisRateLimiter,
+  configuredRequestsPerMinute?: number,
+): RedisRateLimiter => {
+  const requestsPerMinute = resolveGoogleProjectRequestsPerMinute(configuredRequestsPerMinute);
+  if (requestsPerMinute === null) {
+    return userLimiter;
+  }
+  const projectLimiter = createRedisRateLimiter(redis, GOOGLE_PROJECT_RATE_LIMIT_KEY, {
+    requestsPerMinute: Math.max(1, Math.floor(requestsPerMinute * GOOGLE_BACKGROUND_SHARE_OF_PROJECT)),
+  });
+  return {
+    acquire: async (count, signal) => {
+      await userLimiter.acquire(count, signal);
+      await projectLimiter.acquire(count, signal);
+    },
+  };
+};
+
+const combineSignals = (deadline: AbortSignal, signal?: AbortSignal): AbortSignal => {
+  if (!signal) {
+    return deadline;
+  }
+  return AbortSignal.any([signal, deadline]);
+};
+
+interface GoogleInteractiveRateLimiterOptions {
+  maxWaitMs?: number;
+}
+
+const createGoogleInteractiveRateLimiter = (
+  redis: RedisScriptClient,
+  configuredRequestsPerMinute?: number,
+  options?: GoogleInteractiveRateLimiterOptions,
+): RedisRateLimiter | null => {
+  const requestsPerMinute = resolveGoogleProjectRequestsPerMinute(configuredRequestsPerMinute);
+  if (requestsPerMinute === null) {
+    return null;
+  }
+  const projectLimiter = createRedisRateLimiter(redis, GOOGLE_PROJECT_RATE_LIMIT_KEY, {
+    priority: true,
+    requestsPerMinute,
+  });
+  return {
+    acquire: async (count, signal) => {
+      const deadline = AbortSignal.timeout(options?.maxWaitMs ?? GOOGLE_INTERACTIVE_MAX_WAIT_MS);
+      try {
+        await projectLimiter.acquire(count, combineSignals(deadline, signal));
+      } catch (error) {
+        if (deadline.aborted && !signal?.aborted) {
+          throw new GoogleProjectBudgetExhaustedError();
+        }
+        throw error;
+      }
+    },
+  };
+};
 
 const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 
@@ -444,6 +561,10 @@ export {
   createOutlookAccountSemaphore,
   createOutlookRequestLimiter,
   createRedisRateLimiter,
+  createGoogleInteractiveRateLimiter,
+  GoogleProjectBudgetExhaustedError,
+  resolveGoogleProjectRequestsPerMinute,
+  withGoogleProjectBudget,
 };
 export type {
   GoogleRateLimitLane,

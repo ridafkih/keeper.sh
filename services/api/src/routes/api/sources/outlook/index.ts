@@ -4,6 +4,7 @@ import { withAuth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
 import { labelFailureResponse } from "@/utils/error-labelling";
+import { noteUserMilestone } from "@/utils/user-milestones";
 import {
   OAuthSourceLimitError,
   DestinationNotFoundError,
@@ -37,6 +38,8 @@ const POST = withWideEvent(
         provider: OUTLOOK_PROVIDER,
         userId,
       });
+      noteUserMilestone(userId, "first_calendar_connected");
+
       return Response.json(source, { status: HTTP_STATUS.CREATED });
     } catch (error) {
       if (error instanceof OAuthSourceLimitError) {

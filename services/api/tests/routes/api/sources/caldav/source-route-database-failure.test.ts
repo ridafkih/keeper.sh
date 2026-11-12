@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let fields: Record<string, unknown> = {};
 let values: Record<string, unknown> = {};
-let createCalDAVSourceResult: () => Promise<unknown> = () =>
-  Promise.resolve({ id: "source-1" });
+const IMPORTED_RESULT = {
+  accountId: "account-1",
+  calendars: [{ accountId: "account-1", calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", id: "source-1", name: "Work", status: "imported" }],
+};
+
+let importCalDAVCalendarsResult: () => Promise<unknown> = () =>
+  Promise.resolve(IMPORTED_RESULT);
 
 vi.mock("@/utils/logging", () => ({
   context: async (run: () => Promise<unknown>) => await run(),
@@ -32,12 +37,10 @@ vi.mock("@/utils/middleware", () => ({
 }));
 
 class TestCalDAVSourceLimitError extends Error {}
-class TestDuplicateCalDAVSourceError extends Error {}
 
 vi.mock("@/utils/caldav-sources", () => ({
   CalDAVSourceLimitError: TestCalDAVSourceLimitError,
-  DuplicateCalDAVSourceError: TestDuplicateCalDAVSourceError,
-  createCalDAVSource: () => createCalDAVSourceResult(),
+  importCalDAVCalendars: () => importCalDAVCalendarsResult(),
   getUserCalDAVSources: () => Promise.resolve([]),
 }));
 
@@ -60,8 +63,7 @@ const createRequest = (): Request =>
   new Request("https://api.keeper.sh/api/sources/caldav", {
     body: JSON.stringify({
       authMethod: "basic",
-      calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work",
-      name: "Work",
+      calendars: [{ calendarUrl: "https://caldav.fastmail.com/dav/calendars/user/a/work", name: "Work" }],
       password: "secret",
       provider: "fastmail",
       serverUrl: "https://caldav.fastmail.com",
@@ -83,7 +85,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   beforeEach(() => {
     fields = {};
     values = {};
-    createCalDAVSourceResult = () => Promise.resolve({ id: "source-1" });
+    importCalDAVCalendarsResult = () => Promise.resolve(IMPORTED_RESULT);
   });
 
   it("creates the source when the pool is healthy", async () => {
@@ -94,7 +96,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   });
 
   it("labels a closed pooled connection as a database failure, not a CalDAV connection failure", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(pooledInsertFailure({ code: "ERR_POSTGRES_CONNECTION_CLOSED" }));
 
     await post();
@@ -103,7 +105,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   });
 
   it("records the SQLSTATE when the server terminated the connection", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(
         pooledInsertFailure({ code: "ERR_POSTGRES_SERVER_ERROR", errno: "57P01" }),
       );
@@ -115,7 +117,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   });
 
   it("does not answer a pool outage with 400 Bad Request", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(pooledInsertFailure({ code: "ERR_POSTGRES_CONNECTION_CLOSED" }));
 
     const response = await post();
@@ -124,7 +126,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   });
 
   it("does not leak the failing SQL statement to the caller", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(pooledInsertFailure({ code: "ERR_POSTGRES_CONNECTION_CLOSED" }));
 
     const response = await post();
@@ -134,7 +136,7 @@ describe("POST /api/sources/caldav under a Postgres pool failure", () => {
   });
 
   it("still labels a genuine CalDAV failure with the provider slug", async () => {
-    createCalDAVSourceResult = () =>
+    importCalDAVCalendarsResult = () =>
       Promise.reject(new Error("CalDAV server responded 401 Unauthorized"));
 
     await post();

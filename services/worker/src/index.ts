@@ -1,6 +1,8 @@
+import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
+import { SpanKind, startTracing, withSpan } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { Worker } from "bullmq";
-import { PUSH_SYNC_QUEUE_NAME } from "@keeper.sh/queue";
+import { PUSH_SYNC_QUEUE_NAME, createPushSyncQueue } from "@keeper.sh/queue";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
 import {
   closeDatabase,
@@ -9,8 +11,17 @@ import {
 } from "@keeper.sh/database";
 import { processJob } from "./processor";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
-import { destroy } from "./utils/logging";
+import { enqueueSyncContinuation, requestsContinuation } from "./utils/sync-continuation";
+import { context, destroy, widelog } from "./utils/logging";
 import env from "./env";
+
+exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
+
+const tracing = startTracing({
+  serviceName: "keeper-worker",
+  propagateToOrigins: [],
+  environment: process.env,
+});
 
 const DEFAULT_CONCURRENCY = 25;
 const LOCK_DURATION_MS = 360_000;
@@ -38,7 +49,22 @@ await entry({
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
       PUSH_SYNC_QUEUE_NAME,
-      (job, token, signal) => processJob(job, token, signal),
+      (job, token, signal) =>
+        withSpan(
+          `process ${PUSH_SYNC_QUEUE_NAME}`,
+          {
+            kind: SpanKind.CONSUMER,
+            root: true,
+            parent: job.data.traceContext,
+            attributes: {
+              "messaging.system": "bullmq",
+              "messaging.destination.name": PUSH_SYNC_QUEUE_NAME,
+              "messaging.operation.type": "process",
+              "messaging.message.id": job.id ?? "",
+            },
+          },
+          () => processJob(job, token, signal),
+        ),
       {
         connection: { url: env.REDIS_URL, maxRetriesPerRequest: null },
         concurrency,
@@ -50,6 +76,28 @@ await entry({
         metrics: { maxDataPoints: 1000 },
       },
     );
+
+    const continuationQueue = createPushSyncQueue({ url: env.REDIS_URL, maxRetriesPerRequest: null });
+
+    const continueCutShortJob = (job: Parameters<typeof enqueueSyncContinuation>[1]): Promise<void> => {
+      if (!requestsContinuation(job)) {
+        return Promise.resolve();
+      }
+      return context(async () => {
+        widelog.set("operation.name", "push-sync-continuation");
+        widelog.set("operation.type", "internal");
+        widelog.set("user.id", job.data.userId);
+        widelog.set("calendar.id", job.data.calendarId);
+        try {
+          await widelog.time.measure("duration_ms", () => enqueueSyncContinuation(continuationQueue, job));
+          widelog.set("outcome", "success");
+        } catch (error) {
+          widelog.set("outcome", "error");
+          widelog.errorFields(error, { slug: "sync-continuation-enqueue-failed" });
+        }
+        widelog.flush();
+      });
+    };
 
     const activeDestinationJobs = createActiveDestinationJobs({
       beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
@@ -67,6 +115,7 @@ await entry({
     });
 
     worker.on("completed", (job) => {
+      continueCutShortJob(job);
       activeDestinationJobs.onSettled({
         calendarId: job.data.calendarId,
         id: job.id ?? "",
@@ -87,9 +136,11 @@ await entry({
     return async () => {
       activeDestinationJobs.close();
       await worker.close();
+      await continuationQueue.close();
       shutdownConnections();
       closeDatabase(database);
       await destroy();
+      await tracing.shutdown();
     };
   },
   name: "worker",

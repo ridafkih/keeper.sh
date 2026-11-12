@@ -7,6 +7,11 @@ interface ResolveAuthCapabilitiesConfig {
   googleClientSecret?: string;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
+  oidcIssuerUrl?: string;
+  oidcClientId?: string;
+  oidcClientSecret?: string;
+  oidcProviderName?: string;
+  disableLocalAuth?: boolean;
   passkeyRpId?: string;
   passkeyOrigin?: string;
 }
@@ -24,6 +29,22 @@ const resolveCredentialMode = (
   return "username";
 };
 
+const hasOidcCredentials = (config: ResolveAuthCapabilitiesConfig): boolean =>
+  Boolean(config.oidcIssuerUrl && config.oidcClientId && config.oidcClientSecret);
+
+const resolveOidcCapabilities = (
+  config: ResolveAuthCapabilitiesConfig,
+): Pick<AuthCapabilities, "disableLocalAuth" | "oidcProviderName"> => {
+  if (!hasOidcCredentials(config)) {
+    return {};
+  }
+
+  return {
+    ...(config.disableLocalAuth && { disableLocalAuth: true }),
+    ...(config.oidcProviderName && { oidcProviderName: config.oidcProviderName }),
+  };
+};
+
 const resolveAuthCapabilities = (
   config: ResolveAuthCapabilitiesConfig,
 ): AuthCapabilities =>
@@ -34,12 +55,14 @@ const resolveAuthCapabilities = (
     socialProviders: {
       google: hasOAuthCredentials(config.googleClientId, config.googleClientSecret),
       microsoft: hasOAuthCredentials(config.microsoftClientId, config.microsoftClientSecret),
+      ...(hasOidcCredentials(config) && { oidc: true }),
     },
     supportsChangePassword: true,
     supportsPasskeys: Boolean(
       config.commercialMode && config.passkeyOrigin && config.passkeyRpId,
     ),
     supportsPasswordReset: config.commercialMode ?? false,
+    ...resolveOidcCapabilities(config),
   });
 
 export { resolveAuthCapabilities };

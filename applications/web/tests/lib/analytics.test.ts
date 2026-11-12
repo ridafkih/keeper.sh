@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicRuntimeConfig } from "@/lib/runtime-config";
-import { reportPurchaseConversion, reportSignupConversion } from "@/lib/analytics";
+import {
+  reportPurchaseConversion,
+  reportSignupConversion,
+  reportSignupConversionBeforeNavigation,
+} from "@/lib/analytics";
 
 const runtimeConfig: PublicRuntimeConfig = {
   commercialMode: true,
   googleAdsConversionLabel: "purchase-label",
   googleAdsId: "AW-1234567890",
   googleAdsSignupConversionLabel: "signup-label",
+  googleAnalyticsId: null,
   polarProMonthlyProductId: null,
   polarProYearlyProductId: null,
   visitorsNowToken: null,
@@ -65,5 +70,40 @@ describe("reportSignupConversion", () => {
     reportSignupConversion({ ...runtimeConfig, googleAdsSignupConversionLabel: null });
 
     expect(gtagSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("reportSignupConversionBeforeNavigation", () => {
+  it("navigates once Google confirms the conversion was sent", () => {
+    const navigate = vi.fn();
+
+    reportSignupConversionBeforeNavigation(runtimeConfig, navigate);
+    const [, , payload] = gtagSpy.mock.calls[0] as [string, string, { event_callback: () => void; send_to: string }];
+    payload.event_callback();
+    payload.event_callback();
+
+    expect(payload.send_to).toBe("AW-1234567890/signup-label");
+    expect(navigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("navigates after the timeout when Google never answers", () => {
+    vi.useFakeTimers();
+    const navigate = vi.fn();
+
+    reportSignupConversionBeforeNavigation(runtimeConfig, navigate);
+    expect(navigate).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1000);
+
+    expect(navigate).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("navigates at once when there is nothing to report", () => {
+    const navigate = vi.fn();
+    globalThis.gtag = undefined;
+
+    reportSignupConversionBeforeNavigation(runtimeConfig, navigate);
+
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 });

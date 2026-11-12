@@ -1,23 +1,36 @@
 import type { FetchEventsResult } from "../../../core/sync-engine/ingest";
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import type { SourceIngestionPlan } from "../../../core/sync/sync-range";
-import { encodeStoredSyncToken, resolveSyncTokenForWindow } from "../../../core/oauth/sync-token";
+import {
+  decodeStoredSyncToken,
+  encodeStoredSyncToken,
+  resolveSyncTokenForWindow,
+} from "../../../core/oauth/sync-token";
 import { getOAuthSyncTokenVersion } from "../../../core/oauth/sync-window";
 import { filterSourceEventsToSyncWindow } from "../../../core/source/sync-diagnostics";
 import { fetchCalendarEvents, parseOutlookEventsWithDiagnostics } from "./utils/fetch-events";
 import { getMasterCategoryColors } from "./utils/fetch-master-categories";
 
-const OUTLOOK_ADAPTER_VERSION = 1;
+const OUTLOOK_ADAPTER_VERSION = 2;
+const OUTLOOK_PRE_TENTATIVE_ADAPTER_VERSION = 1;
 
 interface OutlookSourceFetcherConfig {
   accessToken: string;
   calendarId: string;
   externalCalendarId: string;
   syncToken: string | null;
+  excludesTentative?: boolean;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
   plan: SourceIngestionPlan;
 }
+
+const resolveRequiredAdapterVersion = (excludesTentative: boolean): number => {
+  if (excludesTentative) {
+    return OUTLOOK_ADAPTER_VERSION;
+  }
+  return OUTLOOK_PRE_TENTATIVE_ADAPTER_VERSION;
+};
 
 interface OutlookSourceFetcher {
   fetchEvents: () => Promise<FetchEventsResult>;
@@ -32,22 +45,30 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       signal: config.signal,
     };
     const { futureRange, historicRange, window: syncWindow } = config.plan;
+    const now = new Date();
     const syncTokenVersion = getOAuthSyncTokenVersion(
       OUTLOOK_ADAPTER_VERSION,
-      new Date(),
+      now,
+      config.calendarId,
+    );
+    const requiredSyncTokenVersion = getOAuthSyncTokenVersion(
+      resolveRequiredAdapterVersion(config.excludesTentative ?? false),
+      now,
       config.calendarId,
     );
 
     const syncTokenResolution = resolveSyncTokenForWindow(
       config.syncToken,
-      syncTokenVersion,
+      requiredSyncTokenVersion,
     );
 
-    if (syncTokenResolution.syncToken === null) {
+    let nextSyncTokenVersion = syncTokenVersion;
+    if (syncTokenResolution.syncToken === null || config.syncToken === null) {
       fetchOptions.timeMin = syncWindow.timeMin;
       fetchOptions.timeMax = syncWindow.timeMax;
     } else {
       fetchOptions.deltaLink = syncTokenResolution.syncToken;
+      nextSyncTokenVersion = decodeStoredSyncToken(config.syncToken).syncWindowVersion;
     }
 
     const result = await fetchCalendarEvents(fetchOptions);
@@ -86,7 +107,7 @@ const createOutlookSourceFetcher = (config: OutlookSourceFetcherConfig): Outlook
       isDeltaSync: result.isDeltaSync,
       nextSyncToken: encodeStoredSyncToken(
         result.nextDeltaLink,
-        syncTokenVersion,
+        nextSyncTokenVersion,
       ),
       syncWindow,
       ...(!result.isDeltaSync && {

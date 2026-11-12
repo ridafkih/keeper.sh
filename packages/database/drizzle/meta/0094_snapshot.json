@@ -1,5 +1,5 @@
 {
-  "id": "1cf3b54c-9225-48f6-9e53-f841df302ef7",
+  "id": "4c528dca-bbb5-4ac8-b0bc-68f91e8ab295",
   "prevId": "86cf1c61-d14b-4132-a75c-2e1943c18b67",
   "version": "7",
   "dialect": "postgresql",
@@ -892,12 +892,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -935,6 +929,13 @@
         },
         "excludeFocusTime": {
           "name": "excludeFocusTime",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "excludeFreeEvents": {
+          "name": "excludeFreeEvents",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
@@ -1481,12 +1482,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "createdAt": {
           "name": "createdAt",

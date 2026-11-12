@@ -165,6 +165,23 @@ describe("createIcsSourceFetcher", () => {
     },
   );
 
+  it("carries the tentative classification of an Outlook-published event to the source event", async () => {
+    const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
+    const ical = MINIMAL_ICS.replace(
+      "SUMMARY:Test",
+      "SUMMARY:Test\r\nX-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE",
+    );
+    mockPullRemoteCalendar.mockResolvedValueOnce({ ical });
+    mockPrepareCalendarSnapshot.mockResolvedValueOnce({
+      changed: true,
+      snapshot: { contentHash: "hash-1", ical },
+    });
+
+    const result = await createIcsSourceFetcher(buildConfig()).fetchEvents();
+
+    expect(result.events[0]?.sourceEventType).toBe("tentative");
+  });
+
   it("interprets floating event times using X-WR-TIMEZONE", async () => {
     const { createIcsSourceFetcher } = await import("../../../src/ics/utils/fetch-adapter");
     const floatingIcs = [

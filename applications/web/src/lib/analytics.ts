@@ -100,6 +100,18 @@ export const ANALYTICS_EVENTS = {
   oauth_consent_granted: "oauth_consent_granted",
   oauth_consent_denied: "oauth_consent_denied",
   marketing_cta_clicked: "marketing_cta_clicked",
+  onboarding_step_viewed: "onboarding_step_viewed",
+  onboarding_provider_chosen: "onboarding_provider_chosen",
+  onboarding_destination_chosen: "onboarding_destination_chosen",
+  onboarding_sync_proposed: "onboarding_sync_proposed",
+  onboarding_sync_edited: "onboarding_sync_edited",
+  onboarding_sync_started: "onboarding_sync_started",
+  onboarding_first_run_empty: "onboarding_first_run_empty",
+  onboarding_completed: "onboarding_completed",
+  onboarding_admin_link_copied: "onboarding_admin_link_copied",
+  onboarding_help_link_opened: "onboarding_help_link_opened",
+  oauth_authorize_started: "oauth_authorize_started",
+  upgrade_card_clicked: "upgrade_card_clicked",
 } satisfies Record<string, string>;
 
 type EventProperties = Record<string, string | number | boolean>;
@@ -167,6 +179,36 @@ const reportSignupConversion = (runtimeConfig: PublicRuntimeConfig): void => {
   reportConversion(runtimeConfig.googleAdsId, runtimeConfig.googleAdsSignupConversionLabel);
 };
 
+const CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS = 1000;
+
+const runOnce = (callback: () => void): (() => void) => {
+  let ran = false;
+  return () => {
+    if (ran) return;
+    ran = true;
+    callback();
+  };
+};
+
+const reportSignupConversionBeforeNavigation = (
+  runtimeConfig: PublicRuntimeConfig,
+  navigate: () => void,
+): void => {
+  const { googleAdsId, googleAdsSignupConversionLabel } = runtimeConfig;
+  if (!googleAdsId || !googleAdsSignupConversionLabel || !globalThis.gtag) {
+    navigate();
+    return;
+  }
+
+  const navigateOnce = runOnce(navigate);
+  globalThis.setTimeout(navigateOnce, CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS);
+  globalThis.gtag("event", "conversion", {
+    ...buildConversionPayload(`${googleAdsId}/${googleAdsSignupConversionLabel}`),
+    event_callback: navigateOnce,
+    event_timeout: CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS,
+  });
+};
+
 const reportGooglePageView = (googleAdsId: string | null, path: string): void => {
   if (!googleAdsId) return;
   globalThis.gtag?.("event", "page_view", { page_path: path, send_to: googleAdsId });
@@ -191,6 +233,7 @@ export {
   reportGooglePageView,
   reportPurchaseConversion,
   reportSignupConversion,
+  reportSignupConversionBeforeNavigation,
   resolveEffectiveConsent,
   setAnalyticsConsent,
   subscribeToConsentChanges,

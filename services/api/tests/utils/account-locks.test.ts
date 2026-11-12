@@ -1,12 +1,21 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { getTableName } from "drizzle-orm";
-import type { createCalDAVSource as createCalDAVSourceFn } from "../../src/utils/caldav-sources";
+import type {
+  normalizeCalDAVCalendarKey as normalizeCalDAVCalendarKeyFn,
+  normalizeCalDAVServerHost as normalizeCalDAVServerHostFn,
+} from "@keeper.sh/calendar/caldav";
+import type { importCalDAVCalendars as importCalDAVCalendarsFn } from "../../src/utils/caldav-sources";
 import type {
   createOAuthSource as createOAuthSourceFn,
   importOAuthAccountCalendars as importOAuthAccountCalendarsFn,
 } from "../../src/utils/oauth-sources";
 
-let createCalDAVSource: typeof createCalDAVSourceFn = () =>
+interface CalDAVIdentityModule {
+  normalizeCalDAVCalendarKey: typeof normalizeCalDAVCalendarKeyFn;
+  normalizeCalDAVServerHost: typeof normalizeCalDAVServerHostFn;
+}
+
+let importCalDAVCalendars: typeof importCalDAVCalendarsFn = () =>
   Promise.reject(new Error("Module not loaded"));
 let createOAuthSource: typeof createOAuthSourceFn = () =>
   Promise.reject(new Error("Module not loaded"));
@@ -14,7 +23,8 @@ let importOAuthAccountCalendars: typeof importOAuthAccountCalendarsFn = () =>
   Promise.reject(new Error("Module not loaded"));
 
 let canAddAccountResult = true;
-let googleCalendars = [{ id: "external-1", summary: "Team Calendar" }];
+let googleCalendars = [{ accessRole: "owner", id: "external-1", summary: "Team Calendar" }];
+let caldavCalendarWritable = true;
 let insertCalls: unknown[] = [];
 let selectResults: unknown[][] = [];
 let triggerSyncCalls: string[] = [];
@@ -115,6 +125,7 @@ beforeAll(async () => {
 
   vi.mock("../../src/context", () => ({
     baseUrl: "https://keeper.test",
+    googleInteractiveRateLimiter: null,
     database: {
       insert: () => {
         throw new Error("global database.insert should not be used");
@@ -147,9 +158,9 @@ beforeAll(async () => {
   }));
 
   vi.mock("../../src/utils/background-task", () => ({
-    spawnBackgroundJob: (jobName: string, fields: { userId: string }, _callback: () => Promise<void>) => {
+    spawnBackgroundJob: (jobName: string, fields: { "user.id": string }, _callback: () => Promise<void>) => {
       spawnedJobNames.push(jobName);
-      triggerSyncCalls.push(fields.userId);
+      triggerSyncCalls.push(fields["user.id"]);
     },
   }));
 
@@ -163,9 +174,25 @@ beforeAll(async () => {
     encryptPassword: () => "encrypted-password",
   }));
 
-  vi.mock("@keeper.sh/calendar/caldav", () => ({
+  vi.mock("../../src/utils/account-calendar-discovery", () => ({
+    discoverOAuthCredentialCalendars: () => Promise.resolve(googleCalendars.map((calendar) => ({
+      calendarUrl: null,
+      externalCalendarId: calendar.id,
+      identityKey: calendar.id,
+      name: calendar.summary,
+      writable: calendar.accessRole === "owner",
+    }))),
+  }));
+
+  vi.mock("@keeper.sh/calendar/caldav", async (importOriginal) => {
+    const { normalizeCalDAVCalendarKey, normalizeCalDAVServerHost } =
+      await importOriginal<CalDAVIdentityModule>();
+    return {
+    normalizeCalDAVCalendarKey,
+    normalizeCalDAVServerHost,
     createCalDAVClient: () => ({
       discoverCalendars: () => Promise.resolve([]),
+      fetchCalendarWritable: () => Promise.resolve(caldavCalendarWritable),
       getResolvedAuthMethod: () => "basic",
     }),
     createCalDAVProvider: () => ({
@@ -174,7 +201,8 @@ beforeAll(async () => {
     createCalDAVSourceProvider: () => ({
       id: "icloud",
     }),
-  }));
+    };
+  });
 
   vi.mock("@keeper.sh/calendar/google", () => ({
     createGoogleCalendarProvider: () => ({
@@ -198,6 +226,7 @@ beforeAll(async () => {
 
   vi.mock("@keeper.sh/calendar", () => ({
     PROVIDER_DEFINITIONS: [],
+    findUserCalDAVCalendarsOnServer: () => Promise.resolve([]),
     getActiveProviders: () => [],
     getCalDAVProviders: () => [],
     getOAuthProviders: () => [],
@@ -208,6 +237,14 @@ beforeAll(async () => {
     isProviderId: () => false,
     resolveGoogleCalendarColor: () => null,
     resolveOutlookCalendarColor: () => null,
+    resolveCalendarCapabilities: (writable: boolean) => {
+      if (writable) {
+        return ["pull", "push"];
+      }
+      return ["pull"];
+    },
+    isGoogleAccessRoleWritable: (accessRole: string) => accessRole === "owner",
+    isOutlookCalendarWritable: (canEdit?: boolean) => canEdit === true,
   }));
 
   ({
@@ -215,7 +252,7 @@ beforeAll(async () => {
     importOAuthAccountCalendars,
   } = await import("../../src/utils/oauth-sources"));
   ({
-    createCalDAVSource,
+    importCalDAVCalendars,
   } = await import("../../src/utils/caldav-sources"));
 });
 
@@ -225,7 +262,8 @@ afterAll(() => {
 
 beforeEach(() => {
   canAddAccountResult = true;
-  googleCalendars = [{ id: "external-1", summary: "Team Calendar" }];
+  googleCalendars = [{ accessRole: "owner", id: "external-1", summary: "Team Calendar" }];
+  caldavCalendarWritable = true;
   insertCalls = [];
   selectResults = [];
   triggerSyncCalls = [];
@@ -324,7 +362,11 @@ describe("Account locks", () => {
     ]);
   });
 
-  it("creates CalDAV sources through the locked transaction client", async () => {
+  it.each([
+    [true, ["pull", "push"]],
+    [false, ["pull"]],
+  ])("imports CalDAV calendars through the locked transaction client (writable %s)", async (writable, capabilities) => {
+    caldavCalendarWritable = writable;
     selectResults = [
       [],
       [],
@@ -343,12 +385,13 @@ describe("Account locks", () => {
           return createInsertBuilder([{ id: "account-1" }]);
         }
 
-        return createInsertBuilder([{
+        return createTrackedInsertBuilder([{
+          calendarUrl: "https://caldav.test/team",
           createdAt: new Date("2026-03-10T12:00:00.000Z"),
           id: "source-1",
           name: "Team CalDAV",
           userId: "user-1",
-        }]);
+        }], true);
       }),
       select: () => createSelectBuilder(selectResults.shift() ?? []),
       selectDistinct: () => ({
@@ -356,24 +399,26 @@ describe("Account locks", () => {
       }),
     };
 
-    const source = await createCalDAVSource("user-1", {
+    const result = await importCalDAVCalendars("user-1", {
       authMethod: "basic",
-      calendarUrl: "https://caldav.test/team",
-      name: "Team CalDAV",
+      calendars: [{ calendarUrl: "https://caldav.test/team", name: "Team CalDAV" }],
       password: "secret",
       provider: "icloud",
       serverUrl: "https://caldav.test",
       username: "person@example.com",
     });
 
-    expect(source).toMatchObject({
+    expect(result).toEqual({
       accountId: "account-1",
-      calendarUrl: "https://caldav.test/team",
-      id: "source-1",
-      name: "Team CalDAV",
-      provider: "icloud",
-      userId: "user-1",
+      calendars: [{
+        accountId: "account-1",
+        calendarUrl: "https://caldav.test/team",
+        id: "source-1",
+        name: "Team CalDAV",
+        status: "imported",
+      }],
     });
     expect(triggerSyncCalls).toEqual(["user-1"]);
+    expect(insertCalls.at(-1)).toEqual([expect.objectContaining({ capabilities })]);
   });
 });

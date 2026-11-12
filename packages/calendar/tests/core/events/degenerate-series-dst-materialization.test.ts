@@ -88,6 +88,26 @@ describe("a zero-duration series crossing a daylight transition", () => {
   });
 });
 
+describe("a daily series whose wall time a spring-forward gap removes", () => {
+  it("shifts that occurrence forward rather than dropping it", () => {
+    const events = materializeRecurrenceEvents([createEvent({
+      endTime: new Date("2026-03-07T11:00:00.000Z"),
+      recurrenceRule: { count: 3, frequency: "DAILY" },
+      startTime: new Date("2026-03-07T10:30:00.000Z"),
+      startTimeZone: "America/Los_Angeles",
+    })], {
+      end: new Date("2026-03-20T00:00:00.000Z"),
+      start: new Date("2026-03-01T00:00:00.000Z"),
+    });
+
+    expect(startsOf(events)).toEqual([
+      "2026-03-07T10:30:00.000Z",
+      "2026-03-08T10:30:00.000Z",
+      "2026-03-09T09:30:00.000Z",
+    ]);
+  });
+});
+
 describe("degenerate series with sparse or absent occurrences", () => {
   it("materializes a single occurrence when until names the start instant", () => {
     const events = materializeRecurrenceEvents([createEvent({

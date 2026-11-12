@@ -1,4 +1,9 @@
+import { RequestTimeoutError } from "@keeper.sh/calendar";
 import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import type { CalendarFetchFailureReason } from "@keeper.sh/calendar/ics";
+import { UrlSafetyError } from "@keeper.sh/calendar/safe-fetch";
+import type { IcsFeedFailureReason } from "@keeper.sh/data-schemas";
+import type { BackgroundJobFields } from "./background-task";
 
 interface SourceReference {
   id: string;
@@ -6,14 +11,18 @@ interface SourceReference {
 
 interface CreateSourceInput {
   userId: string;
-  name: string;
+  name?: string;
   url: string;
+}
+
+interface ValidatedSourceInput extends CreateSourceInput {
+  feedName: string;
 }
 
 interface SourceCreationPreflightDependencies {
   countExistingAccounts: (userId: string) => Promise<number>;
   canAddAccount: (userId: string, existingAccountCount: number) => Promise<boolean>;
-  validateSourceUrl: (url: string) => Promise<void>;
+  readSourceFeedName: (url: string) => Promise<string>;
 }
 
 interface CreateSourceDependencies<TSource extends SourceReference> {
@@ -27,12 +36,13 @@ interface CreateSourceDependencies<TSource extends SourceReference> {
   createSourceCalendar: (payload: {
     accountId: string;
     name: string;
+    originalName: string;
     url: string;
     userId: string;
   }) => Promise<TSource | undefined>;
   spawnBackgroundJob: (
     jobName: string,
-    fields: Record<string, unknown>,
+    fields: BackgroundJobFields,
     callback: () => Promise<void>,
   ) => void;
   fetchAndSyncSource: (source: TSource) => Promise<void>;
@@ -46,31 +56,66 @@ class SourceLimitError extends Error {
   }
 }
 
-const getInvalidSourceUrlDetails = (cause: unknown): {
+type InvalidSourceUrlReason = CalendarFetchFailureReason | "timeout" | "unreachable" | "unsafe_url";
+
+interface InvalidSourceUrlDetails {
   authRequired: boolean;
   message: string;
-} => {
+  reason: InvalidSourceUrlReason;
+}
+
+const FEED_FAILURE_REASONS: Record<InvalidSourceUrlReason, IcsFeedFailureReason> = {
+  auth_required: "auth-required",
+  http_error: "unreachable",
+  not_found: "not-found",
+  not_ical: "not-calendar",
+  partial_response: "unreachable",
+  timeout: "unreachable",
+  truncated: "not-calendar",
+  unreachable: "unreachable",
+  unsafe_url: "unreachable",
+};
+
+const INVALID_CALENDAR_URL_MESSAGE = "Invalid calendar URL";
+
+const resolveUnfetchedReason = (cause: unknown): InvalidSourceUrlReason => {
+  if (cause instanceof UrlSafetyError) {
+    return "unsafe_url";
+  }
+  if (cause instanceof RequestTimeoutError) {
+    return "timeout";
+  }
+  return "unreachable";
+};
+
+const getInvalidSourceUrlDetails = (cause: unknown): InvalidSourceUrlDetails => {
   if (cause instanceof CalendarFetchError) {
     return {
       authRequired: cause.authRequired,
       message: cause.message,
+      reason: cause.reason,
     };
   }
 
   return {
     authRequired: false,
-    message: "Invalid calendar URL",
+    message: INVALID_CALENDAR_URL_MESSAGE,
+    reason: resolveUnfetchedReason(cause),
   };
 };
 
 class InvalidSourceUrlError extends Error {
   public readonly authRequired: boolean;
+  public readonly reason: InvalidSourceUrlReason;
+  public readonly feedFailureReason: IcsFeedFailureReason;
 
   public constructor(cause?: unknown) {
     const details = getInvalidSourceUrlDetails(cause);
     super(details.message);
     this.name = "InvalidSourceUrlError";
     this.authRequired = details.authRequired;
+    this.reason = details.reason;
+    this.feedFailureReason = FEED_FAILURE_REASONS[details.reason];
     this.cause = cause;
   }
 }
@@ -92,18 +137,22 @@ const assertAccountCanBeAdded = async (
 const runSourceCreationPreflight = async (
   input: CreateSourceInput,
   dependencies: SourceCreationPreflightDependencies,
-): Promise<void> => {
+): Promise<ValidatedSourceInput> => {
   await assertAccountCanBeAdded(input.userId, dependencies);
 
   try {
-    await dependencies.validateSourceUrl(input.url);
+    const feedName = await dependencies.readSourceFeedName(input.url);
+    return { ...input, feedName };
   } catch (error) {
     throw new InvalidSourceUrlError(error);
   }
 };
 
+const resolveSourceName = ({ feedName, name }: ValidatedSourceInput): string =>
+  name?.trim() || feedName;
+
 const runCreateSource = async <TSource extends SourceReference>(
-  input: CreateSourceInput,
+  input: ValidatedSourceInput,
   dependencies: CreateSourceDependencies<TSource>,
 ): Promise<TSource> => {
   await dependencies.acquireAccountLock(input.userId);
@@ -119,7 +168,8 @@ const runCreateSource = async <TSource extends SourceReference>(
 
   const source = await dependencies.createSourceCalendar({
     accountId,
-    name: input.name,
+    name: resolveSourceName(input),
+    originalName: input.feedName,
     url: input.url,
     userId: input.userId,
   });
@@ -127,7 +177,7 @@ const runCreateSource = async <TSource extends SourceReference>(
     throw new Error("Failed to create source");
   }
 
-  dependencies.spawnBackgroundJob("ical-source-sync", { userId: input.userId, calendarId: source.id }, async () => {
+  dependencies.spawnBackgroundJob("ical-source-sync", { "calendar.id": source.id, "user.id": input.userId }, async () => {
     await dependencies.fetchAndSyncSource(source);
     await dependencies.enqueuePushSync(input.userId);
   });
@@ -142,8 +192,10 @@ export {
   runCreateSource,
 };
 export type {
+  InvalidSourceUrlReason,
   SourceReference,
   CreateSourceInput,
+  ValidatedSourceInput,
   SourceCreationPreflightDependencies,
   CreateSourceDependencies,
 };

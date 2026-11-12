@@ -1,6 +1,11 @@
-import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
-import { and, arrayContains, eq } from "drizzle-orm";
+import {
+  calendarAccountsTable,
+  calendarsTable,
+  sourceIngestScheduleTable,
+} from "@keeper.sh/database/schema";
+import { and, arrayContains, eq, sql } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { database, premiumService } from "@/context";
 import { idParamSchema } from "@/utils/request-query";
@@ -16,155 +21,183 @@ import { syncDefaultFeedMembership } from "@/utils/ical-feeds";
 import type { FeedMembershipClient } from "@/utils/ical-feeds";
 import { deleteSourceCalendar } from "@/utils/source-calendars";
 import { handlePatchSourceRoute } from "./[id]/source-item-routes";
+import { updatesRequestUserSync } from "@/utils/source-sync-requests";
 
-const GET = withWideEvent(
-  withAuth(async ({ params, userId }) => {
-    if (!params.id || !idParamSchema.allows(params)) {
-      return ErrorResponse.badRequest("ID is required").toResponse();
-    }
-    const { id } = params;
+const getSourceCalendar: AuthenticatedRouteCallback = async ({ params, userId }) => {
+  if (!params.id || !idParamSchema.allows(params)) {
+    return ErrorResponse.badRequest("ID is required").toResponse();
+  }
+  const { id } = params;
 
-    const [source] = await database
-      .select({
-        id: calendarsTable.id,
-        name: calendarsTable.name,
-        originalName: calendarsTable.originalName,
-        color: calendarsTable.color,
-        calendarType: calendarsTable.calendarType,
-        capabilities: calendarsTable.capabilities,
-        provider: calendarAccountsTable.provider,
-        url: calendarsTable.url,
-        calendarUrl: calendarsTable.calendarUrl,
-        customEventName: calendarsTable.customEventName,
-        excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
-        excludeEventDescription: calendarsTable.excludeEventDescription,
-        excludeEventLocation: calendarsTable.excludeEventLocation,
-        excludeEventName: calendarsTable.excludeEventName,
-        excludeFocusTime: calendarsTable.excludeFocusTime,
-        excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
-        syncFutureRange: calendarsTable.syncFutureRange,
-        syncHistoricRange: calendarsTable.syncHistoricRange,
-        treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
-        unavailableSince: calendarsTable.unavailableSince,
-        disabled: calendarsTable.disabled,
-        ingestFailureCount: calendarsTable.ingestFailureCount,
-        ingestLastFailureAt: calendarsTable.ingestLastFailureAt,
-        markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
-        providerMissingSince: calendarsTable.providerMissingSince,
-        createdAt: calendarsTable.createdAt,
-        updatedAt: calendarsTable.updatedAt,
-      })
-      .from(calendarsTable)
-      .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
-      .where(
-        and(
-          eq(calendarsTable.id, id),
-          eq(calendarsTable.userId, userId),
-        ),
-      )
-      .limit(1);
+  const [source] = await database
+    .select({
+      id: calendarsTable.id,
+      name: calendarsTable.name,
+      originalName: calendarsTable.originalName,
+      color: calendarsTable.color,
+      calendarType: calendarsTable.calendarType,
+      capabilities: calendarsTable.capabilities,
+      provider: calendarAccountsTable.provider,
+      url: calendarsTable.url,
+      calendarUrl: calendarsTable.calendarUrl,
+      customEventName: calendarsTable.customEventName,
+      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
+      excludeAvailabilities: calendarsTable.excludeAvailabilities,
+      excludeEventDescription: calendarsTable.excludeEventDescription,
+      excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventName: calendarsTable.excludeEventName,
+      excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      excludeTitleKeywords: calendarsTable.excludeTitleKeywords,
+      syncFutureRange: calendarsTable.syncFutureRange,
+      syncHistoricRange: calendarsTable.syncHistoricRange,
+      treatFullDayTimedEventsAsAllDay: calendarsTable.treatFullDayTimedEventsAsAllDay,
+      unavailableSince: calendarsTable.unavailableSince,
+      disabled: calendarsTable.disabled,
+      ingestFailureCount: sql<number>`coalesce(${sourceIngestScheduleTable.failureCount}, 0)`,
+      ingestLastFailureAt: sourceIngestScheduleTable.lastFailureAt,
+      markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
+      disableEventReminders: calendarsTable.disableEventReminders,
+      providerMissingSince: calendarsTable.providerMissingSince,
+      createdAt: calendarsTable.createdAt,
+      updatedAt: calendarsTable.updatedAt,
+    })
+    .from(calendarsTable)
+    .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+    .leftJoin(
+      sourceIngestScheduleTable,
+      eq(sourceIngestScheduleTable.calendarId, calendarsTable.id),
+    )
+    .where(
+      and(
+        eq(calendarsTable.id, id),
+        eq(calendarsTable.userId, userId),
+      ),
+    )
+    .limit(1);
 
-    if (!source) {
-      return ErrorResponse.notFound().toResponse();
-    }
+  if (!source) {
+    return ErrorResponse.notFound().toResponse();
+  }
 
-    const [destinationIds, sourceIds] = await Promise.all([
-      getDestinationsForSource(userId, id),
-      getSourcesForDestination(userId, id),
-    ]);
+  const [destinationIds, sourceIds] = await Promise.all([
+    getDestinationsForSource(userId, id),
+    getSourcesForDestination(userId, id),
+  ]);
 
-    return Response.json({
-      ...withProviderMetadata(source),
-      destinationIds,
-      sourceIds,
-    });
-  }),
-);
+  return Response.json({
+    ...withProviderMetadata(source),
+    destinationIds,
+    sourceIds,
+  });
+};
 
-const PATCH = withWideEvent(
-  withAuth(async ({ request, params, userId }) => {
-    const payload = await request.json();
-    return handlePatchSourceRoute(
-      { body: payload, params, userId },
-      {
-        canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
-        updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
-          const applyFeedMembership = async (
-            client: FeedMembershipClient,
-            updated: Record<string, unknown> | null,
-          ): Promise<void> => {
-            if (updated && typeof updates.includeInIcalFeed === "boolean") {
-              await syncDefaultFeedMembership(
-                client,
-                userIdToUpdate,
-                sourceCalendarId,
-                updates.includeInIcalFeed,
-              );
-            }
-          };
-
-          const updatesSyncWindow = "syncHistoricRange" in updates
-            || "syncFutureRange" in updates;
-          if (updatesSyncWindow) {
-            const mutation = await withMappingMutationLocks(
+const patchSourceCalendar: AuthenticatedRouteCallback = async ({ request, params, userId }) => {
+  const payload = await request.json();
+  return handlePatchSourceRoute(
+    { body: payload, params, userId },
+    {
+      canUseEventFilters: (candidateUserId) => premiumService.canUseEventFilters(candidateUserId),
+      getSourceExclusionState: async (userIdToRead, sourceCalendarId) => {
+        const [source] = await database
+          .select({
+            excludeAvailabilities: calendarsTable.excludeAvailabilities,
+            provider: calendarAccountsTable.provider,
+          })
+          .from(calendarsTable)
+          .innerJoin(calendarAccountsTable, eq(calendarsTable.accountId, calendarAccountsTable.id))
+          .where(and(
+            eq(calendarsTable.id, sourceCalendarId),
+            eq(calendarsTable.userId, userIdToRead),
+          ))
+          .limit(1);
+        return source ?? null;
+      },
+      updateSource: async (userIdToUpdate, sourceCalendarId, updates) => {
+        const applyFeedMembership = async (
+          client: FeedMembershipClient,
+          updated: Record<string, unknown> | null,
+        ): Promise<void> => {
+          if (updated && typeof updates.includeInIcalFeed === "boolean") {
+            await syncDefaultFeedMembership(
+              client,
               userIdToUpdate,
-              async () => {
-                const pushCalendars = await database
-                  .select({ id: calendarsTable.id })
-                  .from(calendarsTable)
-                  .where(and(
-                    eq(calendarsTable.id, sourceCalendarId),
-                    eq(calendarsTable.userId, userIdToUpdate),
-                    arrayContains(calendarsTable.capabilities, ["push"]),
-                  ));
-                return pushCalendars.map(({ id: calendarId }) => calendarId);
-              },
-              () => database.transaction(async (transaction) => {
-                const [updated] = await transaction
-                  .update(calendarsTable)
-                  .set(updates)
-                  .where(
-                    and(
-                      eq(calendarsTable.id, sourceCalendarId),
-                      eq(calendarsTable.userId, userIdToUpdate),
-                    ),
-                  )
-                  .returning();
-                if (updated?.capabilities.includes("push")) {
-                  await requestUserSync(transaction, userIdToUpdate);
-                }
-                await applyFeedMembership(transaction, updated ?? null);
-                return updated ?? null;
-              }),
+              sourceCalendarId,
+              updates.includeInIcalFeed,
             );
-            if (mutation.destinationCalendarIds.length > 0 && mutation.result) {
-              scheduleMappingReplacementSync(userIdToUpdate);
-            }
-            return mutation.result;
           }
+        };
 
-          return await database.transaction(async (transaction) => {
-            const [updated] = await transaction
-              .update(calendarsTable)
-              .set(updates)
-              .where(
-                and(
+        const updatesSyncWindow = "syncHistoricRange" in updates
+          || "syncFutureRange" in updates;
+        if (updatesSyncWindow) {
+          const mutation = await withMappingMutationLocks(
+            userIdToUpdate,
+            async () => {
+              const pushCalendars = await database
+                .select({ id: calendarsTable.id })
+                .from(calendarsTable)
+                .where(and(
                   eq(calendarsTable.id, sourceCalendarId),
                   eq(calendarsTable.userId, userIdToUpdate),
-                ),
-              )
-              .returning();
-            if (updated && "markEventsAsPrivate" in updates) {
-              await requestUserSync(transaction, userIdToUpdate);
-            }
-            await applyFeedMembership(transaction, updated ?? null);
-            return updated ?? null;
-          });
-        },
+                  arrayContains(calendarsTable.capabilities, ["push"]),
+                ));
+              return pushCalendars.map(({ id: calendarId }) => calendarId);
+            },
+            () => database.transaction(async (transaction) => {
+              const [updated] = await transaction
+                .update(calendarsTable)
+                .set(updates)
+                .where(
+                  and(
+                    eq(calendarsTable.id, sourceCalendarId),
+                    eq(calendarsTable.userId, userIdToUpdate),
+                  ),
+                )
+                .returning();
+              const requestsSync = updated?.capabilities.includes("push")
+                || updatesRequestUserSync(updates);
+              if (updated && requestsSync) {
+                await requestUserSync(transaction, userIdToUpdate);
+              }
+              await applyFeedMembership(transaction, updated ?? null);
+              return updated ?? null;
+            }),
+          );
+          if (mutation.destinationCalendarIds.length > 0 && mutation.result) {
+            scheduleMappingReplacementSync(userIdToUpdate);
+          }
+          return mutation.result;
+        }
+
+        return await database.transaction(async (transaction) => {
+          const [updated] = await transaction
+            .update(calendarsTable)
+            .set(updates)
+            .where(
+              and(
+                eq(calendarsTable.id, sourceCalendarId),
+                eq(calendarsTable.userId, userIdToUpdate),
+              ),
+            )
+            .returning();
+          if (updated && updatesRequestUserSync(updates)) {
+            await requestUserSync(transaction, userIdToUpdate);
+          }
+          await applyFeedMembership(transaction, updated ?? null);
+          return updated ?? null;
+        });
       },
-    );
-  }),
-);
+    },
+  );
+};
+
+const GET = withWideEvent(withAuth(getSourceCalendar));
+
+const PATCH = withWideEvent(withAuth(patchSourceCalendar));
+
+const RECEIVES_EVENTS_MESSAGE
+  = "Keeper.sh syncs events into this calendar, so it can only be removed once it no longer exists at the provider.";
 
 const DELETE = withWideEvent(
   withAuth(async ({ params, userId }) => {
@@ -173,13 +206,16 @@ const DELETE = withWideEvent(
     }
     const { id } = params;
 
-    const deleted = await deleteSourceCalendar(userId, id);
-    if (!deleted) {
+    const outcome = await deleteSourceCalendar(userId, id);
+    if (outcome === "not-found") {
       return ErrorResponse.notFound().toResponse();
+    }
+    if (outcome === "receives-events") {
+      return ErrorResponse.conflict(RECEIVES_EVENTS_MESSAGE).toResponse();
     }
 
     return Response.json({ success: true });
   }),
 );
 
-export { GET, PATCH, DELETE };
+export { GET, PATCH, DELETE, getSourceCalendar, patchSourceCalendar };

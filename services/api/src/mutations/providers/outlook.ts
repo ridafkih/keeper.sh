@@ -8,9 +8,12 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
+import { parseEventDateTime, parseEventTime } from "@keeper.sh/calendar/outlook";
+import type { PartialOutlookDateTime } from "@keeper.sh/calendar/outlook";
 import { resolveRepresentableIsoRange } from "./representable-range";
 
 const MICROSOFT_GRAPH_API = "https://graph.microsoft.com/v1.0";
+const UTC_TIME_ZONE_PREFERENCE = 'outlook.timezone="UTC"';
 
 const buildHeaders = (accessToken: string): Record<string, string> => ({
   "Authorization": `Bearer ${accessToken}`,
@@ -118,18 +121,50 @@ const findOutlookEventByUid = async (
   return item ?? null;
 };
 
+const resolveOutlookEventId = async (
+  accessToken: string,
+  reference: ProviderEventReference,
+): Promise<string | null> => {
+  if (reference.sourceEventId) {
+    return reference.sourceEventId;
+  }
+
+  const existing = await findOutlookEventByUid(accessToken, reference.sourceEventUid);
+  return existing?.id ?? null;
+};
+
+const findOutlookEvent = async (
+  accessToken: string,
+  reference: ProviderEventReference,
+): Promise<OutlookEvent | null> => {
+  if (!reference.sourceEventId) {
+    return findOutlookEventByUid(accessToken, reference.sourceEventUid);
+  }
+
+  const response = await fetch(
+    new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(reference.sourceEventId)}`),
+    { headers: buildHeaders(accessToken), method: "GET" },
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return outlookEventSchema.assert(await response.json());
+};
+
 const updateOutlookEvent = async (
   accessToken: string,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
   updates: EventUpdateInput,
 ): Promise<EventActionResult> => {
-  const existing = await findOutlookEventByUid(accessToken, sourceEventUid);
+  const existing = await findOutlookEvent(accessToken, reference);
 
   if (!existing?.id) {
     return { success: false, error: "Event not found on Outlook." };
   }
 
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}`);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(existing.id)}`);
 
   const patch: Record<string, unknown> = {};
   if ("title" in updates) {
@@ -191,15 +226,15 @@ const updateOutlookEvent = async (
 
 const deleteOutlookEvent = async (
   accessToken: string,
-  sourceEventUid: string,
+  reference: ProviderEventReference,
 ): Promise<EventActionResult> => {
-  const existing = await findOutlookEventByUid(accessToken, sourceEventUid);
+  const eventId = await resolveOutlookEventId(accessToken, reference);
 
-  if (!existing?.id) {
+  if (!eventId) {
     return { success: true };
   }
 
-  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${existing.id}`);
+  const url = new URL(`${MICROSOFT_GRAPH_API}/me/events/${encodeURIComponent(eventId)}`);
 
   const response = await fetch(url, {
     headers: buildHeaders(accessToken),
@@ -226,13 +261,9 @@ const rsvpOutlookEvent = async (
   reference: ProviderEventReference,
   status: RsvpStatus,
 ): Promise<EventActionResult> => {
-  let { sourceEventId } = reference;
+  const sourceEventId = await resolveOutlookEventId(accessToken, reference);
   if (!sourceEventId) {
-    const existing = await findOutlookEventByUid(accessToken, reference.sourceEventUid);
-    sourceEventId = existing?.id ?? null;
-    if (!sourceEventId) {
-      return { success: false, error: "Event not found on Outlook." };
-    }
+    return { success: false, error: "Event not found on Outlook." };
   }
 
   const action = RSVP_ACTION_MAP[status];
@@ -269,6 +300,27 @@ const buildCalendarViewUrl = (from: string, to: string, nextLink: string | null)
   return url;
 };
 
+const parseInviteTime = (time: PartialOutlookDateTime | undefined, isAllDay: boolean): Date | null => {
+  if (isAllDay) {
+    return parseEventTime(time, true);
+  }
+  if (!time?.dateTime || !time.timeZone) {
+    return null;
+  }
+  return parseEventDateTime({ dateTime: time.dateTime, timeZone: time.timeZone });
+};
+
+const readInviteTime = (time: PartialOutlookDateTime | undefined, isAllDay: boolean): string | null => {
+  try {
+    return parseInviteTime(time, isAllDay)?.toISOString() ?? null;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return null;
+    }
+    throw error;
+  }
+};
+
 const getPendingOutlookInvites = async (
   accessToken: string,
   from: string,
@@ -300,7 +352,7 @@ const getPendingOutlookInvites = async (
     const url = buildCalendarViewUrl(from, to, nextLink);
 
     const response = await fetch(url, {
-      headers: buildHeaders(accessToken),
+      headers: { ...buildHeaders(accessToken), Prefer: UTC_TIME_ZONE_PREFERENCE },
       method: "GET",
     });
 
@@ -315,7 +367,10 @@ const getPendingOutlookInvites = async (
         continue;
       }
 
-      if (!event.start?.dateTime || !event.end?.dateTime) {
+      const isAllDay = event.isAllDay ?? false;
+      const startTime = readInviteTime(event.start, isAllDay);
+      const endTime = readInviteTime(event.end, isAllDay);
+      if (!startTime || !endTime) {
         continue;
       }
 
@@ -324,9 +379,9 @@ const getPendingOutlookInvites = async (
         title: event.subject ?? null,
         description: event.bodyPreview ?? null,
         location: event.location?.displayName ?? null,
-        startTime: event.start.dateTime,
-        endTime: event.end.dateTime,
-        isAllDay: event.isAllDay ?? false,
+        startTime,
+        endTime,
+        isAllDay,
         organizer: event.organizer?.emailAddress?.address ?? null,
       });
     }

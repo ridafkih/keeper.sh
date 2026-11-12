@@ -663,8 +663,148 @@
     {
       "idx": 94,
       "version": "7",
-      "when": 1789924337771,
-      "tag": "0094_add_calendar_and_event_colors",
+      "when": 1791822336241,
+      "tag": "0094_rapid_lifeguard",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1791906001909,
+      "tag": "0095_mark_existing_oauth_clients_legacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1791915609113,
+      "tag": "0096_complex_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791915616003,
+      "tag": "0097_tough_morbius",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1793046269170,
+      "tag": "0098_source_ingest_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1793046269528,
+      "tag": "0099_source_ingest_schedule_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1793046269910,
+      "tag": "0100_session_user_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1793054228574,
+      "tag": "0101_calendar_account_credential_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1793055048603,
+      "tag": "0102_source_ingest_schedule_lock_order",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1793308119183,
+      "tag": "0103_better_auth_1_7_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1793308124722,
+      "tag": "0104_microsoft_account_object_ids",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1793308135831,
+      "tag": "0105_drop_legacy_oauth_client_columns",
+      "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1793736782537,
+      "tag": "0106_user_milestones",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1793738193787,
+      "tag": "0107_mapping_first_synced_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1793828923421,
+      "tag": "0108_provider_missing_folds_into_unavailable",
+      "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1793849084386,
+      "tag": "0109_event_reminders_opt_out",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1794080637040,
+      "tag": "0110_ingested_user_event_placeholders",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1794325393738,
+      "tag": "0111_agent_feedback",
+      "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1794325979666,
+      "tag": "0112_user_agent_feedback_preference",
+      "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1794357849829,
+      "tag": "0113_user_sign_up_attributions",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1794374570504,
+      "tag": "0114_add_calendar_and_event_colors",
       "breakpoints": true
     }
   ]

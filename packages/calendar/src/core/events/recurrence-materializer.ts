@@ -20,8 +20,11 @@ interface RecurrenceMaterializationWindow {
   end: Date;
 }
 
+type SuppressedOverride = Pick<SyncableEvent, "calendarId" | "recurrenceId" | "sourceEventUid">;
+
 interface RecurrenceMaterializationOptions {
   onSeriesOverBudget?: (error: RecurrenceMaterializationLimitError) => void;
+  suppressedOverrides?: SuppressedOverride[];
 }
 
 interface RecurrenceSeriesIdentity {
@@ -256,16 +259,15 @@ const createSyntheticOccurrenceId = (
 
 const createMaterializedOccurrence = (
   master: SyncableEvent,
-  occurrenceStartWallTime: Date,
-  timeZone: string | undefined,
+  occurrenceStart: Date,
+  seriesTimeZone: string | undefined,
 ): MaterializedSyncableEvent => {
-  const occurrenceStart = fromRecurrenceWallTime(occurrenceStartWallTime, timeZone);
   const resolveOccurrenceEnd = (): Date => {
     if (master.recurrenceDuration) {
       return addIcsDuration(
         occurrenceStart,
         master.recurrenceDuration,
-        timeZone,
+        seriesTimeZone,
       );
     }
     const exactDuration = master.endTime.getTime() - master.startTime.getTime();
@@ -309,7 +311,7 @@ const compareEvents = (first: SyncableEvent, second: SyncableEvent): number => {
   return 0;
 };
 
-const getSeriesKey = (event: SyncableEvent): string =>
+const getSeriesKey = (event: Pick<SyncableEvent, "calendarId" | "sourceEventUid">): string =>
   JSON.stringify([event.calendarId, event.sourceEventUid]);
 
 const getUniqueMastersBySeries = (events: SyncableEvent[]): Map<string, SyncableEvent> => {
@@ -337,7 +339,7 @@ const getUniqueMastersBySeries = (events: SyncableEvent[]): Map<string, Syncable
 };
 
 const getOverriddenSlotsByMaster = (
-  events: SyncableEvent[],
+  events: SuppressedOverride[],
   uniqueMastersBySeries: Map<string, SyncableEvent>,
 ): Map<SyncableEvent, Set<number>> => {
   const slotsByMaster = new Map<SyncableEvent, Set<number>>();
@@ -360,14 +362,26 @@ const getOverriddenSlotsByMaster = (
   return slotsByMaster;
 };
 
-// DATE-valued series are floating (RFC 5545 §3.3.10); the zone is still resolved so unsupported ones throw.
-const resolveExpansionTimeZone = (master: SyncableEvent): string | undefined => {
+interface SeriesTimeZones {
+  expansionTimeZone?: string;
+  seriesTimeZone?: string;
+}
+
+const stepsInElapsedTime = (rule: IcsRecurrenceRule): boolean =>
+  Boolean(HIGH_FREQUENCY_INTERVAL_MS[rule.frequency]) && !hasOccurrenceSelectors(rule);
+
+const resolveSeriesTimeZones = (
+  master: SyncableEvent,
+  rule: IcsRecurrenceRule,
+): SeriesTimeZones => {
   const timeZone = resolveTimeZone(master.startTimeZone);
   if (resolveIsAllDayEvent(master)) {
-    return;
+    return {};
   }
-
-  return timeZone;
+  if (stepsInElapsedTime(rule)) {
+    return { seriesTimeZone: timeZone };
+  }
+  return { expansionTimeZone: timeZone, seriesTimeZone: timeZone };
 };
 
 const materializeMaster = (
@@ -379,7 +393,10 @@ const materializeMaster = (
     return [];
   }
 
-  const timeZone = resolveExpansionTimeZone(master);
+  const { expansionTimeZone: timeZone, seriesTimeZone } = resolveSeriesTimeZones(
+    master,
+    master.recurrenceRule,
+  );
   const recurrenceStart = toRecurrenceWallTime(master.startTime, timeZone);
   const recurrenceEnd = toRecurrenceWallTime(window.end, timeZone);
   let durationForWindowLookback = master.endTime.getTime() - master.startTime.getTime();
@@ -429,18 +446,17 @@ const materializeMaster = (
     }, MAX_OCCURRENCES_PER_SERIES);
   }
 
+  const emittedSlots = new Set<number>();
+
   return occurrenceStarts.flatMap((occurrenceStartWallTime) => {
     const occurrenceStart = fromRecurrenceWallTime(occurrenceStartWallTime, timeZone);
     const slot = occurrenceStart.getTime();
-    if (excludedSlots.has(slot) || overriddenSlots.has(slot)) {
+    if (excludedSlots.has(slot) || overriddenSlots.has(slot) || emittedSlots.has(slot)) {
       return [];
     }
+    emittedSlots.add(slot);
 
-    const occurrence = createMaterializedOccurrence(
-      master,
-      occurrenceStartWallTime,
-      timeZone,
-    );
+    const occurrence = createMaterializedOccurrence(master, occurrenceStart, seriesTimeZone);
     if (!overlapsWindow(occurrence, window)) {
       return [];
     }
@@ -457,9 +473,12 @@ const materializeRecurrenceEvents = (
   assertValidWindow(window);
 
   const uniqueMastersBySeries = getUniqueMastersBySeries(events);
-  const overriddenSlotsByMaster = getOverriddenSlotsByMaster(events, uniqueMastersBySeries);
+  const { onSeriesOverBudget, suppressedOverrides = [] } = options;
+  const overriddenSlotsByMaster = getOverriddenSlotsByMaster(
+    [...events, ...suppressedOverrides],
+    uniqueMastersBySeries,
+  );
   const materializedEvents: MaterializedSyncableEvent[] = [];
-  const { onSeriesOverBudget } = options;
   const skippedSeriesUids = new Set<string>();
 
   for (const event of events) {

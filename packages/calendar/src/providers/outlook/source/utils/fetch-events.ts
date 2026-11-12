@@ -632,6 +632,9 @@ const resolveFirstCategoryColor = (
   return globalThis.undefined;
 };
 
+const isSelfAuthoredEvent = (iCalUId: string, categories: string[] | undefined): boolean =>
+  isKeeperEvent(iCalUId) || Boolean(categories?.includes(KEEPER_CATEGORY));
+
 const parseOutlookEventsWithDiagnostics = (
   events: OutlookCalendarEvent[],
   options: ParseOutlookEventsOptions = {},
@@ -651,11 +654,7 @@ const parseOutlookEventsWithDiagnostics = (
       unrepresentableCount += 1;
       continue;
     }
-    if (isKeeperEvent(event.iCalUId)) {
-      selfAuthoredCount += 1;
-      continue;
-    }
-    if (event.categories?.includes(KEEPER_CATEGORY)) {
+    if (isSelfAuthoredEvent(event.iCalUId, event.categories)) {
       selfAuthoredCount += 1;
       continue;
     }
@@ -687,6 +686,7 @@ const parseOutlookEventsWithDiagnostics = (
       isAllDay: event.isAllDay ?? false,
       location: event.location?.displayName,
       sourceEventId: event.id,
+      ...event.showAs === "tentative" && { sourceEventType: "tentative" as const },
       startTime: instant.startTime,
       startTimeZone: instant.startTimeZone,
       ...event.subject && { title: event.subject },

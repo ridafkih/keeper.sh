@@ -1,4 +1,5 @@
 import { useState } from "react";
+import useSWR from "swr";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
@@ -9,6 +10,13 @@ import {
   PermissionsList,
   ProviderIconPair,
 } from "@/features/auth/components/oauth-preamble";
+import { ConsentClientSummary } from "@/features/auth/components/oauth-consent-client";
+import { fetcher } from "@/lib/fetcher";
+import {
+  buildPublicOAuthClientUrl,
+  readOAuthClientName,
+  resolveRedirectDestination,
+} from "@/lib/oauth-consent-client";
 import {
   getMcpAuthorizationSearch,
   toStringSearchParams,
@@ -20,6 +28,7 @@ type SearchParams = Record<string, string>;
 
 const SCOPE_LABELS: Record<string, string> = {
   "keeper.read": "Read your Keeper data",
+  "keeper.write": "Create, edit and delete your events, and pause or trigger syncing",
   "keeper.sources.read": "View your calendar sources",
   "keeper.destinations.read": "View your sync destinations",
   "keeper.mappings.read": "View your source-destination mappings",
@@ -77,12 +86,16 @@ function McpConsentPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "loading">("idle");
   const authorizationSearch = getMcpAuthorizationSearch(search);
+  const { data: client, isLoading: isClientLoading } = useSWR<unknown>(
+    authorizationSearch ? buildPublicOAuthClientUrl(authorizationSearch.client_id) : null,
+    fetcher,
+  );
 
   if (!authorizationSearch) {
     return null;
   }
 
-  const { client_id: clientId, scope } = authorizationSearch;
+  const { redirect_uri: redirectUri, scope } = authorizationSearch;
   const scopes = scope
     .split(" ")
     .filter((value) => value.length > 0)
@@ -131,9 +144,12 @@ function McpConsentPage() {
         <Terminal className="size-full text-foreground-muted" />
       </ProviderIconPair>
       <Heading2 as="h1">Authorize MCP access</Heading2>
-      <Text size="sm" tone="muted" align="left">
-        {clientId} is requesting permission to access your Keeper data.
-      </Text>
+      {!isClientLoading && (
+        <ConsentClientSummary
+          clientName={readOAuthClientName(client)}
+          redirectDestination={resolveRedirectDestination(redirectUri)}
+        />
+      )}
       {scopes.length > 0 && <PermissionsList items={scopes} />}
       {error && (
         <Text size="sm" tone="danger" align="center">{error}</Text>
@@ -154,7 +170,7 @@ function McpConsentPage() {
         <Button
           type="button"
           className="grow justify-center"
-          disabled={status === "loading"}
+          disabled={status === "loading" || isClientLoading}
           onClick={() => {
             void handleDecision(true);
           }}

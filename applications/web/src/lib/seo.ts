@@ -1,3 +1,5 @@
+import type { SoftwareSchemaCopy } from "./marketing-content";
+
 const SITE_URL = "https://www.keeper.sh";
 const SITE_NAME = "Keeper.sh";
 const SITE_ALTERNATE_NAME = "Keeper";
@@ -5,7 +7,7 @@ const SITE_ALTERNATE_NAME = "Keeper";
 // Search engines only. This must never appear in visible page copy — it reads as a
 // defensive aside about a competitor the reader was not thinking about.
 export const BRAND_DISAMBIGUATION =
-  "Keeper.sh is a calendar syncing tool. It is not affiliated with Keeper Security, the password manager.";
+  "Keeper.sh is a calendar sync service. It is not affiliated with Keeper Security, the password manager.";
 const DEFAULT_IMAGE_PATH = "/open-graph.png";
 
 export function canonicalUrl(path: string): string {
@@ -17,8 +19,21 @@ function entityId(path: string, fragment: string): string {
   return `${url.endsWith("/") ? url : `${url}/`}#${fragment}`;
 }
 
+export function markdownAlternateLink(path: string) {
+  return { rel: "alternate", type: "text/markdown", href: `${canonicalUrl(path)}.md` };
+}
+
+const SCRIPT_UNSAFE_CHARACTERS = /[<>&\u2028\u2029]/g;
+
+function escapeForScript(character: string): string {
+  return `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`;
+}
+
 export function jsonLdScript(data: Record<string, unknown>) {
-  return { type: "application/ld+json", children: JSON.stringify(data) };
+  return {
+    type: "application/ld+json",
+    children: JSON.stringify(data).replace(SCRIPT_UNSAFE_CHARACTERS, escapeForScript),
+  };
 }
 
 export interface SeoMetaOptions {
@@ -26,8 +41,14 @@ export interface SeoMetaOptions {
   description: string;
   path: string;
   type?: string;
-  brandPosition?: "before" | "after";
+  brandPosition?: "before" | "after" | "none";
   imagePath?: string;
+}
+
+function formatTitle(title: string, brandPosition: SeoMetaOptions["brandPosition"]): string {
+  if (brandPosition === "none") return title;
+  if (brandPosition === "before") return `${SITE_NAME} — ${title}`;
+  return `${title} · ${SITE_NAME}`;
 }
 
 export function seoMeta({
@@ -38,9 +59,7 @@ export function seoMeta({
   brandPosition = "after",
   imagePath = DEFAULT_IMAGE_PATH,
 }: SeoMetaOptions) {
-  const fullTitle = brandPosition === "before"
-    ? `${SITE_NAME} — ${title}`
-    : `${title} · ${SITE_NAME}`;
+  const fullTitle = formatTitle(title, brandPosition);
   const imageUrl = canonicalUrl(imagePath);
   return [
     { title: fullTitle },
@@ -92,7 +111,12 @@ const PERSON_ID = entityId("/about", "person");
 // Consumers resolve @id within one page's graph, not across pages, and the Person
 // node itself is only emitted on /about. Carrying the type and name alongside the
 // id keeps the reference meaningful everywhere else it appears.
-export const authorReference = { "@id": PERSON_ID, "@type": "Person", name: AUTHOR_NAME };
+export const authorReference = {
+  "@id": PERSON_ID,
+  "@type": "Person",
+  name: AUTHOR_NAME,
+  url: canonicalUrl("/about"),
+};
 
 export const organizationSchema = {
   "@context": "https://schema.org",
@@ -110,7 +134,11 @@ export const organizationSchema = {
         height: 512,
       },
       disambiguatingDescription: BRAND_DISAMBIGUATION,
-      sameAs: ["https://github.com/ridafkih/keeper.sh"],
+      sameAs: [
+        "https://github.com/ridafkih/keeper.sh",
+        "https://toolradar.com/tools/keeper-sh",
+        "https://glama.ai/mcp/connectors/io.github.ridafkih/keeper-sh",
+      ],
       founder: authorReference,
     },
     {
@@ -171,14 +199,13 @@ export function faqPageSchema(
   };
 }
 
-export function softwareApplicationSchema() {
+export function softwareApplicationSchema(copy: SoftwareSchemaCopy) {
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "@id": `${SITE_URL}/#software`,
     name: SITE_NAME,
-    description:
-      "Keeper.sh keeps your personal, work and school calendars in sync, so a booking on one shows you as busy on the others. Your event titles stay private.",
+    description: copy.description,
     url: SITE_URL,
     image: `${SITE_URL}/open-graph.png`,
     applicationCategory: "BusinessApplication",
@@ -189,8 +216,7 @@ export function softwareApplicationSchema() {
         name: "Free",
         price: "0",
         priceCurrency: "USD",
-        description:
-          "For keeping two calendar accounts from double-booking each other.",
+        description: copy.offers.free,
       },
       {
         "@type": "Offer",
@@ -203,8 +229,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1M",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proMonthly,
       },
       {
         "@type": "Offer",
@@ -217,8 +242,7 @@ export function softwareApplicationSchema() {
           priceCurrency: "USD",
           billingDuration: "P1Y",
         },
-        description:
-          "For more than two calendar accounts, or when you need updates within the minute.",
+        description: copy.offers.proYearly,
       },
     ],
     provider: { "@id": `${SITE_URL}/#organization` },
@@ -366,7 +390,7 @@ export function personSchema(description: string) {
   };
 }
 
-export function blogPostingSchema(post: {
+interface ArticleSchemaInput {
   title: string;
   description: string;
   path: string;
@@ -374,12 +398,22 @@ export function blogPostingSchema(post: {
   updatedAt: string;
   tags: string[];
   imagePath?: string;
-}) {
+}
+
+export function blogPostingSchema(post: ArticleSchemaInput) {
+  return articleSchema("BlogPosting", post);
+}
+
+export function techArticleSchema(article: ArticleSchemaInput) {
+  return articleSchema("TechArticle", article);
+}
+
+function articleSchema(type: "BlogPosting" | "TechArticle", post: ArticleSchemaInput) {
   const url = canonicalUrl(post.path);
   return {
     "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    "@id": entityId(post.path, "blogposting"),
+    "@type": type,
+    "@id": entityId(post.path, type.toLowerCase()),
     headline: post.title,
     description: post.description,
     image: canonicalUrl(post.imagePath ?? DEFAULT_IMAGE_PATH),

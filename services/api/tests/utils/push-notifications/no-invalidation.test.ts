@@ -8,10 +8,10 @@ const repositoryRoot = resolve(serviceRoot, "../..");
 
 const pushSources = [
   join(serviceRoot, "src/utils/push-notifications/handle-webhook.ts"),
-  join(serviceRoot, "src/utils/push-notifications/pending-ingest.ts"),
+  join(serviceRoot, "src/utils/push-notifications/webhook-dependencies.ts"),
   join(serviceRoot, "src/routes/api/webhook/google.ts"),
   join(serviceRoot, "src/routes/api/webhook/outlook.ts"),
-  join(repositoryRoot, "services/cron/src/utils/drain-pending-ingest.ts"),
+  join(repositoryRoot, "services/cron/src/ingest/run-ingest-round.ts"),
 ];
 
 describe("push trigger modules", () => {

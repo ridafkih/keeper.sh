@@ -25,6 +25,7 @@ const makeSource = (overrides: Partial<CalendarSource> = {}): CalendarSource => 
   accountIdentifier: "ada@example.com",
   needsReauthentication: false,
   includeInIcalFeed: false,
+  excludeEventName: true,
   unavailableSince: null,
   disabled: false,
   providerMissingSince: null,

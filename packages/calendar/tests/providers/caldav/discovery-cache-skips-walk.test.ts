@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-const walks = vi.hoisted(() => ({ fetchCalendars: vi.fn() }));
+const walks = vi.hoisted(() => ({ listCalendars: vi.fn() }));
 
-vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve({
-    fetchCalendars: walks.fetchCalendars,
-  }),
-}));
+vi.mock("tsdav", async () => {
+  const { answerDiscoveryPropfind } = await import("./discovery-propfind");
+  return {
+    DAVNamespaceShort: { DAV: "d" },
+    createDAVClient: () => Promise.resolve({
+      propfind: answerDiscoveryPropfind(() => walks.listCalendars()),
+    }),
+  };
+});
 
 const { CalDAVClient } = await import("../../../src/providers/caldav/shared/client");
 
@@ -19,8 +22,8 @@ const DISCOVERED = [{
 }];
 
 const makeClient = (cache?: {
-  read: () => Promise<{ displayName: string; url: string }[] | null>;
-  write: (calendars: { displayName: string; url: string }[]) => Promise<void>;
+  read: () => Promise<{ displayName: string; url: string; writable: boolean }[] | null>;
+  write: (calendars: { displayName: string; url: string; writable: boolean }[]) => Promise<void>;
 }) => new CalDAVClient({
   calendarDiscoveryCache: cache,
   credentials: { password: "secret", username: "rida" },
@@ -29,33 +32,57 @@ const makeClient = (cache?: {
 
 describe("discovery cache against the client", () => {
   it("walks the server when nothing is cached, and records the result", async () => {
-    walks.fetchCalendars.mockClear().mockResolvedValue(DISCOVERED);
+    walks.listCalendars.mockClear().mockResolvedValue(DISCOVERED);
     const write = vi.fn(() => Promise.resolve());
     const client = makeClient({ read: () => Promise.resolve(null), write });
 
     const calendars = await client.discoverCalendars();
 
-    expect(walks.fetchCalendars).toHaveBeenCalledTimes(1);
+    expect(walks.listCalendars).toHaveBeenCalledTimes(1);
     expect(calendars).toHaveLength(1);
     expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("issues no discovery requests at all when the walk is cached", async () => {
-    walks.fetchCalendars.mockClear().mockResolvedValue(DISCOVERED);
-    const cached = [{ displayName: "Work", url: "https://dav.example/work/" }];
+    walks.listCalendars.mockClear().mockResolvedValue(DISCOVERED);
+    const cached = [{ displayName: "Work", url: "https://dav.example/work/", writable: true }];
     const client = makeClient({ read: () => Promise.resolve(cached), write: () => Promise.resolve() });
 
     const calendars = await client.discoverCalendars();
 
-    expect(walks.fetchCalendars).not.toHaveBeenCalled();
+    expect(walks.listCalendars).not.toHaveBeenCalled();
     expect(calendars).toEqual(cached);
   });
 
   it("still walks when no cache is supplied, so the refresh path stays live", async () => {
-    walks.fetchCalendars.mockClear().mockResolvedValue(DISCOVERED);
+    walks.listCalendars.mockClear().mockResolvedValue(DISCOVERED);
 
     await makeClient().discoverCalendars();
 
-    expect(walks.fetchCalendars).toHaveBeenCalledTimes(1);
+    expect(walks.listCalendars).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("calendar write access from discovery", () => {
+  it("marks a calendar whose privilege set lacks write as read-only", async () => {
+    walks.listCalendars.mockClear().mockResolvedValue([{
+      ...DISCOVERED[0],
+      projectedProps: { currentUserPrivilegeSet: { privilege: [{ read: {} }, { readFreeBusy: {} }] } },
+    }]);
+
+    const [calendar] = await makeClient().discoverCalendars();
+
+    expect(calendar?.writable).toBe(false);
+  });
+
+  it("marks a calendar whose privilege set grants write as writable", async () => {
+    walks.listCalendars.mockClear().mockResolvedValue([{
+      ...DISCOVERED[0],
+      projectedProps: { currentUserPrivilegeSet: { privilege: [{ read: {} }, { write: {} }] } },
+    }]);
+
+    const [calendar] = await makeClient().discoverCalendars();
+
+    expect(calendar?.writable).toBe(true);
   });
 });

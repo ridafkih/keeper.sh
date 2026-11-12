@@ -1,11 +1,10 @@
-import { and, arrayContains, eq, inArray } from "drizzle-orm";
+import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import {
   calendarAccountsTable,
   calendarPushChannelsTable,
   calendarsTable,
 } from "@keeper.sh/database/schema";
-import type { Plan } from "@keeper.sh/data-schemas";
 import { buildUnknownChannelKey } from "./push-keys";
 import { generatePushSecret } from "./push-secret";
 import { resolvePushRegistrar } from "./push-registry";
@@ -37,7 +36,6 @@ interface ManagePushChannelsConfig {
   observe: (fields: Record<string, unknown>) => void;
   onlyAccountId?: string;
   recordError: (error: unknown, slug: string) => void;
-  resolvePlan: (userId: string) => Promise<Plan>;
   webhookPublicUrl: string | null;
 }
 
@@ -63,6 +61,8 @@ const createManagePushChannelsDependencies = (
     const shared = and(
       arrayContains(calendarsTable.capabilities, ["pull"]),
       eq(calendarsTable.disabled, false),
+      isNull(calendarsTable.providerMissingSince),
+      isNull(calendarsTable.unavailableSince),
       inArray(calendarAccountsTable.provider, PUSH_PROVIDERS),
     );
     if (!config.onlyAccountId) {
@@ -103,7 +103,6 @@ const createManagePushChannelsDependencies = (
     },
     recordError: config.recordError,
     releaseLock: (key) => config.locks.release(key),
-    resolvePlan: config.resolvePlan,
     resolveRegistrar: resolvePushRegistrar,
     selectChannels: async () => {
       const rows = await database

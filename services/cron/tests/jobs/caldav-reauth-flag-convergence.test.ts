@@ -182,8 +182,11 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
   ingestSource: () => Promise.resolve().then(ingestOutcome),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const postgresError = (
   message: string,
@@ -230,7 +233,7 @@ const runTick = async (outcome: () => IngestionCounts): Promise<void> => {
   ingestOutcome = outcome;
   emitted.length = 0;
   updates.length = 0;
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
 };
 
 const allowImmediateRetry = (): void => {

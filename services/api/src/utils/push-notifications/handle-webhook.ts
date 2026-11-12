@@ -30,14 +30,11 @@ interface PushWebhookRouteContext {
 
 interface PushWebhookDependencies {
   claimDelivery: (deliveryKey: string) => Promise<boolean>;
-  claimPushAdmission: (
-    input: { channelKey: string | null; provider: string },
-  ) => Promise<boolean>;
+  claimPushAdmission: (provider: string) => Promise<boolean>;
   findChannel: (provider: string, channelKey: string) => Promise<StoredPushChannel | null>;
   generateCorrelationId: () => string;
   isUnknownChannelCached: (provider: string, channelKey: string) => Promise<boolean>;
   markChannelRemoved?: (channelId: string) => Promise<void>;
-  markPendingIngest: (calendarIds: string[], correlationId: string) => Promise<void>;
   markReauthorizeRequested?: (channelId: string) => Promise<void>;
   observe: (fields: Record<string, unknown>) => void;
   recordError?: (error: unknown, slug: string) => void;
@@ -49,8 +46,8 @@ interface PushWebhookDependencies {
     ttlSeconds: number,
   ) => Promise<void>;
   resolveAffectedCalendarIds: (channel: StoredPushChannel) => Promise<string[]>;
-  signalPendingIngest?: (calendarIds: string[]) => Promise<void>;
   verifySecret: (presented: string, storedHash: string) => boolean;
+  wakeIngest: (calendarIds: string[], correlationId: string) => Promise<void>;
   webhookPublicUrl: string | null;
 }
 
@@ -96,13 +93,6 @@ const hasBoundedChannelKey = (channelKey: string): boolean =>
 
 const hasUsableChannelKey = (claim: PushClaim): boolean =>
   hasBoundedChannelKey(claim.channelKey) && claim.presentedSecret.length > 0;
-
-const resolveAdmissionChannelKey = (claim: PushClaim | undefined): string | null => {
-  if (!claim || !hasBoundedChannelKey(claim.channelKey)) {
-    return null;
-  }
-  return claim.channelKey;
-};
 
 interface ChannelLookup {
   channel: StoredPushChannel | null;
@@ -394,10 +384,7 @@ const readAdmittedBody = async (
     return { response: new Response(null, { status: PAYLOAD_TOO_LARGE_STATUS }) };
   }
 
-  const admitted = await dependencies.claimPushAdmission({
-    channelKey: null,
-    provider: options.provider,
-  });
+  const admitted = await dependencies.claimPushAdmission(options.provider);
   if (!admitted) {
     dependencies.observe({ "webhook.reject_reason": "admission_throttled" });
     return { response: new Response(null, { status: HTTP_STATUS.SERVICE_UNAVAILABLE }) };
@@ -411,19 +398,6 @@ const readAdmittedBody = async (
   }
 
   return { body };
-};
-
-const signalWoken = async (
-  calendarIds: string[],
-  dependencies: PushWebhookDependencies,
-): Promise<void> => {
-  try {
-    await dependencies.signalPendingIngest?.(calendarIds);
-  } catch (error) {
-    // The pending set already holds these calendars for the periodic tick.
-    dependencies.recordError?.(error, "webhook-drain-signal-failed");
-    dependencies.observe({ "webhook.signal_failed": true });
-  }
 };
 
 const processClaims = async (
@@ -459,8 +433,7 @@ const processClaims = async (
 
   if (pendingCalendarIds.size > 0) {
     const woken = [...pendingCalendarIds];
-    await dependencies.markPendingIngest(woken, correlationId);
-    await signalWoken(woken, dependencies);
+    await dependencies.wakeIngest(woken, correlationId);
   }
 
   dependencies.observe({
@@ -518,18 +491,6 @@ const runPushWebhook = async (
     "webhook.event_type": firstClaim?.kind ?? "empty",
     "webhook.notification_count": claims.length,
   });
-
-  const admissionChannelKey = resolveAdmissionChannelKey(firstClaim);
-  if (admissionChannelKey !== null) {
-    const admitted = await dependencies.claimPushAdmission({
-      channelKey: admissionChannelKey,
-      provider: options.provider,
-    });
-    if (!admitted) {
-      dependencies.observe({ "webhook.reject_reason": "admission_throttled" });
-      return new Response(null, { status: HTTP_STATUS.SERVICE_UNAVAILABLE });
-    }
-  }
 
   const rejectedCount = await processClaims(claims, correlationId, dependencies, options);
 

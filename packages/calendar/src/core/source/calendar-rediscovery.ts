@@ -2,6 +2,10 @@ import type { GoogleCalendarListEntry } from "@keeper.sh/data-schemas";
 import { resolveGoogleCalendarColor, resolveOutlookCalendarColor } from "../colors/normalize";
 import { normalizeCalDAVCalendarKey } from "../../providers/caldav/shared/calendar-identity";
 import type { CalendarInfo } from "../../providers/caldav/types";
+import {
+  isGoogleAccessRoleWritable,
+  isOutlookCalendarWritable,
+} from "./calendar-capabilities";
 
 type RediscoveryCalendarType = "caldav" | "oauth";
 
@@ -21,6 +25,12 @@ interface ExistingCalendar {
   color: string | null;
   unavailableSince: Date | null;
   createdAt: Date;
+  writable: boolean;
+}
+
+interface CalendarWriteAccessChange {
+  id: string;
+  writable: boolean;
 }
 
 interface CalendarRetarget {
@@ -39,6 +49,7 @@ interface CalendarRediscoveryPlan {
   toMarkUnavailable: string[];
   toRetargetUrl: CalendarRetarget[];
   toSetColor: CalendarRecolor[];
+  toSetWritable: CalendarWriteAccessChange[];
   unchangedCount: number;
   duplicateCount: number;
   crossAccountSkippedCount: number;
@@ -64,6 +75,7 @@ interface StoredCalendarRow extends CalendarIdentityRow {
   color: string | null;
   unavailableSince: Date | null;
   createdAt: Date;
+  capabilities: string[];
 }
 
 interface OutlookCalendarEntry {
@@ -73,8 +85,6 @@ interface OutlookCalendarEntry {
   color?: string;
   hexColor?: string;
 }
-
-const GOOGLE_WRITABLE_ROLES = new Set(["owner", "writer"]);
 
 const EMPTY_PLAN: CalendarRediscoveryPlan = {
   crossAccountSkippedCount: 0,
@@ -86,6 +96,7 @@ const EMPTY_PLAN: CalendarRediscoveryPlan = {
   toRetargetUrl: [],
   toRevive: [],
   toSetColor: [],
+  toSetWritable: [],
   unchangedCount: 0,
 };
 
@@ -156,6 +167,16 @@ const buildUrlRetarget = (
   return [{ calendarUrl: calendar.calendarUrl, id: match.id }];
 };
 
+const buildWriteAccessChange = (
+  calendar: DiscoveredCalendar,
+  match: ExistingCalendar,
+): CalendarWriteAccessChange[] => {
+  if (calendar.writable === match.writable) {
+    return [];
+  }
+  return [{ id: match.id, writable: calendar.writable }];
+};
+
 const planCalendarRediscovery = (
   input: CalendarRediscoveryInput,
 ): CalendarRediscoveryPlan => {
@@ -207,6 +228,7 @@ const planCalendarRediscovery = (
     toRevive: matched
       .filter(({ match }) => match.unavailableSince !== null)
       .map(({ match }) => match.id),
+    toSetWritable: matched.flatMap(({ calendar, match }) => buildWriteAccessChange(calendar, match)),
     unchangedCount: matched.length,
   };
 };
@@ -220,7 +242,7 @@ const toDiscoveredGoogleCalendars = (
     externalCalendarId: entry.id,
     identityKey: entry.id,
     name: entry.summary ?? entry.id,
-    writable: GOOGLE_WRITABLE_ROLES.has(entry.accessRole),
+    writable: isGoogleAccessRoleWritable(entry.accessRole),
   }));
 
 const toDiscoveredOutlookCalendars = (
@@ -232,7 +254,7 @@ const toDiscoveredOutlookCalendars = (
     externalCalendarId: entry.id,
     identityKey: entry.id,
     name: entry.name,
-    writable: entry.canEdit === true,
+    writable: isOutlookCalendarWritable(entry.canEdit),
   }));
 
 const toDiscoveredCalDAVCalendars = (
@@ -244,7 +266,7 @@ const toDiscoveredCalDAVCalendars = (
     externalCalendarId: null,
     identityKey: normalizeCalDAVCalendarKey(entry.url),
     name: entry.displayName,
-    writable: true,
+    writable: entry.writable,
   }));
 
 const resolveStoredIdentityKey = (
@@ -281,6 +303,7 @@ const toExistingCalendars = (
       id: row.id,
       identityKey,
       unavailableSince: row.unavailableSince,
+      writable: row.capabilities.includes("push"),
     })));
 
 const toRemovedIdentityKeys = (
@@ -308,6 +331,7 @@ export {
 };
 export type {
   CalendarIdentityRow,
+  CalendarWriteAccessChange,
   CalendarRediscoveryPlan,
   CalendarRetarget,
   DiscoveredCalendar,

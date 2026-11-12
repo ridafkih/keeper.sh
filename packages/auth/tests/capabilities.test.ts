@@ -51,4 +51,58 @@ describe("resolveAuthCapabilities", () => {
       supportsPasswordReset: true,
     });
   });
+
+  it("enables the oidc provider when issuer, client id and secret are configured", () => {
+    const capabilities = resolveAuthCapabilities({
+      oidcClientId: "oidc-client-id",
+      oidcClientSecret: "oidc-client-secret",
+      oidcIssuerUrl: "https://id.example.com",
+    });
+
+    expect(capabilities.socialProviders.oidc).toBe(true);
+    expect("disableLocalAuth" in capabilities).toBe(false);
+  });
+
+  it("leaves the oidc keys out entirely when oidc is not configured", () => {
+    const capabilities = resolveAuthCapabilities({
+      disableLocalAuth: true,
+      oidcProviderName: "Pocket ID",
+    });
+
+    expect("oidc" in capabilities.socialProviders).toBe(false);
+    expect("disableLocalAuth" in capabilities).toBe(false);
+    expect("oidcProviderName" in capabilities).toBe(false);
+  });
+
+  it("leaves oidc disabled when any of its credentials is missing", () => {
+    const capabilities = resolveAuthCapabilities({
+      oidcClientId: "oidc-client-id",
+      oidcIssuerUrl: "https://id.example.com",
+    });
+
+    expect("oidc" in capabilities.socialProviders).toBe(false);
+  });
+
+  it("disables local auth only when both oidc and DISABLE_LOCAL_AUTH are set", () => {
+    const capabilities = resolveAuthCapabilities({
+      disableLocalAuth: true,
+      oidcClientId: "oidc-client-id",
+      oidcClientSecret: "oidc-client-secret",
+      oidcIssuerUrl: "https://id.example.com",
+    });
+
+    expect(capabilities.socialProviders.oidc).toBe(true);
+    expect(capabilities.disableLocalAuth).toBe(true);
+  });
+
+  it("exposes the configured oidc provider name when oidc is enabled", () => {
+    const capabilities = resolveAuthCapabilities({
+      oidcClientId: "oidc-client-id",
+      oidcClientSecret: "oidc-client-secret",
+      oidcIssuerUrl: "https://id.example.com",
+      oidcProviderName: "Pocket ID",
+    });
+
+    expect(capabilities.oidcProviderName).toBe("Pocket ID");
+  });
 });

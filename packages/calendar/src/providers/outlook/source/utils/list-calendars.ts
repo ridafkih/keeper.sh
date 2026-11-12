@@ -7,21 +7,32 @@ const INVALID_RESPONSE_STATUS = 502;
 class CalendarListError extends Error {
   public readonly status: number;
   public readonly authRequired: boolean;
+  public readonly providerErrorCode: string | null;
 
   constructor(
     message: string,
     status: number,
     authRequired = false,
+    providerErrorCode: string | null = null,
   ) {
     super(message);
     this.name = "CalendarListError";
     this.status = status;
     this.authRequired = authRequired;
+    this.providerErrorCode = providerErrorCode;
   }
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null;
+
+const readGraphErrorCode = async (response: Response): Promise<string | null> => {
+  const body: unknown = await response.json().catch(() => null);
+  if (!isRecord(body) || !isRecord(body.error) || typeof body.error.code !== "string") {
+    return null;
+  }
+  return body.error.code;
+};
 
 const parseCalendarOwner = (value: unknown): OutlookCalendarListEntry["owner"] | undefined => {
   if (!isRecord(value)) {
@@ -122,6 +133,7 @@ const fetchCalendarPage = async (
       `Failed to list calendars: ${response.status}`,
       response.status,
       authRequired,
+      await readGraphErrorCode(response),
     );
   }
 

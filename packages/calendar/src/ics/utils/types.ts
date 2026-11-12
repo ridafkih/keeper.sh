@@ -7,6 +7,7 @@ interface EventTimeSlot {
   startTime: Date;
   endTime: Date;
   availability?: EventAvailability;
+  sourceEventType?: "tentative";
   isAllDay?: boolean;
   startTimeZone?: string;
   recurrenceRule?: IcsRecurrenceRule;

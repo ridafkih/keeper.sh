@@ -1,46 +1,54 @@
 import type { ReactNode, SubmitEvent } from "react";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
+import Eye from "lucide-react/dist/esm/icons/eye";
+import EyeOff from "lucide-react/dist/esm/icons/eye-off";
+import CalendarPlus from "lucide-react/dist/esm/icons/calendar-plus";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check";
 import KeeperLogo from "@/assets/keeper.svg?react";
-import { authClient } from "@/lib/auth-client";
-import { withSignupMarker } from "@/lib/signup-marker";
-import {
-  resolvePathWithSearch,
-  resolveClientPostAuthRedirect,
-  type StringSearchParams,
-} from "@/lib/mcp-auth-flow";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { Heading2 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ExternalTextLink } from "@/components/ui/primitives/text-link";
 import { Divider } from "@/components/ui/primitives/divider";
 import { Button, ButtonText } from "@/components/ui/primitives/button";
+import { ExternalTextLink } from "@/components/ui/primitives/text-link";
+import {
+  NavigationMenu,
+  NavigationMenuItem,
+  NavigationMenuItemIcon,
+  NavigationMenuItemLabel,
+} from "@/components/ui/composites/navigation-menu/navigation-menu-items";
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
+import { providerIcons } from "@/lib/providers";
+import { buildCalendarConsentUrl } from "@/lib/sign-up-continuation";
 
-type Provider = "google" | "outlook" | "microsoft-365";
+type Provider = "google" | "outlook";
 
-const PROVIDER_LABELS: Record<Provider, string> = {
-  google: "Google",
-  outlook: "Outlook",
-  "microsoft-365": "Microsoft 365",
+interface ProviderPreamble {
+  label: string;
+  heading: string;
+  company: string;
+  accountNotice?: string;
+}
+
+const PROVIDER_PREAMBLES: Record<Provider, ProviderPreamble> = {
+  google: { company: "Google", heading: "Google Calendar", label: "Google" },
+  outlook: {
+    accountNotice: "A work or school account may need your admin to approve Keeper.sh first.",
+    company: "Microsoft",
+    heading: "Outlook or Microsoft 365",
+    label: "Outlook",
+  },
 };
 
-const PERMISSIONS = [
-  "See your email address",
-  "View a list of your calendars",
-  "View events, summaries and details",
-  "Add or remove calendar events",
+const ACCESS_USES = [
+  { icon: Eye, label: "Reads when your events happen" },
+  { icon: CalendarPlus, label: "Adds busy blocks to calendars you pick" },
+  { icon: ShieldCheck, label: "Never edits or deletes your events" },
+  { icon: EyeOff, label: "Titles and guests stay private" },
 ];
 
-const PROVIDER_SOCIAL_MAP: Partial<Record<Provider, string>> = {
-  google: "google",
-  outlook: "microsoft",
-};
-
-const PROVIDER_API_MAP: Record<Provider, string> = {
-  google: "google",
-  outlook: "outlook",
-  "microsoft-365": "outlook",
-};
+const SOURCE_CODE_URL = "https://github.com/ridafkih/keeper.sh";
 
 export function PermissionsList({ items }: { items: readonly string[] }) {
   return (
@@ -62,65 +70,54 @@ interface PreambleLayoutProps {
 }
 
 function PreambleLayout({ provider, onSubmit, children }: PreambleLayoutProps) {
+  const { label, heading, company, accountNotice } = PROVIDER_PREAMBLES[provider];
   return (
     <>
       <ProviderIconPair>
         <img
-          src={`/integrations/icon-${provider}.svg`}
-          alt={PROVIDER_LABELS[provider]}
+          src={providerIcons[provider]}
+          alt={label}
           width={40}
           height={40}
           className="size-full rounded-lg p-3"
         />
       </ProviderIconPair>
-      <Heading2 as="h1">Connect {PROVIDER_LABELS[provider]}</Heading2>
-      <Text size="sm" tone="muted" align="left">
-        Start importing your events and sync them across all your calendars.
-      </Text>
-      <PermissionsList items={PERMISSIONS} />
+      <div className="flex flex-col gap-1">
+        <Heading2 as="h1">Connect {heading}</Heading2>
+        <Text size="sm" tone="muted" align="left">
+          {company} will ask for access to your calendars. This is what Keeper.sh does with it.
+        </Text>
+      </div>
+      <NavigationMenu>
+        {ACCESS_USES.map(({ icon: Icon, label: use }) => (
+          <NavigationMenuItem key={use}>
+            <NavigationMenuItemIcon>
+              <Icon size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>{use}</NavigationMenuItemLabel>
+          </NavigationMenuItem>
+        ))}
+      </NavigationMenu>
+      {accountNotice && (
+        <Text size="sm" tone="muted" align="left">{accountNotice}</Text>
+      )}
       <Divider />
       <form onSubmit={onSubmit} className="contents">
         <div className="flex items-stretch gap-2">
           <BackButton variant="border" size="standard" className="self-stretch justify-center px-3.5" />
           <Button type="submit" className="grow justify-center">
-            <ButtonText>Connect</ButtonText>
+            <ButtonText>Continue to {company}</ButtonText>
           </Button>
         </div>
       </form>
+      <Text size="sm" tone="muted" align="center">
+        Keeper.sh is open source.{" "}
+        <ExternalTextLink href={SOURCE_CODE_URL} target="_blank" rel="noreferrer">
+          Read the code
+        </ExternalTextLink>
+      </Text>
       {children}
     </>
-  );
-}
-
-interface AuthOAuthPreambleProps {
-  provider: Provider;
-  authorizationSearch?: StringSearchParams;
-}
-
-export function AuthOAuthPreamble({
-  provider,
-  authorizationSearch,
-}: AuthOAuthPreambleProps) {
-  const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const socialProvider = PROVIDER_SOCIAL_MAP[provider];
-    if (!socialProvider) return;
-
-    const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
-
-    await authClient.signIn.social({
-      callbackURL,
-      newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
-      provider: socialProvider,
-    });
-  };
-
-  return (
-    <PreambleLayout provider={provider} onSubmit={handleSubmit}>
-      <ExternalTextLink href={resolvePathWithSearch("/login", authorizationSearch)}>
-        Don&apos;t import my calendars yet, just log me in.
-      </ExternalTextLink>
-    </PreambleLayout>
   );
 }
 
@@ -131,8 +128,8 @@ interface LinkOAuthPreambleProps {
 export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const apiProvider = PROVIDER_API_MAP[provider];
-    window.location.href = `/api/sources/authorize?provider=${apiProvider}`;
+    track(ANALYTICS_EVENTS.oauth_authorize_started, { oauth_is_reconnect: false, provider_name: provider });
+    window.location.href = buildCalendarConsentUrl(provider, { forSignedInAccount: false });
   };
 
   return (

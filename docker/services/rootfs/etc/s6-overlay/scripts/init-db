@@ -1,4 +1,4 @@
 #!/bin/bash
 set -e
 
-/root/.bun/bin/bun /app/packages/database/scripts/migrate.ts
+/usr/local/bin/bun /app/packages/database/scripts/migrate.ts

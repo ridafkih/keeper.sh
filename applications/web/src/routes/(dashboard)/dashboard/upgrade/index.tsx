@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardHeading1, DashboardHeading3 } from "@/components/ui/primitives/dashboard-heading";
@@ -15,6 +15,7 @@ import {
 import Check from "lucide-react/dist/esm/icons/check";
 import { HttpError } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS, reportPurchaseConversion } from "@/lib/analytics";
+import { reportFunnelEvent } from "@/lib/funnel-events";
 import {
   fetchSubscriptionStateWithApi,
   useSubscription,
@@ -81,6 +82,10 @@ function UpgradePage() {
   });
   const [yearly, setYearly] = useState(false);
 
+  useEffect(() => {
+    reportFunnelEvent({ event: "billing.upgrade_viewed" });
+  }, []);
+
   const handleBillingToggle = (checked: boolean) => {
     const interval = checked ? "annual" : "monthly";
     track(ANALYTICS_EVENTS.upgrade_billing_toggled, { interval });
@@ -135,7 +140,7 @@ function UpgradePage() {
             <Text size="sm" tone="highlight">Annual billing</Text>
           </UpgradeCardToggle>
           <Text size="sm" align="left" className="text-neutral-400 pt-1">
-            For power users who need fast syncs, advanced feed controls, and unlimited syncing. Thank you for supporting this project.
+            Unlimited calendars, changes within seconds from Google and Outlook, and full control over what every link shows.
           </Text>
         </UpgradeCardSection>
 

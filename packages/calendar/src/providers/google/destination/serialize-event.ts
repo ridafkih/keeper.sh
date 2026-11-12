@@ -5,21 +5,12 @@ import { normalizeGoogleEvent } from "./normalize-event";
 
 const formatDateOnly = (value: Date): string => value.toISOString().slice(0, 10);
 
-const buildDateField = (
-  time: Date,
-  isAllDay: boolean,
-  startTimeZone: string | undefined,
-  recurrenceRule: string | null | undefined,
-): NonNullable<GoogleEvent["start"]> => {
+const buildDateField = (time: Date, isAllDay: boolean): NonNullable<GoogleEvent["start"]> => {
   if (isAllDay) {
     return { date: formatDateOnly(time) };
   }
 
-  const timeZone = startTimeZone ?? "UTC";
-  return {
-    dateTime: time.toISOString(),
-    ...(recurrenceRule && { timeZone }),
-  };
+  return { dateTime: time.toISOString() };
 };
 
 const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
@@ -33,7 +24,6 @@ const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
 const serializeGoogleEvent = (
   event: MaterializedSyncableEvent,
   uid: string,
-  recurrenceRule?: string | null,
 ): GoogleEvent | null => {
   if (!canSerializeGoogleEvent(event)) {
     return null;
@@ -44,14 +34,14 @@ const serializeGoogleEvent = (
 
   return {
     description: normalized.description,
-    end: buildDateField(normalized.endTime, isAllDay, event.startTimeZone, recurrenceRule),
+    end: buildDateField(normalized.endTime, isAllDay),
     iCalUID: uid,
     location: event.location,
-    start: buildDateField(normalized.startTime, isAllDay, event.startTimeZone, recurrenceRule),
+    start: buildDateField(normalized.startTime, isAllDay),
     summary: event.summary,
     ...(event.availability === "free" && { transparency: "transparent" }),
     ...(event.isPrivate && { visibility: "private" }),
-    ...(recurrenceRule && { recurrence: [`RRULE:${recurrenceRule}`] }),
+    ...(event.remindersDisabled && { reminders: { overrides: [], useDefault: false } }),
   };
 };
 

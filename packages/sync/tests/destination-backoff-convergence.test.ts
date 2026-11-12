@@ -208,6 +208,7 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
   database: database as never,
   redis: {} as never,
   oauthConfig: {} as never,
+  recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,
   ...overrides,
 });
@@ -535,10 +536,13 @@ describe("a run whose only push was accepted without a remote id", () => {
     expect(shouldExcludeSyncEvent({
       availability: "workingElsewhere",
       excludeAllDayEvents: false,
+      excludeAvailabilities: [],
       excludeFocusTime: false,
       excludeOutOfOffice: false,
+      excludeTitleKeywords: [],
       isAllDay: false,
       sourceEventType: null,
+      title: null,
     })).toBe(true);
   });
 

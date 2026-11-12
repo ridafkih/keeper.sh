@@ -9,7 +9,8 @@ const davMocks = vi.hoisted(() => ({
   deleteCalendarObject: vi.fn(),
 }));
 
-vi.mock("tsdav", () => ({
+vi.mock("tsdav", async (importOriginal) => ({
+  ...await importOriginal<Record<string, unknown>>(),
   createDAVClient: () => Promise.resolve({
     createCalendarObject: davMocks.createCalendarObject,
     deleteCalendarObject: davMocks.deleteCalendarObject,

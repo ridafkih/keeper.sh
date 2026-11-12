@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { type } from "arktype";
 import {
+  MAX_EXCLUDE_TITLE_KEYWORDS,
+  MAX_EXCLUDE_TITLE_KEYWORD_LENGTH,
+} from "@keeper.sh/data-schemas";
+import {
   calendarIdsBodySchema,
   sourcePatchBodySchema,
   icalSettingsPatchBodySchema,
@@ -71,6 +75,59 @@ describe("sourcePatchBodySchema", () => {
     expect(result instanceof type.errors).toBe(false);
   });
 
+  it("accepts disableEventReminders as boolean", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects a non-boolean disableEventReminders", () => {
+    const result = sourcePatchBodySchema({ disableEventReminders: "yes" });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("accepts excluded statuses", () => {
+    const result = sourcePatchBodySchema({ excludeAvailabilities: ["busy", "free", "tentative"] });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("accepts excludeFreeEvents from clients loaded before excluded statuses", () => {
+    const result = sourcePatchBodySchema({ excludeFreeEvents: true });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects statuses that cannot be excluded", () => {
+    const result = sourcePatchBodySchema({ excludeAvailabilities: ["workingElsewhere"] });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it("accepts title keywords at their limits", () => {
+    const result = sourcePatchBodySchema({
+      excludeTitleKeywords: Array.from(
+        { length: MAX_EXCLUDE_TITLE_KEYWORDS },
+        () => "x".repeat(MAX_EXCLUDE_TITLE_KEYWORD_LENGTH),
+      ),
+    });
+    expect(result instanceof type.errors).toBe(false);
+  });
+
+  it("rejects an empty title keyword", () => {
+    const result = sourcePatchBodySchema({ excludeTitleKeywords: [""] });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it(`rejects more than ${MAX_EXCLUDE_TITLE_KEYWORDS} title keywords`, () => {
+    const result = sourcePatchBodySchema({
+      excludeTitleKeywords: Array.from({ length: MAX_EXCLUDE_TITLE_KEYWORDS + 1 }, () => "x"),
+    });
+    expect(result instanceof type.errors).toBe(true);
+  });
+
+  it(`rejects title keywords longer than ${MAX_EXCLUDE_TITLE_KEYWORD_LENGTH} characters`, () => {
+    const result = sourcePatchBodySchema({
+      excludeTitleKeywords: ["x".repeat(MAX_EXCLUDE_TITLE_KEYWORD_LENGTH + 1)],
+    });
+    expect(result instanceof type.errors).toBe(true);
+  });
 
   it("rejects extra properties", () => {
     const result = sourcePatchBodySchema({ name: "ok", hacker: true });
@@ -99,6 +156,23 @@ describe("icalSettingsPatchBodySchema", () => {
 });
 
 describe("eventCreateBodySchema", () => {
+  it("passes a wall time and its timezone through to the event time parser", () => {
+    const result = eventCreateBodySchema({
+      calendarId: "abc-123",
+      title: "Team Meeting",
+      startTime: "2026-11-05T09:00:00",
+      endTime: "2026-11-05T10:00:00",
+      timezone: "America/Edmonton",
+    });
+    expect(result).toEqual({
+      calendarId: "abc-123",
+      title: "Team Meeting",
+      startTime: "2026-11-05T09:00:00",
+      endTime: "2026-11-05T10:00:00",
+      timezone: "America/Edmonton",
+    });
+  });
+
   it("accepts valid event creation body", () => {
     const result = eventCreateBodySchema({
       calendarId: "abc-123",
@@ -152,6 +226,11 @@ describe("eventCreateBodySchema", () => {
 });
 
 describe("eventPatchBodySchema", () => {
+  it("accepts an update that only changes the timezone", () => {
+    const result = eventPatchBodySchema({ timezone: "America/Edmonton" });
+    expect(result).toEqual({ timezone: "America/Edmonton" });
+  });
+
   it("accepts partial event update", () => {
     const result = eventPatchBodySchema({ title: "Updated Title" });
     expect(result instanceof type.errors).toBe(false);

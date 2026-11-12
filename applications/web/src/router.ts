@@ -4,6 +4,7 @@ import { createJsonFetcher } from "./lib/json-fetcher";
 import { getPublicRuntimeConfig, getServerPublicRuntimeConfig } from "./lib/runtime-config";
 import type { PublicRuntimeConfig } from "./lib/runtime-config";
 import { hasSessionCookie } from "./lib/session-cookie";
+import { parseQueryString, stringifyQueryRecord } from "./lib/search-params";
 import type { AppRouterContext } from "./lib/router-context";
 
 import type { ViteAssets } from "./lib/router-context";
@@ -105,9 +106,11 @@ export function createAppRouter(options: CreateAppRouterOptions = {}) {
   const router = createRouter({
     context: buildRouterContext(options.request, options.viteAssets),
     defaultPreload: "intent",
+    parseSearch: parseQueryString,
     routeTree,
     scrollRestoration: true,
     scrollToTopSelectors: ["body"],
+    stringifySearch: stringifyQueryRecord,
   });
 
   return router;

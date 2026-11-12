@@ -1,63 +1,21 @@
 import { HTTP_STATUS } from "@keeper.sh/constants";
-import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
-import { withEventReadErrorHandling } from "@/utils/event-read-errors";
+import { handleGetV1EventsRoute } from "@/handlers/event-routes";
 import { createKeeperApi } from "@/read-models";
-import type { KeeperEventFilters } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventCreateBodySchema } from "@/utils/request-body";
-import { database, oauthProviders, refreshLockStore, encryptionKey } from "@/context";
+import { database, oauthProviders, refreshLockStore, encryptionKey, googleInteractiveRateLimiter } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
+  googleRateLimiter: googleInteractiveRateLimiter,
   oauthTokenRefresher: oauthProviders,
   refreshLockStore,
   encryptionKey,
 });
 
-const parseEventFilters = (url: URL): KeeperEventFilters => {
-  const filters: KeeperEventFilters = {};
-
-  const calendarId = url.searchParams.get("calendarId");
-  if (calendarId) {
-    filters.calendarId = calendarId.split(",").filter(Boolean);
-  }
-
-  const availability = url.searchParams.get("availability");
-  if (availability) {
-    filters.availability = availability.split(",").filter(Boolean);
-  }
-
-  const isAllDay = url.searchParams.get("isAllDay");
-  if (isAllDay === "true") {
-    filters.isAllDay = true;
-  } else if (isAllDay === "false") {
-    filters.isAllDay = false;
-  }
-
-  return filters;
-};
-
 const GET = withWideEvent(
-  withV1Auth(({ request, userId }) => withEventReadErrorHandling(async () => {
-    const url = new URL(request.url);
-    const { from, to } = parseDateRangeParams(url);
-    const { end, start } = normalizeDateRange(from, to);
-    const shouldCount = url.searchParams.get("count") === "true";
-
-    if (shouldCount) {
-      const count = await keeperApi.getEventCount(userId, { from: start, to: end });
-      return Response.json({ count });
-    }
-
-    const filters = parseEventFilters(url);
-    const events = await keeperApi.getEventsInRange(
-      userId,
-      { from: start, to: end },
-      filters,
-    );
-    return Response.json(events);
-  })),
+  withV1Auth(({ request, userId }) => handleGetV1EventsRoute(request, userId, keeperApi)),
 );
 
 const POST = withWideEvent(

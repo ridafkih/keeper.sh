@@ -34,6 +34,7 @@ let accountDemandSource: string | null = null;
 const baseSource = {
   accessToken: "access-token",
   accountId: "account-1",
+  excludeAvailabilities: [],
   expiresAt: new Date(Date.now() + 3_600_000),
   ingestFutureRange: "P90D",
   ingestHistoricRange: "P30D",
@@ -170,8 +171,11 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => ({
     }),
 }));
 
-const ingestSourcesModule = await import("../../src/jobs/ingest-sources");
-const ingestSourcesJob = ingestSourcesModule.default;
+const ingestSourcesModule = await import("../../src/ingest/ingest-sources");
+const runIngestPass = async () => {
+  const { result } = await ingestSourcesModule.ingestSourceCalendars(["calendar-under-test"]);
+  return result;
+};
 
 const emitted: EmittedEvent[] = [];
 const originalWrite = process.stdout.write.bind(process.stdout);
@@ -201,7 +205,7 @@ afterEach(() => {
 });
 
 const runTick = async (): Promise<void> => {
-  await Promise.resolve(ingestSourcesJob.callback()).catch(() => null);
+  await Promise.resolve(runIngestPass()).catch(() => null);
 };
 
 const demandEvents = (): EmittedEvent[] =>

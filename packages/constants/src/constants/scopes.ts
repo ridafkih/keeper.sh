@@ -1,4 +1,5 @@
 const KEEPER_API_READ_SCOPE = "keeper.read";
+const KEEPER_API_WRITE_SCOPE = "keeper.write";
 const KEEPER_API_SOURCE_SCOPE = "keeper.sources.read";
 const KEEPER_API_DESTINATION_SCOPE = "keeper.destinations.read";
 const KEEPER_API_MAPPING_SCOPE = "keeper.mappings.read";
@@ -7,6 +8,7 @@ const KEEPER_API_SYNC_SCOPE = "keeper.sync-status.read";
 
 const KEEPER_API_SCOPES = [
   KEEPER_API_READ_SCOPE,
+  KEEPER_API_WRITE_SCOPE,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_DESTINATION_SCOPE,
   KEEPER_API_MAPPING_SCOPE,
@@ -28,4 +30,5 @@ export {
   KEEPER_API_SCOPES,
   KEEPER_API_SOURCE_SCOPE,
   KEEPER_API_SYNC_SCOPE,
+  KEEPER_API_WRITE_SCOPE,
 };

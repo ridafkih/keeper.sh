@@ -23,7 +23,12 @@ const isCalendarInfo = (value: unknown): value is CalendarInfo => {
     return false;
   }
   const candidate = value as Record<string, unknown>;
-  return typeof candidate.url === "string" && typeof candidate.displayName === "string";
+  return (
+    typeof candidate.url === "string"
+    && typeof candidate.displayName === "string"
+    && typeof candidate.writable === "boolean"
+    && (!("timeZone" in candidate) || typeof candidate.timeZone === "string")
+  );
 };
 
 const parseCachedCalendars = (payload: string | null): CalendarInfo[] | null => {

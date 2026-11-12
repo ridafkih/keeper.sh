@@ -1,0 +1,162 @@
+import { genericOAuth } from "better-auth/plugins";
+import type { BetterAuthPlugin } from "better-auth";
+
+const OIDC_PROVIDER_ID = "oidc";
+const OIDC_REGISTERED_CALLBACK_PATH = `/api/auth/oauth2/callback/${OIDC_PROVIDER_ID}`;
+const OIDC_HANDLER_CALLBACK_PATH = `/api/auth/callback/${OIDC_PROVIDER_ID}`;
+const DEFAULT_OIDC_SCOPES = ["openid", "profile", "email"];
+const LOCAL_ACCOUNT_EMAIL_SUFFIX = "@local";
+
+const LOCAL_AUTH_PATHS = new Set([
+  "/sign-in/email",
+  "/sign-up/email",
+  "/username-only/sign-in",
+  "/username-only/sign-up",
+  "/request-password-reset",
+  "/reset-password",
+]);
+
+interface OidcConfig {
+  baseUrl: string;
+  issuerUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes?: string[] | null;
+  trustEmailVerified: boolean;
+}
+
+interface OidcProfileMappingOptions {
+  trustEmailVerified: boolean;
+}
+
+interface OidcProfile {
+  email?: unknown;
+  email_verified?: unknown;
+  name?: unknown;
+  preferred_username?: unknown;
+}
+
+const readNonEmptyString = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed;
+};
+
+const resolveOidcDiscoveryUrl = (issuerUrl: string): string =>
+  `${issuerUrl.replace(/\/+$/, "")}/.well-known/openid-configuration`;
+
+const resolveOidcDisplayName = (profile: OidcProfile): string | null => {
+  const name = readNonEmptyString(profile.name);
+  if (name) {
+    return name;
+  }
+  const preferredUsername = readNonEmptyString(profile.preferred_username);
+  if (preferredUsername) {
+    return preferredUsername;
+  }
+  const email = readNonEmptyString(profile.email);
+  if (!email) {
+    return null;
+  }
+  const [localPart] = email.split("@");
+  return readNonEmptyString(localPart);
+};
+
+const isLocalAccountEmail = (email: string): boolean =>
+  email.toLowerCase().endsWith(LOCAL_ACCOUNT_EMAIL_SUFFIX);
+
+const isOidcEmailVerified = (
+  profile: OidcProfile,
+  { trustEmailVerified }: OidcProfileMappingOptions,
+): boolean => {
+  if (!trustEmailVerified) {
+    return false;
+  }
+  if (profile.email_verified !== true) {
+    return false;
+  }
+  const email = readNonEmptyString(profile.email);
+  if (!email) {
+    return false;
+  }
+  return !isLocalAccountEmail(email);
+};
+
+const mapOidcProfileToUser = (profile: OidcProfile, options: OidcProfileMappingOptions) => {
+  const emailVerified = isOidcEmailVerified(profile, options);
+  const name = resolveOidcDisplayName(profile);
+  if (!name) {
+    return { emailVerified };
+  }
+  return { emailVerified, name };
+};
+
+const isLocalAuthPath = (path: string): boolean => LOCAL_AUTH_PATHS.has(path);
+
+const resolveOidcRedirectUri = (baseUrl: string): string =>
+  new URL(OIDC_REGISTERED_CALLBACK_PATH, baseUrl).toString();
+
+const routeOidcCallbackRequest = (request: Request): Request => {
+  const url = new URL(request.url);
+  if (url.pathname !== OIDC_REGISTERED_CALLBACK_PATH) {
+    return request;
+  }
+  url.pathname = OIDC_HANDLER_CALLBACK_PATH;
+  return new Request(url.toString(), request);
+};
+
+const createOidcPlugin = (config: OidcConfig): BetterAuthPlugin =>
+  genericOAuth({
+    config: [
+      {
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+        discoveryUrl: resolveOidcDiscoveryUrl(config.issuerUrl),
+        mapProfileToUser: (profile: OidcProfile) =>
+          mapOidcProfileToUser(profile, { trustEmailVerified: config.trustEmailVerified }),
+        pkce: true,
+        providerId: OIDC_PROVIDER_ID,
+        redirectURI: resolveOidcRedirectUri(config.baseUrl),
+        scopes: config.scopes ?? DEFAULT_OIDC_SCOPES,
+      },
+    ],
+  });
+
+interface OidcPluginSettings {
+  baseUrl: string;
+  enabled: boolean;
+  issuerUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[] | null;
+  trustEmailVerified: boolean;
+}
+
+const resolveOidcPlugin = ({
+  enabled,
+  issuerUrl,
+  clientId,
+  clientSecret,
+  ...settings
+}: OidcPluginSettings): BetterAuthPlugin | null => {
+  if (!enabled || !issuerUrl || !clientId || !clientSecret) {
+    return null;
+  }
+  return createOidcPlugin({ ...settings, clientId, clientSecret, issuerUrl });
+};
+
+export {
+  OIDC_PROVIDER_ID,
+  isLocalAccountEmail,
+  isLocalAuthPath,
+  mapOidcProfileToUser,
+  resolveOidcDiscoveryUrl,
+  resolveOidcPlugin,
+  routeOidcCallbackRequest,
+};
+export type { OidcConfig };
