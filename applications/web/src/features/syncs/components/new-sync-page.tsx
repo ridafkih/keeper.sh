@@ -142,7 +142,7 @@ function NewSyncForm({ search, calendars, entitlements }: NewSyncFormProps) {
   if (!draft) {
     return (
       <NewSyncColumns header={<NewSyncHeader description="Start from a profile. It only fills in the form, and you can change everything after." />}>
-        {atLimit && <PremiumHint>Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
+        {atLimit && <PremiumHint limit="syncs">Free plans include one sync. Your existing syncs keep running.</PremiumHint>}
         <ProfileGallery disabled={atLimit} locked={locked} onPick={pick} />
         {dialogs}
       </NewSyncColumns>
@@ -194,7 +194,7 @@ function NewSyncForm({ search, calendars, entitlements }: NewSyncFormProps) {
         notice={conflictMessage && <MenuHint tone="attention">{conflictMessage}</MenuHint>}
         onChange={(patch) => setDraft((current) => current && { ...current, ...patch })}
       />
-      {atLimit && <div className="pt-3"><PremiumHint>{AT_LIMIT_MESSAGE}</PremiumHint></div>}
+      {atLimit && <div className="pt-3"><PremiumHint limit="syncs">{AT_LIMIT_MESSAGE}</PremiumHint></div>}
       {dialogs}
     </NewSyncColumns>
   );

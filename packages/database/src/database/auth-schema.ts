@@ -17,6 +17,7 @@ const ONBOARDING_STATUS_SQL_VALUES = ONBOARDING_STATUSES
   .join(", ");
 
 const user = pgTable("user", {
+  agentFeedbackEnabled: boolean().notNull().default(true),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
   email: text().notNull().unique(),
   emailVerified: boolean().notNull().default(false),

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Heading1, Heading2, Heading3 } from "@/components/ui/primitives/heading";
 import { Text } from "@/components/ui/primitives/text";
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from "@/components/ui/primitives/button";
+import { ButtonIcon, ButtonText, LinkButton } from "@/components/ui/primitives/button";
 import { MarketingCtaCard, MarketingCtaSection } from "@/features/marketing/components/marketing-cta";
 import {
   MarketingFeatureBentoBody,
@@ -18,7 +18,6 @@ import {
   MarketingHowItWorksStepBody,
   MarketingHowItWorksStepIllustration,
 } from "@/features/marketing/components/marketing-how-it-works";
-import { MarketingIllustrationContributors } from "@/illustrations/marketing-illustration-contributors";
 import { MarketingIllustrationProviders } from "@/illustrations/marketing-illustration-providers";
 import { MarketingIllustrationSetup } from "@/illustrations/marketing-illustration-setup";
 import { MarketingIllustrationSync } from "@/illustrations/marketing-illustration-sync";
@@ -31,12 +30,12 @@ import { Breadcrumb } from "@/components/ui/primitives/breadcrumb";
 import { ANALYTICS_EVENTS } from "@/lib/analytics";
 import { marketingCopy } from "@/lib/marketing-copy";
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const breadcrumbs = breadcrumbTrail({ name: "Features", path: "/features" });
 
 const features = marketingCopy.features;
 const PAGE_DESCRIPTION = features.seo.description;
+const PAGE_INTRO = features.header.body ?? PAGE_DESCRIPTION;
 
 type FeatureCard = {
   title: string;
@@ -44,6 +43,8 @@ type FeatureCard = {
   gridClassName: string;
   illustration?: ReactNode;
 };
+
+const RENAMED_CARD_IDS: Record<string, string> = { openSource: "copies" };
 
 const CARD_PRESENTATION: Record<string, { gridClassName: string; illustration?: ReactNode }> = {
   providers: {
@@ -64,9 +65,8 @@ const CARD_PRESENTATION: Record<string, { gridClassName: string; illustration?: 
   moves: {
     gridClassName: "lg:col-start-1 lg:col-span-5 lg:row-start-3",
   },
-  openSource: {
+  copies: {
     gridClassName: "lg:col-start-6 lg:col-span-5 lg:row-start-3",
-    illustration: <MarketingIllustrationContributors />,
   },
   agents: {
     gridClassName: "lg:col-start-1 lg:col-span-6 lg:row-start-4",
@@ -77,7 +77,7 @@ const CARD_PRESENTATION: Record<string, { gridClassName: string; illustration?: 
 };
 
 const FEATURE_CARDS: FeatureCard[] = features.cards.map((card) => {
-  const presentation = CARD_PRESENTATION[card.id];
+  const presentation = CARD_PRESENTATION[RENAMED_CARD_IDS[card.id] ?? card.id];
 
   if (!presentation) {
     throw new Error(`Feature card "${card.id}" has no presentation.`);
@@ -107,7 +107,7 @@ function FeaturesPage() {
       <header className="flex flex-col gap-1.5">
         <Heading1>{features.header.heading}</Heading1>
         <Text size="base" tone="muted" className="max-w-[64ch] leading-6">
-          {PAGE_DESCRIPTION}
+          {PAGE_INTRO}
         </Text>
       </header>
 
@@ -185,18 +185,9 @@ function FeaturesPage() {
                 <ArrowRightIcon size={16} />
               </ButtonIcon>
             </LinkButton>
-            <ExternalLinkButton
-              href="https://github.com/ridafkih/keeper.sh"
-              target="_blank"
-              rel="noreferrer"
-              size="compact"
-              variant="inverse-ghost"
-            >
+            <LinkButton to="/pricing" size="compact" variant="inverse-ghost">
               <ButtonText>{features.cta.secondaryLabel}</ButtonText>
-              <ButtonIcon>
-                <ArrowUpRightIcon size={16} />
-              </ButtonIcon>
-            </ExternalLinkButton>
+            </LinkButton>
           </div>
         </MarketingCtaCard>
       </MarketingCtaSection>

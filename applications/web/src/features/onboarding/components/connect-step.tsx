@@ -95,7 +95,7 @@ export function ConnectStep({ accountId, error, onContinue, onImported }: Connec
           ))}
         </NavigationMenu>
       )}
-      <PremiumGate locked={atLimit} hint="Free plans include two accounts.">
+      <PremiumGate limit="accounts" locked={atLimit} hint="Free plans include two accounts.">
         {GROUP_ORDER.filter((group) => CONNECT_PROVIDER_GROUPS.includes(group)).map((group) => (
           <NavigationMenu key={group}>
             {CONNECT_PROVIDERS.filter((provider) => provider.group === group).map((provider) => (

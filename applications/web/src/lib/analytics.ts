@@ -187,6 +187,36 @@ const reportSignupConversion = (runtimeConfig: PublicRuntimeConfig): void => {
   reportConversion(runtimeConfig.googleAdsId, runtimeConfig.googleAdsSignupConversionLabel);
 };
 
+const CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS = 1000;
+
+const runOnce = (callback: () => void): (() => void) => {
+  let ran = false;
+  return () => {
+    if (ran) return;
+    ran = true;
+    callback();
+  };
+};
+
+const reportSignupConversionBeforeNavigation = (
+  runtimeConfig: PublicRuntimeConfig,
+  navigate: () => void,
+): void => {
+  const { googleAdsId, googleAdsSignupConversionLabel } = runtimeConfig;
+  if (!googleAdsId || !googleAdsSignupConversionLabel || !globalThis.gtag) {
+    navigate();
+    return;
+  }
+
+  const navigateOnce = runOnce(navigate);
+  globalThis.setTimeout(navigateOnce, CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS);
+  globalThis.gtag("event", "conversion", {
+    ...buildConversionPayload(`${googleAdsId}/${googleAdsSignupConversionLabel}`),
+    event_callback: navigateOnce,
+    event_timeout: CONVERSION_BEFORE_NAVIGATION_TIMEOUT_MS,
+  });
+};
+
 const reportGooglePageView = (googleAdsId: string | null, path: string): void => {
   if (!googleAdsId) return;
   globalThis.gtag?.("event", "page_view", { page_path: path, send_to: googleAdsId });
@@ -211,6 +241,7 @@ export {
   reportGooglePageView,
   reportPurchaseConversion,
   reportSignupConversion,
+  reportSignupConversionBeforeNavigation,
   resolveEffectiveConsent,
   setAnalyticsConsent,
   subscribeToConsentChanges,

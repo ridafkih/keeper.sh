@@ -19,6 +19,7 @@ const schema = {
   OIDC_CLIENT_SECRET: "string?",
   OIDC_PROVIDER_NAME: "string?",
   OIDC_SCOPES: "string?",
+  OIDC_TRUST_EMAIL_VERIFIED: "boolean = false",
   DISABLE_LOCAL_AUTH: "boolean?",
   MCP_API_URL: "string.url?",
   MCP_PUBLIC_URL: "string.url?",

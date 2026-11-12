@@ -1,4 +1,4 @@
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { BackButton } from "@/components/ui/primitives/back-button";
 import { DashboardHeading1, DashboardHeading3 } from "@/components/ui/primitives/dashboard-heading";
@@ -15,6 +15,7 @@ import {
 import Check from "lucide-react/dist/esm/icons/check";
 import { HttpError } from "@/lib/fetcher";
 import { track, ANALYTICS_EVENTS, reportPurchaseConversion } from "@/lib/analytics";
+import { reportFunnelEvent } from "@/lib/funnel-events";
 import {
   fetchSubscriptionStateWithApi,
   useSubscription,
@@ -80,6 +81,10 @@ function UpgradePage() {
     fallbackData: loaderSubscription,
   });
   const [yearly, setYearly] = useState(false);
+
+  useEffect(() => {
+    reportFunnelEvent({ event: "billing.upgrade_viewed" });
+  }, []);
 
   const handleBillingToggle = (checked: boolean) => {
     const interval = checked ? "annual" : "monthly";

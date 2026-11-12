@@ -94,7 +94,13 @@ const tokenCreateBodySchema = type({
 });
 type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
+const accountSettingsPatchBodySchema = type({
+  agentFeedbackEnabled: "boolean",
+  "+": "reject",
+});
+
 export {
+  accountSettingsPatchBodySchema,
   calendarIdsBodySchema,
   calendarToggleBodySchema,
   calendarPausePatchBodySchema,

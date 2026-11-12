@@ -99,6 +99,7 @@ const { auth, capabilities: authCapabilities } = createAuth({
   oidcClientSecret: env.OIDC_CLIENT_SECRET,
   oidcProviderName: env.OIDC_PROVIDER_NAME,
   oidcScopes: parseOidcScopes(env.OIDC_SCOPES),
+  oidcTrustEmailVerified: env.OIDC_TRUST_EMAIL_VERIFIED,
   disableLocalAuth: env.DISABLE_LOCAL_AUTH ?? false,
   resendApiKey: env.RESEND_API_KEY,
   passkeyRpId: env.PASSKEY_RP_ID,

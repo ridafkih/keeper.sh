@@ -3,6 +3,7 @@ import {
   CalDAVAuthenticationError,
   CalDAVClient,
 } from "../../../../src/providers/caldav/shared/client";
+import { CalDAVDiscoveryError } from "../../../../src/providers/caldav/shared/calendar-discovery";
 
 const ORIGIN = "https://calendar.example.test";
 const PRINCIPAL_PATH = "/caldav/a1b2c3/user/";
@@ -151,7 +152,7 @@ describe("CalDAV discovery on a server whose principal has no calendar home", ()
   it("still fails discovery when the entered URL is not a calendar collection either", async () => {
     serve({ homeSet: "empty-multistatus", rejectCredentials: false });
 
-    await expect(createClient(ORIGIN).discoverCalendars()).rejects.toThrow("cannot find homeUrl");
+    await expect(createClient(ORIGIN).discoverCalendars()).rejects.toBeInstanceOf(CalDAVDiscoveryError);
   });
 
   it("still reports invalid credentials instead of listing the entered URL", async () => {

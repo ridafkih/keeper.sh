@@ -1,9 +1,107 @@
 {
-  "id": "84477e8e-2cbd-401d-9cfe-d35fdb404dd2",
-  "prevId": "6974fff5-c22d-43b0-967f-79cae8eb6221",
+  "id": "52f28b17-e919-4a26-929c-a6b414e305a9",
+  "prevId": "1df58adf-bc12-41f9-95e0-6621a0ab4d39",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
+    "public.agent_feedback": {
+      "name": "agent_feedback",
+      "schema": "",
+      "columns": {
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deployment": {
+          "name": "deployment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "intent": {
+          "name": "intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "severity": {
+          "name": "severity",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "toolName": {
+          "name": "toolName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "version": {
+          "name": "version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "agent_feedback_created_at_idx": {
+          "name": "agent_feedback_created_at_idx",
+          "columns": [
+            {
+              "expression": "createdAt",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "agent_feedback_category_check": {
+          "name": "agent_feedback_category_check",
+          "value": "\"category\" IN ('tool_error', 'missing_capability', 'confusing_output', 'documentation', 'other')"
+        },
+        "agent_feedback_severity_check": {
+          "name": "agent_feedback_severity_check",
+          "value": "\"severity\" IN ('high', 'medium', 'low')"
+        },
+        "agent_feedback_deployment_check": {
+          "name": "agent_feedback_deployment_check",
+          "value": "\"deployment\" IN ('hosted', 'self-hosted')"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.api_tokens": {
       "name": "api_tokens",
       "schema": "",
@@ -922,12 +1020,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -1532,12 +1624,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "color": {
-          "name": "color",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "createdAt": {
           "name": "createdAt",
@@ -2377,13 +2463,6 @@
       "name": "source_destination_mappings",
       "schema": "",
       "columns": {
-        "copiedCount": {
-          "name": "copiedCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -2396,13 +2475,6 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
-        },
-        "failedCount": {
-          "name": "failedCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
         },
         "firstSyncedAt": {
           "name": "firstSyncedAt",
@@ -2417,40 +2489,8 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "lastErrorAt": {
-          "name": "lastErrorAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lastSyncedAt": {
-          "name": "lastSyncedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "skippedBy": {
-          "name": "skippedBy",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "skippedCount": {
-          "name": "skippedCount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "sourceCalendarId": {
           "name": "sourceCalendarId",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "syncId": {
-          "name": "syncId",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
@@ -2507,21 +2547,6 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "source_destination_mappings_sync_idx": {
-          "name": "source_destination_mappings_sync_idx",
-          "columns": [
-            {
-              "expression": "syncId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
       "foreignKeys": {
@@ -2544,19 +2569,6 @@
           "tableTo": "calendars",
           "columnsFrom": [
             "sourceCalendarId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "source_destination_mappings_syncId_syncs_id_fk": {
-          "name": "source_destination_mappings_syncId_syncs_id_fk",
-          "tableFrom": "source_destination_mappings",
-          "tableTo": "syncs",
-          "columnsFrom": [
-            "syncId"
           ],
           "columnsTo": [
             "id"
@@ -2737,252 +2749,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.sync_activity_days": {
-      "name": "sync_activity_days",
-      "schema": "",
-      "columns": {
-        "added": {
-          "name": "added",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "day": {
-          "name": "day",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "removed": {
-          "name": "removed",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "syncId": {
-          "name": "syncId",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "sync_activity_days_syncId_syncs_id_fk": {
-          "name": "sync_activity_days_syncId_syncs_id_fk",
-          "tableFrom": "sync_activity_days",
-          "tableTo": "syncs",
-          "columnsFrom": [
-            "syncId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "sync_activity_days_syncId_day_pk": {
-          "name": "sync_activity_days_syncId_day_pk",
-          "columns": [
-            "syncId",
-            "day"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.sync_activity": {
-      "name": "sync_activity",
-      "schema": "",
-      "columns": {
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "syncId": {
-          "name": "syncId",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "sync_activity_sync_created_idx": {
-          "name": "sync_activity_sync_created_idx",
-          "columns": [
-            {
-              "expression": "syncId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "createdAt",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sync_activity_syncId_syncs_id_fk": {
-          "name": "sync_activity_syncId_syncs_id_fk",
-          "tableFrom": "sync_activity",
-          "tableTo": "syncs",
-          "columnsFrom": [
-            "syncId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "sync_activity_kind_check": {
-          "name": "sync_activity_kind_check",
-          "value": "\"sync_activity\".\"kind\" IN ('change', 'run')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.sync_calendars": {
-      "name": "sync_calendars",
-      "schema": "",
-      "columns": {
-        "calendarId": {
-          "name": "calendarId",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "position": {
-          "name": "position",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "syncId": {
-          "name": "syncId",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "sync_calendars_calendar_idx": {
-          "name": "sync_calendars_calendar_idx",
-          "columns": [
-            {
-              "expression": "calendarId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sync_calendars_calendarId_calendars_id_fk": {
-          "name": "sync_calendars_calendarId_calendars_id_fk",
-          "tableFrom": "sync_calendars",
-          "tableTo": "calendars",
-          "columnsFrom": [
-            "calendarId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "sync_calendars_syncId_syncs_id_fk": {
-          "name": "sync_calendars_syncId_syncs_id_fk",
-          "tableFrom": "sync_calendars",
-          "tableTo": "syncs",
-          "columnsFrom": [
-            "syncId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "sync_calendars_syncId_calendarId_pk": {
-          "name": "sync_calendars_syncId_calendarId_pk",
-          "columns": [
-            "syncId",
-            "calendarId"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "sync_calendars_role_check": {
-          "name": "sync_calendars_role_check",
-          "value": "\"sync_calendars\".\"role\" IN ('source', 'destination', 'member')"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.sync_status": {
       "name": "sync_status",
       "schema": "",
@@ -3064,167 +2830,6 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.syncs": {
-      "name": "syncs",
-      "schema": "",
-      "columns": {
-        "busyTitle": {
-          "name": "busyTitle",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "markPrivate": {
-          "name": "markPrivate",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "mode": {
-          "name": "mode",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'one_way'"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "paused": {
-          "name": "paused",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "rules": {
-          "name": "rules",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "shareAs": {
-          "name": "shareAs",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'busy_only'"
-        },
-        "skipAllDay": {
-          "name": "skipAllDay",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "skipAvailabilities": {
-          "name": "skipAvailabilities",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "skipFocusTime": {
-          "name": "skipFocusTime",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "skipOutOfOffice": {
-          "name": "skipOutOfOffice",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "skipTitleKeywords": {
-          "name": "skipTitleKeywords",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "userId": {
-          "name": "userId",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "syncs_user_idx": {
-          "name": "syncs_user_idx",
-          "columns": [
-            {
-              "expression": "userId",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "syncs_userId_user_id_fk": {
-          "name": "syncs_userId_user_id_fk",
-          "tableFrom": "syncs",
-          "tableTo": "user",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "syncs_mode_check": {
-          "name": "syncs_mode_check",
-          "value": "\"syncs\".\"mode\" IN ('one_way', 'both_ways')"
-        },
-        "syncs_share_as_check": {
-          "name": "syncs_share_as_check",
-          "value": "\"syncs\".\"shareAs\" IN ('busy_only', 'title_only', 'full')"
-        }
-      },
       "isRLSEnabled": false
     },
     "public.user_events": {
@@ -3493,6 +3098,76 @@
           "value": "\"milestone\" IN ('first_calendar_connected', 'first_sync_created', 'first_events_copied')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "public.user_sign_up_attributions": {
+      "name": "user_sign_up_attributions",
+      "schema": "",
+      "columns": {
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "landingPath": {
+          "name": "landingPath",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referrerOrigin": {
+          "name": "referrerOrigin",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "utmCampaign": {
+          "name": "utmCampaign",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utmMedium": {
+          "name": "utmMedium",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utmSource": {
+          "name": "utmSource",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "user_sign_up_attributions_userId_user_id_fk": {
+          "name": "user_sign_up_attributions_userId_user_id_fk",
+          "tableFrom": "user_sign_up_attributions",
+          "tableTo": "user",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.user_subscriptions": {
@@ -5097,6 +4772,13 @@
       "name": "user",
       "schema": "",
       "columns": {
+        "agentFeedbackEnabled": {
+          "name": "agentFeedbackEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp with time zone",
@@ -5135,13 +4817,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "onboardingStatus": {
-          "name": "onboardingStatus",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
         "updatedAt": {
           "name": "updatedAt",
           "type": "timestamp with time zone",
@@ -5176,12 +4851,7 @@
         }
       },
       "policies": {},
-      "checkConstraints": {
-        "user_onboarding_status_check": {
-          "name": "user_onboarding_status_check",
-          "value": "\"onboardingStatus\" IN ('pending', 'completed', 'skipped')"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.verification": {

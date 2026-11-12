@@ -14,6 +14,7 @@ const SECRET = "test-secret-for-oidc-sign-in";
 const AUTH_DDL = `
 create table "user" (
   "id" text primary key,
+  "agentFeedbackEnabled" boolean not null default true,
   "createdAt" timestamptz not null default now(),
   "email" text not null unique,
   "emailVerified" boolean not null default false,
@@ -62,12 +63,14 @@ interface CreateTestAuthOptions {
   commercialMode?: boolean;
   disableLocalAuth?: boolean;
   oidc?: boolean;
+  trustEmailVerified?: boolean;
 }
 
 const createTestAuth = async ({
   commercialMode = false,
   disableLocalAuth = false,
   oidc = true,
+  trustEmailVerified = false,
 }: CreateTestAuthOptions = {}) => {
   const client = new PGlite();
   await client.exec(AUTH_DDL);
@@ -83,6 +86,7 @@ const createTestAuth = async ({
       oidcClientId: "oidc-client-id",
       oidcClientSecret: "oidc-client-secret",
       oidcIssuerUrl: "https://id.example.com",
+      oidcTrustEmailVerified: trustEmailVerified,
     }),
   });
 
@@ -91,16 +95,30 @@ const createTestAuth = async ({
 
 type TestAuth = Awaited<ReturnType<typeof createTestAuth>>;
 
-const signInWithOidc = async (
-  auth: TestAuth["auth"],
-  profile: { email: string; email_verified?: boolean; name?: string; sub: string },
-) => {
+interface OidcTestProfile {
+  email: string;
+  email_verified?: unknown;
+  name?: string;
+  sub: string;
+}
+
+const readConfiguredOidcProfileMapper = (auth: TestAuth["auth"]) => {
+  const plugin = auth.options.plugins.find((candidate) => candidate.id === "generic-oauth");
+  const [config] = plugin?.options?.config ?? [];
+  if (!config?.mapProfileToUser) {
+    throw new Error("The OIDC provider is not configured");
+  }
+  return config.mapProfileToUser as (profile: OidcTestProfile) => Record<string, unknown>;
+};
+
+const signInWithOidc = async (auth: TestAuth["auth"], profile: OidcTestProfile) => {
   const context = await auth.$context;
+  const mapProfileToUser = readConfiguredOidcProfileMapper(auth);
   const userInfo = {
     email: profile.email,
     id: profile.sub,
     name: profile.name ?? "",
-    ...mapOidcProfileToUser(profile),
+    ...mapProfileToUser(profile),
   };
 
   return handleOAuthUserInfo({ context } as never, {
@@ -115,11 +133,11 @@ const signInWithOidc = async (
 
 const seedUser = async (
   database: TestAuth["database"],
-  { email, id }: { email: string; id: string },
+  { email, emailVerified = true, id }: { email: string; emailVerified?: boolean; id: string },
 ) => {
   await database.insert(userTable).values({
     email,
-    emailVerified: true,
+    emailVerified,
     id,
     name: "Existing User",
   });
@@ -164,21 +182,64 @@ describe("the OIDC discovery URL", () => {
   });
 });
 
+const UNTRUSTED = { trustEmailVerified: false };
+const TRUSTED = { trustEmailVerified: true };
+
 describe("an OIDC profile", () => {
-  it("never marks the email as verified, whatever the provider claims", () => {
+  it("never marks the email as verified unless the provider's claim is trusted", () => {
     expect(
-      mapOidcProfileToUser({ email: "person@example.com", email_verified: true, name: "Person" }),
+      mapOidcProfileToUser(
+        { email: "person@example.com", email_verified: true, name: "Person" },
+        UNTRUSTED,
+      ),
     ).toEqual({ emailVerified: false, name: "Person" });
+  });
+
+  it("marks the email as verified when the trusted provider asserts it", () => {
+    expect(
+      mapOidcProfileToUser(
+        { email: "person@example.com", email_verified: true, name: "Person" },
+        TRUSTED,
+      ),
+    ).toEqual({ emailVerified: true, name: "Person" });
+  });
+
+  it.each([
+    { claim: false, label: "false" },
+    { claim: "true", label: "the string true" },
+    { claim: 1, label: "1" },
+  ])("keeps the email unverified when the trusted provider's claim is $label", ({ claim }) => {
+    expect(
+      mapOidcProfileToUser({ email: "person@example.com", email_verified: claim }, TRUSTED)
+        .emailVerified,
+    ).toBe(false);
+  });
+
+  it("keeps the email unverified when the trusted provider sends no claim", () => {
+    expect(mapOidcProfileToUser({ email: "person@example.com" }, TRUSTED).emailVerified).toBe(
+      false,
+    );
+  });
+
+  it("never trusts a claim for a local account address", () => {
+    expect(
+      mapOidcProfileToUser({ email: "admin@local", email_verified: true }, TRUSTED).emailVerified,
+    ).toBe(false);
   });
 
   it("falls back to preferred_username when the provider sends no name", () => {
     expect(
-      mapOidcProfileToUser({ email: "person@example.com", preferred_username: "person" }).name,
+      mapOidcProfileToUser(
+        { email: "person@example.com", preferred_username: "person" },
+        UNTRUSTED,
+      ).name,
     ).toBe("person");
   });
 
   it("falls back to the email's local part when there is no name or preferred_username", () => {
-    expect(mapOidcProfileToUser({ email: "person@example.com", name: "  " }).name).toBe("person");
+    expect(
+      mapOidcProfileToUser({ email: "person@example.com", name: "  " }, UNTRUSTED).name,
+    ).toBe("person");
   });
 });
 
@@ -243,6 +304,77 @@ describe("an OIDC sign-in", () => {
     expect(
       await database.select().from(userTable).where(eq(userTable.email, "future-admin@local")),
     ).toEqual([]);
+  });
+});
+
+describe("an OIDC sign-in with OIDC_TRUST_EMAIL_VERIFIED", () => {
+  it("links to an existing verified account when the provider verified the email", async () => {
+    const { auth, database } = await createTestAuth({ trustEmailVerified: true });
+    await seedUser(database, { email: "existing@example.com", id: "existing-user" });
+
+    const result = await signInWithOidc(auth, {
+      email: "existing@example.com",
+      email_verified: true,
+      sub: "existing-subject",
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data?.user.id).toBe("existing-user");
+    expect(await readAccountProviders(database, "existing-user")).toEqual(["oidc"]);
+  });
+
+  it.each([
+    { label: "false", profile: { email_verified: false } },
+    { label: "missing", profile: {} },
+  ])("does not link when the provider's email_verified is $label", async ({ profile }) => {
+    const { auth, database } = await createTestAuth({ trustEmailVerified: true });
+    await seedUser(database, { email: "existing@example.com", id: "existing-user" });
+
+    const result = await signInWithOidc(auth, {
+      email: "existing@example.com",
+      sub: "existing-subject",
+      ...profile,
+    });
+
+    expect(result.error).toBe("account not linked");
+    expect(await readAccountProviders(database, "existing-user")).toEqual([]);
+  });
+
+  it("does not link to an existing account whose own email is unverified", async () => {
+    const { auth, database } = await createTestAuth({ trustEmailVerified: true });
+    await seedUser(database, {
+      email: "unverified@example.com",
+      emailVerified: false,
+      id: "unverified-user",
+    });
+
+    const result = await signInWithOidc(auth, {
+      email: "unverified@example.com",
+      email_verified: true,
+      sub: "claiming-subject",
+    });
+
+    expect(result.error).toBe("account not linked");
+    expect(await readAccountProviders(database, "unverified-user")).toEqual([]);
+    const [user] = await database
+      .select({ emailVerified: userTable.emailVerified })
+      .from(userTable)
+      .where(eq(userTable.id, "unverified-user"));
+    expect(user?.emailVerified).toBe(false);
+  });
+
+  it("does not link to a local username account through its @local address", async () => {
+    const { auth, database } = await createTestAuth({ trustEmailVerified: true });
+    await seedUser(database, { email: "admin@local", id: "local-admin" });
+
+    const result = await signInWithOidc(auth, {
+      email: "admin@local",
+      email_verified: true,
+      sub: "impersonating-subject",
+    });
+
+    expect(result.error).toBe("account not linked");
+    expect(await readAccountProviders(database, "local-admin")).toEqual([]);
   });
 });
 

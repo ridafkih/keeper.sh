@@ -24,7 +24,7 @@ function ConnectPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton />
-      <PremiumGate locked={atLimit} hint="Account limit reached.">
+      <PremiumGate limit="accounts" locked={atLimit} hint="Account limit reached.">
         {CONNECT_PROVIDER_GROUPS.map((group) => (
           <NavigationMenu key={group}>
             {CONNECT_PROVIDERS.filter((provider) => provider.group === group).map((provider) => (

@@ -12,18 +12,20 @@ const PLAN = createSourceIngestionPlan("1_month", "2_years", NOW);
 const davMocks = vi.hoisted(() => ({
   calendarQuery: vi.fn(),
   fetchCalendarObjects: vi.fn(),
-  fetchCalendars: vi.fn(),
+  listCalendars: vi.fn(),
 }));
 
-vi.mock("tsdav", () => ({
-  DAVNamespaceShort: { DAV: "d" },
-  createDAVClient: () => Promise.resolve({
-    createAccount: () => Promise.resolve({ homeUrl: "https://caldav.example.test/home/" }),
-    calendarQuery: davMocks.calendarQuery,
-    fetchCalendarObjects: davMocks.fetchCalendarObjects,
-    fetchCalendars: davMocks.fetchCalendars,
-  }),
-}));
+vi.mock("tsdav", async () => {
+  const { answerDiscoveryPropfind } = await import("../../providers/caldav/discovery-propfind");
+  return {
+    DAVNamespaceShort: { DAV: "d" },
+    createDAVClient: () => Promise.resolve({
+      calendarQuery: davMocks.calendarQuery,
+      fetchCalendarObjects: davMocks.fetchCalendarObjects,
+      propfind: answerDiscoveryPropfind(() => davMocks.listCalendars()),
+    }),
+  };
+});
 
 // Postgres reads an absent optional value back as null, never undefined.
 const nullify = <Value,>(value: Value | undefined): Value | null => value ?? null;
@@ -176,7 +178,7 @@ const runRoundtripRounds = async (rounds: number): Promise<RoundtripRound[]> => 
 describe("CalDAV snapshot ingest converges across repeated syncs", () => {
   beforeEach(() => {
     nextRowId = 0;
-    davMocks.fetchCalendars.mockResolvedValue([
+    davMocks.listCalendars.mockResolvedValue([
       { displayName: "Cal", url: "https://dav.example.com/cal/" },
     ]);
     davMocks.fetchCalendarObjects.mockResolvedValue(RESOURCES);

@@ -18,6 +18,7 @@ const STATIC_PATHS = [
   "/compare",
   "/docs",
   "/features",
+  "/free",
   "/guides",
   "/pricing",
   "/privacy",

@@ -20,7 +20,8 @@ import {
   type AuthCapabilities,
 } from "@/lib/auth-capabilities";
 import { signInWithCredential, signUpWithCredential } from "@/lib/auth";
-import { withSignupMarker } from "@/lib/signup-marker";
+import { readSignUpAttribution } from "@/lib/sign-up-attribution";
+import { resolveNewUserCallbackURL } from "@/lib/sign-up-continuation";
 import { track, ANALYTICS_EVENTS, reportSignupConversion } from "@/lib/analytics";
 import { getPublicRuntimeConfig } from "@/lib/runtime-config";
 import {
@@ -284,11 +285,13 @@ function SocialSignInButton({
 
     const callbackURL = resolveClientPostAuthRedirect(authorizationSearch);
     const fallbackMessage = `Couldn't reach ${providerName}.`;
+    const attribution = readSignUpAttribution();
 
     try {
       const { error } = await authClient.signIn.social({
+        ...(attribution && { additionalData: { attribution } }),
         callbackURL,
-        newUserCallbackURL: withSignupMarker(callbackURL, globalThis.location.origin),
+        newUserCallbackURL: resolveNewUserCallbackURL(provider, callbackURL, globalThis.location.origin),
         provider,
       });
 

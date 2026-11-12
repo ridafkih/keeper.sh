@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "agentFeedbackEnabled" boolean DEFAULT true NOT NULL;

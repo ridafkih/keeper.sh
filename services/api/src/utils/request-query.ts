@@ -5,6 +5,7 @@ const sourceAuthorizeQuerySchema = type({
   "credentialId?": "string",
   "accountId?": "string",
   "returnTo?": "'onboarding'",
+  "account?": "'sign-in'",
   "+": "reject",
 });
 type SourceAuthorizeQuery = typeof sourceAuthorizeQuerySchema.infer;
