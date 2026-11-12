@@ -167,6 +167,7 @@ const describeFeedSettings = (settings: FeedSettings): string => [
   settings.excludeFocusTime,
   settings.excludeOutOfOffice,
   settings.customEventName,
+  settings.feedName,
 ].join("\u001F");
 
 const buildFeedEtag = (revision: string, settings: FeedSettings): string => {
