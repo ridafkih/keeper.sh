@@ -1,4 +1,5 @@
 import type { GoogleCalendarListEntry } from "@keeper.sh/data-schemas";
+import { resolveGoogleCalendarColor, resolveOutlookCalendarColor } from "../colors/normalize";
 import { normalizeCalDAVCalendarKey } from "../../providers/caldav/shared/calendar-identity";
 import type { CalendarInfo } from "../../providers/caldav/types";
 import {
@@ -14,12 +15,14 @@ interface DiscoveredCalendar {
   writable: boolean;
   externalCalendarId: string | null;
   calendarUrl: string | null;
+  color: string | null;
 }
 
 interface ExistingCalendar {
   id: string;
   identityKey: string;
   calendarUrl: string | null;
+  color: string | null;
   unavailableSince: Date | null;
   createdAt: Date;
   writable: boolean;
@@ -35,11 +38,17 @@ interface CalendarRetarget {
   calendarUrl: string;
 }
 
+interface CalendarRecolor {
+  id: string;
+  color: string | null;
+}
+
 interface CalendarRediscoveryPlan {
   toInsert: DiscoveredCalendar[];
   toRevive: string[];
   toMarkUnavailable: string[];
   toRetargetUrl: CalendarRetarget[];
+  toSetColor: CalendarRecolor[];
   toSetWritable: CalendarWriteAccessChange[];
   unchangedCount: number;
   duplicateCount: number;
@@ -63,6 +72,7 @@ interface CalendarIdentityRow {
 }
 
 interface StoredCalendarRow extends CalendarIdentityRow {
+  color: string | null;
   unavailableSince: Date | null;
   createdAt: Date;
   capabilities: string[];
@@ -72,6 +82,8 @@ interface OutlookCalendarEntry {
   id: string;
   name: string;
   canEdit?: boolean;
+  color?: string;
+  hexColor?: string;
 }
 
 const EMPTY_PLAN: CalendarRediscoveryPlan = {
@@ -83,6 +95,7 @@ const EMPTY_PLAN: CalendarRediscoveryPlan = {
   toMarkUnavailable: [],
   toRetargetUrl: [],
   toRevive: [],
+  toSetColor: [],
   toSetWritable: [],
   unchangedCount: 0,
 };
@@ -206,6 +219,12 @@ const planCalendarRediscovery = (
     toRetargetUrl: matched.flatMap(
       ({ calendar, match }) => buildUrlRetarget(calendar, match),
     ),
+    toSetColor: matched.flatMap(({ calendar, match }) => {
+      if (calendar.color === match.color) {
+        return [];
+      }
+      return [{ color: calendar.color, id: match.id }];
+    }),
     toRevive: matched
       .filter(({ match }) => match.unavailableSince !== null)
       .map(({ match }) => match.id),
@@ -219,6 +238,7 @@ const toDiscoveredGoogleCalendars = (
 ): DiscoveredCalendar[] =>
   entries.map((entry) => ({
     calendarUrl: null,
+    color: resolveGoogleCalendarColor(entry.backgroundColor),
     externalCalendarId: entry.id,
     identityKey: entry.id,
     name: entry.summary ?? entry.id,
@@ -230,6 +250,7 @@ const toDiscoveredOutlookCalendars = (
 ): DiscoveredCalendar[] =>
   entries.map((entry) => ({
     calendarUrl: null,
+    color: resolveOutlookCalendarColor(entry.hexColor, entry.color),
     externalCalendarId: entry.id,
     identityKey: entry.id,
     name: entry.name,
@@ -241,6 +262,7 @@ const toDiscoveredCalDAVCalendars = (
 ): DiscoveredCalendar[] =>
   entries.map((entry) => ({
     calendarUrl: entry.url,
+    color: entry.color ?? null,
     externalCalendarId: null,
     identityKey: normalizeCalDAVCalendarKey(entry.url),
     name: entry.displayName,
@@ -276,6 +298,7 @@ const toExistingCalendars = (
   rows.flatMap((row) =>
     resolveStoredIdentityKey(row, calendarType).map((identityKey) => ({
       calendarUrl: row.calendarUrl,
+      color: row.color,
       createdAt: row.createdAt,
       id: row.id,
       identityKey,

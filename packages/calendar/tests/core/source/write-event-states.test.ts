@@ -155,6 +155,7 @@ describe("insertEventStatesWithConflictResolution", () => {
     expect(providerCall?.conflictConfig.targetWhere).toBeDefined();
     expect(Object.keys(providerCall?.conflictConfig.set ?? {}).toSorted()).toEqual([
       "availability",
+      "color",
       "description",
       "endTime",
       "exceptionDates",

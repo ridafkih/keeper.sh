@@ -69,6 +69,9 @@ const parseCalendarEntry = (value: unknown): OutlookCalendarListEntry | null => 
   if (typeof value.color === "string") {
     entry.color = value.color;
   }
+  if (typeof value.hexColor === "string") {
+    entry.hexColor = value.hexColor;
+  }
   if (typeof value.isDefaultCalendar === "boolean") {
     entry.isDefaultCalendar = value.isDefaultCalendar;
   }
@@ -114,7 +117,7 @@ const fetchCalendarPage = async (
   if (nextLink) {
     url = new URL(nextLink);
   } else {
-    url.searchParams.set("$select", "id,name,color,isDefaultCalendar,canEdit,owner");
+    url.searchParams.set("$select", "id,name,color,hexColor,isDefaultCalendar,canEdit,owner");
   }
 
   const response = await fetch(url.toString(), {

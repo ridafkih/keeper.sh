@@ -799,6 +799,13 @@
       "when": 1794357849829,
       "tag": "0113_user_sign_up_attributions",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1794374570504,
+      "tag": "0114_add_calendar_and_event_colors",
+      "breakpoints": true
     }
   ]
 }

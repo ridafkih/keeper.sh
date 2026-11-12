@@ -354,10 +354,12 @@ describe("pause_sync", () => {
 });
 
 const eventPayload = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+  calendarColor: null,
   calendarId: "019c0000-0000-7000-8000-000000000010",
   calendarName: "Personal",
   calendarProvider: "google",
   calendarUrl: null,
+  color: null,
   description: null,
   eventStateId: "019c0000-0000-7000-8000-000000000020",
   id: "019c0000-0000-7000-8000-000000000020",

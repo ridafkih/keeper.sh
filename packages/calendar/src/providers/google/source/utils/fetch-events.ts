@@ -14,6 +14,7 @@ import { isAuthError } from "../../shared/errors";
 import type { GoogleApiError } from "../../types";
 import { googleApiErrorSchema, googleEventListSchema } from "@keeper.sh/data-schemas";
 import { parseEventTime } from "../../shared/date-time";
+import { resolveGoogleEventColor } from "../../../../core/colors/normalize";
 import { isKeeperEvent } from "../../../../core/events/identity";
 import { withBackoff } from "../../../../core/utils/backoff";
 import { isRateLimitApiError } from "../../shared/errors";
@@ -372,8 +373,10 @@ const parseGoogleEventsWithDiagnostics = (
       selfAuthoredCount += 1;
       continue;
     }
+    const color = resolveGoogleEventColor(event.colorId);
     result.push({
       availability: resolveGoogleAvailability(event),
+      ...(color && { color }),
       description: event.description,
       endTime,
       isAllDay: isAllDayGoogleEvent(event),

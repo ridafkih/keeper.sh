@@ -62,6 +62,7 @@ interface SyncableEvent {
   summary: string;
   description?: string;
   location?: string;
+  color?: string;
   isPrivate?: boolean;
   remindersDisabled?: boolean;
   calendarId: string;
@@ -219,6 +220,7 @@ interface SourceEvent {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
 }
 
 export type {

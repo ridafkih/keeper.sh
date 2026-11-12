@@ -11,6 +11,7 @@ const ONE_CALENDAR = 1;
 
 const discoveredCalendar = (identityKey: string, name: string): DiscoveredCalendar => ({
   calendarUrl: null,
+  color: null,
   externalCalendarId: identityKey,
   identityKey,
   name,
@@ -19,6 +20,7 @@ const discoveredCalendar = (identityKey: string, name: string): DiscoveredCalend
 
 const existingCalendar = (identityKey: string, id: string): ExistingCalendar => ({
   calendarUrl: null,
+  color: null,
   createdAt: CREATED_AT,
   id,
   identityKey,

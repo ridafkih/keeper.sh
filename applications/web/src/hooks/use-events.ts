@@ -15,6 +15,8 @@ export interface CalendarEvent {
   endTime: Date;
   /** Whole-day event: `startTime`/`endTime` are the UTC-midnight day bounds. */
   isAllDay: boolean;
+  color: string | null;
+  calendarColor: string | null;
   calendarId: string;
   calendarName: string;
   calendarProvider: string;
@@ -34,6 +36,8 @@ const fetchEvents = async (url: string): Promise<CalendarEvent[]> => {
     startTime: new Date(event.startTime),
     endTime: new Date(event.endTime),
     isAllDay: event.isAllDay,
+    color: event.color ?? null,
+    calendarColor: event.calendarColor ?? null,
     calendarId: event.calendarId,
     calendarName: event.calendarName,
     calendarProvider: event.calendarProvider,

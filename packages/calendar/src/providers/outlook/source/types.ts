@@ -4,6 +4,7 @@ interface OutlookCalendarListEntry {
   id: string;
   name: string;
   color?: string;
+  hexColor?: string;
   isDefaultCalendar?: boolean;
   canEdit?: boolean;
   owner?: {
@@ -86,6 +87,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  color?: string;
 }
 
 export type {

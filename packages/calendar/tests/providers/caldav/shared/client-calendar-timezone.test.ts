@@ -83,11 +83,21 @@ const COLLECTIONS: CollectionFixture[] = [
     href: `https://${FOREIGN_HOST}${HOME_PATH}foreign/`,
     zoneProps: "<c:calendar-timezone-id>Asia/Manila</c:calendar-timezone-id>",
   },
+  {
+    displayName: "Colored",
+    href: `${HOME_PATH}colored/`,
+    zoneProps: "<ca:calendar-color>#711A76FF</ca:calendar-color>",
+  },
+  {
+    displayName: "SymbolicColor",
+    href: `${HOME_PATH}symbolic-color/`,
+    zoneProps: '<ca:calendar-color symbolic-color="custom">#33B679</ca:calendar-color>',
+  },
 ];
 
 const multistatus = (body: string): Response =>
   new Response(
-    `<?xml version="1.0" encoding="utf-8" ?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/">${body}</d:multistatus>`,
+    `<?xml version="1.0" encoding="utf-8" ?><d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:cs="http://calendarserver.org/ns/" xmlns:ca="http://apple.com/ns/ical/">${body}</d:multistatus>`,
     { headers: XML_HEADERS, status: 207, statusText: "Multi-Status" },
   );
 
@@ -192,6 +202,26 @@ const calendarAt = (calendars: { url: string }[], path: string) =>
 
 const homeSetPropfinds = (): RecordedRequest[] =>
   requestLog.filter(({ method, url }) => method === "PROPFIND" && url.pathname === HOME_PATH);
+
+describe("CalDAV discovery reads the collection color", () => {
+  it("normalizes a calendar-color with an alpha channel", async () => {
+    const calendars = await createClient().discoverCalendars();
+
+    expect(calendarAt(calendars, `${HOME_PATH}colored/`)).toMatchObject({ color: "#711a76" });
+  });
+
+  it("reads a calendar-color carrying attributes", async () => {
+    const calendars = await createClient().discoverCalendars();
+
+    expect(calendarAt(calendars, `${HOME_PATH}symbolic-color/`)).toMatchObject({ color: "#33b679" });
+  });
+
+  it("leaves the color out of a collection that reports none", async () => {
+    const calendars = await createClient().discoverCalendars();
+
+    expect(calendarAt(calendars, `${HOME_PATH}neither/`)).not.toHaveProperty("color");
+  });
+});
 
 describe("CalDAV discovery reads the collection time zone", () => {
   it("resolves a calendar-timezone VTIMEZONE delivered as CDATA", async () => {

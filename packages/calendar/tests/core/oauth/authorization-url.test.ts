@@ -61,7 +61,9 @@ describe("microsoft getAuthorizationUrl", () => {
     expect(searchParams.get("redirect_uri")).toBe(CALLBACK_URL);
     expect(searchParams.get("response_type")).toBe("code");
     expect(searchParams.get("response_mode")).toBe("query");
-    expect(searchParams.get("scope")).toBe("Calendars.ReadWrite User.Read offline_access");
+    expect(searchParams.get("scope")).toBe(
+      "Calendars.ReadWrite User.Read offline_access MailboxSettings.Read",
+    );
   });
 
   it("carries an opaque state value", async () => {

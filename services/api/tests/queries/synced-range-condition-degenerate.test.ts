@@ -11,7 +11,13 @@ const WINDOW_START = new Date("2027-03-08T00:00:00.000Z");
 const WINDOW_END = new Date("2027-04-08T00:00:00.000Z");
 
 const sourceMap = new Map([
-  [CALENDAR_ID, { name: "Source", provider: "ics", url: null, userId: "user-1" }],
+  [CALENDAR_ID, {
+    calendarColor: null,
+    name: "Source",
+    provider: "ics",
+    url: null,
+    userId: "user-1",
+  }],
 ]);
 
 interface Fixture {
@@ -51,6 +57,7 @@ const fixtures: Fixture[] = [
 const toRow = (fixture: Fixture): SyncedEventRow => ({
   availability: "busy",
   calendarId: CALENDAR_ID,
+  color: null,
   description: null,
   endTime: fixture.endTime,
   exceptionDates: null,
@@ -84,6 +91,7 @@ const readIdsAdmittedInMemory = (): Set<string> => new Set(
 beforeAll(async () => {
   await database.query(`create table event_states (
     "id" uuid primary key,
+    "color" text,
     "calendarId" uuid not null,
     "startTime" timestamptz not null,
     "endTime" timestamptz not null,

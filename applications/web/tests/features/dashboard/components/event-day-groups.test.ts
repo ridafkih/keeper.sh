@@ -12,6 +12,8 @@ const event = (id: string, startIso: string, endIso: string, isAllDay: boolean):
   startTime: new Date(startIso),
   endTime: new Date(endIso),
   isAllDay,
+  color: null,
+  calendarColor: null,
   calendarId: "calendar",
   calendarName: "Calendar",
   calendarProvider: "google",

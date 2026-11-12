@@ -16,10 +16,12 @@ const CALENDAR_ID = "019c0000-0000-7000-8000-000000000004";
 
 const master: SyncedEventOwner = {
   availability: "busy",
+  calendarColor: null,
   calendarId: CALENDAR_ID,
   calendarName: "Source",
   calendarProvider: "google",
   calendarUrl: null,
+  color: null,
   description: "Description",
   endTime: new Date("2026-03-02T11:00:00.000Z"),
   exceptionDates: null,
@@ -49,6 +51,7 @@ const sourceMap = new Map([
   [
     CALENDAR_ID,
     {
+      calendarColor: master.calendarColor,
       name: master.calendarName,
       provider: master.calendarProvider,
       url: master.calendarUrl,
@@ -164,12 +167,30 @@ describe("resolveEventReadModel", () => {
     expect(calls.series).toBe(0);
   });
 
+  it("publishes the event color and its calendar's color on the payload", async () => {
+    const coloredOwner: SyncedEventOwner = {
+      ...detachedOverride,
+      calendarColor: "#9fe1e7",
+      color: "#33b679",
+    };
+    const { repository } = createRepository({ owner: coloredOwner });
+
+    const resolved = await resolveEventReadModel(repository, USER_ID, OVERRIDE_ID);
+
+    expect(resolved).toMatchObject({
+      calendarColor: "#9fe1e7",
+      color: "#33b679",
+    });
+  });
+
   it("keeps a user event addressable by its UUID without an event state", async () => {
     const userEvent: KeeperEvent = {
+      calendarColor: null,
       calendarId: CALENDAR_ID,
       calendarName: "Source",
       calendarProvider: "google",
       calendarUrl: null,
+      color: null,
       description: null,
       endTime: "2026-03-02T11:00:00.000Z",
       eventStateId: null,

@@ -235,6 +235,8 @@ beforeAll(async () => {
     isCalDAVProvider: () => true,
     isOAuthProvider: () => false,
     isProviderId: () => false,
+    resolveGoogleCalendarColor: () => null,
+    resolveOutlookCalendarColor: () => null,
     resolveCalendarCapabilities: (writable: boolean) => {
       if (writable) {
         return ["pull", "push"];
