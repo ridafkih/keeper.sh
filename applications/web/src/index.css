@@ -11,6 +11,40 @@
   );
 }
 
+/* The blue preset doubles as the tint's fallback; the tint below wins by source order alone. */
+.event-blue,
+.event-tint {
+  --event-ink: var(--color-blue-900);
+  --event-surface: var(--color-blue-100);
+  --event-accent: var(--color-blue-500);
+}
+
+@media (prefers-color-scheme: dark) {
+  .event-blue,
+  .event-tint {
+    --event-ink: var(--color-blue-100);
+    --event-surface: color-mix(in srgb, var(--color-blue-500) 20%, var(--color-background));
+    --event-accent: var(--color-blue-400);
+  }
+}
+
+/* Probes the exact shape used: early relative-colour engines pass a bare `from` yet reject math on channels. */
+@supports (color: oklch(from red clamp(0.5, l, 0.8) min(c, 0.1) h)) {
+  .event-tint {
+    --event-accent: oklch(from var(--event-color) clamp(0.55, l, 0.82) c h);
+    --event-surface: color-mix(in oklab, var(--event-accent) 16%, var(--color-background));
+    --event-ink: oklch(from var(--event-color) 0.28 min(c, 0.1) h);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .event-tint {
+      --event-accent: oklch(from var(--event-color) clamp(0.62, l, 0.85) c h);
+      --event-surface: color-mix(in oklab, var(--event-accent) 22%, var(--color-background));
+      --event-ink: oklch(from var(--event-color) 0.92 min(c, 0.06) h);
+    }
+  }
+}
+
 /* Height bands for grid event cards (48px hour); each floor sits 1px under its band's content height. */
 @custom-variant event-compact (@container event-card (height < 27px));
 @custom-variant event-short (@container event-card (height < 43px));
