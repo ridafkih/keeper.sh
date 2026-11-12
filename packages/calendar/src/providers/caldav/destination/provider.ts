@@ -26,6 +26,7 @@ import {
 import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
+import type { CalendarDiscoveryCache } from "../shared/discovery-cache";
 import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
@@ -40,6 +41,7 @@ interface CalDAVSyncProviderConfig {
   username: string;
   password: string;
   safeFetchOptions?: SafeFetchOptions;
+  calendarDiscoveryCache?: CalendarDiscoveryCache;
 }
 
 class CalDAVConflictRecoveryError extends Error {
@@ -221,6 +223,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const client = new CalDAVClient({
     authMethod: config.authMethod,
+    calendarDiscoveryCache: config.calendarDiscoveryCache,
     credentials: { password: config.password, username: config.username },
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);

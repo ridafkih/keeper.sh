@@ -4,6 +4,7 @@ export {
   createCalendarDiscoveryCache,
   invalidateCalendarDiscoveryCache,
   type CalendarDiscoveryCache,
+  type DiscoveryCacheRedis,
 } from "./shared/discovery-cache";
 export { createCalDAVSourceFetcher, type CalDAVSourceFetcherConfig } from "./source/fetch-adapter";
 export { isCalDAVAuthenticationError } from "./source/auth-error-classification";
