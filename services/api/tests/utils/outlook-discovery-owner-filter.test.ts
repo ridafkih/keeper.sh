@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 const client = new PGlite();
 const database = drizzle(client);
 
-const listOutlookCalendars = vi.fn(async () => []);
+const listOutlookCalendars = vi.fn(() => Promise.resolve([]));
 
 vi.mock("@/context", () => ({ database, googleInteractiveRateLimiter: null }));
 vi.mock("../../src/utils/safe-fetch-options", () => ({ safeFetchOptions: {} }));
