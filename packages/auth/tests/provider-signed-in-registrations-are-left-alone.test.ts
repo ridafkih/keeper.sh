@@ -186,16 +186,9 @@ const attemptSignUpAs = (
     }),
   );
 
-const readPendingReclaims = (
+const readStoredVerifications = (
   database: Awaited<ReturnType<typeof createHostedAuth>>["database"],
-  email: string,
-) =>
-  database
-    .select()
-    .from(verificationTable)
-    .where(
-      eq(verificationTable.identifier, `unverified-registration-reclaim:${email}`),
-    );
+) => database.select().from(verificationTable);
 
 type FetchInput = Parameters<typeof fetch>[0];
 
@@ -252,7 +245,7 @@ describe("a registration created through a provider", () => {
     const response = await attemptSignUpAs(auth, email);
     expect(response.status).toBe(200);
 
-    expect(await readPendingReclaims(database, email)).toEqual([]);
+    expect(await readStoredVerifications(database)).toEqual([]);
 
     const rows = await database
       .select()
@@ -289,7 +282,7 @@ describe("a registration created through a provider", () => {
     const response = await attemptSignUpAs(auth, email);
     expect(response.status).toBe(200);
 
-    expect(await readPendingReclaims(database, email)).toEqual([]);
+    expect(await readStoredVerifications(database)).toEqual([]);
   });
 
   it("is left alone for rows written before this change", async () => {
@@ -309,6 +302,6 @@ describe("a registration created through a provider", () => {
     const response = await attemptSignUpAs(auth, email);
     expect(response.status).toBe(200);
 
-    expect(await readPendingReclaims(database, email)).toEqual([]);
+    expect(await readStoredVerifications(database)).toEqual([]);
   });
 });

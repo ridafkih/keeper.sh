@@ -27,10 +27,6 @@ import {
 } from "./registration-email-domains";
 import type { McpTokenVersion } from "./mcp-token-version";
 import {
-  createUnverifiedRegistrationReclaim,
-  readSignUpBody,
-} from "./unverified-registration-reclaim";
-import {
   resolveMcpAuthOptions,
   resolveMcpJwksUrl,
 } from "./mcp-config";
@@ -318,9 +314,6 @@ const createAuth = (config: AuthConfig) => {
     };
   }
 
-  const { applyPendingReclaim, recordPendingReclaim } =
-    createUnverifiedRegistrationReclaim(database);
-
   const sendVerificationEmail = async ({ user, url }: SendEmailParams) => {
     if (!resend) {
       return;
@@ -328,7 +321,7 @@ const createAuth = (config: AuthConfig) => {
     await resend.emails.send(buildVerificationEmail({ url, user }));
   };
 
-  const sendReclaimVerificationEmail = async (user: EmailUser) => {
+  const resendVerificationEmail = async (user: EmailUser) => {
     const token = await signJWT(
       { email: user.email.toLowerCase() },
       secret,
@@ -389,26 +382,12 @@ const createAuth = (config: AuthConfig) => {
     }),
     emailAndPassword: {
       enabled: commercialMode,
-      onExistingUserSignUp: async ({ user }, request) => {
+      onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) {
           return;
         }
 
-        if (!request) {
-          throw new TypeError(
-            "Sign-up request is unavailable, cannot capture an unverified registration reclaim",
-          );
-        }
-
-        const { name, password } = await readSignUpBody(request);
-
-        const recorded = await recordPendingReclaim({ name, password, user });
-
-        if (!recorded) {
-          return;
-        }
-
-        await sendReclaimVerificationEmail({ email: user.email, name });
+        await resendVerificationEmail(user);
       },
       requireEmailVerification: commercialMode,
       sendResetPassword: async ({ user, url }: SendEmailParams) => {
@@ -425,7 +404,6 @@ const createAuth = (config: AuthConfig) => {
       },
     },
     emailVerification: {
-      afterEmailVerification: applyPendingReclaim,
       autoSignInAfterVerification: true,
       sendVerificationEmail,
     },
