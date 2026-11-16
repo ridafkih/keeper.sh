@@ -37,7 +37,7 @@ Alongside the MCP, Keeper.sh syncs calendars — Google, Outlook, iCloud, Fastma
 ## Limits
 
 - **Free**: MCP and REST API together are capped at **25 requests per day** (`429` after that).
-- **Pro**: uncapped API/MCP usage on the hosted product (Pro is $5/mo or $45/year). Self-hosted instances without commercial mode are treated as Pro.
+- **Pro**: uncapped API/MCP usage on the hosted product (Pro is $9/mo or $79/year). Self-hosted instances without commercial mode are treated as Pro.
 
 ## Package layout
 
