@@ -221,11 +221,11 @@ export function softwareApplicationSchema(copy: SoftwareSchemaCopy) {
       {
         "@type": "Offer",
         name: "Pro",
-        price: "5.00",
+        price: "9.00",
         priceCurrency: "USD",
         priceSpecification: {
           "@type": "UnitPriceSpecification",
-          price: "5.00",
+          price: "9.00",
           priceCurrency: "USD",
           billingDuration: "P1M",
         },
@@ -234,11 +234,11 @@ export function softwareApplicationSchema(copy: SoftwareSchemaCopy) {
       {
         "@type": "Offer",
         name: "Pro",
-        price: "45.00",
+        price: "79.00",
         priceCurrency: "USD",
         priceSpecification: {
           "@type": "UnitPriceSpecification",
-          price: "45.00",
+          price: "79.00",
           priceCurrency: "USD",
           billingDuration: "P1Y",
         },
