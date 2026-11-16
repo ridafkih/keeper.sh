@@ -67,6 +67,7 @@ interface RediscoveryAccount extends RediscoveryCandidate {
   encryptedPassword: string | null;
   expiresAt: Date | null;
   oauthCredentialId: string | null;
+  ownerEmail: string | null;
   refreshToken: string | null;
   serverUrl: string | null;
   username: string | null;
@@ -99,6 +100,7 @@ const loadRediscoveryCandidates = (): Promise<RediscoveryAccount[]> =>
       expiresAt: oauthCredentialsTable.expiresAt,
       hasImportedCalendar: buildImportedCalendarExists(),
       oauthCredentialId: oauthCredentialsTable.id,
+      ownerEmail: oauthCredentialsTable.email,
       provider: calendarAccountsTable.provider,
       refreshToken: oauthCredentialsTable.refreshToken,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -183,7 +185,10 @@ const discoverOAuthCalendars = async (
   }
 
   return toDiscoveredOutlookCalendars(
-    await listOutlookCalendars(tokenState.accessToken, { signal }),
+    await listOutlookCalendars(tokenState.accessToken, {
+      ownerEmail: account.ownerEmail,
+      signal,
+    }),
   );
 };
 
