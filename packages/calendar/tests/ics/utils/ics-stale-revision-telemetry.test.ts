@@ -158,7 +158,7 @@ describe("a feed whose newest revision is unbuildable leaves a trace on the wide
     expect(second.deletes).toEqual([]);
     expect(second.inserts).toEqual([]);
     expect(store.startTimes()).toEqual(["2026-06-10T10:00:00.000Z"]);
-    expect(second.wideEvent["source_events.unsupported_uids"]).toBe("mtg@test");
+    expect(second.wideEvent["source_events.unsupported_uid_hashes"]).toBe("547c016c10e39a4e");
     expect(second.wideEvent["source_events.unsupported_count"]).toBe(1);
     expect(second.wideEvent["source_events.discarded_unrepresentable"]).toBe(1);
   });

@@ -1009,6 +1009,36 @@ describe("ingestSource", () => {
     expect(flushCalled).toBe(false);
   });
 
+  it("reports a series that fails materialization by its internal ids and a hash of its uid", async () => {
+    const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
+    const { RecurrenceMaterializationLimitError } = await import(
+      "../../../src/core/events/recurrence-materializer"
+    );
+    const emittedEvents: Record<string, unknown>[] = [];
+
+    await expect(ingestSource({
+      calendarId: "cal-1",
+      fetchEvents: () => Promise.reject(new RecurrenceMaterializationLimitError({
+        calendarId: "cal-1",
+        eventId: "event-1",
+        eventStateId: "event-state-1",
+        sourceEventUid: "series@example.com",
+      }, 10_000)),
+      flush: () => Promise.resolve(),
+      onIngestEvent: (event) => emittedEvents.push(event),
+      readExistingEvents: () => Promise.resolve([]),
+    })).rejects.toThrow(RecurrenceMaterializationLimitError);
+
+    expect(emittedEvents[0]).toMatchObject({
+      "recurrence.calendar_id": "cal-1",
+      "recurrence.event_id": "event-1",
+      "recurrence.event_state_id": "event-state-1",
+      "recurrence.limit": 10_000,
+      "recurrence.source_event_uid_hash": "5d642490daa7157e",
+    });
+    expect(emittedEvents[0]).not.toHaveProperty("recurrence.source_event_uid");
+  });
+
   it("drops an over-budget recurrence but keeps ingesting the rest of the calendar", async () => {
     const { ingestSource } = await import("../../../src/core/sync-engine/ingest");
     const pathological: SourceEvent = {
@@ -1048,7 +1078,7 @@ describe("ingestSource", () => {
     expect(flushes[0]?.inserts.map(({ uid }) => uid)).toEqual(["healthy-event"]);
     expect(result.eventsAdded).toBe(1);
     expect(emittedEvents[0]?.["recurrence.over_budget_count"]).toBe(1);
-    expect(emittedEvents[0]?.["recurrence.over_budget_uids"]).toBe("pathological-series");
+    expect(emittedEvents[0]?.["recurrence.over_budget_uid_hashes"]).toBe("232f489ce99bbff1");
     expect(emittedEvents[0]?.["outcome"]).not.toBe("error");
   });
 
@@ -1087,7 +1117,7 @@ describe("ingestSource", () => {
     expect(flushes[0]?.deletes).toEqual([]);
     expect(result.eventsAdded).toBe(1);
     expect(emittedEvents[0]?.["source_events.unsupported_count"]).toBe(1);
-    expect(emittedEvents[0]?.["source_events.unsupported_uids"]).toBe("unsupported-series");
+    expect(emittedEvents[0]?.["source_events.unsupported_uid_hashes"]).toBe("1247839cb6519015");
   });
 
   it("keeps the stored events of an over-budget series instead of deleting them", async () => {

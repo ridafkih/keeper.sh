@@ -1225,9 +1225,6 @@ const ingestOAuthSources = async (
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
           recordPendingFirstSyncs(source.pendingFirstSyncMappingCount);
-          if (source.externalCalendarId) {
-            widelog.set("provider.external_calendar_id", source.externalCalendarId);
-          }
 
           try {
             const run = await widelog.time.measure("duration_ms", () =>
