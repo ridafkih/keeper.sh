@@ -1,4 +1,5 @@
 import { hasOAuthProviderApi, routeOidcCallbackRequest } from "@keeper.sh/auth";
+import { loggedPathFor } from "@keeper.sh/otelemetry/tracing";
 import { auth, authCapabilities, env } from "@/context";
 import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 import { context, widelog } from "@/utils/logging";
@@ -205,12 +206,13 @@ const readCheckoutCreationOf = async (
 const handleAuthRequest = (pathname: string, request: Request): Promise<Response> =>
   context(async () => {
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+    const loggedPath = loggedPathFor(pathname);
 
-    widelog.set("operation.name", `${request.method} ${pathname}`);
+    widelog.set("operation.name", `${request.method} ${loggedPath}`);
     widelog.set("operation.type", "auth");
     widelog.set("request.id", requestId);
     widelog.set("http.method", request.method);
-    widelog.set("http.path", pathname);
+    widelog.set("http.path", loggedPath);
 
     try {
       return await widelog.time.measure("duration_ms", async () => {

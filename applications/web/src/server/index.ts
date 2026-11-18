@@ -1,5 +1,5 @@
 import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
-import { startTracing, traceIncomingRequest } from "@keeper.sh/otelemetry/tracing";
+import { loggedPathFor, startTracing, traceIncomingRequest } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { getServerPublicRuntimeConfig } from "@/lib/runtime-config";
 import { createServerConfig, envSchema } from "./config";
@@ -46,12 +46,13 @@ await entry({
         return traceIncomingRequest(request, { trustIncomingTraceContext: false }, () => context(async () => {
           const url = new URL(request.url);
           const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+          const loggedPath = loggedPathFor(url.pathname);
 
-          widelog.set("operation.name", `${request.method} ${url.pathname}`);
+          widelog.set("operation.name", `${request.method} ${loggedPath}`);
           widelog.set("operation.type", "http");
           widelog.set("request.id", requestId);
           widelog.set("http.method", request.method);
-          widelog.set("http.path", url.pathname);
+          widelog.set("http.path", loggedPath);
 
           const userAgent = request.headers.get("user-agent");
           if (userAgent) {

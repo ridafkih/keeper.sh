@@ -59,6 +59,17 @@ describe("server spans", () => {
     });
   });
 
+  it("records a calendar feed request under its route, not the feed it identifies", async () => {
+    const tracing = start();
+    await traceIncomingRequest(
+      new Request("http://keeper.test/api/cal/4f1c2a9b7d3e4c1f8a6b5d2e9c0f7a13.ics"),
+      { trustIncomingTraceContext: false },
+      () => Promise.resolve(new Response(null, { status: 200 })),
+    );
+    const span = spanNamed(await tracing.exportedSpans(), "GET");
+    expect(span.attributes["url.path"]).toBe("/api/cal/:identifier");
+  });
+
   it("starts a fresh trace when the edge does not trust the caller's traceparent", async () => {
     const tracing = start();
     const forgedTraceId = "0af7651916cd43dd8448eb211c80319c";
