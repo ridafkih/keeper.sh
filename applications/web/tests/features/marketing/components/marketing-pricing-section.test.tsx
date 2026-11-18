@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
@@ -7,6 +8,12 @@ import {
   PRICING_PLANS,
   pricingPlanHighlights,
 } from "../../../../src/features/marketing/pricing-plans";
+import { SEO_CONTENT_ROOT } from "../../../../src/lib/content-paths";
+import { marketingContentPresent } from "../../../../src/lib/marketing-content";
+
+const COPY_PRESENT = marketingContentPresent(
+  join(import.meta.dirname, "../../../..", SEO_CONTENT_ROOT, "marketing"),
+);
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
@@ -48,7 +55,7 @@ describe("pricingPlanHighlights", () => {
 });
 
 describe("MarketingPricingPlanCard", () => {
-  it("lists the plan's differentiating bullets for narrow viewports only", () => {
+  it.skipIf(!COPY_PRESENT)("lists the plan's differentiating bullets for narrow viewports only", () => {
     const { document } = parseHTML(`<html><body>${renderPlanCard("free")}</body></html>`);
     const list = document.querySelector("ul");
 
@@ -68,7 +75,7 @@ describe("MarketingPricingPlanCard", () => {
     expect(document.querySelector("ul")).toBeNull();
   });
 
-  it("keeps the plan name as the only heading in the card", () => {
+  it.skipIf(!COPY_PRESENT)("keeps the plan name as the only heading in the card", () => {
     const { document } = parseHTML(`<html><body>${renderPlanCard("pro")}</body></html>`);
     const headings = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6")];
 

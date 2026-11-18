@@ -36,14 +36,15 @@ const published = new Set([
   ...COLLECTIONS.flatMap(pathsIn),
 ]);
 
-const referenced = [
-  ...readFileSync(join(CONTENT_ROOT, "llms.txt"), "utf8").matchAll(SITE_PATH),
-]
-  .map((match) => match[1].replace(/\/$/, ""))
-  .filter((path) => path.length > 0 && !path.includes("."));
+const referencedPaths = (): string[] =>
+  [...readFileSync(join(CONTENT_ROOT, "llms.txt"), "utf8").matchAll(SITE_PATH)]
+    .map((match) => match[1].replace(/\/$/, ""))
+    .filter((path) => path.length > 0 && !path.includes("."));
 
 describe.skipIf(!existsSync(join(CONTENT_ROOT, "blog")))("llms.txt", () => {
   it("references pages that exist", () => {
+    const referenced = referencedPaths();
+
     expect(referenced.length).toBeGreaterThan(0);
     expect([...new Set(referenced)].filter((path) => !published.has(path))).toEqual([]);
   });
