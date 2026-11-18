@@ -11,6 +11,7 @@
     "push": "drizzle-kit push",
     "generate": "drizzle-kit generate",
     "migrate": "bun scripts/migrate.ts",
+    "roles": "bun scripts/roles.ts",
     "types": "tsc --noEmit",
     "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run",
     "test:migrations": "bun x --bun vitest run --config vitest.migrations.config.ts",
