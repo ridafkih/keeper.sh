@@ -2,30 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
 import { MarketingPricingPlanCard } from "../../../../src/features/marketing/components/marketing-pricing-section";
-import {
-  PRICING_FEATURES,
-  PRICING_PLANS,
-  pricingPlanHighlights,
-} from "../../../../src/features/marketing/pricing-plans";
+import { PRICING_FEATURES, pricingPlanHighlights } from "../../../../src/features/marketing/pricing-plans";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
 }));
 
-function renderPlanCard(planId: "free" | "pro") {
-  const plan = PRICING_PLANS.find((candidate) => candidate.id === planId)!;
-
-  return renderToStaticMarkup(
+function renderPlanCard(features?: string[]) {
+  const html = renderToStaticMarkup(
     <MarketingPricingPlanCard
-      tone={plan.tone}
-      name={plan.name}
-      price={plan.price}
-      period={plan.period}
-      description={plan.description}
-      ctaLabel={plan.ctaLabel}
-      features={pricingPlanHighlights(plan.id)}
+      name="Example plan"
+      price="$0"
+      period="/mo"
+      description="Example description"
+      ctaLabel="Start"
+      features={features}
     />,
   );
+  return parseHTML(`<html><body>${html}</body></html>`).document;
 }
 
 describe("pricingPlanHighlights", () => {
@@ -49,30 +43,25 @@ describe("pricingPlanHighlights", () => {
 
 describe("MarketingPricingPlanCard", () => {
   it("lists the plan's differentiating bullets for narrow viewports only", () => {
-    const { document } = parseHTML(`<html><body>${renderPlanCard("free")}</body></html>`);
+    const features = ["Two connected calendars", "Shareable link"];
+    const document = renderPlanCard(features);
     const list = document.querySelector("ul");
 
     expect(list?.className).toContain("md:hidden");
-    expect([...document.querySelectorAll("li")].map((item) => item.textContent)).toEqual(
-      pricingPlanHighlights("free"),
-    );
+    expect([...document.querySelectorAll("li")].map((item) => item.textContent)).toEqual(features);
   });
 
   it("renders no list when the plan has no differentiating bullets", () => {
-    const { document } = parseHTML(
-      `<html><body>${renderToStaticMarkup(
-        <MarketingPricingPlanCard name="Free" price="$0" period="/mo" description="" ctaLabel="Start" />,
-      )}</body></html>`,
-    );
+    const document = renderPlanCard();
 
     expect(document.querySelector("ul")).toBeNull();
   });
 
   it("keeps the plan name as the only heading in the card", () => {
-    const { document } = parseHTML(`<html><body>${renderPlanCard("pro")}</body></html>`);
+    const document = renderPlanCard();
     const headings = [...document.querySelectorAll("h1, h2, h3, h4, h5, h6")];
 
     expect(headings.map((heading) => heading.tagName.toLowerCase())).toEqual(["h3"]);
-    expect(headings[0]?.textContent).toBe("Pro");
+    expect(headings[0]?.textContent).toBe("Example plan");
   });
 });
