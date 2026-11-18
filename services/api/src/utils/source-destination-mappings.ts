@@ -116,7 +116,8 @@ const countEffectiveUserMappings = async (
   userId: string,
 ): Promise<number> => {
   const mappings = await getUserSyncMappings(client, userId);
-  return listEffectiveMappings(mappings).length;
+  const mappingsFromOwnedSources = mappings.filter((mapping) => mapping.sourceUserId === userId);
+  return listEffectiveMappings(mappingsFromOwnedSources).length;
 };
 
 const excludeKeptCalendars = (column: AnyColumn, keptCalendarIds: string[]): SQL | undefined => {

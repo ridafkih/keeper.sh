@@ -171,6 +171,11 @@ const readSourceIds = async (destinationId: string): Promise<string[]> => {
   return sources.map((source) => source.sourceCalendarId);
 };
 
+const readSortedSourceIds = async (destinationId: string): Promise<string[]> => {
+  const sourceIds = await readSourceIds(destinationId);
+  return sourceIds.toSorted();
+};
+
 const showEventNames = { excludeEventName: false } as const;
 
 interface Family {
@@ -352,7 +357,7 @@ describe.skipIf(!administrativeUrl)("calendar chaining", () => {
       expect(inherited?.sourceEventUid).toBe("Swim meet@fixture");
     });
 
-    it("ignores a link whose source belongs to another account", async () => {
+    it("keeps another account's stored link but never inherits through it", async () => {
       const family = await seedFamily();
       const strangerId = await seedUser();
       const strangerAccountId = await seedAccount(strangerId);
@@ -363,11 +368,47 @@ describe.skipIf(!administrativeUrl)("calendar chaining", () => {
         includeUpstreamSources: true,
         sourceCalendarId: strangerCalendarId,
       });
+      const storedKidsSourceIds = [family.aubreyId, strangerCalendarId].toSorted();
+
+      expect(await readSortedSourceIds(family.kidsId)).toEqual(storedKidsSourceIds);
 
       await optIn(family.userId, family.kidsId, family.secretopId);
 
       expect(await readSourceIds(family.secretopId)).not.toContain(strangerCalendarId);
-      expect(await readSourceIds(family.kidsId)).toEqual([family.aubreyId]);
+      expect(await readSortedSourceIds(family.kidsId)).toEqual(storedKidsSourceIds);
+    });
+
+    it("keeps a stored link from a calendar to itself", async () => {
+      const family = await seedFamily();
+      await db().insert(sourceDestinationMappingsTable).values({
+        destinationCalendarId: family.kidsId,
+        sourceCalendarId: family.kidsId,
+      });
+      const storedKidsSourceIds = [family.aubreyId, family.kidsId].toSorted();
+
+      expect(await readSortedSourceIds(family.kidsId)).toEqual(storedKidsSourceIds);
+
+      await optIn(family.userId, family.kidsId, family.secretopId);
+
+      expect(await readSortedSourceIds(family.kidsId)).toEqual(storedKidsSourceIds);
+      expect(await countEffectiveUserMappings(db(), family.userId)).toBe(4);
+    });
+
+    it("never copies a provider calendar back into a second connection of itself", async () => {
+      const family = await seedFamily();
+      const secondAccountId = await seedAccount(family.userId);
+      const aubreyAgainId = await seedCalendar(family.userId, secondAccountId, AUBREY);
+      await db()
+        .update(calendarsTable)
+        .set({ externalCalendarId: "aubrey@provider.example" })
+        .where(sql`${calendarsTable.id} in (${family.aubreyId}, ${aubreyAgainId})`);
+      await link(family.userId, family.kidsId, [family.secretopId, aubreyAgainId]);
+      await overrideRules(family.userId, family.kidsId, aubreyAgainId, showEventNames);
+
+      await optIn(family.userId, family.kidsId, aubreyAgainId);
+
+      expect(await readSourceIds(aubreyAgainId)).toEqual([family.kidsId]);
+      expect(await readDestinationSummaries(aubreyAgainId)).toEqual(["School play"]);
     });
   });
 
@@ -452,6 +493,61 @@ describe.skipIf(!administrativeUrl)("calendar chaining", () => {
       expect(inherited?.description).toBeUndefined();
       expect(inherited?.location).toBeUndefined();
       expect(own?.location).toBe("School play location");
+    });
+  });
+
+  describe("privacy along a path", () => {
+    const readInherited = async (family: Family) => {
+      const events = await getEventsForDestination(db(), family.secretopId, WINDOW);
+      return {
+        inherited: events.find((event) => event.summary === "Swim meet"),
+        own: events.find((event) => event.summary === "School play"),
+      };
+    };
+
+    it("keeps an inherited event private once any link on the path marks it private", async () => {
+      const family = await seedFamily();
+      await overrideRules(family.userId, family.aubreyId, family.kidsId, {
+        markEventsAsPrivate: true,
+      });
+      await overrideRules(family.userId, family.kidsId, family.secretopId, {
+        markEventsAsPrivate: false,
+      });
+
+      await optIn(family.userId, family.kidsId, family.secretopId);
+      const { inherited, own } = await readInherited(family);
+
+      expect(inherited?.isPrivate).toBe(true);
+      expect(own?.isPrivate).toBeUndefined();
+    });
+
+    it("marks an inherited event private when only the last link does", async () => {
+      const family = await seedFamily();
+      await overrideRules(family.userId, family.kidsId, family.secretopId, {
+        markEventsAsPrivate: true,
+      });
+
+      await optIn(family.userId, family.kidsId, family.secretopId);
+      const { inherited, own } = await readInherited(family);
+
+      expect(inherited?.isPrivate).toBe(true);
+      expect(own?.isPrivate).toBe(true);
+    });
+
+    it("keeps reminders off once any link on the path turns them off", async () => {
+      const family = await seedFamily();
+      await overrideRules(family.userId, family.aubreyId, family.kidsId, {
+        disableEventReminders: true,
+      });
+      await overrideRules(family.userId, family.kidsId, family.secretopId, {
+        disableEventReminders: false,
+      });
+
+      await optIn(family.userId, family.kidsId, family.secretopId);
+      const { inherited, own } = await readInherited(family);
+
+      expect(inherited?.remindersDisabled).toBe(true);
+      expect(own?.remindersDisabled).toBeUndefined();
     });
   });
 

@@ -9,6 +9,10 @@ interface CalendarRow {
 }
 
 interface MappingRow {
+  destinationProviderCalendarKey: string;
+  isSameOwner: boolean;
+  sourceProviderCalendarKey: string;
+  sourceUserId: string;
   mapping: {
     destinationCalendarId: string;
     includeUpstreamSources: boolean;
@@ -28,7 +32,11 @@ const mapping = (
   destinationCalendarId: string,
   includeUpstreamSources = false,
 ): MappingRow => ({
+  destinationProviderCalendarKey: destinationCalendarId,
+  isSameOwner: true,
   mapping: { destinationCalendarId, includeUpstreamSources, sourceCalendarId },
+  sourceProviderCalendarKey: sourceCalendarId,
+  sourceUserId: "owner-user",
 });
 
 const createBuilder = <TRow>(
@@ -111,7 +119,7 @@ describe("getCalendarsAffectedByAccountMutation", () => {
     );
 
     expect(result).toEqual({
-      calendarIds: ["source-1", "middle-1", "final-1", "beyond-1"],
+      calendarIds: ["source-1", "beyond-1", "final-1", "middle-1"],
       owned: true,
     });
   });
