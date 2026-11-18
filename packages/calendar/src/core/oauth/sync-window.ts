@@ -25,6 +25,7 @@ const getOAuthSyncTokenVersion = (
 };
 
 export {
+  OAUTH_SYNC_TOKEN_REFRESH_MS,
   OAUTH_SYNC_WINDOW_VERSION,
   getDeterministicRefreshOffset,
   getOAuthSyncTokenVersion,
