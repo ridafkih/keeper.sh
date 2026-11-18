@@ -46,6 +46,7 @@ const createMapping = (
   return {
     destinationCalendarId: "destination-1",
     effectiveRules: resolveSyncRules(sourceRules, merged),
+    includeUpstreamSources: false,
     overrides: merged,
     sourceCalendarId: "source-1",
     sourceRules,

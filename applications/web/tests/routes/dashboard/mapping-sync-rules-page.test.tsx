@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { NO_SYNC_RULE_OVERRIDES, resolveSyncRules } from "@keeper.sh/data-schemas";
-import type { CalendarDetail, CalendarSource, MappingSyncRules } from "../../../src/types/api";
+import type {
+  CalendarDetail,
+  CalendarSource,
+  InheritedSource,
+  MappingSyncRules,
+} from "../../../src/types/api";
 import type { RuleOverrides, Rules } from "../../../src/utils/mapping-sync-rules";
 import { HttpError } from "../../../src/lib/fetcher";
 import "../../../src/routes/(dashboard)/dashboard/accounts/$accountId.$calendarId_.destinations.$destinationId";
@@ -11,6 +16,8 @@ const SOURCE_ID = "source-1";
 const DESTINATION_ID = "destination-1";
 const SOURCE_KEY = `/api/sources/${SOURCE_ID}`;
 const MAPPING_KEY = `/api/sources/${SOURCE_ID}/destinations/${DESTINATION_ID}`;
+const DESTINATION_SOURCES_KEY = `/api/sources/${DESTINATION_ID}/sources`;
+const UPSTREAM_ID = "upstream-1";
 
 interface CapturedRoute {
   component: (() => React.ReactElement) | null;
@@ -60,6 +67,10 @@ vi.mock("swr", () => {
 
 vi.mock("../../../src/hooks/use-entitlements", () => ({
   useEntitlements: () => ({ data: entitlements }),
+  useMutateEntitlements: () => ({
+    adjustMappingCount: () => null,
+    revalidateEntitlements: () => Promise.resolve(),
+  }),
 }));
 
 vi.mock("../../../src/config/commercial", () => ({
@@ -132,6 +143,7 @@ const makeMapping = (overrides: Partial<RuleOverrides> = {}): MappingSyncRules =
   return {
     destinationCalendarId: DESTINATION_ID,
     effectiveRules: resolveSyncRules(SOURCE_RULES, merged),
+    includeUpstreamSources: false,
     overrides: merged,
     sourceCalendarId: SOURCE_ID,
     sourceRules: SOURCE_RULES,
@@ -139,15 +151,24 @@ const makeMapping = (overrides: Partial<RuleOverrides> = {}): MappingSyncRules =
 };
 
 interface PageState {
+  includeUpstreamSources?: boolean;
+  inheritedSources?: InheritedSource[];
   overrides?: Partial<RuleOverrides>;
   provider?: string;
   destinations?: CalendarSource[];
 }
 
-const seedPage = ({ overrides, provider = "google", destinations }: PageState = {}): void => {
+const seedPage = ({
+  includeUpstreamSources = false,
+  inheritedSources = [],
+  overrides,
+  provider = "google",
+  destinations,
+}: PageState = {}): void => {
   swrData.set(SOURCE_KEY, makeSource(provider));
   swrData.set("/api/sources", destinations ?? [makeDestination()]);
-  swrData.set(MAPPING_KEY, makeMapping(overrides));
+  swrData.set(MAPPING_KEY, { ...makeMapping(overrides), includeUpstreamSources });
+  swrData.set(DESTINATION_SOURCES_KEY, { inheritedSources, sourceIds: [SOURCE_ID] });
 };
 
 const render = (): string => {
@@ -172,6 +193,43 @@ describe("per-destination sync rules page", () => {
     swrData.clear();
     swrErrors.clear();
     entitlements.canUseEventFilters = true;
+  });
+
+  it("offers inherited events switched off until the link opts in", () => {
+    const markup = renderPage();
+
+    expect(markup).toContain("Keeper.sh syncs into Personal");
+    expect(rowText(markup, "Include Inherited Events")).not.toContain("via");
+    expect(markup).toMatch(/role="switch" aria-checked="false"[^>]*>.*Include Inherited Events/s);
+  });
+
+  it("lists each inherited calendar by the calendar it comes through", () => {
+    const markup = renderPage({
+      destinations: [
+        makeDestination(),
+        { ...makeDestination(), id: SOURCE_ID, name: "Personal" },
+        { ...makeDestination(), id: UPSTREAM_ID, name: "Aubrey" },
+      ],
+      includeUpstreamSources: true,
+      inheritedSources: [{ sourceCalendarId: UPSTREAM_ID, viaCalendarIds: [SOURCE_ID] }],
+    });
+
+    expect(markup).toMatch(/role="switch" aria-checked="true"[^>]*>.*Include Inherited Events/s);
+    expect(markup).toContain("Aubrey");
+    expect(markup).toContain("via Personal");
+  });
+
+  it("hides inherited calendars that reach the destination through another link", () => {
+    const markup = renderPage({
+      destinations: [
+        makeDestination(),
+        { ...makeDestination(), id: UPSTREAM_ID, name: "Aubrey" },
+      ],
+      includeUpstreamSources: true,
+      inheritedSources: [{ sourceCalendarId: UPSTREAM_ID, viaCalendarIds: ["another-link"] }],
+    });
+
+    expect(markup).not.toContain("Aubrey");
   });
 
   it("names both calendars so the direction of the sync is unambiguous", () => {

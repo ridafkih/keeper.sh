@@ -86,9 +86,20 @@ export interface SourceDestinations {
   customizedDestinationIds: string[];
 }
 
+export interface InheritedSource {
+  sourceCalendarId: string;
+  viaCalendarIds: string[];
+}
+
+export interface DestinationSources {
+  sourceIds: string[];
+  inheritedSources: InheritedSource[];
+}
+
 export interface MappingSyncRules {
   sourceCalendarId: string;
   destinationCalendarId: string;
+  includeUpstreamSources: boolean;
   overrides: SyncRuleOverrides<ExcludableAvailability>;
   sourceRules: SyncRules<ExcludableAvailability>;
   effectiveRules: SyncRules<ExcludableAvailability>;

@@ -13,6 +13,7 @@ import { AvailabilityOverrideItem } from "@/features/dashboard/components/mappin
 import { EventNameOverrideItems } from "@/features/dashboard/components/mapping-sync-rules/event-name-override-items";
 import { ResetOverridesMenu } from "@/features/dashboard/components/mapping-sync-rules/reset-overrides-item";
 import { SwitchRuleOverrideItem } from "@/features/dashboard/components/mapping-sync-rules/switch-rule-override-item";
+import { UpstreamSourcesSection } from "@/features/dashboard/components/mapping-sync-rules/upstream-sources-section";
 import { TitleKeywordsOverrideItems } from "@/features/dashboard/components/mapping-sync-rules/title-keywords-override-items";
 import { useEntitlements } from "@/hooks/use-entitlements";
 import { useMappingSyncRules } from "@/hooks/use-mapping-sync-rules";
@@ -38,10 +39,14 @@ function MappingSyncRulesPage() {
   const sourceKey = `/api/sources/${calendarId}`;
   const { data: source, error: sourceError } = useSWR<CalendarDetail>(sourceKey);
   const { data: calendars, error: calendarsError } = useSWR<CalendarSource[]>("/api/sources");
-  const { mapping, error: mappingError, patchOverrides, retry, saveError } = useMappingSyncRules(
-    calendarId,
-    destinationId,
-  );
+  const {
+    mapping,
+    error: mappingError,
+    patchOverrides,
+    retry,
+    saveError,
+    setIncludeUpstreamSources,
+  } = useMappingSyncRules(calendarId, destinationId);
   const { mutate } = useSWRConfig();
   const { data: entitlements } = useEntitlements();
 
@@ -110,6 +115,13 @@ function MappingSyncRulesPage() {
             <TitleKeywordsOverrideItems mapping={mapping} locked={disabled} onPatch={patchOverrides} />
           </NavigationMenu>
         </PremiumGate>
+        <UpstreamSourcesSection
+          mapping={mapping}
+          sourceName={source.name}
+          destinationName={destination.name}
+          calendars={calendars}
+          onChange={setIncludeUpstreamSources}
+        />
         {saveError && <Text size="sm" tone="danger" className="px-0.5">{saveError}</Text>}
         <DashboardSection
           title="Reset"
