@@ -9,7 +9,7 @@ import {
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
   createSyncWindow,
-  getMappedSourceCalendarIds,
+  getEffectiveSourcesForDestination,
   withSourceIngestLocks,
   getConfigurableSyncWindow,
   intersectSyncWindows,
@@ -32,11 +32,7 @@ import type {
   SyncProgressUpdate,
   SyncWindow,
 } from "@keeper.sh/calendar";
-import {
-  calendarAccountsTable,
-  calendarsTable,
-  sourceDestinationMappingsTable,
-} from "@keeper.sh/database/schema";
+import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
 import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
@@ -815,16 +811,12 @@ const resolveRejectedFirstSyncSources = (
   return verifiedSourceCalendarIds;
 };
 
-const countMappedSources = async (
+const getEffectiveSourceCalendarIds = async (
   database: Pick<BunSQLDatabase, "select">,
   destinationCalendarId: string,
-): Promise<number> => {
-  const mappings = await database
-    .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
-    .from(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
-
-  return mappings.length;
+): Promise<string[]> => {
+  const sources = await getEffectiveSourcesForDestination(database, destinationCalendarId);
+  return sources.map((source) => source.sourceCalendarId);
 };
 
 const syncDestinationsForUser = async (
@@ -848,7 +840,11 @@ const syncDestinationsForUser = async (
       ),
     );
 
-  const mappedSourceCount = await countMappedSources(database, config.destinationCalendarId);
+  const mappedSourceCalendarIds = await getEffectiveSourceCalendarIds(
+    database,
+    config.destinationCalendarId,
+  );
+  const mappedSourceCount = mappedSourceCalendarIds.length;
 
   const reportSkip = (calendarId: string, reason: DestinationSkipReason): void => {
     callbacks?.onCalendarSkipped?.({ calendarId, mappedSourceCount, reason });
@@ -933,7 +929,7 @@ const syncDestinationsForUser = async (
         const providerRef = syncProvider;
 
         const sourceAuthorityStartedAt = performance.now();
-        const sourceCalendarIds = await getMappedSourceCalendarIds(
+        const sourceCalendarIds = await getEffectiveSourceCalendarIds(
           database,
           destination.calendarId,
         );
@@ -995,7 +991,7 @@ const syncDestinationsForUser = async (
                 database,
                 sourceCalendarIds,
                 async (lockedDatabase) => {
-                  sourceCalendarIdsAtLocalRead = await getMappedSourceCalendarIds(
+                  sourceCalendarIdsAtLocalRead = await getEffectiveSourceCalendarIds(
                     lockedDatabase,
                     destination.calendarId,
                   );

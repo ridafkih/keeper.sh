@@ -41,7 +41,9 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       },
       events: localEventsMock(),
     }),
-    getMappedSourceCalendarIds: () => Promise.resolve([SOURCE_ID]),
+    getEffectiveSourcesForDestination: () => Promise.resolve([
+      { sourceCalendarId: SOURCE_ID, viaCalendarIds: [] },
+    ]),
     withSourceIngestLocks: (
       database: unknown,
       _ids: string[],

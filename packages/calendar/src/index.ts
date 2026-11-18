@@ -179,11 +179,27 @@ export {
   getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
-  getMappedSourceCalendarIds,
   shouldExcludeSyncEvent,
   type DestinationEventReadDiagnostics,
   type DestinationEventReadResult,
 } from "./core/events/events";
+export { getEffectiveDestinationRangesForSource } from "./core/sync/effective-destination-ranges";
+export {
+  getEffectiveDestinationIdsForSource,
+  getEffectiveSourcesForDestination,
+  getUserSyncMappings,
+  type StoredSyncMapping,
+} from "./core/sync/effective-sources";
+export {
+  isInheritedSource,
+  listEffectiveMappings,
+  resolveDownstreamDestinationIds,
+  resolveEffectiveDestinationIds,
+  resolveEffectiveSources,
+  type EffectiveMapping,
+  type EffectiveSource,
+  type SyncMapping,
+} from "./core/sync/source-chain";
 export {
   findSourceEventsExceedingRecurrenceBudget,
   materializeRecurrenceEvents,

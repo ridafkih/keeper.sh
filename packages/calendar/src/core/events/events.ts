@@ -1,8 +1,4 @@
-import {
-  calendarsTable,
-  eventStatesTable,
-  sourceDestinationMappingsTable,
-} from "@keeper.sh/database/schema";
+import { calendarsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { resolveSyncRules } from "@keeper.sh/data-schemas";
 import type { SyncRuleOverrides, SyncRules } from "@keeper.sh/data-schemas";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
@@ -14,6 +10,11 @@ import type {
   SyncableEvent,
 } from "../types";
 import type { SyncWindow } from "../sync/sync-range";
+import {
+  getEffectiveSourcesForDestination,
+  getSyncMappingsOfCalendarOwner,
+} from "../sync/effective-sources";
+import { resolveEffectiveSources } from "../sync/source-chain";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
@@ -205,64 +206,109 @@ const resolveEventNameTemplate = (
   return resolved || variables.calendar_name || DEFAULT_EVENT_NAME;
 };
 
-const getMappedSourceCalendarIds = async (
-  database: BunSQLClient,
-  destinationCalendarId: string,
-): Promise<string[]> => {
-  const mappings = await database
-    .select({ sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId })
-    .from(sourceDestinationMappingsTable)
-    .where(eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId));
-
-  return mappings.map((mapping) => mapping.sourceCalendarId);
-};
-
-type SyncRuleOverridesBySourceCalendar = Map<string, SyncRuleOverrides>;
-
-const getSyncRuleOverridesForDestination = async (
-  database: BunSQLClient,
-  destinationCalendarId: string,
-  sourceCalendarIds: string[],
-): Promise<SyncRuleOverridesBySourceCalendar> => {
-  if (sourceCalendarIds.length === EMPTY_SOURCES_COUNT) {
-    return new Map();
-  }
-
-  const mappings = await database
-    .select({
-      customEventName: sourceDestinationMappingsTable.customEventName,
-      disableEventReminders: sourceDestinationMappingsTable.disableEventReminders,
-      excludeAllDayEvents: sourceDestinationMappingsTable.excludeAllDayEvents,
-      excludeAvailabilities: sourceDestinationMappingsTable.excludeAvailabilities,
-      excludeEventDescription: sourceDestinationMappingsTable.excludeEventDescription,
-      excludeEventLocation: sourceDestinationMappingsTable.excludeEventLocation,
-      excludeEventName: sourceDestinationMappingsTable.excludeEventName,
-      excludeFocusTime: sourceDestinationMappingsTable.excludeFocusTime,
-      excludeOutOfOffice: sourceDestinationMappingsTable.excludeOutOfOffice,
-      excludeTitleKeywords: sourceDestinationMappingsTable.excludeTitleKeywords,
-      markEventsAsPrivate: sourceDestinationMappingsTable.markEventsAsPrivate,
-      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
-    })
-    .from(sourceDestinationMappingsTable)
-    .where(
-      and(
-        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
-        inArray(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarIds),
-      ),
-    );
-
-  return new Map(
-    mappings.map(({ sourceCalendarId, ...overrides }) => [sourceCalendarId, overrides]),
-  );
-};
-
 interface EffectiveSyncRules extends SyncRules {
   lowercasedTitleKeywords: string[];
 }
 
-const createEffectiveSyncRulesResolver = (
-  overridesBySourceCalendar: SyncRuleOverridesBySourceCalendar,
-) => {
+interface InheritedRuleHop {
+  calendarName: string;
+  rules: EffectiveSyncRules;
+}
+
+interface SourceRulePath {
+  inheritedHops: InheritedRuleHop[];
+  overrides: SyncRuleOverrides | null;
+}
+
+type SourceRulePathsBySourceCalendar = Map<string, SourceRulePath>;
+
+const DIRECT_SOURCE_RULE_PATH: SourceRulePath = { inheritedHops: [], overrides: null };
+
+const toEffectiveSyncRules = (rules: SyncRules): EffectiveSyncRules => ({
+  ...rules,
+  lowercasedTitleKeywords: lowercaseKeywords(rules.excludeTitleKeywords),
+});
+
+const createMappingKey = (sourceCalendarId: string, destinationCalendarId: string): string =>
+  `${sourceCalendarId}:${destinationCalendarId}`;
+
+interface ViaCalendar {
+  name: string;
+  rules: SyncRules;
+}
+
+const getViaCalendars = async (
+  database: BunSQLClient,
+  calendarIds: string[],
+): Promise<Map<string, ViaCalendar>> => {
+  if (calendarIds.length === EMPTY_SOURCES_COUNT) {
+    return new Map();
+  }
+
+  const calendars = await database
+    .select({
+      customEventName: calendarsTable.customEventName,
+      disableEventReminders: calendarsTable.disableEventReminders,
+      excludeAllDayEvents: calendarsTable.excludeAllDayEvents,
+      excludeAvailabilities: calendarsTable.excludeAvailabilities,
+      excludeEventDescription: calendarsTable.excludeEventDescription,
+      excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventName: calendarsTable.excludeEventName,
+      excludeFocusTime: calendarsTable.excludeFocusTime,
+      excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
+      excludeTitleKeywords: calendarsTable.excludeTitleKeywords,
+      id: calendarsTable.id,
+      markEventsAsPrivate: calendarsTable.markEventsAsPrivate,
+      name: calendarsTable.name,
+    })
+    .from(calendarsTable)
+    .where(inArray(calendarsTable.id, calendarIds));
+
+  return new Map(calendars.map(({ id, name, ...rules }) => [id, { name, rules }]));
+};
+
+const getSourceRulePathsForDestination = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+): Promise<SourceRulePathsBySourceCalendar> => {
+  const mappings = await getSyncMappingsOfCalendarOwner(database, destinationCalendarId);
+  const sources = resolveEffectiveSources(mappings, destinationCalendarId);
+  const mappingsByKey = new Map(mappings.map((mapping) => [
+    createMappingKey(mapping.sourceCalendarId, mapping.destinationCalendarId),
+    mapping,
+  ]));
+  const viaCalendars = await getViaCalendars(
+    database,
+    [...new Set(sources.flatMap((source) => source.viaCalendarIds))],
+  );
+
+  return new Map(sources.map((source) => {
+    const hopCalendarIds = [...source.viaCalendarIds, destinationCalendarId];
+    const [firstHopCalendarId = destinationCalendarId] = hopCalendarIds;
+    const inheritedHops = source.viaCalendarIds.flatMap((viaCalendarId, index) => {
+      const viaCalendar = viaCalendars.get(viaCalendarId);
+      const nextCalendarId = hopCalendarIds[index + 1];
+      if (!viaCalendar || !nextCalendarId) {
+        return [];
+      }
+      return [{
+        calendarName: viaCalendar.name,
+        rules: toEffectiveSyncRules(resolveSyncRules(
+          viaCalendar.rules,
+          mappingsByKey.get(createMappingKey(viaCalendarId, nextCalendarId)),
+        )),
+      }];
+    });
+    return [source.sourceCalendarId, {
+      inheritedHops,
+      overrides: mappingsByKey.get(
+        createMappingKey(source.sourceCalendarId, firstHopCalendarId),
+      ) ?? null,
+    }];
+  }));
+};
+
+const createSourceRulesResolver = (rulePaths: SourceRulePathsBySourceCalendar) => {
   const rulesByCalendar = new Map<string, EffectiveSyncRules>();
 
   return (calendarId: string, sourceRules: SyncRules): EffectiveSyncRules => {
@@ -270,29 +316,106 @@ const createEffectiveSyncRulesResolver = (
     if (cached) {
       return cached;
     }
-    const resolved = resolveSyncRules(sourceRules, overridesBySourceCalendar.get(calendarId));
-    const effective = {
-      ...resolved,
-      lowercasedTitleKeywords: lowercaseKeywords(resolved.excludeTitleKeywords),
-    };
+    const effective = toEffectiveSyncRules(
+      resolveSyncRules(sourceRules, rulePaths.get(calendarId)?.overrides),
+    );
     rulesByCalendar.set(calendarId, effective);
     return effective;
   };
+};
+
+interface EventPresentation {
+  description: string | undefined;
+  isPrivate: true | undefined;
+  location: string | undefined;
+  remindersDisabled: true | undefined;
+  summary: string;
+}
+
+interface PresentedEvent {
+  availability: string | null;
+  description: string | null;
+  isAllDay: boolean | null;
+  location: string | null;
+  sourceEventType: string | null;
+  title: string | null;
+}
+
+const presentEvent = (
+  event: PresentedEvent,
+  calendarName: string,
+  rules: EffectiveSyncRules,
+): EventPresentation | null => {
+  if (matchesSyncExclusion(
+    {
+      availability: event.availability,
+      excludeAllDayEvents: rules.excludeAllDayEvents,
+      excludeAvailabilities: rules.excludeAvailabilities,
+      excludeFocusTime: rules.excludeFocusTime,
+      excludeOutOfOffice: rules.excludeOutOfOffice,
+      isAllDay: event.isAllDay,
+      sourceEventType: event.sourceEventType,
+      title: event.title,
+    },
+    rules.lowercasedTitleKeywords,
+  )) {
+    return null;
+  }
+
+  const eventName = event.title ?? DEFAULT_EVENT_NAME;
+  let summary = eventName;
+  if (rules.excludeEventName) {
+    summary = resolveEventNameTemplate(rules.customEventName || DEFAULT_EVENT_NAME_TEMPLATE, {
+      calendar_name: calendarName,
+      event_name: eventName,
+    });
+  }
+
+  return {
+    description: excludeOrAbsent(rules.excludeEventDescription, event.description),
+    isPrivate: trueOrAbsent(rules.markEventsAsPrivate),
+    location: excludeOrAbsent(rules.excludeEventLocation, event.location),
+    remindersDisabled: trueOrAbsent(rules.disableEventReminders),
+    summary,
+  };
+};
+
+const presentEventThroughHops = (
+  event: PresentedEvent,
+  presentation: EventPresentation,
+  hops: InheritedRuleHop[],
+): EventPresentation | null => {
+  let current: EventPresentation | null = presentation;
+  for (const hop of hops) {
+    if (!current) {
+      return null;
+    }
+    current = presentEvent(
+      {
+        ...event,
+        description: current.description ?? null,
+        location: current.location ?? null,
+        title: current.summary,
+      },
+      hop.calendarName,
+      hop.rules,
+    );
+  }
+  return current;
 };
 
 interface DestinationEventReadOptions {
   destinationCalendarId?: string;
 }
 
-const readSyncRuleOverrides = (
+const readSourceRulePaths = (
   database: BunSQLClient,
-  calendarIds: string[],
   options: DestinationEventReadOptions,
-): Promise<SyncRuleOverridesBySourceCalendar> => {
+): Promise<SourceRulePathsBySourceCalendar> => {
   if (!options.destinationCalendarId) {
     return Promise.resolve(new Map());
   }
-  return getSyncRuleOverridesForDestination(database, options.destinationCalendarId, calendarIds);
+  return getSourceRulePathsForDestination(database, options.destinationCalendarId);
 };
 
 const getEventsForCalendarsWithDiagnostics = async (
@@ -308,9 +431,8 @@ const getEventsForCalendarsWithDiagnostics = async (
     };
   }
 
-  const resolveEffectiveSyncRules = createEffectiveSyncRulesResolver(
-    await readSyncRuleOverrides(database, calendarIds, options),
-  );
+  const rulePaths = await readSourceRulePaths(database, options);
+  const resolveSourceRules = createSourceRulesResolver(rulePaths);
 
   const results = await database
     .select({
@@ -370,20 +492,15 @@ const getEventsForCalendarsWithDiagnostics = async (
       missingSourceEventUidCount += 1;
       continue;
     }
-    const rules = resolveEffectiveSyncRules(result.calendarId, result);
-    if (matchesSyncExclusion(
-      {
-        availability: result.availability,
-        excludeAllDayEvents: rules.excludeAllDayEvents,
-        excludeAvailabilities: rules.excludeAvailabilities,
-        excludeFocusTime: rules.excludeFocusTime,
-        excludeOutOfOffice: rules.excludeOutOfOffice,
-        isAllDay: result.isAllDay,
-        sourceEventType: result.sourceEventType,
-        title: result.title,
-      },
-      rules.lowercasedTitleKeywords,
-    )) {
+    const rulePath = rulePaths.get(result.calendarId) ?? DIRECT_SOURCE_RULE_PATH;
+    const sourcePresentation = presentEvent(
+      result,
+      result.calendarName,
+      resolveSourceRules(result.calendarId, result),
+    );
+    const presentation = sourcePresentation
+      && presentEventThroughHops(result, sourcePresentation, rulePath.inheritedHops);
+    if (!presentation) {
       excludedBySyncPolicyCount += 1;
       if (result.recurrenceId) {
         excludedOverrides.push({
@@ -411,36 +528,24 @@ const getEventsForCalendarsWithDiagnostics = async (
       continue;
     }
 
-    const eventName = result.title ?? DEFAULT_EVENT_NAME;
-    const {calendarName} = result;
-    const template = rules.customEventName || DEFAULT_EVENT_NAME_TEMPLATE;
-
-    let summary = eventName;
-    if (rules.excludeEventName) {
-      summary = resolveEventNameTemplate(template, {
-        calendar_name: calendarName,
-        event_name: eventName,
-      });
-    }
-
     syncableEvents.push({
       calendarId: result.calendarId,
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
       availability: parseAvailability(result.availability),
-      description: excludeOrAbsent(rules.excludeEventDescription, result.description),
+      description: presentation.description,
       endTime: result.endTime,
       eventStateId: result.id,
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
-      isPrivate: trueOrAbsent(rules.markEventsAsPrivate),
-      remindersDisabled: trueOrAbsent(rules.disableEventReminders),
-      location: excludeOrAbsent(rules.excludeEventLocation, result.location),
+      isPrivate: presentation.isPrivate,
+      remindersDisabled: presentation.remindersDisabled,
+      location: presentation.location,
       ...recurrence,
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
       startTimeZone: orAbsent(result.startTimeZone),
-      summary,
+      summary: presentation.summary,
     });
   }
 
@@ -496,7 +601,8 @@ const getEventsForDestination = async (
   destinationCalendarId: string,
   syncWindow: SyncWindow,
 ): Promise<MaterializedSyncableEvent[]> => {
-  const sourceCalendarIds = await getMappedSourceCalendarIds(database, destinationCalendarId);
+  const sources = await getEffectiveSourcesForDestination(database, destinationCalendarId);
+  const sourceCalendarIds = sources.map((source) => source.sourceCalendarId);
 
   if (sourceCalendarIds.length === EMPTY_SOURCES_COUNT) {
     return [];
@@ -515,7 +621,6 @@ export {
   getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,
-  getMappedSourceCalendarIds,
   isEventInDestinationReconciliationWindow,
   shouldExcludeSyncEvent,
 };

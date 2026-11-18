@@ -248,7 +248,7 @@ describe("destination reconciliation source selection", () => {
       `${import.meta.dirname}/../../../src/core/events/events.ts`,
     ).text();
 
-    expect(source).toContain("getMappedSourceCalendarIds");
+    expect(source).toContain("getEffectiveSourcesForDestination");
     expect(source).not.toContain("unavailableSince");
   });
 });
