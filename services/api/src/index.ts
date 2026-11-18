@@ -13,6 +13,7 @@ import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
+import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
@@ -35,6 +36,7 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: async () => {
+    reportPrivateResolutionPolicy();
     const server = Bun.serve<BroadcastData>({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
