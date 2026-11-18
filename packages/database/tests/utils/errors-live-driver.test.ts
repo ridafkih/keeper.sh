@@ -155,11 +155,12 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
   it("classifies every in-flight query when the backend dies under concurrency", async () => {
     const database = trackedDatabase({ max: 4 });
     const killer = trackedDatabase();
+    const sleepQuery = `select pg_sleep(2) /* ${crypto.randomUUID()} */`;
 
     await database.execute(sql`select 1`);
     const inFlight = Array.from({ length: 8 }, async () => {
       try {
-        await database.execute(sql`select pg_sleep(2)`);
+        await database.execute(sql.raw(sleepQuery));
         return null;
       } catch (error) {
         return error;
@@ -168,7 +169,7 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     await Bun.sleep(250);
     await killer.execute(
       sql`select pg_terminate_backend(pid) from pg_stat_activity
-          where query like '%pg_sleep(2)%' and pid <> pg_backend_pid()`,
+          where query = ${sleepQuery} and state = 'active' and datname = current_database()`,
     );
 
     const settled = await Promise.all(inFlight);
