@@ -102,3 +102,50 @@ describe("loggedServerContext", () => {
     expect(loggedServerContext("40P01", context)).toBe(context);
   });
 });
+
+const PROMPT_MS = 1000;
+const SPACES = " ".repeat(100_000);
+const QUOTES = '"'.repeat(100_000);
+const OPENINGS = "(".repeat(100_000);
+const CLOSINGS = ")=(".repeat(100_000);
+
+const elapsed = (run: () => unknown): number => {
+  const startedAt = performance.now();
+  run();
+  return performance.now() - startedAt;
+};
+
+describe("long server text", () => {
+  it.each([
+    ["a run of spaces", SPACES],
+    ["a run of spaces before a quote", `invalid input syntax for type integer:${SPACES}"4111"`],
+    ["a run of spaces between quotes", `value "${SPACES}" is out of range`],
+    ["a run of quotes", QUOTES],
+    ["alternating spaces and quotes", ' "'.repeat(50_000)],
+  ])("reads a data exception message holding %s promptly", (_shape, message) => {
+    expect(elapsed(() => loggedServerMessage("22P02", message))).toBeLessThan(PROMPT_MS);
+  });
+
+  it.each([
+    ["a run of spaces", SPACES],
+    ["a key whose columns are a run of spaces", `Key (${SPACES}`],
+    ["a key whose columns are a run of openings", `Key (${OPENINGS}`],
+    ["a key with repeated value openings", `Key (${CLOSINGS}`],
+    ["a key whose value is a run of spaces", `Key (email)=(${SPACES}) already exists.`],
+    ["a key with a run of separators", `Key (id)=(${", ".repeat(50_000)}) already exists.`],
+  ])("reads a constraint detail holding %s promptly", (_shape, detail) => {
+    expect(elapsed(() => loggedServerDetail("23505", detail))).toBeLessThan(PROMPT_MS);
+  });
+
+  it("drops what follows the scanned length of a data exception message", () => {
+    const message = `invalid input syntax for type integer${SPACES}: "4111 1111"`;
+
+    expect(loggedServerMessage("22P02", message)).toBe("invalid input syntax for type integer");
+  });
+
+  it("names the key columns of a detail longer than the scanned length", () => {
+    const detail = `Key (email)=(${"a".repeat(100_000)}@example.com) already exists.`;
+
+    expect(loggedServerDetail("23505", detail)).toBe("Key (email)");
+  });
+});

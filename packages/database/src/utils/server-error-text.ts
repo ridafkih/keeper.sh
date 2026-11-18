@@ -1,14 +1,17 @@
 const DATA_EXCEPTION_CLASS = "22";
 const SERVER_STATE_CLASSES = new Set(["08", "25", "40", "53", "55", "57"]);
 
-const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
-const IDENTIFIER_KEY_DETAIL_PATTERN = new RegExp(
-  `^Key \\([^()]*\\)=\\(${UUID}(?:, ${UUID})*\\) [^()]*$`,
-  "i",
-);
-const KEY_DETAIL_PATTERN = /^Key \((?<columns>.*?)\)(?:=\(|$)/s;
+const MAX_SCANNED_LENGTH = 4096;
+
 const VALUE_QUOTE = '"';
 const TRAILING_VALUE_SEPARATOR = ":";
+
+const KEY_PREFIX = "Key (";
+const KEY_VALUES_OPENING = ")=(";
+const KEY_VALUES_CLOSING = ")";
+const KEY_VALUE_SEPARATOR = ", ";
+const GROUPING_CHARACTERS = ["(", ")"];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const readSqlStateClass = (sqlState: string | null): string | null => {
   if (sqlState === null) {
@@ -39,19 +42,56 @@ const loggedServerMessage = (sqlState: string | null, message: string): string =
   if (readSqlStateClass(sqlState) !== DATA_EXCEPTION_CLASS) {
     return message;
   }
-  const [condition = ""] = withoutQuotedSpan(message).split(TRAILING_VALUE_SEPARATOR);
+  const scanned = message.slice(0, MAX_SCANNED_LENGTH);
+  const [condition = ""] = withoutQuotedSpan(scanned).split(TRAILING_VALUE_SEPARATOR);
   return condition.trimEnd();
 };
 
-const loggedServerDetail = (sqlState: string | null, detail: string): string | null => {
-  if (describesServerState(sqlState) || IDENTIFIER_KEY_DETAIL_PATTERN.test(detail)) {
-    return detail;
+const hasGrouping = (text: string): boolean =>
+  GROUPING_CHARACTERS.some((character) => text.includes(character));
+
+const readKeyColumns = (detail: string): string | null => {
+  if (!detail.startsWith(KEY_PREFIX)) {
+    return null;
   }
-  const columns = KEY_DETAIL_PATTERN.exec(detail)?.groups?.columns;
-  if (typeof columns === "string") {
-    return `Key (${columns})`;
+  const valuesOpening = detail.indexOf(KEY_VALUES_OPENING);
+  if (valuesOpening !== -1) {
+    return detail.slice(KEY_PREFIX.length, valuesOpening);
+  }
+  if (detail.endsWith(KEY_VALUES_CLOSING)) {
+    return detail.slice(KEY_PREFIX.length, -KEY_VALUES_CLOSING.length);
   }
   return null;
+};
+
+const namesOnlyIdentifiers = (detail: string, columns: string): boolean => {
+  const valuesStart = KEY_PREFIX.length + columns.length + KEY_VALUES_OPENING.length;
+  const valuesEnd = detail.indexOf(KEY_VALUES_CLOSING, valuesStart);
+  if (valuesEnd === -1 || hasGrouping(columns) || hasGrouping(detail.slice(valuesEnd + 1))) {
+    return false;
+  }
+  return detail
+    .slice(valuesStart, valuesEnd)
+    .split(KEY_VALUE_SEPARATOR)
+    .every((value) => UUID_PATTERN.test(value));
+};
+
+const loggedKeyDetail = (detail: string): string | null => {
+  const columns = readKeyColumns(detail);
+  if (columns === null) {
+    return null;
+  }
+  if (detail.includes(KEY_VALUES_OPENING) && namesOnlyIdentifiers(detail, columns)) {
+    return detail;
+  }
+  return `${KEY_PREFIX}${columns}${KEY_VALUES_CLOSING}`;
+};
+
+const loggedServerDetail = (sqlState: string | null, detail: string): string | null => {
+  if (describesServerState(sqlState)) {
+    return detail;
+  }
+  return loggedKeyDetail(detail.slice(0, MAX_SCANNED_LENGTH));
 };
 
 const loggedServerContext = (sqlState: string | null, context: string): string | null => {
