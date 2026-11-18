@@ -184,9 +184,7 @@ const reportAggregateError = (scope: string, error: Error): void => {
 };
 
 const syncAggregateRuntime = createSyncAggregateRuntime({
-  broadcast: (broadcastUserId, eventName, payload) => {
-    broadcastService.emit(broadcastUserId, eventName, payload);
-  },
+  broadcast: (broadcastUserId, eventName, payload) => broadcastService.emit(broadcastUserId, eventName, payload),
   onError: reportAggregateError,
   persistSyncStatus,
   redis: refreshLockRedis,
@@ -195,9 +193,7 @@ const syncAggregateRuntime = createSyncAggregateRuntime({
 const noteEventsCopied = createEventsCopiedMilestone(database);
 
 const publishMappingSyncState = createMappingSyncStatePublisher({
-  broadcast: (broadcastUserId, eventName, payload) => {
-    broadcastService.emit(broadcastUserId, eventName, payload);
-  },
+  broadcast: (broadcastUserId, eventName, payload) => broadcastService.emit(broadcastUserId, eventName, payload),
   database,
   redis: refreshLockRedis,
 });

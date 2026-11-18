@@ -22,7 +22,7 @@ interface MappingSyncStateRedis {
 }
 
 interface MappingSyncStateConfig {
-  broadcast: (userId: string, eventName: string, data: MappingSyncState) => void;
+  broadcast: (userId: string, eventName: string, data: MappingSyncState) => Promise<void>;
   database: MappingSyncStateDatabase;
   redis: MappingSyncStateRedis;
 }
@@ -84,7 +84,7 @@ const createMappingSyncStateReader = (
 const createMappingSyncStatePublisher = (config: MappingSyncStateConfig) => {
   const readMappingSyncState = createMappingSyncStateReader(config);
   return async (userId: string): Promise<void> => {
-    config.broadcast(userId, MAPPING_SYNC_STATE_EVENT, await readMappingSyncState(userId));
+    await config.broadcast(userId, MAPPING_SYNC_STATE_EVENT, await readMappingSyncState(userId));
   };
 };
 

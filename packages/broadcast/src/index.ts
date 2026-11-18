@@ -18,7 +18,7 @@ interface BroadcastConfig {
 }
 
 interface BroadcastService {
-  emit: (userId: string, eventName: string, data: unknown) => void;
+  emit: (userId: string, eventName: string, data: unknown) => Promise<void>;
   startSubscriber: () => Promise<void>;
 }
 
@@ -40,9 +40,9 @@ const sendToUser = (userId: string, eventName: string, data: unknown): void => {
 const createBroadcastService = (config: BroadcastConfig): BroadcastService => {
   const { redis } = config;
 
-  const emit = (userId: string, eventName: string, data: unknown): void => {
+  const emit = async (userId: string, eventName: string, data: unknown): Promise<void> => {
     const message: BroadcastMessage = { data, event: eventName, userId };
-    redis.publish(CHANNEL, JSON.stringify(message));
+    await redis.publish(CHANNEL, JSON.stringify(message));
   };
 
   const startSubscriber = async (): Promise<void> => {

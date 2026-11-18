@@ -149,18 +149,15 @@ const reportSyncAggregateError = (scope: string, error: Error): void => {
 };
 
 const syncAggregateRuntime = createSyncAggregateRuntime({
-  broadcast: (userId, eventName, payload): void => {
-    broadcastService.emit(userId, eventName, payload);
-  },
+  broadcast: (userId, eventName, payload): Promise<void> => broadcastService.emit(userId, eventName, payload),
   onError: reportSyncAggregateError,
   persistSyncStatus,
   redis,
 });
 
 const mappingSyncStateConfig = {
-  broadcast: (userId: string, eventName: string, payload: unknown): void => {
-    broadcastService.emit(userId, eventName, payload);
-  },
+  broadcast: (userId: string, eventName: string, payload: unknown): Promise<void> =>
+    broadcastService.emit(userId, eventName, payload),
   database,
   redis,
 };

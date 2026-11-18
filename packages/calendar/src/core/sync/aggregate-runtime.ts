@@ -26,11 +26,11 @@ redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
 return 1
 `;
 
-type SyncAggregateErrorScope = "emit" | "emit-queue" | "cache-read";
+type SyncAggregateErrorScope = "emit" | "emit-queue" | "cache-read" | "broadcast";
 
 interface SyncAggregateRuntimeConfig {
   redis: Redis;
-  broadcast: (userId: string, eventName: string, data: unknown) => void;
+  broadcast: (userId: string, eventName: string, data: unknown) => Promise<void>;
   persistSyncStatus: (result: DestinationSyncResult, syncedAt: Date) => Promise<void>;
   onError: (scope: SyncAggregateErrorScope, error: Error) => void;
   tracker?: SyncAggregateTracker;
@@ -118,35 +118,44 @@ const createSyncAggregateRuntime = (config: SyncAggregateRuntimeConfig): SyncAgg
   const tracker = config.tracker ?? new SyncAggregateTracker();
   const emitQueueByUser = new Map<string, Promise<void>>();
 
+  const sequenceAggregate = async (
+    userId: string,
+    aggregate: SyncAggregateMessage,
+  ): Promise<SyncAggregateMessage> => {
+    const sequenceKey = getSyncAggregateSequenceKey(userId);
+    const sequence = await config.redis.incr(sequenceKey);
+    await config.redis.expire(sequenceKey, SYNC_TTL_SECONDS);
+
+    const payload: SyncAggregateMessage = {
+      ...aggregate,
+      emittedAt: new Date().toISOString(),
+      seq: sequence,
+    };
+
+    await config.redis.eval(
+      SET_LATEST_IF_NEWER_LUA,
+      1,
+      getSyncAggregateLatestKey(userId),
+      JSON.stringify(payload),
+      String(sequence),
+      String(SYNC_TTL_SECONDS),
+    );
+
+    return payload;
+  };
+
   const performEmit = async (
     userId: string,
     aggregate: SyncAggregateMessage,
   ): Promise<void> => {
-    try {
-      const sequenceKey = getSyncAggregateSequenceKey(userId);
-      const sequence = await config.redis.incr(sequenceKey);
-      await config.redis.expire(sequenceKey, SYNC_TTL_SECONDS);
-
-      const payload: SyncAggregateMessage = {
-        ...aggregate,
-        emittedAt: new Date().toISOString(),
-        seq: sequence,
-      };
-
-      await config.redis.eval(
-        SET_LATEST_IF_NEWER_LUA,
-        1,
-        getSyncAggregateLatestKey(userId),
-        JSON.stringify(payload),
-        String(sequence),
-        String(SYNC_TTL_SECONDS),
-      );
-
-      config.broadcast(userId, "sync:aggregate", payload);
-    } catch (error) {
+    const message = await sequenceAggregate(userId, aggregate).catch((error: unknown) => {
       config.onError("emit", toError(error));
-      config.broadcast(userId, "sync:aggregate", aggregate);
-    }
+      return aggregate;
+    });
+
+    await config.broadcast(userId, "sync:aggregate", message).catch((error: unknown) => {
+      config.onError("broadcast", toError(error));
+    });
   };
 
   const emitSyncAggregate = (

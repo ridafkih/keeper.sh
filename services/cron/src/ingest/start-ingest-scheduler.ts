@@ -145,9 +145,7 @@ const recordFirstIngestSyncRequests = async (userIds: string[]): Promise<void> =
 const broadcastService = createBroadcastService({ redis: refreshLockRedis });
 
 const publishMappingSyncState = createMappingSyncStatePublisher({
-  broadcast: (userId, eventName, payload) => {
-    broadcastService.emit(userId, eventName, payload);
-  },
+  broadcast: (userId, eventName, payload) => broadcastService.emit(userId, eventName, payload),
   database,
   redis: refreshLockRedis,
 });

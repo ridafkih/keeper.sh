@@ -99,8 +99,11 @@ const createMockRedis = (): Redis => {
 
 const ignoredCallbacks: unknown[] = [];
 
-const ignoreBroadcast = (userId: string, eventName: string, data: unknown): void => {
+const connectionClosed = (): Promise<never> => Promise.reject(new Error("Connection is closed."));
+
+const ignoreBroadcast = (userId: string, eventName: string, data: unknown): Promise<void> => {
   ignoredCallbacks.push({ data, eventName, userId });
+  return Promise.resolve();
 };
 
 const ignorePersistSyncStatus = (result: DestinationSyncResult, syncedAt: Date): Promise<void> => {
@@ -155,7 +158,10 @@ describe("createSyncAggregateRuntime", () => {
       const broadcasts: { userId: string; event: string; data: unknown }[] = [];
 
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
-        broadcast: (userId, event, data) => broadcasts.push({ data, event, userId }),
+        broadcast: (userId, event, data) => {
+          broadcasts.push({ data, event, userId });
+          return Promise.resolve();
+        },
       }));
 
       runtime.onSyncProgress(
@@ -182,7 +188,10 @@ describe("createSyncAggregateRuntime", () => {
       const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
 
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
-        broadcast: (userId, event, data) => broadcasts.push({ data, event, userId }),
+        broadcast: (userId, event, data) => {
+          broadcasts.push({ data, event, userId });
+          return Promise.resolve();
+        },
         persistSyncStatus: (result, syncedAt) => {
           persisted.push({ result, syncedAt });
           return Promise.resolve();
@@ -213,6 +222,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (userId, eventName, data) => {
           broadcasts.push({ data, eventName, userId });
+          return Promise.resolve();
         },
         persistSyncStatus: () => {
           persisted.push(true);
@@ -235,6 +245,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (_userId, _eventName, data) => {
           broadcasts.push({ data });
+          return Promise.resolve();
         },
         persistSyncStatus: () => {
           persisted.push(true);
@@ -265,6 +276,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (_userId, _eventName, data) => {
           broadcasts.push({ data });
+          return Promise.resolve();
         },
         persistSyncStatus: () => Promise.reject(new Error("database down")),
         tracker,
@@ -488,6 +500,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (userId, eventName, data) => {
           broadcasts.push({ data, eventName, userId });
+          return Promise.resolve();
         },
         redis,
       }));
@@ -526,6 +539,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (userId, eventName, data) => {
           broadcasts.push({ data, eventName, userId });
+          return Promise.resolve();
         },
         redis,
       }));
@@ -585,6 +599,7 @@ describe("createSyncAggregateRuntime", () => {
       const runtime = createSyncAggregateRuntime(createRuntimeConfig({
         broadcast: (userId, eventName, data) => {
           broadcasts.push({ data, eventName, userId });
+          return Promise.resolve();
         },
         onError: (scope, error) => {
           reportedErrors.push({ error, scope });
@@ -619,6 +634,27 @@ describe("createSyncAggregateRuntime", () => {
       }
       expect(firstError.scope).toBe("emit");
       expect(firstError.error.message).toBe("redis down");
+    });
+
+    it("reports a broadcast on a closed connection instead of rejecting", async () => {
+      const reportedErrors: { scope: string; error: Error }[] = [];
+      const closedRedis = createMockRedis();
+      closedRedis.incr = connectionClosed satisfies typeof closedRedis.incr;
+
+      const runtime = createSyncAggregateRuntime(createRuntimeConfig({
+        broadcast: connectionClosed,
+        onError: (scope, error) => {
+          reportedErrors.push({ error, scope });
+        },
+        redis: closedRedis,
+      }));
+
+      await expect(runtime.releaseSyncing("user-1")).resolves.toBeUndefined();
+
+      expect(reportedErrors.map(({ scope, error }) => [scope, error.message])).toEqual([
+        ["emit", "Connection is closed."],
+        ["broadcast", "Connection is closed."],
+      ]);
     });
   });
 });
