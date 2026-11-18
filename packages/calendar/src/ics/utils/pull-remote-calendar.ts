@@ -1,3 +1,4 @@
+import { BYTES_PER_MEBIBYTE, ResponseTooLargeError } from "../../utils/bounded-response";
 import { createSafeFetch } from "../../utils/safe-fetch";
 import type { SafeFetchOptions } from "../../utils/safe-fetch";
 import { coerceCompliantDate } from "../patches/coerce-compliant-date";
@@ -18,9 +19,11 @@ type CalendarFetchFailureReason =
   | "not_found"
   | "not_ical"
   | "partial_response"
+  | "too_large"
   | "truncated";
 
 interface CalendarFetchErrorDetails {
+  cause?: unknown;
   reason: CalendarFetchFailureReason;
   statusCode?: number;
 }
@@ -31,7 +34,7 @@ class CalendarFetchError extends Error {
   public readonly authRequired: boolean;
 
   constructor(message: string, details: CalendarFetchErrorDetails) {
-    super(message);
+    super(message, { cause: details.cause });
     this.name = "CalendarFetchError";
     this.reason = details.reason;
     this.statusCode = details.statusCode;
@@ -62,6 +65,9 @@ const ICS_USER_AGENT = "Keeper/1.0 (+https://www.keeper.sh)";
 
 const HTTP_STATUS_PARTIAL_CONTENT = 206;
 
+const MAX_ICS_FEED_MEBIBYTES = 25;
+const MAX_ICS_FEED_BYTES = MAX_ICS_FEED_MEBIBYTES * BYTES_PER_MEBIBYTE;
+
 const CALENDAR_END_PATTERN = /(?:^|[\r\n])END:VCALENDAR[ \t]*(?:[\r\n]|$)/i;
 
 const assertCalendarBodyComplete = (ical: string): void => {
@@ -73,9 +79,23 @@ const assertCalendarBodyComplete = (ical: string): void => {
   }
 };
 
+const readFeedBody = async (response: Response): Promise<string> => {
+  try {
+    return await response.text();
+  } catch (error) {
+    if (error instanceof ResponseTooLargeError) {
+      throw new CalendarFetchError(
+        `Calendar feed is too large. Feeds up to ${MAX_ICS_FEED_MEBIBYTES} MB are supported.`,
+        { cause: error, reason: "too_large" },
+      );
+    }
+    throw error;
+  }
+};
+
 const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise<string> => {
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
-  const safeFetch = createSafeFetch(options);
+  const safeFetch = createSafeFetch({ maxResponseBytes: MAX_ICS_FEED_BYTES, ...options });
   const response = await safeFetch(cleanUrl, {
     headers: { "User-Agent": ICS_USER_AGENT, ...headers },
   });
@@ -109,7 +129,7 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
     );
   }
 
-  return response.text();
+  return readFeedBody(response);
 };
 
 type ParsedCalendarResult = ReturnType<typeof parseIcsCalendarLenient>;
@@ -170,5 +190,5 @@ async function pullRemoteCalendar(
   return { ical, json };
 }
 
-export { CalendarFetchError, pullRemoteCalendar };
+export { CalendarFetchError, MAX_ICS_FEED_BYTES, pullRemoteCalendar };
 export type { CalendarFetchFailureReason };

@@ -1,5 +1,6 @@
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ResponseTooLargeError } from "@keeper.sh/calendar/safe-fetch";
 
 interface WideEvent {
   fields: Record<string, unknown>;
@@ -281,5 +282,44 @@ describe("caldav ingest labelling of database failures the pool classifier does 
     });
 
     expect(sourceEvent().fields.slug).toBe("provider-api-error");
+  });
+});
+
+describe("caldav ingest of a response over the size limit", () => {
+  beforeEach(() => {
+    emitted.length = 0;
+    updates.length = 0;
+    current = { fields: {}, values: {} };
+  });
+
+  it("labels the failure as an oversized provider response", async () => {
+    await runTick(() => {
+      throw new ResponseTooLargeError(1024);
+    });
+
+    expect(sourceEvent().fields).toMatchObject({
+      retriable: true,
+      slug: "provider-response-too-large",
+    });
+  });
+
+  it("backs the calendar off instead of retrying it on the next round", async () => {
+    ingestOutcome = () => {
+      throw new ResponseTooLargeError(1024);
+    };
+
+    const { outcomes } = await runIngestPass();
+
+    expect(outcomes).toEqual([
+      { calendarId: "calendar-1", outcome: { backoff: true, kind: "failed" } },
+    ]);
+  });
+
+  it("does not ask the account to re-authenticate", async () => {
+    await runTick(() => {
+      throw new ResponseTooLargeError(1024);
+    });
+
+    expect(updates.some((values) => values.needsReauthentication === true)).toBe(false);
   });
 });

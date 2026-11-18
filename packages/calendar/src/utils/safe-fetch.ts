@@ -3,6 +3,7 @@ import ipaddr from "ipaddr.js";
 import { getDomain } from "tldts";
 import { RequestTimeoutError, buildTimeoutSignal } from "../core/utils/fetch-with-timeout";
 import type { TimeoutSignal } from "../core/utils/fetch-with-timeout";
+import { DEFAULT_MAX_RESPONSE_BYTES, limitResponseBody, ResponseTooLargeError } from "./bounded-response";
 
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
@@ -13,6 +14,7 @@ const SITE_BOUNDARY_OPTIONS = { allowPrivateDomains: true };
 interface SafeFetchOptions {
   blockPrivateResolution?: boolean;
   allowedPrivateHosts?: Set<string>;
+  maxResponseBytes?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -293,6 +295,15 @@ const markWithheldCredentials = (response: Response, redirectedTo: string): Resp
 const getWithheldCredentials = (response: Response): WithheldCredentials | null =>
   (Reflect.get(response, WITHHELD_CREDENTIALS) as WithheldCredentials | undefined) ?? null;
 
+const limitResponse = (response: Response, options: SafeFetchOptions | undefined): Response => {
+  const limited = limitResponseBody(response, options?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES);
+  const withheld = getWithheldCredentials(response);
+  if (!withheld || limited === response) {
+    return limited;
+  }
+  return markWithheldCredentials(limited, withheld.redirectedTo);
+};
+
 const isStaleSocketError = (error: unknown): boolean => error instanceof Error && "code" in error && error.code === STALE_SOCKET_ERROR_CODE;
 
 const isReplayableBody = (body: RequestInit["body"]): boolean => !body || typeof body === "string" || body instanceof URLSearchParams || body instanceof Blob || body instanceof ArrayBuffer || ArrayBuffer.isView(body);
@@ -498,15 +509,15 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
       const response = await performFetch(input, { ...init, redirect: "manual", signal }, headers, connection);
 
       if (!isRedirect(response)) {
-        return response;
+        return limitResponse(response, options);
       }
 
       if (callerWantsManual) {
         assertManualRedirectKeepsCredentials(url, response);
-        return response;
+        return limitResponse(response, options);
       }
 
-      return await followRedirects(url, response, init, headers, options, signal);
+      return limitResponse(await followRedirects(url, response, init, headers, options, signal), options);
     } catch (error) {
       if (timeout?.isTimeout() && options?.timeoutMs) {
         throw new RequestTimeoutError(options.timeoutMs);
@@ -515,5 +526,12 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
     }
   };
 
-export { createSafeFetch, getWithheldCredentials, UrlSafetyError, validateUrlSafety };
+export {
+  createSafeFetch,
+  DEFAULT_MAX_RESPONSE_BYTES,
+  getWithheldCredentials,
+  ResponseTooLargeError,
+  UrlSafetyError,
+  validateUrlSafety,
+};
 export type { SafeFetchOptions, WithheldCredentials };

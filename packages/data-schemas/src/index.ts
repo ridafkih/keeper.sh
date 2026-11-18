@@ -6,7 +6,9 @@ type ProxyableMethods = typeof proxyableMethods.infer;
 
 const planSchema = type("'free' | 'pro'");
 
-const icsFeedFailureReasonSchema = type("'auth-required' | 'not-found' | 'not-calendar' | 'unreachable'");
+const icsFeedFailureReasonSchema = type(
+  "'auth-required' | 'not-found' | 'not-calendar' | 'too-large' | 'unreachable'",
+);
 const oauthConnectFailureReasonSchema = type(
   "'access-declined' | 'admin-approval-required' | 'expired' | 'no-mailbox' | 'unknown'",
 );

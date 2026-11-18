@@ -8,6 +8,7 @@ import {
   buildCalendarObjectFilters,
   CALDAV_MULTIGET_BATCH_SIZE,
   isCalendarObjectPath,
+  MAX_CALDAV_RESPONSE_BYTES,
 } from "./api";
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
@@ -249,7 +250,10 @@ class CalDAVClient {
 
   private async getClient(): Promise<DAVClientInstance> {
     if (!this.client) {
-      const safeFetch = createSafeFetch(this.safeFetchOptions);
+      const safeFetch = createSafeFetch({
+        maxResponseBytes: MAX_CALDAV_RESPONSE_BYTES,
+        ...this.safeFetchOptions,
+      });
       const chargedFetch: typeof safeFetch = (input, init) => fetchHonouringRetryAfter(
         async (attempt) => {
           await this.chargeRequest();
