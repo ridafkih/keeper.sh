@@ -10,9 +10,12 @@ import type {
 import { hasPushEchoDivergence } from "../events/push-echo";
 import type { EventMapping } from "../events/mappings";
 import { getDatabaseErrorDetails } from "@keeper.sh/database";
+import { EVENT_OWNER_BACKFILL_PER_RUN } from "@keeper.sh/constants";
 import type { SyncProgressUpdate } from "../sync/types";
 import { createSyncEventContentHash } from "../events/content-hash";
-import { computeSyncOperations } from "../sync/operations";
+import { computeSyncOperations, matchRemoteEventsToMappings } from "../sync/operations";
+import { buildOwnershipScope, selectOwnerTagBackfill } from "../sync/event-ownership";
+import type { OwnershipScope } from "../sync/event-ownership";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
 import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
@@ -83,7 +86,14 @@ const createTimedProvider = (
   provider: CalendarSyncProvider,
   timer: ReturnType<typeof createPhaseTimer>,
 ): CalendarSyncProvider => {
-  const { getSyncDiagnostics, getThrottleMetrics, updateEvents } = provider;
+  const {
+    claimEvents,
+    deriveEventUids,
+    getSyncDiagnostics,
+    getThrottleMetrics,
+    ownerTag,
+    updateEvents,
+  } = provider;
   return {
     deleteEvents: (eventIds) => timer.measure("provider_delete", () => provider.deleteEvents(eventIds)),
     listRemoteEvents: (options) => provider.listRemoteEvents(options),
@@ -91,6 +101,9 @@ const createTimedProvider = (
     ...(updateEvents && { updateEvents: (updates: EventUpdate[]) => timer.measure("provider_push", () => updateEvents(updates)) }),
     ...(getSyncDiagnostics && { getSyncDiagnostics: () => getSyncDiagnostics() }),
     ...(getThrottleMetrics && { getThrottleMetrics: () => getThrottleMetrics() }),
+    ...(claimEvents && { claimEvents: (updates: EventUpdate[]) => timer.measure("provider_push", () => claimEvents(updates)) }),
+    ...(deriveEventUids && { deriveEventUids }),
+    ...(ownerTag && { ownerTag }),
   };
 };
 
@@ -970,6 +983,48 @@ const appendProviderDiagnostics = (
   }
 };
 
+const withOwnership = (
+  scope: ReconciliationScope,
+  ownership: OwnershipScope | null,
+): ReconciliationScope => {
+  if (!ownership) {
+    return scope;
+  }
+  return { ...scope, ownership };
+};
+
+interface ClaimUntaggedMirrorsInput {
+  excludedMappingIds: ReadonlySet<string>;
+  localEvents: MaterializedSyncableEvent[];
+  mappings: EventMapping[];
+  provider: CalendarSyncProvider;
+  remoteEvents: RemoteEvent[];
+  wideEvent: Record<string, unknown>;
+}
+
+const claimUntaggedMirrors = async (input: ClaimUntaggedMirrorsInput): Promise<void> => {
+  const { ownerTag, claimEvents } = input.provider;
+  if (!ownerTag || !claimEvents) {
+    return;
+  }
+  const updates = selectOwnerTagBackfill({
+    excludedMappingIds: input.excludedMappingIds,
+    limit: EVENT_OWNER_BACKFILL_PER_RUN,
+    localEventsById: new Map(input.localEvents.map((event) => [event.id, event])),
+    mappings: input.mappings,
+    ownerTag,
+    remoteEvents: input.remoteEvents,
+    remoteEventsByMappingId: matchRemoteEventsToMappings(input.mappings, input.remoteEvents),
+  });
+  if (updates.length === 0) {
+    return;
+  }
+  const results = await claimEvents(updates);
+  const claimed = results.filter((result) => result.success).length;
+  input.wideEvent["owner_tag.claimed_count"] = claimed;
+  input.wideEvent["owner_tag.claim_failed_count"] = results.length - claimed;
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -1041,8 +1096,25 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       localEvents,
       state.existingMappings,
       state.remoteEvents,
-      reconciliationScope,
+      withOwnership(reconciliationScope, buildOwnershipScope(provider, localEvents)),
     ));
+
+    await claimUntaggedMirrors({
+      excludedMappingIds: new Set([
+        ...staleMappingIds,
+        ...operations.flatMap((operation) => {
+          if (operation.type === "remove" && operation.mappingId) {
+            return [operation.mappingId];
+          }
+          return [];
+        }),
+      ]),
+      localEvents,
+      mappings: state.existingMappings,
+      provider: timedProvider,
+      remoteEvents: state.remoteEvents,
+      wideEvent,
+    });
 
     const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;
     const removeCount = operations.filter((op) => op.type === "remove" || op.type === "replace").length;

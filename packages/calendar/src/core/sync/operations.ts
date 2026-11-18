@@ -11,12 +11,15 @@ import {
 } from "../events/content-hash";
 import { overlapsTimeWindow } from "../events/time-range";
 import type { SyncWindow } from "./sync-range";
+import { isOwnedOrphan } from "./event-ownership";
+import type { OwnershipScope } from "./event-ownership";
 
 interface ReconciliationScope {
   authoritativeMappingIds?: ReadonlySet<string>;
   authoritativeWindow: SyncWindow | null;
   authoritativeSourceWindows?: ReadonlyMap<string, SyncWindow>;
   configuredSourceCalendarIds?: ReadonlySet<string>;
+  ownership?: OwnershipScope;
   requestedWindow: SyncWindow;
   withheldSourceEventStateIds?: ReadonlySet<string>;
 }
@@ -601,6 +604,10 @@ const buildRemoveOperations = (
     }
 
     if (!remoteEvent.isKeeperEvent) {
+      continue;
+    }
+
+    if (!isOwnedOrphan(remoteEvent, scope.ownership)) {
       continue;
     }
 

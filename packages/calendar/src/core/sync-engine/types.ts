@@ -23,6 +23,12 @@ interface CalendarSyncProvider {
   getThrottleMetrics?: () => ProviderThrottleMetrics;
   getSyncDiagnostics?: () => Record<string, number | string>;
   verifyEventsExist?: (deleteIds: string[]) => Promise<RemoteEvent[]>;
+  /** The tag this destination writes on its events; see RemoteEvent.ownerTag. */
+  ownerTag?: string;
+  /** Every UID this destination could have given the event, current scheme first. */
+  deriveEventUids?: (event: MaterializedSyncableEvent) => string[];
+  /** Writes this destination's tag onto events it already mirrors, leaving their content as is. */
+  claimEvents?: (updates: EventUpdate[]) => Promise<PushResult[]>;
 }
 
 interface PendingInsert {

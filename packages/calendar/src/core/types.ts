@@ -148,6 +148,11 @@ interface RemoteEvent {
   startTime: Date;
   endTime: Date;
   isKeeperEvent: boolean;
+  /**
+   * The destination calendar id the event was tagged with when Keeper.sh wrote it, null when it
+   * carries no tag, and absent when the provider does not tag the events it writes.
+   */
+  ownerTag?: string | null;
   editableContent?: EditableEventContentSnapshot;
   editableContentHash?: string;
   editableAvailability?: EventAvailability;
