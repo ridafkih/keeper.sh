@@ -1043,6 +1043,7 @@ const syncDestinationsForUser = async (
                       lockedDatabase,
                       [...authoritativeSourceWindows.keys()],
                       localReadWindow,
+                      { destinationCalendarId: destination.calendarId },
                     );
                     eventReadDiagnostics = eventRead.diagnostics;
                     localEvents.push(...eventRead.events);
