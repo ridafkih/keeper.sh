@@ -19,6 +19,7 @@ export type { Keyring, KeyringOptions } from "./keyring";
 export {
   SecretDecryptionError,
   SecretEncryptionError,
+  hasStoredSecret,
   openSecret,
   readStoredSecret,
   sealSecret,

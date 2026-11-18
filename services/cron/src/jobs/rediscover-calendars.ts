@@ -29,7 +29,12 @@ import {
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import { buildImportedCalendarExists, hasEncryptionKey, openSecret } from "@keeper.sh/database";
+import {
+  buildImportedCalendarExists,
+  hasEncryptionKey,
+  hasStoredSecret,
+  openSecret,
+} from "@keeper.sh/database";
 import type { StoredSecret } from "@keeper.sh/database";
 import {
   caldavCredentialsTable,
@@ -146,8 +151,12 @@ const discoverOAuthCalendars = async (
   account: RediscoveryAccount,
   signal: AbortSignal,
 ): Promise<DiscoveredCalendar[]> => {
-  if (!account.oauthCredentialId || !account.accessToken
-    || !account.refreshToken || !account.expiresAt) {
+  if (
+    !account.oauthCredentialId
+    || !hasStoredSecret(account.accessToken)
+    || !hasStoredSecret(account.refreshToken)
+    || !account.expiresAt
+  ) {
     throw new Error(`Calendar account ${account.accountId} has no OAuth credential`);
   }
 
@@ -207,7 +216,7 @@ const discoverCalDAVCalendars = async (
     !account.caldavCredentialId
     || !account.serverUrl
     || !account.username
-    || !account.encryptedPassword
+    || !hasStoredSecret(account.encryptedPassword)
   ) {
     throw new Error(`Calendar account ${account.accountId} has no CalDAV credential`);
   }

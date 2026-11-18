@@ -87,6 +87,10 @@ const readStoredSecret = <Purpose extends SecretPurpose>(
 
 const storedSecretValue = (secret: StoredSecret): string => secret.stored;
 
+const hasStoredSecret = <Secret extends StoredSecret>(
+  secret?: Secret | null,
+): secret is Secret => typeof secret?.stored === "string" && secret.stored.length > 0;
+
 const isSecretVersioned = (secret: StoredSecret): boolean =>
   secret.stored.startsWith(ENCRYPTED_SECRET_PREFIX);
 
@@ -314,6 +318,7 @@ export {
   SecretDecryptionError,
   SecretEncryptionError,
   encryptSecret,
+  hasStoredSecret,
   isSecretVersioned,
   openSecret,
   readSecretKeyId,

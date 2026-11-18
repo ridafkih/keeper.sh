@@ -7,6 +7,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq } from "drizzle-orm";
+import { hasStoredSecret } from "@keeper.sh/database";
 import type { StoredSecret } from "@keeper.sh/database";
 import type { KeeperDatabase } from "@/types";
 import type { ProviderCredentials } from "@/types";
@@ -60,7 +61,12 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
     email: row.email,
   };
 
-  if (row.oauthCredentialId && row.oauthAccessToken && row.oauthRefreshToken && row.oauthExpiresAt) {
+  if (
+    row.oauthCredentialId
+    && hasStoredSecret(row.oauthAccessToken)
+    && hasStoredSecret(row.oauthRefreshToken)
+    && row.oauthExpiresAt
+  ) {
     credentials.oauth = {
       credentialId: row.oauthCredentialId,
       accessToken: row.oauthAccessToken,
@@ -73,7 +79,7 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
     row.caldavCredentialId
     && row.caldavServerUrl
     && row.caldavUsername
-    && row.caldavEncryptedPassword
+    && hasStoredSecret(row.caldavEncryptedPassword)
   ) {
     credentials.caldav = {
       authMethod: row.caldavAuthMethod ?? "basic",

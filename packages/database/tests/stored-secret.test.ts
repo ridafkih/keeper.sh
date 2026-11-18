@@ -6,6 +6,7 @@ import {
   SecretDecryptionError,
   SecretEncryptionError,
   encryptSecret,
+  hasStoredSecret,
   isSecretVersioned,
   openSecret,
   readSecretKeyId,
@@ -478,6 +479,17 @@ describe("stored secret handling", () => {
     expect(JSON.stringify([stored])).not.toContain(ACCESS_TOKEN);
     expect(`${String(stored)}`).not.toContain(ACCESS_TOKEN);
     expect(Bun.inspect({ stored })).not.toContain(ACCESS_TOKEN);
+  });
+
+  it("treats an empty stored value as absent", () => {
+    const empty = readStoredSecret("oauth_credentials.accessToken", "");
+    const present = readStoredSecret("oauth_credentials.accessToken", ACCESS_TOKEN);
+
+    expect(Boolean(empty)).toBe(true);
+    expect(hasStoredSecret(empty)).toBe(false);
+    expect(hasStoredSecret(present)).toBe(true);
+    expect(hasStoredSecret(null)).toBe(false);
+    expect(hasStoredSecret()).toBe(false);
   });
 
   it("does not put secret material in error messages", () => {
