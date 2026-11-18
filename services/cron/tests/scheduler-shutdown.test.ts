@@ -51,6 +51,10 @@ vi.mock("../src/utils/logging", () => ({
   },
 }));
 
+vi.mock("../src/utils/safe-fetch-options", () => ({
+  reportPrivateResolutionPolicy: (): null => null,
+}));
+
 vi.mock("../src/utils/get-jobs", () => ({
   getAllJobs: (): Promise<unknown[]> =>
     Promise.resolve([
