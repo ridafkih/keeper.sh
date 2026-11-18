@@ -9,6 +9,7 @@ const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
 const MAX_REDIRECTS = 10;
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 const STALE_SOCKET_ERROR_CODE = "ECONNRESET";
+const NO_ROUTE_ERROR_CODE = "ENETUNREACH";
 const SITE_BOUNDARY_OPTIONS = { allowPrivateDomains: true };
 
 interface SafeFetchOptions {
@@ -368,13 +369,23 @@ const isTransportFailure = (error: unknown): boolean => {
   return "code" in error && typeof error.code === "string";
 };
 
+const hasNoRouteToNetwork = (error: unknown): boolean =>
+  error instanceof Error && "code" in error && error.code === NO_ROUTE_ERROR_CODE;
+
+const failureToReport = (earlier: unknown, latest: unknown): unknown => {
+  if (earlier !== null && hasNoRouteToNetwork(latest)) {
+    return earlier;
+  }
+  return latest;
+};
+
 const fetchPinned = async (
   input: string | Request | URL,
   init: BunFetchRequestInit,
   headers: Record<string, string>,
   connection: PinnedConnection,
 ): Promise<Response> => {
-  let lastError: unknown = new UrlSafetyError("The provided URL could not be resolved to any IP address.");
+  let failure: unknown = null;
 
   for (const url of connection.urls) {
     const request = buildPinnedRequest(input, init, headers, connection, url);
@@ -384,11 +395,11 @@ const fetchPinned = async (
       if (!isTransportFailure(error) || !isReplayableRequest(input, init)) {
         throw error;
       }
-      lastError = error;
+      failure = failureToReport(failure, error);
     }
   }
 
-  throw lastError;
+  throw failure ?? new UrlSafetyError("The provided URL could not be resolved to any IP address.");
 };
 
 const performFetch = (
