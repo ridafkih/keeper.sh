@@ -22,6 +22,7 @@ import {
   eventToICalString,
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
+  readEventOwnerTag,
 } from "../shared/ics";
 import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
@@ -35,6 +36,7 @@ const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as c
 
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
+  calendarId: string;
   calendarUrl: string;
   serverUrl: string;
   username: string;
@@ -187,7 +189,11 @@ const parseCalendarObjectEvents = (data: string): ParsedCalendarEvent[] => {
   return resources.events;
 };
 
-const toCalDAVRemoteEvent = (parsed: ParsedCalendarEvent, objectPath: string): RemoteEvent => {
+const toCalDAVRemoteEvent = (
+  parsed: ParsedCalendarEvent,
+  objectPath: string,
+  ownerTag: string | null,
+): RemoteEvent => {
   const editableContent = createEditableEventContentSnapshot({
     availability: parsed.availability,
     description: parsed.description,
@@ -203,6 +209,7 @@ const toCalDAVRemoteEvent = (parsed: ParsedCalendarEvent, objectPath: string): R
     editableAvailability: parsed.availability,
     editableContent,
     editableContentHash: hashEditableEventContentSnapshot(editableContent),
+    ownerTag,
     supportedAvailabilities: ["busy", "free"],
   };
 };
@@ -266,7 +273,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
             const uid = toDestinationEventUid(event);
-            const iCalString = eventToICalString(event, uid);
+            const iCalString = eventToICalString(event, uid, config.calendarId);
 
             try {
               await client.createCalendarObject({
@@ -339,7 +346,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
             const { objectUrl, uid } = resolveUpdateTarget(deleteId, event);
 
             await client.updateCalendarObjectByUrl({
-              iCalString: eventToICalString(event, uid),
+              iCalString: eventToICalString(event, uid, config.calendarId),
               objectUrl,
             });
 
@@ -436,6 +443,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     });
     for (const { data, url } of keeperObjects) {
       const objectPath = new URL(url, calendarUrl).pathname;
+      const ownerTag = readEventOwnerTag(data);
       for (const parsed of parseCalendarObjectEvents(data)) {
         const beyondHorizon = parsed.startTime > options.timeMax;
         if (
@@ -446,7 +454,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           continue;
         }
 
-        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath));
+        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath, ownerTag));
       }
     }
 
@@ -470,11 +478,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         continue;
       }
       const objectPath = new URL(url, calendarUrl).pathname;
+      const ownerTag = readEventOwnerTag(data);
       for (const parsed of parseCalendarObjectEvents(data)) {
         if (!isKeeperEvent(parsed.uid)) {
           continue;
         }
-        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath));
+        remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath, ownerTag));
       }
     }
 
@@ -482,6 +491,9 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
 
   return {
+    claimEvents: updateEvents,
+    deriveEventUids: toOwnedEventUids,
+    ownerTag: config.calendarId,
     pushEvents,
     updateEvents,
     deleteEvents,

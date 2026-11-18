@@ -63,6 +63,7 @@ const legacyUid = generateDeterministicEventUid(event.id);
 
 const createProvider = (calendarUrl: string) =>
   createCalDAVSyncProvider({
+    calendarId: "destination-calendar-id",
     authMethod: "basic",
     calendarUrl,
     password: "password",

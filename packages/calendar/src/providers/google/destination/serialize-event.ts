@@ -1,4 +1,5 @@
 import type { GoogleEvent } from "@keeper.sh/data-schemas";
+import { EVENT_OWNER_GOOGLE_PROPERTY } from "@keeper.sh/constants";
 import type { MaterializedSyncableEvent } from "../../../core/types";
 import { resolveIsAllDayEvent } from "../../../core/events/all-day";
 import { normalizeGoogleEvent } from "./normalize-event";
@@ -20,6 +21,13 @@ const canSerializeGoogleEvent = (event: MaterializedSyncableEvent): boolean => {
 
   return true;
 };
+
+const buildOwnerProperties = (ownerTag: string): NonNullable<GoogleEvent["extendedProperties"]> => ({
+  private: { [EVENT_OWNER_GOOGLE_PROPERTY]: ownerTag },
+});
+
+const readOwnerTag = (event: GoogleEvent): string | null =>
+  event.extendedProperties?.private?.[EVENT_OWNER_GOOGLE_PROPERTY] ?? null;
 
 const serializeGoogleEvent = (
   event: MaterializedSyncableEvent,
@@ -45,4 +53,4 @@ const serializeGoogleEvent = (
   };
 };
 
-export { canSerializeGoogleEvent, serializeGoogleEvent };
+export { buildOwnerProperties, canSerializeGoogleEvent, readOwnerTag, serializeGoogleEvent };

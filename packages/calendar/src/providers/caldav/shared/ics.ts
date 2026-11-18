@@ -1,4 +1,5 @@
-import { generateIcsCalendar } from "ts-ics";
+import { convertIcsCalendar, generateIcsCalendar } from "ts-ics";
+import { EVENT_OWNER_ICS_PROPERTY } from "@keeper.sh/constants";
 import {
   applyCalendarTimeZoneToFloatingEventDates,
   buildVtimezone,
@@ -47,7 +48,37 @@ const resolveEventTimezones = (
   return [timezone];
 };
 
-const eventToICalString = (event: MaterializedSyncableEvent, uid: string): string => {
+interface EventOwnerValues {
+  owner: string;
+}
+
+const EVENT_OWNER_NON_STANDARD = {
+  owner: {
+    convert: (line: { value: string }) => line.value,
+    generate: (value: string) => ({ value }),
+    name: EVENT_OWNER_ICS_PROPERTY,
+  },
+} as const;
+
+const readEventOwnerTag = (icsString: string): string | null => {
+  const calendar = convertIcsCalendar<EventOwnerValues>(globalThis.undefined, icsString, {
+    nonStandard: EVENT_OWNER_NON_STANDARD,
+  });
+  const owners = new Set(
+    (calendar.events ?? []).map((event) => event.nonStandard?.owner ?? null),
+  );
+  if (owners.size !== 1) {
+    return null;
+  }
+  const [owner] = owners;
+  return owner ?? null;
+};
+
+const eventToICalString = (
+  event: MaterializedSyncableEvent,
+  uid: string,
+  ownerTag?: string,
+): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const timezones = resolveEventTimezones(event, isAllDay);
   const icsEvent: IcsEvent = {
@@ -60,6 +91,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
     ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
+    ...(ownerTag && { nonStandard: { owner: ownerTag } }),
   };
 
   const calendar: IcsCalendar = {
@@ -69,7 +101,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     ...(timezones.length > 0 && { timezones }),
   };
 
-  return generateIcsCalendar(calendar);
+  return generateIcsCalendar<EventOwnerValues>(calendar, { nonStandard: EVENT_OWNER_NON_STANDARD });
 };
 
 interface ParsedCalendarEvent {
@@ -279,5 +311,6 @@ export {
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
   parseICalToRemoteEvents,
+  readEventOwnerTag,
 };
 export type { ParsedCalendarEvent, ParseICalCalendarsOptions, ParsedCalendarResources };

@@ -67,6 +67,7 @@ const destinationUid = (eventId: string): string =>
 
 const createProvider = () =>
   createCalDAVSyncProvider({
+    calendarId: "destination-calendar-id",
     calendarUrl: "https://caldav.example.com/calendar/",
     password: "pass",
     serverUrl: "https://caldav.example.com",

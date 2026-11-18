@@ -30,7 +30,8 @@ import {
 import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
-import { serializeGoogleEvent } from "./serialize-event";
+import { buildOwnerProperties, readOwnerTag, serializeGoogleEvent } from "./serialize-event";
+import type { EventUpdate } from "../../../core/sync-engine/types";
 import {
   createEditableEventContentSnapshot,
   hashEditableEventContentSnapshot,
@@ -118,6 +119,7 @@ const toGoogleRemoteEvent = (event: GoogleEvent): RemoteEvent | null => {
     editableContentHash: hashEditableEventContentSnapshot(observation.content),
     endTime: observation.endTime,
     isKeeperEvent: true,
+    ownerTag: readOwnerTag(event),
     startTime: observation.startTime,
     supportedAvailabilities: ["busy", "free"],
     uid: event.iCalUID,
@@ -243,10 +245,11 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     event: MaterializedSyncableEvent,
   ): { uid: string; resource: GoogleEvent; request: BatchSubRequest } | null => {
     const uid = generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
-    const resource = serializeGoogleEvent(event, uid);
-    if (!resource) {
+    const serialized = serializeGoogleEvent(event, uid);
+    if (!serialized) {
       return null;
     }
+    const resource = { ...serialized, extendedProperties: buildOwnerProperties(config.calendarId) };
     return {
       uid,
       resource,
@@ -549,11 +552,65 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     return remoteEvents;
   };
 
+  const toEventUid = (event: MaterializedSyncableEvent): string =>
+    generateDeterministicEventUid(`${event.id}:${config.externalCalendarId}`);
+
+  const claimEvents = async (updates: EventUpdate[]): Promise<PushResult[]> => {
+    await refreshIfNeeded();
+
+    const results: PushResult[] = Array.from({ length: updates.length });
+    const requests: BatchSubRequest[] = [];
+    const indexMap: number[] = [];
+    for (const [index, { deleteId }] of updates.entries()) {
+      if (!isDirectEventId(deleteId)) {
+        results[index] = {
+          error: "Google event has no event id to tag",
+          errorType: "GoogleBatchProtocolError",
+          success: false,
+        };
+        continue;
+      }
+      indexMap.push(index);
+      requests.push({
+        body: { extendedProperties: buildOwnerProperties(config.calendarId) },
+        headers: { "Content-Type": "application/json" },
+        method: "PATCH",
+        path: `${eventsPath}/${encodeURIComponent(deleteId)}`,
+      });
+    }
+
+    if (requests.length === 0) {
+      return results;
+    }
+
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+    for (const [requestIndex, originalIndex] of indexMap.entries()) {
+      const response = responses[requestIndex];
+      const update = updates[originalIndex];
+      if (!response || !update) {
+        results[originalIndex] = {
+          error: "Missing batch response",
+          errorType: "GoogleBatchProtocolError",
+          success: false,
+        };
+      } else if (response.statusCode >= 200 && response.statusCode < 300) {
+        results[originalIndex] = { deleteId: update.deleteId, remoteId: toEventUid(update.event), success: true };
+      } else {
+        results[originalIndex] = createFailedSubResponseResult(response);
+      }
+    }
+
+    return results;
+  };
+
   return {
+    claimEvents,
     deleteEvents,
+    deriveEventUids: (event: MaterializedSyncableEvent) => [toEventUid(event)],
     getRemoteEventsByIds,
     listRemoteEvents,
     normalizeEvent: normalizeGoogleEvent,
+    ownerTag: config.calendarId,
     pushEvents,
   };
 };

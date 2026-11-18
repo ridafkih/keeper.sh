@@ -146,6 +146,7 @@ const resolveCalDAVProvider = async (
 
   return createCalDAVSyncProvider({
     authMethod: resolveAuthMethod(caldavCred.authMethod),
+    calendarId,
     calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
