@@ -6,7 +6,7 @@ import { MAX_RETRY_AFTER_MS, parseRetryAfterMs } from "../../../core/utils/retry
 const CALDAV_MAX_THROTTLE_RETRIES = 3;
 
 /*
- * iCloud answers an overloaded account with 500 as often as with 503, and a write it
+ * Apple's iCloud answers an overloaded account with 500 as often as with 503, and a write it
  * answered 500 has frequently landed anyway. Every CalDAV write is safe to replay: a
  * create carries If-None-Match and resolves its own conflict, and a repeated delete's
  * 404 already counts as done. So transient server statuses back off like a throttle.
