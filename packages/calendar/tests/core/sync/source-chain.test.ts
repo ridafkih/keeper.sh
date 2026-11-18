@@ -11,14 +11,29 @@ import type { EventMapping } from "../../../src/core/events/mappings";
 
 const direct = (sourceCalendarId: string, destinationCalendarId: string): SyncMapping => ({
   destinationCalendarId,
+  destinationProviderCalendarKey: destinationCalendarId,
   includeUpstreamSources: false,
+  isSameOwner: true,
   sourceCalendarId,
+  sourceProviderCalendarKey: sourceCalendarId,
 });
 
 const chained = (sourceCalendarId: string, destinationCalendarId: string): SyncMapping => ({
-  destinationCalendarId,
+  ...direct(sourceCalendarId, destinationCalendarId),
   includeUpstreamSources: true,
-  sourceCalendarId,
+});
+
+const acrossOwners = (mapping: SyncMapping): SyncMapping => ({ ...mapping, isSameOwner: false });
+
+const onProviderCalendar = (
+  mapping: SyncMapping,
+  providerCalendarKeys: Record<string, string>,
+): SyncMapping => ({
+  ...mapping,
+  destinationProviderCalendarKey:
+    providerCalendarKeys[mapping.destinationCalendarId] ?? mapping.destinationProviderCalendarKey,
+  sourceProviderCalendarKey:
+    providerCalendarKeys[mapping.sourceCalendarId] ?? mapping.sourceProviderCalendarKey,
 });
 
 const source = (sourceCalendarId: string, ...viaCalendarIds: string[]): EffectiveSource => ({
@@ -128,6 +143,45 @@ describe("resolveEffectiveSources", () => {
     ];
 
     expect(sourcesOf(mappings.toReversed(), "d")).toEqual(sourcesOf(mappings, "d"));
+  });
+
+  it("keeps a stored link from a calendar to itself as a direct source", () => {
+    const mappings = [direct("a", "a"), direct("b", "a")];
+
+    expect(sourcesOf(mappings, "a")).toEqual([source("a"), source("b")]);
+    expect(sourcesOf([chained("a", "a")], "a")).toEqual([source("a")]);
+  });
+
+  it("keeps a stored link from another owner's calendar as a direct source", () => {
+    const mappings = [acrossOwners(direct("theirs", "mine")), direct("own", "mine")];
+
+    expect(sourcesOf(mappings, "mine")).toEqual([source("own"), source("theirs")]);
+  });
+
+  it("never inherits across owners", () => {
+    const mappings = [
+      acrossOwners(direct("theirs", "kids")),
+      direct("aubrey", "kids"),
+      chained("kids", "secretop"),
+    ];
+
+    expect(sourcesOf(mappings, "secretop")).toEqual([source("aubrey", "kids"), source("kids")]);
+    expect(sourcesOf([direct("a", "b"), acrossOwners(chained("b", "c"))], "c"))
+      .toEqual([source("b")]);
+  });
+
+  it("never inherits a second connection of the destination's own provider calendar", () => {
+    const sameProviderCalendar = { shared: "family@provider", sharedAgain: "family@provider" };
+    const mappings = [
+      direct("shared", "kids"),
+      direct("aubrey", "kids"),
+      chained("kids", "sharedAgain"),
+    ].map((mapping) => onProviderCalendar(mapping, sameProviderCalendar));
+
+    expect(sourcesOf(mappings, "sharedAgain")).toEqual([
+      source("aubrey", "kids"),
+      source("kids"),
+    ]);
   });
 
   it("drops an inherited source once its middle link is removed", () => {

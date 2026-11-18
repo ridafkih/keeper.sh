@@ -1,7 +1,10 @@
 interface SyncMapping {
   destinationCalendarId: string;
+  destinationProviderCalendarKey: string;
   includeUpstreamSources: boolean;
+  isSameOwner: boolean;
   sourceCalendarId: string;
+  sourceProviderCalendarKey: string;
 }
 
 interface EffectiveSource {
@@ -41,6 +44,16 @@ const groupMappings = <TMapping extends SyncMapping>(
   return groups;
 };
 
+const isDirectStep = (step: ChainStep): boolean => step.viaCalendarIds.length === 0;
+
+const resolveProviderCalendarKey = (
+  mappingsIntoCalendar: readonly SyncMapping[],
+  calendarId: string,
+): string => {
+  const [mapping] = mappingsIntoCalendar;
+  return mapping?.destinationProviderCalendarKey ?? calendarId;
+};
+
 const resolveEffectiveSources = (
   mappings: readonly SyncMapping[],
   destinationCalendarId: string,
@@ -50,6 +63,14 @@ const resolveEffectiveSources = (
     (mapping) => mapping.destinationCalendarId,
     bySourceCalendarId,
   );
+  const destinationProviderCalendarKey = resolveProviderCalendarKey(
+    mappingsByDestination.get(destinationCalendarId) ?? [],
+    destinationCalendarId,
+  );
+  const isInheritable = (mapping: SyncMapping): boolean =>
+    mapping.isSameOwner
+    && mapping.sourceCalendarId !== destinationCalendarId
+    && mapping.sourceProviderCalendarKey !== destinationProviderCalendarKey;
   const sources = new Map<string, EffectiveSource>();
   const expandedCalendarIds = new Set([destinationCalendarId]);
   let steps: ChainStep[] = [{ calendarId: destinationCalendarId, viaCalendarIds: [] }];
@@ -59,7 +80,7 @@ const resolveEffectiveSources = (
     for (const step of steps) {
       for (const mapping of mappingsByDestination.get(step.calendarId) ?? []) {
         const { sourceCalendarId } = mapping;
-        if (sourceCalendarId === destinationCalendarId) {
+        if (!isDirectStep(step) && !isInheritable(mapping)) {
           continue;
         }
         if (!sources.has(sourceCalendarId)) {
@@ -68,7 +89,11 @@ const resolveEffectiveSources = (
             viaCalendarIds: step.viaCalendarIds,
           });
         }
-        if (mapping.includeUpstreamSources && !expandedCalendarIds.has(sourceCalendarId)) {
+        if (
+          mapping.includeUpstreamSources
+          && isInheritable(mapping)
+          && !expandedCalendarIds.has(sourceCalendarId)
+        ) {
           expandedCalendarIds.add(sourceCalendarId);
           upstreamSteps.push({
             calendarId: sourceCalendarId,
@@ -102,6 +127,7 @@ const resolveDownstreamDestinationIds = (
         const { destinationCalendarId } = mapping;
         if (
           !mapping.includeUpstreamSources
+          || !mapping.isSameOwner
           || destinationCalendarId === calendarId
           || downstreamCalendarIds.has(destinationCalendarId)
         ) {
@@ -117,34 +143,23 @@ const resolveDownstreamDestinationIds = (
   return [...downstreamCalendarIds];
 };
 
+const listDestinationCalendarIds = (mappings: readonly SyncMapping[]): string[] =>
+  [...new Set(mappings.map((mapping) => mapping.destinationCalendarId))].toSorted();
+
 const resolveEffectiveDestinationIds = (
   mappings: readonly SyncMapping[],
   sourceCalendarId: string,
-): string[] => {
-  const directDestinationIds = mappings
-    .filter((mapping) => mapping.sourceCalendarId === sourceCalendarId)
-    .map((mapping) => mapping.destinationCalendarId)
-    .toSorted();
-  const destinationCalendarIds = new Set(directDestinationIds.flatMap((destinationCalendarId) => [
-    destinationCalendarId,
-    ...resolveDownstreamDestinationIds(mappings, destinationCalendarId),
-  ]));
-  destinationCalendarIds.delete(sourceCalendarId);
+): string[] =>
+  listDestinationCalendarIds(mappings).filter((destinationCalendarId) =>
+    resolveEffectiveSources(mappings, destinationCalendarId)
+      .some((source) => source.sourceCalendarId === sourceCalendarId));
 
-  return [...destinationCalendarIds];
-};
-
-const listEffectiveMappings = (mappings: readonly SyncMapping[]): EffectiveMapping[] => {
-  const destinationCalendarIds = [...new Set(
-    mappings.map((mapping) => mapping.destinationCalendarId),
-  )].toSorted();
-
-  return destinationCalendarIds.flatMap((destinationCalendarId) =>
+const listEffectiveMappings = (mappings: readonly SyncMapping[]): EffectiveMapping[] =>
+  listDestinationCalendarIds(mappings).flatMap((destinationCalendarId) =>
     resolveEffectiveSources(mappings, destinationCalendarId).map((source) => ({
       ...source,
       destinationCalendarId,
     })));
-};
 
 const isInheritedSource = (source: EffectiveSource): boolean =>
   source.viaCalendarIds.length > 0;

@@ -11,10 +11,9 @@ import type {
 } from "../types";
 import type { SyncWindow } from "../sync/sync-range";
 import {
+  getDestinationSourceChain,
   getEffectiveSourcesForDestination,
-  getSyncMappingsOfCalendarOwner,
 } from "../sync/effective-sources";
-import { resolveEffectiveSources } from "../sync/source-chain";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
@@ -271,8 +270,7 @@ const getSourceRulePathsForDestination = async (
   database: BunSQLClient,
   destinationCalendarId: string,
 ): Promise<SourceRulePathsBySourceCalendar> => {
-  const mappings = await getSyncMappingsOfCalendarOwner(database, destinationCalendarId);
-  const sources = resolveEffectiveSources(mappings, destinationCalendarId);
+  const { mappings, sources } = await getDestinationSourceChain(database, destinationCalendarId);
   const mappingsByKey = new Map(mappings.map((mapping) => [
     createMappingKey(mapping.sourceCalendarId, mapping.destinationCalendarId),
     mapping,
@@ -390,7 +388,7 @@ const presentEventThroughHops = (
     if (!current) {
       return null;
     }
-    current = presentEvent(
+    const shown: EventPresentation | null = presentEvent(
       {
         ...event,
         description: current.description ?? null,
@@ -400,6 +398,11 @@ const presentEventThroughHops = (
       hop.calendarName,
       hop.rules,
     );
+    current = shown && {
+      ...shown,
+      isPrivate: current.isPrivate ?? shown.isPrivate,
+      remindersDisabled: current.remindersDisabled ?? shown.remindersDisabled,
+    };
   }
   return current;
 };
