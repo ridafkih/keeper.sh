@@ -1,5 +1,6 @@
 import type { MaybePromise } from "bun";
 import { isKeeperMcpEnabledAuth, resolveMissingMcpScope } from "@keeper.sh/auth";
+import { loggedPathFor } from "@keeper.sh/otelemetry/tracing";
 import { ErrorResponse } from "./responses";
 import { apiTokensTable } from "@keeper.sh/database/schema";
 import { isApiToken, hashApiToken } from "./api-tokens";
@@ -104,12 +105,13 @@ const withWideEvent =
     context(async () => {
       const url = new URL(request.url);
       const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
-      const operationPath = routePattern ?? url.pathname;
+      const loggedPath = loggedPathFor(url.pathname);
+      const operationPath = routePattern ?? loggedPath;
       widelog.set("operation.name", `${request.method} ${operationPath}`);
       widelog.set("operation.type", "http");
       widelog.set("request.id", requestId);
       widelog.set("http.method", request.method);
-      widelog.set("http.path", url.pathname);
+      widelog.set("http.path", loggedPath);
 
       const userAgent = request.headers.get("user-agent");
       if (userAgent) {

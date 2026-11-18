@@ -1,4 +1,5 @@
 import { ROOT_CONTEXT, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
+import { loggedPathFor } from "./request-path";
 import { withSpanInContext } from "./spans";
 import { contextFromHeaders } from "./trace-context";
 
@@ -37,7 +38,7 @@ const traceIncomingRequest = <Outcome extends Response | undefined>(
   const parentContext = parentContextFor(request, options);
   const attributes = {
     "http.request.method": request.method,
-    "url.path": url.pathname,
+    "url.path": loggedPathFor(url.pathname),
     "url.scheme": url.protocol.replace(":", ""),
     ...(request.headers.has("user-agent") && { "user_agent.original": request.headers.get("user-agent") ?? "" }),
   };
