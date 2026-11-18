@@ -1,5 +1,6 @@
 import { SpanKind, SpanStatusCode, context, trace } from "@opentelemetry/api";
 import type { Attributes, Context, Span } from "@opentelemetry/api";
+import { loggedErrorFor } from "./logged-text";
 import { contextFromCarrier } from "./trace-context";
 import type { TraceCarrier } from "./trace-context";
 
@@ -25,10 +26,11 @@ const resolveParentContext = (options: SpanOptions): Context => {
 };
 
 const toError = (error: unknown): Error => {
-  if (error instanceof Error) {
-    return error;
+  const logged = loggedErrorFor(error);
+  if (logged instanceof Error) {
+    return logged;
   }
-  return new Error(String(error));
+  return new Error(String(logged));
 };
 
 const markSpanFailed = (span: Span, error: unknown) => {

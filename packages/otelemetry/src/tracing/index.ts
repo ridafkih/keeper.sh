@@ -5,5 +5,6 @@ export type { SpanOptions } from "./spans";
 export { nameRequestRoute, traceIncomingRequest, withRequestTracing } from "./http-server";
 export type { IncomingRequestOptions, RequestHandler } from "./http-server";
 export { loggedPathFor } from "./request-path";
+export { withLoggedText } from "./logged-wide-events";
 export { activeTraceFields, captureTraceContext } from "./trace-context";
 export type { TraceCarrier, TraceFields } from "./trace-context";
