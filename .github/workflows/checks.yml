@@ -169,13 +169,14 @@ jobs:
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
           IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+          IS_DEPENDABOT: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
         run: |
           if [ -n "$APP_ID" ]; then
             echo "available=yes" >> "$GITHUB_OUTPUT"
-          elif [ "$IS_FORK" = "true" ]; then
+          elif [ "$IS_FORK" = "true" ] || [ "$IS_DEPENDABOT" = "true" ]; then
             echo "available=no" >> "$GITHUB_OUTPUT"
           else
-            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
+            echo "KEEPER_BOT_APP_ID is missing outside a fork or Dependabot pull request." >&2
             exit 1
           fi
 
