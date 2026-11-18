@@ -24,6 +24,7 @@ import { createBroadcastService } from "@keeper.sh/broadcast";
 import { createMappingSyncStatePublisher } from "@keeper.sh/calendar";
 import { database, premiumService, refreshLockRedis } from "@/context";
 import { enqueueDestinationSyncsForUsers } from "@/utils/enqueue-destination-syncs";
+import { laneProgressed } from "@/liveness";
 import { fleetIngestLane, pushIngestLane } from "@/utils/ingest-lanes";
 import type { IngestLane as IngestResources } from "@/utils/ingest-lanes";
 import { context, widelog } from "@/utils/logging";
@@ -229,6 +230,7 @@ const startScheduledLane = (
       leaseToken: crypto.randomUUID(),
       limit,
     }),
+    onClaimSettled: laneProgressed(lane),
     onError: (error, phase) => {
       reportLaneError(lane, error, phase);
     },

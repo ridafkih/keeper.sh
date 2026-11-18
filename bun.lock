@@ -190,6 +190,15 @@
         "typescript": "5.9.3",
       },
     },
+    "packages/heartbeat": {
+      "name": "@keeper.sh/heartbeat",
+      "devDependencies": {
+        "@keeper.sh/typescript-config": "workspace:*",
+        "@types/bun": "latest",
+        "typescript": "5.9.3",
+        "vitest": "^4.1.4",
+      },
+    },
     "packages/otelemetry": {
       "name": "@keeper.sh/otelemetry",
       "bin": {
@@ -311,6 +320,7 @@
         "@keeper.sh/constants": "workspace:*",
         "@keeper.sh/data-schemas": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/heartbeat": "workspace:*",
         "@keeper.sh/otelemetry": "workspace:*",
         "@keeper.sh/premium": "workspace:*",
         "@keeper.sh/queue": "workspace:*",
@@ -357,6 +367,7 @@
         "@keeper.sh/broadcast": "workspace:*",
         "@keeper.sh/calendar": "workspace:*",
         "@keeper.sh/database": "workspace:*",
+        "@keeper.sh/heartbeat": "workspace:*",
         "@keeper.sh/otelemetry": "workspace:*",
         "@keeper.sh/queue": "workspace:*",
         "@keeper.sh/sync": "workspace:*",
@@ -601,6 +612,8 @@
     "@keeper.sh/digest-fetch": ["@keeper.sh/digest-fetch@workspace:packages/digest-fetch"],
 
     "@keeper.sh/fixtures": ["@keeper.sh/fixtures@workspace:packages/fixtures"],
+
+    "@keeper.sh/heartbeat": ["@keeper.sh/heartbeat@workspace:packages/heartbeat"],
 
     "@keeper.sh/mcp": ["@keeper.sh/mcp@workspace:services/mcp"],
 
@@ -2362,6 +2375,8 @@
 
     "@keeper.sh/database/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
+    "@keeper.sh/heartbeat/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
+
     "@keeper.sh/mcp/@types/bun": ["@types/bun@1.3.11", "", { "dependencies": { "bun-types": "1.3.11" } }, "sha512-5vPne5QvtpjGpsGYXiFyycfpDF2ECyPcTSsFBMa0fraoxiQyMJ3SmuQIGhzPg2WJuWxVBoxWJ2kClYTcw/4fAg=="],
 
     "@keeper.sh/otelemetry/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
@@ -2605,6 +2620,8 @@
     "@keeper.sh/data-schemas/@types/bun/bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
 
     "@keeper.sh/database/@types/bun/bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
+
+    "@keeper.sh/heartbeat/@types/bun/bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
 
     "@keeper.sh/mcp/@types/bun/bun-types": ["bun-types@1.3.11", "", { "dependencies": { "@types/node": "*" } }, "sha512-1KGPpoxQWl9f6wcZh57LvrPIInQMn2TQ7jsgxqpRzg+l0QPOFvJVH7HmvHo/AiPgwXy+/Thf6Ov3EdVn1vOabg=="],
 
