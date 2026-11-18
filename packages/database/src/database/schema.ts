@@ -481,6 +481,7 @@ const sourceDestinationMappingsTable = pgTable(
     excludeTitleKeywords: text().array(),
     firstSyncedAt: timestamp({ withTimezone: true }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    includeUpstreamSources: boolean().notNull().default(false),
     markEventsAsPrivate: boolean(),
     sourceCalendarId: uuid()
       .notNull()
