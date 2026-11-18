@@ -651,6 +651,7 @@ const syncRuleOverridesPatchSchema = type({
   "excludeFocusTime?": "boolean | null",
   "excludeOutOfOffice?": "boolean | null",
   "excludeTitleKeywords?": excludeTitleKeywordsSchema.or("null"),
+  "includeUpstreamSources?": "boolean",
   "markEventsAsPrivate?": "boolean | null",
   "+": "reject",
 });
