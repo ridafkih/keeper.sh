@@ -466,11 +466,22 @@ const sourceDestinationMappingsTable = pgTable(
   "source_destination_mappings",
   {
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    customEventName: text(),
     destinationCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),
+    disableEventReminders: boolean(),
+    excludeAllDayEvents: boolean(),
+    excludeAvailabilities: text().array(),
+    excludeEventDescription: boolean(),
+    excludeEventLocation: boolean(),
+    excludeEventName: boolean(),
+    excludeFocusTime: boolean(),
+    excludeOutOfOffice: boolean(),
+    excludeTitleKeywords: text().array(),
     firstSyncedAt: timestamp({ withTimezone: true }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    markEventsAsPrivate: boolean(),
     sourceCalendarId: uuid()
       .notNull()
       .references(() => calendarsTable.id, { onDelete: "cascade" }),

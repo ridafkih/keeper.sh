@@ -63,6 +63,10 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  DESTINATION_EXCLUDES_TENTATIVE,
+  requiresTentativeIngestion,
+} from "./tentative-ingestion";
 import { context, widelog } from "@/utils/logging";
 import { pendingFirstSyncMappingCount, recordPendingFirstSyncs } from "@/utils/first-sync-fields";
 import {
@@ -1229,6 +1233,7 @@ const ingestOAuthSources = async (
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
                     excludeAvailabilities: calendarsTable.excludeAvailabilities,
+                    excludesTentativeForADestination: DESTINATION_EXCLUDES_TENTATIVE,
                     expiresAt: oauthCredentialsTable.expiresAt,
                     externalCalendarId: calendarsTable.externalCalendarId,
                     failureCount: calendarsTable.ingestFailureCount,
@@ -1307,7 +1312,7 @@ const ingestOAuthSources = async (
                 const fetcher = resolveOAuthFetcher(currentSource.provider, {
                   accessToken: tokenState.accessToken,
                   calendarId: source.calendarId,
-                  excludesTentative: currentSource.excludeAvailabilities.includes("tentative"),
+                  excludesTentative: requiresTentativeIngestion(currentSource),
                   externalCalendarId: currentSource.externalCalendarId,
                   syncToken: ingestionState.syncToken,
                   rateLimiter,

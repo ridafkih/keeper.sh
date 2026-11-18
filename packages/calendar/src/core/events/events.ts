@@ -3,6 +3,8 @@ import {
   eventStatesTable,
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
+import { resolveSyncRules } from "@keeper.sh/data-schemas";
+import type { SyncRuleOverrides, SyncRules } from "@keeper.sh/data-schemas";
 import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
 import type {
@@ -215,10 +217,89 @@ const getMappedSourceCalendarIds = async (
   return mappings.map((mapping) => mapping.sourceCalendarId);
 };
 
+type SyncRuleOverridesBySourceCalendar = Map<string, SyncRuleOverrides>;
+
+const getSyncRuleOverridesForDestination = async (
+  database: BunSQLClient,
+  destinationCalendarId: string,
+  sourceCalendarIds: string[],
+): Promise<SyncRuleOverridesBySourceCalendar> => {
+  if (sourceCalendarIds.length === EMPTY_SOURCES_COUNT) {
+    return new Map();
+  }
+
+  const mappings = await database
+    .select({
+      customEventName: sourceDestinationMappingsTable.customEventName,
+      disableEventReminders: sourceDestinationMappingsTable.disableEventReminders,
+      excludeAllDayEvents: sourceDestinationMappingsTable.excludeAllDayEvents,
+      excludeAvailabilities: sourceDestinationMappingsTable.excludeAvailabilities,
+      excludeEventDescription: sourceDestinationMappingsTable.excludeEventDescription,
+      excludeEventLocation: sourceDestinationMappingsTable.excludeEventLocation,
+      excludeEventName: sourceDestinationMappingsTable.excludeEventName,
+      excludeFocusTime: sourceDestinationMappingsTable.excludeFocusTime,
+      excludeOutOfOffice: sourceDestinationMappingsTable.excludeOutOfOffice,
+      excludeTitleKeywords: sourceDestinationMappingsTable.excludeTitleKeywords,
+      markEventsAsPrivate: sourceDestinationMappingsTable.markEventsAsPrivate,
+      sourceCalendarId: sourceDestinationMappingsTable.sourceCalendarId,
+    })
+    .from(sourceDestinationMappingsTable)
+    .where(
+      and(
+        eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
+        inArray(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarIds),
+      ),
+    );
+
+  return new Map(
+    mappings.map(({ sourceCalendarId, ...overrides }) => [sourceCalendarId, overrides]),
+  );
+};
+
+interface EffectiveSyncRules extends SyncRules {
+  lowercasedTitleKeywords: string[];
+}
+
+const createEffectiveSyncRulesResolver = (
+  overridesBySourceCalendar: SyncRuleOverridesBySourceCalendar,
+) => {
+  const rulesByCalendar = new Map<string, EffectiveSyncRules>();
+
+  return (calendarId: string, sourceRules: SyncRules): EffectiveSyncRules => {
+    const cached = rulesByCalendar.get(calendarId);
+    if (cached) {
+      return cached;
+    }
+    const resolved = resolveSyncRules(sourceRules, overridesBySourceCalendar.get(calendarId));
+    const effective = {
+      ...resolved,
+      lowercasedTitleKeywords: lowercaseKeywords(resolved.excludeTitleKeywords),
+    };
+    rulesByCalendar.set(calendarId, effective);
+    return effective;
+  };
+};
+
+interface DestinationEventReadOptions {
+  destinationCalendarId?: string;
+}
+
+const readSyncRuleOverrides = (
+  database: BunSQLClient,
+  calendarIds: string[],
+  options: DestinationEventReadOptions,
+): Promise<SyncRuleOverridesBySourceCalendar> => {
+  if (!options.destinationCalendarId) {
+    return Promise.resolve(new Map());
+  }
+  return getSyncRuleOverridesForDestination(database, options.destinationCalendarId, calendarIds);
+};
+
 const getEventsForCalendarsWithDiagnostics = async (
   database: BunSQLClient,
   calendarIds: string[],
   syncWindow: SyncWindow,
+  options: DestinationEventReadOptions = {},
 ): Promise<DestinationEventReadResult> => {
   if (calendarIds.length === EMPTY_SOURCES_COUNT) {
     return {
@@ -226,6 +307,10 @@ const getEventsForCalendarsWithDiagnostics = async (
       events: [],
     };
   }
+
+  const resolveEffectiveSyncRules = createEffectiveSyncRulesResolver(
+    await readSyncRuleOverrides(database, calendarIds, options),
+  );
 
   const results = await database
     .select({
@@ -279,25 +364,25 @@ const getEventsForCalendarsWithDiagnostics = async (
   let excludedBySyncPolicyCount = 0;
   let missingSourceEventUidCount = 0;
   let outsideReconciliationWindowCount = 0;
-  const lowercasedTitleKeywordsByCalendar = new Map<string, string[]>();
-  const getLowercasedTitleKeywords = (calendarId: string, keywords: string[]): string[] => {
-    const cached = lowercasedTitleKeywordsByCalendar.get(calendarId);
-    if (cached) {
-      return cached;
-    }
-    const lowercased = lowercaseKeywords(keywords);
-    lowercasedTitleKeywordsByCalendar.set(calendarId, lowercased);
-    return lowercased;
-  };
 
   for (const result of results) {
     if (result.sourceEventUid === null) {
       missingSourceEventUidCount += 1;
       continue;
     }
+    const rules = resolveEffectiveSyncRules(result.calendarId, result);
     if (matchesSyncExclusion(
-      result,
-      getLowercasedTitleKeywords(result.calendarId, result.excludeTitleKeywords),
+      {
+        availability: result.availability,
+        excludeAllDayEvents: rules.excludeAllDayEvents,
+        excludeAvailabilities: rules.excludeAvailabilities,
+        excludeFocusTime: rules.excludeFocusTime,
+        excludeOutOfOffice: rules.excludeOutOfOffice,
+        isAllDay: result.isAllDay,
+        sourceEventType: result.sourceEventType,
+        title: result.title,
+      },
+      rules.lowercasedTitleKeywords,
     )) {
       excludedBySyncPolicyCount += 1;
       if (result.recurrenceId) {
@@ -328,10 +413,10 @@ const getEventsForCalendarsWithDiagnostics = async (
 
     const eventName = result.title ?? DEFAULT_EVENT_NAME;
     const {calendarName} = result;
-    const template = result.customEventName || DEFAULT_EVENT_NAME_TEMPLATE;
+    const template = rules.customEventName || DEFAULT_EVENT_NAME_TEMPLATE;
 
     let summary = eventName;
-    if (result.excludeEventName) {
+    if (rules.excludeEventName) {
       summary = resolveEventNameTemplate(template, {
         calendar_name: calendarName,
         event_name: eventName,
@@ -343,14 +428,14 @@ const getEventsForCalendarsWithDiagnostics = async (
       calendarName: result.calendarName,
       calendarUrl: result.calendarUrl,
       availability: parseAvailability(result.availability),
-      description: excludeOrAbsent(result.excludeEventDescription, result.description),
+      description: excludeOrAbsent(rules.excludeEventDescription, result.description),
       endTime: result.endTime,
       eventStateId: result.id,
       id: result.id,
       isAllDay: orAbsentBoolean(result.isAllDay),
-      isPrivate: trueOrAbsent(result.markEventsAsPrivate),
-      remindersDisabled: trueOrAbsent(result.disableEventReminders),
-      location: excludeOrAbsent(result.excludeEventLocation, result.location),
+      isPrivate: trueOrAbsent(rules.markEventsAsPrivate),
+      remindersDisabled: trueOrAbsent(rules.disableEventReminders),
+      location: excludeOrAbsent(rules.excludeEventLocation, result.location),
       ...recurrence,
       sourceEventUid: result.sourceEventUid,
       startTime: result.startTime,
@@ -417,7 +502,13 @@ const getEventsForDestination = async (
     return [];
   }
 
-  return getEventsForCalendars(database, sourceCalendarIds, syncWindow);
+  const result = await getEventsForCalendarsWithDiagnostics(
+    database,
+    sourceCalendarIds,
+    syncWindow,
+    { destinationCalendarId },
+  );
+  return result.events;
 };
 
 export {

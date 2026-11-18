@@ -5,7 +5,7 @@ import { useMutateEntitlements } from "@/hooks/use-entitlements";
 
 type MappingRoute = "destinations" | "sources";
 type MappingResponseKey = "destinationIds" | "sourceIds";
-type MappingData = Partial<Record<MappingResponseKey, string[]>>;
+type MappingData = Partial<Record<MappingResponseKey | "customizedDestinationIds", string[]>>;
 
 const RESPONSE_KEYS: Record<MappingRoute, MappingResponseKey> = {
   destinations: "destinationIds",
@@ -23,6 +23,20 @@ const readMappedIds = (body: unknown, responseKey: MappingResponseKey): string[]
     throw new Error(`Mapping response has an invalid ${responseKey}`);
   }
   return ids;
+};
+
+const replaceMappedIds = (
+  current: MappingData | undefined,
+  responseKey: MappingResponseKey,
+  calendarIds: string[],
+): MappingData => {
+  const next: MappingData = { ...current, [responseKey]: calendarIds };
+  if (responseKey === "destinationIds" && current?.customizedDestinationIds) {
+    next.customizedDestinationIds = current.customizedDestinationIds.filter(
+      (destinationId) => calendarIds.includes(destinationId),
+    );
+  }
+  return next;
 };
 
 const resolveMappingEndpoint = (calendarId: string | undefined, route: MappingRoute): string | null => {
@@ -47,7 +61,11 @@ function useMappingToggles(calendarId: string | undefined, route: MappingRoute) 
         adjustMappingCount(failed.enabled ? -1 : 1);
       },
       publish: (calendarIds) => {
-        void mutate(endpoint, { [responseKey]: calendarIds }, { revalidate: false });
+        void mutate<MappingData>(
+          endpoint,
+          (current) => replaceMappedIds(current, responseKey, calendarIds),
+          { revalidate: false },
+        );
       },
       send: async (pendingToggle) => {
         try {
@@ -67,5 +85,5 @@ function useMappingToggles(calendarId: string | undefined, route: MappingRoute) 
   return { mappedIds, toggle };
 }
 
-export { useMappingToggles };
+export { replaceMappedIds, useMappingToggles };
 export type { MappingRoute };

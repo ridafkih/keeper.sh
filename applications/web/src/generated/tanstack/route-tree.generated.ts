@@ -78,6 +78,7 @@ import { Route as dashboardDashboardAccountsAccountIdIndexRouteImport } from './
 import { Route as dashboardDashboardAccountsAccountIdSetupRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.setup'
 import { Route as dashboardDashboardAccountsAccountIdReconnectRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.reconnect'
 import { Route as dashboardDashboardAccountsAccountIdCalendarIdRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId'
+import { Route as dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRouteImport } from './../../routes/(dashboard)/dashboard/accounts/$accountId.$calendarId_.destinations.$destinationId'
 
 const oauthRouteRoute = oauthRouteRouteImport.update({
   id: '/(oauth)',
@@ -450,6 +451,14 @@ const dashboardDashboardAccountsAccountIdCalendarIdRoute =
     path: '/$accountId/$calendarId',
     getParentRoute: () => dashboardDashboardAccountsRouteRoute,
   } as any)
+const dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute =
+  dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRouteImport.update(
+    {
+      id: '/$accountId/$calendarId_/destinations/$destinationId',
+      path: '/$accountId/$calendarId/destinations/$destinationId',
+      getParentRoute: () => dashboardDashboardAccountsRouteRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/blog': typeof marketingBlogRouteRouteWithChildren
@@ -517,6 +526,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/accounts/$accountId/$calendarId/destinations/$destinationId': typeof dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof oauthAuthRouteRouteWithChildren
@@ -579,6 +589,7 @@ export interface FileRoutesByTo {
   '/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/dashboard/accounts/$accountId': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/dashboard/accounts/$accountId/$calendarId/destinations/$destinationId': typeof dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -651,6 +662,7 @@ export interface FileRoutesById {
   '/(dashboard)/dashboard/accounts/$accountId/reconnect': typeof dashboardDashboardAccountsAccountIdReconnectRoute
   '/(dashboard)/dashboard/accounts/$accountId/setup': typeof dashboardDashboardAccountsAccountIdSetupRoute
   '/(dashboard)/dashboard/accounts/$accountId/': typeof dashboardDashboardAccountsAccountIdIndexRoute
+  '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/destinations/$destinationId': typeof dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -720,6 +732,7 @@ export interface FileRouteTypes {
     | '/dashboard/accounts/$accountId/reconnect'
     | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId/'
+    | '/dashboard/accounts/$accountId/$calendarId/destinations/$destinationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
@@ -782,6 +795,7 @@ export interface FileRouteTypes {
     | '/dashboard/accounts/$accountId/reconnect'
     | '/dashboard/accounts/$accountId/setup'
     | '/dashboard/accounts/$accountId'
+    | '/dashboard/accounts/$accountId/$calendarId/destinations/$destinationId'
   id:
     | '__root__'
     | '/(auth)'
@@ -853,6 +867,7 @@ export interface FileRouteTypes {
     | '/(dashboard)/dashboard/accounts/$accountId/reconnect'
     | '/(dashboard)/dashboard/accounts/$accountId/setup'
     | '/(dashboard)/dashboard/accounts/$accountId/'
+    | '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/destinations/$destinationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1347,6 +1362,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdRouteImport
       parentRoute: typeof dashboardDashboardAccountsRouteRoute
     }
+    '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/destinations/$destinationId': {
+      id: '/(dashboard)/dashboard/accounts/$accountId/$calendarId_/destinations/$destinationId'
+      path: '/$accountId/$calendarId/destinations/$destinationId'
+      fullPath: '/dashboard/accounts/$accountId/$calendarId/destinations/$destinationId'
+      preLoaderRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRouteImport
+      parentRoute: typeof dashboardDashboardAccountsRouteRoute
+    }
   }
 }
 
@@ -1377,6 +1399,7 @@ interface dashboardDashboardAccountsRouteRouteChildren {
   dashboardDashboardAccountsAccountIdReconnectRoute: typeof dashboardDashboardAccountsAccountIdReconnectRoute
   dashboardDashboardAccountsAccountIdSetupRoute: typeof dashboardDashboardAccountsAccountIdSetupRoute
   dashboardDashboardAccountsAccountIdIndexRoute: typeof dashboardDashboardAccountsAccountIdIndexRoute
+  dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute: typeof dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute
 }
 
 const dashboardDashboardAccountsRouteRouteChildren: dashboardDashboardAccountsRouteRouteChildren =
@@ -1389,6 +1412,8 @@ const dashboardDashboardAccountsRouteRouteChildren: dashboardDashboardAccountsRo
       dashboardDashboardAccountsAccountIdSetupRoute,
     dashboardDashboardAccountsAccountIdIndexRoute:
       dashboardDashboardAccountsAccountIdIndexRoute,
+    dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute:
+      dashboardDashboardAccountsAccountIdCalendarIdDestinationsDestinationIdRoute,
   }
 
 const dashboardDashboardAccountsRouteRouteWithChildren =

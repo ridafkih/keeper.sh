@@ -37,7 +37,7 @@ import {
   parseTitleKeywords,
   toggleExcludedAvailability,
 } from "@/utils/calendars";
-import type { CalendarAccount, CalendarDetail, CalendarSource } from "@/types/api";
+import type { CalendarAccount, CalendarDetail, CalendarSource, SourceDestinations } from "@/types/api";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -85,6 +85,8 @@ import {
   destinationIdsAtom,
   selectDestinationInclusion,
 } from "@/state/destination-ids";
+import { DestinationRulesSection } from "@/features/dashboard/components/mapping-sync-rules/destination-rules-section";
+import { getSourceDestinationsKey } from "@/hooks/use-mapping-sync-rules";
 import {
   getSyncRangeLabel,
   SYNC_RANGE_OPTIONS,
@@ -198,6 +200,7 @@ function CalendarDetailPage() {
               description="Select which calendars should receive events from this calendar."
             />
             <DestinationsSection calendarId={calendarId} />
+            <DestinationRulesSection accountId={accountId} calendarId={calendarId} />
           </>
         )}
         {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
@@ -503,9 +506,7 @@ function DeleteCalendarSection({ accountId, calendarId }: { accountId: string; c
 }
 
 function DestinationsSeed({ calendarId }: { calendarId: string }) {
-  const { data } = useSWR<{ destinationIds: string[] }>(
-    `/api/sources/${calendarId}/destinations`,
-  );
+  const { data } = useSWR<SourceDestinations>(getSourceDestinationsKey(calendarId));
   const store = useStore();
 
   useEffect(() => {

@@ -785,6 +785,8 @@ const changeSourcesForDestination = async (
 };
 
 export {
+  createSetDestinationsTransaction,
+  createSetSourcesTransaction,
   getUserMappings,
   getDestinationsForSource,
   getSourcesForDestination,

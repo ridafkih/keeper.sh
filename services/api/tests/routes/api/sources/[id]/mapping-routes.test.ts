@@ -16,6 +16,7 @@ describe("handleGetSourceDestinationsRoute", () => {
     const response = await handleGetSourceDestinationsRoute(
       { params: {}, userId: "user-1" },
       {
+        getCustomizedDestinationIds: () => Promise.resolve([]),
         getDestinationsForSource: () => Promise.resolve([]),
         sourceExists: () => Promise.resolve(true),
       },
@@ -28,6 +29,7 @@ describe("handleGetSourceDestinationsRoute", () => {
     const response = await handleGetSourceDestinationsRoute(
       { params: { id: "source-1" }, userId: "user-1" },
       {
+        getCustomizedDestinationIds: () => Promise.resolve([]),
         getDestinationsForSource: () => Promise.resolve([]),
         sourceExists: () => Promise.resolve(false),
       },
@@ -40,13 +42,17 @@ describe("handleGetSourceDestinationsRoute", () => {
     const response = await handleGetSourceDestinationsRoute(
       { params: { id: "source-1" }, userId: "user-1" },
       {
+        getCustomizedDestinationIds: () => Promise.resolve(["dest-2"]),
         getDestinationsForSource: () => Promise.resolve(["dest-1", "dest-2"]),
         sourceExists: () => Promise.resolve(true),
       },
     );
 
     expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({ destinationIds: ["dest-1", "dest-2"] });
+    expect(await readJson(response)).toEqual({
+      customizedDestinationIds: ["dest-2"],
+      destinationIds: ["dest-1", "dest-2"],
+    });
   });
 });
 
