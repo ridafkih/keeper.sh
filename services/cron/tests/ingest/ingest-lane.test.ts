@@ -155,6 +155,118 @@ describe("startIngestLane", () => {
     expect(errors.filter((phase) => phase === "round").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("reports progress each time a claim settles, whether it succeeded or failed", async () => {
+    const progressedAfterCall: number[] = [];
+    let calls = 0;
+    start({
+      claim: () => {
+        calls += 1;
+        if (calls <= 3) {
+          return Promise.reject(new Error("database restarting"));
+        }
+        return Promise.resolve([]);
+      },
+      idleMs: 5,
+      onClaimSettled: () => {
+        progressedAfterCall.push(calls);
+      },
+      runRound: () => Promise.resolve(),
+    });
+
+    await waitFor(() => progressedAfterCall.length >= 6);
+
+    expect(progressedAfterCall.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("stops reporting progress while a claim never settles", async () => {
+    const hung = defer();
+    let calls = 0;
+    let progressed = 0;
+    start({
+      claim: async () => {
+        calls += 1;
+        if (calls === 3) {
+          await hung.promise;
+        }
+        return [];
+      },
+      idleMs: 5,
+      onClaimSettled: () => {
+        progressed += 1;
+      },
+      runRound: () => Promise.resolve(),
+    });
+
+    await waitFor(() => calls === 3);
+    await tick(60);
+
+    expect(progressed).toBe(2);
+
+    hung.resolve();
+    await waitFor(() => progressed > 3);
+  });
+
+  it("stops reporting progress while every slot is held by a round that never finishes", async () => {
+    const round = defer();
+    let claims = 0;
+    let progressed = 0;
+    const lane = start({
+      batchSize: 2,
+      capacity: 2,
+      claim: (limit) => {
+        claims += 1;
+        if (claims > 1) {
+          return Promise.resolve([]);
+        }
+        return Promise.resolve(claimsFrom("calendar", limit));
+      },
+      idleMs: 5,
+      onClaimSettled: () => {
+        progressed += 1;
+      },
+      runRound: () => round.promise,
+    });
+
+    await waitFor(() => lane.inFlight() === 2);
+    await tick(60);
+
+    expect(progressed).toBe(1);
+
+    round.resolve();
+    await waitFor(() => progressed > 1);
+  });
+
+  it("keeps the claims and keeps running when reporting progress throws", async () => {
+    const errors: string[] = [];
+    const rounds: number[] = [];
+    let served = false;
+    start({
+      claim: () => {
+        if (served) {
+          return Promise.resolve([]);
+        }
+        served = true;
+        return Promise.resolve(claimsFrom("calendar", 3));
+      },
+      idleMs: 5,
+      onClaimSettled: () => {
+        throw new Error("disk full");
+      },
+      onError: (_error, phase) => {
+        errors.push(phase);
+      },
+      runRound: (claims) => {
+        rounds.push(claims.length);
+        return Promise.resolve();
+      },
+    });
+
+    await waitFor(() => errors.length >= 3);
+
+    expect(rounds).toEqual([3]);
+    expect(new Set(errors)).toEqual(new Set(["claim"]));
+  });
+
   it("waits for in-flight rounds on stop and starts nothing new", async () => {
     const round = defer();
     let claims = 0;

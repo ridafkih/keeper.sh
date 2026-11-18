@@ -14,6 +14,7 @@ import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { enqueueSyncContinuation, requestsContinuation } from "./utils/sync-continuation";
 import { context, destroy, widelog } from "./utils/logging";
 import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
+import { createQueueJobFlow, startLiveness, startQueueProbe } from "./liveness";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
@@ -42,12 +43,15 @@ const parseConcurrency = (value: string | undefined): number => {
 
 await entry({
   main: async () => {
+    startLiveness();
     const { database, shutdownConnections } = await import("./context");
     await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
     reportPrivateResolutionPolicy();
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
     const { syncAggregateRuntime } = await import("./processor");
+
+    const jobFlow = createQueueJobFlow();
 
     const worker = new Worker<PushSyncJobPayload, PushSyncJobResult>(
       PUSH_SYNC_QUEUE_NAME,
@@ -65,7 +69,7 @@ await entry({
               "messaging.message.id": job.id ?? "",
             },
           },
-          () => processJob(job, token, signal),
+          () => jobFlow.track(() => processJob(job, token, signal)),
         ),
       {
         connection: { url: env.REDIS_URL, maxRetriesPerRequest: null },
@@ -78,6 +82,15 @@ await entry({
         metrics: { maxDataPoints: 1000 },
       },
     );
+
+    const stopQueueProbe = startQueueProbe({
+      isRunning: () => worker.isRunning(),
+      jobFlow,
+      ping: async () => {
+        const client = await worker.client;
+        return client.ping();
+      },
+    });
 
     const continuationQueue = createPushSyncQueue({ url: env.REDIS_URL, maxRetriesPerRequest: null });
 
@@ -136,6 +149,7 @@ await entry({
     });
 
     return async () => {
+      stopQueueProbe();
       activeDestinationJobs.close();
       await worker.close();
       await continuationQueue.close();

@@ -13,6 +13,7 @@ import { destroy } from "./utils/logging";
 import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
 import { baker } from "./utils/baker";
 import { checkWorkerMigrationStatus } from "./migration-check";
+import { startLiveness, withJobProgress } from "./liveness";
 import { resolveIngestDials } from "./ingest/ingest-dials";
 import type { IngestDials } from "./ingest/ingest-dials";
 import type { IngestScheduler } from "./ingest/start-ingest-scheduler";
@@ -42,6 +43,7 @@ const startIngestSchedulerWhenEnabled = async (dials: IngestDials): Promise<Inge
 
 await entry({
   main: async () => {
+    startLiveness();
     const {
       database,
       shutdownDatabases,
@@ -52,7 +54,7 @@ await entry({
 
     if (env.CRON_JOBS_ENABLED !== false) {
       const jobs = await getAllJobs(jobsFolderPathname);
-      registerJobs(injectJobs(jobs));
+      registerJobs(injectJobs(jobs).map((job) => withJobProgress(job)));
     }
 
     const scheduler = await startIngestSchedulerWhenEnabled(resolveIngestDials(env));
