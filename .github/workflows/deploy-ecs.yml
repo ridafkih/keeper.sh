@@ -36,6 +36,8 @@ permissions: {}
 jobs:
   resolve:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       api: ${{ steps.images.outputs.api }}
       cron: ${{ steps.images.outputs.cron }}
@@ -80,6 +82,26 @@ jobs:
             fi
             echo "$package=$REGISTRY/keeper-$package@$digest" >> "$GITHUB_OUTPUT"
             echo "- \`$REGISTRY/keeper-$package@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Confirm the release is on the default branch
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          head=$(gh api "repos/$GITHUB_REPOSITORY/commits/heads/$BRANCH" --jq .sha)
+          if ! released=$(gh api "repos/$GITHUB_REPOSITORY/commits/tags/v$VERSION" --jq .sha); then
+            echo "::error::There is no v$VERSION tag to deploy."
+            exit 1
+          fi
+          for commit in "$GITHUB_SHA" "$released"; do
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$commit...$head" --jq .status)
+            if [ "$status" != "ahead" ] && [ "$status" != "identical" ]; then
+              echo "::error::Commit $commit is not on $BRANCH, so v$VERSION was not deployed."
+              exit 1
+            fi
           done
 
   deploy:
