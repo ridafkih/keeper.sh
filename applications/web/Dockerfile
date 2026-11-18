@@ -13,7 +13,7 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/web build
+RUN ENV=production bun run --cwd applications/web build
 
 FROM base AS runtime
 COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
