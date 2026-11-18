@@ -3,6 +3,7 @@ import type { BroadcastData } from "@keeper.sh/broadcast";
 import { nameRequestRoute, startTracing, withRequestTracing } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { join } from "node:path";
+import { withDefaultCacheControl } from "./middleware/cache-control";
 import { withCors } from "./middleware/cors";
 import { handleAuthRequest } from "./handlers/auth";
 import { websocketHandler } from "./handlers/websocket";
@@ -43,7 +44,7 @@ await entry({
       port: env.API_PORT,
       idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       websocket: websocketHandler,
-      fetch: withRequestTracing({ trustIncomingTraceContext: true }, withCors(async (request) => {
+      fetch: withRequestTracing({ trustIncomingTraceContext: true }, withCors(withDefaultCacheControl(async (request) => {
         const url = new URL(request.url);
 
         if (url.pathname.startsWith("/api/auth")) {
@@ -105,7 +106,7 @@ await entry({
         }
 
         return handler(request, match.params, match.name);
-      })),
+      }))),
     });
 
     await broadcastService.startSubscriber();
