@@ -36,6 +36,18 @@ const collectDelays = async (
 };
 
 describe("CalDAV throttle retry", () => {
+  it("retries a 500, which iCloud returns when an account is overloaded", async () => {
+    const { sends } = await collectDelays([new Response(null, { status: 500 })]);
+
+    expect(sends).toBe(2);
+  });
+
+  it("does not retry a client error such as a failed precondition", async () => {
+    const { sends } = await collectDelays([new Response(null, { status: 412 })]);
+
+    expect(sends).toBe(1);
+  });
+
   it("retries a 503 instead of surfacing it as a failure", async () => {
     const { sends } = await collectDelays([throttled("1")]);
 

@@ -8,6 +8,11 @@ import {
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 import { RequestTimeoutError } from "../../../../src/core/utils/fetch-with-timeout";
 
+vi.mock("../../../../src/core/utils/leased-semaphore", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  sleepWithSignal: () => Promise.resolve(),
+}));
+
 const SERVER_URL = "https://caldav.example.test";
 const PRINCIPAL_PATH = "/principals/user/";
 const HOME_PATH = "/cal/u/";

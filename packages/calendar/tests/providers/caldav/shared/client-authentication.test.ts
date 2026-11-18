@@ -8,6 +8,11 @@ const fetchMocks = vi.hoisted(() => ({
   safeFetch: vi.fn(),
 }));
 
+vi.mock("../../../../src/core/utils/leased-semaphore", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  sleepWithSignal: () => Promise.resolve(),
+}));
+
 vi.mock("../../../../src/utils/safe-fetch", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   createSafeFetch: () => fetchMocks.safeFetch,

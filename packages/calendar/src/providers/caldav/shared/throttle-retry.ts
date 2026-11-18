@@ -1,8 +1,25 @@
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import { widelog } from "widelogger";
 import { measureSegment } from "../../../core/telemetry/segments";
-import { isThrottleStatus, MAX_RETRY_AFTER_MS, parseRetryAfterMs } from "../../../core/utils/retry-after";
+import { MAX_RETRY_AFTER_MS, parseRetryAfterMs } from "../../../core/utils/retry-after";
 
 const CALDAV_MAX_THROTTLE_RETRIES = 3;
+
+/*
+ * iCloud answers an overloaded account with 500 as often as with 503, and a write it
+ * answered 500 has frequently landed anyway. Every CalDAV write is safe to replay: a
+ * create carries If-None-Match and resolves its own conflict, and a repeated delete's
+ * 404 already counts as done. So transient server statuses back off like a throttle.
+ */
+const CALDAV_RETRYABLE_STATUSES: ReadonlySet<number> = new Set([
+  HTTP_STATUS.TOO_MANY_REQUESTS,
+  HTTP_STATUS.INTERNAL_SERVER_ERROR,
+  HTTP_STATUS.BAD_GATEWAY,
+  HTTP_STATUS.SERVICE_UNAVAILABLE,
+  HTTP_STATUS.GATEWAY_TIMEOUT,
+]);
+
+const isRetryableStatus = (status: number): boolean => CALDAV_RETRYABLE_STATUSES.has(status);
 
 /*
  * Apple's advertised retry interval is routinely shorter than the throttle it is reporting,
@@ -57,7 +74,7 @@ const fetchHonouringRetryAfter = async <TInput>(
   let response = await send(cloneAttempt(input));
 
   for (let attempt = 0; attempt < CALDAV_MAX_THROTTLE_RETRIES; attempt++) {
-    if (!isThrottleStatus(response.status)) {
+    if (!isRetryableStatus(response.status)) {
       return response;
     }
 
@@ -77,6 +94,7 @@ const fetchHonouringRetryAfter = async <TInput>(
 
 export {
   CALDAV_MAX_THROTTLE_RETRIES,
+  CALDAV_RETRYABLE_STATUSES,
   CALDAV_THROTTLE_FLOOR_MS,
   fetchHonouringRetryAfter,
   resolveThrottleDelayMs,
