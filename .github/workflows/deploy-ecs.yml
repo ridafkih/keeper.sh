@@ -9,6 +9,9 @@ on:
       version:
         required: true
         type: string
+    secrets:
+      AWS_DEPLOY_ROLE_ARN:
+        required: true
   workflow_dispatch:
     inputs:
       environment:
@@ -39,6 +42,15 @@ jobs:
       VERSION: ${{ inputs.version }}
       REGISTRY: ghcr.io/${{ github.repository_owner }}
     steps:
+      - name: Confirm the deploy role reached this job
+        env:
+          ROLE: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+        run: |
+          if [ -z "$ROLE" ]; then
+            echo "::error::AWS_DEPLOY_ROLE_ARN is empty for the $ENVIRONMENT environment; nothing was deployed."
+            exit 1
+          fi
+
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
