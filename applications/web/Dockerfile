@@ -26,7 +26,7 @@ RUN bun install --frozen-lockfile --production
 COPY --from=build /app/applications/web/dist ./applications/web/dist
 COPY --from=build /app/applications/web/public ./applications/web/public
 COPY --from=prune /app/out/full/packages/otelemetry ./packages/otelemetry
-RUN bun link --cwd packages/otelemetry
+RUN ln -s /app/packages/otelemetry/src/index.ts /usr/local/bin/keeper-otelemetry
 COPY --from=source /app/applications/web/entrypoint.sh ./applications/web/entrypoint.sh
 RUN chmod +x ./applications/web/entrypoint.sh
 
@@ -40,5 +40,9 @@ ARG VERSION
 RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
 ENV COMMIT_SHA=$COMMIT_SHA
 ENV VERSION=$VERSION
+
+RUN chown 1000:1000 /tmp
+USER 1000:1000
+VOLUME ["/tmp"]
 
 ENTRYPOINT ["./entrypoint.sh"]
