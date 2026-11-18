@@ -4,7 +4,11 @@ import {
   readMappingSyncRules,
   writeMappingSyncRuleOverrides,
 } from "@/utils/mapping-sync-rules";
-import { scheduleMappingReplacementSync } from "@/utils/source-destination-mappings";
+import {
+  countEffectiveUserMappings,
+  MAPPING_LIMIT_ERROR_MESSAGE,
+  scheduleMappingReplacementSync,
+} from "@/utils/source-destination-mappings";
 import {
   handleGetMappingSyncRulesRoute,
   handlePatchMappingSyncRulesRoute,
@@ -36,12 +40,18 @@ const PATCH = withWideEvent(
           destinationCalendarId,
           updates,
         ) => {
+          const plan = await premiumService.getUserPlan(userIdToUpdate);
           const updated = await writeMappingSyncRuleOverrides(
             database,
             userIdToUpdate,
             sourceCalendarId,
             destinationCalendarId,
             updates,
+            {
+              countEffectiveMappings: countEffectiveUserMappings,
+              limitErrorMessage: MAPPING_LIMIT_ERROR_MESSAGE,
+              mappingLimit: premiumService.getMappingLimit(plan),
+            },
           );
           if (updated) {
             scheduleMappingReplacementSync(userIdToUpdate);

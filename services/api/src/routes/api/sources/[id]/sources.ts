@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database } from "@/context";
 import {
+  getInheritedSourcesForDestination,
   getSourcesForDestination,
   changeSourcesForDestination,
 } from "@/utils/source-destination-mappings";
@@ -30,6 +31,7 @@ const GET = withWideEvent(
 
           return Boolean(destination);
         },
+        getInheritedSourcesForDestination,
         getSourcesForDestination,
       },
     )),

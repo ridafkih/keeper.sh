@@ -133,6 +133,7 @@ describe("handleGetSourcesForDestinationRoute", () => {
       { params: {}, userId: "user-1" },
       {
         destinationExists: () => Promise.resolve(true),
+        getInheritedSourcesForDestination: () => Promise.resolve([]),
         getSourcesForDestination: () => Promise.resolve([]),
       },
     );
@@ -145,6 +146,7 @@ describe("handleGetSourcesForDestinationRoute", () => {
       { params: { id: "dest-1" }, userId: "user-1" },
       {
         destinationExists: () => Promise.resolve(false),
+        getInheritedSourcesForDestination: () => Promise.resolve([]),
         getSourcesForDestination: () => Promise.resolve([]),
       },
     );
@@ -157,12 +159,18 @@ describe("handleGetSourcesForDestinationRoute", () => {
       { params: { id: "dest-1" }, userId: "user-1" },
       {
         destinationExists: () => Promise.resolve(true),
+        getInheritedSourcesForDestination: () => Promise.resolve([
+          { sourceCalendarId: "source-2", viaCalendarIds: ["source-1"] },
+        ]),
         getSourcesForDestination: () => Promise.resolve(["source-1"]),
       },
     );
 
     expect(response.status).toBe(200);
-    expect(await readJson(response)).toEqual({ sourceIds: ["source-1"] });
+    expect(await readJson(response)).toEqual({
+      inheritedSources: [{ sourceCalendarId: "source-2", viaCalendarIds: ["source-1"] }],
+      sourceIds: ["source-1"],
+    });
   });
 });
 

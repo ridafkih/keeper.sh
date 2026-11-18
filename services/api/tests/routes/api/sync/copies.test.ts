@@ -32,6 +32,7 @@ describe("handleCopiesRoute", () => {
             id: "copy-1",
             sourceCalendarId: "source-1",
             startTime: "2026-11-02T16:30:00.000Z",
+            viaCalendarIds: [],
             title: "Team standup",
           }],
         });
@@ -47,6 +48,7 @@ describe("handleCopiesRoute", () => {
         sourceCalendarId: "source-1",
         startTime: "2026-11-02T16:30:00.000Z",
         title: "Team standup",
+        viaCalendarIds: [],
       }],
     });
     expect(loggedFields.get("sync.events_copied")).toBe(24);

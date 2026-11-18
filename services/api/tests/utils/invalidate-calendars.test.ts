@@ -8,18 +8,36 @@ interface CalendarRow {
   calendarId: string | null;
 }
 
-type SelectBuilder = Promise<CalendarRow[]> & {
-  from: () => SelectBuilder;
-  leftJoin: () => SelectBuilder;
-  where: (condition: SQL) => SelectBuilder;
+interface MappingRow {
+  mapping: {
+    destinationCalendarId: string;
+    includeUpstreamSources: boolean;
+    sourceCalendarId: string;
+  };
+}
+
+type SelectBuilder<TRow> = Promise<TRow[]> & {
+  from: () => SelectBuilder<TRow>;
+  innerJoin: () => SelectBuilder<TRow>;
+  leftJoin: () => SelectBuilder<TRow>;
+  where: (condition: SQL) => SelectBuilder<TRow>;
 };
 
-const createBuilder = (
-  rows: CalendarRow[],
+const mapping = (
+  sourceCalendarId: string,
+  destinationCalendarId: string,
+  includeUpstreamSources = false,
+): MappingRow => ({
+  mapping: { destinationCalendarId, includeUpstreamSources, sourceCalendarId },
+});
+
+const createBuilder = <TRow>(
+  rows: TRow[],
   capture?: { query: { sql: string; params: unknown[] } | null },
-): SelectBuilder => {
-  const builder = Promise.resolve(rows) as SelectBuilder;
+): SelectBuilder<TRow> => {
+  const builder = Promise.resolve(rows) as SelectBuilder<TRow>;
   builder.from = () => builder;
+  builder.innerJoin = () => builder;
   builder.leftJoin = () => builder;
   builder.where = (condition) => {
     if (capture) {
@@ -32,7 +50,7 @@ const createBuilder = (
 
 const createDatabase = (
   ownedRows: CalendarRow[],
-  mappedDestinationRows: CalendarRow[] = [],
+  mappingRows: MappingRow[] = [],
   capture?: { query: { sql: string; params: unknown[] } | null },
 ): BunSQLDatabase => {
   let selectCount = 0;
@@ -42,7 +60,7 @@ const createDatabase = (
       if (selectCount === 1) {
         return createBuilder(ownedRows, capture);
       }
-      return createBuilder(mappedDestinationRows);
+      return createBuilder(mappingRows);
     },
   } as unknown as BunSQLDatabase;
 };
@@ -66,7 +84,7 @@ describe("getCalendarsAffectedByAccountMutation", () => {
     const result = await getCalendarsAffectedByAccountMutation(
       createDatabase(
         [{ calendarId: "source-1" }, { calendarId: "destination-1" }],
-        [{ calendarId: "destination-2" }, { calendarId: "destination-1" }],
+        [mapping("source-1", "destination-1"), mapping("source-1", "destination-2")],
       ),
       "owner-user",
       "owned-account",
@@ -76,6 +94,39 @@ describe("getCalendarsAffectedByAccountMutation", () => {
       calendarIds: ["source-1", "destination-1", "destination-2"],
       owned: true,
     });
+  });
+
+  it("includes destinations that inherit an owned source through a chained link", async () => {
+    const result = await getCalendarsAffectedByAccountMutation(
+      createDatabase(
+        [{ calendarId: "source-1" }],
+        [
+          mapping("source-1", "middle-1"),
+          mapping("middle-1", "final-1", true),
+          mapping("final-1", "beyond-1", true),
+        ],
+      ),
+      "owner-user",
+      "owned-account",
+    );
+
+    expect(result).toEqual({
+      calendarIds: ["source-1", "middle-1", "final-1", "beyond-1"],
+      owned: true,
+    });
+  });
+
+  it("stops at a link that has not opted in to upstream sources", async () => {
+    const result = await getCalendarsAffectedByAccountMutation(
+      createDatabase(
+        [{ calendarId: "source-1" }],
+        [mapping("source-1", "middle-1"), mapping("middle-1", "final-1")],
+      ),
+      "owner-user",
+      "owned-account",
+    );
+
+    expect(result).toEqual({ calendarIds: ["source-1", "middle-1"], owned: true });
   });
 
   it("allows deleting an owned account that has no calendars", async () => {

@@ -1,9 +1,6 @@
-import {
-  calendarAccountsTable,
-  calendarsTable,
-  sourceDestinationMappingsTable,
-} from "@keeper.sh/database/schema";
-import { and, eq, inArray } from "drizzle-orm";
+import { getUserSyncMappings, resolveEffectiveDestinationIds } from "@keeper.sh/calendar";
+import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
+import { and, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
 const getCalendarsAffectedByAccountMutation = async (
@@ -33,16 +30,12 @@ const getCalendarsAffectedByAccountMutation = async (
     return { calendarIds: [], owned: true };
   }
 
-  const mappedDestinations = await database
-    .select({ calendarId: sourceDestinationMappingsTable.destinationCalendarId })
-    .from(sourceDestinationMappingsTable)
-    .where(inArray(sourceDestinationMappingsTable.sourceCalendarId, ownedCalendarIds));
+  const mappings = await getUserSyncMappings(database, userId);
+  const downstreamCalendarIds = ownedCalendarIds.flatMap((calendarId) =>
+    resolveEffectiveDestinationIds(mappings, calendarId));
 
   return {
-    calendarIds: [...new Set([
-      ...ownedCalendarIds,
-      ...mappedDestinations.map(({ calendarId }) => calendarId),
-    ])],
+    calendarIds: [...new Set([...ownedCalendarIds, ...downstreamCalendarIds])],
     owned: true,
   };
 };
