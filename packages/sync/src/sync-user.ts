@@ -621,6 +621,7 @@ const DESTINATION_SKIP_REASONS = [
   "destination_not_pushable",
   "lock_not_acquired",
   "destination_ineligible",
+  "account_needs_reauthentication",
   "provider_unresolved",
 ] as const;
 
@@ -644,6 +645,7 @@ interface DestinationAttempt {
   accountId: string;
   calendarId: string;
   failureCount: number;
+  needsReauthentication: boolean;
   nextAttemptAt: Date | null;
   provider: string;
   syncFutureRange: string;
@@ -661,6 +663,7 @@ const getDestinationAttempt = async (
       accountId: calendarsTable.accountId,
       calendarId: calendarsTable.id,
       failureCount: calendarsTable.failureCount,
+      needsReauthentication: calendarAccountsTable.needsReauthentication,
       nextAttemptAt: calendarsTable.nextAttemptAt,
       provider: calendarAccountsTable.provider,
       syncFutureRange: calendarsTable.syncFutureRange,
@@ -900,6 +903,10 @@ const syncDestinationsForUser = async (
         const currentDestination = destinationLookup.value;
         if (!currentDestination || !isDestinationAttemptEligible(currentDestination)) {
           reportSkip(destinationCandidate.calendarId, "destination_ineligible");
+          return;
+        }
+        if (currentDestination.needsReauthentication) {
+          reportSkip(destinationCandidate.calendarId, "account_needs_reauthentication");
           return;
         }
         const destination = currentDestination;
