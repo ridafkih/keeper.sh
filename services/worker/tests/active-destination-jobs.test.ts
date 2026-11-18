@@ -6,7 +6,7 @@ import {
 
 const createHarness = () => {
   const beginUserRun = vi.fn();
-  const releaseUserRun = vi.fn();
+  const releaseUserRun = vi.fn((_userId: string): Promise<void> => Promise.resolve());
   const tracker = createActiveDestinationJobs({
     beginUserRun,
     releaseUserRun,
@@ -19,7 +19,7 @@ describe("createActiveDestinationJobs", () => {
     vi.useRealTimers();
   });
 
-  it("holds the user aggregate until every active destination settles", () => {
+  it("holds the user aggregate until every active destination settles", async () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -34,10 +34,10 @@ describe("createActiveDestinationJobs", () => {
     vi.advanceTimersByTime(DEFAULT_RELEASE_DELAY_MS);
 
     expect(harness.releaseUserRun).toHaveBeenCalledOnce();
-    harness.tracker.close();
+    await harness.tracker.close();
   });
 
-  it("cancels a pending idle transition when a sibling starts", () => {
+  it("cancels a pending idle transition when a sibling starts", async () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -53,10 +53,10 @@ describe("createActiveDestinationJobs", () => {
     harness.tracker.onSettled({ calendarId: "cal-2", id: "job-2", userId: "user-1" });
     vi.advanceTimersByTime(DEFAULT_RELEASE_DELAY_MS);
     expect(harness.releaseUserRun).toHaveBeenCalledOnce();
-    harness.tracker.close();
+    await harness.tracker.close();
   });
 
-  it("tracks a replacement for the same destination without cancelling the older run", () => {
+  it("tracks a replacement for the same destination without cancelling the older run", async () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -74,6 +74,6 @@ describe("createActiveDestinationJobs", () => {
     harness.tracker.onSettled({ calendarId: "cal-2", id: "sibling", userId: "user-1" });
     vi.advanceTimersByTime(DEFAULT_RELEASE_DELAY_MS);
     expect(harness.releaseUserRun).toHaveBeenCalledOnce();
-    harness.tracker.close();
+    await harness.tracker.close();
   });
 });

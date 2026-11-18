@@ -116,9 +116,7 @@ await entry({
 
     const activeDestinationJobs = createActiveDestinationJobs({
       beginUserRun: (userId) => syncAggregateRuntime.beginSyncRun(userId),
-      releaseUserRun: (userId) => {
-        syncAggregateRuntime.releaseSyncing(userId);
-      },
+      releaseUserRun: (userId) => syncAggregateRuntime.releaseSyncing(userId),
     });
 
     worker.on("active", (job) => {
@@ -150,8 +148,8 @@ await entry({
 
     return async () => {
       stopQueueProbe();
-      activeDestinationJobs.close();
       await worker.close();
+      await activeDestinationJobs.close();
       await continuationQueue.close();
       shutdownConnections();
       closeDatabase(database);

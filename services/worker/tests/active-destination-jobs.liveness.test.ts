@@ -33,7 +33,7 @@ import { createActiveDestinationJobs } from "../src/active-destination-jobs";
 
 const createHarness = (releaseDelayMs?: number) => {
   const beginUserRun = vi.fn();
-  const releaseUserRun = vi.fn();
+  const releaseUserRun = vi.fn((_userId: string): Promise<void> => Promise.resolve());
   const tracker = createActiveDestinationJobs({
     beginUserRun,
     releaseUserRun,
@@ -47,7 +47,7 @@ describe("active destination job liveness", () => {
     vi.useRealTimers();
   });
 
-  it("releases the user aggregate when an active job never settles", () => {
+  it("releases the user aggregate when an active job never settles", async () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -66,7 +66,7 @@ describe("active destination job liveness", () => {
     vi.advanceTimersByTime(60 * 60 * 1000);
 
     expect(harness.releaseUserRun).toHaveBeenCalledWith("user-1");
-    harness.tracker.close();
+    await harness.tracker.close();
   });
 
   /*
@@ -76,7 +76,7 @@ describe("active destination job liveness", () => {
    * is therefore permanent only for a calendar that never runs again on this
    * worker (destination deleted, disabled, or in a 6h backoff).
    */
-  it("reclaims a lost settle when the same calendar syncs again", () => {
+  it("reclaims a lost settle when the same calendar syncs again", async () => {
     vi.useFakeTimers();
     const harness = createHarness();
 
@@ -93,24 +93,49 @@ describe("active destination job liveness", () => {
     vi.advanceTimersByTime(60 * 60 * 1000);
 
     expect(harness.releaseUserRun).toHaveBeenCalledWith("user-1");
-    harness.tracker.close();
+    await harness.tracker.close();
   });
 
-  it("flushes a pending release when the worker shuts down", () => {
+  it("flushes a pending release when the worker shuts down", async () => {
     vi.useFakeTimers();
     const harness = createHarness(2000);
 
     harness.tracker.onActive({ calendarId: "cal-1", id: "job-1", userId: "user-1" });
     harness.tracker.onSettled({ calendarId: "cal-1", id: "job-1", userId: "user-1" });
 
-    /*
-     * Shutdown calls activeDestinationJobs.close() before worker.close(), so a
-     * release scheduled inside the 2s debounce is discarded and the user is
-     * left holding a syncing aggregate that nothing will ever clear.
-     */
-    harness.tracker.close();
+    await harness.tracker.close();
     vi.advanceTimersByTime(10_000);
 
     expect(harness.releaseUserRun).toHaveBeenCalledWith("user-1");
+  });
+
+  it("waits for every release, including one that settles while closing", async () => {
+    vi.useFakeTimers();
+    const harness = createHarness(2000);
+    const releases = new Map<string, PromiseWithResolvers<null>>();
+    harness.releaseUserRun.mockImplementation(async (userId: string) => {
+      const release = Promise.withResolvers<null>();
+      releases.set(userId, release);
+      await release.promise;
+    });
+    const pending = Symbol("pending");
+    const isPending = (promise: Promise<void>): Promise<boolean> =>
+      Promise.race([promise, Promise.resolve(pending)]).then((value) => value === pending);
+
+    harness.tracker.onActive({ calendarId: "cal-1", id: "job-1", userId: "user-1" });
+    harness.tracker.onActive({ calendarId: "cal-2", id: "job-2", userId: "user-2" });
+    harness.tracker.onSettled({ calendarId: "cal-1", id: "job-1", userId: "user-1" });
+
+    const closed = harness.tracker.close();
+    harness.tracker.onSettled({ calendarId: "cal-2", id: "job-2", userId: "user-2" });
+
+    expect(harness.releaseUserRun.mock.calls).toEqual([["user-1"], ["user-2"]]);
+    expect(vi.getTimerCount()).toBe(0);
+
+    releases.get("user-1")?.resolve(null);
+    await expect(isPending(closed)).resolves.toBe(true);
+
+    releases.get("user-2")?.resolve(null);
+    await expect(closed).resolves.toBeUndefined();
   });
 });

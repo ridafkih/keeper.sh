@@ -7,12 +7,12 @@ interface ActiveDestinationJob {
 interface ActiveDestinationJobsConfig {
   beginUserRun: (userId: string) => void;
   releaseDelayMs?: number;
-  releaseUserRun: (userId: string) => void;
+  releaseUserRun: (userId: string) => Promise<void>;
   stalledJobTimeoutMs?: number;
 }
 
 interface ActiveDestinationJobs {
-  close: () => void;
+  close: () => Promise<void>;
   onActive: (job: ActiveDestinationJob) => void;
   onSettled: (job: ActiveDestinationJob) => void;
 }
@@ -32,6 +32,8 @@ const createActiveDestinationJobs = (
   const activeDestinationCountsByUser = new Map<string, number>();
   const releaseTimersByUser = new Map<string, ReturnType<typeof setTimeout>>();
   const stalledTimersByCalendar = new Map<string, ReturnType<typeof setTimeout>>();
+  const releasesInFlight = new Set<Promise<void>>();
+  let closing = false;
   const releaseDelayMs = config.releaseDelayMs ?? DEFAULT_RELEASE_DELAY_MS;
   const stalledJobTimeoutMs = config.stalledJobTimeoutMs ?? DEFAULT_STALLED_JOB_TIMEOUT_MS;
 
@@ -57,6 +59,13 @@ const createActiveDestinationJobs = (
 
 
 
+  const releaseUserRun = (userId: string): void => {
+    const release = config.releaseUserRun(userId).finally(() => {
+      releasesInFlight.delete(release);
+    });
+    releasesInFlight.add(release);
+  };
+
   const onSettled = (job: ActiveDestinationJob): void => {
     const activeJob = activeJobsByCalendar.get(job.calendarId);
     if (activeJob?.id !== job.id) {
@@ -73,10 +82,14 @@ const createActiveDestinationJobs = (
     }
 
     activeDestinationCountsByUser.delete(job.userId);
+    if (closing) {
+      releaseUserRun(job.userId);
+      return;
+    }
     const timer = setTimeout(() => {
       releaseTimersByUser.delete(job.userId);
       if ((activeDestinationCountsByUser.get(job.userId) ?? 0) === 0) {
-        config.releaseUserRun(job.userId);
+        releaseUserRun(job.userId);
       }
     }, releaseDelayMs);
     releaseTimersByUser.set(job.userId, timer);
@@ -118,20 +131,20 @@ const createActiveDestinationJobs = (
     armStalledWatchdog(job);
   };
 
-  const close = (): void => {
+  const close = async (): Promise<void> => {
+    closing = true;
     for (const timer of stalledTimersByCalendar.values()) {
       clearTimeout(timer);
     }
     stalledTimersByCalendar.clear();
-    /*
-     * Shutdown runs before worker.close(), so discarding a debounced release would
-     * leave the user holding a syncing aggregate nothing clears. Fire them instead.
-     */
     for (const [userId, timer] of releaseTimersByUser) {
       clearTimeout(timer);
-      config.releaseUserRun(userId);
+      releaseUserRun(userId);
     }
     releaseTimersByUser.clear();
+    while (releasesInFlight.size > 0) {
+      await Promise.all(releasesInFlight);
+    }
   };
 
   return { close, onActive, onSettled };
