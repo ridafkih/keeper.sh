@@ -19,7 +19,7 @@ RUN bun run --cwd services/api build && \
     bun run --cwd services/cron build && \
     bun run --cwd services/mcp build && \
     bun run --cwd services/worker build && \
-    bun run --cwd applications/web build
+    ENV=production bun run --cwd applications/web build
 
 FROM debian:bookworm-slim AS runtime
 COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone
