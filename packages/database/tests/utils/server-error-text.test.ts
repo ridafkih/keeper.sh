@@ -14,6 +14,7 @@ describe("loggedServerMessage", () => {
     ["22003", 'value "99999999999" is out of range for type integer', "value is out of range for type integer"],
     ["22023", 'invalid value for parameter "TimeZone": "ada\'s "home" zone"', "invalid value for parameter"],
     ["22023", 'time zone "ada@example.com" not recognized', "time zone not recognized"],
+    ["22P02", 'invalid input syntax for type integer: "4111 1111', "invalid input syntax for type integer"],
     ["22021", 'invalid byte sequence for encoding "UTF8": 0xe9 0x61', "invalid byte sequence for encoding"],
   ])("keeps only the condition of a %s data exception", (sqlState, message, expected) => {
     expect(loggedServerMessage(sqlState, message)).toBe(expected);

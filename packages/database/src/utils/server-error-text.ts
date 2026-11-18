@@ -7,7 +7,7 @@ const IDENTIFIER_KEY_DETAIL_PATTERN = new RegExp(
   "i",
 );
 const KEY_DETAIL_PATTERN = /^Key \((?<columns>.*?)\)(?:=\(|$)/s;
-const QUOTED_SPAN_PATTERN = /\s*".*"/s;
+const VALUE_QUOTE = '"';
 const TRAILING_VALUE_SEPARATOR = ":";
 
 const readSqlStateClass = (sqlState: string | null): string | null => {
@@ -22,11 +22,24 @@ const describesServerState = (sqlState: string | null): boolean => {
   return sqlStateClass !== null && SERVER_STATE_CLASSES.has(sqlStateClass);
 };
 
+const withoutQuotedSpan = (message: string): string => {
+  const opening = message.indexOf(VALUE_QUOTE);
+  if (opening === -1) {
+    return message;
+  }
+  const closing = message.lastIndexOf(VALUE_QUOTE);
+  const lead = message.slice(0, opening).trimEnd();
+  if (closing === opening) {
+    return lead;
+  }
+  return `${lead}${message.slice(closing + 1)}`;
+};
+
 const loggedServerMessage = (sqlState: string | null, message: string): string => {
   if (readSqlStateClass(sqlState) !== DATA_EXCEPTION_CLASS) {
     return message;
   }
-  const [condition = ""] = message.replace(QUOTED_SPAN_PATTERN, "").split(TRAILING_VALUE_SEPARATOR);
+  const [condition = ""] = withoutQuotedSpan(message).split(TRAILING_VALUE_SEPARATOR);
   return condition.trimEnd();
 };
 
