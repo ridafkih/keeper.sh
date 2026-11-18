@@ -1189,7 +1189,7 @@ describe("syncCalendar", () => {
     const emittedEvents: Record<string, unknown>[] = [];
     const cause = Object.assign(new Error("duplicate key value violates unique constraint"), {
       constraint: "event_mappings_sync_event_cal_idx",
-      detail: "Key already exists.",
+      detail: "Key (sync_event_id, calendar_id)=(source-uid-1, dest-cal-1) already exists.",
       errno: "23505",
     });
     const error = new Error("Failed query", { cause });
@@ -1207,7 +1207,7 @@ describe("syncCalendar", () => {
 
     expect(emittedEvents[0]).toMatchObject({
       "error.database.constraint": "event_mappings_sync_event_cal_idx",
-      "error.database.detail": "Key already exists.",
+      "error.database.detail": "Key (sync_event_id, calendar_id)",
       "error.database.message": "duplicate key value violates unique constraint",
       "error.database.sqlstate": "23505",
       "error.message": "Failed query",

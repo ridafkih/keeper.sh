@@ -1,5 +1,5 @@
-import { activeTraceFields } from "@keeper.sh/otelemetry/tracing";
-import { widelogger, widelog } from "widelogger";
+import { activeTraceFields, withLoggedText } from "@keeper.sh/otelemetry/tracing";
+import { widelogger, widelog as wideEvent } from "widelogger";
 import { buildIdentity } from "../build-identity";
 
 const { context: wideEventContext, destroy } = widelogger({
@@ -9,6 +9,8 @@ const { context: wideEventContext, destroy } = widelogger({
   environment: buildIdentity.ENV,
   version: buildIdentity.VERSION,
 });
+
+const widelog = withLoggedText(wideEvent);
 
 const context = <Result>(callback: () => Result): Result =>
   wideEventContext(() => {

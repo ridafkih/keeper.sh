@@ -19,6 +19,7 @@ import {
   ensureValidToken,
   REDIS_UNAVAILABLE_SLUG,
   isRedisUnavailableError,
+  isResponseTooLargeError,
   isTimeoutError,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
@@ -63,6 +64,10 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import {
+  DESTINATION_EXCLUDES_TENTATIVE,
+  requiresTentativeIngestion,
+} from "./tentative-ingestion";
 import { context, widelog } from "@/utils/logging";
 import { pendingFirstSyncMappingCount, recordPendingFirstSyncs } from "@/utils/first-sync-fields";
 import {
@@ -247,6 +252,9 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   if (error instanceof CalDAVUnreadableResourceError) {
     recordSkippedResources(error.skippedResourceCount, error.skippedResourceReasons);
     return "provider-partial-response";
+  }
+  if (isResponseTooLargeError(error)) {
+    return "provider-response-too-large";
   }
   if (!isTimeoutError(error)) {
     return "provider-api-error";
@@ -1217,9 +1225,6 @@ const ingestOAuthSources = async (
           widelog.set("provider.account_id", source.accountId);
           widelog.set("provider.calendar_id", source.calendarId);
           recordPendingFirstSyncs(source.pendingFirstSyncMappingCount);
-          if (source.externalCalendarId) {
-            widelog.set("provider.external_calendar_id", source.externalCalendarId);
-          }
 
           try {
             const run = await widelog.time.measure("duration_ms", () =>
@@ -1229,6 +1234,7 @@ const ingestOAuthSources = async (
                     accountId: calendarAccountsTable.id,
                     accessToken: oauthCredentialsTable.accessToken,
                     excludeAvailabilities: calendarsTable.excludeAvailabilities,
+                    excludesTentativeForADestination: DESTINATION_EXCLUDES_TENTATIVE,
                     expiresAt: oauthCredentialsTable.expiresAt,
                     externalCalendarId: calendarsTable.externalCalendarId,
                     failureCount: calendarsTable.ingestFailureCount,
@@ -1307,7 +1313,7 @@ const ingestOAuthSources = async (
                 const fetcher = resolveOAuthFetcher(currentSource.provider, {
                   accessToken: tokenState.accessToken,
                   calendarId: source.calendarId,
-                  excludesTentative: currentSource.excludeAvailabilities.includes("tentative"),
+                  excludesTentative: requiresTentativeIngestion(currentSource),
                   externalCalendarId: currentSource.externalCalendarId,
                   syncToken: ingestionState.syncToken,
                   rateLimiter,

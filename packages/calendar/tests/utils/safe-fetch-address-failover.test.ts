@@ -118,6 +118,73 @@ describe("safe-fetch gives up without falling back to the hostname", () => {
   });
 });
 
+describe("safe-fetch reports the failure of the address it could reach", () => {
+  const originalFetch = globalThis.fetch;
+  const IPV6_ADDRESS = "2606:2800:220:1:248:1893:25c8:1946";
+
+  beforeEach(() => {
+    mockResolve4.mockReset();
+    mockResolve6.mockReset();
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const failWith = (failures: Map<string, Error>): ReturnType<typeof vi.fn<FetchFn>> => {
+    const mockFetch = vi.fn<FetchFn>();
+    mockFetch.mockImplementation((input) => {
+      const failure = failures.get(requestedHostname(input));
+      if (!failure) {
+        return Promise.resolve(new Response("unexpected", { status: 200 }));
+      }
+      return Promise.reject(failure);
+    });
+    installMockFetch(mockFetch);
+    return mockFetch;
+  };
+
+  const rejectionOf = async (url: string): Promise<unknown> => {
+    try {
+      await createSafeFetch(enabledOptions)(url);
+      return null;
+    } catch (error) {
+      return error;
+    }
+  };
+
+  it("keeps the IPv4 failure when the IPv6 address has no route from this network", async () => {
+    mockResolve4.mockResolvedValue([FIRST_ADDRESS]);
+    mockResolve6.mockResolvedValue([IPV6_ADDRESS]);
+
+    const failures = new Map<string, Error>([
+      [FIRST_ADDRESS, connectionError("ECONNRESET")],
+      [`[${IPV6_ADDRESS}]`, connectionError("ENETUNREACH")],
+    ]);
+    const mockFetch = failWith(failures);
+
+    const rejection = await rejectionOf("https://dual.example.com/cal.ics");
+
+    expect(rejection).toBe(failures.get(FIRST_ADDRESS));
+    const attempted = mockFetch.mock.calls.map((call) => requestedHostname(call[0] ?? ""));
+    expect(attempted).toContain(`[${IPV6_ADDRESS}]`);
+  });
+
+  it("reports the missing route when no other address was tried", async () => {
+    mockResolve4.mockRejectedValue(new Error("no A records"));
+    mockResolve6.mockResolvedValue([IPV6_ADDRESS]);
+
+    const failures = new Map<string, Error>([
+      [`[${IPV6_ADDRESS}]`, connectionError("ENETUNREACH")],
+    ]);
+    failWith(failures);
+
+    const rejection = await rejectionOf("https://v6only.example.com/cal.ics");
+
+    expect(rejection).toBe(failures.get(`[${IPV6_ADDRESS}]`));
+  });
+});
+
 describe("safe-fetch only fails over on a failure to connect", () => {
   const originalFetch = globalThis.fetch;
 

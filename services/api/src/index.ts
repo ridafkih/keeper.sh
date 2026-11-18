@@ -3,6 +3,7 @@ import type { BroadcastData } from "@keeper.sh/broadcast";
 import { nameRequestRoute, startTracing, withRequestTracing } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { join } from "node:path";
+import { withDefaultCacheControl } from "./middleware/cache-control";
 import { withCors } from "./middleware/cors";
 import { handleAuthRequest } from "./handlers/auth";
 import { websocketHandler } from "./handlers/websocket";
@@ -13,6 +14,7 @@ import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
 import { closeDatabase } from "@keeper.sh/database";
 import { broadcastService, database, redis } from "./context";
 import { destroy } from "./utils/logging";
+import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
@@ -35,13 +37,14 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: async () => {
+    reportPrivateResolutionPolicy();
     const server = Bun.serve<BroadcastData>({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.API_PORT,
       idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
       websocket: websocketHandler,
-      fetch: withRequestTracing({ trustIncomingTraceContext: true }, withCors(async (request) => {
+      fetch: withRequestTracing({ trustIncomingTraceContext: true }, withCors(withDefaultCacheControl(async (request) => {
         const url = new URL(request.url);
 
         if (url.pathname.startsWith("/api/auth")) {
@@ -103,7 +106,7 @@ await entry({
         }
 
         return handler(request, match.params, match.name);
-      })),
+      }))),
     });
 
     await broadcastService.startSubscriber();

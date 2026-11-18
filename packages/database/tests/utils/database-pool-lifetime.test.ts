@@ -4,27 +4,37 @@ import { closeDatabase, createDatabase } from "../../src/utils/database";
 
 const TEST_DATABASE_URL = process.env.KEEPER_TEST_DATABASE_URL;
 
-/*
- * Bun 1.3.14 retires a pooled connection the instant maxLifetime elapses, even
- * with a query in flight: onMaxLifetimeTimeout never consults hasQueryRunning,
- * so the healthy query dies with ERR_POSTGRES_LIFETIME_TIMEOUT and nothing
- * retries it (oven-sh/bun#30646; fix #30648 unmerged as of 1.3.14). Production
- * saw this kill better-auth session reads every ~30 minutes, turning every
- * authed route into a 500. The only safe value is 0; these tests pin both the
- * driver defect and the production pool configuration that avoids it.
- */
 describe.skipIf(!TEST_DATABASE_URL)("pool max lifetime with a query in flight", () => {
-  it("kills a healthy in-flight query when a non-zero maxLifetime elapses", async () => {
+  it("lets a healthy in-flight query outlive a non-zero maxLifetime, then replaces the connection", async () => {
     const sql = new SQL({ max: 1, maxLifetime: 1, prepare: false, url: TEST_DATABASE_URL });
     try {
       await sql.unsafe("select 1", []);
       await Bun.sleep(200);
-      const failure = await sql.unsafe("select pg_sleep(2)", []).then(
-        () => null,
-        (error: unknown) => error,
-      );
-      expect(failure).not.toBeNull();
-      expect((failure as { code?: string }).code).toBe("ERR_POSTGRES_LIFETIME_TIMEOUT");
+      const [inFlight] = (await sql.unsafe(
+        "select pg_sleep(2), pg_backend_pid() as pid, 'survived' as outcome",
+        [],
+      )) as { outcome: string; pid: number }[];
+      const [next] = (await sql.unsafe("select pg_backend_pid() as pid", [])) as { pid: number }[];
+      expect(inFlight?.outcome).toBe("survived");
+      expect(next?.pid).toBeTypeOf("number");
+      expect(next?.pid).not.toBe(inFlight?.pid);
+    } finally {
+      await sql.close();
+    }
+  }, 15_000);
+
+  it("lets a healthy in-flight query outlive idleTimeout, then closes the connection once it is idle", async () => {
+    const sql = new SQL({ idleTimeout: 1, max: 1, prepare: false, url: TEST_DATABASE_URL });
+    try {
+      const [inFlight] = (await sql.unsafe(
+        "select pg_sleep(2), pg_backend_pid() as pid, 'survived' as outcome",
+        [],
+      )) as { outcome: string; pid: number }[];
+      await Bun.sleep(2000);
+      const [next] = (await sql.unsafe("select pg_backend_pid() as pid", [])) as { pid: number }[];
+      expect(inFlight?.outcome).toBe("survived");
+      expect(next?.pid).toBeTypeOf("number");
+      expect(next?.pid).not.toBe(inFlight?.pid);
     } finally {
       await sql.close();
     }

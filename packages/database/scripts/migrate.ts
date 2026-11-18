@@ -2,6 +2,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Client } from "pg";
 import {
+  describeMigrationRun,
+  selectPendingMigrations,
+  type MigrationJournal,
+} from "../src/database/applied-migrations";
+import {
   backfillEventMappingSyncEventIds,
   createEventMappingBackfillDatabase,
 } from "../src/database/backfill-event-mapping-sync-event-ids";
@@ -404,6 +409,30 @@ const readServerTimeZone = async (): Promise<string> => {
   return zone;
 };
 
+const MIGRATIONS_FOLDER = `${import.meta.dirname}/../drizzle`;
+
+const readMigrationJournal = async (): Promise<MigrationJournal> => {
+  const journal: MigrationJournal = await Bun.file(`${MIGRATIONS_FOLDER}/meta/_journal.json`).json();
+  return journal;
+};
+
+const readLastAppliedMigrationAt = async (): Promise<number | null> => {
+  const table = await connection.query<{ exists: boolean }>(`
+    SELECT to_regclass('drizzle.__drizzle_migrations') IS NOT NULL AS exists
+  `);
+  if (!table.rows[0]?.exists) {
+    return null;
+  }
+  const latest = await connection.query<{ created_at: string | null }>(`
+    SELECT max(created_at) AS created_at FROM drizzle.__drizzle_migrations
+  `);
+  const createdAt = latest.rows[0]?.created_at ?? null;
+  if (createdAt === null) {
+    return null;
+  }
+  return Number(createdAt);
+};
+
 const normalizeServerClockTimestamps = async (zone: string): Promise<void> => {
   if (isUtcTimeZoneName(zone)) {
     return;
@@ -459,9 +488,16 @@ try {
      */
   }
 
+  const journal = await readMigrationJournal();
+  const pendingMigrations = selectPendingMigrations(journal, await readLastAppliedMigrationAt());
+
   await migrate(database, {
-    migrationsFolder: `${import.meta.dirname}/../drizzle`,
+    migrationsFolder: MIGRATIONS_FOLDER,
   });
+
+  process.stdout.write(
+    `${JSON.stringify(describeMigrationRun(journal, pendingMigrations, new Date()))}\n`,
+  );
 
   if (!(await isPostMigrationRuntimeReady())) {
     await installEventMappingCompatibilityTrigger();

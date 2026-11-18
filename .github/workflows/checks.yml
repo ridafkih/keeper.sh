@@ -10,42 +10,9 @@ jobs:
   types:
     runs-on: ubuntu-latest
     steps:
-      - id: content-access
-        env:
-          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          if [ -n "$APP_ID" ]; then
-            echo "available=yes" >> "$GITHUB_OUTPUT"
-          elif [ "$IS_FORK" = "true" ]; then
-            echo "available=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
-            exit 1
-          fi
-
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-token
-        if: steps.content-access.outputs.available == 'yes'
-        with:
-          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
-          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
-          owner: keeperdotsh
-          repositories: seo
-          permission-contents: read
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Fetch the content submodule
-        if: steps.content-access.outputs.available == 'yes'
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
-          test -d applications/web/seo/blog
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run types
@@ -53,42 +20,9 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - id: content-access
-        env:
-          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          if [ -n "$APP_ID" ]; then
-            echo "available=yes" >> "$GITHUB_OUTPUT"
-          elif [ "$IS_FORK" = "true" ]; then
-            echo "available=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
-            exit 1
-          fi
-
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-token
-        if: steps.content-access.outputs.available == 'yes'
-        with:
-          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
-          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
-          owner: keeperdotsh
-          repositories: seo
-          permission-contents: read
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Fetch the content submodule
-        if: steps.content-access.outputs.available == 'yes'
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
-          test -d applications/web/seo/blog
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run lint
@@ -96,42 +30,9 @@ jobs:
   unused:
     runs-on: ubuntu-latest
     steps:
-      - id: content-access
-        env:
-          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          if [ -n "$APP_ID" ]; then
-            echo "available=yes" >> "$GITHUB_OUTPUT"
-          elif [ "$IS_FORK" = "true" ]; then
-            echo "available=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
-            exit 1
-          fi
-
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-token
-        if: steps.content-access.outputs.available == 'yes'
-        with:
-          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
-          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
-          owner: keeperdotsh
-          repositories: seo
-          permission-contents: read
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Fetch the content submodule
-        if: steps.content-access.outputs.available == 'yes'
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
-          test -d applications/web/seo/blog
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run unused
@@ -166,6 +67,7 @@ jobs:
           --health-retries 12
     steps:
       - id: content-access
+        if: matrix.shard == 'web'
         env:
           APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
           IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
@@ -190,21 +92,21 @@ jobs:
           permission-contents: read
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Fetch the content submodule
         if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" submodule update --init applications/web/seo
           test -d applications/web/seo/blog
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun -e 'console.log(require("node:os").availableParallelism(), require("node:os").cpus().length)'
-      - run: bunx turbo run test --concurrency=2 ${{ matrix.filter }}
+      - run: bunx turbo run test --concurrency=2 --continue=always ${{ matrix.filter }}
         env:
           KEEPER_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
 
@@ -253,6 +155,8 @@ jobs:
       ENV: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Confirm the content submodule is absent
         run: test -z "$(ls -A applications/web/seo)"
@@ -301,42 +205,9 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     steps:
-      - id: content-access
-        env:
-          APP_ID: ${{ secrets.KEEPER_BOT_APP_ID }}
-          IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
-        run: |
-          if [ -n "$APP_ID" ]; then
-            echo "available=yes" >> "$GITHUB_OUTPUT"
-          elif [ "$IS_FORK" = "true" ]; then
-            echo "available=no" >> "$GITHUB_OUTPUT"
-          else
-            echo "KEEPER_BOT_APP_ID is missing outside a fork pull request." >&2
-            exit 1
-          fi
-
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-token
-        if: steps.content-access.outputs.available == 'yes'
-        with:
-          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
-          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
-          owner: keeperdotsh
-          repositories: seo
-          permission-contents: read
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Fetch the content submodule
-        if: steps.content-access.outputs.available == 'yes'
-        env:
-          TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
-          test -d applications/web/seo/blog
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       - run: bun install --frozen-lockfile
       - run: bun run --filter @keeper.sh/database test:migrations

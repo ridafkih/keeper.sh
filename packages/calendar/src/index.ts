@@ -173,6 +173,7 @@ export {
   isTimeoutError,
   mergeAbortSignals,
 } from "./core/utils/fetch-with-timeout";
+export { isResponseTooLargeError } from "./utils/bounded-response";
 export { REDIS_UNAVAILABLE_SLUG, isRedisUnavailableError } from "./core/utils/redis-errors";
 export {
   getEventsForCalendars,

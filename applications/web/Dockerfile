@@ -1,11 +1,14 @@
-FROM oven/bun:1 AS base
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS base
 WORKDIR /app
 
 FROM base AS source
 COPY . .
 
 FROM base AS prune
-RUN bun install --global turbo
+COPY --from=source /app/bun.lock ./bun.lock
+RUN version="$(sed -n 's/^ *"turbo": \["turbo@\([^"]*\)".*/\1/p' bun.lock)" \
+  && test -n "$version" \
+  && bun install --global "turbo@$version"
 COPY --from=source /app .
 RUN turbo prune @keeper.sh/web --docker
 
@@ -13,7 +16,7 @@ FROM base AS build
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile
 COPY --from=prune /app/out/full/ .
-RUN bun run --cwd applications/web build
+RUN ENV=production bun run --cwd applications/web build
 
 FROM base AS runtime
 COPY --from=source /app/docker/icu-timezone /usr/share/icu-timezone

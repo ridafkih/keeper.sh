@@ -8,6 +8,8 @@ concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
 
+permissions: {}
+
 env:
   REGISTRY: ghcr.io
 
@@ -70,16 +72,16 @@ jobs:
           permission-contents: read
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Fetch the content submodule
         if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" submodule update --init applications/web/seo
           test -d applications/web/seo/blog
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -165,16 +167,16 @@ jobs:
           permission-contents: read
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Fetch the content submodule
         if: steps.content-access.outputs.available == 'yes'
         env:
           TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config --global \
-            url."https://x-access-token:${TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" submodule update --init applications/web/seo
           test -d applications/web/seo/blog
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
@@ -366,7 +368,8 @@ jobs:
       contents: read
       id-token: write
     uses: ./.github/workflows/deploy-ecs.yml
-    secrets: inherit
+    secrets:
+      AWS_DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
     with:
       environment: ${{ matrix.environment }}
       version: ${{ needs.deploy-targets.outputs.version }}

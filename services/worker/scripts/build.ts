@@ -1,6 +1,6 @@
 import { Glob, build } from "bun";
 
-const ENTRY_POINT_GLOB = new Glob("src/index.ts");
+const ENTRY_POINT_GLOB = new Glob("src/{index,healthcheck}.ts");
 
 const entrypoints = [...ENTRY_POINT_GLOB.scanSync()];
 

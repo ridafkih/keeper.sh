@@ -7,7 +7,8 @@ interface EmittedEvent {
   };
   operation?: { name?: string };
   outcome?: string;
-  provider?: { calendar_id?: string };
+  provider?: { account_id?: string; calendar_id?: string; name?: string };
+  user?: { id?: string };
   wait?: { rate_limiter_key?: string; rate_limiter_ms?: number };
 }
 
@@ -41,7 +42,11 @@ const TIMER_SLACK_MS = 5;
 
 const RATE_LIMITER_SCRIPT_MARKER = "ZREMRANGEBYSCORE";
 
+const DEFAULT_EXTERNAL_CALENDAR_ID = "primary";
+const ACCOUNT_ADDRESS = ["ada.lovelace", "example.com"].join("@");
+
 let sourceCount = 1;
+let externalCalendarId = DEFAULT_EXTERNAL_CALENDAR_ID;
 let gatedReadMs = 0;
 let limiterWaitCount = 0;
 let limiterWaitKey = "ratelimit:user-1:google";
@@ -72,7 +77,7 @@ const buildSourceRows = (): unknown[] => {
     return [{
       ...baseSource,
       calendarId: CALENDAR_ID,
-      externalCalendarId: "primary",
+      externalCalendarId,
       reauthenticationSource: null,
     }];
   }
@@ -80,7 +85,7 @@ const buildSourceRows = (): unknown[] => {
   return Array.from({ length: sourceCount }, (_unused, index) => ({
     ...baseSource,
     calendarId: `${CALENDAR_ID}-${index}`,
-    externalCalendarId: "primary",
+    externalCalendarId,
     reauthenticationSource: null,
     userId: `user-${index}`,
   }));
@@ -246,6 +251,7 @@ const originalWrite = process.stdout.write.bind(process.stdout);
 beforeEach(() => {
   emitted.length = 0;
   sourceCount = 1;
+  externalCalendarId = DEFAULT_EXTERNAL_CALENDAR_ID;
   gatedReadMs = 0;
   limiterWaitCount = 0;
   limiterWaitKey = "ratelimit:user-1:google";
@@ -329,5 +335,22 @@ describe("rate limiter attribution", () => {
 
     expect(event.outcome).toBe("success");
     expect(event.wait?.rate_limiter_key).toBeUndefined();
+  });
+});
+
+describe("source identity", () => {
+  it("names the source by its internal identifiers when the provider's calendar id is an address", async () => {
+    externalCalendarId = ACCOUNT_ADDRESS;
+
+    const event = await firstEvent();
+
+    expect(event.outcome).toBe("success");
+    expect(event.provider).toEqual({
+      account_id: "account-1",
+      calendar_id: CALENDAR_ID,
+      name: "google",
+    });
+    expect(event.user?.id).toBe("user-1");
+    expect(JSON.stringify(event)).not.toContain(ACCOUNT_ADDRESS);
   });
 });
