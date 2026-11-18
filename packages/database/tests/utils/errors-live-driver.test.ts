@@ -182,13 +182,13 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
 
   it("classifies a connection refused by the server connection limit", async () => {
     const administrator = trackedDatabase({ max: 2 });
-    await administrator.execute(sql`drop role if exists keeper_conn_limit_probe`);
+    const limitedRole = `keeper_conn_limit_probe_${crypto.randomUUID().replaceAll("-", "")}`;
     await administrator.execute(
-      sql`create role keeper_conn_limit_probe login password 'probe' connection limit 1`,
+      sql`create role ${sql.identifier(limitedRole)} login password 'probe' connection limit 1`,
     );
 
     const limitedUrl = new URL(databaseUrl ?? "");
-    limitedUrl.username = "keeper_conn_limit_probe";
+    limitedUrl.username = limitedRole;
     limitedUrl.password = "probe";
 
     const holder = trackedDatabase({ url: limitedUrl.toString() });
@@ -202,7 +202,7 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     } finally {
       holder.$client.close();
       blocked.$client.close();
-      await administrator.execute(sql`drop role if exists keeper_conn_limit_probe`);
+      await administrator.execute(sql`drop role if exists ${sql.identifier(limitedRole)}`);
     }
   }, 20_000);
 

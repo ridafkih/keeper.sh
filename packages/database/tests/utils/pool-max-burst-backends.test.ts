@@ -15,7 +15,7 @@ const POOL_MAX = 2;
 const BURST_SIZE = 50;
 const QUERY_SECONDS = 0.5;
 const SAMPLE_INTERVAL_MS = 20;
-const APPLICATION_NAME = "keeper-pool-burst-probe";
+const APPLICATION_NAME = `keeper-pool-burst-probe-${crypto.randomUUID()}`;
 
 const probeUrl = (): string => {
   const url = new URL(TEST_DATABASE_URL as string);
