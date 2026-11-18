@@ -122,7 +122,7 @@ describe("a create conflict never overwrites a stranger", () => {
   });
 
   it("still replaces our own object when its content has drifted", async () => {
-    const ourUid = generateDeterministicEventUid(ourEvent().id);
+    const ourUid = generateDeterministicEventUid(`${ourEvent().id}:https://caldav.example.com/calendar/`);
     conflictOnCreate();
     clientMocks.fetchCalendarObject.mockResolvedValueOnce({
       data: eventToICalString({ ...ourEvent(), summary: "Our meeting, older title" }, ourUid),

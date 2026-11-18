@@ -227,6 +227,19 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 
+  /*
+   * Servers such as iCloud refuse a UID that another calendar in the same account already
+   * holds, so a source event mirrored into two calendars of one account needs a UID per
+   * destination. Objects written before the UID carried the destination keep the legacy UID.
+   */
+  const toDestinationEventUid = (event: MaterializedSyncableEvent): string =>
+    generateDeterministicEventUid(`${event.id}:${config.calendarUrl}`);
+
+  const toOwnedEventUids = (event: MaterializedSyncableEvent): string[] => [
+    toDestinationEventUid(event),
+    generateDeterministicEventUid(event.id),
+  ];
+
   const isKeeperCalendarObjectPath = (path: string): boolean => {
     try {
       const filename = decodeURIComponent(path.split("/").at(-1) ?? "");
@@ -252,7 +265,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       events.map((event) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
-            const uid = generateDeterministicEventUid(event.id);
+            const uid = toDestinationEventUid(event);
             const iCalString = eventToICalString(event, uid);
 
             try {
@@ -305,13 +318,17 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
    * "@". Comparing decoded basenames keeps the write on the object the mapping
    * already points at instead of a reconstructed href that never matches.
    */
-  const resolveUpdateTargetUrl = (deleteId: string, uid: string): string => {
+  const resolveUpdateTarget = (
+    deleteId: string,
+    event: MaterializedSyncableEvent,
+  ): { objectUrl: string; uid: string } => {
     const objectUrl = toObjectUrl(deleteId);
     const filename = decodeURIComponent(new URL(objectUrl).pathname.split("/").at(-1) ?? "");
-    if (filename !== `${uid}.ics`) {
-      throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
+    const uid = toOwnedEventUids(event).find((candidate) => filename === `${candidate}.ics`);
+    if (!uid) {
+      throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${event.id}`);
     }
-    return objectUrl;
+    return { objectUrl, uid };
   };
 
   const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
@@ -319,8 +336,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
       updates.map(({ deleteId, event }) =>
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
-            const uid = generateDeterministicEventUid(event.id);
-            const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
+            const { objectUrl, uid } = resolveUpdateTarget(deleteId, event);
 
             await client.updateCalendarObjectByUrl({
               iCalString: eventToICalString(event, uid),
