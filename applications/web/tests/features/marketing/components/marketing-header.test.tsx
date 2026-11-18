@@ -1,5 +1,9 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  MarketingHeaderMenu,
+  MarketingHeaderNav,
+} from "../../../../src/features/marketing/components/marketing-header";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to, ...props }: React.ComponentPropsWithoutRef<"a"> & { to?: string }) => (
@@ -15,15 +19,6 @@ vi.mock("lucide-react/dist/esm/icons/menu", () => ({
 vi.mock("lucide-react/dist/esm/icons/x", () => ({
   default: (props: React.ComponentPropsWithoutRef<"svg">) => <svg {...props} />,
 }));
-
-let MarketingHeaderMenu: typeof import("../../../../src/features/marketing/components/marketing-header").MarketingHeaderMenu;
-let MarketingHeaderNav: typeof import("../../../../src/features/marketing/components/marketing-header").MarketingHeaderNav;
-
-beforeAll(async () => {
-  ({ MarketingHeaderMenu, MarketingHeaderNav } = await import(
-    "../../../../src/features/marketing/components/marketing-header"
-  ));
-});
 
 describe("MarketingHeaderNav", () => {
   it("renders the primary destinations as links", () => {

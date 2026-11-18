@@ -1,24 +1,16 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
+import { MarketingPricingPlanCard } from "../../../../src/features/marketing/components/marketing-pricing-section";
+import {
+  PRICING_FEATURES,
+  PRICING_PLANS,
+  pricingPlanHighlights,
+} from "../../../../src/features/marketing/pricing-plans";
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: React.ComponentPropsWithoutRef<"a">) => <a {...props}>{children}</a>,
 }));
-
-let MarketingPricingPlanCard: typeof import("../../../../src/features/marketing/components/marketing-pricing-section").MarketingPricingPlanCard;
-let PRICING_FEATURES: typeof import("../../../../src/features/marketing/pricing-plans").PRICING_FEATURES;
-let PRICING_PLANS: typeof import("../../../../src/features/marketing/pricing-plans").PRICING_PLANS;
-let pricingPlanHighlights: typeof import("../../../../src/features/marketing/pricing-plans").pricingPlanHighlights;
-
-beforeAll(async () => {
-  ({ MarketingPricingPlanCard } = await import(
-    "../../../../src/features/marketing/components/marketing-pricing-section"
-  ));
-  ({ PRICING_FEATURES, PRICING_PLANS, pricingPlanHighlights } = await import(
-    "../../../../src/features/marketing/pricing-plans"
-  ));
-});
 
 function renderPlanCard(planId: "free" | "pro") {
   const plan = PRICING_PLANS.find((candidate) => candidate.id === planId)!;
