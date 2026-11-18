@@ -40,6 +40,16 @@ describe("isBackoffEligibleError", () => {
     expect(isBackoffEligibleError(new Error(message))).toBe(true);
   });
 
+  it("backs off a destination whose calendar the provider reports as gone", () => {
+    const body = JSON.stringify({ error: { code: 404, errors: [{ reason: "notFound" }], message: "Not Found" } });
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(404, body))).toBe(true);
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(410, body))).toBe(true);
+  });
+
+  it("does not back off a transient server error carrying a status", () => {
+    expect(isBackoffEligibleError(new GoogleCalendarApiError(500, "{}"))).toBe(false);
+  });
+
   it("matches cannot find homeUrl", () => {
     expect(isBackoffEligibleError(new Error("cannot find homeUrl"))).toBe(true);
   });

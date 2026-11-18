@@ -1,5 +1,6 @@
 import { RecurrenceMaterializationLimitError, RequestTimeoutError } from "@keeper.sh/calendar";
 import { isGoogleWriteAccessDeniedError } from "@keeper.sh/calendar/google";
+import { HTTP_STATUS } from "@keeper.sh/constants";
 import { isDatabaseError } from "@keeper.sh/database";
 
 /**
@@ -13,6 +14,30 @@ const BACKOFF_ERROR_PATTERNS: string[] = [
   "404 Not Found",
   "cannot find homeUrl",
 ];
+
+/*
+ * Statuses a provider error carries when the destination itself is gone. Matching the typed
+ * status instead of message text covers every provider, whatever its error message says.
+ */
+const BACKOFF_ERROR_STATUSES: ReadonlySet<number> = new Set([
+  HTTP_STATUS.NOT_FOUND,
+  HTTP_STATUS.GONE,
+]);
+
+const readErrorStatus = (error: unknown): number | null => {
+  if (!(error instanceof Error) || !("status" in error)) {
+    return null;
+  }
+  if (typeof error.status !== "number") {
+    return null;
+  }
+  return error.status;
+};
+
+const hasBackoffStatus = (error: unknown): boolean => {
+  const status = readErrorStatus(error);
+  return status !== null && BACKOFF_ERROR_STATUSES.has(status);
+};
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
@@ -32,6 +57,10 @@ const isBackoffEligibleError = (error: unknown): boolean => {
   }
 
   if (error instanceof RequestTimeoutError) {
+    return true;
+  }
+
+  if (hasBackoffStatus(error)) {
     return true;
   }
 
@@ -99,6 +128,7 @@ const resolveThrownDestinationVerdict = (error: unknown): DestinationAttemptVerd
 
 export {
   BACKOFF_ERROR_PATTERNS,
+  BACKOFF_ERROR_STATUSES,
   getErrorMessage,
   hasNoSuccessfulOperations,
   isBackoffEligibleError,
