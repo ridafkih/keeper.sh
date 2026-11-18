@@ -2,6 +2,7 @@ import type { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 import { instrumentDatabasePool } from "./pool-telemetry";
+import { keepBoundValuesOutOfQueryErrors } from "./query-errors";
 
 interface DatabasePoolOptions {
   statementTimeoutMs?: number;
@@ -80,6 +81,7 @@ const createDatabase = async (url: string, options?: DatabasePoolOptions): Promi
   const idleInTransactionTimeoutMs =
     options?.idleInTransactionTimeoutMs ?? DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS;
   const connectionUrl = appendServerSettings(url, statementTimeoutMs, idleInTransactionTimeoutMs);
+  keepBoundValuesOutOfQueryErrors();
   const database = drizzle({
     connection: {
       url: connectionUrl,
