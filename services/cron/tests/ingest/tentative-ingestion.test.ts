@@ -115,6 +115,27 @@ describe.skipIf(!administrativeUrl)("destination tentative exclusion lookup", ()
         INSERT INTO "source_destination_mappings" ("sourceCalendarId", "destinationCalendarId", "excludeAvailabilities")
         VALUES (${calendarIds.get("other-status") ?? ""}::uuid, ${destinationId}::uuid, '{free}')
       `;
+      await client`INSERT INTO "user" ("id", "email", "name") VALUES ('chain-owner', 'chain-owner@example.com', 'Chain Owner')`;
+      const [chainAccount] = await client<{ id: string }[]>`
+        INSERT INTO "calendar_accounts" ("authType", "provider", "userId")
+        VALUES ('oauth', 'outlook', 'chain-owner') RETURNING "id"
+      `;
+      for (const name of ["upstream", "middle", "final"]) {
+        const [calendar] = await client<{ id: string }[]>`
+          INSERT INTO "calendars" ("accountId", "calendarType", "name", "userId")
+          VALUES (${chainAccount?.id}::uuid, 'oauth', ${name}, 'chain-owner') RETURNING "id"
+        `;
+        calendarIds.set(name, calendar?.id ?? "");
+      }
+      await client`
+        INSERT INTO "source_destination_mappings" ("sourceCalendarId", "destinationCalendarId")
+        VALUES (${calendarIds.get("upstream") ?? ""}::uuid, ${calendarIds.get("middle") ?? ""}::uuid)
+      `;
+      await client`
+        INSERT INTO "source_destination_mappings"
+          ("sourceCalendarId", "destinationCalendarId", "excludeAvailabilities", "includeUpstreamSources")
+        VALUES (${calendarIds.get("middle") ?? ""}::uuid, ${calendarIds.get("final") ?? ""}::uuid, '{tentative}', true)
+      `;
     } finally {
       await client.close();
     }
@@ -145,6 +166,14 @@ describe.skipIf(!administrativeUrl)("destination tentative exclusion lookup", ()
 
   it("is false for a source with no mappings", async () => {
     expect(await readFlag("unmapped")).toBe(false);
+  });
+
+  it("is true for a source upstream of an opted-in link that excludes tentative events", async () => {
+    expect(await readFlag("upstream")).toBe(true);
+  });
+
+  it("is false for another account's source when a stranger's link opted in", async () => {
+    expect(await readFlag("plain")).toBe(false);
   });
 
   it("is false for a calendar that is only a destination", async () => {

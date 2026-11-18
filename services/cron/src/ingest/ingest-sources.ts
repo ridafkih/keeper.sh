@@ -29,6 +29,7 @@ import {
   measureRedisCommand,
   measureSegment,
   recordSegment,
+  getEffectiveDestinationRangesForSource,
 } from "@keeper.sh/calendar";
 import {
   INGEST_SOURCE_TIMEOUT_MS,
@@ -61,7 +62,6 @@ import {
   caldavCredentialsTable,
   eventStatesTable,
   oauthCredentialsTable,
-  sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, asc, count, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
@@ -691,22 +691,11 @@ const getRequiredSourceRanges = async (
   lane: IngestLane,
   sourceCalendarId: string,
 ): Promise<RequiredSourceRanges> => {
-  const mappings = await measureDatabaseRead(lane.pooledQueryGate,() => database
-    .select({
-      syncFutureRange: calendarsTable.syncFutureRange,
-      syncHistoricRange: calendarsTable.syncHistoricRange,
-    })
-    .from(sourceDestinationMappingsTable)
-    .innerJoin(
-      calendarsTable,
-      eq(sourceDestinationMappingsTable.destinationCalendarId, calendarsTable.id),
-    )
-    .where(and(
-      eq(sourceDestinationMappingsTable.sourceCalendarId, sourceCalendarId),
-      eq(calendarsTable.disabled, false),
-      arrayContains(calendarsTable.capabilities, ["push"]),
-    )));
-  return createRequiredSourceRanges(mappings);
+  const destinationRanges = await measureDatabaseRead(
+    lane.pooledQueryGate,
+    () => getEffectiveDestinationRangesForSource(database, sourceCalendarId),
+  );
+  return createRequiredSourceRanges(destinationRanges);
 };
 
 const hasSourceAuthorityChanged = (

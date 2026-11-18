@@ -1,10 +1,8 @@
-import {
-  calendarsTable,
-  eventMappingsTable,
-  eventStatesTable,
-  sourceDestinationMappingsTable,
-} from "@keeper.sh/database/schema";
+import { getUserSyncMappings, listEffectiveMappings } from "@keeper.sh/calendar";
+import type { EffectiveMapping } from "@keeper.sh/calendar";
+import { calendarsTable, eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, asc, countDistinct, eq, gte, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 
 interface CopiedEvent {
@@ -13,6 +11,7 @@ interface CopiedEvent {
   startTime: string;
   sourceCalendarId: string | null;
   destinationCalendarId: string;
+  viaCalendarIds: string[];
 }
 
 interface CopiedEvents {
@@ -22,24 +21,38 @@ interface CopiedEvents {
 
 const sourceEventIdentity = sql`coalesce(${eventMappingsTable.syncEventId}, ${eventMappingsTable.eventStateId}::text)`;
 
-const throughCurrentMapping = and(
-  eq(sourceDestinationMappingsTable.sourceCalendarId, eventMappingsTable.sourceCalendarId),
-  eq(sourceDestinationMappingsTable.destinationCalendarId, eventMappingsTable.calendarId),
-);
+const throughEffectiveMappings = (mappings: EffectiveMapping[]): SQL => {
+  const pairs = mappings.map((mapping) =>
+    sql`(${mapping.sourceCalendarId}::uuid, ${mapping.destinationCalendarId}::uuid)`);
+  return sql`(${eventMappingsTable.sourceCalendarId}, ${eventMappingsTable.calendarId}) in (${sql.join(pairs, sql`, `)})`;
+};
 
-const countCopiedEvents = async (database: KeeperDatabase, userId: string): Promise<number> => {
+const countCopiedEvents = async (
+  database: KeeperDatabase,
+  userId: string,
+  mappings: EffectiveMapping[],
+): Promise<number> => {
   const [row] = await database
     .select({ value: countDistinct(sourceEventIdentity) })
     .from(eventMappingsTable)
-    .innerJoin(sourceDestinationMappingsTable, throughCurrentMapping)
     .innerJoin(calendarsTable, eq(eventMappingsTable.calendarId, calendarsTable.id))
-    .where(eq(calendarsTable.userId, userId));
+    .where(and(eq(calendarsTable.userId, userId), throughEffectiveMappings(mappings)));
   return row?.value ?? 0;
+};
+
+const createViaCalendarIdsResolver = (mappings: EffectiveMapping[]) => {
+  const viaCalendarIdsByPair = new Map(mappings.map((mapping) => [
+    `${mapping.sourceCalendarId}:${mapping.destinationCalendarId}`,
+    mapping.viaCalendarIds,
+  ]));
+  return (sourceCalendarId: string | null, destinationCalendarId: string): string[] =>
+    viaCalendarIdsByPair.get(`${sourceCalendarId}:${destinationCalendarId}`) ?? [];
 };
 
 const listUpcomingCopiedEvents = async (
   database: KeeperDatabase,
   userId: string,
+  mappings: EffectiveMapping[],
   limit: number,
   now: Date,
 ): Promise<CopiedEvent[]> => {
@@ -52,14 +65,22 @@ const listUpcomingCopiedEvents = async (
       title: eventStatesTable.title,
     })
     .from(eventMappingsTable)
-    .innerJoin(sourceDestinationMappingsTable, throughCurrentMapping)
     .innerJoin(calendarsTable, eq(eventMappingsTable.calendarId, calendarsTable.id))
     .leftJoin(eventStatesTable, eq(eventMappingsTable.eventStateId, eventStatesTable.id))
-    .where(and(eq(calendarsTable.userId, userId), gte(eventMappingsTable.endTime, now)))
+    .where(and(
+      eq(calendarsTable.userId, userId),
+      throughEffectiveMappings(mappings),
+      gte(eventMappingsTable.endTime, now),
+    ))
     .orderBy(asc(eventMappingsTable.startTime), sourceEventIdentity)
     .limit(limit);
 
-  return rows.map((row) => ({ ...row, startTime: row.startTime.toISOString() }));
+  const resolveViaCalendarIds = createViaCalendarIdsResolver(mappings);
+  return rows.map((row) => ({
+    ...row,
+    startTime: row.startTime.toISOString(),
+    viaCalendarIds: resolveViaCalendarIds(row.sourceCalendarId, row.destinationCalendarId),
+  }));
 };
 
 const getCopiedEvents = async (
@@ -68,9 +89,13 @@ const getCopiedEvents = async (
   limit: number,
   now: Date = new Date(),
 ): Promise<CopiedEvents> => {
+  const mappings = listEffectiveMappings(await getUserSyncMappings(database, userId));
+  if (mappings.length === 0) {
+    return { count: 0, upcoming: [] };
+  }
   const [total, upcoming] = await Promise.all([
-    countCopiedEvents(database, userId),
-    listUpcomingCopiedEvents(database, userId, limit, now),
+    countCopiedEvents(database, userId, mappings),
+    listUpcomingCopiedEvents(database, userId, mappings, limit, now),
   ]);
   return { count: total, upcoming };
 };

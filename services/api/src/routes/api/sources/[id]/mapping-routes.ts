@@ -32,6 +32,15 @@ interface ChangeSourceDestinationsDependencies {
 interface GetSourcesForDestinationDependencies {
   destinationExists: (userId: string, destinationCalendarId: string) => Promise<boolean>;
   getSourcesForDestination: (userId: string, destinationCalendarId: string) => Promise<string[]>;
+  getInheritedSourcesForDestination: (
+    userId: string,
+    destinationCalendarId: string,
+  ) => Promise<InheritedSource[]>;
+}
+
+interface InheritedSource {
+  sourceCalendarId: string;
+  viaCalendarIds: string[];
 }
 
 interface ChangeSourcesForDestinationDependencies {
@@ -196,8 +205,11 @@ const handleGetSourcesForDestinationRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  const sourceIds = await dependencies.getSourcesForDestination(context.userId, resolved.id);
-  return Response.json({ sourceIds });
+  const [sourceIds, inheritedSources] = await Promise.all([
+    dependencies.getSourcesForDestination(context.userId, resolved.id),
+    dependencies.getInheritedSourcesForDestination(context.userId, resolved.id),
+  ]);
+  return Response.json({ inheritedSources, sourceIds });
 };
 
 const handlePutSourcesForDestinationRoute = (

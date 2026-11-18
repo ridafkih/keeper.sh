@@ -20,12 +20,28 @@ interface MappingSyncRules {
   sourceCalendarId: string;
   destinationCalendarId: string;
   sourceProvider: string;
+  includeUpstreamSources: boolean;
   overrides: SyncRuleOverrides;
   sourceRules: SyncRules;
   effectiveRules: SyncRules;
 }
 
 type SyncRuleOverrideUpdates = Partial<SyncRuleOverrides>;
+
+interface MappingSyncRuleUpdates extends SyncRuleOverrideUpdates {
+  includeUpstreamSources?: boolean;
+}
+
+type CountEffectiveMappings = (
+  client: DatabaseReader,
+  userId: string,
+) => Promise<number>;
+
+interface MappingLimitGuard {
+  countEffectiveMappings: CountEffectiveMappings;
+  limitErrorMessage: string;
+  mappingLimit: number;
+}
 
 const destinationCalendarsTable = alias(calendarsTable, "destination_calendars");
 
@@ -77,6 +93,7 @@ const readMappingSyncRules = async (
 ): Promise<MappingSyncRules | null> => {
   const [mapping] = await client
     .select({
+      includeUpstreamSources: sourceDestinationMappingsTable.includeUpstreamSources,
       overrides: OVERRIDE_COLUMNS,
       sourceProvider: calendarAccountsTable.provider,
       sourceRules: SOURCE_RULE_COLUMNS,
@@ -101,6 +118,7 @@ const readMappingSyncRules = async (
   return {
     destinationCalendarId,
     effectiveRules: resolveSyncRules(mapping.sourceRules, mapping.overrides),
+    includeUpstreamSources: mapping.includeUpstreamSources,
     overrides: mapping.overrides,
     sourceCalendarId,
     sourceProvider: mapping.sourceProvider,
@@ -113,7 +131,8 @@ const writeMappingSyncRuleOverrides = (
   userId: string,
   sourceCalendarId: string,
   destinationCalendarId: string,
-  updates: SyncRuleOverrideUpdates,
+  updates: MappingSyncRuleUpdates,
+  limitGuard?: MappingLimitGuard,
 ): Promise<MappingSyncRules | null> =>
   database.transaction(async (transaction) => {
     const existing = await readMappingSyncRules(
@@ -135,6 +154,14 @@ const writeMappingSyncRuleOverrides = (
           eq(sourceDestinationMappingsTable.destinationCalendarId, destinationCalendarId),
         ),
       );
+    if (
+      limitGuard
+      && updates.includeUpstreamSources === true
+      && !existing.includeUpstreamSources
+      && await limitGuard.countEffectiveMappings(transaction, userId) > limitGuard.mappingLimit
+    ) {
+      throw new Error(limitGuard.limitErrorMessage);
+    }
     await requestUserSync(transaction, userId);
 
     return readMappingSyncRules(transaction, userId, sourceCalendarId, destinationCalendarId);
@@ -168,4 +195,9 @@ export {
   readMappingSyncRules,
   writeMappingSyncRuleOverrides,
 };
-export type { MappingSyncRules, SyncRuleOverrideUpdates };
+export type {
+  MappingLimitGuard,
+  MappingSyncRules,
+  MappingSyncRuleUpdates,
+  SyncRuleOverrideUpdates,
+};

@@ -3,7 +3,7 @@ import type { Plan } from "@keeper.sh/data-schemas";
 import { eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
 import { database, premiumService, webhookConfig } from "@/context";
-import { getUserMappings } from "@/utils/source-destination-mappings";
+import { countEffectiveUserMappings } from "@/utils/source-destination-mappings";
 
 interface EntitlementsRouteContext {
   userId: string;
@@ -76,10 +76,7 @@ const GET = withWideEvent(
       return feeds.length;
     },
     getFeedLimit: (plan) => premiumService.getFeedLimit(plan),
-    getMappingCount: async (resolvedUserId) => {
-      const mappings = await getUserMappings(resolvedUserId);
-      return mappings.length;
-    },
+    getMappingCount: (resolvedUserId) => countEffectiveUserMappings(database, resolvedUserId),
     getMappingLimit: (plan) => premiumService.getMappingLimit(plan),
     getUserPlan: (resolvedUserId) => premiumService.getUserPlan(resolvedUserId),
     webhookConfigured: webhookConfig !== null,

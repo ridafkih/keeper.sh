@@ -7,6 +7,7 @@ interface CopiedEvent {
   startTime: string;
   sourceCalendarId: string | null;
   destinationCalendarId: string;
+  viaCalendarIds: string[];
 }
 
 interface CopiedEvents {

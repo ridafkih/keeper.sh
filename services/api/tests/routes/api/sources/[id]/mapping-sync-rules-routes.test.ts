@@ -6,7 +6,8 @@ import {
   handlePatchMappingSyncRulesRoute,
 } from "../../../../../src/routes/api/sources/[id]/mapping-sync-rules-routes";
 import type { PatchMappingSyncRulesDependencies } from "../../../../../src/routes/api/sources/[id]/mapping-sync-rules-routes";
-import type { MappingSyncRules, SyncRuleOverrideUpdates } from "@/utils/mapping-sync-rules";
+import type { MappingSyncRules, MappingSyncRuleUpdates } from "@/utils/mapping-sync-rules";
+import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
 
 const SOURCE_ID = "11111111-1111-4111-8111-111111111111";
 const DESTINATION_ID = "22222222-2222-4222-8222-222222222222";
@@ -34,6 +35,7 @@ const createMapping = (
   return {
     destinationCalendarId: DESTINATION_ID,
     effectiveRules: resolveSyncRules(SOURCE_RULES, mergedOverrides),
+    includeUpstreamSources: false,
     overrides: mergedOverrides,
     sourceCalendarId: SOURCE_ID,
     sourceProvider,
@@ -43,7 +45,7 @@ const createMapping = (
 
 interface PatchHarness {
   dependencies: PatchMappingSyncRulesDependencies;
-  appliedUpdates: SyncRuleOverrideUpdates[];
+  appliedUpdates: MappingSyncRuleUpdates[];
   entitlementChecks: string[];
 }
 
@@ -52,7 +54,7 @@ const createPatchHarness = (options: {
   canUseEventFilters?: boolean;
   disappearsBeforeWrite?: boolean;
 } = {}): PatchHarness => {
-  const appliedUpdates: SyncRuleOverrideUpdates[] = [];
+  const appliedUpdates: MappingSyncRuleUpdates[] = [];
   const entitlementChecks: string[] = [];
   let mapping: MappingSyncRules | null = createMapping();
   if ("mapping" in options) {
@@ -86,6 +88,38 @@ const patch = (body: unknown, harness: PatchHarness, params: Record<string, stri
   );
 
 const readJson = (response: Response): Promise<unknown> => response.json();
+
+describe("including upstream sources", () => {
+  it("opts a link in without requiring a Pro plan", async () => {
+    const harness = createPatchHarness({ canUseEventFilters: false });
+
+    const response = await patch({ includeUpstreamSources: true }, harness);
+
+    expect(response.status).toBe(200);
+    expect(harness.appliedUpdates).toEqual([{ includeUpstreamSources: true }]);
+    expect(harness.entitlementChecks).toEqual([]);
+  });
+
+  it("rejects a value that is not a boolean", async () => {
+    const harness = createPatchHarness();
+
+    const response = await patch({ includeUpstreamSources: null }, harness);
+
+    expect(response.status).toBe(400);
+    expect(harness.appliedUpdates).toEqual([]);
+  });
+
+  it("returns 402 when the inherited sources would exceed the plan", async () => {
+    const harness = createPatchHarness();
+    harness.dependencies.updateSyncRuleOverrides = () =>
+      Promise.reject(new Error(MAPPING_LIMIT_ERROR_MESSAGE));
+
+    const response = await patch({ includeUpstreamSources: true }, harness);
+
+    expect(response.status).toBe(402);
+    expect(await readJson(response)).toEqual({ error: MAPPING_LIMIT_ERROR_MESSAGE });
+  });
+});
 
 describe("handleGetMappingSyncRulesRoute", () => {
   it("returns 404 without reading when an id is not a calendar id", async () => {
@@ -123,6 +157,7 @@ describe("handleGetMappingSyncRulesRoute", () => {
     expect(await readJson(response)).toEqual({
       destinationCalendarId: DESTINATION_ID,
       effectiveRules: { ...SOURCE_RULES, excludeEventName: false },
+      includeUpstreamSources: false,
       overrides: { ...NO_SYNC_RULE_OVERRIDES, excludeEventName: false },
       sourceCalendarId: SOURCE_ID,
       sourceRules: SOURCE_RULES,
@@ -212,6 +247,7 @@ describe("handlePatchMappingSyncRulesRoute", () => {
         customEventName: "Busy ({{calendar_name}})",
         markEventsAsPrivate: true,
       },
+      includeUpstreamSources: false,
       overrides: {
         ...NO_SYNC_RULE_OVERRIDES,
         customEventName: "Busy ({{calendar_name}})",

@@ -5,7 +5,12 @@ import {
 } from "@keeper.sh/data-schemas";
 import type { SyncRuleOverridesPatch } from "@keeper.sh/data-schemas";
 import { isCalendarId } from "@/utils/calendar-pause";
-import type { MappingSyncRules, SyncRuleOverrideUpdates } from "@/utils/mapping-sync-rules";
+import type {
+  MappingSyncRules,
+  MappingSyncRuleUpdates,
+  SyncRuleOverrideUpdates,
+} from "@/utils/mapping-sync-rules";
+import { MAPPING_LIMIT_ERROR_MESSAGE } from "@/utils/source-destination-mappings";
 import { ErrorResponse } from "@/utils/responses";
 
 interface MappingSyncRulesRouteContext {
@@ -31,7 +36,7 @@ interface PatchMappingSyncRulesDependencies extends GetMappingSyncRulesDependenc
     userId: string,
     sourceCalendarId: string,
     destinationCalendarId: string,
-    updates: SyncRuleOverrideUpdates,
+    updates: MappingSyncRuleUpdates,
   ) => Promise<MappingSyncRules | null>;
 }
 
@@ -62,6 +67,7 @@ const resolveMappingIds = (params: Record<string, string>): MappingIds | null =>
 const serializeMappingSyncRules = (rules: MappingSyncRules) => ({
   destinationCalendarId: rules.destinationCalendarId,
   effectiveRules: rules.effectiveRules,
+  includeUpstreamSources: rules.includeUpstreamSources,
   overrides: rules.overrides,
   sourceCalendarId: rules.sourceCalendarId,
   sourceRules: rules.sourceRules,
@@ -155,6 +161,19 @@ const buildSyncRuleOverrideUpdates = (
   return updates;
 };
 
+const withUpstreamSourcesUpdate = (
+  body: SyncRuleOverridesPatch,
+  overrideUpdates: SyncRuleOverrideUpdates,
+): MappingSyncRuleUpdates => {
+  if (typeof body.includeUpstreamSources !== "boolean") {
+    return overrideUpdates;
+  }
+  return { ...overrideUpdates, includeUpstreamSources: body.includeUpstreamSources };
+};
+
+const isMappingLimitError = (error: unknown): boolean =>
+  error instanceof Error && error.message === MAPPING_LIMIT_ERROR_MESSAGE;
+
 const setsAnOverride = (updates: SyncRuleOverrideUpdates): boolean =>
   Object.values(updates).some((value) => value !== null);
 
@@ -203,32 +222,40 @@ const handlePatchMappingSyncRulesRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  const updates = buildSyncRuleOverrideUpdates(context.body, existing.sourceProvider);
-  if (updates instanceof Response) {
-    return updates;
+  const overrideUpdates = buildSyncRuleOverrideUpdates(context.body, existing.sourceProvider);
+  if (overrideUpdates instanceof Response) {
+    return overrideUpdates;
   }
+  const updates = withUpstreamSourcesUpdate(context.body, overrideUpdates);
   if (Object.keys(updates).length === 0) {
     return ErrorResponse.badRequest("No valid fields to update").toResponse();
   }
 
-  if (setsAnOverride(updates)) {
+  if (setsAnOverride(overrideUpdates)) {
     const allowed = await dependencies.canUseEventFilters(context.userId);
     if (!allowed) {
       return ErrorResponse.forbidden("This setting requires a Pro plan.").toResponse();
     }
   }
 
-  const updated = await dependencies.updateSyncRuleOverrides(
-    context.userId,
-    ids.sourceCalendarId,
-    ids.destinationCalendarId,
-    updates,
-  );
-  if (!updated) {
-    return ErrorResponse.notFound().toResponse();
-  }
+  try {
+    const updated = await dependencies.updateSyncRuleOverrides(
+      context.userId,
+      ids.sourceCalendarId,
+      ids.destinationCalendarId,
+      updates,
+    );
+    if (!updated) {
+      return ErrorResponse.notFound().toResponse();
+    }
 
-  return Response.json(serializeMappingSyncRules(updated));
+    return Response.json(serializeMappingSyncRules(updated));
+  } catch (error) {
+    if (isMappingLimitError(error)) {
+      return ErrorResponse.paymentRequired(MAPPING_LIMIT_ERROR_MESSAGE).toResponse();
+    }
+    throw error;
+  }
 };
 
 export { handleGetMappingSyncRulesRoute, handlePatchMappingSyncRulesRoute };

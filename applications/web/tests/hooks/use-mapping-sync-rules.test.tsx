@@ -27,6 +27,7 @@ const SOURCE_RULES: Rules = {
 const INITIAL: MappingSyncRules = {
   destinationCalendarId: "destination-1",
   effectiveRules: resolveSyncRules(SOURCE_RULES, NO_SYNC_RULE_OVERRIDES),
+  includeUpstreamSources: false,
   overrides: { ...NO_SYNC_RULE_OVERRIDES },
   sourceCalendarId: "source-1",
   sourceRules: SOURCE_RULES,
@@ -104,6 +105,25 @@ describe("useMappingSyncRules", () => {
     expect(readCache().overrides.excludeEventName).toBe(false);
     expect(readCache().effectiveRules.excludeEventName).toBe(false);
     await flush();
+  });
+
+  it("includes inherited events in the cached mapping before the server answers", async () => {
+    React.act(() => {
+      hook.latest().setIncludeUpstreamSources(true);
+    });
+
+    expect(readCache().includeUpstreamSources).toBe(true);
+    await flush();
+  });
+
+  it("sends the inherited events choice and refreshes the destination's sources", async () => {
+    React.act(() => {
+      hook.latest().setIncludeUpstreamSources(true);
+    });
+    await flush();
+
+    expect(sentBodies()).toEqual([{ includeUpstreamSources: true }]);
+    expect(globalRevalidations).toContain("/api/sources/destination-1/sources");
   });
 
   it("sends the patch to the mapping's own endpoint", async () => {

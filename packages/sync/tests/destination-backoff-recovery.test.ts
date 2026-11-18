@@ -7,7 +7,19 @@ const isCalendarInvalidatedMock = vi.fn(
   (_redis: unknown, _calendarId: string) => Promise.resolve(false),
 );
 const handleIsCurrentMock = vi.fn(() => Promise.resolve(true));
-const mappedSourceCalendarIdsMock = vi.fn((): Promise<string[]> => Promise.resolve([]));
+interface EffectiveSourceFixture {
+  sourceCalendarId: string;
+  viaCalendarIds: string[];
+}
+
+const directSource = (sourceCalendarId: string): EffectiveSourceFixture => ({
+  sourceCalendarId,
+  viaCalendarIds: [],
+});
+
+const effectiveSourcesMock = vi.fn(
+  (): Promise<EffectiveSourceFixture[]> => Promise.resolve([]),
+);
 const acquireMock = vi.fn();
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {
@@ -30,7 +42,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       },
       events: [],
     }),
-    getMappedSourceCalendarIds: () => mappedSourceCalendarIdsMock(),
+    getEffectiveSourcesForDestination: () => effectiveSourcesMock(),
     syncCalendar: (options: unknown) => syncCalendarMock(options),
     withSourceIngestLocks: (
       database: unknown,
@@ -182,7 +194,7 @@ beforeEach(() => {
   handleIsCurrentMock.mockImplementation(() => Promise.resolve(true));
   isCalendarInvalidatedMock.mockImplementation(() => Promise.resolve(false));
   listRemoteEventsMock.mockImplementation(() => Promise.resolve([]));
-  mappedSourceCalendarIdsMock.mockImplementation(() => Promise.resolve([]));
+  effectiveSourcesMock.mockImplementation(() => Promise.resolve([]));
   acquireMock.mockImplementation(() => Promise.resolve({
     acquired: true,
     handle: { isCurrent: handleIsCurrentMock, release: () => Promise.resolve() },
@@ -268,9 +280,10 @@ describe("a repaired destination that is already in sync", () => {
       failureCount: 2,
       nextAttemptAt: new Date(START.getTime() - 1),
     });
-    mappedSourceCalendarIdsMock
-      .mockImplementationOnce(() => Promise.resolve(["source-a"]))
-      .mockImplementationOnce(() => Promise.resolve(["source-b"]));
+    effectiveSourcesMock
+      .mockImplementationOnce(() => Promise.resolve([directSource("source-a")]))
+      .mockImplementationOnce(() => Promise.resolve([directSource("source-a")]))
+      .mockImplementationOnce(() => Promise.resolve([directSource("source-b")]));
 
     await syncDestinationsForUser(USER_ID, config(database));
 
