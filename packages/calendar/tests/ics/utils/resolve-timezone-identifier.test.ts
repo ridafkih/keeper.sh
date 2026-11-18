@@ -86,8 +86,11 @@ const buildRecurringFeed = (timeZoneId: string, observances: readonly Observance
 const declaredOffsetsFor = (timeZoneId: string, observances: readonly Observance[]) =>
   readDeclaredTimeZoneOffsets(buildCalendar(timeZoneId, observances));
 
-const readIntlOffsetMinutes = (timeZone: string, instant: Date): number => {
-  const label = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" })
+const createOffsetFormatter = (timeZone: string): Intl.DateTimeFormat =>
+  new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "longOffset" });
+
+const readFormattedOffsetMinutes = (formatter: Intl.DateTimeFormat, instant: Date): number => {
+  const label = formatter
     .formatToParts(instant)
     .find((part) => part.type === "timeZoneName")?.value ?? "";
   const match = /^GMT(?:(?<sign>[+-])(?<hours>\d{2}):(?<minutes>\d{2}))?$/.exec(label);
@@ -100,6 +103,9 @@ const readIntlOffsetMinutes = (timeZone: string, instant: Date): number => {
   }
   return magnitude;
 };
+
+const readIntlOffsetMinutes = (timeZone: string, instant: Date): number =>
+  readFormattedOffsetMinutes(createOffsetFormatter(timeZone), instant);
 
 const sampleInstants = (): Date[] => Array.from(
   { length: LAST_SAMPLE_YEAR - FIRST_SAMPLE_YEAR + 1 },
@@ -134,9 +140,12 @@ const MATERIALIZATION_WINDOW = {
 
 describe("resolveTimeZoneIdentifier with a single declared non-whole-hour offset", () => {
   it.each([
-    { identifier: INDIA_LABEL, offset: "+0530", offsetMinutes: 330, timeZone: "Asia/Calcutta" },
-    { identifier: NEPAL_LABEL, offset: "+0545", offsetMinutes: 345, timeZone: "Asia/Katmandu" },
-    { identifier: "Customized Time Zone", offset: "+0630", offsetMinutes: 390, timeZone: "Asia/Rangoon" },
+    { identifier: INDIA_LABEL, offset: "+0530", offsetMinutes: 330, timeZone: "Asia/Kolkata" },
+    { identifier: NEPAL_LABEL, offset: "+0545", offsetMinutes: 345, timeZone: "Asia/Kathmandu" },
+    { identifier: "Customized Time Zone", offset: "+0630", offsetMinutes: 390, timeZone: "Asia/Yangon" },
+    { identifier: "Customized Time Zone", offset: "+0430", offsetMinutes: 270, timeZone: "Asia/Kabul" },
+    { identifier: "Customized Time Zone", offset: "+0930", offsetMinutes: 570, timeZone: "Australia/Darwin" },
+    { identifier: "Customized Time Zone", offset: "-0930", offsetMinutes: -570, timeZone: "Pacific/Marquesas" },
   ])("resolves $offset to the fixed-offset zone $timeZone", ({ identifier, offset, offsetMinutes, timeZone }) => {
     const resolved = resolveTimeZoneIdentifier(
       identifier,
@@ -161,9 +170,32 @@ describe("resolveTimeZoneIdentifier with a single declared non-whole-hour offset
       .toEqual(sampleInstants().map(() => offsetMinutes));
   });
 
+  it("resolves every non-whole-hour offset that a zone the runtime lists holds constant", () => {
+    const instants = sampleInstants();
+    const constantOffsets = new Set(
+      Intl.supportedValuesOf("timeZone")
+        .map((timeZone) => createOffsetFormatter(timeZone))
+        .map((formatter) => new Set(instants.map((instant) => readFormattedOffsetMinutes(formatter, instant))))
+        .filter((offsets) => offsets.size === 1)
+        .flatMap((offsets) => [...offsets])
+        .filter((offsetMinutes) => offsetMinutes % 60 !== 0),
+    );
+
+    const resolvedOffsets = [...constantOffsets].map((offsetMinutes) => {
+      const resolved = resolveTimeZoneIdentifier(
+        "Customized Time Zone",
+        new Map([["Customized Time Zone", [offsetMinutes]]]),
+      );
+      return readIntlOffsetMinutes(resolved?.timeZone ?? "UTC", new Date(Date.UTC(2026, 0, 1)));
+    });
+
+    expect(constantOffsets.size).toBeGreaterThan(0);
+    expect(resolvedOffsets).toEqual([...constantOffsets]);
+  });
+
   it.each([
-    { identifier: INDIA_LABEL, offset: "+0530", timeZone: "Asia/Calcutta" },
-    { identifier: NEPAL_LABEL, offset: "+0545", timeZone: "Asia/Katmandu" },
+    { identifier: INDIA_LABEL, offset: "+0530", timeZone: "Asia/Kolkata" },
+    { identifier: NEPAL_LABEL, offset: "+0545", timeZone: "Asia/Kathmandu" },
   ])("resolveDeclaredTimeZone returns $timeZone for a single $offset", ({ identifier, offset, timeZone }) => {
     expect(resolveDeclaredTimeZone(
       identifier,
@@ -174,8 +206,8 @@ describe("resolveTimeZoneIdentifier with a single declared non-whole-hour offset
 
 describe("resolveRecurrenceTimeZones with a single declared non-whole-hour offset", () => {
   it.each([
-    { identifier: INDIA_LABEL, offset: "+0530", timeZone: "Asia/Calcutta", uid: "india@test" },
-    { identifier: NEPAL_LABEL, offset: "+0545", timeZone: "Asia/Katmandu", uid: "nepal@test" },
+    { identifier: INDIA_LABEL, offset: "+0530", timeZone: "Asia/Kolkata", uid: "india@test" },
+    { identifier: NEPAL_LABEL, offset: "+0545", timeZone: "Asia/Kathmandu", uid: "nepal@test" },
   ])("no longer reports the $offset series as unsupported", ({ identifier, offset, timeZone, uid }) => {
     const result = resolveRecurrenceTimeZones(
       [{ recurrenceRule: { frequency: "DAILY" as const }, startTimeZone: identifier, uid }],
@@ -198,14 +230,14 @@ describe("ingesting a recurring event in a custom single-offset zone", () => {
       identifier: INDIA_LABEL,
       occurrences: ["2026-07-01T03:30:00.000Z", "2026-07-02T03:30:00.000Z"],
       offset: "+0530",
-      timeZone: "Asia/Calcutta",
+      timeZone: "Asia/Kolkata",
       uid: "india-standup@test",
     },
     {
       identifier: NEPAL_LABEL,
       occurrences: ["2026-07-01T03:15:00.000Z", "2026-07-02T03:15:00.000Z"],
       offset: "+0545",
-      timeZone: "Asia/Katmandu",
+      timeZone: "Asia/Kathmandu",
       uid: "nepal-standup@test",
     },
     {
