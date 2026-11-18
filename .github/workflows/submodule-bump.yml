@@ -38,13 +38,16 @@ jobs:
             claude) echo "path=.claude"               >> "$GITHUB_OUTPUT" ;;
             *)     echo "Unknown submodule: '$NAME'" >&2; exit 1 ;;
           esac
-          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
-            echo "Expected a full commit SHA to pin, got '$SHA'." >&2
+          case "$SHA" in
+            *[!0-9a-f]*) SHA="" ;;
+          esac
+          if [ "${#SHA}" -ne 40 ]; then
+            echo "Expected a full commit SHA to pin." >&2
             exit 1
           fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          echo "pin=$(printf '%s' "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          echo "pin=${SHA:0:7}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -81,7 +84,7 @@ jobs:
         env:
           TOKEN: ${{ steps.app-content.outputs.token }}
         run: |
-          header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$TOKEN" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=$header" submodule update --init applications/web/seo
           test -d applications/web/seo/blog
 
@@ -118,7 +121,7 @@ jobs:
 
           git checkout -B "$BRANCH"
           git commit -m "chore($NAME): bump to $PIN"
-          header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$GH_TOKEN" | base64 -w0)"
           git -c "http.https://github.com/.extraheader=$header" push --force origin "$BRANCH"
 
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
