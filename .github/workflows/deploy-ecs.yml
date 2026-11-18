@@ -6,6 +6,9 @@ on:
       environment:
         required: true
         type: string
+      digests:
+        required: true
+        type: string
       version:
         required: true
         type: string
@@ -25,33 +28,86 @@ concurrency:
   group: deploy-ecs-${{ inputs.environment }}
   cancel-in-progress: false
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
 
 jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.images.outputs.api }}
+      cron: ${{ steps.images.outputs.cron }}
+      mcp: ${{ steps.images.outputs.mcp }}
+      web: ${{ steps.images.outputs.web }}
+      worker: ${{ steps.images.outputs.worker }}
+    steps:
+      - name: Resolve the images to deploy
+        id: images
+        env:
+          DIGESTS: ${{ inputs.digests }}
+          EVENT: ${{ github.event_name }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          semver='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if ! [[ "$VERSION" =~ $semver ]]; then
+            echo "::error::The version must be a published version without the leading v, such as 2.14.3."
+            exit 1
+          fi
+          packages=(api cron mcp web worker)
+          if [ -z "$DIGESTS" ]; then
+            if [ "$EVENT" != "workflow_dispatch" ]; then
+              echo "::error::The calling workflow passed no image digests."
+              exit 1
+            fi
+            DIGESTS='{}'
+            for package in "${packages[@]}"; do
+              if ! manifest=$(docker buildx imagetools inspect "$REGISTRY/keeper-$package:$VERSION" --format '{{json .Manifest}}'); then
+                echo "::error::keeper-$package:$VERSION was not found in the registry."
+                exit 1
+              fi
+              DIGESTS=$(jq -c --arg package "$package" --argjson manifest "$manifest" '.[$package] = $manifest.digest' <<< "$DIGESTS")
+            done
+          fi
+          for package in "${packages[@]}"; do
+            digest=$(jq -r --arg package "$package" '.[$package] // empty' <<< "$DIGESTS")
+            if ! [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::There is no valid digest for keeper-$package."
+              exit 1
+            fi
+            echo "$package=$REGISTRY/keeper-$package@$digest" >> "$GITHUB_OUTPUT"
+            echo "- \`$REGISTRY/keeper-$package@$digest\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
   deploy:
+    needs: resolve
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
     env:
       ENVIRONMENT: ${{ inputs.environment }}
       CLUSTER: keeper-${{ inputs.environment }}
-      VERSION: ${{ inputs.version }}
-      REGISTRY: ghcr.io/${{ github.repository_owner }}
+      IMAGE_API: ${{ needs.resolve.outputs.api }}
+      IMAGE_CRON: ${{ needs.resolve.outputs.cron }}
+      IMAGE_MCP: ${{ needs.resolve.outputs.mcp }}
+      IMAGE_WEB: ${{ needs.resolve.outputs.web }}
+      IMAGE_WORKER: ${{ needs.resolve.outputs.worker }}
     steps:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
 
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-
-      - name: Resolve image digests
+      - name: Confirm every image is pinned by digest
         run: |
           set -euo pipefail
-          for package in api cron worker mcp web; do
-            digest=$(docker buildx imagetools inspect "$REGISTRY/keeper-$package:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
-            echo "IMAGE_${package^^}=$REGISTRY/keeper-$package@$digest" >> "$GITHUB_ENV"
+          for image in "$IMAGE_API" "$IMAGE_CRON" "$IMAGE_MCP" "$IMAGE_WEB" "$IMAGE_WORKER"; do
+            if ! [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::An image to deploy is not pinned by digest; nothing was deployed."
+              exit 1
+            fi
           done
 
       - name: Run migrations
