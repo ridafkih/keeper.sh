@@ -89,6 +89,8 @@ const calendarAccountsTable = pgTable(
       onDelete: "cascade",
     }),
     provider: text().notNull(),
+    reauthenticationNotifiedAt: timestamp({ withTimezone: true }),
+    reauthenticationObservedAt: timestamp({ withTimezone: true }),
     reauthenticationSource: text(),
     updatedAt: timestamp({ withTimezone: true })
       .notNull()

@@ -1,0 +1,2 @@
+ALTER TABLE "calendar_accounts" ADD COLUMN IF NOT EXISTS "reauthenticationNotifiedAt" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "calendar_accounts" ADD COLUMN IF NOT EXISTS "reauthenticationObservedAt" timestamp with time zone;
