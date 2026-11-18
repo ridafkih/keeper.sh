@@ -17,7 +17,7 @@ const harness = vi.hoisted(() => {
 
   const sourceRow = {
     accountId: "account-1",
-    accessToken: "access-token",
+    accessToken: { purpose: "oauth_credentials.accessToken", stored: "access-token" },
     calendarId: "calendar-1",
     excludeAvailabilities: [],
     expiresAt: new Date(Date.now() + FUTURE_EXPIRY_MS),
@@ -30,7 +30,7 @@ const harness = vi.hoisted(() => {
     oauthCredentialId: "credential-1",
     provider: "outlook",
     reauthenticationSource: null,
-    refreshToken: "refresh-token",
+    refreshToken: { purpose: "oauth_credentials.refreshToken", stored: "refresh-token" },
     syncToken: null,
     userId: "user-1",
   };

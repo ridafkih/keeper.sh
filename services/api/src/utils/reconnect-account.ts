@@ -1,5 +1,5 @@
 import { calendarAccountsTable, caldavCredentialsTable } from "@keeper.sh/database/schema";
-import { encryptPassword } from "@keeper.sh/database";
+import { hasEncryptionKey, sealSecret } from "@keeper.sh/database";
 import { and, eq } from "drizzle-orm";
 import type { KeeperDatabase } from "@/types";
 
@@ -69,13 +69,18 @@ const applyCalDAVReconnect = async (
 ): Promise<void> => {
   /* Imported lazily: evaluating @/context at module scope boots auth, which a unit test
      importing this file has no way to satisfy. */
-  const { encryptionKey } = await import("@/context");
+  const { keyring } = await import("@/context");
 
-  if (!encryptionKey) {
+  if (!hasEncryptionKey(keyring)) {
     throw new Error("Encryption key not configured");
   }
 
-  const encryptedPassword = encryptPassword(password, encryptionKey);
+  const encryptedPassword = sealSecret(
+    "caldav_credentials.encryptedPassword",
+    password,
+    keyring,
+    target.credentialId,
+  );
 
   await database.transaction(async (transaction) => {
     await transaction

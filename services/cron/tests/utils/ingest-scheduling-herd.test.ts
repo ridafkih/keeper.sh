@@ -23,7 +23,7 @@ const trackedQuery = vi.hoisted(() => async (rows: unknown[]): Promise<unknown[]
 
 const oauthSources = vi.hoisted(() => Array.from({ length: 400 }, (_unused, index) => ({
   accountId: `account-${index}`,
-  accessToken: "token",
+  accessToken: { purpose: "oauth_credentials.accessToken", stored: "token" },
   calendarId: `calendar-${index}`,
   expiresAt: new Date(Date.now() + 3_600_000),
   externalCalendarId: `external-${index}`,
@@ -35,7 +35,7 @@ const oauthSources = vi.hoisted(() => Array.from({ length: 400 }, (_unused, inde
   oauthCredentialId: `credential-${index}`,
   provider: "google",
   reauthenticationSource: null,
-  refreshToken: "refresh",
+  refreshToken: { purpose: "oauth_credentials.refreshToken", stored: "refresh" },
   syncToken: null,
   userId: `user-${index}`,
 })));

@@ -7,7 +7,7 @@ const database = drizzle(client);
 
 vi.mock("@/context", () => ({
   database,
-  encryptionKey: "encryption-key",
+  keyring: {},
   oauthProviders: {
     getProvider: () => null,
     hasRequiredScopes: () => true,

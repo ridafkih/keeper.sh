@@ -8,6 +8,7 @@ const schema = {
   DATABASE_POOL_MAX: "number?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",
+  ENCRYPTION_KEYS_DECRYPT_ONLY: "string?",
   FEEDBACK_EMAIL: "string?",
   GOOGLE_CLIENT_ID: "string?",
   GOOGLE_CLIENT_SECRET: "string?",

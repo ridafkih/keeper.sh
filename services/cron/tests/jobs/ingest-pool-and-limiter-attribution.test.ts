@@ -1,3 +1,4 @@
+import { readStoredSecret } from "@keeper.sh/database";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface EmittedEvent {
@@ -55,7 +56,7 @@ const limiterWaitsServed = new Map<string, number>();
 const STORED_INGEST_SEQ = 0;
 
 const baseSource = {
-  accessToken: "access-token",
+  accessToken: readStoredSecret("oauth_credentials.accessToken", "access-token"),
   accountId: "account-1",
   excludeAvailabilities: [],
   expiresAt: new Date(Date.now() + 3_600_000),
@@ -67,7 +68,7 @@ const baseSource = {
   oauthCredentialId: "credential-1",
   provider: "google",
   ingestSeq: STORED_INGEST_SEQ,
-  refreshToken: "refresh-token",
+  refreshToken: readStoredSecret("oauth_credentials.refreshToken", "refresh-token"),
   syncToken: null,
   userId: "user-1",
 };
@@ -199,7 +200,7 @@ vi.mock("@keeper.sh/sync", async (importOriginal) => ({
 vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   createDatabase: () => Promise.resolve({}),
-  decryptPassword: () => "plaintext",
+  openSecret: () => "plaintext",
 }));
 
 /* The real limiter is left in place: the key under test is the one it was built with. */

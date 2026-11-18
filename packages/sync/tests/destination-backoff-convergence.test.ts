@@ -209,6 +209,7 @@ const config = (database: unknown, overrides: Record<string, unknown> = {}) => (
   destinationCalendarId: CALENDAR_ID,
   database: database as never,
   redis: {} as never,
+  keyring: {} as never,
   oauthConfig: {} as never,
   recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,

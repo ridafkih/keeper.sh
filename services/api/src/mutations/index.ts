@@ -11,7 +11,13 @@ import type {
   ProviderEventReference,
   RsvpStatus,
 } from "@/types";
-import { createCoordinatedRefresher, resolveIsAllDayEvent } from "@keeper.sh/calendar";
+import {
+  createCoordinatedRefresher,
+  readCredentialTokens,
+  resolveIsAllDayEvent,
+} from "@keeper.sh/calendar";
+import { hasEncryptionKey } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import type { RedisRateLimiter, RefreshLockStore } from "@keeper.sh/calendar";
 import { resolveCredentialsByCalendarId, resolveCredentialsByEventId } from "./resolve-credentials";
 import type { EventSource } from "./resolve-credentials";
@@ -53,7 +59,7 @@ interface MutationDependencies {
   database: KeeperDatabase;
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
-  encryptionKey?: string;
+  keyring: Keyring;
   googleRateLimiter?: RedisRateLimiter | null;
   onSourceEventChanged?: (userId: string) => Promise<void>;
 }
@@ -64,32 +70,42 @@ const CALDAV_PROVIDERS = new Set(["caldav", "fastmail", "icloud"]);
 
 const ensureValidAccessToken = async (
   provider: string,
-  oauth: { credentialId: string; accessToken: string; refreshToken: string; expiresAt: Date },
+  oauth: NonNullable<ProviderCredentials["oauth"]>,
   accountId: string,
   deps: MutationDependencies,
 ): Promise<string> => {
+  const tokens = readCredentialTokens(
+    {
+      accessToken: oauth.accessToken,
+      oauthCredentialId: oauth.credentialId,
+      refreshToken: oauth.refreshToken,
+    },
+    deps.keyring,
+  );
+
   if (oauth.expiresAt.getTime() > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
-    return oauth.accessToken;
+    return tokens.accessToken;
   }
 
   if (!deps.oauthTokenRefresher) {
-    return oauth.accessToken;
+    return tokens.accessToken;
   }
 
   const oauthProvider = deps.oauthTokenRefresher.getProvider(provider);
   if (!oauthProvider) {
-    return oauth.accessToken;
+    return tokens.accessToken;
   }
 
   const refresher = createCoordinatedRefresher({
     database: deps.database,
     oauthCredentialId: oauth.credentialId,
     calendarAccountId: accountId,
+    keyring: deps.keyring,
     refreshLockStore: deps.refreshLockStore ?? null,
     rawRefresh: (refreshToken) => oauthProvider.refreshAccessToken(refreshToken),
   });
 
-  const result = await refresher(oauth.refreshToken);
+  const result = await refresher(tokens.refreshToken);
   return result.access_token;
 };
 
@@ -148,7 +164,7 @@ const createEventViaOAuth = async (
 const createEventViaCalDAV = async (
   credentials: ProviderCredentials,
   input: EventInput,
-  encryptionKey: string,
+  keyring: Keyring,
 ): Promise<CreateProviderResult> => {
   if (!credentials.caldav || !credentials.calendarUrl) {
     return { success: false, error: "Missing CalDAV credentials or calendar URL." };
@@ -160,8 +176,9 @@ const createEventViaCalDAV = async (
       calendarUrl: credentials.calendarUrl,
       username: credentials.caldav.username,
       authMethod: credentials.caldav.authMethod,
+      credentialId: credentials.caldav.credentialId,
       encryptedPassword: credentials.caldav.encryptedPassword,
-      encryptionKey,
+      keyring,
     },
     input,
   );
@@ -182,8 +199,8 @@ const dispatchCreateEvent = (
     return createEventViaOAuth(credentials, input, deps);
   }
 
-  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
-    return createEventViaCalDAV(credentials, input, deps.encryptionKey);
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && hasEncryptionKey(deps.keyring) && credentials.calendarUrl) {
+    return createEventViaCalDAV(credentials, input, deps.keyring);
   }
 
   return Promise.resolve({ success: false, error: "Calendar provider not supported for event creation." });
@@ -315,15 +332,16 @@ const dispatchUpdateEvent = async (
     return { success: false, error: `Unsupported OAuth provider: ${credentials.provider}` };
   }
 
-  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && hasEncryptionKey(deps.keyring) && credentials.calendarUrl) {
     return updateCalDAVEvent(
       {
         serverUrl: credentials.caldav.serverUrl,
         calendarUrl: credentials.calendarUrl,
         username: credentials.caldav.username,
         authMethod: credentials.caldav.authMethod,
+        credentialId: credentials.caldav.credentialId,
         encryptedPassword: credentials.caldav.encryptedPassword,
-        encryptionKey: deps.encryptionKey,
+        keyring: deps.keyring,
       },
       reference.sourceEventUid,
       updates,
@@ -548,15 +566,16 @@ const dispatchDeleteEvent = async (
     return null;
   }
 
-  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && hasEncryptionKey(deps.keyring) && credentials.calendarUrl) {
     return deleteCalDAVEvent(
       {
         serverUrl: credentials.caldav.serverUrl,
         calendarUrl: credentials.calendarUrl,
         username: credentials.caldav.username,
         authMethod: credentials.caldav.authMethod,
+        credentialId: credentials.caldav.credentialId,
         encryptedPassword: credentials.caldav.encryptedPassword,
-        encryptionKey: deps.encryptionKey,
+        keyring: deps.keyring,
       },
       reference.sourceEventUid,
     );
@@ -663,15 +682,16 @@ const rsvpEventMutation = async (
     return { success: false, error: `RSVP not supported for provider: ${credentials.provider}` };
   }
 
-  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && deps.encryptionKey && credentials.calendarUrl) {
+  if (credentials.caldav && CALDAV_PROVIDERS.has(credentials.provider) && hasEncryptionKey(deps.keyring) && credentials.calendarUrl) {
     return rsvpCalDAVEvent(
       {
         serverUrl: credentials.caldav.serverUrl,
         calendarUrl: credentials.calendarUrl,
         username: credentials.caldav.username,
         authMethod: credentials.caldav.authMethod,
+        credentialId: credentials.caldav.credentialId,
         encryptedPassword: credentials.caldav.encryptedPassword,
-        encryptionKey: deps.encryptionKey,
+        keyring: deps.keyring,
       },
       sourceEventUid,
       occurrenceStart,
@@ -731,7 +751,7 @@ const fetchCalDAVPendingInvites = async (
   credentials: ProviderCredentials,
   from: string,
   to: string,
-  encryptionKey: string,
+  keyring: Keyring,
 ): Promise<PendingInvite[]> => {
   if (!credentials.caldav || !credentials.calendarUrl || !credentials.email) {
     return [];
@@ -747,8 +767,9 @@ const fetchCalDAVPendingInvites = async (
       calendarUrl: credentials.calendarUrl,
       username: credentials.caldav.username,
       authMethod: credentials.caldav.authMethod,
+      credentialId: credentials.caldav.credentialId,
       encryptedPassword: credentials.caldav.encryptedPassword,
-      encryptionKey,
+      keyring,
     },
     from,
     to,
@@ -772,8 +793,8 @@ const fetchPendingInvitesForCalendar = (
     return fetchOAuthPendingInvites(credentials, from, to, deps);
   }
 
-  if (credentials.caldav && deps.encryptionKey) {
-    return fetchCalDAVPendingInvites(credentials, from, to, deps.encryptionKey);
+  if (credentials.caldav && hasEncryptionKey(deps.keyring)) {
+    return fetchCalDAVPendingInvites(credentials, from, to, deps.keyring);
   }
 
   return Promise.resolve([]);

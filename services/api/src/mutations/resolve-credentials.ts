@@ -7,6 +7,7 @@ import {
   userEventsTable,
 } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq } from "drizzle-orm";
+import type { StoredSecret } from "@keeper.sh/database";
 import type { KeeperDatabase } from "@/types";
 import type { ProviderCredentials } from "@/types";
 import { parseEventReference } from "@/queries/event-read-model";
@@ -24,6 +25,7 @@ const credentialColumns = {
   oauthRefreshToken: oauthCredentialsTable.refreshToken,
   oauthExpiresAt: oauthCredentialsTable.expiresAt,
   caldavAuthMethod: caldavCredentialsTable.authMethod,
+  caldavCredentialId: caldavCredentialsTable.id,
   caldavServerUrl: caldavCredentialsTable.serverUrl,
   caldavUsername: caldavCredentialsTable.username,
   caldavEncryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -38,13 +40,14 @@ interface CredentialRow {
   email: string | null;
   needsReauthentication: boolean;
   oauthCredentialId: string | null;
-  oauthAccessToken: string | null;
-  oauthRefreshToken: string | null;
+  oauthAccessToken: StoredSecret<"oauth_credentials.accessToken"> | null;
+  oauthRefreshToken: StoredSecret<"oauth_credentials.refreshToken"> | null;
   oauthExpiresAt: Date | null;
   caldavAuthMethod: string | null;
+  caldavCredentialId: string | null;
   caldavServerUrl: string | null;
   caldavUsername: string | null;
-  caldavEncryptedPassword: string | null;
+  caldavEncryptedPassword: StoredSecret<"caldav_credentials.encryptedPassword"> | null;
 }
 
 const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
@@ -66,9 +69,15 @@ const rowToCredentials = (row: CredentialRow): ProviderCredentials => {
     };
   }
 
-  if (row.caldavServerUrl && row.caldavUsername && row.caldavEncryptedPassword) {
+  if (
+    row.caldavCredentialId
+    && row.caldavServerUrl
+    && row.caldavUsername
+    && row.caldavEncryptedPassword
+  ) {
     credentials.caldav = {
       authMethod: row.caldavAuthMethod ?? "basic",
+      credentialId: row.caldavCredentialId,
       serverUrl: row.caldavServerUrl,
       username: row.caldavUsername,
       encryptedPassword: row.caldavEncryptedPassword,

@@ -7,13 +7,15 @@ import {
 import { and, arrayContains, eq } from "drizzle-orm";
 import type { Plan } from "@keeper.sh/data-schemas";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { StoredAccessToken, StoredRefreshToken } from "./credential-tokens";
 
 interface OAuthAccount {
   calendarId: string;
   userId: string;
   accountId: string;
-  accessToken: string;
-  refreshToken: string;
+  oauthCredentialId: string;
+  accessToken: StoredAccessToken;
+  refreshToken: StoredRefreshToken;
   accessTokenExpiresAt: Date;
 }
 
@@ -31,6 +33,7 @@ const getOAuthAccountsByPlan = async (
       accessTokenExpiresAt: oauthCredentialsTable.expiresAt,
       accountId: calendarAccountsTable.accountId,
       calendarId: calendarsTable.id,
+      oauthCredentialId: oauthCredentialsTable.id,
       plan: userSubscriptionsTable.plan,
       refreshToken: oauthCredentialsTable.refreshToken,
       userId: calendarsTable.userId,
@@ -67,6 +70,7 @@ const getOAuthAccountsByPlan = async (
       accessTokenExpiresAt,
       accountId: accountId ?? "",
       calendarId: result.calendarId,
+      oauthCredentialId: result.oauthCredentialId,
       refreshToken,
       userId: result.userId,
     });
@@ -86,6 +90,7 @@ const getOAuthAccountsForUser = async (
       accessTokenExpiresAt: oauthCredentialsTable.expiresAt,
       accountId: calendarAccountsTable.accountId,
       calendarId: calendarsTable.id,
+      oauthCredentialId: oauthCredentialsTable.id,
       refreshToken: oauthCredentialsTable.refreshToken,
       userId: calendarsTable.userId,
     })
@@ -108,6 +113,7 @@ const getOAuthAccountsForUser = async (
     accessTokenExpiresAt: result.accessTokenExpiresAt,
     accountId: result.accountId ?? "",
     calendarId: result.calendarId,
+    oauthCredentialId: result.oauthCredentialId,
     refreshToken: result.refreshToken,
     userId: result.userId,
   }));

@@ -28,6 +28,7 @@ import {
   createSourceIngestionPlan,
   measureRedisCommand,
   measureSegment,
+  readCredentialTokens,
   recordSegment,
   getEffectiveDestinationRangesForSource,
 } from "@keeper.sh/calendar";
@@ -52,8 +53,9 @@ import {
   createCalendarDiscoveryCache,
 } from "@keeper.sh/calendar/caldav";
 import {
-  decryptPassword,
+  hasEncryptionKey,
   hasSiblingReadSinceLastSuccess,
+  openSecret,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
 import {
@@ -77,6 +79,7 @@ import {
   refreshLockStore,
 } from "@/context";
 import env from "@/env";
+import { keyring } from "@/utils/keyring";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import {
   resolveMissingCalendarFailure,
@@ -1264,15 +1267,15 @@ const ingestOAuthSources = async (
 
                 const rawRefresher = resolveTokenRefresher(currentSource.provider);
                 const tokenState: TokenState = {
-                  accessToken: currentSource.accessToken,
+                  ...readCredentialTokens(currentSource, keyring),
                   accessTokenExpiresAt: currentSource.expiresAt,
-                  refreshToken: currentSource.refreshToken,
                 };
                 if (rawRefresher) {
                   const tokenRefresher = createCoordinatedRefresher({
                     database,
                     oauthCredentialId: currentSource.oauthCredentialId,
                     calendarAccountId: currentSource.accountId,
+                    keyring,
                     refreshLockStore,
                     rawRefresh: rawRefresher,
                   });
@@ -1426,12 +1429,10 @@ const ingestCalDAVSources = async (
   calendarIds: string[],
   options: IngestRunOptions = {},
 ): Promise<IngestionBatchResult> => {
-  if (!env.ENCRYPTION_KEY || calendarIds.length === 0) {
+  if (calendarIds.length === 0 || !hasEncryptionKey(keyring)) {
     return createEmptyIngestionBatchResult();
   }
   const lane = options.lane ?? fleetIngestLane;
-
-  const encryptionKey = env.ENCRYPTION_KEY;
 
   const caldavSources = await database
     .select({
@@ -1484,6 +1485,7 @@ const ingestCalDAVSources = async (
                 const [currentSource] = await measureDatabaseRead(lane.pooledQueryGate, () => database
                   .select({
                     accountId: calendarAccountsTable.id,
+                    caldavCredentialId: caldavCredentialsTable.id,
                     calendarUrl: calendarsTable.calendarUrl,
                     encryptedPassword: caldavCredentialsTable.encryptedPassword,
                     failureCount: calendarsTable.ingestFailureCount,
@@ -1532,7 +1534,11 @@ const ingestCalDAVSources = async (
                   },
                   serverUrl: currentSource.serverUrl,
                   username: currentSource.username,
-                  password: decryptPassword(currentSource.encryptedPassword, encryptionKey),
+                  password: openSecret(
+                    currentSource.encryptedPassword,
+                    keyring,
+                    currentSource.caldavCredentialId,
+                  ),
                   safeFetchOptions: { ...safeFetchOptions, signal },
                   plan: createSourceIngestionPlan(
                     ranges.historicRange,

@@ -2,13 +2,13 @@ import { normalizeDateRange, parseDateRangeParams } from "@/utils/date-range";
 import { createKeeperApi } from "@/read-models";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { database, oauthProviders, refreshLockStore, encryptionKey, googleInteractiveRateLimiter } from "@/context";
+import { database, oauthProviders, refreshLockStore, keyring, googleInteractiveRateLimiter } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   googleRateLimiter: googleInteractiveRateLimiter,
   oauthTokenRefresher: oauthProviders,
   refreshLockStore,
-  encryptionKey,
+  keyring,
 });
 
 const GET = withWideEvent(

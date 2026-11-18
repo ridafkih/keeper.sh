@@ -9,10 +9,12 @@ import type { KeeperDatabase } from "../../src/types";
 
 /* @/context boots auth on import, which a unit test has no way to satisfy. */
 vi.mock("../../src/context", () => ({
-  encryptionKey: "0".repeat(44),
+  keyring: {},
 }));
 vi.mock("@keeper.sh/database", () => ({
-  encryptPassword: (password: string) => `encrypted:${password}`,
+  hasEncryptionKey: () => true,
+  sealSecret: (_purpose: string, password: string, _keyring: unknown, rowId: string) =>
+    `encrypted:${rowId}:${password}`,
 }));
 
 const USER_ID = "user-1";

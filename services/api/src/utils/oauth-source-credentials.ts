@@ -1,6 +1,7 @@
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
+import { storeCredentialAccessToken, storeCredentialRefreshToken } from "@keeper.sh/calendar";
 import { and, eq, notExists } from "drizzle-orm";
-import { database } from "@/context";
+import { database, keyring } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 
@@ -32,24 +33,26 @@ const createOAuthSourceCredential = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: data.accessToken,
+        accessToken: storeCredentialAccessToken(existing.id, data.accessToken, keyring),
         expiresAt: data.expiresAt,
         needsReauthentication: false,
-        refreshToken: data.refreshToken,
+        refreshToken: storeCredentialRefreshToken(existing.id, data.refreshToken, keyring),
       })
       .where(eq(oauthCredentialsTable.id, existing.id));
 
     return existing.id;
   }
 
+  const credentialId = crypto.randomUUID();
   const [credential] = await database
     .insert(oauthCredentialsTable)
     .values({
-      accessToken: data.accessToken,
+      accessToken: storeCredentialAccessToken(credentialId, data.accessToken, keyring),
       email: data.email,
       expiresAt: data.expiresAt,
+      id: credentialId,
       provider: data.provider,
-      refreshToken: data.refreshToken,
+      refreshToken: storeCredentialRefreshToken(credentialId, data.refreshToken, keyring),
       userId,
     })
     .returning({ id: oauthCredentialsTable.id });

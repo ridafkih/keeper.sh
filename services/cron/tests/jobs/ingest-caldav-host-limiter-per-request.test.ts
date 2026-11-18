@@ -1,4 +1,5 @@
-import { encryptPassword } from "@keeper.sh/database";
+import { createKeyring, sealSecret } from "@keeper.sh/database";
+import type { StoredSecret } from "@keeper.sh/database";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
@@ -7,9 +8,10 @@ const CALENDAR_URL = "https://caldav.example.net/calendars/user-1/personal/";
 const harness = vi.hoisted(() => {
   interface CalDAVSourceRow {
     accountId: string;
+    caldavCredentialId: string;
     calendarId: string;
     calendarUrl: string;
-    encryptedPassword: string;
+    encryptedPassword: StoredSecret<"caldav_credentials.encryptedPassword">;
     ingestFutureRange: string;
     ingestHistoricRange: string;
     ingestWindowRecordedAt: Date | null;
@@ -275,8 +277,15 @@ vi.mock("@keeper.sh/sync", () => ({
   }),
 }));
 
-/* A real key so the job's decryptPassword round-trips the fixture password. */
-const ENCRYPTION_KEY = Buffer.alloc(32).toString("base64");
+/* A real key so the job round-trips the fixture password. */
+const CALDAV_CREDENTIAL_ID = "5d5f0b3c-7a51-4e0f-9d39-0d6f2f1f7a10";
+const sealFixturePassword = () =>
+  sealSecret(
+    "caldav_credentials.encryptedPassword",
+    "secret",
+    createKeyring({ primaryKey: Buffer.alloc(32).toString("base64") }),
+    CALDAV_CREDENTIAL_ID,
+  );
 
 vi.mock("../../src/env", () => ({
   default: { ENCRYPTION_KEY: Buffer.alloc(32).toString("base64") },
@@ -344,8 +353,9 @@ describe("CalDAV limiter consumption", () => {
     harness.state.caldavRows.push({
       accountId: "account-caldav-1",
       calendarId: "calendar-caldav-1",
+      caldavCredentialId: CALDAV_CREDENTIAL_ID,
       calendarUrl: CALENDAR_URL,
-      encryptedPassword: encryptPassword("secret", ENCRYPTION_KEY),
+      encryptedPassword: sealFixturePassword(),
       ingestFutureRange: "6m",
       ingestHistoricRange: "1m",
       ingestWindowRecordedAt: new Date(),
@@ -380,8 +390,9 @@ describe("CalDAV limiter consumption", () => {
     harness.state.caldavRows.push({
       accountId: "account-caldav-2",
       calendarId: "calendar-caldav-2",
+      caldavCredentialId: CALDAV_CREDENTIAL_ID,
       calendarUrl: CALENDAR_URL,
-      encryptedPassword: encryptPassword("secret", ENCRYPTION_KEY),
+      encryptedPassword: sealFixturePassword(),
       ingestFutureRange: "6m",
       ingestHistoricRange: "1m",
       ingestWindowRecordedAt: new Date(),

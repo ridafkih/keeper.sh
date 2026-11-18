@@ -14,7 +14,7 @@ import {
   insertSourceCalendars,
 } from "./source-calendar-insert";
 
-import { resolveCalendarCapabilities } from "@keeper.sh/calendar";
+import { readCredentialTokens, resolveCalendarCapabilities } from "@keeper.sh/calendar";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
   fromGoogleCalendarListEntries,
@@ -122,13 +122,14 @@ const getOAuthDestinationCredentials = async (
   accountId: string,
   provider: string,
 ): Promise<OAuthAccountWithCredentials> => {
-  const { database } = await import("@/context");
+  const { database, keyring } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
       accountId: calendarAccountsTable.id,
       email: calendarAccountsTable.email,
       expiresAt: oauthCredentialsTable.expiresAt,
+      oauthCredentialId: oauthCredentialsTable.id,
       provider: calendarAccountsTable.provider,
       refreshToken: oauthCredentialsTable.refreshToken,
     })
@@ -154,11 +155,10 @@ const getOAuthDestinationCredentials = async (
   }
 
   return {
-    accessToken: result.accessToken,
+    ...readCredentialTokens(result, keyring),
     accountId: result.accountId,
     email: result.email,
     expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
   };
 };
 
@@ -179,7 +179,7 @@ const getOAuthSourceCredentials = async (
   credentialId: string,
   provider: string,
 ): Promise<OAuthSourceWithCredentials> => {
-  const { database } = await import("@/context");
+  const { database, keyring } = await import("@/context");
   const [result] = await database
     .select({
       accessToken: oauthCredentialsTable.accessToken,
@@ -207,11 +207,17 @@ const getOAuthSourceCredentials = async (
   }
 
   return {
-    accessToken: result.accessToken,
+    ...readCredentialTokens(
+      {
+        accessToken: result.accessToken,
+        oauthCredentialId: result.credentialId,
+        refreshToken: result.refreshToken,
+      },
+      keyring,
+    ),
     credentialId: result.credentialId,
     email: result.email,
     expiresAt: result.expiresAt,
-    refreshToken: result.refreshToken,
   };
 };
 

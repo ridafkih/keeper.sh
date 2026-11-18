@@ -5,9 +5,9 @@ import { createKeeperApi } from "@/read-models";
 import type { KeeperEventFilters, KeeperFreeTimeOptions } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
-import { database } from "@/context";
+import { database, keyring } from "@/context";
 
-const keeperApi = createKeeperApi(database);
+const keeperApi = createKeeperApi(database, { keyring });
 
 const parseLimit = (limitParam: string | null): number => {
   if (!limitParam) {

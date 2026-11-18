@@ -138,7 +138,7 @@ beforeAll(async () => {
       }),
       transaction: (callback: (tx: object) => Promise<unknown>) => callback(txInstance),
     },
-    encryptionKey: "encryption-key",
+    keyring: {},
     premiumService: {
       canAddAccount: () => Promise.resolve(canAddAccountResult),
       getUserPlan: () => Promise.resolve("free"),
@@ -171,7 +171,8 @@ beforeAll(async () => {
   }));
 
   vi.mock("@keeper.sh/database", () => ({
-    encryptPassword: () => "encrypted-password",
+    hasEncryptionKey: () => true,
+    sealSecret: () => "encrypted-password",
   }));
 
   vi.mock("../../src/utils/account-calendar-discovery", () => ({

@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { Keyring } from "@keeper.sh/database";
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { createCoordinatedRefresher } from "../oauth/coordinated-refresher";
+import { readCredentialTokens } from "../oauth/credential-tokens";
 import { createGoogleTokenRefresher } from "../oauth/google";
 import { createMicrosoftTokenRefresher } from "../oauth/microsoft";
 import { createRedisRateLimiter, withGoogleProjectBudget } from "../utils/redis-rate-limiter";
@@ -29,6 +31,7 @@ interface RegistrarContextConfig {
   googleClientId?: string;
   googleClientSecret?: string;
   googleProjectRequestsPerMinute?: number;
+  keyring: Keyring;
   microsoftClientId?: string;
   microsoftClientSecret?: string;
   rateLimiterRedis: Parameters<typeof createRedisRateLimiter>[0];
@@ -96,9 +99,8 @@ const resolveFreshAccessToken = async (
   }
 
   const tokenState: TokenState = {
-    accessToken: credentials.accessToken,
+    ...readCredentialTokens(credentials, config.keyring),
     accessTokenExpiresAt: credentials.expiresAt,
-    refreshToken: credentials.refreshToken,
   };
 
   const rawRefresh = resolveTokenRefresher(provider, config);
@@ -106,6 +108,7 @@ const resolveFreshAccessToken = async (
     await ensureValidToken(tokenState, createCoordinatedRefresher({
       calendarAccountId: credentials.calendarAccountId,
       database: config.database,
+      keyring: config.keyring,
       oauthCredentialId: credentials.oauthCredentialId,
       rawRefresh,
       refreshLockStore: config.refreshLockStore,

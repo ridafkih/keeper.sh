@@ -2,10 +2,14 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
-import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
+import {
+  createGoogleTokenRefresher,
+  createMicrosoftTokenRefresher,
+  storeCredentialAccessToken,
+  storeCredentialRefreshToken,
+} from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
-import { database, env } from "@/context";
+import { database, env, keyring } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -41,9 +45,17 @@ const refreshGoogleAccessToken = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: tokenData.access_token,
+        accessToken: storeCredentialAccessToken(
+          account.oauthCredentialId,
+          tokenData.access_token,
+          keyring,
+        ),
         expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
+        refreshToken: storeCredentialRefreshToken(
+          account.oauthCredentialId,
+          tokenData.refresh_token ?? refreshToken,
+          keyring,
+        ),
       })
       .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
   }
@@ -80,9 +92,17 @@ const refreshMicrosoftAccessToken = async (
     await database
       .update(oauthCredentialsTable)
       .set({
-        accessToken: tokenData.access_token,
+        accessToken: storeCredentialAccessToken(
+          account.oauthCredentialId,
+          tokenData.access_token,
+          keyring,
+        ),
         expiresAt: newExpiresAt,
-        refreshToken: tokenData.refresh_token ?? refreshToken,
+        refreshToken: storeCredentialRefreshToken(
+          account.oauthCredentialId,
+          tokenData.refresh_token ?? refreshToken,
+          keyring,
+        ),
       })
       .where(eq(oauthCredentialsTable.id, account.oauthCredentialId));
   }
@@ -112,9 +132,13 @@ const refreshGoogleSourceAccessToken = async (
   await database
     .update(oauthCredentialsTable)
     .set({
-      accessToken: tokenData.access_token,
+      accessToken: storeCredentialAccessToken(credentialId, tokenData.access_token, keyring),
       expiresAt: newExpiresAt,
-      refreshToken: tokenData.refresh_token ?? refreshToken,
+      refreshToken: storeCredentialRefreshToken(
+        credentialId,
+        tokenData.refresh_token ?? refreshToken,
+        keyring,
+      ),
     })
     .where(eq(oauthCredentialsTable.id, credentialId));
 
@@ -143,9 +167,13 @@ const refreshMicrosoftSourceAccessToken = async (
   await database
     .update(oauthCredentialsTable)
     .set({
-      accessToken: tokenData.access_token,
+      accessToken: storeCredentialAccessToken(credentialId, tokenData.access_token, keyring),
       expiresAt: newExpiresAt,
-      refreshToken: tokenData.refresh_token ?? refreshToken,
+      refreshToken: storeCredentialRefreshToken(
+        credentialId,
+        tokenData.refresh_token ?? refreshToken,
+        keyring,
+      ),
     })
     .where(eq(oauthCredentialsTable.id, credentialId));
 

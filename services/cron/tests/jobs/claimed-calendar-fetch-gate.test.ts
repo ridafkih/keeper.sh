@@ -1,3 +1,4 @@
+import { readStoredSecret } from "@keeper.sh/database";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
 
@@ -137,7 +138,7 @@ vi.mock("@keeper.sh/database", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    decryptPassword: () => "plaintext",
+    openSecret: () => "plaintext",
   };
 });
 
@@ -217,7 +218,7 @@ const oauthListingRow = {
 
 const oauthCalendarRow = {
   ...commonCalendarFields,
-  accessToken: "merged-access-token",
+  accessToken: readStoredSecret("oauth_credentials.accessToken", "merged-access-token"),
   accountId: "account-oauth",
   excludeAvailabilities: [],
   expiresAt: new Date(Date.now() + TOKEN_EXPIRY_MS),
@@ -225,7 +226,7 @@ const oauthCalendarRow = {
   failureCount: FAILURE_COUNT,
   oauthCredentialId: "credential-oauth",
   provider: "outlook",
-  refreshToken: "merged-refresh-token",
+  refreshToken: readStoredSecret("oauth_credentials.refreshToken", "merged-refresh-token"),
   syncToken: null,
   userId: "user-oauth",
 };

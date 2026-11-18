@@ -30,7 +30,7 @@ vi.mock("tsdav", () => ({
 }));
 
 vi.mock("@keeper.sh/database", () => ({
-  decryptPassword: vi.fn(() => "decrypted"),
+  openSecret: vi.fn(() => "decrypted"),
 }));
 
 vi.mock("@keeper.sh/calendar/safe-fetch", () => ({
@@ -47,8 +47,9 @@ describe("caldav provider mutations", () => {
     serverUrl: "https://dav.com",
     calendarUrl: "https://dav.com/cal",
     username: "user",
-    encryptedPassword: "enc",
-    encryptionKey: "key",
+    credentialId: "credential-1",
+    encryptedPassword: { purpose: "caldav_credentials.encryptedPassword", stored: "enc" } as never,
+    keyring: {} as never,
     authMethod: "basic",
   };
 

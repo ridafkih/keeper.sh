@@ -63,7 +63,7 @@ const createCalDAVSourceProvider = (
   const sourceService = createCalDAVSourceService(config);
 
   const fetchEventsFromCalDAV = async (account: CalDAVSourceAccount): Promise<SourceEvent[]> => {
-    const password = sourceService.getDecryptedPassword(account.encryptedPassword);
+    const password = sourceService.getDecryptedPassword(account);
     const client = new CalDAVClient({
       authMethod: resolveAuthMethod(account.authMethod),
       credentials: {
@@ -182,7 +182,7 @@ const createCalDAVSourceProvider = (
       return;
     }
 
-    const password = sourceService.getDecryptedPassword(account.encryptedPassword);
+    const password = sourceService.getDecryptedPassword(account);
     const client = new CalDAVClient({
       authMethod: resolveAuthMethod(account.authMethod),
       credentials: { password, username: account.username },
