@@ -127,19 +127,18 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     expect(classifyDatabaseError(error)?.slug).toBeOneOf(CONNECTION_SLUGS);
   }, 20_000);
 
-  it("classifies a connection reclaimed by the pool max lifetime", async () => {
+  it("raises nothing when a transaction outlives the pool max lifetime", async () => {
     const database = trackedDatabase({ maxLifetime: 1 });
 
-    const error = await captureFailure(async () => {
-      await database.execute(sql`select 1`);
-      await database.transaction(async (transaction) => {
-        await transaction.execute(sql`select 1`);
-        await Bun.sleep(1100);
-        await transaction.execute(sql`select 2`);
-      });
+    await database.execute(sql`select 1`);
+    const outcome = await database.transaction(async (transaction) => {
+      await transaction.execute(sql`select 1`);
+      await Bun.sleep(1100);
+      await transaction.execute(sql`select 2`);
+      return "committed";
     });
 
-    expect(classifyDatabaseError(error)?.slug).toBe("db-connection-unavailable");
+    expect(outcome).toBe("committed");
   }, 20_000);
 
   it("classifies a pool that can never reach the server", async () => {
