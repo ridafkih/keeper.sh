@@ -126,3 +126,38 @@ jobs:
             '{web: $web, api: $api, mcp: $mcp, worker: $worker, cron: $cron}')
           aws ssm put-parameter --name "/keeper/$ENVIRONMENT/images" \
             --type String --overwrite --value "$images" --query Version --output text
+
+      - name: Deregister superseded task definitions
+        env:
+          AWS_MAX_ATTEMPTS: "10"
+          AWS_RETRY_MODE: standard
+        run: |
+          set -uo pipefail
+          skip() {
+            echo "::warning::Older task definition revisions were left in place: $1"
+            exit 0
+          }
+          in_use=$(aws ecs describe-services --cluster "$CLUSTER" \
+            --services "$CLUSTER"-{api,cron,mcp,web,worker} \
+            --query 'services[].deployments[].taskDefinition' --output json) \
+            || skip "the running revisions could not be read."
+          for family in "$CLUSTER"-{api,cron,mcp,migrate,web,worker}; do
+            active=$(aws ecs list-task-definitions --family-prefix "$family" --status ACTIVE --sort DESC \
+              --query taskDefinitionArns --output json) \
+              || skip "the revisions of $family could not be listed."
+            superseded=$(jq -r --arg family "$family" --argjson in_use "$in_use" \
+              '[.[] | select(test("/" + $family + ":[0-9]+$"))] | .[2:] | .[] | select(. as $revision | $in_use | index($revision) | not)' \
+              <<< "$active") \
+              || skip "the revisions of $family could not be compared."
+            for task_definition in $superseded; do
+              if failure=$(aws ecs deregister-task-definition --task-definition "$task_definition" \
+                --query taskDefinition.revision --output text 2>&1 > /dev/null); then
+                echo "Deregistered ${task_definition##*/}"
+              elif [[ "$failure" == *AccessDenied* ]]; then
+                echo "::notice::The deploy role may not deregister task definitions yet, so older revisions were left in place."
+                exit 0
+              else
+                echo "::warning::${task_definition##*/} could not be deregistered."
+              fi
+            done
+          done
