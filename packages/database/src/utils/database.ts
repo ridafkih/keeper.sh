@@ -124,5 +124,11 @@ const closeDatabase = (database: DatabaseInstance, options?: CloseDatabaseOption
   database.$client.close();
 };
 
-export { createDatabase, closeDatabase, hasBoundedDatabaseCloseBegun, DEFAULT_STATEMENT_TIMEOUT_MS };
+export {
+  createDatabase,
+  closeDatabase,
+  hasBoundedDatabaseCloseBegun,
+  DEFAULT_IDLE_IN_TRANSACTION_TIMEOUT_MS,
+  DEFAULT_STATEMENT_TIMEOUT_MS,
+};
 export type { DatabasePoolOptions, DatabaseInstance, CloseDatabaseOptions };
