@@ -21,7 +21,6 @@ export {
   SecretEncryptionError,
   hasStoredSecret,
   openSecret,
-  readStoredSecret,
   sealSecret,
 } from "./stored-secret";
 export type { SecretDecryptionReason, SecretPurpose, StoredSecret } from "./stored-secret";

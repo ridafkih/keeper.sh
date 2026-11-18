@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { SecretDecryptionError, createKeyring, readStoredSecret } from "@keeper.sh/database";
+import { SecretDecryptionError, createKeyring } from "@keeper.sh/database";
 import {
   readCredentialAccessToken,
   readCredentialTokens,
@@ -13,9 +13,9 @@ const OTHER_CREDENTIAL_ID = "9d2e7c10-51a3-4b8f-a6c4-7e0f3b2a1d99";
 const KEY = randomBytes(32).toString("base64");
 
 const plaintextRow = () => ({
-  accessToken: readStoredSecret("oauth_credentials.accessToken", "plain-access"),
+  accessToken: storeCredentialAccessToken(CREDENTIAL_ID, "plain-access", createKeyring()),
   oauthCredentialId: CREDENTIAL_ID,
-  refreshToken: readStoredSecret("oauth_credentials.refreshToken", "plain-refresh"),
+  refreshToken: storeCredentialRefreshToken(CREDENTIAL_ID, "plain-refresh", createKeyring()),
 });
 
 const encryptedRow = () => {

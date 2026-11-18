@@ -1,4 +1,4 @@
-import { readStoredSecret } from "@keeper.sh/database";
+import { createKeyring, sealSecret } from "@keeper.sh/database";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { calendarsTable } from "@keeper.sh/database/schema";
 import type { ingestSourceCalendars as IngestSourceCalendars } from "../../src/ingest/ingest-sources";
@@ -261,7 +261,7 @@ const oauthListingRow = {
 
 const oauthCalendarRow = {
   ...commonCalendarFields,
-  accessToken: readStoredSecret("oauth_credentials.accessToken", "merged-access-token"),
+  accessToken: sealSecret("oauth_credentials.accessToken", "merged-access-token", createKeyring(), "credential-oauth"),
   accountId: "account-oauth",
   excludeAvailabilities: [],
   expiresAt: new Date(Date.now() + TOKEN_EXPIRY_MS),
@@ -269,7 +269,7 @@ const oauthCalendarRow = {
   failureCount: OAUTH_FAILURE_COUNT,
   oauthCredentialId: "credential-oauth",
   provider: "outlook",
-  refreshToken: readStoredSecret("oauth_credentials.refreshToken", "merged-refresh-token"),
+  refreshToken: sealSecret("oauth_credentials.refreshToken", "merged-refresh-token", createKeyring(), "credential-oauth"),
   syncToken: null,
   userId: "user-oauth",
 };
