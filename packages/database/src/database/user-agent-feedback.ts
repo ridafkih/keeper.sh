@@ -4,6 +4,11 @@ import { user } from "./auth-schema";
 
 type UserAgentFeedbackDatabase = Pick<BunSQLDatabase, "select">;
 
+const USER_AGENT_FEEDBACK_READ = {
+  columns: [user.id, user.agentFeedbackEnabled],
+  table: user,
+};
+
 const readUserAgentFeedbackEnabled = async (
   database: UserAgentFeedbackDatabase,
   userId: string,
@@ -19,5 +24,5 @@ const readUserAgentFeedbackEnabled = async (
   return row.agentFeedbackEnabled;
 };
 
-export { readUserAgentFeedbackEnabled };
+export { readUserAgentFeedbackEnabled, USER_AGENT_FEEDBACK_READ };
 export type { UserAgentFeedbackDatabase };

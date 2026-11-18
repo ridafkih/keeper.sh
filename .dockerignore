@@ -6,3 +6,5 @@ dist
 *.log
 .env*
 !.env.template
+infra
+.claude

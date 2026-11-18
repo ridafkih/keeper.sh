@@ -25,6 +25,7 @@ import {
   REGISTRATION_EMAIL_DOMAIN_MESSAGE,
   isRegistrationEmailAllowed,
 } from "./registration-email-domains";
+import { discardSignInTokens } from "./sign-in-tokens";
 import type { McpTokenVersion } from "./mcp-token-version";
 import {
   resolveMcpAuthOptions,
@@ -408,6 +409,10 @@ const createAuth = (config: AuthConfig) => {
       sendVerificationEmail,
     },
     databaseHooks: {
+      account: {
+        create: { before: discardSignInTokens },
+        update: { before: discardSignInTokens },
+      },
       user: {
         create: {
           before: (user) => {

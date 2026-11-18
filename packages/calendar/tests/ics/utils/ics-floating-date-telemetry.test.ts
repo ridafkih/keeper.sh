@@ -163,7 +163,7 @@ describe("ICS feeds holding a VEVENT with unanchorable floating dates", () => {
     expect(run.status).toBe("success");
     expect(run.inserts.toSorted()).toEqual(["state-dinner@test", "state-standup@test"]);
     expect(run.wideEvent["source_events.unsupported_count"]).toBe(1);
-    expect(run.wideEvent["source_events.unsupported_uids"]).toBe("floating@test");
+    expect(run.wideEvent["source_events.unsupported_uid_hashes"]).toBe("4624854850601e83");
   });
 
   it("applies a real deletion arriving in the same feed", async () => {

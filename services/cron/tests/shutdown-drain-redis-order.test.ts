@@ -38,10 +38,20 @@ vi.mock("../src/migration-check", () => ({
   },
 }));
 
+vi.mock("../src/liveness", () => ({
+  laneProgressed: () => (): null => null,
+  startLiveness: (): null => null,
+  withJobProgress: (job: unknown): unknown => job,
+}));
+
 vi.mock("../src/utils/logging", () => ({
   destroy: (): void => {
     // Intentionally empty.
   },
+}));
+
+vi.mock("../src/utils/safe-fetch-options", () => ({
+  reportPrivateResolutionPolicy: (): null => null,
 }));
 
 vi.mock("../src/utils/get-jobs", () => ({

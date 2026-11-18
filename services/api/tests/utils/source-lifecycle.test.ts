@@ -116,6 +116,17 @@ describe("runSourceCreationPreflight", () => {
     ).rejects.toMatchObject({ reason: "not_ical", feedFailureReason: "not-calendar" });
   });
 
+  it("says a feed over the size limit was rejected for its size", async () => {
+    await expect(
+      rejectWith(new CalendarFetchError("Calendar feed is too large.", { reason: "too_large" })),
+    ).rejects.toMatchObject({
+      authRequired: false,
+      feedFailureReason: "too-large",
+      message: "Calendar feed is too large.",
+      reason: "too_large",
+    });
+  });
+
   it("says a URL pointing at a private address was refused as unsafe", async () => {
     await expect(rejectWith(new UrlSafetyError("private address"))).rejects.toMatchObject({
       reason: "unsafe_url",

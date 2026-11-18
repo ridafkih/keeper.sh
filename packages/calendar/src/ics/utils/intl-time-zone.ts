@@ -45,6 +45,4 @@ const readTimeZoneOffsetMinutes = (timeZone: string, instant: Date): number | un
   return offsetPartsToMinutes(sign, hours, minutes);
 };
 
-const listSupportedTimeZones = (): readonly string[] => Intl.supportedValuesOf("timeZone");
-
-export { canFormatTimeZone, listSupportedTimeZones, readTimeZoneOffsetMinutes };
+export { canFormatTimeZone, readTimeZoneOffsetMinutes };

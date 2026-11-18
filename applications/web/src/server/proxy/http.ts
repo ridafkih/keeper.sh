@@ -15,11 +15,33 @@ export function toProxiedUrl(requestUrl: URL, origin: string): URL {
   return new URL(requestUrl.pathname + requestUrl.search, upstreamUrl);
 }
 
+const HOP_BY_HOP_HEADERS = [
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+];
+
+const EDGE_ONLY_HEADERS = ["x-origin-auth"];
+
+const UNFORWARDED_REQUEST_HEADERS = ["host", ...HOP_BY_HOP_HEADERS, ...EDGE_ONLY_HEADERS];
+
+export function toForwardedHeaders(headers: Headers): Headers {
+  const forwarded = new Headers(headers);
+  for (const name of UNFORWARDED_REQUEST_HEADERS) {
+    forwarded.delete(name);
+  }
+  return forwarded;
+}
+
 export async function proxyRequest(request: Request, origin: string): Promise<Response> {
   const requestUrl = new URL(request.url);
   const targetUrl = toProxiedUrl(requestUrl, origin);
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.delete("host");
+  const requestHeaders = toForwardedHeaders(request.headers);
 
   const requestInit: RequestInit = {
     headers: requestHeaders,

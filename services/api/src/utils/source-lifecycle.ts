@@ -71,6 +71,7 @@ const FEED_FAILURE_REASONS: Record<InvalidSourceUrlReason, IcsFeedFailureReason>
   not_ical: "not-calendar",
   partial_response: "unreachable",
   timeout: "unreachable",
+  too_large: "too-large",
   truncated: "not-calendar",
   unreachable: "unreachable",
   unsafe_url: "unreachable",

@@ -127,19 +127,18 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     expect(classifyDatabaseError(error)?.slug).toBeOneOf(CONNECTION_SLUGS);
   }, 20_000);
 
-  it("classifies a connection reclaimed by the pool max lifetime", async () => {
+  it("raises nothing when a transaction outlives the pool max lifetime", async () => {
     const database = trackedDatabase({ maxLifetime: 1 });
 
-    const error = await captureFailure(async () => {
-      await database.execute(sql`select 1`);
-      await database.transaction(async (transaction) => {
-        await transaction.execute(sql`select 1`);
-        await Bun.sleep(1100);
-        await transaction.execute(sql`select 2`);
-      });
+    await database.execute(sql`select 1`);
+    const outcome = await database.transaction(async (transaction) => {
+      await transaction.execute(sql`select 1`);
+      await Bun.sleep(1100);
+      await transaction.execute(sql`select 2`);
+      return "committed";
     });
 
-    expect(classifyDatabaseError(error)?.slug).toBe("db-connection-unavailable");
+    expect(outcome).toBe("committed");
   }, 20_000);
 
   it("classifies a pool that can never reach the server", async () => {
@@ -155,11 +154,12 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
   it("classifies every in-flight query when the backend dies under concurrency", async () => {
     const database = trackedDatabase({ max: 4 });
     const killer = trackedDatabase();
+    const ownQueryMarker = `keeper-live-driver-${crypto.randomUUID()}`;
 
     await database.execute(sql`select 1`);
     const inFlight = Array.from({ length: 8 }, async () => {
       try {
-        await database.execute(sql`select pg_sleep(2)`);
+        await database.execute(sql.raw(`select pg_sleep(2) /* ${ownQueryMarker} */`));
         return null;
       } catch (error) {
         return error;
@@ -168,7 +168,7 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     await Bun.sleep(250);
     await killer.execute(
       sql`select pg_terminate_backend(pid) from pg_stat_activity
-          where query like '%pg_sleep(2)%' and pid <> pg_backend_pid()`,
+          where query like ${`%${ownQueryMarker}%`} and pid <> pg_backend_pid()`,
     );
 
     const settled = await Promise.all(inFlight);
@@ -182,13 +182,13 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
 
   it("classifies a connection refused by the server connection limit", async () => {
     const administrator = trackedDatabase({ max: 2 });
-    await administrator.execute(sql`drop role if exists keeper_conn_limit_probe`);
+    const limitedRole = `keeper_conn_limit_probe_${crypto.randomUUID().replaceAll("-", "")}`;
     await administrator.execute(
-      sql`create role keeper_conn_limit_probe login password 'probe' connection limit 1`,
+      sql`create role ${sql.identifier(limitedRole)} login password 'probe' connection limit 1`,
     );
 
     const limitedUrl = new URL(databaseUrl ?? "");
-    limitedUrl.username = "keeper_conn_limit_probe";
+    limitedUrl.username = limitedRole;
     limitedUrl.password = "probe";
 
     const holder = trackedDatabase({ url: limitedUrl.toString() });
@@ -202,7 +202,7 @@ describe.skipIf(!databaseUrl)("classifyDatabaseError against a live Bun SQL pool
     } finally {
       holder.$client.close();
       blocked.$client.close();
-      await administrator.execute(sql`drop role if exists keeper_conn_limit_probe`);
+      await administrator.execute(sql`drop role if exists ${sql.identifier(limitedRole)}`);
     }
   }, 20_000);
 

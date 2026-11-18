@@ -6,7 +6,9 @@ type ProxyableMethods = typeof proxyableMethods.infer;
 
 const planSchema = type("'free' | 'pro'");
 
-const icsFeedFailureReasonSchema = type("'auth-required' | 'not-found' | 'not-calendar' | 'unreachable'");
+const icsFeedFailureReasonSchema = type(
+  "'auth-required' | 'not-found' | 'not-calendar' | 'too-large' | 'unreachable'",
+);
 const oauthConnectFailureReasonSchema = type(
   "'access-declined' | 'admin-approval-required' | 'expired' | 'no-mailbox' | 'unknown'",
 );
@@ -558,6 +560,102 @@ const applySourceSyncDefaults = <TValues extends object>(
   ...values,
 });
 
+const SYNC_RULE_FIELDS = [
+  "customEventName",
+  "disableEventReminders",
+  "excludeAllDayEvents",
+  "excludeAvailabilities",
+  "excludeEventDescription",
+  "excludeEventLocation",
+  "excludeEventName",
+  "excludeFocusTime",
+  "excludeOutOfOffice",
+  "excludeTitleKeywords",
+  "markEventsAsPrivate",
+] as const;
+type SyncRuleField = (typeof SYNC_RULE_FIELDS)[number];
+
+interface SyncRules<TAvailability extends string = string> {
+  customEventName: string;
+  disableEventReminders: boolean;
+  excludeAllDayEvents: boolean;
+  excludeAvailabilities: TAvailability[];
+  excludeEventDescription: boolean;
+  excludeEventLocation: boolean;
+  excludeEventName: boolean;
+  excludeFocusTime: boolean;
+  excludeOutOfOffice: boolean;
+  excludeTitleKeywords: string[];
+  markEventsAsPrivate: boolean;
+}
+
+type SyncRuleOverrides<TAvailability extends string = string> = {
+  [Field in SyncRuleField]: SyncRules<TAvailability>[Field] | null;
+};
+
+const NO_SYNC_RULE_OVERRIDES: Readonly<SyncRuleOverrides<never>> = Object.freeze({
+  customEventName: null,
+  disableEventReminders: null,
+  excludeAllDayEvents: null,
+  excludeAvailabilities: null,
+  excludeEventDescription: null,
+  excludeEventLocation: null,
+  excludeEventName: null,
+  excludeFocusTime: null,
+  excludeOutOfOffice: null,
+  excludeTitleKeywords: null,
+  markEventsAsPrivate: null,
+});
+
+const resolveSyncRules = <TAvailability extends string>(
+  source: SyncRules<TAvailability>,
+  overrides: Readonly<SyncRuleOverrides<TAvailability>> | null | undefined,
+): SyncRules<TAvailability> => {
+  const applied = overrides ?? NO_SYNC_RULE_OVERRIDES;
+  return {
+    customEventName: applied.customEventName ?? source.customEventName,
+    disableEventReminders: applied.disableEventReminders ?? source.disableEventReminders,
+    excludeAllDayEvents: applied.excludeAllDayEvents ?? source.excludeAllDayEvents,
+    excludeAvailabilities: applied.excludeAvailabilities ?? source.excludeAvailabilities,
+    excludeEventDescription: applied.excludeEventDescription ?? source.excludeEventDescription,
+    excludeEventLocation: applied.excludeEventLocation ?? source.excludeEventLocation,
+    excludeEventName: applied.excludeEventName ?? source.excludeEventName,
+    excludeFocusTime: applied.excludeFocusTime ?? source.excludeFocusTime,
+    excludeOutOfOffice: applied.excludeOutOfOffice ?? source.excludeOutOfOffice,
+    excludeTitleKeywords: applied.excludeTitleKeywords ?? source.excludeTitleKeywords,
+    markEventsAsPrivate: applied.markEventsAsPrivate ?? source.markEventsAsPrivate,
+  };
+};
+
+const listOverriddenSyncRuleFields = (
+  overrides: Readonly<SyncRuleOverrides> | null | undefined,
+): SyncRuleField[] => {
+  if (!overrides) {
+    return [];
+  }
+  return SYNC_RULE_FIELDS.filter((field) => overrides[field] !== null);
+};
+
+const hasSyncRuleOverrides = (
+  overrides: Readonly<SyncRuleOverrides> | null | undefined,
+): boolean => listOverriddenSyncRuleFields(overrides).length > 0;
+
+const syncRuleOverridesPatchSchema = type({
+  "customEventName?": "string | null",
+  "disableEventReminders?": "boolean | null",
+  "excludeAllDayEvents?": "boolean | null",
+  "excludeAvailabilities?": excludableAvailabilitySchema.array().or("null"),
+  "excludeEventDescription?": "boolean | null",
+  "excludeEventLocation?": "boolean | null",
+  "excludeEventName?": "boolean | null",
+  "excludeFocusTime?": "boolean | null",
+  "excludeOutOfOffice?": "boolean | null",
+  "excludeTitleKeywords?": excludeTitleKeywordsSchema.or("null"),
+  "markEventsAsPrivate?": "boolean | null",
+  "+": "reject",
+});
+type SyncRuleOverridesPatch = typeof syncRuleOverridesPatchSchema.infer;
+
 const apiErrorBodySchema = type({ error: "string | null" });
 type ApiErrorBody = typeof apiErrorBodySchema.infer;
 
@@ -605,6 +703,12 @@ export {
   DEFAULT_FEED_NAME,
   DEFAULT_FEED_SETTINGS,
   DEFAULT_SOURCE_SYNC_RULES,
+  NO_SYNC_RULE_OVERRIDES,
+  SYNC_RULE_FIELDS,
+  hasSyncRuleOverrides,
+  listOverriddenSyncRuleFields,
+  resolveSyncRules,
+  syncRuleOverridesPatchSchema,
   apiErrorBodySchema,
   applySourceSyncDefaults,
   readApiErrorMessage,
@@ -729,6 +833,10 @@ export type {
   GraphNotification,
   GraphNotificationCollection,
   PushChannelStateValue,
+  SyncRuleField,
+  SyncRuleOverrides,
+  SyncRuleOverridesPatch,
+  SyncRules,
 };
 
 export {

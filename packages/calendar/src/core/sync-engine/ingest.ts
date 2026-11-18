@@ -15,6 +15,7 @@ import {
   parseStoredSourceEventStatesRecoveringInvalid,
   type StoredSourceEventState,
 } from "../source/stored-event-state";
+import { loggedIdentifierFor } from "../telemetry/logged-identifier";
 import { recordSegment } from "../telemetry/segments";
 
 type IngestWideEventFields = Record<string, boolean | number | string>;
@@ -44,6 +45,9 @@ const summarizeWideEventList = (
   values.slice(0, WIDE_EVENT_LIST_LIMIT).join(separator),
   Math.max(values.length - WIDE_EVENT_LIST_LIMIT, 0),
 );
+
+const summarizeLoggedIdentifiers = (values: ReadonlySet<string>): string =>
+  summarizeWideEventList([...values].map((value) => loggedIdentifierFor(value)));
 
 interface DiscardedSourceEventCounts {
   outsideSyncWindow: number;
@@ -237,8 +241,8 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
     if (unsupportedEventUids.size > 0) {
       sourceEvents = sourceEvents.filter(({ uid }) => !unsupportedEventUids.has(uid));
       wideEvent["source_events.unsupported_count"] = unsupportedEventUids.size;
-      wideEvent["source_events.unsupported_uids"] =
-        summarizeWideEventList([...unsupportedEventUids]);
+      wideEvent["source_events.unsupported_uid_hashes"] =
+        summarizeLoggedIdentifiers(unsupportedEventUids);
     }
     if (sourceEvents.some((event) => event.recurrenceRule)) {
       const recurrenceWindow = fetchResult.syncWindow;
@@ -258,7 +262,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         const overBudgetUids = new Set(overBudget.map(({ uid }) => uid));
         sourceEvents = sourceEvents.filter(({ uid }) => !overBudgetUids.has(uid));
         wideEvent["recurrence.over_budget_count"] = overBudget.length;
-        wideEvent["recurrence.over_budget_uids"] = summarizeWideEventList([...overBudgetUids]);
+        wideEvent["recurrence.over_budget_uid_hashes"] = summarizeLoggedIdentifiers(overBudgetUids);
       }
     }
 
@@ -434,7 +438,7 @@ const ingestSource = async (options: IngestSourceOptions): Promise<IngestionResu
         wideEvent["recurrence.event_state_id"] = error.eventStateId;
       }
       wideEvent["recurrence.limit"] = error.limit;
-      wideEvent["recurrence.source_event_uid"] = error.sourceEventUid;
+      wideEvent["recurrence.source_event_uid_hash"] = loggedIdentifierFor(error.sourceEventUid);
     }
 
     throw error;

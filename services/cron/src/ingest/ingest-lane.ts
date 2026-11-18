@@ -7,6 +7,7 @@ interface IngestLaneOptions<TClaim extends IngestLaneClaim> {
   capacity: number;
   claim: (limit: number) => Promise<TClaim[]>;
   idleMs: number;
+  onClaimSettled?: () => void;
   onError: (error: unknown, phase: "claim" | "round") => void;
   runRound: (claims: TClaim[]) => Promise<unknown>;
 }
@@ -75,12 +76,22 @@ const startIngestLane = <TClaim extends IngestLaneClaim>(
     rounds.add(round);
   };
 
+  const noteClaimSettled = (): void => {
+    try {
+      options.onClaimSettled?.();
+    } catch (error) {
+      options.onError(error, "claim");
+    }
+  };
+
   const claimNext = async (): Promise<TClaim[] | null> => {
     try {
       return await options.claim(Math.min(options.batchSize, options.capacity - inFlight));
     } catch (error) {
       options.onError(error, "claim");
       return null;
+    } finally {
+      noteClaimSettled();
     }
   };
 

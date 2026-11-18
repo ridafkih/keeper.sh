@@ -1,3 +1,5 @@
+import { loggedServerContext, loggedServerDetail, loggedServerMessage } from "./server-error-text";
+
 const SQLSTATE_PATTERN = /^[0-9A-Z]{5}$/;
 // Postgres SQLSTATE classes, Appendix A; a five-character code outside these is not a SQLSTATE.
 const SQLSTATE_CLASSES = new Set([
@@ -15,6 +17,8 @@ const UNCLASSIFIED_DATABASE_SLUG = "db-query-failed";
 const CONNECTION_TERMINATED_CODE = "ERR_POSTGRES_EXPECTED_REQUEST";
 const CONNECTION_UNAVAILABLE_CODES = new Set([
   "ERR_POSTGRES_CONNECTION_CLOSED",
+  "ERR_POSTGRES_CONNECTION_FAILED",
+  "ERR_POSTGRES_CONNECTION_REFUSED",
   "ERR_POSTGRES_CONNECTION_TIMEOUT",
   "ERR_POSTGRES_IDLE_TIMEOUT",
   "ERR_POSTGRES_LIFETIME_TIMEOUT",
@@ -205,16 +209,85 @@ const getDatabaseErrorDetails = (error: unknown): DatabaseErrorDetails | null =>
     return null;
   }
 
+  const sqlState = readSqlState(source);
+  const detail = readField(source, "detail");
+  const message = readField(source, "message");
   const details = {
     constraint: readField(source, "constraint"),
-    detail: readField(source, "detail"),
-    message: readField(source, "message"),
-    sqlState: readSqlState(source),
+    detail: detail && loggedServerDetail(sqlState, detail),
+    message: message && loggedServerMessage(sqlState, message),
+    sqlState,
   };
   if (Object.values(details).every((value) => value === null)) {
     return null;
   }
   return details;
+};
+
+const FAILED_QUERY_PREFIX = "Failed query: ";
+
+const rewriteMessage = (link: Record<string, unknown>, message: string): void => {
+  const previous = link.message;
+  if (previous === message) {
+    return;
+  }
+  link.message = message;
+  const { stack } = link;
+  if (typeof stack === "string" && typeof previous === "string" && stack.includes(previous)) {
+    link.stack = stack.replace(previous, () => message);
+  }
+};
+
+const rewriteField = (
+  link: Record<string, unknown>,
+  field: string,
+  rewrite: (value: string) => string | null,
+): void => {
+  const value = readString(link[field]);
+  if (value === null) {
+    return;
+  }
+  const rewritten = rewrite(value);
+  if (rewritten === null) {
+    Reflect.deleteProperty(link, field);
+    return;
+  }
+  link[field] = rewritten;
+};
+
+const removeQueryParameters = (link: Record<string, unknown>): void => {
+  const { message, query } = link;
+  if (typeof query !== "string" || typeof message !== "string") {
+    return;
+  }
+  if (!message.startsWith(FAILED_QUERY_PREFIX)) {
+    return;
+  }
+  rewriteMessage(link, `${FAILED_QUERY_PREFIX}${query}`);
+  Reflect.deleteProperty(link, "params");
+};
+
+const removeEchoedValues = (link: Record<string, unknown>): void => {
+  if (!isDatabaseErrorShape(link)) {
+    return;
+  }
+  const sqlState = readSqlState(link);
+  const message = readString(link.message);
+  if (message !== null) {
+    rewriteMessage(link, loggedServerMessage(sqlState, message));
+  }
+  rewriteField(link, "detail", (detail) => loggedServerDetail(sqlState, detail));
+  rewriteField(link, "where", (context) => loggedServerContext(sqlState, context));
+};
+
+const withoutBoundValues = <Failure>(error: Failure): Failure => {
+  for (const link of readErrorChain(error)) {
+    if (isRecord(link)) {
+      removeQueryParameters(link);
+      removeEchoedValues(link);
+    }
+  }
+  return error;
 };
 
 const isDatabaseError = (error: unknown): boolean =>
@@ -249,5 +322,6 @@ export {
   getDatabaseErrorDetails,
   isDatabaseError,
   resolveDatabaseErrorClassification,
+  withoutBoundValues,
 };
 export type { DatabaseErrorClassification, DatabaseErrorDetails };

@@ -22,6 +22,7 @@ type ChangeMappings = (
 interface GetSourceDestinationsDependencies {
   sourceExists: (userId: string, sourceCalendarId: string) => Promise<boolean>;
   getDestinationsForSource: (userId: string, sourceCalendarId: string) => Promise<string[]>;
+  getCustomizedDestinationIds: (userId: string, sourceCalendarId: string) => Promise<string[]>;
 }
 
 interface ChangeSourceDestinationsDependencies {
@@ -152,8 +153,11 @@ const handleGetSourceDestinationsRoute = async (
     return ErrorResponse.notFound().toResponse();
   }
 
-  const destinationIds = await dependencies.getDestinationsForSource(context.userId, resolved.id);
-  return Response.json({ destinationIds });
+  const [destinationIds, customizedDestinationIds] = await Promise.all([
+    dependencies.getDestinationsForSource(context.userId, resolved.id),
+    dependencies.getCustomizedDestinationIds(context.userId, resolved.id),
+  ]);
+  return Response.json({ customizedDestinationIds, destinationIds });
 };
 
 const handlePutSourceDestinationsRoute = (
