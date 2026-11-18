@@ -1,4 +1,9 @@
-import type { ExcludableAvailability, SyncRange } from "@keeper.sh/data-schemas";
+import type {
+  ExcludableAvailability,
+  SyncRange,
+  SyncRuleOverrides,
+  SyncRules,
+} from "@keeper.sh/data-schemas";
 
 export interface CalendarAccount {
   id: string;
@@ -74,6 +79,19 @@ export interface CalendarDetail {
   unavailableSince: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SourceDestinations {
+  destinationIds: string[];
+  customizedDestinationIds: string[];
+}
+
+export interface MappingSyncRules {
+  sourceCalendarId: string;
+  destinationCalendarId: string;
+  overrides: SyncRuleOverrides<ExcludableAvailability>;
+  sourceRules: SyncRules<ExcludableAvailability>;
+  effectiveRules: SyncRules<ExcludableAvailability>;
 }
 
 export interface ApiEvent {
