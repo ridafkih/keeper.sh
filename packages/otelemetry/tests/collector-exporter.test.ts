@@ -25,14 +25,15 @@ const captureRecord = (): ReadableLogRecord => {
 };
 
 const startCollector = () => {
-  const requests: { path: string; authorization: string | null; body: string }[] = [];
+  const requests: { path: string; authorization: string | null; encoding: string | null; body: string }[] = [];
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
       requests.push({
         path: new URL(request.url).pathname,
         authorization: request.headers.get("authorization"),
-        body: await request.text(),
+        encoding: request.headers.get("content-encoding"),
+        body: new TextDecoder().decode(Bun.gunzipSync(new Uint8Array(await request.arrayBuffer()))),
       });
       return new Response("{}");
     },
@@ -45,7 +46,7 @@ describe("collector exporter", () => {
     vi.unstubAllEnvs();
   });
 
-  it("sends records to the configured endpoint with the configured headers", async () => {
+  it("sends gzipped records to the configured endpoint with the configured headers", async () => {
     const collector = startCollector();
     vi.stubEnv(ENDPOINT_VARIABLE, collector.url);
     vi.stubEnv(HEADERS_VARIABLE, "Authorization=Bearer%20secret");
@@ -60,6 +61,7 @@ describe("collector exporter", () => {
     expect(collector.requests).toHaveLength(1);
     expect(collector.requests[0]?.path).toBe("/v1/logs");
     expect(collector.requests[0]?.authorization).toBe("Bearer secret");
+    expect(collector.requests[0]?.encoding).toBe("gzip");
     expect(collector.requests[0]?.body).toContain("hello collector");
   });
 });

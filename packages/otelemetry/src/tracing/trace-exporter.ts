@@ -6,12 +6,13 @@ import {
 } from "@opentelemetry/otlp-exporter-base/node-http";
 import { JsonTraceSerializer, TraceExporterMetricsHelper } from "@opentelemetry/otlp-transformer";
 import type { ReadableSpan, SpanExporter } from "@opentelemetry/sdk-trace";
+import { COLLECTOR_REQUEST_OPTIONS } from "../collector-request";
 import { createFetchTransport } from "../fetch-transport";
 
 const TRACE_EXPORTER_COMPONENT_TYPE = "otlp_http_span_exporter";
 
 const createTraceExporter = (exportTimeoutMillis: number): SpanExporter => {
-  const configuration = convertLegacyHttpOptions({}, "TRACES", "v1/traces", {
+  const configuration = convertLegacyHttpOptions(COLLECTOR_REQUEST_OPTIONS, "TRACES", "v1/traces", {
     "Content-Type": "application/json",
   });
 
