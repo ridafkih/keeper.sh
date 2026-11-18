@@ -1,6 +1,7 @@
 import arkenv from "arkenv";
 
 const schema = {
+  BETTER_AUTH_URL: "string.url?",
   PRIVATE_RESOLUTION_WHITELIST: "string?",
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
   CALENDAR_REDISCOVERY_ENABLED: "boolean?",
@@ -29,7 +30,9 @@ const schema = {
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
   OUTLOOK_INGEST_REQUESTS_PER_MINUTE: "number?",
+  REAUTHENTICATION_EMAIL_TEMPLATE_ID: "string?",
   REDIS_URL: "string.url",
+  RESEND_API_KEY: "string?",
   WEBHOOK_PUBLIC_URL: "string.url?",
   WORKER_JOB_QUEUE_ENABLED: "boolean?",
 } as const;

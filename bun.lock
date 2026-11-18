@@ -321,6 +321,7 @@
         "drizzle-orm": "0.45.2",
         "entrykit": "^0.1.3",
         "ioredis": "^5.10.0",
+        "resend": "^6.9.3",
         "widelogger": "^0.7.0",
       },
       "devDependencies": {
