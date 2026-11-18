@@ -223,6 +223,7 @@ export {
   resolveCalendarCapabilities,
   type CalendarCapability,
 } from "./core/source/calendar-capabilities";
+export { setCalendarWriteAccess } from "./core/source/calendar-write-access";
 export {
   planCalendarRediscovery,
   resolveRediscoveryCalendarType,
@@ -251,6 +252,11 @@ export {
   type CalendarRediscoveryApplyResult,
   type InsertedCalendar,
 } from "./core/source/apply-calendar-rediscovery";
+export {
+  findUserCalDAVCalendarsOnServer,
+  type UserCalDAVCalendar,
+  type UserCalDAVCalendarsQuery,
+} from "./core/source/user-caldav-calendars";
 export {
   SOURCE_INGEST_LOCK_NAMESPACE,
   SOURCE_INGEST_LOCK_TIMEOUT_MS,

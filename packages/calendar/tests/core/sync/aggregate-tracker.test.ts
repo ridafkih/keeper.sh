@@ -142,7 +142,7 @@ describe("SyncAggregateTracker", () => {
     });
 
     it("returns null when payload is identical to last emission", () => {
-      const tracker = new SyncAggregateTracker({ progressThrottleMs: 0 });
+      const tracker = new SyncAggregateTracker({ now: () => 1_000_000, progressThrottleMs: 0 });
 
       tracker.trackProgress(
         createProgressUpdate({ progress: { current: 5, total: 10 } }),

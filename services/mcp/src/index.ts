@@ -1,8 +1,9 @@
 import { exitUnlessTimeZoneDataCurrent } from "@keeper.sh/calendar";
 import { HTTP_IDLE_TIMEOUT_SECONDS } from "@keeper.sh/constants";
+import { nameRequestRoute, startTracing, withRequestTracing } from "@keeper.sh/otelemetry/tracing";
 import { entry } from "entrykit";
 import { join } from "node:path";
-import { tryLoadMcpEnv } from "./env";
+import { resolveApiBaseUrl, tryLoadMcpEnv } from "./env";
 import { isHttpMethod, isRouteModule } from "./utils/route-handler";
 import { destroy } from "./utils/logging";
 
@@ -25,17 +26,25 @@ const router = new Bun.FileSystemRouter({
 
 await entry({
   main: () => {
+    const tracing = startTracing({
+      serviceName: "keeper-mcp",
+      propagateToOrigins: [resolveApiBaseUrl(env)],
+      environment: process.env,
+    });
+
     const server = Bun.serve({
       // Bun's dev error page renders the thrown error, leaking query text and bound parameters.
       development: false,
       port: env.MCP_PORT,
       idleTimeout: HTTP_IDLE_TIMEOUT_SECONDS,
-      fetch: async (request) => {
+      fetch: withRequestTracing({ trustIncomingTraceContext: true }, async (request) => {
         const match = router.match(request);
 
         if (!match) {
           return new Response("Not found", { status: HTTP_NOT_FOUND });
         }
+
+        nameRequestRoute(request.method, match.name);
 
         const module: unknown = await import(match.filePath);
 
@@ -56,12 +65,13 @@ await entry({
         }
 
         return handler(request);
-      },
+      }),
     });
 
     return async () => {
       server.stop();
       await destroy();
+      await tracing.shutdown();
     };
   },
   name: "mcp",

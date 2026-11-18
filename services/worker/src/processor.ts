@@ -18,6 +18,7 @@ import {
   recordUserSyncRequest,
   resolveDatabaseErrorClassification,
 } from "@keeper.sh/database";
+import { markActiveSpanFailed } from "@keeper.sh/otelemetry/tracing";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
@@ -275,7 +276,8 @@ const processJob = (
 
     const deadlineController = new AbortController();
     const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
-    let needsFlush = true;
+    const jobStartedAt = performance.now();
+    let calendarOutcomeReported = false;
     const pendingDestinationSyncs: Promise<void>[] = [];
     const checkpointedOperationsByCalendar = new Map<string, number>();
 
@@ -338,7 +340,6 @@ const processJob = (
             return;
           }
           applySyncEventFields(syncEvent);
-          needsFlush = true;
 
           const syncEventCalendarId = syncEvent["calendar.id"];
           const localCount = syncEvent["local_events.count"];
@@ -376,6 +377,7 @@ const processJob = (
           widelog.set("sync.conflicts_resolved", completion.conflictsResolved);
           widelog.setFields(completion.firstSync);
           widelog.set("duration_ms", completion.durationMs);
+          widelog.set("destination.push_removed", completion.pushRemoved);
 
           if (completion.added > 0) {
             pendingDestinationSyncs.push(noteEventsCopied(userId));
@@ -398,16 +400,14 @@ const processJob = (
           }
           widelog.set("outcome", outcome);
           recordReflectMs();
-          widelog.flush();
-          needsFlush = false;
+          calendarOutcomeReported = true;
         },
         onCalendarSkipped: (skip) => {
           widelog.set("calendar.id", skip.calendarId);
           widelog.set("push_sync.mapped_source_count", skip.mappedSourceCount);
           widelog.set("push_sync.skipped", skip.reason);
           widelog.set("outcome", "skipped");
-          widelog.flush();
-          needsFlush = false;
+          calendarOutcomeReported = true;
         },
         onCalendarError: (failure) => {
           widelog.set("provider.name", failure.provider);
@@ -415,25 +415,25 @@ const processJob = (
           widelog.set("provider.calendar_id", failure.calendarId);
           widelog.set("duration_ms", failure.durationMs);
           widelog.set("retry.backoff_applied", failure.backoffApplied);
+          widelog.set("destination.push_removed", failure.pushRemoved);
           widelog.set("outcome", "error");
+          markActiveSpanFailed(failure.error);
           applyDatabaseErrorFields(failure.error);
           widelog.errorFields(failure.error, { slug: classifySyncError(failure.error) });
-          widelog.flush();
-          needsFlush = false;
+          calendarOutcomeReported = true;
         },
       });
 
-      if (result.syncEvents.length === 0) {
-        const completedWithErrors = result.errors.length > 0;
+      if (!calendarOutcomeReported) {
         let outcome = "success";
-        if (completedWithErrors) {
+        if (result.errors.length > 0) {
           outcome = "error";
+          markActiveSpanFailed(result.errors.join("; "));
         }
         widelog.set("outcome", outcome);
         for (const syncError of result.errors) {
           widelog.error("sync.failures", syncError);
         }
-        needsFlush = true;
       }
 
       return {
@@ -449,7 +449,6 @@ const processJob = (
       widelog.set("outcome", "error");
       applyDatabaseErrorFields(error);
       widelog.errorFields(error, { slug: classifySyncError(error) });
-      needsFlush = true;
       throw error;
     } finally {
       await Promise.all(pendingDestinationSyncs);
@@ -459,12 +458,10 @@ const processJob = (
         widelog.set("timeout.kind", "job_deadline");
         widelog.set("timeout.limit_ms", USER_TIMEOUT_MS);
         widelog.set("error.slug", "sync-deadline-exceeded");
-        needsFlush = true;
       }
-      if (needsFlush) {
-        recordReflectMs();
-        widelog.flush();
-      }
+      recordReflectMs();
+      widelog.set("job.duration_ms", Math.round(performance.now() - jobStartedAt));
+      widelog.flush();
       await publishMappingSyncStateAfterJob(userId);
     }
   });

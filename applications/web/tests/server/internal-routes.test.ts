@@ -36,6 +36,7 @@ describe("resolveInternalProxyPath", () => {
 const serverConfig: ServerConfig = {
   apiProxyOrigin: "http://api.test",
   mcpProxyOrigin: null,
+  contentSecurityPolicy: "default-src 'self'",
   openaiAppsChallengeToken: null,
   environment: "production",
   isProduction: true,

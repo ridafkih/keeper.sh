@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKeeperMcpToolset } from "../src/toolset";
+import { testFeedbackOptions } from "./helpers/feedback-options";
 import type { KeeperToolContext } from "../src/toolset";
 
 const context: KeeperToolContext = {
@@ -24,7 +25,7 @@ describe("get_event_count", () => {
   it("forwards the viewer timezone to the events count route", async () => {
     const urls = stubCountFetch();
 
-    await createKeeperMcpToolset().get_event_count.execute(context, {
+    await createKeeperMcpToolset({ feedback: testFeedbackOptions }).get_event_count.execute(context, {
       from: "2026-11-12T06:00:00Z",
       timezone: "America/Chicago",
       to: "2026-11-13T06:00:00Z",

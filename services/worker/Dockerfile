@@ -29,4 +29,10 @@ RUN chmod +x ./services/worker/entrypoint.sh
 
 ENV ENV=production
 
+ARG COMMIT_SHA
+ARG VERSION
+RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV VERSION=$VERSION
+
 ENTRYPOINT ["./services/worker/entrypoint.sh"]

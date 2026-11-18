@@ -1,4 +1,5 @@
 import { resolveDatabaseErrorClassification } from "@keeper.sh/database";
+import { loggedPathFor } from "@keeper.sh/otelemetry/tracing";
 import { context, widelog } from "./logging";
 
 type RouteHandler = (request: Request) => Response | Promise<Response>;
@@ -16,12 +17,13 @@ const withWideEvent =
     context(async () => {
       const url = new URL(request.url);
       const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+      const loggedPath = loggedPathFor(url.pathname);
 
-      widelog.set("operation.name", `${request.method} ${url.pathname}`);
+      widelog.set("operation.name", `${request.method} ${loggedPath}`);
       widelog.set("operation.type", "http");
       widelog.set("request.id", requestId);
       widelog.set("http.method", request.method);
-      widelog.set("http.path", url.pathname);
+      widelog.set("http.path", loggedPath);
 
       const userAgent = request.headers.get("user-agent");
       if (userAgent) {

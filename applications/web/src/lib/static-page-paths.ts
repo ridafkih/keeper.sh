@@ -8,6 +8,7 @@ export const staticPagePaths: string[] = [
   "/",
   "/features",
   "/pricing",
+  "/free",
   "/self-hosting",
   "/about",
   "/tools/ics-generator",

@@ -12,6 +12,7 @@ import {
 import { createDigestAwareFetch } from "./digest-fetch";
 import { runInRequestScope } from "./response-status-scope";
 import { findCalendarByStoredUrl } from "./calendar-identity";
+import { discoverCalendarCollections, supportsEvents } from "./calendar-discovery";
 import { resolveCollectionTimeZone } from "./collection-timezone";
 import { CURRENT_USER_PRIVILEGE_SET_PROP, readCurrentUserPrivileges } from "./privileges";
 import { isCalDAVPrivilegeSetWritable } from "../../../core/source/calendar-capabilities";
@@ -19,6 +20,7 @@ import type { CalDAVAuthMethod } from "./digest-fetch";
 import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-fetch";
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 import { measureProviderRequest } from "../../../core/telemetry/segments";
+import { fetchMultiGetBatch } from "./multiget";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
 
@@ -33,12 +35,6 @@ const CALENDAR_DISCOVERY_PROPS = {
   "c:supported-calendar-component-set": {},
   "d:sync-token": {},
   [CURRENT_USER_PRIVILEGE_SET_PROP]: {},
-};
-
-const CALENDAR_DISCOVERY_PROJECTED_PROPS = {
-  calendarTimezone: true,
-  calendarTimezoneId: true,
-  currentUserPrivilegeSet: true,
 };
 
 interface ResolvedCalendar {
@@ -221,6 +217,9 @@ const bindRequestToAccount = (input: string | Request | URL, serverUrl: string):
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
 
+const isCalendarObjectUrlOf = (calendarUrl: string) => (url: string): boolean =>
+  isCalendarObjectPath(toCalendarObjectPath(url, calendarUrl));
+
 const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
   ...new Set(
     responses
@@ -272,7 +271,6 @@ class CalDAVClient {
         authMethod: "Custom",
         authFunction: () => Promise.resolve({}),
         credentials: this.config.credentials,
-        defaultAccountType: "caldav",
         fetch: accountBoundFetch,
         serverUrl,
       });
@@ -288,22 +286,23 @@ class CalDAVClient {
 
     const calendars = await mapAuthenticationFailure(async () => {
       const client = await this.getClient();
-      return measureProviderRequest(() => client.fetchCalendars({
-        projectedProps: CALENDAR_DISCOVERY_PROJECTED_PROPS,
-        props: CALENDAR_DISCOVERY_PROPS,
-      }));
+      return discoverCalendarCollections(
+        (request) => measureProviderRequest(() => client.propfind(request)),
+        this.config.serverUrl,
+        CALENDAR_DISCOVERY_PROPS,
+      );
     });
 
     const discovered = calendars
-      .filter(({ components }) => components?.includes("VEVENT"))
-      .map(({ url, displayName, ctag, projectedProps }): CalendarInfo => {
-        const timeZone = resolveCollectionTimeZone(projectedProps ?? {});
+      .filter((calendar) => supportsEvents(calendar))
+      .map(({ url, displayName, ctag, props }): CalendarInfo => {
+        const timeZone = resolveCollectionTimeZone(props);
         return {
           ctag,
           displayName: getDisplayName(displayName),
           ...timeZone && { timeZone },
           url: bindUrlToAccount(url, this.config.serverUrl),
-          writable: isPrivilegeSetWritable(projectedProps?.["currentUserPrivilegeSet"]),
+          writable: isPrivilegeSetWritable(props["currentUserPrivilegeSet"]),
         };
       });
 
@@ -411,12 +410,13 @@ class CalDAVClient {
     return mapAuthenticationFailure(async () => {
       const client = await this.getClient();
       const objectUrl = CalDAVClient.normalizeUrl(params.calendarUrl, params.filename);
-      const objects = await client.fetchCalendarObjects({
-        calendar: { url: params.calendarUrl },
+      const objects = await fetchMultiGetBatch(client, {
+        calendarUrl: params.calendarUrl,
         objectUrls: [objectUrl],
+        urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
       });
 
-      return objects[0] ?? null;
+      return objects.find((object): object is CalendarObject => typeof object.data === "string") ?? null;
     });
   }
 
@@ -433,10 +433,10 @@ class CalDAVClient {
       const objects: CalendarObject[] = [];
 
       for (const objectUrls of chunkArray(params.objectUrls, CALDAV_MULTIGET_BATCH_SIZE)) {
-        const batch = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const batch = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         objects.push(
           ...batch.filter((object): object is CalendarObject => typeof object.data === "string"),
@@ -479,10 +479,10 @@ class CalDAVClient {
       const batchResults: CalendarObject[][] = [];
 
       for (const objectUrls of batches) {
-        const objects = await measureProviderRequest(() => client.fetchCalendarObjects({
-          calendar: { url: params.calendarUrl },
+        const objects = await measureProviderRequest(() => fetchMultiGetBatch(client, {
+          calendarUrl: params.calendarUrl,
           objectUrls,
-          urlFilter: (url) => isCalendarObjectPath(toCalendarObjectPath(url, params.calendarUrl)),
+          urlFilter: isCalendarObjectUrlOf(params.calendarUrl),
         }));
         batchResults.push(
           objects.filter((object): object is CalendarObject => typeof object.data === "string"),

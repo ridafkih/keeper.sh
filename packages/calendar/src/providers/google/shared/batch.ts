@@ -4,7 +4,7 @@ import { chunkArray } from "../../../core/utils/chunk";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
 import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
 import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "../../../core/utils/backoff";
-import { isRateLimitApiError, parseGoogleApiError, parseGoogleApiErrorFromBody } from "./errors";
+import { GoogleBatchApiError, isRateLimitApiError, parseGoogleApiErrorFromBody } from "./errors";
 
 interface BatchSubRequest {
   method: string;
@@ -214,17 +214,6 @@ const extractResponseBoundary = (contentType: string | null): string | null => {
 
   return match[1];
 };
-
-class GoogleBatchApiError extends Error {
-  public readonly status: number;
-  public readonly apiError: ReturnType<typeof parseGoogleApiError>;
-  constructor(status: number, body: string) {
-    super(`Google Batch API ${status}: ${body}`);
-    this.name = "GoogleBatchApiError";
-    this.status = status;
-    this.apiError = parseGoogleApiError(body);
-  }
-}
 
 /*
  * Quota is acquired inside the retried operation rather than around it: a whole-batch

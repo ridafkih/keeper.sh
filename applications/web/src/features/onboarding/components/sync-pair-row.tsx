@@ -20,7 +20,7 @@ export function SyncPairRow({ pair, source }: SyncPairRowProps) {
       <NavigationMenuItemIcon>
         <ArrowLeftRight size={15} />
       </NavigationMenuItemIcon>
-      <NavigationMenuItemLabel tone="default">{pair.label}</NavigationMenuItemLabel>
+      <NavigationMenuItemLabel>{pair.label}</NavigationMenuItemLabel>
       <NavigationMenuItemTrailing>
         {pair.busyOnly && <Text size="sm" tone="muted" className="shrink-0">Busy only</Text>}
       </NavigationMenuItemTrailing>

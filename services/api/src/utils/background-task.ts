@@ -2,10 +2,11 @@ import { context, widelog } from "@/utils/logging";
 import { labelFailure } from "@/utils/error-labelling";
 
 type BackgroundJobCallback<TResult> = () => Promise<TResult>;
+type BackgroundJobFields = Record<`${string}.${string}`, string | number | boolean>;
 
 const spawnBackgroundJob = <TResult>(
   jobName: string,
-  fields: Record<string, unknown>,
+  fields: BackgroundJobFields,
   callback: BackgroundJobCallback<TResult>,
 ): Promise<void> =>
   context(async () => {
@@ -26,3 +27,4 @@ const spawnBackgroundJob = <TResult>(
   });
 
 export { spawnBackgroundJob };
+export type { BackgroundJobFields };

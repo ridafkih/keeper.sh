@@ -24,7 +24,7 @@ function ConnectPage() {
   return (
     <div className="flex flex-col gap-1.5">
       <BackButton />
-      <PremiumGate locked={atLimit} hint="Account limit reached.">
+      <PremiumGate limit="accounts" locked={atLimit} hint="Account limit reached.">
         <NavigationMenu>
           <div data-visitors-event={ANALYTICS_EVENTS.calendar_connect_started} data-visitors-provider="ical">
             <NavigationMenuLinkItem to="/dashboard/connect/ical-link" disabled={atLimit}>

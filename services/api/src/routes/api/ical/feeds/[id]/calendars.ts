@@ -1,4 +1,5 @@
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { ErrorResponse } from "@/utils/responses";
 import { calendarIdsBodySchema } from "@/utils/request-body";
 import {
@@ -78,15 +79,15 @@ const GET = withWideEvent(
     )),
 );
 
-const PUT = withWideEvent(
-  withAuth(async ({ params, request, userId }) => {
-    const payload = await request.json();
+const putFeedCalendars: AuthenticatedRouteCallback = async ({ params, request, userId }) => {
+  const payload = await request.json();
 
-    return await handlePutFeedCalendarsRoute(
-      { body: payload, params, userId },
-      { setFeedCalendars },
-    );
-  }),
-);
+  return await handlePutFeedCalendarsRoute(
+    { body: payload, params, userId },
+    { setFeedCalendars },
+  );
+};
 
-export { GET, PUT, handleGetFeedCalendarsRoute, handlePutFeedCalendarsRoute };
+const PUT = withWideEvent(withAuth(putFeedCalendars));
+
+export { GET, PUT, handleGetFeedCalendarsRoute, handlePutFeedCalendarsRoute, putFeedCalendars };

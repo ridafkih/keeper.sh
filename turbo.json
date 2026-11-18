@@ -1,7 +1,7 @@
 {
   "$schema": "https://v2-9-0.turborepo.dev/schema.json",
   "ui": "stream",
-  "globalPassThroughEnv": ["CI", "ENV", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_HEADERS"],
+  "globalPassThroughEnv": ["CI", "ENV", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_HEADERS", "TRACE_SAMPLE_RATIO", "TRACE_SLOW_THRESHOLD_MS"],
   "tasks": {
     "dev": {
       "cache": false,

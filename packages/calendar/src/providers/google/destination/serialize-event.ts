@@ -41,6 +41,7 @@ const serializeGoogleEvent = (
     summary: event.summary,
     ...(event.availability === "free" && { transparency: "transparent" }),
     ...(event.isPrivate && { visibility: "private" }),
+    ...(event.remindersDisabled && { reminders: { overrides: [], useDefault: false } }),
   };
 };
 

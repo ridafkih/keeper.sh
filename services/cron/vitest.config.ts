@@ -9,6 +9,11 @@ export default defineConfig({
     },
   },
   test: {
+    env: {
+      COMMIT_SHA: "test",
+      ENV: "production",
+      VERSION: "test",
+    },
     deps: {
       interopDefault: false,
     },

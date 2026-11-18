@@ -34,6 +34,7 @@ const sourcePatchBodySchema = type({
   "syncHistoricRange?": syncRangeSchema,
   "syncFutureRange?": syncRangeSchema,
   "markEventsAsPrivate?": "boolean",
+  "disableEventReminders?": "boolean",
   "+": "reject",
 });
 type SourcePatchBody = typeof sourcePatchBodySchema.infer;
@@ -107,7 +108,13 @@ const tokenCreateBodySchema = type({
 });
 type TokenCreateBody = typeof tokenCreateBodySchema.infer;
 
+const accountSettingsPatchBodySchema = type({
+  agentFeedbackEnabled: "boolean",
+  "+": "reject",
+});
+
 export {
+  accountSettingsPatchBodySchema,
   calendarIdsBodySchema,
   calendarToggleBodySchema,
   calendarPausePatchBodySchema,

@@ -40,7 +40,7 @@ export function ContentSiloPage({ silo, slug }: { silo: ContentSilo; slug: strin
         </Text>
       </header>
 
-      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS}>
+      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS} images={page.images}>
         {page.content}
       </Prose>
 

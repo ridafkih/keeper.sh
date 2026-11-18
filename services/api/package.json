@@ -4,9 +4,9 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run --hot src/index.ts",
+    "dev": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone ../../scripts/with-build-identity.sh bun run --hot src/index.ts",
     "build": "bun scripts/build",
-    "start": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run dist/index.js",
+    "start": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone ../../scripts/with-build-identity.sh bun run dist/index.js",
     "types": "tsc --noEmit",
     "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun x --bun vitest run",
     "lint": "oxlint ."

@@ -1,9 +1,17 @@
 import { hasOAuthProviderApi, routeOidcCallbackRequest } from "@keeper.sh/auth";
+import { loggedPathFor } from "@keeper.sh/otelemetry/tracing";
 import { auth, authCapabilities, env } from "@/context";
 import { prepareOAuthTokenRequest } from "./auth-oauth-resource";
 import { context, widelog } from "@/utils/logging";
 import { resolveOutcome } from "@/utils/middleware";
 import { labelFailure } from "@/utils/error-labelling";
+import { readAuthErrorDetail } from "@/utils/auth-error-detail";
+import {
+  describeCheckoutCreation,
+  isCheckoutCreation,
+  readCheckoutCreation,
+} from "@/utils/billing-funnel";
+import type { CheckoutCreation } from "@/utils/billing-funnel";
 
 const COMPANION_COOKIE_NAME = "keeper.has_session";
 const COMPANION_COOKIE_SET = `${COMPANION_COOKIE_NAME}=1; Path=/; SameSite=Lax`;
@@ -161,21 +169,61 @@ const processAuth = async (pathname: string, request: Request): Promise<Response
   return processAuthResponse(pathname, response);
 };
 
+const recordAuthErrorDetail = async (response: Response): Promise<void> => {
+  const detail = await readAuthErrorDetail(response);
+  if (!detail) {
+    return;
+  }
+  if (detail.code) {
+    widelog.set("auth.error_code", detail.code);
+  }
+  if (detail.description) {
+    widelog.set("auth.error_description", detail.description);
+  }
+};
+
+const readRequestJson = async (request: Request): Promise<unknown> => {
+  try {
+    return await request.clone().json();
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+const readCheckoutCreationOf = async (
+  pathname: string,
+  request: Request,
+): Promise<CheckoutCreation | null> => {
+  if (!isCheckoutCreation(pathname, request.method)) {
+    return null;
+  }
+  return readCheckoutCreation(await readRequestJson(request));
+};
+
 const handleAuthRequest = (pathname: string, request: Request): Promise<Response> =>
   context(async () => {
     const requestId = request.headers.get("x-request-id") ?? crypto.randomUUID();
+    const loggedPath = loggedPathFor(pathname);
 
-    widelog.set("operation.name", `${request.method} ${pathname}`);
+    widelog.set("operation.name", `${request.method} ${loggedPath}`);
     widelog.set("operation.type", "auth");
     widelog.set("request.id", requestId);
     widelog.set("http.method", request.method);
-    widelog.set("http.path", pathname);
+    widelog.set("http.path", loggedPath);
 
     try {
       return await widelog.time.measure("duration_ms", async () => {
+        const checkoutCreation = await readCheckoutCreationOf(pathname, request);
         const response = await processAuth(pathname, request);
         widelog.set("status_code", response.status);
+        if (checkoutCreation) {
+          widelog.setFields(describeCheckoutCreation(checkoutCreation, response.status));
+        }
         widelog.set("outcome", resolveOutcome(response.status));
+        await recordAuthErrorDetail(response);
         return response;
       });
     } catch (error) {

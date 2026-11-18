@@ -19,7 +19,7 @@ function ConnectFastmailPage() {
           provider="fastmail"
           settingsUrl="https://www.fastmail.com/settings/security/devicekeys"
           settingsLabel="Open Fastmail settings"
-          sectionLabel="Choose Manage app password and access"
+          sectionLabel="Choose Manage app passwords and access"
         />
       }
       description="Fastmail uses an app-specific password to authenticate Keeper.sh to interact with your calendar."
@@ -30,9 +30,9 @@ function ConnectFastmailPage() {
             Fastmail Settings
           </a>
         </>,
-        <>Click &ldquo;Manage app password and access&rdquo;</>,
+        <>Click &ldquo;Manage app passwords and access&rdquo;</>,
         <>Click &ldquo;New app password&rdquo;</>,
-        <>Under &ldquo;Access&rdquo;, select &ldquo;Calendars (CalDAV)&rdquo;</>,
+        <>Leave access on &ldquo;Mail, Contacts &amp; Calendars&rdquo;</>,
         <>Click &ldquo;Generate password&rdquo;</>,
         "Copy the password, and paste it below",
       ]}

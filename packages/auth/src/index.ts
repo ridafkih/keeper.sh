@@ -16,20 +16,17 @@ import { deletePolarCustomerByExternalId } from "./polar-customer-delete";
 import { writeAuthStderr } from "./runtime-environment";
 import { resolveAuthCapabilities } from "./capabilities";
 import { buildVerificationEmail } from "./verification-email";
-import { createOidcPlugin, isLocalAccountEmail, isLocalAuthPath } from "./oidc";
+import { isLocalAccountEmail, isLocalAuthPath, resolveOidcPlugin } from "./oidc";
 import { readMcpTokenVersion } from "./mcp-token-version";
 import { createAuthObservation } from "./auth-observer";
+import { readSignUpAttribution } from "./sign-up-attribution";
 import { keepSignedInAccount } from "./passkey-session-owner";
-import type { AuthObserver, AuthRequestOutcome } from "./auth-observer";
+import type { AuthLogEntry, AuthObserver, AuthRequestOutcome } from "./auth-observer";
 import {
   REGISTRATION_EMAIL_DOMAIN_MESSAGE,
   isRegistrationEmailAllowed,
 } from "./registration-email-domains";
 import type { McpTokenVersion } from "./mcp-token-version";
-import {
-  createUnverifiedRegistrationReclaim,
-  readSignUpBody,
-} from "./unverified-registration-reclaim";
 import {
   resolveMcpAuthOptions,
   resolveMcpJwksUrl,
@@ -77,6 +74,7 @@ interface AuthConfig {
   oidcClientSecret?: string;
   oidcProviderName?: string;
   oidcScopes?: string[] | null;
+  oidcTrustEmailVerified?: boolean;
   disableLocalAuth?: boolean;
   resendApiKey?: string;
   passkeyRpId?: string;
@@ -190,6 +188,7 @@ const createAuth = (config: AuthConfig) => {
     oidcClientSecret,
     oidcProviderName,
     oidcScopes,
+    oidcTrustEmailVerified = false,
     disableLocalAuth,
     resendApiKey,
     passkeyRpId,
@@ -314,9 +313,6 @@ const createAuth = (config: AuthConfig) => {
     };
   }
 
-  const { applyPendingReclaim, recordPendingReclaim } =
-    createUnverifiedRegistrationReclaim(database);
-
   const sendVerificationEmail = async ({ user, url }: SendEmailParams) => {
     if (!resend) {
       return;
@@ -324,7 +320,7 @@ const createAuth = (config: AuthConfig) => {
     await resend.emails.send(buildVerificationEmail({ url, user }));
   };
 
-  const sendReclaimVerificationEmail = async (user: EmailUser) => {
+  const resendVerificationEmail = async (user: EmailUser) => {
     const token = await signJWT(
       { email: user.email.toLowerCase() },
       secret,
@@ -340,16 +336,18 @@ const createAuth = (config: AuthConfig) => {
 
   const oidcEnabled = capabilities.socialProviders.oidc === true;
 
-  if (oidcEnabled && oidcIssuerUrl && oidcClientId && oidcClientSecret) {
-    plugins.push(
-      createOidcPlugin({
-        baseUrl,
-        clientId: oidcClientId,
-        clientSecret: oidcClientSecret,
-        issuerUrl: oidcIssuerUrl,
-        scopes: oidcScopes,
-      }),
-    );
+  const oidcPlugin = resolveOidcPlugin({
+    baseUrl,
+    clientId: oidcClientId,
+    clientSecret: oidcClientSecret,
+    enabled: oidcEnabled,
+    issuerUrl: oidcIssuerUrl,
+    scopes: oidcScopes,
+    trustEmailVerified: oidcTrustEmailVerified,
+  });
+
+  if (oidcPlugin) {
+    plugins.push(oidcPlugin);
   }
 
   const localAuthDisabled = capabilities.disableLocalAuth === true;
@@ -358,6 +356,7 @@ const createAuth = (config: AuthConfig) => {
     account: {
       accountLinking: {
         allowDifferentEmails: true,
+        requireLocalEmailVerified: true,
       },
     },
     basePath: AUTH_BASE_PATH,
@@ -382,26 +381,12 @@ const createAuth = (config: AuthConfig) => {
     }),
     emailAndPassword: {
       enabled: commercialMode,
-      onExistingUserSignUp: async ({ user }, request) => {
+      onExistingUserSignUp: async ({ user }) => {
         if (user.emailVerified) {
           return;
         }
 
-        if (!request) {
-          throw new TypeError(
-            "Sign-up request is unavailable, cannot capture an unverified registration reclaim",
-          );
-        }
-
-        const { name, password } = await readSignUpBody(request);
-
-        const recorded = await recordPendingReclaim({ name, password, user });
-
-        if (!recorded) {
-          return;
-        }
-
-        await sendReclaimVerificationEmail({ email: user.email, name });
+        await resendVerificationEmail(user);
       },
       requireEmailVerification: commercialMode,
       sendResetPassword: async ({ user, url }: SendEmailParams) => {
@@ -418,7 +403,6 @@ const createAuth = (config: AuthConfig) => {
       },
     },
     emailVerification: {
-      afterEmailVerification: applyPendingReclaim,
       autoSignInAfterVerification: true,
       sendVerificationEmail,
     },
@@ -434,13 +418,13 @@ const createAuth = (config: AuthConfig) => {
             }
             return Promise.resolve();
           },
-          after: (user) => {
-            observation.userCreated(user.id);
-            return Promise.resolve();
+          after: async (user, context) => {
+            observation.userCreated(user.id, await readSignUpAttribution(context));
           },
         },
       },
     },
+    logger: observation.logger,
     hooks: {
       ...observation.hooks,
       before: createAuthMiddleware((context) => {
@@ -604,6 +588,7 @@ export {
 } from "./mcp-token-version";
 export type {
   AuthConfig,
+  AuthLogEntry,
   AuthObserver,
   AuthRequestOutcome,
   AuthResult,

@@ -1,0 +1,1 @@
+DELETE FROM "user_events" WHERE "sourceEventUid" IS NOT NULL AND EXISTS (SELECT 1 FROM "event_states" WHERE "event_states"."calendarId" = "user_events"."calendarId" AND "event_states"."sourceEventUid" = "user_events"."sourceEventUid");

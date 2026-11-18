@@ -98,6 +98,7 @@ function MarketingLayout() {
               <MarketingFooterNavItem to="/register">Create an Account</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/features">Features</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/pricing">Pricing</MarketingFooterNavItem>
+              <MarketingFooterNavItem to="/free">Free Plan</MarketingFooterNavItem>
               <MarketingFooterNavItem to="/self-hosting">Self-Hosting</MarketingFooterNavItem>
             </MarketingFooterNavGroup>
             <MarketingFooterNavGroup>

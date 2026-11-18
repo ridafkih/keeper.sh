@@ -63,13 +63,13 @@ describe("POST /api/feedback", () => {
 
     expect(response.status).toBe(200);
     expect(insertedRows[0]?.wantsFollowUp).toBe(false);
-    expect(sentEmails[0]?.template.variables.wantsFollowUp).toBe("false");
+    expect(sentEmails[0]?.template.variables.wantsFollowUp).toBe("no");
   });
 
   it("passes an explicit follow-up preference through to the notification", async () => {
     await submit({ message: "Broken sync", type: "report", wantsFollowUp: true });
 
     expect(insertedRows[0]?.wantsFollowUp).toBe(true);
-    expect(sentEmails[0]?.template.variables.wantsFollowUp).toBe("true");
+    expect(sentEmails[0]?.template.variables.wantsFollowUp).toBe("yes");
   });
 });

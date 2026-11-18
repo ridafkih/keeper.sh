@@ -1,4 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { signInWithCredential, signUpWithCredential } from "../../src/lib/auth";
 import type { AuthCapabilities } from "../../src/lib/auth-capabilities";
 
 const authClientMock = vi.hoisted(() => ({
@@ -16,9 +17,6 @@ vi.mock("../../src/lib/auth-client", () => ({
   authClient: authClientMock,
 }));
 
-let signInWithCredential: typeof import("../../src/lib/auth").signInWithCredential;
-let signUpWithCredential: typeof import("../../src/lib/auth").signUpWithCredential;
-
 const commercialCapabilities: AuthCapabilities = {
   commercialMode: true,
   credentialMode: "email",
@@ -31,10 +29,6 @@ const commercialCapabilities: AuthCapabilities = {
   supportsPasskeys: true,
   supportsPasswordReset: true,
 };
-
-beforeAll(async () => {
-  ({ signInWithCredential, signUpWithCredential } = await import("../../src/lib/auth"));
-});
 
 beforeEach(() => {
   authClientMock.signIn.email.mockClear();
@@ -94,5 +88,24 @@ describe("signUpWithCredential", () => {
       },
       method: "POST",
     });
+  });
+
+  it("sends where the visit started with an email sign-up", async () => {
+    const entries = new Map([["keeper.sign_up_attribution", JSON.stringify({ landingPath: "/pricing", utmSource: "github" })]]);
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => entries.get(key) ?? null,
+      setItem: (key: string, value: string) => entries.set(key, value),
+    });
+
+    await signUpWithCredential("person@example.com", "password", commercialCapabilities, "/dashboard");
+
+    expect(authClientMock.signUp.email).toHaveBeenCalledWith({
+      attribution: { landingPath: "/pricing", utmSource: "github" },
+      callbackURL: "/dashboard",
+      email: "person@example.com",
+      name: "person",
+      password: "password",
+    });
+    vi.unstubAllGlobals();
   });
 });

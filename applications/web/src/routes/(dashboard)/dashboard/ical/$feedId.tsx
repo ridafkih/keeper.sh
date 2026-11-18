@@ -229,7 +229,7 @@ function ICalFeedDetailPage() {
           title="Feed Settings"
           description={<>Choose which event details this link includes. Use <Text as="span" size="sm" className="text-template inline">{"{{calendar_name}}"}</Text> or <Text as="span" size="sm" className="text-template inline">{"{{event_name}}"}</Text> in text fields for dynamic values.</>}
         />
-        <PremiumGate locked={locked} hint="Feed settings are a Pro feature.">
+        <PremiumGate limit="feed_settings" locked={locked} hint="Feed settings are a Pro feature.">
           <NavigationMenu>
             <EventNameTemplateItem
               customEventName={feed.customEventName}
@@ -259,7 +259,7 @@ function ICalFeedDetailPage() {
           title="Event Filters"
           description="Leave these event types out of this link."
         />
-        <PremiumGate locked={locked} hint="Event filters are a Pro feature.">
+        <PremiumGate limit="event_filters" locked={locked} hint="Event filters are a Pro feature.">
           <NavigationMenu>
             {FILTER_TOGGLES.map(({ field, label }) => (
               <NavigationMenuToggleItem

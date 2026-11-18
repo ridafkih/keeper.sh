@@ -21,6 +21,7 @@ import {
   MarketingToolGrid,
   MarketingToolPanel,
   MarketingToolSection,
+  MarketingToolSyncGuides,
 } from "@/features/marketing/components/marketing-tool";
 import {
   buildIcsCalendar,
@@ -259,6 +260,8 @@ function IcsGeneratorPage() {
           {icsGenerator.writes.body}
         </Text>
       </MarketingToolSection>
+
+      {icsGenerator.syncGuides && <MarketingToolSyncGuides {...icsGenerator.syncGuides} />}
 
       <MarketingFaqSection>
         <Heading2 className="text-center">{icsGenerator.faq.heading}</Heading2>

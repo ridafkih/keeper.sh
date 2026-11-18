@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { Plugin } from "vite";
 import { parse as parseYaml } from "yaml";
 import { parseMetadata, type BlogPostMetadata } from "../src/lib/blog-post-metadata";
 import { buildMovedPaths, CONTENT_DIRECTORIES, MOVED_PATHS_FILE } from "../src/lib/content-paths";
 import { extractContentFaq, type ContentFaqEntry } from "../src/lib/content-faq";
+import { collectContentImages, renderContentCollectionModule, type ContentImageFile } from "../src/lib/content-images";
 
 const OPEN_GRAPH_IMAGE_WIDTH = 1200;
 const OPEN_GRAPH_IMAGE_HEIGHT = 630;
@@ -12,6 +13,7 @@ const OPEN_GRAPH_IMAGE_HEIGHT = 630;
 export interface ProcessedBlogPost {
   content: string;
   faq: ContentFaqEntry[];
+  images: ContentImageFile[];
   metadata: BlogPostMetadata;
   slug: string;
 }
@@ -135,6 +137,8 @@ export function processBlogDirectory(
 ): ProcessedBlogPost[] {
   if (!existsSync(blogDir)) return [];
 
+  const contentRoot = dirname(blogDir);
+
   const files = readdirSync(blogDir)
     .filter((f) => f.endsWith(".mdx"))
     .sort();
@@ -163,7 +167,13 @@ export function processBlogDirectory(
     slugCounts.set(baseSlug, seenCount + 1);
     const slug = seenCount === 0 ? baseSlug : `${baseSlug}-${seenCount + 1}`;
 
-    return { content, faq: extractFaqEntries(content, file), metadata, slug };
+    return {
+      content,
+      faq: extractFaqEntries(content, file),
+      images: collectContentImages(content, filePath, contentRoot),
+      metadata,
+      slug,
+    };
   });
 
   return posts.sort((a, b) =>
@@ -198,8 +208,10 @@ function contentCollectionPlugin(collection: ContentCollection): Plugin {
     load(id) {
       if (id !== resolvedId) return;
 
-      const posts = processBlogDirectory(contentDir, publicDir);
-      return `export const ${collection.exportName} = ${JSON.stringify(posts)};`;
+      return renderContentCollectionModule(
+        collection.exportName,
+        processBlogDirectory(contentDir, publicDir),
+      );
     },
 
     handleHotUpdate({ file, server }) {

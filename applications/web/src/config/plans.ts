@@ -22,8 +22,8 @@ const basePlans: Omit<PlanConfig, "monthlyProductId" | "yearlyProductId">[] = [
   {
     id: "pro",
     ...marketingCopy.plans.pro,
-    monthlyPrice: 5,
-    yearlyPrice: 42,
+    monthlyPrice: 9,
+    yearlyPrice: 79,
   },
 ];
 

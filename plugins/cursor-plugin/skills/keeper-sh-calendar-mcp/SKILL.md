@@ -32,7 +32,7 @@ Use the **keeper-sh** MCP server from this plugin when the user:
 - **Guest lists are never copied** to another calendar or shared link, on any plan.
 - Titles, descriptions, and locations stay private by default unless the user opts in; do not claim they always sync.
 - Pasted ICS and share links are **pull-only**.
-- **Free**: 25 MCP/API requests per day shared across MCP and REST. **Pro**: uncapped hosted usage; pricing if mentioned is **$5/mo** or **$45/year** only — do not invent other prices.
+- **Free**: 25 MCP/API requests per day shared across MCP and REST. **Pro**: uncapped hosted usage; pricing if mentioned is **$9/mo** or **$79/year** only — do not invent other prices.
 - Docs: https://www.keeper.sh/docs/mcp
 
 ## How to work

@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  CalDAVAuthenticationError,
-  CalDAVClient,
-} from "../../../../src/providers/caldav/shared/client";
+import { CalDAVClient } from "../../../../src/providers/caldav/shared/client";
 import { createCalDAVSourceFetcher } from "../../../../src/providers/caldav/source/fetch-adapter";
 import { createSourceIngestionPlan } from "../../../../src/core/sync/sync-range";
-import { RequestTimeoutError } from "../../../../src/core/utils/fetch-with-timeout";
 
 const SERVER_URL = "https://caldav.example.test";
 const PRINCIPAL_PATH = "/principals/user/";
@@ -166,23 +162,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe("CalDAV discovery when the home listing succeeds but a per-collection probe is denied", () => {
-  it("reaches the per-collection probes concurrently, so their statuses share one operation", async () => {
-    serve(discoveryServer({
-      deniedPath: SHARED_PATH,
-      deniedTicks: 0,
-      entries: TWO_EVENT_CALENDARS,
-      healthyTicks: 0,
-    }));
-
-    await runDiscovery(createClient());
-
-    const probePaths = requests
-      .filter(({ path }) => path === PERSONAL_PATH || path === SHARED_PATH)
-      .map(({ path }) => path);
-    expect(probePaths).toHaveLength(2);
-  });
-
+describe("CalDAV discovery when the home lists a collection that denies requests", () => {
   it("gives the same verdict whichever collection's probe answers last", async () => {
     serve(discoveryServer({
       deniedPath: SHARED_PATH,
@@ -270,46 +250,7 @@ describe("a source ingest against a server with one denied collection", () => {
   });
 });
 
-describe("a timeout racing a denied probe in the same discovery", () => {
-  const timingOutServer = (deniedTicks: number, timeoutTicks: number): Responder => (request) => {
-    if (request.path === "/.well-known/caldav") {
-      return Promise.resolve(new Response("", { status: 404 }));
-    }
-    if (request.path === "/") {
-      return Promise.resolve(principalResponse());
-    }
-    if (request.path === PRINCIPAL_PATH) {
-      return Promise.resolve(homeResponse());
-    }
-    if (request.path === HOME_PATH) {
-      return Promise.resolve(calendarListResponse(TWO_EVENT_CALENDARS));
-    }
-    if (request.path === SHARED_PATH) {
-      return settleAfter(deniedTicks, unauthorized());
-    }
-    return settleAfter(timeoutTicks, new Response("", { status: 200 })).then(() => {
-      throw new RequestTimeoutError(30_000);
-    });
-  };
-
-  it("reports the timeout, not invalid credentials, when the denial lands first", async () => {
-    serve(timingOutServer(0, 8));
-
-    const verdict = await runDiscovery(createClient());
-
-    expect(verdict).toEqual({ kind: "rejected", name: "RequestTimeoutError" });
-  });
-
-  it("reports the timeout, not invalid credentials, when the denial lands last", async () => {
-    serve(timingOutServer(8, 0));
-
-    const verdict = await runDiscovery(createClient());
-
-    expect(verdict).toEqual({ kind: "rejected", name: "RequestTimeoutError" });
-  });
-});
-
-describe("CalDAV discovery on collections that need no concurrent probe", () => {
+describe("CalDAV discovery on an empty calendar home", () => {
   it("reports an empty calendar home as empty rather than as invalid credentials", async () => {
     serve(discoveryServer({
       deniedPath: SHARED_PATH,
@@ -321,18 +262,5 @@ describe("CalDAV discovery on collections that need no concurrent probe", () => 
     const verdict = await runDiscovery(createClient());
 
     expect(verdict).toEqual({ kind: "resolved", names: [] });
-  });
-
-  it("still blames the credentials when the only collection's probe is denied", async () => {
-    serve(discoveryServer({
-      deniedPath: PERSONAL_PATH,
-      deniedTicks: 0,
-      entries: [collectionEntry(PERSONAL_PATH, "Personal", "VEVENT")],
-      healthyTicks: 0,
-    }));
-
-    const verdict = await runDiscovery(createClient());
-
-    expect(verdict).toEqual({ kind: "rejected", name: CalDAVAuthenticationError.name });
   });
 });

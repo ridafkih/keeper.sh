@@ -51,13 +51,6 @@ vi.mock("@keeper.sh/calendar", () => ({
   resolveWebhookConfig: () => null,
 }));
 
-vi.mock("@polar-sh/sdk", () => ({
-  // The member keeps oxlint's no-extraneous-class satisfied on this stub.
-  Polar: class FakePolar {
-    public readonly mocked = true;
-  },
-}));
-
 describe("shutdown drain deadline", () => {
   it("settles shutdownDatabases within a bounded time even when one flush is wedged", async () => {
     const context = await import("../../src/context");

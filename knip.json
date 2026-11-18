@@ -10,7 +10,7 @@
     "applications/web/src/generated/**/*"
   ],
   "ignoreBinaries": [],
-  "ignoreDependencies": ["@keeper.sh/otelemetry", "@keeper.sh/fixtures"],
+  "ignoreDependencies": ["@keeper.sh/fixtures"],
   "ignoreWorkspaces": ["packages/typescript-config"],
   "ignoreExportsUsedInFile": true,
   "workspaces": {
@@ -26,6 +26,7 @@
       "entry": [
         "src/main.tsx",
         "src/server.tsx",
+        "src/server/index.ts",
         "plugins/**/*.ts",
         "scripts/**/*.ts"
       ],

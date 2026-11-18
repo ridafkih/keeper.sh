@@ -194,6 +194,45 @@ describe("handlePatchSourceRoute", () => {
     expect(response.status).toBe(200);
   });
 
+  it("returns 403 when free users try to disable reminders on copies", async () => {
+    const response = await handlePatchSourceRoute(
+      {
+        body: { disableEventReminders: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(false),
+        getSourceExclusionState: () => Promise.resolve(OUTLOOK_SOURCE),
+        updateSource: () => Promise.resolve(null),
+      },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("saves disabled reminders when a pro user turns them off on copies", async () => {
+    let receivedUpdates: Record<string, unknown> = {};
+    const response = await handlePatchSourceRoute(
+      {
+        body: { disableEventReminders: true },
+        params: { id: "source-1" },
+        userId: "user-1",
+      },
+      {
+        canUseEventFilters: () => Promise.resolve(true),
+        getSourceExclusionState: () => Promise.resolve(OUTLOOK_SOURCE),
+        updateSource: (_userId, _sourceId, updates) => {
+          receivedUpdates = updates;
+          return Promise.resolve({ id: "source-1", ...updates });
+        },
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(receivedUpdates).toEqual({ disableEventReminders: true });
+  });
+
   it("returns 403 when free users set title keywords", async () => {
     const response = await handlePatchSourceRoute(
       {

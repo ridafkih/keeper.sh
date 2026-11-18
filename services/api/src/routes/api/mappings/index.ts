@@ -1,4 +1,5 @@
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { getUserMappings } from "@/utils/source-destination-mappings";
 
 interface MappingPair {
@@ -23,8 +24,9 @@ const handleMappingsRoute = async (
   });
 };
 
-const GET = withWideEvent(
-  withAuth(({ userId }) => handleMappingsRoute({ userId }, { listMappings: getUserMappings })),
-);
+const listMappings: AuthenticatedRouteCallback = ({ userId }) =>
+  handleMappingsRoute({ userId }, { listMappings: getUserMappings });
 
-export { GET, handleMappingsRoute };
+const GET = withWideEvent(withAuth(listMappings));
+
+export { GET, handleMappingsRoute, listMappings };

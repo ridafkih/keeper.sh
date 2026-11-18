@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { isAuthError, isRateLimitApiError, isRateLimitResponseStatus } from "../../../../src/providers/google/shared/errors";
+import {
+  GoogleBatchApiError,
+  GoogleCalendarApiError,
+  isAuthError,
+  isGoogleWriteAccessDeniedError,
+  isRateLimitApiError,
+  isRateLimitResponseStatus,
+} from "../../../../src/providers/google/shared/errors";
 
 describe("isAuthError", () => {
   it("returns true for unauthenticated 401 responses", () => {
@@ -110,5 +117,38 @@ describe("isRateLimitApiError", () => {
   it("returns false for non-rate-limit status codes", () => {
     expect(isRateLimitApiError(401, { errors: [{ reason: "rateLimitExceeded" }] })).toBe(false);
     expect(isRateLimitApiError(500, { errors: [{ reason: "rateLimitExceeded" }] })).toBe(false);
+  });
+});
+
+const WRITER_ACCESS_BODY = JSON.stringify({
+  error: {
+    code: 403,
+    errors: [{
+      domain: "calendar",
+      message: "You need to have writer access to this calendar.",
+      reason: "requiredAccessLevel",
+    }],
+    message: "You need to have writer access to this calendar.",
+  },
+});
+
+describe("isGoogleWriteAccessDeniedError", () => {
+  it("recognises a calendar refusing writes from the API response reason", () => {
+    expect(isGoogleWriteAccessDeniedError(new GoogleCalendarApiError(403, WRITER_ACCESS_BODY))).toBe(true);
+  });
+
+  it("recognises a whole batch refused for missing writer access", () => {
+    expect(isGoogleWriteAccessDeniedError(new GoogleBatchApiError(403, WRITER_ACCESS_BODY))).toBe(true);
+  });
+
+  it("does not treat a rate-limited 403 as missing writer access", () => {
+    const body = JSON.stringify({
+      error: { code: 403, errors: [{ reason: "rateLimitExceeded" }], message: "Rate Limit Exceeded" },
+    });
+    expect(isGoogleWriteAccessDeniedError(new GoogleCalendarApiError(403, body))).toBe(false);
+  });
+
+  it("ignores a plain error that only quotes the writer access message", () => {
+    expect(isGoogleWriteAccessDeniedError(new Error("You need to have writer access to this calendar."))).toBe(false);
   });
 });

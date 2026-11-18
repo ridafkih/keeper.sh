@@ -33,6 +33,13 @@ export {
   GOOGLE_CALENDAR_MAX_RESULTS,
   GONE_STATUS,
 } from "./shared/api";
-export { hasRateLimitMessage, isAuthError, isSimpleAuthError } from "./shared/errors";
+export {
+  GoogleBatchApiError,
+  GoogleCalendarApiError,
+  hasRateLimitMessage,
+  isAuthError,
+  isGoogleWriteAccessDeniedError,
+  isSimpleAuthError,
+} from "./shared/errors";
 export { parseEventDateTime, parseEventTime } from "./shared/date-time";
 export type { GoogleDateTime, PartialGoogleDateTime, GoogleApiError } from "./types";

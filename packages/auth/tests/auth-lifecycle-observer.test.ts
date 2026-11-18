@@ -15,6 +15,7 @@ const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const AUTH_DDL = `
 create table "user" (
   "id" text primary key,
+  "agentFeedbackEnabled" boolean not null default true,
   "createdAt" timestamptz not null default now(),
   "email" text not null unique,
   "emailVerified" boolean not null default false,
@@ -77,6 +78,7 @@ const createObservedAuth = async () => {
     database: database as unknown as BunSQLDatabase,
     observer: {
       onRequestResolved: (outcome) => outcomes.push(outcome),
+      onAuthLog: () => null,
       onUserCreated: (userId) => createdUserIds.push(userId),
       onUserDeleted: (userId) => deletedUserIds.push(userId),
     },
@@ -139,7 +141,7 @@ describe("the auth observer", () => {
 
     await handleOAuthUserInfo({ context } as never, {
       account: { accessToken: "token", accountId: profile.sub, providerId: "oidc" },
-      userInfo: { email: profile.email, id: profile.sub, ...mapOidcProfileToUser(profile) },
+      userInfo: { email: profile.email, id: profile.sub, ...mapOidcProfileToUser(profile, { trustEmailVerified: false }) },
     } as never);
 
     expect(createdUserIds).toHaveLength(1);

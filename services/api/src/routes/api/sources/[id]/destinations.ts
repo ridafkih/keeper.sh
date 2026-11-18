@@ -1,6 +1,7 @@
 import { calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { database } from "@/context";
 import {
   getDestinationsForSource,
@@ -37,15 +38,15 @@ const GET = withWideEvent(
   ),
 );
 
-const PUT = withWideEvent(
-  withAuth(async ({ request, params, userId }) => {
-    const payload = await request.json();
-    return handlePutSourceDestinationsRoute(
-      { body: payload, params, userId },
-      { changeDestinationsForSource },
-    );
-  }),
-);
+const putSourceDestinations: AuthenticatedRouteCallback = async ({ request, params, userId }) => {
+  const payload = await request.json();
+  return handlePutSourceDestinationsRoute(
+    { body: payload, params, userId },
+    { changeDestinationsForSource },
+  );
+};
+
+const PUT = withWideEvent(withAuth(putSourceDestinations));
 
 const PATCH = withWideEvent(
   withAuth(async ({ request, params, userId }) => {
@@ -57,4 +58,4 @@ const PATCH = withWideEvent(
   }),
 );
 
-export { GET, PATCH, PUT };
+export { GET, PATCH, PUT, putSourceDestinations };

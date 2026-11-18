@@ -148,8 +148,8 @@ function Home() {
       <EventGraph />
       <div className="flex flex-col gap-1.5">
         <DashboardReauthNotice />
-        <CalendarSourcesMenu />
         <CalendarsMenu />
+        <SyncPairsMenu />
         <PlanMenu />
         <NavigationMenu>
           <NavigationMenuLinkItem to="/dashboard/feedback">
@@ -200,13 +200,13 @@ function PlanMenu() {
   );
 }
 
-function CalendarSourcesMenu() {
+function useRefreshCalendars() {
   const { mutate: globalMutate } = useSWRConfig();
   const [isRefreshing, startRefreshTransition] = useTransition();
   const [status, setStatus] = useState<RefreshStatus | null>(null);
   const { secondsRemaining, start: startCooldown } = useCountdown();
 
-  const handleRefresh = () => {
+  const refresh = () => {
     setStatus(null);
 
     startRefreshTransition(async () => {
@@ -231,43 +231,19 @@ function CalendarSourcesMenu() {
     });
   };
 
-  const isCoolingDown = secondsRemaining > 0;
-
-  return (
-    <>
-      <NavigationMenu>
-        <SyncPairRows />
-        <NavigationMenuLinkItem to="/dashboard/connect">
-          <NavigationMenuItemIcon>
-            <CalendarPlus size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>Add a calendar</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing />
-        </NavigationMenuLinkItem>
-        <NavigationMenuButtonItem
-          onClick={isRefreshing || isCoolingDown ? undefined : handleRefresh}
-          disabled={isRefreshing || isCoolingDown}
-        >
-          <NavigationMenuItemIcon>
-            <RefreshCw size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>
-            {isRefreshing ? "Refreshing..." : "Refresh calendars"}
-          </NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {isCoolingDown && <Text size="sm" tone="muted">{secondsRemaining}s</Text>}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuButtonItem>
-      </NavigationMenu>
-      {status && <Text size="sm" tone={status.tone}>{status.message}</Text>}
-    </>
-  );
+  return { isRefreshing, refresh, secondsRemaining, status };
 }
 
-function SyncPairRows() {
+function SyncPairsMenu() {
   const { data: calendars } = useSWR<CalendarSource[]>("/api/sources");
   const pairs = useSyncPairs(calendars);
-  return pairs.map(({ pair, source }) => <SyncPairRow key={pair.key} pair={pair} source={source} />);
+  if (pairs.length === 0) return null;
+
+  return (
+    <NavigationMenu>
+      {pairs.map(({ pair, source }) => <SyncPairRow key={pair.key} pair={pair} source={source} />)}
+    </NavigationMenu>
+  );
 }
 
 function AttentionDot() {
@@ -284,94 +260,121 @@ function CalendarsMenu() {
   const { data: eventCountData, error: eventCountError } = useSWR<{ count: number }>("/api/events/count");
   const eventCount = eventCountError ? undefined : eventCountData?.count;
 
+  const { isRefreshing, refresh, secondsRemaining, status } = useRefreshCalendars();
+  const isCoolingDown = secondsRemaining > 0;
+
   return (
-    <NavigationMenu>
-      <NavigationMenuPopover
-        disabled={calendars.length === 0 && !calendarsLoading}
-        trigger={
-          <>
-            <NavigationMenuItemIcon>
-              <Calendar size={15} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel>
-              {calendars.length > 0 ? "Calendars" : "No calendars"}
-            </NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing>
-              <ProviderIconStack
-                providers={calendars}
-                leading={
-                  calendars.some((calendar) => reauthIds.has(calendar.accountId))
-                    ? <AttentionDot />
+    <>
+      <NavigationMenu>
+        <NavigationMenuPopover
+          disabled={calendars.length === 0 && !calendarsLoading}
+          trigger={
+            <>
+              <NavigationMenuItemIcon>
+                <Calendar size={15} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel>
+                {calendars.length > 0 ? "Calendars" : "No calendars"}
+              </NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing>
+                <ProviderIconStack
+                  providers={calendars}
+                  leading={
+                    calendars.some((calendar) => reauthIds.has(calendar.accountId))
+                      ? <AttentionDot />
+                      : undefined
+                  }
+                />
+              </NavigationMenuItemTrailing>
+            </>
+          }
+        >
+          {error && <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />}
+          {calendarsLoading && (
+            <div className="flex justify-center py-4">
+              <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
+            </div>
+          )}
+          {calendars.map((calendar) => (
+            <NavigationMenuLinkItem
+              key={calendar.id}
+              to={`/dashboard/accounts/${calendar.accountId}/${calendar.id}`}
+              onMouseEnter={() => {
+                preload(`/api/accounts/${calendar.accountId}`, fetcher);
+                preload(`/api/sources/${calendar.id}`, fetcher);
+              }}
+            >
+              <NavigationMenuItemIcon>
+                <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
+              </NavigationMenuItemIcon>
+              <NavigationMenuItemLabel
+                className="shrink-0"
+                tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
+              >
+                {calendar.name}
+              </NavigationMenuItemLabel>
+              <NavigationMenuItemTrailing
+                className="overflow-hidden"
+                indicator={
+                  reauthIds.has(calendar.accountId)
+                    ? <TriangleAlert size={15} className="shrink-0 text-attention" />
                     : undefined
                 }
-              />
-            </NavigationMenuItemTrailing>
-          </>
-        }
-      >
-        {error && <ErrorState message="Failed to load calendars." onRetry={() => mutateCalendars()} />}
-        {calendarsLoading && (
-          <div className="flex justify-center py-4">
-            <LoaderCircle size={16} className="animate-spin text-foreground-muted" />
-          </div>
-        )}
-        {calendars.map((calendar) => (
-          <NavigationMenuLinkItem
-            key={calendar.id}
-            to={`/dashboard/accounts/${calendar.accountId}/${calendar.id}`}
-            onMouseEnter={() => {
-              preload(`/api/accounts/${calendar.accountId}`, fetcher);
-              preload(`/api/sources/${calendar.id}`, fetcher);
-            }}
-          >
-            <NavigationMenuItemIcon>
-              <ProviderIcon provider={calendar.provider} calendarType={calendar.calendarType} />
-            </NavigationMenuItemIcon>
-            <NavigationMenuItemLabel
-              className="shrink-0"
-              tone={reauthIds.has(calendar.accountId) ? "attention" : undefined}
-            >
-              {calendar.name}
-            </NavigationMenuItemLabel>
-            <NavigationMenuItemTrailing
-              className="overflow-hidden"
-              indicator={
-                reauthIds.has(calendar.accountId)
-                  ? <TriangleAlert size={15} className="shrink-0 text-attention" />
-                  : undefined
-              }
-            >
-              <Text
-                size="sm"
-                tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
-                align="right"
-                className="flex-1 min-w-0 truncate"
               >
-                {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
-              </Text>
-            </NavigationMenuItemTrailing>
-          </NavigationMenuLinkItem>
-        ))}
-      </NavigationMenuPopover>
-      <AnimatedReveal show={calendars.length > 0} skipInitial={!animateCalendars}>
-        <NavigationMenuLinkItem to="/dashboard/events">
+                <Text
+                  size="sm"
+                  tone={reauthIds.has(calendar.accountId) ? "attention" : "muted"}
+                  align="right"
+                  className="flex-1 min-w-0 truncate"
+                >
+                  {calendar.unavailableSince ? "Unavailable" : calendar.accountLabel}
+                </Text>
+              </NavigationMenuItemTrailing>
+            </NavigationMenuLinkItem>
+          ))}
+        </NavigationMenuPopover>
+        <NavigationMenuLinkItem to="/dashboard/connect">
           <NavigationMenuItemIcon>
-            <CalendarDays size={15} />
+            <CalendarPlus size={15} />
           </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>View events</NavigationMenuItemLabel>
-          <NavigationMenuItemTrailing>
-            {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
-          </NavigationMenuItemTrailing>
-        </NavigationMenuLinkItem>
-        <NavigationMenuLinkItem to="/dashboard/ical">
-          <NavigationMenuItemIcon>
-            <Link2 size={15} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel>iCal feeds</NavigationMenuItemLabel>
+          <NavigationMenuItemLabel>Add a calendar</NavigationMenuItemLabel>
           <NavigationMenuItemTrailing />
         </NavigationMenuLinkItem>
-      </AnimatedReveal>
-    </NavigationMenu>
+        <NavigationMenuButtonItem
+          onClick={isRefreshing || isCoolingDown ? undefined : refresh}
+          disabled={isRefreshing || isCoolingDown}
+        >
+          <NavigationMenuItemIcon>
+            <RefreshCw size={15} />
+          </NavigationMenuItemIcon>
+          <NavigationMenuItemLabel>
+            {isRefreshing ? "Refreshing..." : "Refresh calendars"}
+          </NavigationMenuItemLabel>
+          <NavigationMenuItemTrailing>
+            {isCoolingDown && <Text size="sm" tone="muted">{secondsRemaining}s</Text>}
+          </NavigationMenuItemTrailing>
+        </NavigationMenuButtonItem>
+        <AnimatedReveal show={calendars.length > 0} skipInitial={!animateCalendars}>
+          <NavigationMenuLinkItem to="/dashboard/events">
+            <NavigationMenuItemIcon>
+              <CalendarDays size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>View events</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing>
+              {eventCount != null && <Text size="sm" tone="muted">{pluralize(eventCount, "event")}</Text>}
+            </NavigationMenuItemTrailing>
+          </NavigationMenuLinkItem>
+          <NavigationMenuLinkItem to="/dashboard/ical">
+            <NavigationMenuItemIcon>
+              <Link2 size={15} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel>iCal feeds</NavigationMenuItemLabel>
+            <NavigationMenuItemTrailing />
+          </NavigationMenuLinkItem>
+        </AnimatedReveal>
+      </NavigationMenu>
+      {status && <Text size="sm" tone={status.tone}>{status.message}</Text>}
+    </>
   );
 }
 

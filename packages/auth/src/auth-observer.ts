@@ -1,4 +1,7 @@
 import { APIError, createAuthMiddleware } from "better-auth/api";
+import type { SignUpAttribution } from "@keeper.sh/data-schemas";
+import { writeAuthStderr } from "./runtime-environment";
+import { readBodySignUpAttribution } from "./sign-up-attribution";
 
 interface AuthRequestOutcome {
   userId: string | null;
@@ -6,9 +9,17 @@ interface AuthRequestOutcome {
   errorCode: string | null;
 }
 
+type AuthLogLevel = "debug" | "info" | "warn" | "error";
+
+interface AuthLogEntry {
+  level: AuthLogLevel;
+  message: string;
+}
+
 interface AuthObserver {
   onRequestResolved: (outcome: AuthRequestOutcome) => void;
-  onUserCreated: (userId: string) => void;
+  onAuthLog: (entry: AuthLogEntry) => void;
+  onUserCreated: (userId: string, attribution: SignUpAttribution | null) => void;
   onUserDeleted: (userId: string) => void;
 }
 
@@ -86,7 +97,7 @@ const observeAuthRequest = (observer: AuthObserver, context: AfterHookContext): 
   observer.onRequestResolved(outcome);
 
   if (context.path === USERNAME_SIGN_UP_PATH && !outcome.errorCode && outcome.userId) {
-    observer.onUserCreated(outcome.userId);
+    observer.onUserCreated(outcome.userId, readBodySignUpAttribution(context.body));
   }
 };
 
@@ -103,11 +114,20 @@ const createObserverHooks = (observer: AuthObserver | undefined) => {
   return { after: createAuthObserverHook(observer) };
 };
 
+const createObservedLogger = (observer: AuthObserver | undefined) => ({
+  log: (level: AuthLogLevel, message: string) => {
+    writeAuthStderr(`${new Date().toISOString()} ${level.toUpperCase()} [Better Auth]: ${message}\n`);
+    observer?.onAuthLog({ level, message });
+  },
+});
+
 const createAuthObservation = (observer: AuthObserver | undefined) => ({
   hooks: createObserverHooks(observer),
-  userCreated: (userId: string): void => observer?.onUserCreated(userId),
+  logger: createObservedLogger(observer),
+  userCreated: (userId: string, attribution: SignUpAttribution | null): void =>
+    observer?.onUserCreated(userId, attribution),
   userDeleted: (userId: string): void => observer?.onUserDeleted(userId),
 });
 
 export { createAuthObservation };
-export type { AuthObserver, AuthRequestOutcome };
+export type { AuthLogEntry, AuthObserver, AuthRequestOutcome };

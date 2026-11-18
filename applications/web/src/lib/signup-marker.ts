@@ -16,4 +16,12 @@ const stripSignupMarker = (href: string): string | null => {
   return `${url.pathname}${url.search}${url.hash}`;
 };
 
-export { SIGNUP_MARKER, stripSignupMarker, withSignupMarker };
+const consumeSignupMarker = (): boolean => {
+  const cleanedUrl = stripSignupMarker(globalThis.location.href);
+  if (cleanedUrl === null) return false;
+
+  globalThis.history.replaceState(null, "", cleanedUrl);
+  return true;
+};
+
+export { SIGNUP_MARKER, consumeSignupMarker, stripSignupMarker, withSignupMarker };

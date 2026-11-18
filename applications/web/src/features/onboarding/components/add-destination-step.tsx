@@ -3,6 +3,7 @@ import { useSetAtom } from "jotai";
 import Link2 from "lucide-react/dist/esm/icons/link-2";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Check from "lucide-react/dist/esm/icons/check";
+import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import {
   NavigationMenu,
   NavigationMenuButtonItem,
@@ -12,22 +13,48 @@ import {
   NavigationMenuItemTrailing,
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { ProviderIcon } from "@/components/ui/primitives/provider-icon";
+import { navigationMenuItemIconStyle } from "@/components/ui/composites/navigation-menu/navigation-menu.styles";
 import { useIcalFeeds } from "@/hooks/use-ical-feeds";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { chosenDestinationIdAtom } from "@/state/onboarding";
 import { showToastAtom } from "@/state/toast";
 import { getCalendarProvider } from "@/utils/calendars";
 import type { CalendarSource } from "@/types/api";
+import { resolveDestinationPrompt } from "../destination-prompt";
+import type { DestinationPrompt } from "../destination-prompt";
 import { OnboardingHeading } from "./onboarding-heading";
 import { ProviderOptions } from "./provider-options";
 
 interface AddDestinationStepProps {
+  calendars: CalendarSource[];
   origin: CalendarSource;
   sameAccountDestinations: CalendarSource[];
 }
 
-export function AddDestinationStep({ origin, sameAccountDestinations }: AddDestinationStepProps) {
+const READ_ONLY_DESCRIPTIONS: Record<"read-only-links" | "read-only", (origin: CalendarSource) => string> = {
+  "read-only": (origin) =>
+    `${origin.name} is read-only, so it can't receive events. Connect the calendar that should show your busy time.`,
+  "read-only-links": () =>
+    "Calendar links are read-only, so they can't receive events. Connect the calendar that should show your busy time.",
+};
+
+function describePrompt(prompt: DestinationPrompt<CalendarSource>, origin: CalendarSource): string {
+  if (prompt.kind === "same-account") {
+    return `Keeper.sh can copy events from ${origin.name} into another calendar on this account, or into one you connect.`;
+  }
+  if (prompt.kind === "connect") {
+    return `Keeper.sh copies events from ${origin.name} into a second calendar. Connect the one that should show you as busy.`;
+  }
+  return READ_ONLY_DESCRIPTIONS[prompt.kind](origin);
+}
+
+function isReadOnlyPrompt(prompt: DestinationPrompt<CalendarSource>): boolean {
+  return prompt.kind === "read-only-links" || prompt.kind === "read-only";
+}
+
+export function AddDestinationStep({ calendars, origin, sameAccountDestinations }: AddDestinationStepProps) {
   const chooseDestination = useSetAtom(chosenDestinationIdAtom);
+  const prompt = resolveDestinationPrompt(calendars, sameAccountDestinations);
 
   const chooseSameAccount = (calendar: CalendarSource) => {
     track(ANALYTICS_EVENTS.onboarding_destination_chosen, { destination_path: "same_account" });
@@ -38,30 +65,31 @@ export function AddDestinationStep({ origin, sameAccountDestinations }: AddDesti
     <>
       <OnboardingHeading
         title="Where should your busy time show?"
-        description={`Keeper.sh copies events from ${origin.name} into a second calendar. Connect the one that should show you as busy.`}
+        description={describePrompt(prompt, origin)}
       />
-      <NavigationMenu>
-        <NavigationMenuItem>
-          <NavigationMenuItemIcon>
-            <ProviderIcon provider={getCalendarProvider(origin)} calendarType={origin.calendarType} />
-          </NavigationMenuItemIcon>
-          <NavigationMenuItemLabel tone="default">{origin.name}</NavigationMenuItemLabel>
-        </NavigationMenuItem>
-      </NavigationMenu>
-      {sameAccountDestinations.length > 0 && (
+      {prompt.kind === "same-account" ? (
         <NavigationMenu>
-          {sameAccountDestinations.map((calendar) => (
+          {prompt.destinations.map((calendar) => (
             <NavigationMenuButtonItem key={calendar.id} onClick={() => chooseSameAccount(calendar)}>
               <NavigationMenuItemIcon>
                 <ProviderIcon provider={getCalendarProvider(calendar)} calendarType={calendar.calendarType} />
               </NavigationMenuItemIcon>
               <NavigationMenuItemLabel>{calendar.name}</NavigationMenuItemLabel>
-              <NavigationMenuItemTrailing />
+              <NavigationMenuItemTrailing indicator={<ArrowRight size={15} className={navigationMenuItemIconStyle()} />} />
             </NavigationMenuButtonItem>
           ))}
         </NavigationMenu>
+      ) : (
+        <NavigationMenu>
+          <NavigationMenuItem>
+            <NavigationMenuItemIcon>
+              <ProviderIcon provider={getCalendarProvider(origin)} calendarType={origin.calendarType} />
+            </NavigationMenuItemIcon>
+            <NavigationMenuItemLabel tone="default">{origin.name}</NavigationMenuItemLabel>
+          </NavigationMenuItem>
+        </NavigationMenu>
       )}
-      <ProviderOptions step="add-destination" />
+      <ProviderOptions step="add-destination" includeCalendarLinks={!isReadOnlyPrompt(prompt)} />
       <SubscribeLinkOption />
     </>
   );

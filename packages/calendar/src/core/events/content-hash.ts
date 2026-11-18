@@ -8,6 +8,7 @@ type SyncableEventContent = Pick<SyncableEvent, "summary" | "description" | "loc
     | "availability"
     | "isAllDay"
     | "isPrivate"
+    | "remindersDisabled"
     | "startTime"
     | "endTime"
     | "startTimeZone"
@@ -40,6 +41,14 @@ const resolveHashedPrivacy = (isPrivate?: boolean): string[] => {
   return [];
 };
 
+const resolveHashedReminders = (remindersDisabled?: boolean): string[] => {
+  if (remindersDisabled) {
+    return ["reminders-disabled"];
+  }
+
+  return [];
+};
+
 const createSyncEventContentHash = (event: SyncableEventContent): string => {
   const payload = JSON.stringify([
     normalizeText(event.summary),
@@ -55,6 +64,7 @@ const createSyncEventContentHash = (event: SyncableEventContent): string => {
     [...event.exceptionDates ?? []].map((date) => date.toISOString()).toSorted(),
     event.recurrenceId?.toISOString() ?? "",
     ...resolveHashedPrivacy(event.isPrivate),
+    ...resolveHashedReminders(event.remindersDisabled),
   ]);
 
   return new Bun.CryptoHasher("sha256").update(payload).digest("hex");

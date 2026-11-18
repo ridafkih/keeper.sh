@@ -1,6 +1,6 @@
 import { context, widelog } from "./logging";
 
-type UserLifecycleEvent = "user.created" | "user.deleted";
+type UserLifecycleEvent = "user.deleted";
 
 const emitUserLifecycleEvent = (event: UserLifecycleEvent, userId: string): void => {
   context(() => {

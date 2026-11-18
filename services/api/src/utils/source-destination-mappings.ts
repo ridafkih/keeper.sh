@@ -694,12 +694,12 @@ const readNewlyMappedSources = async (sourceCalendarIds: string[]): Promise<void
 const scheduleMappingReplacementSync = (userId: string): void => {
   spawnBackgroundJob(
     "mapping-replacement-push-enqueue",
-    { userId },
+    { "user.id": userId },
     () => enqueueMappingReplacementSync(userId),
   );
   spawnBackgroundJob(
     "mapping-sync-state-publish",
-    { userId },
+    { "user.id": userId },
     () => publishMappingSyncState(userId),
   );
 };
@@ -710,7 +710,7 @@ const scheduleNewlyMappedSourceReads = (userId: string, sourceCalendarIds: strin
   }
   spawnBackgroundJob(
     "mapping-source-ingest-wake",
-    { "mapping.woken_source_count": sourceCalendarIds.length, userId },
+    { "mapping.woken_source_count": sourceCalendarIds.length, "user.id": userId },
     () => readNewlyMappedSources(sourceCalendarIds),
   );
 };

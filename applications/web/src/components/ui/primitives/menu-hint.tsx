@@ -1,6 +1,9 @@
+import { useEffect } from "react";
 import type { CSSProperties, ComponentPropsWithoutRef, PropsWithChildren, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
+import type { BillingLimitType } from "@keeper.sh/data-schemas/client";
 import { getCommercialMode } from "@/config/commercial";
+import { reportFunnelEvent } from "@/lib/funnel-events";
 import { Text } from "./text";
 
 type GateTone = "muted" | "attention";
@@ -113,24 +116,39 @@ function MenuGate({
   );
 }
 
-function PremiumHint({ children }: PropsWithChildren) {
-  if (!getCommercialMode()) return null;
+function useLimitShown(limitType: BillingLimitType, shown: boolean) {
+  useEffect(() => {
+    if (!shown) return;
+    reportFunnelEvent({ event: "billing.limit_shown", limitType });
+  }, [limitType, shown]);
+}
+
+function PremiumHint({ limit, children }: PropsWithChildren<{ limit: BillingLimitType }>) {
+  const commercialMode = getCommercialMode();
+  useLimitShown(limit, commercialMode);
+
+  if (!commercialMode) return null;
 
   return <MenuHint action={UPGRADE_ACTION}>{children}</MenuHint>;
 }
 
 function PremiumGate({
+  limit,
   locked,
   children,
   hint,
 }: {
+  limit: BillingLimitType;
   locked: boolean;
   children: ReactNode;
   hint: string;
 }) {
+  const active = locked && getCommercialMode();
+  useLimitShown(limit, active);
+
   return (
     <MenuGate
-      active={locked && getCommercialMode()}
+      active={active}
       hint={hint}
       action={UPGRADE_ACTION}
       disableChildren

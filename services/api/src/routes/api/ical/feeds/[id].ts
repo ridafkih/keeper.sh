@@ -3,6 +3,7 @@ import { icalFeedSettingsTable, icalFeedsTable } from "@keeper.sh/database/schem
 import { DEFAULT_FEED_SETTINGS } from "@keeper.sh/data-schemas";
 import { and, eq } from "drizzle-orm";
 import { withAuth, withWideEvent } from "@/utils/middleware";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
 import { database, premiumService } from "@/context";
 import { ErrorResponse } from "@/utils/responses";
 import { icalFeedPatchBodySchema } from "@/utils/request-body";
@@ -205,63 +206,65 @@ const GET = withWideEvent(
   )),
 );
 
-const PATCH = withWideEvent(
-  withAuth(async ({ params, request, userId }) => {
-    const payload = await request.json();
+const patchIcalFeed: AuthenticatedRouteCallback = async ({ params, request, userId }) => {
+  const payload = await request.json();
 
-    return await handlePatchIcalFeedRoute(
-      { body: payload, params, userId },
-      {
-        canCustomizeIcalFeed: (resolvedUserId) =>
-          premiumService.canCustomizeIcalFeed(resolvedUserId),
-        findFeed: (resolvedUserId, resolvedFeedId) =>
-          findFeedForUser(database, resolvedUserId, resolvedFeedId),
-        updateFeed: async (resolvedUserId, resolvedFeedId, updates) => {
-          const [updated] = await database
-            .update(icalFeedsTable)
-            .set(updates)
-            .where(
-              and(
-                eq(icalFeedsTable.id, resolvedFeedId),
-                eq(icalFeedsTable.userId, resolvedUserId),
-              ),
-            )
-            .returning(FEED_ROW_COLUMNS);
+  return await handlePatchIcalFeedRoute(
+    { body: payload, params, userId },
+    {
+      canCustomizeIcalFeed: (resolvedUserId) =>
+        premiumService.canCustomizeIcalFeed(resolvedUserId),
+      findFeed: (resolvedUserId, resolvedFeedId) =>
+        findFeedForUser(database, resolvedUserId, resolvedFeedId),
+      updateFeed: async (resolvedUserId, resolvedFeedId, updates) => {
+        const [updated] = await database
+          .update(icalFeedsTable)
+          .set(updates)
+          .where(
+            and(
+              eq(icalFeedsTable.id, resolvedFeedId),
+              eq(icalFeedsTable.userId, resolvedUserId),
+            ),
+          )
+          .returning(FEED_ROW_COLUMNS);
 
-          return updated ?? null;
-        },
-        mirrorLegacySettings: async (resolvedUserId, updates) => {
-          await database
-            .insert(icalFeedSettingsTable)
-            .values({
-              userId: resolvedUserId,
-              includeEventName: DEFAULT_FEED_SETTINGS.includeEventName,
-              includeEventDescription: DEFAULT_FEED_SETTINGS.includeEventDescription,
-              includeEventLocation: DEFAULT_FEED_SETTINGS.includeEventLocation,
-              excludeAllDayEvents: DEFAULT_FEED_SETTINGS.excludeAllDayEvents,
-              customEventName: DEFAULT_FEED_SETTINGS.customEventName,
-              ...updates,
-            })
-            .onConflictDoUpdate({
-              target: icalFeedSettingsTable.userId,
-              set: updates,
-            });
-        },
+        return updated ?? null;
       },
-    );
-  }),
-);
+      mirrorLegacySettings: async (resolvedUserId, updates) => {
+        await database
+          .insert(icalFeedSettingsTable)
+          .values({
+            userId: resolvedUserId,
+            includeEventName: DEFAULT_FEED_SETTINGS.includeEventName,
+            includeEventDescription: DEFAULT_FEED_SETTINGS.includeEventDescription,
+            includeEventLocation: DEFAULT_FEED_SETTINGS.includeEventLocation,
+            excludeAllDayEvents: DEFAULT_FEED_SETTINGS.excludeAllDayEvents,
+            customEventName: DEFAULT_FEED_SETTINGS.customEventName,
+            ...updates,
+          })
+          .onConflictDoUpdate({
+            target: icalFeedSettingsTable.userId,
+            set: updates,
+          });
+      },
+    },
+  );
+};
 
-const DELETE = withWideEvent(
-  withAuth(async ({ params, userId }) =>
-    await handleDeleteIcalFeedRoute({ params, userId }, { deleteFeed })),
-);
+const PATCH = withWideEvent(withAuth(patchIcalFeed));
+
+const deleteIcalFeed: AuthenticatedRouteCallback = async ({ params, userId }) =>
+  await handleDeleteIcalFeedRoute({ params, userId }, { deleteFeed });
+
+const DELETE = withWideEvent(withAuth(deleteIcalFeed));
 
 export {
   DELETE,
   GET,
   PATCH,
+  deleteIcalFeed,
   handleDeleteIcalFeedRoute,
   handleGetIcalFeedRoute,
   handlePatchIcalFeedRoute,
+  patchIcalFeed,
 };

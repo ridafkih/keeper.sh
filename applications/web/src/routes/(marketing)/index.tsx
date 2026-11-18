@@ -1,5 +1,5 @@
 import { useSetAtom } from 'jotai'
-import { createFileRoute, useLoaderData, type LinkProps } from '@tanstack/react-router'
+import { createFileRoute, useLoaderData } from '@tanstack/react-router'
 import { faqSchema, jsonLdScript, seoHead, softwareApplicationSchema, webPageSchema } from '../../lib/seo'
 import { Heading1, Heading2, Heading3 } from '../../components/ui/primitives/heading'
 import { Text } from '../../components/ui/primitives/text'
@@ -8,7 +8,7 @@ import { MarketingArticleCard, MarketingArticleGrid, MarketingArticleSection } f
 import { MarketingCtaSection, MarketingCtaCard } from '../../features/marketing/components/marketing-cta'
 import { Collapsible } from '../../components/ui/primitives/collapsible'
 import { TextLink } from '../../components/ui/primitives/text-link'
-import { ButtonIcon, ButtonText, ExternalLinkButton, LinkButton } from '../../components/ui/primitives/button'
+import { ButtonIcon, ButtonText, LinkButton } from '../../components/ui/primitives/button'
 import { MarketingIllustrationCalendar, MarketingIllustrationCalendarCard, type Skew, type SkewTuple } from '../../features/marketing/components/marketing-illustration-calendar'
 import {
   MarketingFeatureBentoBody,
@@ -17,7 +17,6 @@ import {
   MarketingFeatureBentoIllustration,
   MarketingFeatureBentoSection,
 } from '../../features/marketing/components/marketing-feature-bento'
-import { MarketingIllustrationContributors } from '../../illustrations/marketing-illustration-contributors'
 import { MarketingIllustrationProviders } from '../../illustrations/marketing-illustration-providers'
 import { MarketingIllustrationSync } from '../../illustrations/marketing-illustration-sync'
 import {
@@ -56,7 +55,6 @@ import { latestArticles } from '../../lib/article-library'
 import { calendarEmphasizedAtom } from '../../state/calendar-emphasized'
 import { ANALYTICS_EVENTS } from '../../lib/analytics'
 import ArrowRightIcon from "lucide-react/dist/esm/icons/arrow-right";
-import ArrowUpRightIcon from "lucide-react/dist/esm/icons/arrow-up-right";
 
 const home = marketingCopy.home
 const PAGE_DESCRIPTION = home.seo.description
@@ -87,7 +85,6 @@ type MarketingFeature = {
   description: string
   gridClassName: string
   illustration?: React.ReactNode
-  link?: { to: LinkProps["to"]; label: string }
 }
 
 const MARKETING_FEATURES: MarketingFeature[] = [
@@ -106,20 +103,12 @@ const MARKETING_FEATURES: MarketingFeature[] = [
   {
     id: 3,
     ...home.features.details,
-    gridClassName: 'sm:col-span-2 lg:col-start-1 lg:col-span-10 lg:row-start-2',
+    gridClassName: 'lg:col-start-1 lg:col-span-5 lg:row-start-2',
   },
   {
     id: 4,
     ...home.features.agents,
-    gridClassName: 'lg:col-start-1 lg:col-span-4 lg:row-start-3',
-  },
-  {
-    id: 5,
-    title: home.features.openSource.title,
-    description: home.features.openSource.description,
-    gridClassName: 'lg:col-start-5 lg:col-span-6 lg:row-start-3',
-    illustration: <MarketingIllustrationContributors />,
-    link: { to: '/about', label: home.features.openSource.linkLabel },
+    gridClassName: 'lg:col-start-6 lg:col-span-5 lg:row-start-2',
   },
 ]
 
@@ -193,11 +182,6 @@ function MarketingPage() {
                     <Text size="sm" className="text-left">
                       {feature.description}
                     </Text>
-                    {feature.link && (
-                      <TextLink align="left" size="sm" to={feature.link.to} tone="muted">
-                        {feature.link.label}
-                      </TextLink>
-                    )}
                   </MarketingFeatureBentoBody>
                 </MarketingFeatureBentoCard>
               ))}
@@ -350,18 +334,9 @@ function MarketingPage() {
                     <ArrowRightIcon size={16} />
                   </ButtonIcon>
                 </LinkButton>
-                <ExternalLinkButton
-                  href="https://github.com/ridafkih/keeper.sh"
-                  target="_blank"
-                  rel="noreferrer"
-                  size="compact"
-                  variant="inverse-ghost"
-                >
+                <LinkButton to="/features" size="compact" variant="inverse-ghost">
                   <ButtonText>{home.cta.secondaryLabel}</ButtonText>
-                  <ButtonIcon>
-                    <ArrowUpRightIcon size={16} />
-                  </ButtonIcon>
-                </ExternalLinkButton>
+                </LinkButton>
               </div>
             </MarketingCtaCard>
           </MarketingCtaSection>

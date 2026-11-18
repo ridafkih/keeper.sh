@@ -53,7 +53,7 @@ const stubTransport = (transportSteps: FetchStep[]): void => {
 };
 
 interface DavClientCalls {
-  fetchCalendars: (davFetch: FetchFunction) => Promise<unknown>;
+  propfind: (davFetch: FetchFunction) => Promise<unknown>;
   calendarQuery: (davFetch: FetchFunction) => Promise<{ href?: string }[]>;
   fetchCalendarObjects: (davFetch: FetchFunction) => Promise<{ url: string; data?: string }[]>;
 }
@@ -63,7 +63,7 @@ const stubDavClient = (calls: Partial<DavClientCalls>): void => {
     Promise.resolve({
       calendarQuery: () => calls.calendarQuery?.(davFetch) ?? Promise.resolve([]),
       fetchCalendarObjects: () => calls.fetchCalendarObjects?.(davFetch) ?? Promise.resolve([]),
-      fetchCalendars: () => calls.fetchCalendars?.(davFetch) ?? Promise.resolve([]),
+      propfind: () => calls.propfind?.(davFetch) ?? Promise.resolve([]),
     }));
 };
 
@@ -101,7 +101,10 @@ describe("CalDAV response status is scoped to the operation that produced it", (
     stubTransport([respondWith(unauthorized()), throwTimeout]);
     stubDavClient({
       calendarQuery: (davFetch) => davFetch(CALENDAR_URL).then(() => []),
-      fetchCalendars: (davFetch) => davFetch(SERVER_URL).then(drainResponse).then(() => []),
+      propfind: (davFetch) =>
+        davFetch(SERVER_URL)
+          .then(drainResponse)
+          .then(({ ok, status, statusText }) => [{ ok, status, statusText }]),
     });
 
     const client = createClient();

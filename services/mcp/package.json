@@ -4,9 +4,9 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run --hot src/index.ts",
+    "dev": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone ../../scripts/with-build-identity.sh bun run --hot src/index.ts",
     "build": "bun scripts/build.ts",
-    "start": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone bun run dist/index.js",
+    "start": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone ../../scripts/with-build-identity.sh bun run dist/index.js",
     "types": "tsc --noEmit",
     "test": "ICU_TIMEZONE_FILES_DIR=../../docker/icu-timezone vitest run",
     "lint": "oxlint ."
@@ -15,13 +15,14 @@
     "@keeper.sh/auth": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
     "@keeper.sh/constants": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/otelemetry": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.27.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "arkenv": "^0.11.0",
     "entrykit": "^0.1.3",
     "widelogger": "^0.7.0",
-    "zod": "^4.3.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@keeper.sh/typescript-config": "workspace:*",

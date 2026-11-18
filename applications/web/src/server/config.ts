@@ -1,11 +1,13 @@
 import { type } from "entrykit";
+import type { PublicRuntimeConfig } from "@/lib/runtime-config";
+import { buildContentSecurityPolicy } from "./content-security-policy";
 import type { ServerConfig } from "./types";
 
 export const envSchema = type({
   VITE_API_URL: "string.url",
   VITE_MCP_URL: "string.url?",
   OPENAI_APPS_CHALLENGE_TOKEN: "string?",
-  ENV: "'development'|'production'|'test' = 'production'",
+  ENV: "'development'|'production'|'test'",
   PORT: "string",
 });
 
@@ -27,7 +29,10 @@ function deriveVitePort(serverPort: number): number {
   return derivedPort;
 }
 
-export function createServerConfig(environment: typeof envSchema.infer): ServerConfig {
+export function createServerConfig(
+  environment: typeof envSchema.infer,
+  publicRuntimeConfig: PublicRuntimeConfig,
+): ServerConfig {
   const serverPort = parsePort("PORT", environment.PORT);
   const vitePort = deriveVitePort(serverPort);
   const runtimeEnvironment = environment.ENV;
@@ -35,6 +40,7 @@ export function createServerConfig(environment: typeof envSchema.infer): ServerC
   return {
     apiProxyOrigin: environment.VITE_API_URL,
     mcpProxyOrigin: environment.VITE_MCP_URL ?? null,
+    contentSecurityPolicy: buildContentSecurityPolicy(publicRuntimeConfig),
     openaiAppsChallengeToken: environment.OPENAI_APPS_CHALLENGE_TOKEN ?? null,
     environment: runtimeEnvironment,
     isProduction: runtimeEnvironment === "production",

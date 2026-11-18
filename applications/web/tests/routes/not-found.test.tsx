@@ -10,6 +10,7 @@ const { blogPosts } = vi.hoisted(() => ({
   blogPosts: ["first", "second", "third", "fourth", "fifth"].map((slug, index) => ({
     content: "",
     faq: [],
+    images: [],
     metadata: {
       blurb: `The ${slug} post.`,
       createdAt: `2026-08-0${5 - index}`,

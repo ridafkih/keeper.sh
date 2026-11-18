@@ -17,7 +17,10 @@ export { account, user } from "./database/auth-schema";
 export { encryptPassword, decryptPassword } from "./encryption";
 export { buildImportedCalendarExists } from "./database/rediscovery-candidates";
 export { recordUserMilestone } from "./database/user-milestones";
+export { readUserAgentFeedbackEnabled } from "./database/user-agent-feedback";
 export type { UserMilestoneDatabase } from "./database/user-milestones";
+export { recordUserSignUpAttribution } from "./database/user-sign-up-attributions";
+export type { UserSignUpAttributionDatabase } from "./database/user-sign-up-attributions";
 export { recordUserSyncRequest } from "./database/user-sync-requests";
 export type { UserSyncRequestDatabase } from "./database/user-sync-requests";
 export {

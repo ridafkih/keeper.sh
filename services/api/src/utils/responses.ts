@@ -37,6 +37,10 @@ class ErrorResponse {
     return new ErrorResponse(HTTP_STATUS.CONFLICT, message);
   }
 
+  static payloadTooLarge(message: string | null = null): ErrorResponse {
+    return new ErrorResponse(HTTP_STATUS.PAYLOAD_TOO_LARGE, message);
+  }
+
   static tooManyRequests(message: string | null = null): ErrorResponse {
     return new ErrorResponse(HTTP_STATUS.TOO_MANY_REQUESTS, message);
   }

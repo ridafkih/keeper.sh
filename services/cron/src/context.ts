@@ -6,7 +6,6 @@ import Redis from "ioredis";
 import { createPremiumService } from "@keeper.sh/premium";
 import { resolveWebhookConfig } from "@keeper.sh/calendar";
 import type { RefreshLockStore } from "@keeper.sh/calendar";
-import { Polar } from "@polar-sh/sdk";
 
 const database = await createDatabase(env.DATABASE_URL, { maxConnections: env.DATABASE_POOL_MAX });
 
@@ -77,25 +76,12 @@ const shutdownRefreshLockRedis = (): void => {
   refreshLockRedis.disconnect();
 };
 
-const createPolarClient = (): Polar | null => {
-  if (env.POLAR_ACCESS_TOKEN && env.POLAR_MODE) {
-    return new Polar({
-      accessToken: env.POLAR_ACCESS_TOKEN,
-      server: env.POLAR_MODE,
-    });
-  }
-  return null;
-};
-
-const polarClient = createPolarClient();
-
 export {
   database,
   flushDatabase,
   flushDrainRegistry,
   shutdownDatabases,
   premiumService,
-  polarClient,
   refreshLockRedis,
   refreshLockStore,
   shutdownRefreshLockRedis,

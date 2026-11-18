@@ -1,57 +1,31 @@
 import { allSettledWithConcurrency } from "@keeper.sh/calendar";
-import { invalidateCalendarDiscoveryCache } from "@keeper.sh/calendar/caldav";
 import { handleRefreshCalendarsRoute } from "./refresh-calendars-route";
 import { withAuth, withWideEvent } from "@/utils/middleware";
-import { redis, refreshLockStore } from "@/context";
+import type { AuthenticatedRouteCallback } from "@/utils/middleware";
+import { redis } from "@/context";
 import {
   CALENDAR_REFRESH_COOLDOWN_SECONDS,
   checkAndClaimCalendarRefresh,
 } from "@/utils/sync-trigger-limit";
 import {
-  createDefaultAccountCalendarRefreshDependencies,
-  runAccountCalendarRefresh,
-} from "@/utils/calendar-rediscovery";
+  acquireAccountRefreshLock,
+  refreshAccountCalendars,
+} from "@/utils/account-calendar-refresh";
 import { loadRefreshableAccountsForUser } from "@/utils/account-calendar-discovery";
 
-const CALENDAR_REDISCOVER_LOCK_TTL_SECONDS = 120;
 const REFRESH_CONCURRENCY = 3;
 
-const buildRefreshLockKey = (accountId: string): string =>
-  `calendar-rediscover:${accountId}`;
+const refreshAllAccountCalendars: AuthenticatedRouteCallback = ({ userId }) =>
+  handleRefreshCalendarsRoute({ userId }, {
+    acquireRefreshLock: acquireAccountRefreshLock,
+    claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
+    cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
+    loadAccounts: loadRefreshableAccountsForUser,
+    refreshCalendars: refreshAccountCalendars,
+    runConcurrently: (tasks) =>
+      allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
+  });
 
-const POST = withWideEvent(
-  withAuth(({ userId }) =>
-    handleRefreshCalendarsRoute({ userId }, {
-      acquireRefreshLock: async (accountId) => {
-        const key = buildRefreshLockKey(accountId);
-        const acquired = await refreshLockStore.tryAcquire(
-          key,
-          CALENDAR_REDISCOVER_LOCK_TTL_SECONDS,
-        );
+const POST = withWideEvent(withAuth(refreshAllAccountCalendars));
 
-        if (!acquired) {
-          return { acquired: false };
-        }
-
-        return {
-          acquired: true,
-          handle: { release: () => refreshLockStore.release(key) },
-        };
-      },
-      claimRefreshCooldown: (id) => checkAndClaimCalendarRefresh(redis, id),
-      cooldownSeconds: CALENDAR_REFRESH_COOLDOWN_SECONDS,
-      loadAccounts: loadRefreshableAccountsForUser,
-      refreshCalendars: async (options) => {
-        const summary = await runAccountCalendarRefresh(
-          options,
-          await createDefaultAccountCalendarRefreshDependencies(),
-        );
-        await invalidateCalendarDiscoveryCache(redis, options.accountId);
-        return summary;
-      },
-      runConcurrently: (tasks) =>
-        allSettledWithConcurrency(tasks, { concurrency: REFRESH_CONCURRENCY }),
-    })),
-);
-
-export { POST };
+export { POST, refreshAllAccountCalendars };

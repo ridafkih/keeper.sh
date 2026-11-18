@@ -542,6 +542,22 @@ describe("applyCalendarRediscoveryPlan", () => {
       .toContainEqual({ capabilities: ["pull"] });
   });
 
+  it("gives push back to a read-only calendar the provider now lists as writable", async () => {
+    const fake = createFakeDatabase({
+      calendars: [{ ...oauthRow("calendar-1", "external-1"), capabilities: ["pull"] }],
+      mappings: [],
+    });
+
+    const result = await apply(fake, {
+      calendarType: "oauth",
+      discovered: [oauthDiscovery("external-1", "Team")],
+    });
+
+    expect(result.toSetWritable).toEqual([{ id: "calendar-1", writable: true }]);
+    expect(calendarUpdates(fake.updates).map(({ values }) => values))
+      .toContainEqual({ capabilities: ["pull", "push"] });
+  });
+
   it("reinstates a reappearing calendar by clearing only its unavailability", async () => {
     const fake = createFakeDatabase({
       calendars: [oauthRow("calendar-1", "external-1", MARKED_AT)],

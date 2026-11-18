@@ -13,6 +13,7 @@ export interface Runtime {
 export interface ServerConfig {
   apiProxyOrigin: string;
   mcpProxyOrigin: string | null;
+  contentSecurityPolicy: string;
   openaiAppsChallengeToken: string | null;
   environment: "development" | "production" | "test";
   isProduction: boolean;

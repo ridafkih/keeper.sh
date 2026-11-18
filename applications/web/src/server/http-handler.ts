@@ -1,11 +1,6 @@
 import { withCompression } from "./compression";
-import {
-  googleTagConnectHosts,
-  googleTagFrameHosts,
-  googleTagImageHosts,
-  googleTagScriptHosts,
-} from "./google-tag-csp";
 import { isApiRequest, isMcpRequest, proxyRequest } from "./proxy/http";
+import { nameRequestRoute } from "@keeper.sh/otelemetry/tracing";
 import { handleInternalRoute } from "./internal-routes";
 import { hasSessionCookie } from "@/lib/session-cookie";
 import { resolveMovedPath } from "@/lib/moved-paths";
@@ -53,19 +48,6 @@ const baseSecurityHeaders: Record<string, string> = {
   "permissions-policy": "camera=(), microphone=(), geolocation=(), interest-cohort=()",
 };
 
-const cspHeader = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline' ${googleTagScriptHosts.join(" ")} https://cdn.visitors.now`,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: ${googleTagImageHosts.join(" ")}`,
-  "font-src 'self'",
-  `connect-src 'self' ${googleTagConnectHosts.join(" ")} https://cdn.visitors.now https://e.visitors.now`,
-  `frame-src https://polar.sh ${googleTagFrameHosts.join(" ")}`,
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
 function withSecurityHeaders(response: Response, config: ServerConfig): Response {
   const headers = new Headers(response.headers);
 
@@ -74,7 +56,7 @@ function withSecurityHeaders(response: Response, config: ServerConfig): Response
   }
 
   if (config.isProduction) {
-    headers.set("content-security-policy", cspHeader);
+    headers.set("content-security-policy", config.contentSecurityPolicy);
   }
 
   return new Response(response.body, {
@@ -207,10 +189,12 @@ export async function handleApplicationRequest(
   }
 
   if (isMcpRequest(requestUrl) && config.mcpProxyOrigin) {
+    nameRequestRoute(request.method, "/mcp");
     return proxyRequest(request, config.mcpProxyOrigin);
   }
 
   if (isApiRequest(requestUrl)) {
+    nameRequestRoute(request.method, "/api/*");
     return proxyRequest(request, config.apiProxyOrigin);
   }
 

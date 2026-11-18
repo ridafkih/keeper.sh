@@ -31,7 +31,13 @@ COPY --from=source /app/packages/database/drizzle ./packages/database/drizzle
 COPY --from=source /app/services/api/entrypoint.sh ./services/api/entrypoint.sh
 RUN chmod +x ./services/api/entrypoint.sh
 
-ENV DEV=production
+ENV ENV=production
 EXPOSE 3001
+
+ARG COMMIT_SHA
+ARG VERSION
+RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
+ENV COMMIT_SHA=$COMMIT_SHA
+ENV VERSION=$VERSION
 
 ENTRYPOINT ["./services/api/entrypoint.sh"]

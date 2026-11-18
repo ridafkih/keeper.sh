@@ -77,7 +77,9 @@ const runWebsocketBoundary = (
 
     try {
       await widelog.time.measure("duration_ms", () => callback());
+      widelog.set("outcome", "success");
     } catch (error) {
+      widelog.set("outcome", "error");
       labelFailure(error, { slug: "unclassified" });
       throw error;
     } finally {

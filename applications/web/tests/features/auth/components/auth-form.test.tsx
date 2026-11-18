@@ -1,10 +1,10 @@
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseHTML } from "linkedom";
 import type { AuthCapabilities } from "@/lib/auth-capabilities";
-import type { AuthScreenCopy } from "../../../../src/features/auth/components/auth-form";
+import { AuthForm, type AuthScreenCopy } from "../../../../src/features/auth/components/auth-form";
 
 const { passkeySignInMock, socialSignInMock, omitMotionProps } = vi.hoisted(() => {
   const passkeySignInMock = vi.fn(() => Promise.resolve({ error: null }));
@@ -98,12 +98,6 @@ vi.mock("lucide-react/dist/esm/icons/arrow-left", () => ({
 vi.mock("lucide-react/dist/esm/icons/loader-circle", () => ({
   default: (props: React.ComponentPropsWithoutRef<"svg">) => <svg {...props} />,
 }));
-
-let AuthForm: typeof import("../../../../src/features/auth/components/auth-form").AuthForm;
-
-beforeAll(async () => {
-  ({ AuthForm } = await import("../../../../src/features/auth/components/auth-form"));
-});
 
 const capabilities: AuthCapabilities = {
   commercialMode: true,
@@ -301,6 +295,26 @@ describe("AuthForm", () => {
           callbackURL: "/dashboard",
           newUserCallbackURL: "/dashboard?keeper_signup=1",
           provider: "oidc",
+        });
+      },
+    );
+  });
+
+  it("sends a new Google user on to calendar consent instead of the welcome step", async () => {
+    socialSignInMock.mockClear();
+
+    await renderInDom(
+      <AuthForm
+        capabilities={{ ...capabilities, socialProviders: { google: true, microsoft: false } }}
+        copy={copy}
+      />,
+      async (container) => {
+        await clickButtonWithText(container, "Sign in with Google");
+
+        expect(socialSignInMock).toHaveBeenCalledWith({
+          callbackURL: "/dashboard",
+          newUserCallbackURL: "/dashboard/connect/google?continue=consent&keeper_signup=1",
+          provider: "google",
         });
       },
     );

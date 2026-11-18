@@ -6,6 +6,11 @@ import {
   insertEventStatesWithConflictResolution,
 } from "../../../src/core/source/write-event-states";
 
+const withoutPlaceholders = {
+  delete: () => ({ where: () => Promise.resolve() }),
+  select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
+};
+
 describe("insertEventStatesWithConflictResolution", () => {
   it("persists recurrence metadata", () => {
     const recurrenceId = new Date("2026-03-05T10:00:00.000Z");
@@ -27,6 +32,7 @@ describe("insertEventStatesWithConflictResolution", () => {
     let insertCalled = false;
 
     const database = {
+      ...withoutPlaceholders,
       insert: () => {
         insertCalled = true;
         return {
@@ -50,6 +56,7 @@ describe("insertEventStatesWithConflictResolution", () => {
      */
     const batchSizes: number[] = [];
     const database = {
+      ...withoutPlaceholders,
       insert: () => ({
         values: (value: EventStateInsertRow | EventStateInsertRow[]) => {
           let insertedRows = value;
@@ -112,6 +119,7 @@ describe("insertEventStatesWithConflictResolution", () => {
     }[] = [];
 
     const database = {
+      ...withoutPlaceholders,
       insert: (table: typeof eventStatesTable) => ({
         values: (value: EventStateInsertRow | EventStateInsertRow[]) => ({
           onConflictDoUpdate: (config: {

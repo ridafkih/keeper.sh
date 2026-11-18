@@ -120,7 +120,7 @@ function ComparePage() {
         </div>
       </header>
 
-      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS}>
+      <Prose allowedTags={MARKDOWN_FAQ_TAGS} components={MARKDOWN_FAQ_COMPONENTS} images={comparePage.images}>
         {comparePage.content}
       </Prose>
 

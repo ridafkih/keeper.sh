@@ -61,13 +61,6 @@ vi.mock("@keeper.sh/premium", () => ({
   createPremiumService: (): object => ({}),
 }));
 
-vi.mock("@polar-sh/sdk", () => ({
-  // The member keeps oxlint's no-extraneous-class satisfied on this stub.
-  Polar: class FakePolar {
-    public readonly mocked = true;
-  },
-}));
-
 /* Mirrors ioredis: after disconnect() every command rejects "Connection is closed." */
 vi.mock("ioredis", () => ({
   default: class FakeRedis {

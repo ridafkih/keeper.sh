@@ -63,6 +63,7 @@ interface SyncableEvent {
   description?: string;
   location?: string;
   isPrivate?: boolean;
+  remindersDisabled?: boolean;
   calendarId: string;
   calendarName: string | null;
   calendarUrl: string | null;
@@ -88,6 +89,7 @@ interface PushResult {
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
+  writeAccessDenied?: boolean;
 }
 
 interface PushEchoValueLengths {
@@ -125,6 +127,7 @@ interface DeleteResult {
   errorType?: string;
   statusCode?: number;
   shouldContinue?: boolean;
+  writeAccessDenied?: boolean;
 }
 
 interface ProviderThrottleMetrics {

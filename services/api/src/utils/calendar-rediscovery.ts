@@ -13,6 +13,11 @@ import type {
 } from "@keeper.sh/calendar";
 import type { RefreshableAccount } from "./account-calendar-discovery";
 
+class CalendarAccountNotFoundError extends Error {
+  constructor() {
+    super("Account not found");
+  }
+}
 class CalendarRefreshUnsupportedError extends Error {}
 class CalendarRefreshUnconfiguredError extends Error {}
 
@@ -80,7 +85,7 @@ const runAccountCalendarRefresh = async (
 ): Promise<AccountCalendarRefreshSummary> => {
   const account = await dependencies.loadAccount(options.accountId, options.userId);
   if (!account) {
-    throw new Error(`Calendar account ${options.accountId} is not available to refresh`);
+    throw new CalendarAccountNotFoundError();
   }
 
   assertRefreshable(account, dependencies.encryptionKey);
@@ -158,6 +163,7 @@ const createDefaultAccountCalendarRefreshDependencies = async (
 };
 
 export {
+  CalendarAccountNotFoundError,
   CalendarRefreshUnconfiguredError,
   CalendarRefreshUnsupportedError,
   createDefaultAccountCalendarRefreshDependencies,

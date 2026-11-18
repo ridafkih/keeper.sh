@@ -19,9 +19,16 @@ export interface BlogPostFaqEntry {
   question: string;
 }
 
+export interface ContentImage {
+  height: number;
+  src: string;
+  width: number;
+}
+
 export interface BlogPost {
   content: string;
   faq: BlogPostFaqEntry[];
+  images: ContentImage[];
   metadata: BlogPostMetadata;
   slug: string;
 }

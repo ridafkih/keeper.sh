@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/composites/navigation-menu/navigation-menu-items";
 import { track, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { providerIcons } from "@/lib/providers";
+import { buildCalendarConsentUrl } from "@/lib/sign-up-continuation";
 
 type Provider = "google" | "outlook";
 
@@ -128,7 +129,7 @@ export function LinkOAuthPreamble({ provider }: LinkOAuthPreambleProps) {
   const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     track(ANALYTICS_EVENTS.oauth_authorize_started, { oauth_is_reconnect: false, provider_name: provider });
-    window.location.href = `/api/sources/authorize?provider=${provider}`;
+    window.location.href = buildCalendarConsentUrl(provider, { forSignedInAccount: false });
   };
 
   return (

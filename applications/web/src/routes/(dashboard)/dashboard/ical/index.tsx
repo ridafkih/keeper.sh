@@ -91,7 +91,7 @@ function ICalFeedsPage() {
           onError={setMutationError}
         />
       </NavigationMenu>
-      {!canCreate && <PremiumHint>Free plans include one iCal feed.</PremiumHint>}
+      {!canCreate && <PremiumHint limit="ical_feeds">Free plans include one iCal feed.</PremiumHint>}
     </div>
   );
 }

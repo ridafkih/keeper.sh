@@ -19,6 +19,7 @@ import {
   MarketingToolGrid,
   MarketingToolPanel,
   MarketingToolSection,
+  MarketingToolSyncGuides,
 } from "@/features/marketing/components/marketing-tool";
 import { formatIcsDateValue, parseIcsFile, type ParsedIcsEvent } from "@/utils/ics";
 import { pluralize } from "@/lib/pluralize";
@@ -187,6 +188,8 @@ function IcsViewerPage() {
           {icsViewer.howRead.body}
         </Text>
       </MarketingToolSection>
+
+      {icsViewer.syncGuides && <MarketingToolSyncGuides {...icsViewer.syncGuides} />}
 
       <MarketingFaqSection>
         <Heading2 className="text-center">{icsViewer.faq.heading}</Heading2>

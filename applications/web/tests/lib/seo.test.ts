@@ -112,6 +112,17 @@ describe("seoMeta", () => {
     });
   });
 
+  it("leaves a title that already names the brand without a suffix", () => {
+    const meta = seoMeta({
+      title: "Keeper.sh pricing: free plan and $9 a month Pro",
+      description: "Plans and pricing.",
+      path: "/pricing",
+      brandPosition: "none",
+    });
+
+    expect(meta[0]).toEqual({ title: "Keeper.sh pricing: free plan and $9 a month Pro" });
+  });
+
   it("keeps the declared image dimensions at 1200x630", () => {
     const meta = seoMeta({
       title: "Pricing",
@@ -280,7 +291,12 @@ describe("personSchema", () => {
   });
 
   it("is the author a blog post points at and the organization's founder", () => {
-    const reference = { "@id": PERSON_ID, "@type": "Person", name: "Rida F'kih" };
+    const reference = {
+      "@id": PERSON_ID,
+      "@type": "Person",
+      name: "Rida F'kih",
+      url: "https://www.keeper.sh/about",
+    };
 
     expect(blogPostingSchema(post).author).toEqual(reference);
     expect(organizationSchema["@graph"][0]).toMatchObject({ founder: reference });
@@ -341,7 +357,7 @@ describe("offerCatalogSchema", () => {
 });
 
 describe("softwareApplicationSchema", () => {
-  it("offers Free, monthly Pro, and yearly Pro at 45 USD", () => {
+  it("offers Free, monthly Pro, and yearly Pro at 79 USD", () => {
     const { offers } = softwareApplicationSchema(marketingCopy.softwareSchema);
 
     expect(offers).toEqual([
@@ -354,22 +370,22 @@ describe("softwareApplicationSchema", () => {
       expect.objectContaining({
         "@type": "Offer",
         name: "Pro",
-        price: "5.00",
+        price: "9.00",
         priceCurrency: "USD",
         priceSpecification: expect.objectContaining({
           billingDuration: "P1M",
-          price: "5.00",
+          price: "9.00",
           priceCurrency: "USD",
         }),
       }),
       expect.objectContaining({
         "@type": "Offer",
         name: "Pro",
-        price: "45.00",
+        price: "79.00",
         priceCurrency: "USD",
         priceSpecification: expect.objectContaining({
           billingDuration: "P1Y",
-          price: "45.00",
+          price: "79.00",
           priceCurrency: "USD",
         }),
       }),

@@ -6,6 +6,7 @@ import { ErrorResponse } from "@/utils/responses";
 import { widelog } from "@/utils/logging";
 import { withWideEvent } from "@/utils/middleware";
 import { syncPolarSubscription } from "@/utils/polar-subscription-sync";
+import { describeCheckoutWebhook, describeSubscriptionWebhook } from "@/utils/billing-funnel";
 import { database } from "@/context";
 import env from "@/env";
 import { userSubscriptionsTable } from "@keeper.sh/database/schema";
@@ -97,10 +98,19 @@ const POST = withWideEvent(async ({ request }) => {
     widelog.set("operation.type", "webhook");
     widelog.set("webhook.provider", "polar");
     widelog.set("webhook.event_type", event.type);
-    widelog.set("webhook.subscription_id", event.data.id);
+
+    if (event.type === "checkout.created" || event.type === "checkout.updated") {
+      widelog.setFields(describeCheckoutWebhook(event.data));
+      return new Response(null, { status: HTTP_OK });
+    }
 
     if (!event.type.startsWith("subscription.") || !("customer" in event.data)) {
       return new Response(null, { status: HTTP_OK });
+    }
+
+    widelog.set("webhook.subscription_id", event.data.id);
+    if ("recurringInterval" in event.data) {
+      widelog.setFields(describeSubscriptionWebhook(event.type, event.data));
     }
 
     if ("cancelAtPeriodEnd" in event.data) {
