@@ -256,44 +256,6 @@ jobs:
               "${tag}-arm64"
           done
 
-  deploy-ec2:
-    runs-on: ubuntu-latest
-    needs: merge-core-manifests
-    if: ${{ !github.event.release.prerelease }}
-    concurrency:
-      group: production-deploy
-      cancel-in-progress: false
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "deploy/compose.yaml,deploy/Caddyfile,docker/caddy/Dockerfile"
-          target: /home/ubuntu
-
-      - uses: appleboy/ssh-action@823bd89e131d8d508129f9443cad5855e9ba96f0 # v1.2.4
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -euo pipefail
-
-            exec 9>/tmp/keeper-deploy.lock
-            flock 9
-
-            cd /home/ubuntu
-
-            cd deploy
-            docker compose pull
-            docker compose up -d --build --remove-orphans --wait
-            docker image prune -af --filter "until=24h"
-
   deploy-targets:
     runs-on: ubuntu-latest
     needs: merge-core-manifests
