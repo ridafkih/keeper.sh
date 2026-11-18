@@ -410,6 +410,25 @@ describe.skipIf(!administrativeUrl)("calendar chaining", () => {
       expect(await readSourceIds(aubreyAgainId)).toEqual([family.kidsId]);
       expect(await readDestinationSummaries(aubreyAgainId)).toEqual(["School play"]);
     });
+
+    it("inherits a calendar that only shares an identifier with another provider's", async () => {
+      const family = await seedFamily();
+      const [otherProviderAccount] = await db()
+        .insert(calendarAccountsTable)
+        .values({ authType: "oauth", provider: "outlook", userId: family.userId })
+        .returning({ id: calendarAccountsTable.id });
+      const inboxId = await seedCalendar(family.userId, otherProviderAccount?.id ?? "", "Inbox");
+      await db()
+        .update(calendarsTable)
+        .set({ externalCalendarId: "primary" })
+        .where(sql`${calendarsTable.id} in (${family.aubreyId}, ${inboxId})`);
+      await link(family.userId, family.kidsId, [family.secretopId, inboxId]);
+
+      await optIn(family.userId, family.kidsId, inboxId);
+
+      expect(await readSortedSourceIds(inboxId))
+        .toEqual([family.aubreyId, family.kidsId].toSorted());
+    });
   });
 
   describe("rules along a path", () => {

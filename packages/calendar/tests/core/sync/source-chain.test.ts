@@ -271,6 +271,25 @@ describe("resolveEffectiveDestinationIds", () => {
   });
 });
 
+describe("without any opted-in link", () => {
+  it("resolves destinations and mappings exactly as stored", () => {
+    const mappings = [
+      direct("a", "b"),
+      direct("b", "c"),
+      direct("a", "a"),
+      acrossOwners(direct("theirs", "b")),
+    ];
+
+    expect(resolveEffectiveDestinationIds(mappings, "a")).toEqual(["a", "b"]);
+    expect(resolveEffectiveDestinationIds(mappings, "theirs")).toEqual(["b"]);
+    expect(listEffectiveMappings(mappings)).toEqual(mappings.map((mapping) => ({
+      destinationCalendarId: mapping.destinationCalendarId,
+      sourceCalendarId: mapping.sourceCalendarId,
+      viaCalendarIds: [],
+    })));
+  });
+});
+
 describe("resolveDownstreamDestinationIds", () => {
   it("lists only the calendars that inherit what a destination receives", () => {
     const mappings = [direct("a", "b"), chained("b", "c"), direct("b", "x"), chained("c", "d")];

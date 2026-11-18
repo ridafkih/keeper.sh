@@ -146,20 +146,37 @@ const resolveDownstreamDestinationIds = (
 const listDestinationCalendarIds = (mappings: readonly SyncMapping[]): string[] =>
   [...new Set(mappings.map((mapping) => mapping.destinationCalendarId))].toSorted();
 
+const hasInheritingMapping = (mappings: readonly SyncMapping[]): boolean =>
+  mappings.some((mapping) => mapping.includeUpstreamSources);
+
 const resolveEffectiveDestinationIds = (
   mappings: readonly SyncMapping[],
   sourceCalendarId: string,
-): string[] =>
-  listDestinationCalendarIds(mappings).filter((destinationCalendarId) =>
+): string[] => {
+  if (!hasInheritingMapping(mappings)) {
+    return listDestinationCalendarIds(
+      mappings.filter((mapping) => mapping.sourceCalendarId === sourceCalendarId),
+    );
+  }
+  return listDestinationCalendarIds(mappings).filter((destinationCalendarId) =>
     resolveEffectiveSources(mappings, destinationCalendarId)
       .some((source) => source.sourceCalendarId === sourceCalendarId));
+};
 
-const listEffectiveMappings = (mappings: readonly SyncMapping[]): EffectiveMapping[] =>
-  listDestinationCalendarIds(mappings).flatMap((destinationCalendarId) =>
+const listEffectiveMappings = (mappings: readonly SyncMapping[]): EffectiveMapping[] => {
+  if (!hasInheritingMapping(mappings)) {
+    return mappings.map(({ destinationCalendarId, sourceCalendarId }) => ({
+      destinationCalendarId,
+      sourceCalendarId,
+      viaCalendarIds: [],
+    }));
+  }
+  return listDestinationCalendarIds(mappings).flatMap((destinationCalendarId) =>
     resolveEffectiveSources(mappings, destinationCalendarId).map((source) => ({
       ...source,
       destinationCalendarId,
     })));
+};
 
 const isInheritedSource = (source: EffectiveSource): boolean =>
   source.viaCalendarIds.length > 0;

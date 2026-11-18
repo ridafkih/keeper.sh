@@ -1,9 +1,10 @@
 import { calendarsTable, sourceDestinationMappingsTable } from "@keeper.sh/database/schema";
 import { and, arrayContains, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { getEffectiveDestinationIdsForSource } from "./effective-sources";
+import { getSyncMappingsOfCalendarOwner } from "./effective-sources";
 import type { SyncMappingReader } from "./effective-sources";
 import type { StoredDestinationRanges } from "./required-source-ranges";
+import { resolveEffectiveDestinationIds } from "./source-chain";
 
 const PUSH_CAPABILITY = "push";
 
@@ -21,8 +22,8 @@ const getInheritingDestinationRanges = async (
   directDestinationIds: string[],
 ): Promise<StoredDestinationRanges[]> => {
   const directDestinationIdSet = new Set(directDestinationIds);
-  const effectiveDestinationIds = await getEffectiveDestinationIdsForSource(
-    database,
+  const effectiveDestinationIds = resolveEffectiveDestinationIds(
+    await getSyncMappingsOfCalendarOwner(database, sourceCalendarId),
     sourceCalendarId,
   );
   const inheritingDestinationIds = effectiveDestinationIds

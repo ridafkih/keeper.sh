@@ -56,6 +56,18 @@ const createBuilder = <TRow>(
   return builder;
 };
 
+const readDirectDestinations = (ownedRows: CalendarRow[], mappingRows: MappingRow[]) => {
+  const ownedCalendarIds = new Set(ownedRows.map((row) => row.calendarId));
+  return mappingRows
+    .filter((row) => ownedCalendarIds.has(row.mapping.sourceCalendarId))
+    .map((row) => ({
+      destinationCalendarId: row.mapping.destinationCalendarId,
+      feedsInheritingLink: mappingRows.some((candidate) =>
+        candidate.mapping.includeUpstreamSources
+        && candidate.mapping.sourceCalendarId === row.mapping.destinationCalendarId),
+    }));
+};
+
 const createDatabase = (
   ownedRows: CalendarRow[],
   mappingRows: MappingRow[] = [],
@@ -67,6 +79,9 @@ const createDatabase = (
       selectCount += 1;
       if (selectCount === 1) {
         return createBuilder(ownedRows, capture);
+      }
+      if (selectCount === 2) {
+        return createBuilder(readDirectDestinations(ownedRows, mappingRows));
       }
       return createBuilder(mappingRows);
     },
@@ -119,7 +134,7 @@ describe("getCalendarsAffectedByAccountMutation", () => {
     );
 
     expect(result).toEqual({
-      calendarIds: ["source-1", "beyond-1", "final-1", "middle-1"],
+      calendarIds: ["source-1", "middle-1", "beyond-1", "final-1"],
       owned: true,
     });
   });

@@ -185,6 +185,7 @@ export {
 } from "./core/events/events";
 export { getEffectiveDestinationRangesForSource } from "./core/sync/effective-destination-ranges";
 export {
+  getEffectiveDestinationIdsForOwnedSources,
   getEffectiveDestinationIdsForSource,
   getEffectiveSourcesForDestination,
   getUserSyncMappings,

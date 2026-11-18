@@ -1,4 +1,4 @@
-import { getUserSyncMappings, resolveEffectiveDestinationIds } from "@keeper.sh/calendar";
+import { getEffectiveDestinationIdsForOwnedSources } from "@keeper.sh/calendar";
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -30,9 +30,10 @@ const getCalendarsAffectedByAccountMutation = async (
     return { calendarIds: [], owned: true };
   }
 
-  const mappings = await getUserSyncMappings(database, userId);
-  const downstreamCalendarIds = ownedCalendarIds.flatMap((calendarId) =>
-    resolveEffectiveDestinationIds(mappings, calendarId));
+  const downstreamCalendarIds = await getEffectiveDestinationIdsForOwnedSources(
+    database,
+    ownedCalendarIds,
+  );
 
   return {
     calendarIds: [...new Set([...ownedCalendarIds, ...downstreamCalendarIds])],
