@@ -81,8 +81,8 @@ describe("ingest wide-event identifier lists", () => {
     });
 
     expect(wideEvent["source_events.unsupported_count"]).toBe(20);
-    expect(String(wideEvent["source_events.unsupported_uids"])).not.toContain("more)");
-    expect(String(wideEvent["source_events.unsupported_uids"]).split(",")).toHaveLength(20);
+    expect(String(wideEvent["source_events.unsupported_uid_hashes"])).not.toContain("more)");
+    expect(String(wideEvent["source_events.unsupported_uid_hashes"]).split(",")).toHaveLength(20);
   });
 
   it("reports the omitted remainder once the list passes the sample limit", async () => {
@@ -92,7 +92,7 @@ describe("ingest wide-event identifier lists", () => {
     });
 
     expect(wideEvent["source_events.unsupported_count"]).toBe(21);
-    expect(String(wideEvent["source_events.unsupported_uids"])).toContain("(+1 more)");
+    expect(String(wideEvent["source_events.unsupported_uid_hashes"])).toContain("(+1 more)");
   });
 
   it("counts unsupported uids once when the provider repeats them", async () => {
@@ -105,14 +105,24 @@ describe("ingest wide-event identifier lists", () => {
     expect(wideEvent["source_events.unsupported_count"]).toBe(2);
   });
 
-  it("bounds a single pathologically long identifier", async () => {
+  it("reports a pathologically long identifier at a fixed length", async () => {
     const longUid = `${"x".repeat(9000)}@example.com`;
     const wideEvent = await runIngest({
       events: [sourceEvent(longUid)],
       unsupportedEventUids: [longUid],
     });
 
-    const value = String(wideEvent["source_events.unsupported_uids"]);
+    expect(String(wideEvent["source_events.unsupported_uid_hashes"])).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it("bounds a single pathologically long reason", async () => {
+    const wideEvent = await runIngest({
+      events: [],
+      skippedResourceCount: 1,
+      skippedResourceReasons: [`/cal/a.ics: ${"x".repeat(9000)}`],
+    });
+
+    const value = String(wideEvent["source_events.skipped_resource_reasons"]);
     expect(value.length).toBeLessThan(2200);
     expect(value).toContain("(truncated)");
   });

@@ -21,7 +21,7 @@ const ENGINE_WIDE_EVENT: IngestWideEventFields = {
   "source_events.count": 3,
   "source_events.discarded_outside_window": 2,
   "source_events.discarded_unrepresentable": 1,
-  "source_events.unsupported_uids": "moved@example.com",
+  "source_events.unsupported_uid_hashes": "3f1c0a9d5b7e2468",
 };
 
 vi.mock("@/utils/logging", () => ({
@@ -170,7 +170,7 @@ describe("the ingest job reads the engine's wide event rather than discarding it
     expect(values["source_events.discarded_unrepresentable"]).toBe(1);
     expect(values["source_events.discarded_outside_window"]).toBe(2);
     expect(values["source_events.count"]).toBe(3);
-    expect(values["source_events.unsupported_uids"]).toBe("moved@example.com");
+    expect(values["source_events.unsupported_uid_hashes"]).toBe("3f1c0a9d5b7e2468");
   });
 
   it("namespaces the engine's outcome instead of overwriting the job's own", () => {
