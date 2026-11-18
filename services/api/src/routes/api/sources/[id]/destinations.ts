@@ -7,6 +7,7 @@ import {
   getDestinationsForSource,
   changeDestinationsForSource,
 } from "@/utils/source-destination-mappings";
+import { readCustomizedDestinationIds } from "@/utils/mapping-sync-rules";
 import {
   handleGetSourceDestinationsRoute,
   handlePatchSourceDestinationsRoute,
@@ -18,6 +19,8 @@ const GET = withWideEvent(
     handleGetSourceDestinationsRoute(
       { params, userId },
       {
+        getCustomizedDestinationIds: (userIdToRead, sourceCalendarId) =>
+          readCustomizedDestinationIds(database, userIdToRead, sourceCalendarId),
         getDestinationsForSource,
         sourceExists: async (userIdToCheck, sourceCalendarId) => {
           const [source] = await database
