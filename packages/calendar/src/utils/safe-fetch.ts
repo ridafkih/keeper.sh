@@ -295,8 +295,15 @@ const markWithheldCredentials = (response: Response, redirectedTo: string): Resp
 const getWithheldCredentials = (response: Response): WithheldCredentials | null =>
   (Reflect.get(response, WITHHELD_CREDENTIALS) as WithheldCredentials | undefined) ?? null;
 
-const limitResponse = (response: Response, options: SafeFetchOptions | undefined): Response => {
-  const limited = limitResponseBody(response, options?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES);
+const limitResponse = (
+  response: Response,
+  options: SafeFetchOptions | undefined,
+  transfer: AbortController,
+): Response => {
+  const limited = limitResponseBody(response, {
+    maxBytes: options?.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES,
+    stopTransfer: (reason) => transfer.abort(reason),
+  });
   const withheld = getWithheldCredentials(response);
   if (!withheld || limited === response) {
     return limited;
@@ -472,8 +479,9 @@ const resolveExternalSignal = (
   input: string | Request | URL,
   init: RequestInit | undefined,
   options: SafeFetchOptions | undefined,
+  transfer: AbortController,
 ): AbortSignal | null => {
-  const signals: AbortSignal[] = [];
+  const signals: AbortSignal[] = [transfer.signal];
   if (options?.signal) {
     signals.push(options.signal);
   }
@@ -500,7 +508,8 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
 
     const callerWantsManual = init?.redirect === "manual";
 
-    const externalSignal = resolveExternalSignal(input, init, options);
+    const transfer = new AbortController();
+    const externalSignal = resolveExternalSignal(input, init, options, transfer);
     const timeout = resolveTimeoutSignal(options, externalSignal);
     const signal = resolveRequestSignal(timeout, externalSignal);
     const headers = mergeHeaderRecord(input, init);
@@ -509,15 +518,19 @@ const createSafeFetch = (options?: SafeFetchOptions): SafeFetch => async (input,
       const response = await performFetch(input, { ...init, redirect: "manual", signal }, headers, connection);
 
       if (!isRedirect(response)) {
-        return limitResponse(response, options);
+        return limitResponse(response, options, transfer);
       }
 
       if (callerWantsManual) {
         assertManualRedirectKeepsCredentials(url, response);
-        return limitResponse(response, options);
+        return limitResponse(response, options, transfer);
       }
 
-      return limitResponse(await followRedirects(url, response, init, headers, options, signal), options);
+      return limitResponse(
+        await followRedirects(url, response, init, headers, options, signal),
+        options,
+        transfer,
+      );
     } catch (error) {
       if (timeout?.isTimeout() && options?.timeoutMs) {
         throw new RequestTimeoutError(options.timeoutMs);

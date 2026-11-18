@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import { createGzip } from "node:zlib";
+import { constants, createGzip } from "node:zlib";
 
 type RouteHandler = (request: IncomingMessage, response: ServerResponse) => void;
 
@@ -10,7 +10,8 @@ interface RemoteBodyServer {
 }
 
 interface EndlessBodyTracker {
-  hungUp: Promise<null>;
+  hangUp: () => void;
+  stalled: () => Promise<number>;
   uncompressedBytes: () => number;
 }
 
@@ -18,6 +19,16 @@ interface EndlessBody {
   handler: RouteHandler;
   tracker: EndlessBodyTracker;
 }
+
+const RUNTIME_STOPS_ABORTED_TRANSFERS = Bun.semver.satisfies(Bun.version, ">=1.4.4");
+
+const STALL_SAMPLE_MS = 100;
+const STALL_SAMPLES = 3;
+
+const delay = (milliseconds: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 
 const listen = (server: Server): Promise<number> =>
   new Promise((resolve, reject) => {
@@ -54,13 +65,26 @@ const startRemoteBodyServer = async (routes: Record<string, RouteHandler>): Prom
   };
 };
 
-const createEndlessGzipBody = (block: Buffer, headers: Record<string, string>): EndlessBody => {
+type EndlessBodyEncoding = "deflated" | "stored";
+
+const GZIP_LEVELS: Record<EndlessBodyEncoding, number> = {
+  deflated: constants.Z_DEFAULT_COMPRESSION,
+  stored: constants.Z_NO_COMPRESSION,
+};
+
+const createEndlessGzipBody = (
+  block: Buffer,
+  headers: Record<string, string>,
+  encoding: EndlessBodyEncoding,
+  status = 200,
+): EndlessBody => {
   let uncompressedBytes = 0;
-  const hangUp = Promise.withResolvers<null>();
+  const openResponses = new Set<ServerResponse>();
 
   const handler: RouteHandler = (_request, response) => {
-    const gzip = createGzip();
-    response.writeHead(200, { ...headers, "content-encoding": "gzip" });
+    openResponses.add(response);
+    const gzip = createGzip({ level: GZIP_LEVELS[encoding] });
+    response.writeHead(status, { ...headers, "content-encoding": "gzip" });
     gzip.pipe(response);
 
     const pump = (): void => {
@@ -74,17 +98,36 @@ const createEndlessGzipBody = (block: Buffer, headers: Record<string, string>): 
     };
 
     response.once("close", () => {
+      openResponses.delete(response);
       gzip.destroy();
-      hangUp.resolve(null);
     });
     pump();
   };
 
-  return {
-    handler,
-    tracker: { hungUp: hangUp.promise, uncompressedBytes: () => uncompressedBytes },
+  const hangUp = (): void => {
+    for (const response of openResponses) {
+      response.destroy();
+    }
   };
+
+  const stalled = async (): Promise<number> => {
+    let unchangedSamples = 0;
+    let lastSample = uncompressedBytes;
+
+    while (unchangedSamples < STALL_SAMPLES) {
+      await delay(STALL_SAMPLE_MS);
+      if (uncompressedBytes === lastSample) {
+        unchangedSamples += 1;
+      } else {
+        unchangedSamples = 0;
+        lastSample = uncompressedBytes;
+      }
+    }
+
+    return lastSample;
+  };
+
+  return { handler, tracker: { hangUp, stalled, uncompressedBytes: () => uncompressedBytes } };
 };
 
-export { createEndlessGzipBody, startRemoteBodyServer };
-export type { RemoteBodyServer };
+export { createEndlessGzipBody, RUNTIME_STOPS_ABORTED_TRANSFERS, startRemoteBodyServer };

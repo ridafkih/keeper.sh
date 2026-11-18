@@ -93,6 +93,39 @@ const readFeedBody = async (response: Response): Promise<string> => {
   }
 };
 
+const resolveStatusFailure = (response: Response): CalendarFetchError | null => {
+  /* Response.ok covers 206 too, and a range fragment would diff as deletions. */
+  if (response.status === HTTP_STATUS_PARTIAL_CONTENT) {
+    return new CalendarFetchError(
+      "Calendar server returned a partial (206) response; refusing to treat a fragment as the whole feed.",
+      { reason: "partial_response", statusCode: response.status },
+    );
+  }
+
+  if (response.ok) {
+    return null;
+  }
+
+  if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
+    return new CalendarFetchError(
+      "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
+      { reason: "auth_required", statusCode: response.status },
+    );
+  }
+
+  if (response.status === HTTP_STATUS.NOT_FOUND) {
+    return new CalendarFetchError(
+      "Calendar not found. Check that the URL is correct.",
+      { reason: "not_found", statusCode: response.status },
+    );
+  }
+
+  return new CalendarFetchError(
+    `Failed to fetch calendar (HTTP ${response.status})`,
+    { reason: "http_error", statusCode: response.status },
+  );
+};
+
 const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise<string> => {
   const { url: cleanUrl, headers } = parseUrlWithCredentials(url);
   const safeFetch = createSafeFetch({ maxResponseBytes: MAX_ICS_FEED_BYTES, ...options });
@@ -100,33 +133,10 @@ const fetchRemoteText = async (url: string, options?: SafeFetchOptions): Promise
     headers: { "User-Agent": ICS_USER_AGENT, ...headers },
   });
 
-  /* Response.ok covers 206 too, and a range fragment would diff as deletions. */
-  if (response.status === HTTP_STATUS_PARTIAL_CONTENT) {
-    throw new CalendarFetchError(
-      "Calendar server returned a partial (206) response; refusing to treat a fragment as the whole feed.",
-      { reason: "partial_response", statusCode: response.status },
-    );
-  }
-
-  if (!response.ok) {
-    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
-      throw new CalendarFetchError(
-        "Calendar requires authentication. Use a public URL or include credentials in the URL (https://user:pass@host/path).",
-        { reason: "auth_required", statusCode: response.status },
-      );
-    }
-
-    if (response.status === HTTP_STATUS.NOT_FOUND) {
-      throw new CalendarFetchError(
-        "Calendar not found. Check that the URL is correct.",
-        { reason: "not_found", statusCode: response.status },
-      );
-    }
-
-    throw new CalendarFetchError(
-      `Failed to fetch calendar (HTTP ${response.status})`,
-      { reason: "http_error", statusCode: response.status },
-    );
+  const statusFailure = resolveStatusFailure(response);
+  if (statusFailure) {
+    await response.body?.cancel();
+    throw statusFailure;
   }
 
   return readFeedBody(response);

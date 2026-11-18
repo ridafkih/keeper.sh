@@ -1,10 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { MAX_CALDAV_RESPONSE_BYTES } from "../../../../src/providers/caldav/shared/api";
 import { CalDAVClient } from "../../../../src/providers/caldav/shared/client";
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 import { isResponseTooLargeError, ResponseTooLargeError } from "../../../../src/utils/bounded-response";
-import { createEndlessGzipBody, startRemoteBodyServer } from "../../../utils/remote-body-server";
+import {
+  createEndlessGzipBody,
+  RUNTIME_STOPS_ABORTED_TRANSFERS,
+  startRemoteBodyServer,
+} from "../../../utils/remote-body-server";
 
 const CALENDAR_PATH = "/cal/user/";
 const OBJECT_HREF = `${CALENDAR_PATH}event-1.ics`;
@@ -21,8 +25,9 @@ const RESPONSE_ROW = Buffer.from(
   `<d:response><d:href>${CALENDAR_PATH}${"a".repeat(1024)}.ics</d:href></d:response>`.repeat(512),
 );
 
-const endlessListing = createEndlessGzipBody(RESPONSE_ROW, XML_HEADERS);
-const endlessObjects = createEndlessGzipBody(RESPONSE_ROW, XML_HEADERS);
+const endlessListing = createEndlessGzipBody(RESPONSE_ROW, XML_HEADERS, "stored");
+const endlessDeflatedListing = createEndlessGzipBody(RESPONSE_ROW, XML_HEADERS, "deflated");
+const endlessObjects = createEndlessGzipBody(RESPONSE_ROW, XML_HEADERS, "stored");
 
 const readRequestBody = async (request: AsyncIterable<Buffer>): Promise<string> => {
   const chunks: Buffer[] = [];
@@ -52,6 +57,7 @@ const answerObjectsRequest = async (request: IncomingMessage, response: ServerRe
 };
 
 const server = await startRemoteBodyServer({
+  [`/deflated${CALENDAR_PATH}`]: endlessDeflatedListing.handler,
   [`/listing${CALENDAR_PATH}`]: endlessListing.handler,
   [`/objects${CALENDAR_PATH}`]: (request, response) => {
     answerObjectsRequest(request, response).catch(() => response.destroy());
@@ -65,36 +71,65 @@ const createClient = (basePath: string): CalDAVClient =>
     serverUrl: server.url(basePath),
   });
 
+afterEach(() => {
+  for (const { tracker } of [endlessListing, endlessDeflatedListing, endlessObjects]) {
+    tracker.hangUp();
+  }
+});
+
 afterAll(async () => {
   await server.close();
 });
 
 describe("CalDAV response size limit", () => {
-  it("stops a calendar listing that never ends", async () => {
+  it("refuses a calendar listing that never ends", async () => {
     const client = createClient("/listing/");
-    const residentBefore = process.memoryUsage().rss;
 
     const error = await captureRejection(
       client.fetchCalendarObjects({ calendarUrl: server.url(`/listing${CALENDAR_PATH}`) }),
     );
-    const residentGrowth = process.memoryUsage().rss - residentBefore;
-    await endlessListing.tracker.hungUp;
 
     expect(error).toBeInstanceOf(ResponseTooLargeError);
     expect(error).toMatchObject({ limitBytes: MAX_CALDAV_RESPONSE_BYTES });
-    expect(residentGrowth).toBeLessThan(MAX_CALDAV_RESPONSE_BYTES * 4);
   });
 
-  it("stops a multiget response that never ends", async () => {
+  it("refuses a multiget response that never ends", async () => {
     const client = createClient("/objects/");
 
     const error = await captureRejection(
       client.fetchCalendarObjects({ calendarUrl: server.url(`/objects${CALENDAR_PATH}`) }),
     );
-    await endlessObjects.tracker.hungUp;
 
     expect(isResponseTooLargeError(error)).toBe(true);
+    expect(endlessObjects.tracker.uncompressedBytes()).toBeGreaterThan(MAX_CALDAV_RESPONSE_BYTES);
   });
+
+  it("keeps memory bounded while refusing a listing that inflates without end", async () => {
+    const client = createClient("/deflated/");
+    const residentBefore = process.memoryUsage().rss;
+
+    const error = await captureRejection(
+      client.fetchCalendarObjects({ calendarUrl: server.url(`/deflated${CALENDAR_PATH}`) }),
+    );
+    const residentGrowth = process.memoryUsage().rss - residentBefore;
+
+    expect(isResponseTooLargeError(error)).toBe(true);
+    expect(residentGrowth).toBeLessThan(MAX_CALDAV_RESPONSE_BYTES * 4);
+  });
+
+  it.runIf(RUNTIME_STOPS_ABORTED_TRANSFERS)(
+    "stops downloading a calendar listing that never ends",
+    async () => {
+      const client = createClient("/listing/");
+
+      await captureRejection(
+        client.fetchCalendarObjects({ calendarUrl: server.url(`/listing${CALENDAR_PATH}`) }),
+      );
+      const servedWhenStalled = await endlessListing.tracker.stalled();
+
+      expect(endlessListing.tracker.uncompressedBytes()).toBe(servedWhenStalled);
+    },
+  );
 
   it("does not mistake an oversized response for rejected credentials", async () => {
     const client = createClient("/listing/");

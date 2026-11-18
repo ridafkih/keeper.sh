@@ -1,12 +1,16 @@
 import { gzipSync } from "node:zlib";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { isTimeoutError } from "../../src/core/utils/fetch-with-timeout";
 import {
   createSafeFetch,
   DEFAULT_MAX_RESPONSE_BYTES,
   ResponseTooLargeError,
 } from "../../src/utils/safe-fetch";
-import { createEndlessGzipBody, startRemoteBodyServer } from "./remote-body-server";
+import {
+  createEndlessGzipBody,
+  RUNTIME_STOPS_ABORTED_TRANSFERS,
+  startRemoteBodyServer,
+} from "./remote-body-server";
 
 const MEBIBYTE = 1024 * 1024;
 const LIMIT_BYTES = 2 * MEBIBYTE;
@@ -15,8 +19,13 @@ const PADDING_BLOCK = Buffer.alloc(MEBIBYTE, "A");
 const SMALL_BODY = "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n";
 const COMPRESSIBLE_BODY = Buffer.alloc(LIMIT_BYTES * 4, "A");
 
-const endless = createEndlessGzipBody(PADDING_BLOCK, { "content-type": "text/calendar" });
-const endlessUnderDefault = createEndlessGzipBody(PADDING_BLOCK, { "content-type": "text/calendar" });
+const CALENDAR_HEADERS = { "content-type": "text/calendar" };
+const TRANSFER_SLACK_BYTES = 64 * MEBIBYTE;
+
+const endlessRead = createEndlessGzipBody(PADDING_BLOCK, CALENDAR_HEADERS, "stored");
+const endlessCancelled = createEndlessGzipBody(PADDING_BLOCK, CALENDAR_HEADERS, "stored");
+const endlessSignalled = createEndlessGzipBody(PADDING_BLOCK, CALENDAR_HEADERS, "stored");
+const endlessUnderDefault = createEndlessGzipBody(PADDING_BLOCK, CALENDAR_HEADERS, "deflated");
 
 const captureRejection = async (operation: Promise<unknown>): Promise<unknown> => {
   try {
@@ -40,8 +49,10 @@ const server = await startRemoteBodyServer({
     response.writeHead(200, { "content-length": String(LIMIT_BYTES + 1) });
     response.write("BEGIN:VCALENDAR\r\n");
   },
-  "/endless": endless.handler,
+  "/endless-cancelled": endlessCancelled.handler,
   "/endless-default": endlessUnderDefault.handler,
+  "/endless-read": endlessRead.handler,
+  "/endless-signalled": endlessSignalled.handler,
   "/small": (_request, response) => {
     const compressed = gzipSync(SMALL_BODY);
     response.writeHead(200, { "content-encoding": "gzip" });
@@ -51,6 +62,24 @@ const server = await startRemoteBodyServer({
     response.writeHead(200, { "content-type": "text/calendar" });
     response.write("BEGIN:VCALENDAR\r\n");
   },
+});
+
+const observeRequestSignals = (): (() => AbortSignal[]) => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch");
+  return () =>
+    fetchSpy.mock.calls.flatMap(([, init]) => {
+      if (!init?.signal) {
+        return [];
+      }
+      return [init.signal];
+    });
+};
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const { tracker } of [endlessRead, endlessCancelled, endlessSignalled, endlessUnderDefault]) {
+    tracker.hangUp();
+  }
 });
 
 afterAll(async () => {
@@ -77,16 +106,67 @@ describe("createSafeFetch response size limit", () => {
     expect(error).toBeInstanceOf(ResponseTooLargeError);
   });
 
-  it("stops a compressed body that never ends and hangs up on the server", async () => {
+  it("aborts the request once the body passes the limit", async () => {
+    const readSignals = observeRequestSignals();
     const safeFetch = createSafeFetch({ maxResponseBytes: LIMIT_BYTES });
 
-    const response = await safeFetch(server.url("/endless"));
+    const response = await safeFetch(server.url("/endless-signalled"));
     const error = await captureRejection(response.text());
-    await endless.tracker.hungUp;
+    await vi.waitFor(() => expect(readSignals().every((signal) => signal.aborted)).toBe(true));
 
     expect(error).toBeInstanceOf(ResponseTooLargeError);
-    expect(endless.tracker.uncompressedBytes()).toBeGreaterThan(LIMIT_BYTES);
+    expect(readSignals()).toHaveLength(1);
   });
+
+  it("aborts the request when its caller gives up on the body", async () => {
+    const readSignals = observeRequestSignals();
+    const safeFetch = createSafeFetch({ maxResponseBytes: LIMIT_BYTES });
+
+    const response = await safeFetch(server.url("/endless-signalled"));
+    await response.body?.cancel();
+
+    expect(readSignals().map((signal) => signal.aborted)).toEqual([true]);
+  });
+
+  it("leaves the request running while its body is within the limit", async () => {
+    const readSignals = observeRequestSignals();
+    const safeFetch = createSafeFetch({ maxResponseBytes: LIMIT_BYTES });
+
+    const response = await safeFetch(server.url("/small"));
+    await response.text();
+
+    expect(readSignals().map((signal) => signal.aborted)).toEqual([false]);
+  });
+
+  it.runIf(RUNTIME_STOPS_ABORTED_TRANSFERS)(
+    "stops downloading a compressed body that never ends once the limit is passed",
+    async () => {
+      const safeFetch = createSafeFetch({ maxResponseBytes: LIMIT_BYTES });
+
+      const response = await safeFetch(server.url("/endless-read"));
+      const error = await captureRejection(response.text());
+      const servedWhenStalled = await endlessRead.tracker.stalled();
+
+      expect(error).toBeInstanceOf(ResponseTooLargeError);
+      expect(servedWhenStalled).toBeGreaterThan(LIMIT_BYTES);
+      expect(servedWhenStalled).toBeLessThan(LIMIT_BYTES + TRANSFER_SLACK_BYTES);
+      expect(endlessRead.tracker.uncompressedBytes()).toBe(servedWhenStalled);
+    },
+  );
+
+  it.runIf(RUNTIME_STOPS_ABORTED_TRANSFERS)(
+    "stops downloading a body its caller gives up on without reading",
+    async () => {
+      const safeFetch = createSafeFetch({ maxResponseBytes: LIMIT_BYTES });
+
+      const response = await safeFetch(server.url("/endless-cancelled"));
+      await response.body?.cancel();
+      const servedWhenStalled = await endlessCancelled.tracker.stalled();
+
+      expect(servedWhenStalled).toBeLessThan(TRANSFER_SLACK_BYTES);
+      expect(endlessCancelled.tracker.uncompressedBytes()).toBe(servedWhenStalled);
+    },
+  );
 
   it("keeps memory bounded while a never-ending compressed body is refused by default", async () => {
     const safeFetch = createSafeFetch();
@@ -95,7 +175,6 @@ describe("createSafeFetch response size limit", () => {
     const response = await safeFetch(server.url("/endless-default"));
     const error = await captureRejection(response.text());
     const residentGrowth = process.memoryUsage().rss - residentBefore;
-    await endlessUnderDefault.tracker.hungUp;
 
     expect(error).toMatchObject({ limitBytes: DEFAULT_MAX_RESPONSE_BYTES });
     expect(residentGrowth).toBeLessThan(DEFAULT_MAX_RESPONSE_BYTES * 4);
