@@ -15,7 +15,7 @@ const REGISTRATION_FAILED_SLUG = "webhook-registration-failed";
  * connection: the sweep remains the safety net and will pick the account up regardless.
  */
 const registerAccountPushChannels = async (accountId: string): Promise<void> => {
-  const { database, env, redis, refreshLockStore, webhookConfig } = await import(
+  const { database, env, microsoftCredentials, redis, refreshLockStore, webhookConfig } = await import(
     "@/context",
   );
 
@@ -29,8 +29,7 @@ const registerAccountPushChannels = async (accountId: string): Promise<void> => 
       googleClientId: env.GOOGLE_CLIENT_ID,
       googleClientSecret: env.GOOGLE_CLIENT_SECRET,
       googleProjectRequestsPerMinute: env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
-      microsoftClientId: env.MICROSOFT_CLIENT_ID,
-      microsoftClientSecret: env.MICROSOFT_CLIENT_SECRET,
+      microsoftCredentials,
       rateLimiterRedis: redis,
       refreshLockStore,
       webhookConfig,

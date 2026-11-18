@@ -18,8 +18,7 @@ import {
 import { importOAuthAccountCalendars } from "@/utils/oauth-sources";
 import { noteUserMilestone } from "@/utils/user-milestones";
 import { resolveProviderFailureReason } from "@/utils/oauth-callback-failure";
-import { baseUrl } from "@/context";
-import env from "@/env";
+import { baseUrl, microsoftCredentials } from "@/context";
 import { buildMicrosoftAdminConsentUrl } from "@/utils/microsoft-admin-consent";
 import type { OAuthConnectFailureReason } from "@keeper.sh/data-schemas";
 
@@ -32,12 +31,12 @@ const buildCallbackUrl = (provider: string): string =>
   new URL(`/api/sources/callback/${provider}`, baseUrl).toString();
 
 const resolveApprovalUrl = (reason: OAuthConnectFailureReason): string | null => {
-  if (reason !== "admin-approval-required" || !env.MICROSOFT_CLIENT_ID) {
+  if (reason !== "admin-approval-required" || !microsoftCredentials) {
     return null;
   }
   return buildMicrosoftAdminConsentUrl({
     callbackUrl: buildCallbackUrl("outlook"),
-    clientId: env.MICROSOFT_CLIENT_ID,
+    credentials: microsoftCredentials,
   });
 };
 

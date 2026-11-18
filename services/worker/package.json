@@ -15,6 +15,7 @@
   "dependencies": {
     "@keeper.sh/broadcast": "workspace:*",
     "@keeper.sh/calendar": "workspace:*",
+    "@keeper.sh/data-schemas": "workspace:*",
     "@keeper.sh/database": "workspace:*",
     "@keeper.sh/otelemetry": "workspace:*",
     "@keeper.sh/queue": "workspace:*",

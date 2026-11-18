@@ -1,9 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
+import type { MicrosoftDirectoryTenant } from "@keeper.sh/data-schemas";
+import { buildOAuthConfigs } from "../../../src/core/oauth/config";
 import { createGoogleOAuthService } from "../../../src/core/oauth/google";
-import { createMicrosoftOAuthService } from "../../../src/core/oauth/microsoft";
+import {
+  createMicrosoftOAuthService,
+  createMicrosoftTokenRefresher,
+} from "../../../src/core/oauth/microsoft";
 
 const MS_PER_SECOND = 1000;
 const CALLBACK_URL = "https://calendar.test.invalid/api/oauth/callback";
+const DIRECTORY_ID = "abcdef01-2345-6789-abcd-ef0123456789";
+const DIRECTORY_TENANT = microsoftDirectoryTenantSchema.assert(DIRECTORY_ID);
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 const createTestStateStore = () => {
   const store = new Map<string, { value: string; expiresAt: number }>();
@@ -27,6 +39,21 @@ const buildMicrosoftAuthorizationUrl = async (): Promise<URL> => {
   const service = createMicrosoftOAuthService({
     clientId: "microsoft-test-client-id",
     clientSecret: "microsoft-test-client-secret",
+    tenant: "common",
+  }, createTestStateStore());
+
+  const authorizationUrl = await service.getAuthorizationUrl("user-test-1", {
+    callbackUrl: CALLBACK_URL,
+  });
+
+  return new URL(authorizationUrl);
+};
+
+const buildTenantMicrosoftAuthorizationUrl = async (tenant: MicrosoftDirectoryTenant): Promise<URL> => {
+  const service = createMicrosoftOAuthService({
+    clientId: "microsoft-test-client-id",
+    clientSecret: "microsoft-test-client-secret",
+    tenant,
   }, createTestStateStore());
 
   const authorizationUrl = await service.getAuthorizationUrl("user-test-1", {
@@ -62,6 +89,60 @@ describe("microsoft getAuthorizationUrl", () => {
     expect(searchParams.get("response_type")).toBe("code");
     expect(searchParams.get("response_mode")).toBe("query");
     expect(searchParams.get("scope")).toBe("Calendars.ReadWrite User.Read offline_access");
+  });
+
+  it("uses the configured tenant authority", async () => {
+    const parsed = await buildTenantMicrosoftAuthorizationUrl(DIRECTORY_TENANT);
+
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/authorize`,
+    );
+  });
+
+  it("carries the configured tenant into the Microsoft credentials", () => {
+    const configs = buildOAuthConfigs({
+      MICROSOFT_CLIENT_ID: "microsoft-test-client-id",
+      MICROSOFT_CLIENT_SECRET: "microsoft-test-client-secret",
+      MICROSOFT_TENANT_ID: DIRECTORY_TENANT,
+    });
+
+    expect(configs.microsoft?.tenant).toBe(DIRECTORY_ID);
+  });
+
+  it("uses the common tenant when none is configured", () => {
+    const configs = buildOAuthConfigs({
+      MICROSOFT_CLIENT_ID: "microsoft-test-client-id",
+      MICROSOFT_CLIENT_SECRET: "microsoft-test-client-secret",
+    });
+
+    expect(configs.microsoft?.tenant).toBe("common");
+  });
+
+  it("uses the configured tenant for code exchange and token refresh", async () => {
+    const requestedUrls: string[] = [];
+    vi.stubGlobal("fetch", (input: Parameters<typeof fetch>[0]) => {
+      requestedUrls.push(String(input));
+      return Promise.resolve(Response.json({
+        access_token: "access-token",
+        expires_in: 3600,
+        scope: "Calendars.ReadWrite User.Read offline_access",
+        token_type: "Bearer",
+      }));
+    });
+
+    const credentials = {
+      clientId: "microsoft-test-client-id",
+      clientSecret: "microsoft-test-client-secret",
+      tenant: DIRECTORY_TENANT,
+    };
+    const service = createMicrosoftOAuthService(credentials, createTestStateStore());
+    await service.exchangeCodeForTokens("authorization-code", CALLBACK_URL);
+    await createMicrosoftTokenRefresher(credentials)("refresh-token");
+
+    expect(requestedUrls).toEqual([
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/token`,
+      `https://login.microsoftonline.com/${DIRECTORY_ID}/oauth2/v2.0/token`,
+    ]);
   });
 
   it("carries an opaque state value", async () => {

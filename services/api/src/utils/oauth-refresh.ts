@@ -5,7 +5,7 @@ import {
 import { createGoogleTokenRefresher } from "@keeper.sh/calendar";
 import { createMicrosoftTokenRefresher } from "@keeper.sh/calendar";
 import { eq } from "drizzle-orm";
-import { database, env } from "@/context";
+import { database, env, microsoftCredentials } from "@/context";
 
 const FIRST_RESULT_LIMIT = 1;
 const MS_PER_SECOND = 1000;
@@ -58,14 +58,11 @@ const refreshMicrosoftAccessToken = async (
   accountId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
+  if (!microsoftCredentials) {
     throw new Error("Microsoft OAuth not configured");
   }
 
-  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  });
+  const refreshMicrosoftToken = createMicrosoftTokenRefresher(microsoftCredentials);
 
   const tokenData = await refreshMicrosoftToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);
@@ -128,14 +125,11 @@ const refreshMicrosoftSourceAccessToken = async (
   credentialId: string,
   refreshToken: string,
 ): Promise<RefreshResult> => {
-  if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) {
+  if (!microsoftCredentials) {
     throw new Error("Microsoft OAuth not configured");
   }
 
-  const refreshMicrosoftToken = createMicrosoftTokenRefresher({
-    clientId: env.MICROSOFT_CLIENT_ID,
-    clientSecret: env.MICROSOFT_CLIENT_SECRET,
-  });
+  const refreshMicrosoftToken = createMicrosoftTokenRefresher(microsoftCredentials);
 
   const tokenData = await refreshMicrosoftToken(refreshToken);
   const newExpiresAt = new Date(Date.now() + tokenData.expires_in * MS_PER_SECOND);

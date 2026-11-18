@@ -1,4 +1,5 @@
 import arkenv from "arkenv";
+import { microsoftDirectoryTenantSchema } from "@keeper.sh/data-schemas";
 
 const schema = {
   PRIVATE_RESOLUTION_WHITELIST: "string?",
@@ -28,6 +29,7 @@ const schema = {
   INGEST_WAKE_IDLE_MS: "number?",
   MICROSOFT_CLIENT_ID: "string?",
   MICROSOFT_CLIENT_SECRET: "string?",
+  MICROSOFT_TENANT_ID: microsoftDirectoryTenantSchema.optional(),
   OUTLOOK_INGEST_REQUESTS_PER_MINUTE: "number?",
   REDIS_URL: "string.url",
   WEBHOOK_PUBLIC_URL: "string.url?",

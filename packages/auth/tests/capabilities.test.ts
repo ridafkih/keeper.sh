@@ -7,8 +7,11 @@ describe("resolveAuthCapabilities", () => {
       commercialMode: false,
       googleClientId: "google-client-id",
       googleClientSecret: "google-client-secret",
-      microsoftClientId: "microsoft-client-id",
-      microsoftClientSecret: "microsoft-client-secret",
+      microsoftCredentials: {
+        clientId: "microsoft-client-id",
+        clientSecret: "microsoft-client-secret",
+        tenant: "common",
+      },
       passkeyOrigin: "https://keeper.sh",
       passkeyRpId: "keeper.sh",
     });
@@ -32,8 +35,11 @@ describe("resolveAuthCapabilities", () => {
       commercialMode: true,
       googleClientId: "google-client-id",
       googleClientSecret: "google-client-secret",
-      microsoftClientId: "microsoft-client-id",
-      microsoftClientSecret: "microsoft-client-secret",
+      microsoftCredentials: {
+        clientId: "microsoft-client-id",
+        clientSecret: "microsoft-client-secret",
+        tenant: "common",
+      },
       passkeyOrigin: "https://keeper.sh",
       passkeyRpId: "keeper.sh",
     });
