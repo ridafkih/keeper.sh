@@ -36,6 +36,10 @@ const ICS_FEED_FAILURE_COPY: Record<IcsFeedFailureReason, FeedFailureCopy> = {
     hint: "Check that it's the full feed URL.",
     message: "Nothing was found at this link.",
   },
+  "too-large": {
+    hint: "Use a feed that covers fewer calendars or a shorter date range.",
+    message: "This feed is too large to sync.",
+  },
   unreachable: {
     hint: "Check the link and try again.",
     message: "This feed couldn't be reached.",

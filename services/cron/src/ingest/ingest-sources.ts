@@ -19,6 +19,7 @@ import {
   ensureValidToken,
   REDIS_UNAVAILABLE_SLUG,
   isRedisUnavailableError,
+  isResponseTooLargeError,
   isTimeoutError,
   buildReauthenticationDemandFields,
   resolveReauthenticationDemandAction,
@@ -251,6 +252,9 @@ const resolveIngestErrorSlug = (error: unknown): string => {
   if (error instanceof CalDAVUnreadableResourceError) {
     recordSkippedResources(error.skippedResourceCount, error.skippedResourceReasons);
     return "provider-partial-response";
+  }
+  if (isResponseTooLargeError(error)) {
+    return "provider-response-too-large";
   }
   if (!isTimeoutError(error)) {
     return "provider-api-error";

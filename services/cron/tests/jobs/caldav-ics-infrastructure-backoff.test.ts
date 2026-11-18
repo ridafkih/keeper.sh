@@ -1,12 +1,21 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { createSerialFlushWorker } from "@keeper.sh/calendar";
+import {
+  createSerialFlushWorker,
+  resolveCalendarBackoffDelayMs,
+  resolveIngestScheduleDecision,
+} from "@keeper.sh/calendar";
+import { CalendarFetchError } from "@keeper.sh/calendar/ics";
+import { ResponseTooLargeError } from "@keeper.sh/calendar/safe-fetch";
 import {
   WEIGHT_BUDGET,
 } from "../../src/utils/ingest-weight";
 import { OperationTimeoutError, withAbortTimeout } from "../../src/utils/with-abort-timeout";
 import { isIngestInfrastructureError } from "../../src/utils/error-flags";
-import { shouldTreatAsProviderAuthFailure } from "../../src/utils/provider-ingest-failure";
+import {
+  resolveMissingCalendarFailure,
+  shouldTreatAsProviderAuthFailure,
+} from "../../src/utils/provider-ingest-failure";
 
 const shouldApplyCalDavIngestBackoff = (error: unknown): boolean =>
   !shouldTreatAsProviderAuthFailure(error) && !isIngestInfrastructureError(error);
@@ -97,5 +106,41 @@ describe("ICS backoff gate versus ingest infrastructure errors", () => {
     const caught = await produceShutdownRejection();
     expect(isIngestInfrastructureError(caught)).toBe(true);
     expect(shouldApplyIcsIngestBackoff(caught)).toBe(false);
+  });
+});
+
+describe("backoff gates versus a response over the size limit", () => {
+  const oversizedResponse = new ResponseTooLargeError(1024);
+  const oversizedFeed = new CalendarFetchError("Calendar feed is too large.", {
+    cause: oversizedResponse,
+    reason: "too_large",
+  });
+
+  it("backs off a CalDAV calendar whose response is over the limit", () => {
+    expect(shouldApplyCalDavIngestBackoff(oversizedResponse)).toBe(true);
+  });
+
+  it("backs off an ICS feed that is over the limit", () => {
+    expect(shouldApplyIcsIngestBackoff(oversizedFeed)).toBe(true);
+  });
+
+  it("does not read an oversized response as a missing calendar", () => {
+    expect(resolveMissingCalendarFailure(oversizedResponse)).toBeNull();
+  });
+
+  it("spaces each repeated failure further apart than the last", () => {
+    const schedule = { intervalMs: 60_000, jitterMs: 0 };
+    const first = resolveIngestScheduleDecision(
+      { backoff: true, kind: "failed" },
+      { ...schedule, failureCount: 0 },
+    );
+    const second = resolveIngestScheduleDecision(
+      { backoff: true, kind: "failed" },
+      { ...schedule, failureCount: first.failureCount },
+    );
+
+    expect(first.nextDueInMs).toBe(resolveCalendarBackoffDelayMs(0));
+    expect(first.nextDueInMs).toBeGreaterThan(schedule.intervalMs);
+    expect(second.nextDueInMs).toBeGreaterThan(first.nextDueInMs);
   });
 });

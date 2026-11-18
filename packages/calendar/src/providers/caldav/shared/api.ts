@@ -1,4 +1,7 @@
+import { BYTES_PER_MEBIBYTE } from "../../../utils/bounded-response";
+
 const CALDAV_MULTIGET_BATCH_SIZE = 250;
+const MAX_CALDAV_RESPONSE_BYTES = 25 * BYTES_PER_MEBIBYTE;
 
 const isCalendarObjectPath = (path: string): boolean => path.includes(".ics");
 
@@ -24,4 +27,9 @@ const buildCalendarObjectFilters = (timeRange?: { start: string; end: string }):
   },
 ];
 
-export { buildCalendarObjectFilters, CALDAV_MULTIGET_BATCH_SIZE, isCalendarObjectPath };
+export {
+  buildCalendarObjectFilters,
+  CALDAV_MULTIGET_BATCH_SIZE,
+  isCalendarObjectPath,
+  MAX_CALDAV_RESPONSE_BYTES,
+};

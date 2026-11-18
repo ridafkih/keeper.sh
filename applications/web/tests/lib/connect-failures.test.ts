@@ -55,6 +55,13 @@ describe("describeIcsFeedFailure", () => {
     });
   });
 
+  it("says a feed is too large and how to make it smaller", () => {
+    expect(describeIcsFeedFailure(icsRejection({ error: "x", reason: "too-large" }))).toEqual({
+      hint: "Use a feed that covers fewer calendars or a shorter date range.",
+      message: "This feed is too large to sync.",
+    });
+  });
+
   it("keeps the plan message when the account limit is reached", () => {
     expect(describeIcsFeedFailure(icsRejection({ error: "Account limit reached." }, 402))).toEqual({
       hint: null,
