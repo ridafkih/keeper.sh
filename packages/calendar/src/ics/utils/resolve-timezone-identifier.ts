@@ -1,5 +1,5 @@
 import { visitIcsProperties } from "./apply-patches";
-import { canFormatTimeZone, listSupportedTimeZones, readTimeZoneOffsetMinutes } from "./intl-time-zone";
+import { canFormatTimeZone, readTimeZoneOffsetMinutes } from "./intl-time-zone";
 import { offsetPartsToMinutes } from "./utc-offset";
 import { WINDOWS_TO_IANA } from "./windows-timezones";
 
@@ -16,7 +16,14 @@ const UTC_OFFSET_PATTERN = /^([+-])(\d{2})(\d{2})(\d{2})?$/;
 const FIRST_CONSTANT_OFFSET_YEAR = 1990;
 const LAST_CONSTANT_OFFSET_YEAR = 2100;
 const CONSTANT_OFFSET_SAMPLE_MONTHS = [0, 6];
-const PREFILTER_INSTANTS = [new Date(Date.UTC(2026, 0, 1)), new Date(Date.UTC(2026, 6, 1))];
+const CONSTANT_OFFSET_ZONES: ReadonlyMap<number, string> = new Map([
+  [-570, "Pacific/Marquesas"],
+  [270, "Asia/Kabul"],
+  [330, "Asia/Kolkata"],
+  [345, "Asia/Kathmandu"],
+  [390, "Asia/Yangon"],
+  [570, "Australia/Darwin"],
+]);
 
 const constantOffsetZones = new Map<number, string | undefined>();
 
@@ -63,20 +70,22 @@ const buildConstantOffsetSamples = (): Date[] => Array.from(
 const holdsOffsetAt = (timeZone: string, offsetMinutes: number, instants: readonly Date[]): boolean =>
   instants.every((instant) => readTimeZoneOffsetMinutes(timeZone, instant) === offsetMinutes);
 
-const searchConstantOffsetZone = (offsetMinutes: number): string | undefined => {
-  const samples = buildConstantOffsetSamples();
-  return listSupportedTimeZones()
-    .filter((timeZone) => holdsOffsetAt(timeZone, offsetMinutes, PREFILTER_INSTANTS))
-    .filter((timeZone) => holdsOffsetAt(timeZone, offsetMinutes, samples))
-    .toSorted()
-    .at(0);
+const readConstantOffsetZone = (offsetMinutes: number): string | undefined => {
+  const timeZone = CONSTANT_OFFSET_ZONES.get(offsetMinutes);
+  if (!timeZone || !canFormatTimeZone(timeZone)) {
+    return;
+  }
+  if (!holdsOffsetAt(timeZone, offsetMinutes, buildConstantOffsetSamples())) {
+    return;
+  }
+  return timeZone;
 };
 
 const findConstantOffsetIanaZone = (offsetMinutes: number): string | undefined => {
   if (constantOffsetZones.has(offsetMinutes)) {
     return constantOffsetZones.get(offsetMinutes);
   }
-  const timeZone = searchConstantOffsetZone(offsetMinutes);
+  const timeZone = readConstantOffsetZone(offsetMinutes);
   constantOffsetZones.set(offsetMinutes, timeZone);
   return timeZone;
 };
