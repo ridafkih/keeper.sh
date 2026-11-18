@@ -171,7 +171,7 @@ There are seven images currently available: two designed for convenience, and fi
 | VERSION                        | `api`, `cron`, `worker`, `mcp`, `web` | Required. The release version the service was built from, recorded on every log event. Baked into the published images; `bun dev` and `bun run start` read it from git. When building an image yourself, pass `--build-arg VERSION=$(git describe --tags --always)`. |
 | PORT                           | `web`         | Required. Port the web server listens on. Pre-set to `3000` in the `keeper-standalone` and `keeper-services` images.                                                 |
 | VITE_API_URL                   | `web`         | The URL the web server uses to proxy requests to the Bun API.<br><br>e.g. `http://api:3001`                                                                         |
-| COMMERCIAL_MODE                | `api`, `cron`, `mcp`, `web` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions.                                                                            |
+| COMMERCIAL_MODE                | `api`, `cron`, `worker`, `mcp`, `web` | Enable Polar billing flow. Set to `true` if using Polar for subscriptions. Also keeps `BLOCK_PRIVATE_RESOLUTION` on in `api`, `cron` and `worker`. |
 | POLAR_ACCESS_TOKEN             | `api`         | Optional. Polar API token for subscription management.                                                                                                              |
 | POLAR_MODE                     | `api`         | Optional. Polar environment, `sandbox` or `production`.                                                                                                             |
 | POLAR_WEBHOOK_SECRET           | `api`         | Optional. Secret to verify Polar webhooks.                                                                                                                          |
@@ -193,8 +193,8 @@ There are seven images currently available: two designed for convenience, and fi
 | OIDC_TRUST_EMAIL_VERIFIED      | `api`         | Optional. Set to `true` to trust the OIDC provider's `email_verified` claim, so a sign-in links to an existing account with the same verified email. Defaults to `false`. Only enable it if your provider verifies every email address it asserts. |
 | DISABLE_LOCAL_AUTH             | `api`         | Optional. Set to `true` to turn off username and email/password sign-in and sign-up. Google and Microsoft sign-in stay available while their client credentials are set. Only takes effect when `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID` and `OIDC_CLIENT_SECRET` are all set. |
 | POSTGRES_PASSWORD              | `standalone`  | Optional. Custom password for the internal PostgreSQL database in `keeper-standalone`. If unset, defaults to `keeper`. The database is not exposed outside the container, so this is low risk, but can be set for defense in depth. |
-| BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
-| BLOCK_PRIVATE_RESOLUTION       | `api`, `cron` | Optional. Set to `true` to block outbound fetches (ICS subscriptions, CalDAV servers) from resolving to private/reserved network addresses. Prevents SSRF. Defaults to `false` for backward compatibility with self-hosted setups that use local CalDAV/ICS servers. |
+| BLOCK_PRIVATE_RESOLUTION       | `api`, `cron`, `worker` | Optional. Whether outbound fetches (ICS subscriptions, CalDAV servers) are refused when the address is private or reserved. Defaults to `true`. Set to `false` to sync with CalDAV or ICS servers on your own network; set it on all three services. Pre-set to `false` in the `keeper-standalone` and `keeper-services` images, so those keep reaching local servers unless you set `true`. Always on when `COMMERCIAL_MODE` is `true`. Each service logs the effective setting once at startup.<br><br>e.g. `false` |
+| PRIVATE_RESOLUTION_WHITELIST   | `api`, `cron`, `worker` | Optional. Comma-separated hosts that stay reachable while `BLOCK_PRIVATE_RESOLUTION` is on, matched against the host of the URL, including the port when the URL has one. Use it to allow a few local servers without turning the block off.<br><br>e.g. `nas.local:5232,192.168.1.20` |
 | REGISTRATION_EMAIL_DOMAINS     | `api`         | Optional. Comma-separated email domains that may create an account. When set, sign-up and first-time sign-in from any other domain are refused; existing accounts are unaffected. Unset or empty allows every domain.<br><br>e.g. `keeper.sh,example.com` |
 | TRUSTED_ORIGINS                | `api`         | Optional. Comma-separated list of additional trusted origins for CSRF protection.<br><br>e.g. `http://192.168.1.100,http://keeper.local,https://keeper.example.com` |
 | WEBHOOK_PUBLIC_URL             | `api`, `cron` | Optional. Public HTTPS origin that Google Calendar and Microsoft Graph can reach your instance on. Setting it turns on realtime push, so Keeper.sh picks up calendar changes within seconds instead of waiting for the next poll. Leave it unset and nothing changes: polling continues exactly as before and no subscription is ever registered with a provider. Subscriptions are registered for every plan; on the free plan, notifications that arrive within five minutes of each other are folded into one read, and destinations still update on the free plan's 30-minute cadence. Must be a public `https://` origin with no query string or fragment — `localhost`, private-range and `.local` addresses are rejected at boot, since no provider could deliver to them.<br><br>e.g. `https://keeper.example.com` |
@@ -497,6 +497,13 @@ docker compose up -d
 ## Individual Service Images
 
 Running each service in its own image gives you the most control over scaling and placement, at the cost of a much longer configuration. Reach for this when `keeper-standalone` or `keeper-services` no longer fits, not before.
+
+> [!NOTE]
+>
+> The individual `api`, `cron` and `worker` images refuse outbound fetches to private or reserved
+> addresses by default. If you sync with a CalDAV or ICS server on your own network, set
+> `BLOCK_PRIVATE_RESOLUTION=false` on all three, or list just those servers in
+> `PRIVATE_RESOLUTION_WHITELIST`.
 
 ### Generate Individual Service Environment Variables
 

@@ -2,6 +2,7 @@ import arkenv from "arkenv";
 
 const schema = {
   BLOCK_PRIVATE_RESOLUTION: "boolean?",
+  COMMERCIAL_MODE: "boolean?",
   DATABASE_POOL_MAX: "number?",
   DATABASE_URL: "string.url",
   ENCRYPTION_KEY: "string?",

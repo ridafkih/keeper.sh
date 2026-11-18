@@ -279,7 +279,10 @@ vi.mock("@keeper.sh/sync", () => ({
 const ENCRYPTION_KEY = Buffer.alloc(32).toString("base64");
 
 vi.mock("../../src/env", () => ({
-  default: { ENCRYPTION_KEY: Buffer.alloc(32).toString("base64") },
+  default: {
+    BLOCK_PRIVATE_RESOLUTION: false,
+    ENCRYPTION_KEY: Buffer.alloc(32).toString("base64"),
+  },
 }));
 vi.mock("../../src/context", () => ({
   flushDrainRegistry: { register: (): null => null },

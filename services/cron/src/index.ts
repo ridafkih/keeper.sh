@@ -10,6 +10,7 @@ import {
   waitForDatabaseMigrations,
 } from "@keeper.sh/database";
 import { destroy } from "./utils/logging";
+import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
 import { baker } from "./utils/baker";
 import { checkWorkerMigrationStatus } from "./migration-check";
 import { resolveIngestDials } from "./ingest/ingest-dials";
@@ -47,6 +48,7 @@ await entry({
       shutdownRefreshLockRedis,
     } = await import("./context");
     await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
+    reportPrivateResolutionPolicy();
 
     if (env.CRON_JOBS_ENABLED !== false) {
       const jobs = await getAllJobs(jobsFolderPathname);

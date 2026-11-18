@@ -13,6 +13,7 @@ import { processJob } from "./processor";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { enqueueSyncContinuation, requestsContinuation } from "./utils/sync-continuation";
 import { context, destroy, widelog } from "./utils/logging";
+import { reportPrivateResolutionPolicy } from "./utils/safe-fetch-options";
 import env from "./env";
 
 exitUnlessTimeZoneDataCurrent(process.env.ICU_TIMEZONE_FILES_DIR);
@@ -43,6 +44,7 @@ await entry({
   main: async () => {
     const { database, shutdownConnections } = await import("./context");
     await waitForDatabaseMigrations(createMigrationReadinessDatabase(database));
+    reportPrivateResolutionPolicy();
     const concurrency = parseConcurrency(env.WORKER_CONCURRENCY);
 
     const { syncAggregateRuntime } = await import("./processor");
