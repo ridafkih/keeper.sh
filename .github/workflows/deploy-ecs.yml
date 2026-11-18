@@ -87,11 +87,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     permissions:
+      attestations: read
       contents: read
       id-token: write
     env:
       ENVIRONMENT: ${{ inputs.environment }}
       CLUSTER: keeper-${{ inputs.environment }}
+      VERSION: ${{ inputs.version }}
       IMAGE_API: ${{ needs.resolve.outputs.api }}
       IMAGE_CRON: ${{ needs.resolve.outputs.cron }}
       IMAGE_MCP: ${{ needs.resolve.outputs.mcp }}
@@ -112,7 +114,10 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-2
 
-      - name: Confirm every image is pinned by digest
+      - name: Verify the provenance of every image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHER: ${{ github.repository }}/.github/workflows/docker-publish.yml
         run: |
           set -euo pipefail
           for image in "$IMAGE_API" "$IMAGE_CRON" "$IMAGE_MCP" "$IMAGE_WEB" "$IMAGE_WORKER"; do
@@ -120,6 +125,13 @@ jobs:
               echo "::error::An image to deploy is not pinned by digest; nothing was deployed."
               exit 1
             fi
+            if ! gh attestation verify "oci://$image" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$PUBLISHER" --source-ref "refs/tags/v$VERSION" \
+              --deny-self-hosted-runners > /dev/null; then
+              echo "::error::${image%%@*} has no build provenance from the v$VERSION release; nothing was deployed."
+              exit 1
+            fi
+            echo "${image%%@*} was built by the v$VERSION release"
           done
 
       - name: Run migrations
