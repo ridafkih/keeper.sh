@@ -14,6 +14,10 @@ on:
         required: true
         type: choice
         options: [seo, infra, claude]
+      sha:
+        description: Commit to pin, as a full 40-character SHA
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +30,7 @@ jobs:
         id: target
         env:
           NAME: ${{ github.event.client_payload.submodule || inputs.submodule }}
+          SHA: ${{ github.event.client_payload.sha || inputs.sha }}
         run: |
           case "$NAME" in
             seo)    echo "path=applications/web/seo" >> "$GITHUB_OUTPUT" ;;
@@ -33,59 +38,70 @@ jobs:
             claude) echo "path=.claude"               >> "$GITHUB_OUTPUT" ;;
             *)     echo "Unknown submodule: '$NAME'" >&2; exit 1 ;;
           esac
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "Expected a full commit SHA to pin, got '$SHA'." >&2
+            exit 1
+          fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "pin=$(printf '%s' "$SHA" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Move the pin
+        id: bump
+        env:
+          SUBMODULE_PATH: ${{ steps.target.outputs.path }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          current="$(git ls-tree HEAD "$SUBMODULE_PATH" | awk '{print $3}')"
+          if [ "$current" = "$SHA" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Pin is already current; nothing to do."
+            exit 0
+          fi
+          git update-index --cacheinfo "160000,$SHA,$SUBMODULE_PATH"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app-content
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name == 'seo'
+        with:
+          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: keeperdotsh
+          repositories: seo
+          permission-contents: read
+
+      - name: Fetch the content at the new pin
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name == 'seo'
+        env:
+          TOKEN: ${{ steps.app-content.outputs.token }}
+        run: |
+          header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" submodule update --init applications/web/seo
+          test -d applications/web/seo/blog
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name == 'seo'
+      - run: bun install --frozen-lockfile
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name == 'seo'
+      - run: bunx turbo run build --filter=@keeper.sh/web
+        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name == 'seo'
 
       - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: app-main
+        if: steps.bump.outputs.changed == 'true'
         with:
           app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
           private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
           owner: ridafkih
           repositories: keeper.sh
-
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        id: app-submodules
-        with:
-          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
-          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
-          owner: keeperdotsh
-          repositories: |
-            seo
-            infra
-            .claude
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          submodules: false
-          token: ${{ steps.app-main.outputs.token }}
-
-      - name: Fetch the submodules
-        env:
-          SUBMODULE_TOKEN: ${{ steps.app-submodules.outputs.token }}
-        run: |
-          git config --global \
-            url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/keeperdotsh/".insteadOf \
-            "https://github.com/keeperdotsh/"
-          git submodule update --init applications/web/seo "${{ steps.target.outputs.path }}"
-
-      - name: Move the pin
-        id: bump
-        run: |
-          git submodule update --remote "${{ steps.target.outputs.path }}"
-          if git diff --quiet -- "${{ steps.target.outputs.path }}"; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Pin is already current; nothing to do."
-            exit 0
-          fi
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "pin=$(git -C "${{ steps.target.outputs.path }}" rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
-      - run: bun install --frozen-lockfile
-        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
-      - run: bunx turbo run build --filter=@keeper.sh/web
-        if: steps.bump.outputs.changed == 'true' && steps.target.outputs.name != 'claude'
+          permission-contents: write
+          permission-pull-requests: write
 
       - name: Open a pull request
         if: steps.bump.outputs.changed == 'true'
@@ -93,18 +109,17 @@ jobs:
           GH_TOKEN: ${{ steps.app-main.outputs.token }}
           APP_SLUG: ${{ steps.app-main.outputs.app-slug }}
           NAME: ${{ steps.target.outputs.name }}
-          PIN: ${{ steps.bump.outputs.pin }}
-          BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.bump.outputs.pin }}
+          PIN: ${{ steps.target.outputs.pin }}
+          BRANCH: chore/bump-${{ steps.target.outputs.name }}-${{ steps.target.outputs.pin }}
         run: |
           BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
           git config user.name "${APP_SLUG}[bot]"
           git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
 
-          git fetch origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
           git checkout -B "$BRANCH"
-          git add "${{ steps.target.outputs.path }}"
           git commit -m "chore($NAME): bump to $PIN"
-          git push -u --force-with-lease origin "$BRANCH"
+          header="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" push --force origin "$BRANCH"
 
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             gh pr create --title "chore($NAME): bump to $PIN" --body "" --head "$BRANCH"
