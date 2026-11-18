@@ -29,15 +29,13 @@ const UNINSTRUMENTED_HOLD_MS = 240;
 const ADVISORY_WAIT_MS = 40;
 const COMMIT_MS = 30;
 
-/*
- * Bun.sleep can return a fraction of a millisecond early, so an exact floor would
- * assert timer granularity rather than attribution.
- */
-const TIMER_SLACK_MS = 5;
-/* An accounted flush still pays for the unmeasured set_config statements around it. */
-const FULLY_ACCOUNTED_CEILING_MS = 30;
+const CLOCK_ORIGIN_MS = 1000;
 
-const chargedAtLeast = (injectedMs: number): number => injectedMs - TIMER_SLACK_MS;
+const clock = { nowMs: CLOCK_ORIGIN_MS };
+
+const elapse = (durationMs: number): void => {
+  clock.nowMs += durationMs;
+};
 
 let advisoryWaitMs = 0;
 let commitMs = 0;
@@ -113,19 +111,19 @@ const runTransaction = async (work: (transaction: unknown) => Promise<unknown>):
   let executeCount = 0;
   const transaction = {
     delete: () => createQuery(() => []),
-    execute: async () => {
+    execute: (): Promise<unknown[]> => {
       executeCount += 1;
       if (executeCount === ADVISORY_LOCK_STATEMENT_INDEX) {
-        await Bun.sleep(advisoryWaitMs);
+        elapse(advisoryWaitMs);
       }
-      return [];
+      return Promise.resolve([]);
     },
     insert: () => createQuery(() => []),
     select: (projection: Record<string, unknown>) => createQuery(() => resolveSelect(projection)),
     update: () => createQuery(() => []),
   };
   const result = await work(transaction);
-  await Bun.sleep(commitMs);
+  elapse(commitMs);
   return result;
 };
 
@@ -184,7 +182,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
       await options.withPersistenceTransaction(async ({ flush, readExistingEvents }) => {
         await readExistingEvents();
         /* Holds the writer slot without touching an instrumented statement. */
-        await Bun.sleep(uninstrumentedHoldMs);
+        elapse(uninstrumentedHoldMs);
         await flush({ deletes: [], inserts: [], syncToken: "next-token" });
         return null;
       });
@@ -203,6 +201,8 @@ const emitted: EmittedEvent[] = [];
 const originalWrite = process.stdout.write.bind(process.stdout);
 
 beforeEach(() => {
+  clock.nowMs = CLOCK_ORIGIN_MS;
+  vi.spyOn(performance, "now").mockImplementation(() => clock.nowMs);
   emitted.length = 0;
   advisoryWaitMs = 0;
   commitMs = 0;
@@ -219,6 +219,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.stdout.write = originalWrite;
+  vi.restoreAllMocks();
 });
 
 const runTick = async (): Promise<EmittedEvent> => {
@@ -239,11 +240,9 @@ describe("flush unattributed time", () => {
     const event = await runTick();
 
     expect(event.outcome).toBe("success");
-    expect(event.flush?.unattributed_ms).toBeGreaterThanOrEqual(
-      chargedAtLeast(UNINSTRUMENTED_HOLD_MS),
-    );
-    expect(event.flush?.unattributed_ms ?? 0).toBeLessThanOrEqual(
-      event.flush?.slot_occupancy_ms ?? 0,
+    expect(event.flush?.unattributed_ms).toBe(UNINSTRUMENTED_HOLD_MS);
+    expect(event.flush?.slot_occupancy_ms).toBe(
+      UNINSTRUMENTED_HOLD_MS + ADVISORY_WAIT_MS + COMMIT_MS,
     );
   });
 
@@ -253,10 +252,9 @@ describe("flush unattributed time", () => {
 
     const event = await runTick();
 
-    expect(event.wait?.advisory_lock_ms).toBeGreaterThanOrEqual(chargedAtLeast(ADVISORY_WAIT_MS));
-    expect(event.work?.db_commit_ms).toBeGreaterThanOrEqual(chargedAtLeast(COMMIT_MS));
-    expect(event.flush?.unattributed_ms).toBeDefined();
-    expect(event.flush?.unattributed_ms ?? -1).toBeLessThanOrEqual(FULLY_ACCOUNTED_CEILING_MS);
+    expect(event.wait?.advisory_lock_ms).toBe(ADVISORY_WAIT_MS);
+    expect(event.work?.db_commit_ms).toBe(COMMIT_MS);
+    expect(event.flush?.unattributed_ms).toBe(0);
   });
 
   it("never reports a negative residual", async () => {
@@ -264,6 +262,6 @@ describe("flush unattributed time", () => {
 
     const event = await runTick();
 
-    expect(event.flush?.unattributed_ms ?? -1).toBeGreaterThanOrEqual(0);
+    expect(event.flush?.unattributed_ms).toBe(0);
   });
 });
