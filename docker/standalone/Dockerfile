@@ -71,6 +71,9 @@ RUN case "${TARGETARCH}" in \
   && tar -C / -Jxpf /tmp/s6-overlay-arch.tar.xz \
   && rm /tmp/s6-overlay-*.tar.xz
 
+RUN groupadd --gid 10001 keeper \
+  && useradd --uid 10001 --gid keeper --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin keeper
+
 WORKDIR /app
 
 COPY --from=prune /app/out/json/ .

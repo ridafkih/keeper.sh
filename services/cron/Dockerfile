@@ -25,7 +25,7 @@ ADD --chmod=644 --checksum=sha256:90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e7
 COPY --from=prune /app/out/json/ .
 RUN bun install --frozen-lockfile --production
 COPY --from=prune /app/out/full/packages/otelemetry ./packages/otelemetry
-RUN bun link --cwd packages/otelemetry
+RUN ln -s /app/packages/otelemetry/src/index.ts /usr/local/bin/keeper-otelemetry
 COPY --from=build /app/services/cron/dist ./services/cron/dist
 COPY --from=source /app/services/cron/entrypoint.sh ./services/cron/entrypoint.sh
 RUN chmod +x ./services/cron/entrypoint.sh
@@ -37,5 +37,9 @@ ARG VERSION
 RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
 ENV COMMIT_SHA=$COMMIT_SHA
 ENV VERSION=$VERSION
+
+RUN chown 1000:1000 /tmp
+USER 1000:1000
+VOLUME ["/tmp"]
 
 ENTRYPOINT ["./services/cron/entrypoint.sh"]
