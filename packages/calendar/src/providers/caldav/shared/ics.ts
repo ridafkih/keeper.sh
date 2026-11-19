@@ -260,6 +260,14 @@ const parseICalCalendarsToRemoteEvents = (
   };
 };
 
+const FOLDED_LINE_BREAK = /\r?\n[ \t]/gu;
+const UID_PROPERTY = /^UID(?:;[^:\r\n]*)?:(?<uid>[^\r\n]*)$/gimu;
+
+const readCalendarObjectUids = (icsString: string): string[] =>
+  [...icsString.replaceAll(FOLDED_LINE_BREAK, "").matchAll(UID_PROPERTY)]
+    .map((match) => match.groups?.["uid"]?.trim() ?? "")
+    .filter((uid) => uid.length > 0);
+
 const parseICalToRemoteEvents = (icsString: string): ParsedCalendarEvent[] => {
   const resources = parseICalCalendarsToRemoteEvents([icsString]);
   assertAllEventsSupported(resources);
@@ -279,5 +287,6 @@ export {
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
   parseICalToRemoteEvents,
+  readCalendarObjectUids,
 };
 export type { ParsedCalendarEvent, ParseICalCalendarsOptions, ParsedCalendarResources };

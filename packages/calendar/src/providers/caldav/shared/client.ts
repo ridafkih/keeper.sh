@@ -390,11 +390,12 @@ class CalDAVClient {
   async updateCalendarObjectByUrl(params: {
     objectUrl: string;
     iCalString: string;
+    etag?: string;
   }): Promise<void> {
     const client = await this.getClient();
 
     const response = await client.updateCalendarObject({
-      calendarObject: { data: params.iCalString, url: params.objectUrl },
+      calendarObject: { data: params.iCalString, etag: params.etag, url: params.objectUrl },
     });
 
     await assertSuccessfulResponse(response, "update");
