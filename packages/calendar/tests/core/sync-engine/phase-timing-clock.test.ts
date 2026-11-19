@@ -1,6 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type { MaterializedSyncableEvent } from "../../../src/core/types";
+import {
+  elapse,
+  expectPhaseDurations,
+  installControlledClock,
+  stepWallClock,
+} from "./phase-timing-harness";
 
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
@@ -13,20 +19,9 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-const PHASE_FIELDS = [
-  "sync.phase.read_state.duration_ms",
-  "sync.phase.currency_check.duration_ms",
-  "sync.phase.compute_operations.duration_ms",
-  "sync.phase.provider_push.duration_ms",
-  "sync.phase.provider_delete.duration_ms",
-  "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.mapping_flush.duration_ms",
-] as const;
-
-const delay = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
+const HOUR_MS = 3_600_000;
+const READ_STATE_MS = 25;
+const REPEATED_READ_STATE_MS = 20;
 
 const makeLocalEvent = (id: string): MaterializedSyncableEvent => ({
   calendarId: "cal-1",
@@ -40,7 +35,8 @@ const makeLocalEvent = (id: string): MaterializedSyncableEvent => ({
 });
 
 const runSync = async (
-  readStateDelayMs: number,
+  readStateMs: number,
+  wallClockStepMs = 0,
 ): Promise<Record<string, unknown>> => {
   const emitted: Record<string, unknown>[] = [];
   await syncCalendar({
@@ -63,13 +59,14 @@ const runSync = async (
           })),
         ),
     },
-    readState: async () => {
-      await delay(readStateDelayMs);
-      return {
+    readState: () => {
+      elapse(readStateMs);
+      stepWallClock(wallClockStepMs);
+      return Promise.resolve({
         existingMappings: [],
         localEvents: [makeLocalEvent("a")],
         remoteEvents: [],
-      };
+      });
     },
     reconciliationScope: TEST_RECONCILIATION_SCOPE,
     userId: "user-1",
@@ -79,71 +76,40 @@ const runSync = async (
   return event as Record<string, unknown>;
 };
 
-const sumPhases = (event: Record<string, unknown>): number =>
-  PHASE_FIELDS.reduce((total, field) => total + (event[field] as number), 0);
-
 describe("syncCalendar phase attribution when the wall clock moves", () => {
+  beforeEach(() => {
+    installControlledClock();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
   it("keeps the reconcile total and the phases honest when the clock steps backwards", async () => {
-    const realNow = Date.now.bind(Date);
-    const baseline = realNow();
-    let calls = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => {
-      calls += 1;
-      if (calls === 1) {
-        return baseline;
-      }
-      return baseline - 3_600_000;
-    });
+    const event = await runSync(READ_STATE_MS, -HOUR_MS);
 
-    const event = await runSync(25);
-
-    const reconcileDurationMs = event["sync.reconcile.duration_ms"] as number;
-    const unattributedDurationMs = event["sync.phase.unattributed.duration_ms"] as number;
-
-    /*
-     * Bounded, never sized: the delay is a setTimeout and the measurement is
-     * performance.now(), so requiring the measurement to reach the delay races two
-     * clocks — CI saw 24.97 against a floor of 25. What the backwards step must not do
-     * is leak into the reading, and the hour it moves by is what proves that.
-     */
-    expect(Number.isFinite(reconcileDurationMs)).toBe(true);
-    expect(reconcileDurationMs).toBeGreaterThan(0);
-    expect(reconcileDurationMs).toBeLessThan(3_600_000);
-    expect(unattributedDurationMs).toBeGreaterThanOrEqual(0);
-    expect(sumPhases(event) + unattributedDurationMs).toBeCloseTo(reconcileDurationMs, 1);
-    expect(event["sync.phase.read_state.duration_ms"] as number).toBeGreaterThan(0);
+    expectPhaseDurations(
+      event,
+      { "sync.phase.read_state.duration_ms": READ_STATE_MS },
+      { wallClockStepMs: -HOUR_MS },
+    );
   });
 
   it("keeps the reconcile total honest when the clock jumps forwards", async () => {
-    const realNow = Date.now.bind(Date);
-    const baseline = realNow();
-    let calls = 0;
-    vi.spyOn(Date, "now").mockImplementation(() => {
-      calls += 1;
-      if (calls === 1) {
-        return baseline;
-      }
-      return baseline + 3_600_000;
-    });
+    const event = await runSync(READ_STATE_MS, HOUR_MS);
 
-    const event = await runSync(25);
-
-    const reconcileDurationMs = event["sync.reconcile.duration_ms"] as number;
-    expect(reconcileDurationMs).toBeLessThan(3_600_000);
-    expect(sumPhases(event) + (event["sync.phase.unattributed.duration_ms"] as number))
-      .toBeCloseTo(reconcileDurationMs, 1);
+    expectPhaseDurations(
+      event,
+      { "sync.phase.read_state.duration_ms": READ_STATE_MS },
+      { wallClockStepMs: HOUR_MS },
+    );
   });
 
   it("agrees with duration_ms when the clock is left alone, over repeated runs", async () => {
     for (let round = 0; round < 4; round++) {
-      const event = await runSync(20);
-      const reconcileDurationMs = event["sync.reconcile.duration_ms"] as number;
-      const durationMs = event["duration_ms"] as number;
-      expect(Math.abs(reconcileDurationMs - durationMs)).toBeLessThanOrEqual(2);
+      const event = await runSync(REPEATED_READ_STATE_MS);
+
+      expectPhaseDurations(event, { "sync.phase.read_state.duration_ms": REPEATED_READ_STATE_MS });
     }
   });
 });

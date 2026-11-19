@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { executeRemoteOperations, OPERATION_ERROR_SAMPLE_SIZE } from "../../../src/core/sync-engine/index";
 import { computeSyncOperations } from "../../../src/core/sync/operations";
 import type {
@@ -14,6 +14,7 @@ import {
   createSyncEventContentHash,
 } from "../../../src/core/events/content-hash";
 import { RecurrenceMaterializationLimitError } from "../../../src/core/events/recurrence-materializer";
+import { elapse, expectPhaseDurations, installControlledClock } from "./phase-timing-harness";
 
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
@@ -25,9 +26,6 @@ const TEST_RECONCILIATION_SCOPE = {
     timeMin: new Date("2000-01-01T00:00:00.000Z"),
   },
 };
-
-const delay = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => { setTimeout(resolve, durationMs); });
 
 const makeEvent = (
   id: string,
@@ -499,6 +497,10 @@ describe("executeRemoteOperations", () => {
 });
 
 describe("syncCalendar", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("does not call providers or flush reconciliation state when local materialization fails", async () => {
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const materializationError = new RecurrenceMaterializationLimitError({
@@ -909,12 +911,13 @@ describe("syncCalendar", () => {
   });
 
   it("attributes wall time to each sync phase on the wide event", async () => {
+    installControlledClock();
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const localEvent = makeEvent("ev-1", new Date("2026-03-15T09:00:00Z"), new Date("2026-03-15T10:00:00Z"));
     const provider = makeProvider({
-      pushEvents: async () => {
-        await delay(30);
-        return [{ success: true, remoteId: "remote-1" }];
+      pushEvents: () => {
+        elapse(30);
+        return Promise.resolve([{ success: true, remoteId: "remote-1" }]);
       },
     });
 
@@ -925,30 +928,28 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider,
-      readState: async () => {
-        await delay(20);
-        return { localEvents: [localEvent], existingMappings: [], remoteEvents: [] };
+      readState: () => {
+        elapse(20);
+        return Promise.resolve({ localEvents: [localEvent], existingMappings: [], remoteEvents: [] });
       },
       isCurrent: () => Promise.resolve(true),
-      flush: async () => { await delay(10); },
+      flush: () => {
+        elapse(10);
+        return Promise.resolve();
+      },
       onSyncEvent: (event) => { emittedEvents.push(event); },
     });
 
-    const [event] = emittedEvents;
-    expect(event?.["sync.phase.read_state.duration_ms"]).toBeGreaterThanOrEqual(15);
-    expect(event?.["sync.phase.provider_push.duration_ms"]).toBeGreaterThanOrEqual(25);
-    expect(event?.["sync.phase.checkpoint_flush.duration_ms"]).toBeGreaterThanOrEqual(5);
-    expect(event?.["sync.phase.provider_delete.duration_ms"]).toBe(0);
-    expect(typeof event?.["sync.phase.currency_check.duration_ms"]).toBe("number");
-    expect(typeof event?.["sync.phase.compute_operations.duration_ms"]).toBe("number");
-    expect(typeof event?.["sync.phase.mapping_flush.duration_ms"]).toBe("number");
-
-    const reconcileDurationMs = event?.["sync.reconcile.duration_ms"] as number;
-    expect(reconcileDurationMs).toBeGreaterThanOrEqual(55);
-    expect(event?.["sync.phase.unattributed.duration_ms"]).toBeLessThan(reconcileDurationMs);
+    expect(emittedEvents).toHaveLength(1);
+    expectPhaseDurations(emittedEvents[0] as Record<string, unknown>, {
+      "sync.phase.checkpoint_flush.duration_ms": 10,
+      "sync.phase.provider_push.duration_ms": 30,
+      "sync.phase.read_state.duration_ms": 20,
+    });
   });
 
   it("attributes wall time even when the run ends early as in-sync", async () => {
+    installControlledClock();
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const emittedEvents: Record<string, unknown>[] = [];
 
@@ -958,22 +959,25 @@ describe("syncCalendar", () => {
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider: makeProvider(),
       readState: () => Promise.resolve({ localEvents: [], existingMappings: [], remoteEvents: [] }),
-      isCurrent: async () => {
-        await delay(25);
-        return true;
+      isCurrent: () => {
+        elapse(25);
+        return Promise.resolve(true);
       },
       flush: () => Promise.resolve(),
       onSyncEvent: (event) => { emittedEvents.push(event); },
     });
 
     const [event] = emittedEvents;
+    expect(emittedEvents).toHaveLength(1);
     expect(event?.["outcome"]).toBe("in-sync");
-    expect(event?.["sync.phase.currency_check.duration_ms"]).toBeGreaterThanOrEqual(20);
-    expect(event?.["sync.phase.provider_push.duration_ms"]).toBe(0);
-    expect(event?.["sync.reconcile.duration_ms"]).toBeGreaterThanOrEqual(20);
+    expectPhaseDurations(
+      event as Record<string, unknown>,
+      { "sync.phase.currency_check.duration_ms": 25 },
+    );
   });
 
   it("attributes wall time when the reconcile throws", async () => {
+    installControlledClock();
     const { syncCalendar } = await import("../../../src/core/sync-engine/index");
     const emittedEvents: Record<string, unknown>[] = [];
 
@@ -982,9 +986,9 @@ describe("syncCalendar", () => {
       calendarId: "dest-cal-1",
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       provider: makeProvider(),
-      readState: async () => {
-        await delay(20);
-        throw new Error("local read failed");
+      readState: () => {
+        elapse(20);
+        return Promise.reject(new Error("local read failed"));
       },
       isCurrent: () => Promise.resolve(true),
       flush: () => Promise.resolve(),
@@ -992,8 +996,12 @@ describe("syncCalendar", () => {
     })).rejects.toThrow("local read failed");
 
     const [event] = emittedEvents;
+    expect(emittedEvents).toHaveLength(1);
     expect(event?.["outcome"]).toBe("error");
-    expect(event?.["sync.phase.read_state.duration_ms"]).toBeGreaterThanOrEqual(15);
+    expectPhaseDurations(
+      event as Record<string, unknown>,
+      { "sync.phase.read_state.duration_ms": 20 },
+    );
   });
 
   it("emits only nonzero stale mapping reason counts", async () => {
