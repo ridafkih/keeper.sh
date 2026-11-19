@@ -321,6 +321,7 @@ export {
   classifyDatabaseError,
   getDatabaseErrorDetails,
   isDatabaseError,
+  isSqlState,
   resolveDatabaseErrorClassification,
   withoutBoundValues,
 };

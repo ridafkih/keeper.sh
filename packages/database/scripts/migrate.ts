@@ -15,6 +15,12 @@ import {
   createEventMappingSourceBackfillDatabase,
 } from "../src/database/backfill-event-mapping-source-calendar-ids";
 import {
+  createCredentialEncryptionDatabase,
+  describeCredentialEncryption,
+  encryptStoredCredentials,
+  resolveCredentialEncryptionKeys,
+} from "../src/database/credential-encryption";
+import {
   buildLegacyRecurringStateConsolidation,
   shouldConsolidateLegacyRecurringStates,
   type LegacyRecurringStateCompatibility,
@@ -37,6 +43,11 @@ const connectionString = Bun.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL is missing");
 }
+
+const credentialEncryptionKeys = resolveCredentialEncryptionKeys({
+  decryptOnlyKeys: Bun.env.ENCRYPTION_KEYS_DECRYPT_ONLY,
+  primaryKey: Bun.env.ENCRYPTION_KEY,
+});
 
 const connection = new Client({
   connectionString: connectionString,
@@ -512,6 +523,14 @@ try {
     await installEventMappingConstraints();
     await validateEventMappingConstraints();
   }
+
+  const credentialEncryption = await encryptStoredCredentials(
+    createCredentialEncryptionDatabase(database),
+    credentialEncryptionKeys,
+  );
+  process.stdout.write(
+    `${JSON.stringify(describeCredentialEncryption(credentialEncryption, new Date()))}\n`,
+  );
 } finally {
   // PostgreSQL releases the session-level migration lock when this client closes.
   await connection.end();

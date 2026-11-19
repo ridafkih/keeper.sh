@@ -105,6 +105,23 @@ const readSecretKeyId = (secret: StoredSecret): string | null => {
   return keyId;
 };
 
+type StoredSecretForm = "plaintext" | "legacy" | "versioned";
+
+interface StoredSecretDescription {
+  form: StoredSecretForm;
+  keyId: string | null;
+}
+
+const describeStoredSecret = (secret: StoredSecret): StoredSecretDescription => {
+  if (isSecretVersioned(secret)) {
+    return { form: "versioned", keyId: readSecretKeyId(secret) };
+  }
+  if (SECRET_PURPOSES[secret.purpose].unversioned === "plaintext") {
+    return { form: "plaintext", keyId: null };
+  }
+  return { form: "legacy", keyId: null };
+};
+
 const buildAssociatedData = (purpose: SecretPurpose, keyId: string, rowId: string): Buffer =>
   Buffer.from(
     JSON.stringify([ENCRYPTED_SECRET_VERSION, keyId, purpose, rowId.toLowerCase()]),
@@ -317,6 +334,7 @@ export {
   ENCRYPTED_SECRET_MARKER,
   SecretDecryptionError,
   SecretEncryptionError,
+  describeStoredSecret,
   encryptSecret,
   hasStoredSecret,
   isSecretVersioned,
@@ -326,4 +344,10 @@ export {
   sealSecret,
   storedSecretValue,
 };
-export type { SecretDecryptionReason, SecretPurpose, StoredSecret };
+export type {
+  SecretDecryptionReason,
+  SecretPurpose,
+  StoredSecret,
+  StoredSecretDescription,
+  StoredSecretForm,
+};
