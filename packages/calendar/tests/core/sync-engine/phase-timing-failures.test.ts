@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type {
   DeleteResult,
@@ -7,6 +7,7 @@ import type {
   RemoteEvent,
 } from "../../../src/core/types";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
+import { elapse, expectPhaseDurations, installControlledClock } from "./phase-timing-harness";
 
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
@@ -19,20 +20,17 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-const PHASE_FIELDS = [
-  "sync.phase.read_state.duration_ms",
-  "sync.phase.currency_check.duration_ms",
-  "sync.phase.compute_operations.duration_ms",
-  "sync.phase.provider_push.duration_ms",
-  "sync.phase.provider_delete.duration_ms",
-  "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.mapping_flush.duration_ms",
-] as const;
+const CURRENCY_CHECK_MS = 20;
+const FLUSH_MS = 20;
+const FOLLOWING_FLUSH_MS = 3;
 
-const delay = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
+beforeEach(() => {
+  installControlledClock();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const makeEvent = (id: string): MaterializedSyncableEvent => ({
   id,
@@ -95,74 +93,62 @@ const runSync = async (
   return { event: emitted[0] as Record<string, unknown>, thrown };
 };
 
-const expectBalanced = (event: Record<string, unknown>): number => {
-  let attributed = 0;
-  for (const field of PHASE_FIELDS) {
-    const value = event[field];
-    expect(typeof value, `${field} is a number`).toBe("number");
-    expect(Number.isFinite(value as number), `${field} is finite`).toBe(true);
-    expect(value as number).toBeGreaterThanOrEqual(0);
-    attributed += value as number;
-  }
-  const reconcileDurationMs = event["sync.reconcile.duration_ms"] as number;
-  const unattributedDurationMs = event["sync.phase.unattributed.duration_ms"] as number;
-  expect(unattributedDurationMs).toBeGreaterThanOrEqual(0);
-  expect(attributed + unattributedDurationMs).toBeCloseTo(reconcileDurationMs, 1);
-  return attributed;
-};
-
 const phaseKeys = (event: Record<string, unknown>): string[] =>
   Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted();
 
 describe("syncCalendar phase attribution when a phase throws", () => {
   it("records the currency check that rejected", async () => {
     const { event, thrown } = await runSync({
-      isCurrent: async () => {
-        await delay(20);
-        throw new Error("currency check failed");
+      isCurrent: () => {
+        elapse(CURRENCY_CHECK_MS);
+        return Promise.reject(new Error("currency check failed"));
       },
     });
 
     expect((thrown as Error).message).toBe("currency check failed");
-    expect(event["sync.phase.currency_check.duration_ms"] as number).toBeGreaterThanOrEqual(15);
-    expectBalanced(event);
+    expectPhaseDurations(event, { "sync.phase.currency_check.duration_ms": CURRENCY_CHECK_MS });
   });
 
   it("records the flush that rejected", async () => {
     const { event, thrown } = await runSync({
-      flush: async () => {
-        await delay(20);
-        throw new Error("flush failed");
+      flush: () => {
+        elapse(FLUSH_MS);
+        return Promise.reject(new Error("flush failed"));
       },
       localEvents: [makeEvent("event-1")],
     });
 
     expect((thrown as Error).message).toBe("flush failed");
-    expect(event["sync.phase.checkpoint_flush.duration_ms"] as number).toBeGreaterThanOrEqual(15);
-    expectBalanced(event);
+    expectPhaseDurations(event, { "sync.phase.checkpoint_flush.duration_ms": FLUSH_MS });
   });
 
   it("keeps a failed run from leaking phase time into the runs that follow it", async () => {
-    const attributedTotals: number[] = [];
-
     for (let round = 0; round < 5; round++) {
       const failure = await runSync({
-        isCurrent: async () => {
-          await delay(20);
-          throw new Error("currency check failed");
+        isCurrent: () => {
+          elapse(CURRENCY_CHECK_MS);
+          return Promise.reject(new Error("currency check failed"));
         },
       });
       expect(failure.thrown).toBeInstanceOf(Error);
-      expectBalanced(failure.event);
+      expectPhaseDurations(
+        failure.event,
+        { "sync.phase.currency_check.duration_ms": CURRENCY_CHECK_MS },
+      );
 
-      const success = await runSync({ localEvents: [makeEvent(`event-${round}`)] });
+      const success = await runSync({
+        flush: () => {
+          elapse(FOLLOWING_FLUSH_MS);
+          return Promise.resolve();
+        },
+        localEvents: [makeEvent(`event-${round}`)],
+      });
       expect(success.thrown).toBeNull();
-      attributedTotals.push(expectBalanced(success.event));
-      expect(failure.event["sync.phase.currency_check.duration_ms"] as number)
-        .toBeGreaterThan((success.event["sync.phase.currency_check.duration_ms"] as number) * 2);
+      expectPhaseDurations(
+        success.event,
+        { "sync.phase.checkpoint_flush.duration_ms": FOLLOWING_FLUSH_MS },
+      );
     }
-
-    expect(Math.max(...attributedTotals) - Math.min(...attributedTotals)).toBeLessThan(20);
   });
 
   it("emits the same phase field set whether the run succeeds or throws", async () => {
