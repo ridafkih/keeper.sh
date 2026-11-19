@@ -55,6 +55,7 @@ export {
   readCredentialTokens,
   storeCredentialAccessToken,
   storeCredentialRefreshToken,
+  storeRefreshedTokens,
   type CredentialTokens,
   type StoredAccessToken,
   type StoredCredentialTokens,
