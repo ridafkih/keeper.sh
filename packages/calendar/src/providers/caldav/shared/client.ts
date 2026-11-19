@@ -218,16 +218,22 @@ const bindRequestToAccount = (input: string | Request | URL, serverUrl: string):
 const toCalendarObjectPath = (href: string, calendarUrl: string): string =>
   new URL(href, calendarUrl).pathname;
 
-const isCalendarObjectUrlOf = (calendarUrl: string) => (url: string): boolean =>
-  isCalendarObjectPath(toCalendarObjectPath(url, calendarUrl));
+const isCalendarObjectUrlOf = (calendarUrl: string) => {
+  const collectionPath = new URL(calendarUrl).pathname;
+  return (url: string): boolean =>
+    isCalendarObjectPath(toCalendarObjectPath(url, calendarUrl), collectionPath);
+};
 
-const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => [
-  ...new Set(
-    responses
-      .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
-      .filter((path) => isCalendarObjectPath(path)),
-  ),
-];
+const toCalendarObjectPaths = (responses: { href?: string }[], calendarUrl: string): string[] => {
+  const collectionPath = new URL(calendarUrl).pathname;
+  return [
+    ...new Set(
+      responses
+        .map(({ href }) => toCalendarObjectPath(href ?? "", calendarUrl))
+        .filter((path) => isCalendarObjectPath(path, collectionPath)),
+    ),
+  ];
+};
 
 class CalDAVClient {
   private client: DAVClientInstance | null = null;
