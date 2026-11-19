@@ -9,6 +9,12 @@ import type {
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
 import { createSyncEventContentHash } from "../../../src/core/events/content-hash";
+import {
+  PHASE_FIELDS,
+  elapse,
+  expectPhaseDurations,
+  installControlledClock,
+} from "./phase-timing-harness";
 
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
@@ -21,21 +27,6 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-const PHASE_FIELDS = [
-  "sync.phase.read_state.duration_ms",
-  "sync.phase.currency_check.duration_ms",
-  "sync.phase.compute_operations.duration_ms",
-  "sync.phase.provider_push.duration_ms",
-  "sync.phase.provider_delete.duration_ms",
-  "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.mapping_flush.duration_ms",
-] as const;
-
-type PhaseField = (typeof PHASE_FIELDS)[number];
-
-const MONOTONIC_ORIGIN_MS = 1000;
-const WALL_ORIGIN_MS = Date.parse("2026-03-15T08:00:00.000Z");
-
 const READ_STATE_MS = 3;
 const CURRENCY_CHECK_MS = 10;
 const PUSH_MS = 10;
@@ -43,18 +34,8 @@ const SLOW_PUSH_MS = 15;
 const DELETE_MS = 4;
 const NORMALIZE_MS = 2;
 
-const clock = { monotonicMs: MONOTONIC_ORIGIN_MS, wallMs: WALL_ORIGIN_MS };
-
-const elapse = (durationMs: number): void => {
-  clock.monotonicMs += durationMs;
-  clock.wallMs += durationMs;
-};
-
 beforeEach(() => {
-  clock.monotonicMs = MONOTONIC_ORIGIN_MS;
-  clock.wallMs = WALL_ORIGIN_MS;
-  vi.spyOn(performance, "now").mockImplementation(() => clock.monotonicMs);
-  vi.spyOn(Date, "now").mockImplementation(() => clock.wallMs);
+  installControlledClock();
 });
 
 afterEach(() => {
@@ -87,24 +68,6 @@ const makeProvider = (overrides: Partial<{
   listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
   ...(overrides.normalizeEvent && { normalizeEvent: overrides.normalizeEvent }),
 });
-
-const expectPhaseDurations = (
-  event: Record<string, unknown>,
-  expectedPhases: Partial<Record<PhaseField, number>> = {},
-  expectedUnattributedMs = 0,
-): void => {
-  let attributedMs = 0;
-  for (const field of PHASE_FIELDS) {
-    const expectedMs = expectedPhases[field] ?? 0;
-    attributedMs += expectedMs;
-    expect(event[field], field).toBe(expectedMs);
-  }
-
-  const reconcileMs = attributedMs + expectedUnattributedMs;
-  expect(event["sync.phase.unattributed.duration_ms"]).toBe(expectedUnattributedMs);
-  expect(event["sync.reconcile.duration_ms"]).toBe(reconcileMs);
-  expect(event["duration_ms"]).toBe(reconcileMs);
-};
 
 interface RunOptions {
   existingMappings?: EventMapping[];
@@ -287,7 +250,7 @@ describe("syncCalendar phase attribution", () => {
       expectPhaseDurations(
         event,
         { "sync.phase.provider_push.duration_ms": PUSH_MS },
-        NORMALIZE_MS,
+        { unattributedMs: NORMALIZE_MS },
       );
     }
 
