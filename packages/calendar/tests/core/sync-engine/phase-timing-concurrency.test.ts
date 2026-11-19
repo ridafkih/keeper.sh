@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type {
   DeleteResult,
@@ -8,6 +8,12 @@ import type {
 } from "../../../src/core/types";
 import type { EventMapping } from "../../../src/core/events/mappings";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
+import {
+  createGate,
+  elapse,
+  expectPhaseDurations,
+  installControlledClock,
+} from "./phase-timing-harness";
 
 const TEST_RECONCILIATION_SCOPE = {
   authoritativeWindow: {
@@ -20,18 +26,26 @@ const TEST_RECONCILIATION_SCOPE = {
   },
 };
 
-const PHASE_FIELDS = [
-  "sync.phase.read_state.duration_ms",
-  "sync.phase.currency_check.duration_ms",
-  "sync.phase.compute_operations.duration_ms",
-  "sync.phase.provider_push.duration_ms",
-  "sync.phase.provider_delete.duration_ms",
-  "sync.phase.checkpoint_flush.duration_ms",
-  "sync.phase.mapping_flush.duration_ms",
-] as const;
+const FAST_PUSH_MS = 5;
+const SLOW_PUSH_MS = 40;
+const READ_STATE_MS = 15;
+const FLUSH_MS = 15;
+const SLOW_FLUSH_MS = 25;
+const PUSH_MS = 7;
 
-const delay = (durationMs: number): Promise<void> =>
-  new Promise((resolve) => { setTimeout(resolve, durationMs); });
+const BULK_EVENT_COUNT = 130;
+const BULK_CHUNK_COUNT = 3;
+const BULK_CURRENCY_CHECK_COUNT = 4;
+const BULK_CURRENCY_CHECK_MS = 1;
+const BULK_PUSH_MS = 2;
+
+beforeEach(() => {
+  installControlledClock();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const makeEvent = (
   id: string,
@@ -57,25 +71,6 @@ const makeProvider = (overrides: Partial<{
   deleteEvents: overrides.deleteEvents ?? (() => Promise.resolve([])),
   listRemoteEvents: overrides.listRemoteEvents ?? (() => Promise.resolve([])),
 });
-
-const readPhaseTotal = (event: Record<string, unknown>): number =>
-  PHASE_FIELDS.reduce((total, field) => total + (event[field] as number), 0);
-
-const expectPhaseArithmetic = (event: Record<string, unknown>): void => {
-  const reconcileDurationMs = event["sync.reconcile.duration_ms"] as number;
-  const unattributedDurationMs = event["sync.phase.unattributed.duration_ms"] as number;
-
-  for (const field of PHASE_FIELDS) {
-    expect(typeof event[field], `${field} is a number`).toBe("number");
-    expect(Number.isFinite(event[field] as number), `${field} is finite`).toBe(true);
-    expect(event[field] as number).toBeGreaterThanOrEqual(0);
-  }
-
-  expect(unattributedDurationMs).toBeGreaterThanOrEqual(0);
-  expect(readPhaseTotal(event) + unattributedDurationMs).toBeCloseTo(reconcileDurationMs, 1);
-  expect(reconcileDurationMs).toBeLessThanOrEqual((event["duration_ms"] as number) + 2);
-  expect(reconcileDurationMs).toBeGreaterThanOrEqual((event["duration_ms"] as number) - 2);
-};
 
 interface RunOptions {
   calendarId?: string;
@@ -120,34 +115,42 @@ const runSync = async (options: RunOptions = {}): Promise<Record<string, unknown
   return emitted[0] as Record<string, unknown>;
 };
 
-const fastPush = (): Promise<PushResult[]> =>
-  Promise.resolve([{ remoteId: "remote-fast", success: true }]);
-
 describe("syncCalendar phase attribution under stress", () => {
   it("keeps two interleaved runs from borrowing each other's phase time", async () => {
-    const slowPush = async (): Promise<PushResult[]> => {
-      await delay(40);
-      return [{ remoteId: "remote-slow", success: true }];
-    };
-    const [slowEvent, fastEvent] = await Promise.all([
-      runSync({
-        calendarId: "dest-slow",
-        localEvents: [makeEvent("slow-1")],
-        provider: makeProvider({ pushEvents: slowPush }),
-      }),
-      runSync({
-        calendarId: "dest-fast",
-        localEvents: [makeEvent("fast-1")],
-        provider: makeProvider({ pushEvents: fastPush }),
-      }),
-    ]);
+    const slowGate = createGate();
+    const fastGate = createGate();
 
-    expectPhaseArithmetic(slowEvent);
-    expectPhaseArithmetic(fastEvent);
-    expect(slowEvent["sync.phase.provider_push.duration_ms"] as number)
-      .toBeGreaterThanOrEqual(30);
-    expect(slowEvent["sync.phase.provider_push.duration_ms"] as number)
-      .toBeGreaterThan((fastEvent["sync.phase.provider_push.duration_ms"] as number) * 2);
+    const slowRun = runSync({
+      calendarId: "dest-slow",
+      localEvents: [makeEvent("slow-1")],
+      provider: makeProvider({
+        pushEvents: async () => {
+          await slowGate.pass();
+          return [{ remoteId: "remote-slow", success: true }];
+        },
+      }),
+    });
+    const fastRun = runSync({
+      calendarId: "dest-fast",
+      localEvents: [makeEvent("fast-1")],
+      provider: makeProvider({
+        pushEvents: async () => {
+          await fastGate.pass();
+          return [{ remoteId: "remote-fast", success: true }];
+        },
+      }),
+    });
+
+    await Promise.all([slowGate.entered, fastGate.entered]);
+    elapse(FAST_PUSH_MS);
+    fastGate.release();
+    const fastEvent = await fastRun;
+    elapse(SLOW_PUSH_MS - FAST_PUSH_MS);
+    slowGate.release();
+    const slowEvent = await slowRun;
+
+    expectPhaseDurations(fastEvent, { "sync.phase.provider_push.duration_ms": FAST_PUSH_MS });
+    expectPhaseDurations(slowEvent, { "sync.phase.provider_push.duration_ms": SLOW_PUSH_MS });
   });
 
   it("records read_state and balances when readState rejects", async () => {
@@ -158,9 +161,9 @@ describe("syncCalendar phase attribution under stress", () => {
       isCurrent: () => Promise.resolve(true),
       onSyncEvent: (event) => { emitted.push(event); },
       provider: makeProvider(),
-      readState: async () => {
-        await delay(15);
-        throw new Error("read state exploded");
+      readState: () => {
+        elapse(READ_STATE_MS);
+        return Promise.reject(new Error("read state exploded"));
       },
       reconciliationScope: TEST_RECONCILIATION_SCOPE,
       userId: "user-1",
@@ -169,17 +172,16 @@ describe("syncCalendar phase attribution under stress", () => {
     expect(emitted).toHaveLength(1);
     const event = emitted[0] as Record<string, unknown>;
     expect(event["outcome"]).toBe("error");
-    expect(event["sync.phase.read_state.duration_ms"] as number).toBeGreaterThanOrEqual(10);
-    expectPhaseArithmetic(event);
+    expectPhaseDurations(event, { "sync.phase.read_state.duration_ms": READ_STATE_MS });
   });
 
   it("records checkpoint_flush and balances when the flush rejects", async () => {
     const emitted: Record<string, unknown>[] = [];
     await expect(syncCalendar({
       calendarId: "dest-cal-1",
-      flush: async () => {
-        await delay(15);
-        throw new Error("flush exploded");
+      flush: () => {
+        elapse(FLUSH_MS);
+        return Promise.reject(new Error("flush exploded"));
       },
       isCurrent: () => Promise.resolve(true),
       onSyncEvent: (event) => { emitted.push(event); },
@@ -198,38 +200,43 @@ describe("syncCalendar phase attribution under stress", () => {
     expect(emitted).toHaveLength(1);
     const event = emitted[0] as Record<string, unknown>;
     expect(event["outcome"]).toBe("error");
-    expect(event["sync.phase.checkpoint_flush.duration_ms"] as number).toBeGreaterThanOrEqual(10);
-    expectPhaseArithmetic(event);
+    expectPhaseDurations(event, { "sync.phase.checkpoint_flush.duration_ms": FLUSH_MS });
   });
 
   it("does not double count across many operation chunks", async () => {
-    const localEvents = Array.from({ length: 130 }, (_unused, index) =>
+    const localEvents = Array.from({ length: BULK_EVENT_COUNT }, (_unused, index) =>
       makeEvent(`bulk-${index}`,
         new Date(Date.UTC(2026, 2, 15, 9, index % 60)),
         new Date(Date.UTC(2026, 2, 15, 10, index % 60))));
 
     let currencyChecks = 0;
+    let pushCalls = 0;
     const event = await runSync({
-      isCurrent: async () => {
+      isCurrent: () => {
         currencyChecks += 1;
-        await delay(1);
-        return true;
+        elapse(BULK_CURRENCY_CHECK_MS);
+        return Promise.resolve(true);
       },
       localEvents,
       provider: makeProvider({
-        pushEvents: async (events) => {
-          await delay(2);
-          return events.map((pushed, index) => ({
+        pushEvents: (events) => {
+          pushCalls += 1;
+          elapse(BULK_PUSH_MS);
+          return Promise.resolve(events.map((pushed, index) => ({
             remoteId: `remote-${pushed.id}-${index}`,
             success: true,
-          }));
+          })));
         },
       }),
     });
 
-    expect(currencyChecks).toBeGreaterThan(3);
+    expect(currencyChecks).toBe(BULK_CURRENCY_CHECK_COUNT);
+    expect(pushCalls).toBe(BULK_CHUNK_COUNT);
     expect(event["outcome"]).toBe("success");
-    expectPhaseArithmetic(event);
+    expectPhaseDurations(event, {
+      "sync.phase.currency_check.duration_ms": BULK_CURRENCY_CHECK_COUNT * BULK_CURRENCY_CHECK_MS,
+      "sync.phase.provider_push.duration_ms": BULK_CHUNK_COUNT * BULK_PUSH_MS,
+    });
   });
 
   it("converges on identical phase field sets over repeated runs", async () => {
@@ -238,10 +245,13 @@ describe("syncCalendar phase attribution under stress", () => {
       const event = await runSync({
         localEvents: [makeEvent("ev-repeat")],
         provider: makeProvider({
-          pushEvents: () => Promise.resolve([{ remoteId: "remote-repeat", success: true }]),
+          pushEvents: () => {
+            elapse(PUSH_MS);
+            return Promise.resolve([{ remoteId: "remote-repeat", success: true }]);
+          },
         }),
       });
-      expectPhaseArithmetic(event);
+      expectPhaseDurations(event, { "sync.phase.provider_push.duration_ms": PUSH_MS });
       keySets.push(Object.keys(event).filter((key) => key.startsWith("sync.")).toSorted().join("|"));
     }
     expect(new Set(keySets).size).toBe(1);
@@ -249,8 +259,9 @@ describe("syncCalendar phase attribution under stress", () => {
 
   it("keeps a slow checkpoint flush inside the reconcile total", async () => {
     const event = await runSync({
-      flush: async () => {
-        await delay(25);
+      flush: () => {
+        elapse(SLOW_FLUSH_MS);
+        return Promise.resolve();
       },
       localEvents: [makeEvent("ev-1")],
       provider: makeProvider({
@@ -258,8 +269,6 @@ describe("syncCalendar phase attribution under stress", () => {
       }),
     });
 
-    expect(event["sync.phase.checkpoint_flush.duration_ms"] as number)
-      .toBeGreaterThanOrEqual(20);
-    expectPhaseArithmetic(event);
+    expectPhaseDurations(event, { "sync.phase.checkpoint_flush.duration_ms": SLOW_FLUSH_MS });
   });
 });
