@@ -1,5 +1,8 @@
 import type { CalendarDiscoveryCache } from "./shared/discovery-cache";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { Keyring, StoredSecret } from "@keeper.sh/database";
+
+type StoredCalDAVPassword = StoredSecret<"caldav_credentials.encryptedPassword">;
 
 interface CalDAVProviderOptions {
   providerId: string;
@@ -8,7 +11,7 @@ interface CalDAVProviderOptions {
 
 interface CalDAVProviderConfig {
   database: BunSQLDatabase;
-  encryptionKey: string;
+  keyring: Keyring;
 }
 
 interface CalDAVAccount {
@@ -20,7 +23,8 @@ interface CalDAVAccount {
   serverUrl: string;
   calendarUrl: string;
   username: string;
-  encryptedPassword: string;
+  caldavCredentialId: string;
+  encryptedPassword: StoredCalDAVPassword;
 }
 
 interface CalDAVSourceAccount {
@@ -34,7 +38,8 @@ interface CalDAVSourceAccount {
   name: string;
   originalName: string | null;
   username: string;
-  encryptedPassword: string;
+  caldavCredentialId: string;
+  encryptedPassword: StoredCalDAVPassword;
   syncToken: string | null;
 }
 
@@ -49,7 +54,7 @@ interface CalDAVSourceConfig {
 
 interface CalDAVSourceProviderConfig {
   database: BunSQLDatabase;
-  encryptionKey: string;
+  keyring: Keyring;
 }
 
 interface CalDAVSourceSyncResult {
@@ -60,13 +65,15 @@ interface CalDAVSourceSyncResult {
 
 interface CalDAVServiceConfig {
   database: BunSQLDatabase;
-  encryptionKey: string;
+  keyring: Keyring;
 }
 
 interface CalDAVService {
   getCalDAVAccountsForUser: (userId: string, providerFilter?: string) => Promise<CalDAVAccount[]>;
   getCalDAVAccountsByProvider: (provider: string) => Promise<CalDAVAccount[]>;
-  getDecryptedPassword: (encryptedPassword: string) => string;
+  getDecryptedPassword: (
+    credential: Pick<CalDAVAccount, "caldavCredentialId" | "encryptedPassword">,
+  ) => string;
 }
 
 interface CalDAVClientConfig {
@@ -101,4 +108,5 @@ export type {
   CalDAVSourceConfig,
   CalDAVSourceProviderConfig,
   CalDAVSourceSyncResult,
+  StoredCalDAVPassword,
 };

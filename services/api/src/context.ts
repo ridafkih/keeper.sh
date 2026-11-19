@@ -1,6 +1,6 @@
 import { Resend } from "resend";
 import env from "./env";
-import { createDatabase } from "@keeper.sh/database";
+import { createDatabase, createKeyring } from "@keeper.sh/database";
 import { syncStatusTable } from "@keeper.sh/database/schema";
 import Redis from "ioredis";
 import { createAuth, parseRegistrationEmailDomains } from "@keeper.sh/auth";
@@ -194,7 +194,10 @@ const resend = createResendClient();
 const feedbackEmail = env.FEEDBACK_EMAIL ?? null;
 
 const baseUrl = env.BETTER_AUTH_URL;
-const encryptionKey = env.ENCRYPTION_KEY;
+const keyring = createKeyring({
+  decryptOnlyKeys: env.ENCRYPTION_KEYS_DECRYPT_ONLY,
+  primaryKey: env.ENCRYPTION_KEY,
+});
 const webhookConfig = resolveWebhookConfig(env.WEBHOOK_PUBLIC_URL);
 
 export {
@@ -215,7 +218,7 @@ export {
   resend,
   feedbackEmail,
   baseUrl,
-  encryptionKey,
+  keyring,
   getCurrentSyncAggregate,
   getCachedSyncAggregate,
 };

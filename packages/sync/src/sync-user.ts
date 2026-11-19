@@ -34,6 +34,7 @@ import type {
 } from "@keeper.sh/calendar";
 import { calendarAccountsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { withDatabasePoolWindow } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import type { DatabasePoolWindow } from "@keeper.sh/database";
 import { and, arrayContains, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
@@ -132,7 +133,7 @@ interface SyncConfig {
   destinationCalendarId: string;
   database: BunSQLDatabase;
   redis: Redis;
-  encryptionKey?: string;
+  keyring: Keyring;
   googleProjectRequestsPerMinute?: number;
   oauthConfig: OAuthConfig;
   plan: Plan;
@@ -908,7 +909,7 @@ const syncDestinationsForUser = async (
           userId: destination.userId,
           accountId: destination.accountId,
           oauthConfig: config.oauthConfig,
-          encryptionKey: config.encryptionKey,
+          keyring: config.keyring,
           refreshLockStore: config.refreshLockStore,
           safeFetchOptions: config.safeFetchOptions,
           rateLimiter: createProviderRateLimiter(

@@ -14,7 +14,16 @@ export {
 export type { DatabasePoolWindow, DatabasePoolWindowSample } from "./utils/pool-telemetry";
 export type { DatabaseErrorClassification, DatabaseErrorDetails } from "./utils/errors";
 export { account, user } from "./database/auth-schema";
-export { encryptPassword, decryptPassword } from "./encryption";
+export { KeyringConfigurationError, createKeyring, hasEncryptionKey } from "./keyring";
+export type { Keyring, KeyringOptions } from "./keyring";
+export {
+  SecretDecryptionError,
+  SecretEncryptionError,
+  hasStoredSecret,
+  openSecret,
+  sealSecret,
+} from "./stored-secret";
+export type { SecretDecryptionReason, SecretPurpose, StoredSecret } from "./stored-secret";
 export { buildImportedCalendarExists } from "./database/rediscovery-candidates";
 export { recordUserMilestone } from "./database/user-milestones";
 export { readUserAgentFeedbackEnabled } from "./database/user-agent-feedback";

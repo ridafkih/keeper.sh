@@ -1,3 +1,4 @@
+import { createKeyring, sealSecret } from "@keeper.sh/database";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 interface EmittedEvent {
@@ -65,7 +66,7 @@ let poolAcquisitionFails = false;
 const STORED_INGEST_SEQ = 0;
 
 const baseSource = {
-  accessToken: "access-token",
+  accessToken: sealSecret("oauth_credentials.accessToken", "access-token", createKeyring(), "credential-1"),
   accountId: "account-1",
   excludeAvailabilities: [],
   expiresAt: new Date(Date.now() + 3_600_000),
@@ -77,7 +78,7 @@ const baseSource = {
   ingestWindowStart: null,
   oauthCredentialId: "credential-1",
   provider: "google",
-  refreshToken: "refresh-token",
+  refreshToken: sealSecret("oauth_credentials.refreshToken", "refresh-token", createKeyring(), "credential-1"),
   syncToken: null,
   userId: "user-1",
 };
@@ -217,7 +218,7 @@ vi.mock("@keeper.sh/sync", async (importOriginal) => ({
 vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   createDatabase: () => Promise.resolve({}),
-  decryptPassword: () => "plaintext",
+  openSecret: () => "plaintext",
 }));
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => {

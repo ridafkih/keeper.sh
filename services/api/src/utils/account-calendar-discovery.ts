@@ -3,14 +3,21 @@ import {
   calendarAccountsTable,
   oauthCredentialsTable,
 } from "@keeper.sh/database/schema";
-import { buildImportedCalendarExists, decryptPassword } from "@keeper.sh/database";
+import { buildImportedCalendarExists, openSecret } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import {
+  readCredentialTokens,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
   toDiscoveredGoogleCalendars,
   toDiscoveredOutlookCalendars,
 } from "@keeper.sh/calendar";
-import type { DiscoveredCalendar, RediscoveryCalendarType } from "@keeper.sh/calendar";
+import type {
+  DiscoveredCalendar,
+  RediscoveryCalendarType,
+  StoredAccessToken,
+  StoredRefreshToken,
+} from "@keeper.sh/calendar";
 import {
   createCalDAVClient,
   resolveCalDAVServerHost,
@@ -63,10 +70,10 @@ const resolveSourceAccessToken = async (
 };
 
 interface StoredOAuthCredential {
-  accessToken: string;
+  accessToken: StoredAccessToken;
   expiresAt: Date;
   id: string;
-  refreshToken: string;
+  refreshToken: StoredRefreshToken;
 }
 
 const storedOAuthCredentialColumns = {
@@ -80,8 +87,19 @@ const listOAuthCredentialCalendars = async (
   provider: string,
   credential: StoredOAuthCredential,
 ): Promise<DiscoveredCalendar[]> => {
-  const { googleInteractiveRateLimiter } = await import("@/context");
-  const accessToken = await resolveSourceAccessToken(provider, credential);
+  const { googleInteractiveRateLimiter, keyring } = await import("@/context");
+  const accessToken = await resolveSourceAccessToken(provider, {
+    ...readCredentialTokens(
+      {
+        accessToken: credential.accessToken,
+        oauthCredentialId: credential.id,
+        refreshToken: credential.refreshToken,
+      },
+      keyring,
+    ),
+    expiresAt: credential.expiresAt,
+    id: credential.id,
+  });
 
   if (provider === "google") {
     return toDiscoveredGoogleCalendars(await listGoogleCalendars(accessToken, {
@@ -140,13 +158,14 @@ const discoverOAuthCredentialCalendars = async (
 
 const discoverCalDAVAccountCalendars = async (
   accountId: string,
-  encryptionKey: string,
+  keyring: Keyring,
 ): Promise<DiscoveredCalendar[]> => {
   const { database } = await import("@/context");
 
   const [credential] = await database
     .select({
       authMethod: caldavCredentialsTable.authMethod,
+      caldavCredentialId: caldavCredentialsTable.id,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
       username: caldavCredentialsTable.username,
@@ -166,7 +185,11 @@ const discoverCalDAVAccountCalendars = async (
   const client = createCalDAVClient({
     authMethod: credential.authMethod as CalDAVAuthMethod,
     credentials: {
-      password: decryptPassword(credential.encryptedPassword, encryptionKey),
+      password: openSecret(
+        credential.encryptedPassword,
+        keyring,
+        credential.caldavCredentialId,
+      ),
       username: credential.username,
     },
     serverUrl: credential.serverUrl,

@@ -11,8 +11,15 @@ import {
 } from "@keeper.sh/database/schema";
 import { REAUTHENTICATION_TOKEN_REFRESH, TOKEN_REFRESH_BUFFER_MS } from "@keeper.sh/constants";
 import { classifyDatabaseError } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import { widelog } from "widelogger";
 import { abortableSleep } from "../utils/backoff";
+import {
+  readCredentialAccessToken,
+  storeCredentialAccessToken,
+  storeCredentialRefreshToken,
+} from "./credential-tokens";
+import type { StoredAccessToken, StoredRefreshToken } from "./credential-tokens";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -22,9 +29,9 @@ const PERSIST_ATTEMPTS = 3;
 const PERSIST_BACKOFF_MS = 50;
 
 interface RefreshedCredential {
-  accessToken: string;
+  accessToken: StoredAccessToken;
   expiresAt: Date;
-  refreshToken: string;
+  refreshToken: StoredRefreshToken;
 }
 
 const persistRefreshedCredential = async (
@@ -55,6 +62,7 @@ interface CoordinatedRefresherOptions {
   database: BunSQLDatabase;
   oauthCredentialId: string;
   calendarAccountId: string;
+  keyring: Keyring;
   refreshLockStore: RefreshLockStore | null;
   rawRefresh: (refreshToken: string) => Promise<{
     access_token: string;
@@ -64,7 +72,14 @@ interface CoordinatedRefresherOptions {
 }
 
 const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
-  const { database, oauthCredentialId, calendarAccountId, refreshLockStore, rawRefresh } = options;
+  const {
+    database,
+    oauthCredentialId,
+    calendarAccountId,
+    keyring,
+    refreshLockStore,
+    rawRefresh,
+  } = options;
 
   /*
    * A peer that won the lock persists before releasing it, so its result is readable here.
@@ -79,7 +94,7 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
       .from(oauthCredentialsTable)
       .where(eq(oauthCredentialsTable.id, oauthCredentialId))
       .limit(1);
-    if (!stored?.expiresAt || !stored.accessToken) {
+    if (!stored?.expiresAt) {
       return null;
     }
     /*
@@ -90,8 +105,15 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
     if (remainingMs <= TOKEN_REFRESH_BUFFER_MS) {
       return null;
     }
+    const accessToken = readCredentialAccessToken(
+      { accessToken: stored.accessToken, oauthCredentialId },
+      keyring,
+    );
+    if (!accessToken) {
+      return null;
+    }
     return {
-      access_token: stored.accessToken,
+      access_token: accessToken,
       expires_in: Math.floor(remainingMs / MS_PER_SECOND),
     };
   };
@@ -109,9 +131,17 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
 
           try {
             await persistRefreshedCredential(database, oauthCredentialId, {
-              accessToken: result.access_token,
+              accessToken: storeCredentialAccessToken(
+                oauthCredentialId,
+                result.access_token,
+                keyring,
+              ),
               expiresAt: newExpiresAt,
-              refreshToken: result.refresh_token ?? refreshToken,
+              refreshToken: storeCredentialRefreshToken(
+                oauthCredentialId,
+                result.refresh_token ?? refreshToken,
+                keyring,
+              ),
             });
           } catch (error) {
             widelog.set("token.rotation_lost", rotated);

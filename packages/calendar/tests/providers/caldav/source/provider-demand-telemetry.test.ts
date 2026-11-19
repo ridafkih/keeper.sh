@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { createKeyring } from "@keeper.sh/database";
 
 interface EmittedEvent {
   provider?: { account_id?: string };
@@ -37,7 +38,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => ({
 
 vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
-  decryptPassword: () => "plaintext",
+  openSecret: () => "plaintext",
 }));
 
 const { createCalDAVSourceProvider } = await import(
@@ -145,7 +146,7 @@ const createFakeDatabase = (readPrior: () => PriorRow[]): FakeDatabase => {
 const syncOnce = async (fake: FakeDatabase): Promise<void> => {
   const provider = createCalDAVSourceProvider({
     database: fake.database,
-    encryptionKey: "0".repeat(64),
+    keyring: createKeyring(),
   });
   await context(async () => {
     await provider.syncSource("calendar-1");

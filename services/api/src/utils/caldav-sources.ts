@@ -5,12 +5,13 @@ import {
   sourceDestinationMappingsTable,
 } from "@keeper.sh/database/schema";
 import { and, count, eq, inArray, sql } from "drizzle-orm";
-import { encryptPassword } from "@keeper.sh/database";
+import { hasEncryptionKey, sealSecret } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import { findUserCalDAVCalendarsOnServer, resolveCalendarCapabilities } from "@keeper.sh/calendar";
 import { createCalDAVClient, normalizeCalDAVServerHost } from "@keeper.sh/calendar/caldav";
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { safeFetchOptions } from "./safe-fetch-options";
-import { database, premiumService, encryptionKey } from "@/context";
+import { database, premiumService, keyring } from "@/context";
 import { enqueuePushSync } from "./enqueue-push-sync";
 import {
   createSourceCalendarInsertDependencies,
@@ -171,13 +172,20 @@ const createCalDAVAccount = async (
   client: CaldavImportDatabase,
   userId: string,
   credentials: CalDAVAccountCredentials,
-  resolvedEncryptionKey: string,
+  credentialKeyring: Keyring,
 ): Promise<string> => {
+  const credentialId = crypto.randomUUID();
   const [credential] = await client
     .insert(caldavCredentialsTable)
     .values({
       authMethod: credentials.authMethod,
-      encryptedPassword: encryptPassword(credentials.password, resolvedEncryptionKey),
+      encryptedPassword: sealSecret(
+        "caldav_credentials.encryptedPassword",
+        credentials.password,
+        credentialKeyring,
+        credentialId,
+      ),
+      id: credentialId,
       serverUrl: credentials.serverUrl,
       username: credentials.username,
     })
@@ -243,11 +251,11 @@ const createCalDAVImportTransaction = (
   client: CaldavImportDatabase,
   userId: string,
   credentials: CalDAVAccountCredentials,
-  resolvedEncryptionKey: string,
+  credentialKeyring: Keyring,
   writableCalendarUrls: Set<string>,
 ): CalDAVImportTransaction => ({
   countAccounts: () => countCalDAVImportAccounts(client, userId),
-  createAccount: () => createCalDAVAccount(client, userId, credentials, resolvedEncryptionKey),
+  createAccount: () => createCalDAVAccount(client, userId, credentials, credentialKeyring),
   findHeldCalendars: () => findHeldCalDAVCalendars(client, userId, credentials),
   findReusableAccountId: () => findReusableCalDAVAccountId(client, userId, credentials),
   insertCalendars: (accountId, calendars) =>
@@ -263,11 +271,9 @@ const importCalDAVCalendars = async (
   userId: string,
   { calendars, ...credentials }: ImportCalDAVCalendarsData,
 ): Promise<CalDAVImportResult> => {
-  if (!encryptionKey) {
+  if (!hasEncryptionKey(keyring)) {
     throw new Error("Encryption key not configured");
   }
-
-  const resolvedEncryptionKey = encryptionKey;
 
   const plan = await premiumService.getUserPlan(userId);
   if (!plan) {
@@ -284,7 +290,7 @@ const importCalDAVCalendars = async (
           transaction,
           userId,
           credentials,
-          resolvedEncryptionKey,
+          keyring,
           writableCalendarUrls,
         ))),
   });

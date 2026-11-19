@@ -5,13 +5,15 @@ import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   createCoordinatedRefresher,
+  readCredentialTokens,
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
 import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
 import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
-import { decryptPassword } from "@keeper.sh/database";
+import { hasEncryptionKey, openSecret } from "@keeper.sh/database";
+import type { Keyring } from "@keeper.sh/database";
 import {
   calendarAccountsTable,
   calendarsTable,
@@ -38,6 +40,7 @@ const resolveOAuthProvider = async (
   userId: string,
   accountId: string,
   oauthConfig: OAuthConfig,
+  keyring: Keyring,
   refreshLockStore: RefreshLockStore | null,
   rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
@@ -60,6 +63,8 @@ const resolveOAuthProvider = async (
     return null;
   }
 
+  const tokens = readCredentialTokens(oauthCred, keyring);
+
   if (provider === "google" && oauthConfig.googleClientId && oauthConfig.googleClientSecret) {
     if (!oauthCred.externalCalendarId) {
       return null;
@@ -69,8 +74,8 @@ const resolveOAuthProvider = async (
       clientSecret: oauthConfig.googleClientSecret,
     });
     return createGoogleSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
       externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
@@ -79,6 +84,7 @@ const resolveOAuthProvider = async (
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
+        keyring,
         refreshLockStore,
         rawRefresh: (refreshToken) => refreshGoogleToken(refreshToken),
       }),
@@ -96,8 +102,8 @@ const resolveOAuthProvider = async (
       clientSecret: oauthConfig.microsoftClientSecret,
     });
     return createOutlookSyncProvider({
-      accessToken: oauthCred.accessToken,
-      refreshToken: oauthCred.refreshToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
       accessTokenExpiresAt: oauthCred.expiresAt,
       externalCalendarId: oauthCred.externalCalendarId,
       calendarId,
@@ -106,6 +112,7 @@ const resolveOAuthProvider = async (
         database,
         oauthCredentialId: oauthCred.oauthCredentialId,
         calendarAccountId: accountId,
+        keyring,
         refreshLockStore,
         rawRefresh: (refreshToken) => refreshMicrosoftToken(refreshToken),
       }),
@@ -120,13 +127,14 @@ const resolveOAuthProvider = async (
 const resolveCalDAVProvider = async (
   database: BunSQLDatabase,
   calendarId: string,
-  encryptionKey: string,
+  keyring: Keyring,
   safeFetchOptions?: SafeFetchOptions,
   signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
     .select({
       authMethod: caldavCredentialsTable.authMethod,
+      caldavCredentialId: caldavCredentialsTable.id,
       username: caldavCredentialsTable.username,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
       serverUrl: caldavCredentialsTable.serverUrl,
@@ -142,7 +150,11 @@ const resolveCalDAVProvider = async (
     return null;
   }
 
-  const password = decryptPassword(caldavCred.encryptedPassword, encryptionKey);
+  const password = openSecret(
+    caldavCred.encryptedPassword,
+    keyring,
+    caldavCred.caldavCredentialId,
+  );
 
   return createCalDAVSyncProvider({
     authMethod: resolveAuthMethod(caldavCred.authMethod),
@@ -166,7 +178,7 @@ interface ResolveProviderOptions {
   userId: string;
   accountId: string;
   oauthConfig: OAuthConfig;
-  encryptionKey?: string;
+  keyring: Keyring;
   refreshLockStore?: RefreshLockStore | null;
   rateLimiter?: RedisRateLimiter;
   safeFetchOptions?: SafeFetchOptions;
@@ -182,17 +194,18 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.userId,
       options.accountId,
       options.oauthConfig,
+      options.keyring,
       options.refreshLockStore ?? null,
       options.rateLimiter,
       options.signal,
     );
   }
 
-  if (CALDAV_PROVIDERS.has(options.provider) && options.encryptionKey) {
+  if (CALDAV_PROVIDERS.has(options.provider) && hasEncryptionKey(options.keyring)) {
     return resolveCalDAVProvider(
       options.database,
       options.calendarId,
-      options.encryptionKey,
+      options.keyring,
       options.safeFetchOptions,
       options.signal,
     );

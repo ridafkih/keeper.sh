@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { createKeyring, openSecret } from "@keeper.sh/database";
+import type { StoredSecret } from "@keeper.sh/database";
 import { createCoordinatedRefresher } from "../../../src/core/oauth/coordinated-refresher";
 
 interface EmittedEvent {
@@ -41,10 +43,18 @@ const statementTimeout = (): Error => {
 
 const constraintViolation = (): Error => new Error("duplicate key value violates unique constraint");
 
+interface StoredCredential {
+  accessToken: StoredSecret<"oauth_credentials.accessToken">;
+  refreshToken: StoredSecret<"oauth_credentials.refreshToken">;
+}
+
 interface Persistence {
   attempts: number;
-  stored: Record<string, unknown>[];
+  stored: StoredCredential[];
 }
+
+const CREDENTIAL_ID = "credential-under-test";
+const keyring = createKeyring();
 
 const createDatabase = (
   failures: number,
@@ -53,7 +63,7 @@ const createDatabase = (
   const persistence: Persistence = { attempts: 0, stored: [] };
   const database = {
     update: () => ({
-      set: (values: Record<string, unknown>) => ({
+      set: (values: StoredCredential) => ({
         where: () => {
           persistence.attempts += 1;
           if (persistence.attempts <= failures) {
@@ -82,7 +92,8 @@ const refresh = async (
   const refresher = createCoordinatedRefresher({
     calendarAccountId: "account-1",
     database,
-    oauthCredentialId: "credential-under-test",
+    keyring,
+    oauthCredentialId: CREDENTIAL_ID,
     rawRefresh: () => Promise.resolve(grantOf(rotatedToken)),
     refreshLockStore: null,
   });
@@ -111,7 +122,12 @@ describe("persisting a refreshed credential", () => {
 
     expect(failure).toBeNull();
     expect(persistence.attempts).toBe(3);
-    expect(persistence.stored[0]?.refreshToken).toBe("rotated-refresh-token");
+    const [stored] = persistence.stored;
+    if (!stored) {
+      throw new Error("expected the refreshed credential to be stored");
+    }
+    expect(openSecret(stored.refreshToken, keyring, CREDENTIAL_ID)).toBe("rotated-refresh-token");
+    expect(openSecret(stored.accessToken, keyring, CREDENTIAL_ID)).toBe("fresh-access");
     expect(eventWithToken()?.persist_attempts).toBe(3);
   });
 

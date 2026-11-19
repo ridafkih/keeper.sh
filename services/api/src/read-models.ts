@@ -13,24 +13,25 @@ import {
 } from "./mutations";
 import type { OAuthTokenRefresher } from "./mutations";
 import type { RedisRateLimiter, RefreshLockStore } from "@keeper.sh/calendar";
+import type { Keyring } from "@keeper.sh/database";
 import type { KeeperApi, KeeperDatabase } from "./types";
 
 interface KeeperApiOptions {
   oauthTokenRefresher?: OAuthTokenRefresher;
   refreshLockStore?: RefreshLockStore | null;
-  encryptionKey?: string;
+  keyring: Keyring;
   googleRateLimiter?: RedisRateLimiter | null;
   onSourceEventChanged?: (userId: string) => Promise<void>;
 }
 
-const createKeeperApi = (database: KeeperDatabase, options?: KeeperApiOptions): KeeperApi => {
+const createKeeperApi = (database: KeeperDatabase, options: KeeperApiOptions): KeeperApi => {
   const deps = {
     database,
-    oauthTokenRefresher: options?.oauthTokenRefresher,
-    refreshLockStore: options?.refreshLockStore,
-    encryptionKey: options?.encryptionKey,
-    googleRateLimiter: options?.googleRateLimiter,
-    onSourceEventChanged: options?.onSourceEventChanged,
+    oauthTokenRefresher: options.oauthTokenRefresher,
+    refreshLockStore: options.refreshLockStore,
+    keyring: options.keyring,
+    googleRateLimiter: options.googleRateLimiter,
+    onSourceEventChanged: options.onSourceEventChanged,
   };
 
   return {

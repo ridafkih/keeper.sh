@@ -2,7 +2,8 @@ import { convertIcsCalendar, generateIcsCalendar, generateIcsEvent } from "ts-ic
 import type { IcsCalendar, IcsEvent } from "ts-ics";
 import ICAL from "ical.js";
 import { KEEPER_USER_EVENT_SUFFIX } from "@keeper.sh/constants";
-import { decryptPassword } from "@keeper.sh/database";
+import { openSecret } from "@keeper.sh/database";
+import type { Keyring, StoredSecret } from "@keeper.sh/database";
 import { createSafeFetch } from "@keeper.sh/calendar/safe-fetch";
 import { materializeRecurrenceEvents } from "@keeper.sh/calendar";
 import type { SyncableEvent } from "@keeper.sh/calendar";
@@ -17,13 +18,18 @@ interface CalDAVCredentials {
   serverUrl: string;
   calendarUrl: string;
   username: string;
-  encryptedPassword: string;
-  encryptionKey: string;
+  credentialId: string;
+  encryptedPassword: StoredSecret<"caldav_credentials.encryptedPassword">;
+  keyring: Keyring;
   authMethod: string;
 }
 
 const getClient = (credentials: CalDAVCredentials) => {
-  const password = decryptPassword(credentials.encryptedPassword, credentials.encryptionKey);
+  const password = openSecret(
+    credentials.encryptedPassword,
+    credentials.keyring,
+    credentials.credentialId,
+  );
   const safeFetch = createSafeFetch(safeFetchOptions);
   const knownAuthMethod = resolveAuthMethod(credentials.authMethod);
   const { fetch: digestAwareFetch } = createDigestAwareFetch({

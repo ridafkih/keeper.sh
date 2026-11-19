@@ -6,13 +6,13 @@ import { ErrorResponse } from "@/utils/responses";
 import { labelFailureResponse } from "@/utils/error-labelling";
 import { eventPatchBodySchema } from "@/utils/request-body";
 import { enqueuePushSync } from "@/utils/enqueue-push-sync";
-import { database, oauthProviders, refreshLockStore, encryptionKey, premiumService, googleInteractiveRateLimiter } from "@/context";
+import { database, oauthProviders, refreshLockStore, keyring, premiumService, googleInteractiveRateLimiter } from "@/context";
 
 const keeperApi = createKeeperApi(database, {
   googleRateLimiter: googleInteractiveRateLimiter,
   oauthTokenRefresher: oauthProviders,
   refreshLockStore,
-  encryptionKey,
+  keyring,
   onSourceEventChanged: async (userId) => {
     const plan = await premiumService.getUserPlan(userId);
     if (plan) {

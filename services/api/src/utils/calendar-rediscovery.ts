@@ -28,7 +28,7 @@ interface AccountCalendarRefreshDependencies {
   applyPlan: (input: CalendarRediscoveryApplyInput) => Promise<CalendarRediscoveryApplyResult>;
   markNeedsReauthentication: (accountId: string) => Promise<void>;
   enqueuePush: (userId: string) => void;
-  encryptionKey: string | null;
+  encryptionConfigured: boolean;
   now: () => Date;
 }
 
@@ -46,7 +46,7 @@ interface AccountCalendarRefreshSummary {
 
 const assertRefreshable = (
   account: RefreshableAccount,
-  encryptionKey: string | null,
+  encryptionConfigured: boolean,
 ): void => {
   if (account.authType !== "caldav" && account.authType !== "oauth") {
     throw new CalendarRefreshUnsupportedError(
@@ -60,7 +60,7 @@ const assertRefreshable = (
     );
   }
 
-  if (account.authType === "caldav" && !encryptionKey) {
+  if (account.authType === "caldav" && !encryptionConfigured) {
     throw new CalendarRefreshUnconfiguredError("Encryption key not configured");
   }
 };
@@ -88,7 +88,7 @@ const runAccountCalendarRefresh = async (
     throw new CalendarAccountNotFoundError();
   }
 
-  assertRefreshable(account, dependencies.encryptionKey);
+  assertRefreshable(account, dependencies.encryptionConfigured);
 
   const now = dependencies.now();
   await dependencies.markAttempt(account.id, now);
@@ -123,7 +123,9 @@ const runAccountCalendarRefresh = async (
 
 const createDefaultAccountCalendarRefreshDependencies = async (
 ): Promise<AccountCalendarRefreshDependencies> => {
-  const { database, encryptionKey, premiumService } = await import("@/context");
+  const { database, keyring, premiumService } = await import("@/context");
+  const { hasEncryptionKey } = await import("@keeper.sh/database");
+  const encryptionConfigured = hasEncryptionKey(keyring);
   const { spawnBackgroundJob } = await import("./background-task");
   const { enqueuePushSync } = await import("./enqueue-push-sync");
   const {
@@ -139,12 +141,12 @@ const createDefaultAccountCalendarRefreshDependencies = async (
       if (account.authType !== "caldav") {
         return discoverOAuthAccountCalendars(account.id, account.provider);
       }
-      if (!encryptionKey) {
+      if (!encryptionConfigured) {
         throw new CalendarRefreshUnconfiguredError("Encryption key not configured");
       }
-      return discoverCalDAVAccountCalendars(account.id, encryptionKey);
+      return discoverCalDAVAccountCalendars(account.id, keyring);
     },
-    encryptionKey: encryptionKey ?? null,
+    encryptionConfigured,
     enqueuePush: (userId) => {
       spawnBackgroundJob("calendar-refresh-push", { "user.id": userId }, async () => {
         const plan = await premiumService.getUserPlan(userId);
