@@ -66,6 +66,7 @@ interface StoredOAuthCredential {
   accessToken: string;
   expiresAt: Date;
   id: string;
+  ownerEmail: string | null;
   refreshToken: string;
 }
 
@@ -73,6 +74,7 @@ const storedOAuthCredentialColumns = {
   accessToken: oauthCredentialsTable.accessToken,
   expiresAt: oauthCredentialsTable.expiresAt,
   id: oauthCredentialsTable.id,
+  ownerEmail: oauthCredentialsTable.email,
   refreshToken: oauthCredentialsTable.refreshToken,
 };
 
@@ -89,7 +91,9 @@ const listOAuthCredentialCalendars = async (
     }));
   }
 
-  return toDiscoveredOutlookCalendars(await listOutlookCalendars(accessToken));
+  return toDiscoveredOutlookCalendars(await listOutlookCalendars(accessToken, {
+    ownerEmail: credential.ownerEmail,
+  }));
 };
 
 const discoverOAuthAccountCalendars = async (
