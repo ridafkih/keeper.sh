@@ -42,15 +42,47 @@ const storeCredentialRefreshToken = (
 ): StoredRefreshToken =>
   sealSecret("oauth_credentials.refreshToken", refreshToken, keyring, oauthCredentialId);
 
+interface RefreshGrant {
+  access_token: string;
+  refresh_token?: string;
+}
+
+interface StoredRefreshedTokens {
+  accessToken: StoredAccessToken;
+  refreshToken?: StoredRefreshToken;
+}
+
+const isRefreshTokenRotated = (grant: RefreshGrant, presentedRefreshToken: string): boolean =>
+  Boolean(grant.refresh_token) && grant.refresh_token !== presentedRefreshToken;
+
+const storeRefreshedTokens = (
+  oauthCredentialId: string,
+  grant: RefreshGrant,
+  presentedRefreshToken: string,
+  keyring: Keyring,
+): StoredRefreshedTokens => {
+  const accessToken = storeCredentialAccessToken(oauthCredentialId, grant.access_token, keyring);
+  if (!grant.refresh_token || !isRefreshTokenRotated(grant, presentedRefreshToken)) {
+    return { accessToken };
+  }
+  return {
+    accessToken,
+    refreshToken: storeCredentialRefreshToken(oauthCredentialId, grant.refresh_token, keyring),
+  };
+};
+
 export {
+  isRefreshTokenRotated,
   readCredentialAccessToken,
   readCredentialTokens,
   storeCredentialAccessToken,
   storeCredentialRefreshToken,
+  storeRefreshedTokens,
 };
 export type {
   CredentialTokens,
   StoredAccessToken,
   StoredCredentialTokens,
+  StoredRefreshedTokens,
   StoredRefreshToken,
 };

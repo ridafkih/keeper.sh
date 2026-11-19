@@ -79,9 +79,9 @@ const withAdministrativeClient = async (run: (client: SQL) => Promise<void>): Pr
   }
 };
 
-const readingKeyring = (): Keyring => createKeyring({ primaryKey: ENCRYPTION_KEY });
-const encryptingKeyring = (): Keyring =>
-  createKeyring({ encryptOnWrite: true, primaryKey: ENCRYPTION_KEY });
+const readingKeyring = (): Keyring =>
+  createKeyring({ encryptOnWrite: false, primaryKey: ENCRYPTION_KEY });
+const encryptingKeyring = (): Keyring => createKeyring({ primaryKey: ENCRYPTION_KEY });
 
 describe.skipIf(!administrativeUrl)("stored credentials against Postgres", () => {
   let client: SQL | null = null;
@@ -386,6 +386,154 @@ describe.skipIf(!administrativeUrl)("stored credentials against Postgres", () =>
     const reread = await resolveOAuth(seeded, "outlook", readingKeyring());
     expect(reread.accessToken).toBe("rotated-access");
     expect(reread.refreshToken).toBe("rotated-refresh");
+  });
+
+  const parkCalendar = async (calendarId: string): Promise<void> => {
+    await requireClient()`
+      UPDATE "source_ingest_schedule"
+      SET "dueAt" = NULL, "parkedReason" = 'credential-rejected'
+      WHERE "calendarId" = ${calendarId}::uuid
+    `;
+  };
+
+  const readParkedReason = async (calendarId: string): Promise<string | null> => {
+    const [row] = await requireClient()<{ parkedReason: string | null }[]>`
+      SELECT "parkedReason" FROM "source_ingest_schedule" WHERE "calendarId" = ${calendarId}::uuid
+    `;
+    if (!row) {
+      throw new Error(`calendar ${calendarId} has no schedule row`);
+    }
+    return row.parkedReason;
+  };
+
+  const refreshWith = async (
+    seeded: SeededOAuthCalendar,
+    keyring: Keyring,
+    grant: { access_token: string; expires_in: number; refresh_token?: string },
+    presentedRefreshToken: string,
+  ): Promise<void> => {
+    const refresher = createCoordinatedRefresher({
+      calendarAccountId: seeded.accountId,
+      database: requireDatabase(),
+      keyring,
+      oauthCredentialId: seeded.credentialId,
+      rawRefresh: () => Promise.resolve(grant),
+      refreshLockStore: null,
+    });
+    await refresher(presentedRefreshToken);
+  };
+
+  const keyringsByMode = { encrypted: encryptingKeyring, plaintext: readingKeyring };
+
+  for (const mode of ["plaintext", "encrypted"] as const) {
+    it(`leaves a ${mode} refresh token and a parked calendar untouched when the provider does not rotate it`, async () => {
+      const seeded = await seedOAuthCalendar("google", {
+        accessToken: "stale-access",
+        refreshToken: "steady-refresh",
+      }, 0);
+      const keyring = keyringsByMode[mode]();
+      if (mode === "encrypted") {
+        await encryptStoredTokens(seeded.credentialId);
+      }
+      await parkCalendar(seeded.calendarId);
+      const before = await readStoredTokens(seeded.credentialId);
+
+      for (const accessToken of ["first-access", "second-access"]) {
+        await refreshWith(seeded, keyring, { access_token: accessToken, expires_in: 3600 }, "steady-refresh");
+        await refreshWith(
+          seeded,
+          keyring,
+          { access_token: accessToken, expires_in: 3600, refresh_token: "steady-refresh" },
+          "steady-refresh",
+        );
+      }
+
+      const after = await readStoredTokens(seeded.credentialId);
+      expect(after.refreshToken).toBe(before.refreshToken);
+      expect(after.accessToken).not.toBe(before.accessToken);
+      expect(await readParkedReason(seeded.calendarId)).toBe("credential-rejected");
+      const reread = await resolveOAuth(seeded, "google", readingKeyring());
+      expect(reread.accessToken).toBe("second-access");
+      expect(reread.refreshToken).toBe("steady-refresh");
+    });
+
+    it(`stores a rotated refresh token and releases a parked calendar when tokens are ${mode}`, async () => {
+      const seeded = await seedOAuthCalendar("outlook", {
+        accessToken: "stale-access",
+        refreshToken: "old-refresh",
+      }, 0);
+      const keyring = keyringsByMode[mode]();
+      if (mode === "encrypted") {
+        await encryptStoredTokens(seeded.credentialId);
+      }
+      await parkCalendar(seeded.calendarId);
+
+      await refreshWith(
+        seeded,
+        keyring,
+        { access_token: "new-access", expires_in: 3600, refresh_token: "new-refresh" },
+        "old-refresh",
+      );
+
+      expect(await readParkedReason(seeded.calendarId)).toBeNull();
+      const stored = await readStoredTokens(seeded.credentialId);
+      expect(stored.refreshToken.startsWith("enc:v1:")).toBe(mode === "encrypted");
+      expect(stored.accessToken.startsWith("enc:v1:")).toBe(mode === "encrypted");
+      const reread = await resolveOAuth(seeded, "outlook", readingKeyring());
+      expect(reread.accessToken).toBe("new-access");
+      expect(reread.refreshToken).toBe("new-refresh");
+    });
+  }
+
+  it("never stores an empty refresh token", async () => {
+    const seeded = await seedOAuthCalendar("google", {
+      accessToken: "stale-access",
+      refreshToken: "kept-refresh",
+    }, 0);
+
+    await refreshWith(
+      seeded,
+      encryptingKeyring(),
+      { access_token: "new-access", expires_in: 3600, refresh_token: "" },
+      "kept-refresh",
+    );
+
+    const stored = await readStoredTokens(seeded.credentialId);
+    expect(stored.refreshToken).toBe("kept-refresh");
+  });
+
+  it("lets a task that only reads keep working after a task that encrypts has written", async () => {
+    const seeded = await seedOAuthCalendar("google", {
+      accessToken: "stale-access",
+      refreshToken: "shared-refresh",
+    }, 0);
+
+    await refreshWith(
+      seeded,
+      encryptingKeyring(),
+      { access_token: "written-by-new", expires_in: 3600, refresh_token: "rotated-by-new" },
+      "shared-refresh",
+    );
+    const readByOld = await resolveOAuth(seeded, "google", readingKeyring());
+    expect(readByOld.accessToken).toBe("written-by-new");
+    expect(readByOld.refreshToken).toBe("rotated-by-new");
+
+    await requireClient()`
+      UPDATE "oauth_credentials" SET "expiresAt" = now() WHERE "id" = ${seeded.credentialId}::uuid
+    `;
+    await refreshWith(
+      seeded,
+      readingKeyring(),
+      { access_token: "written-by-old", expires_in: 3600 },
+      readByOld.refreshToken,
+    );
+    const stored = await readStoredTokens(seeded.credentialId);
+    expect(stored.accessToken).toBe("written-by-old");
+    expect(stored.refreshToken.startsWith("enc:v1:")).toBe(true);
+
+    const readByNew = await resolveOAuth(seeded, "google", encryptingKeyring());
+    expect(readByNew.accessToken).toBe("written-by-old");
+    expect(readByNew.refreshToken).toBe("rotated-by-new");
   });
 
   it("adopts an encrypted access token a peer already refreshed", async () => {
