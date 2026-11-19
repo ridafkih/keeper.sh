@@ -22,6 +22,7 @@ import {
   eventToICalString,
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
+  readCalendarObjectUids,
 } from "../shared/ics";
 import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
@@ -29,6 +30,7 @@ import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
+const CALENDAR_OBJECT_EXTENSION = ".ics";
 
 // A CalDAV PUT answers 201/204 with no body, so there is nothing to compare the write against.
 const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as const;
@@ -207,6 +209,37 @@ const toCalDAVRemoteEvent = (parsed: ParsedCalendarEvent, objectPath: string): R
   };
 };
 
+const readObjectName = (path: string): string => {
+  const name = path.split("/").at(-1) ?? "";
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name;
+  }
+};
+
+const endsInCalendarExtension = (path: string): boolean =>
+  readObjectName(path).endsWith(CALENDAR_OBJECT_EXTENSION);
+
+const isNamedAfterKeeperEvent = (path: string): boolean => {
+  const name = readObjectName(path);
+  return name.endsWith(CALENDAR_OBJECT_EXTENSION)
+    && isKeeperEvent(name.slice(0, -CALENDAR_OBJECT_EXTENSION.length));
+};
+
+const mayHoldKeeperEvent = (path: string): boolean =>
+  isNamedAfterKeeperEvent(path) || !endsInCalendarExtension(path);
+
+const holdsKeeperEvent = (data: string): boolean =>
+  readCalendarObjectUids(data).some((uid) => isKeeperEvent(uid));
+
+const readKeeperEvents = (data: string, objectPath: string): ParsedCalendarEvent[] => {
+  if (!isNamedAfterKeeperEvent(objectPath) && !holdsKeeperEvent(data)) {
+    return [];
+  }
+  return parseCalendarObjectEvents(data).filter((parsed) => isKeeperEvent(parsed.uid));
+};
+
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const calendarHost = new URL(config.calendarUrl).hostname;
   const removeCounts: CalDAVRemoveCounts = {
@@ -227,21 +260,9 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
 
-  const isKeeperCalendarObjectPath = (path: string): boolean => {
+  const mayHoldKeeperEventAt = (objectUrl: string): boolean => {
     try {
-      const filename = decodeURIComponent(path.split("/").at(-1) ?? "");
-      if (!filename.endsWith(".ics")) {
-        return false;
-      }
-      return isKeeperEvent(filename.slice(0, -4));
-    } catch {
-      return false;
-    }
-  };
-
-  const isKeeperCalendarObjectUrl = (objectUrl: string): boolean => {
-    try {
-      return isKeeperCalendarObjectPath(new URL(objectUrl, config.calendarUrl).pathname);
+      return mayHoldKeeperEvent(new URL(objectUrl, config.calendarUrl).pathname);
     } catch {
       return false;
     }
@@ -300,18 +321,30 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     return new URL(`${deleteId}.ics`, calendarBaseUrl).href;
   };
 
-  /*
-   * Servers may return the href percent-encoded, and every Keeper UID contains an
-   * "@". Comparing decoded basenames keeps the write on the object the mapping
-   * already points at instead of a reconstructed href that never matches.
-   */
-  const resolveUpdateTargetUrl = (deleteId: string, uid: string): string => {
+  const readStoredObject = async (objectUrl: string): Promise<{ data?: string; etag?: string }> => {
+    const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+    const [object] = await client.fetchCalendarObjectsByUrls({ calendarUrl, objectUrls: [objectUrl] });
+    return object ?? {};
+  };
+
+  const resolveUpdateTarget = async (
+    deleteId: string,
+    uid: string,
+  ): Promise<{ etag?: string; objectUrl: string }> => {
     const objectUrl = toObjectUrl(deleteId);
-    const filename = decodeURIComponent(new URL(objectUrl).pathname.split("/").at(-1) ?? "");
-    if (filename !== `${uid}.ics`) {
-      throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
+    const objectPath = new URL(objectUrl).pathname;
+    if (readObjectName(objectPath) === `${uid}${CALENDAR_OBJECT_EXTENSION}`) {
+      return { objectUrl };
     }
-    return objectUrl;
+
+    if (!endsInCalendarExtension(objectPath)) {
+      const { data, etag } = await readStoredObject(objectUrl);
+      if (data && readCalendarObjectUids(data).includes(uid)) {
+        return { etag, objectUrl };
+      }
+    }
+
+    throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
   };
 
   const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
@@ -320,9 +353,10 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         rateLimiter.execute(async (): Promise<PushResult> => {
           try {
             const uid = generateDeterministicEventUid(event.id);
-            const objectUrl = resolveUpdateTargetUrl(deleteId, uid);
+            const { etag, objectUrl } = await resolveUpdateTarget(deleteId, uid);
 
             await client.updateCalendarObjectByUrl({
+              ...(etag && { etag }),
               iCalString: eventToICalString(event, uid),
               objectUrl,
             });
@@ -407,26 +441,22 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     const objects = await client.fetchCalendarObjects({
       calendarUrl,
       onListing: (stats) => { listing = stats; },
-      pathFilter: isKeeperCalendarObjectPath,
+      pathFilter: mayHoldKeeperEvent,
     });
 
     const remoteEvents: RemoteEvent[] = [];
 
-    const keeperObjects = objects.flatMap(({ data, url }) => {
-      if (!data || !isKeeperCalendarObjectUrl(url)) {
+    const candidateObjects = objects.flatMap(({ data, url }) => {
+      if (!data || !mayHoldKeeperEventAt(url)) {
         return [];
       }
       return [{ data, url }];
     });
-    for (const { data, url } of keeperObjects) {
+    for (const { data, url } of candidateObjects) {
       const objectPath = new URL(url, calendarUrl).pathname;
-      for (const parsed of parseCalendarObjectEvents(data)) {
+      for (const parsed of readKeeperEvents(data, objectPath)) {
         const beyondHorizon = parsed.startTime > options.timeMax;
-        if (
-          !isKeeperEvent(parsed.uid)
-          || beyondHorizon
-          || resolveTimeRangeEnd(parsed) < options.timeMin
-        ) {
+        if (beyondHorizon || resolveTimeRangeEnd(parsed) < options.timeMin) {
           continue;
         }
 
@@ -450,14 +480,11 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     const remoteEvents: RemoteEvent[] = [];
     for (const { data, url } of objects) {
-      if (!data || !isKeeperCalendarObjectUrl(url)) {
+      if (!data || !mayHoldKeeperEventAt(url)) {
         continue;
       }
       const objectPath = new URL(url, calendarUrl).pathname;
-      for (const parsed of parseCalendarObjectEvents(data)) {
-        if (!isKeeperEvent(parsed.uid)) {
-          continue;
-        }
+      for (const parsed of readKeeperEvents(data, objectPath)) {
         remoteEvents.push(toCalDAVRemoteEvent(parsed, objectPath));
       }
     }

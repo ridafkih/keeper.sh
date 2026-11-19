@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { generateDeterministicEventUid } from "../../../../src/core/events/identity";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
+import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
 
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
@@ -9,6 +10,7 @@ const clientMocks = vi.hoisted(() => ({
   deleteCalendarObjectByUrl: vi.fn(),
   fetchCalendarObject: vi.fn(),
   fetchCalendarObjects: vi.fn(),
+  fetchCalendarObjectsByUrls: vi.fn(),
   resolveCalendarUrl: vi.fn(),
   updateCalendarObjectByUrl: vi.fn(),
 }));
@@ -37,6 +39,7 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
     deleteCalendarObjectByUrl = clientMocks.deleteCalendarObjectByUrl;
     fetchCalendarObject = clientMocks.fetchCalendarObject;
     fetchCalendarObjects = clientMocks.fetchCalendarObjects;
+    fetchCalendarObjectsByUrls = clientMocks.fetchCalendarObjectsByUrls;
     resolveCalendarUrl = clientMocks.resolveCalendarUrl;
     updateCalendarObjectByUrl = clientMocks.updateCalendarObjectByUrl;
   }
@@ -113,5 +116,55 @@ describe("resolving the in-place update target", () => {
     expect(result?.success).toBe(false);
     expect(clientMocks.updateCalendarObjectByUrl).not.toHaveBeenCalled();
     expect(clientMocks.createCalendarObject).not.toHaveBeenCalled();
+    expect(clientMocks.fetchCalendarObjectsByUrls).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolving the in-place update target when the object name does not carry the UID", () => {
+  const OPAQUE_DELETE_ID = "/calendar/AAMkAGI2_w%3D%3D.EML";
+  const OPAQUE_URL = `https://caldav.example.com${OPAQUE_DELETE_ID}`;
+
+  it("updates the object once its content is confirmed to hold this event", async () => {
+    clientMocks.fetchCalendarObjectsByUrls.mockResolvedValueOnce([{
+      data: eventToICalString(event, uid),
+      etag: "\"etag-7\"",
+      url: OPAQUE_URL,
+    }]);
+    const provider = createProvider("https://caldav.example.com/calendar/");
+
+    const [result] = await provider.updateEvents?.([{ deleteId: OPAQUE_DELETE_ID, event }]) ?? [];
+
+    expect(result).toMatchObject({ deleteId: OPAQUE_DELETE_ID, remoteId: uid, success: true });
+    expect(clientMocks.fetchCalendarObjectsByUrls).toHaveBeenCalledWith({
+      calendarUrl: "https://caldav.example.com/calendar/",
+      objectUrls: [OPAQUE_URL],
+    });
+    expect(clientMocks.updateCalendarObjectByUrl).toHaveBeenCalledTimes(1);
+    expect(clientMocks.updateCalendarObjectByUrl.mock.calls[0]?.[0])
+      .toMatchObject({ etag: "\"etag-7\"", objectUrl: OPAQUE_URL });
+  });
+
+  it("refuses to write when the object holds a different event", async () => {
+    clientMocks.fetchCalendarObjectsByUrls.mockResolvedValueOnce([{
+      data: eventToICalString(event, "somebody-elses-event@example.com"),
+      etag: "\"etag-7\"",
+      url: OPAQUE_URL,
+    }]);
+    const provider = createProvider("https://caldav.example.com/calendar/");
+
+    const [result] = await provider.updateEvents?.([{ deleteId: OPAQUE_DELETE_ID, event }]) ?? [];
+
+    expect(result?.success).toBe(false);
+    expect(clientMocks.updateCalendarObjectByUrl).not.toHaveBeenCalled();
+  });
+
+  it("refuses to write when the object is no longer there", async () => {
+    clientMocks.fetchCalendarObjectsByUrls.mockResolvedValueOnce([]);
+    const provider = createProvider("https://caldav.example.com/calendar/");
+
+    const [result] = await provider.updateEvents?.([{ deleteId: OPAQUE_DELETE_ID, event }]) ?? [];
+
+    expect(result?.success).toBe(false);
+    expect(clientMocks.updateCalendarObjectByUrl).not.toHaveBeenCalled();
   });
 });

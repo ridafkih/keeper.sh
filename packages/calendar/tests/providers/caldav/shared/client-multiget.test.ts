@@ -176,13 +176,23 @@ describe("CalDAVClient.fetchCalendarObjects on healthy calendars", () => {
     expect(objects).toHaveLength(1);
   });
 
-  it("ignores calendar-query hrefs that are not calendar objects", async () => {
+  it("ignores calendar-query hrefs that name the collection or a nested collection", async () => {
     const path = objectPath(0);
-    answerQueryWith([CALENDAR_PATH, `${CALENDAR_PATH}notes.txt`, path]);
+    answerQueryWith([CALENDAR_PATH, CALENDAR_PATH.slice(0, -1), `${CALENDAR_PATH}inbox/`, path]);
 
     await fetchObjects();
 
     expect(requestedBatches()).toEqual([[path]]);
+  });
+
+  it("requests listed objects whatever their name ends in", async () => {
+    const paths = [`${CALENDAR_PATH}AAMkAGI2_w%3D%3D.EML`, `${CALENDAR_PATH}7f3a9c`, objectPath(0)];
+    answerQueryWith(paths);
+
+    const objects = await fetchObjects();
+
+    expect(requestedBatches()).toEqual([paths]);
+    expect(pathsOf(objects)).toEqual(paths);
   });
 
   it("supplies its own url filter so tsdav cannot drop a requested path", async () => {
@@ -192,8 +202,9 @@ describe("CalDAVClient.fetchCalendarObjects on healthy calendars", () => {
 
     const { urlFilter } = davMocks.fetchCalendarObjects.mock.calls[0]?.[0] ?? {};
     expect(urlFilter?.(`${SERVER_URL}${objectPath(0)}`)).toBe(true);
-    expect(urlFilter?.(`${SERVER_URL}${CALENDAR_PATH}notes.txt`)).toBe(false);
-    expect(urlFilter?.(`https://cal.ics.example.com${CALENDAR_PATH}notes.txt`)).toBe(false);
+    expect(urlFilter?.(`${SERVER_URL}${CALENDAR_PATH}AAMkAGI2_w%3D%3D.EML`)).toBe(true);
+    expect(urlFilter?.(CALENDAR_URL)).toBe(false);
+    expect(urlFilter?.(`${SERVER_URL}${CALENDAR_PATH}inbox/`)).toBe(false);
   });
 
   it("matches a percent-encoded requested href against a decoded response href", async () => {
@@ -260,7 +271,7 @@ describe("CalDAVClient.fetchCalendarObjects listing diagnostics", () => {
   });
 
   it("does not count listed hrefs that are not calendar objects", async () => {
-    answerQueryWith([CALENDAR_PATH, `${CALENDAR_PATH}notes.txt`, objectPath(0)]);
+    answerQueryWith([CALENDAR_PATH, `${CALENDAR_PATH}inbox/`, objectPath(0)]);
 
     const [listing] = await captureListings();
 

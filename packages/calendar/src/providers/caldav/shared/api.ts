@@ -3,7 +3,17 @@ import { BYTES_PER_MEBIBYTE } from "../../../utils/bounded-response";
 const CALDAV_MULTIGET_BATCH_SIZE = 250;
 const MAX_CALDAV_RESPONSE_BYTES = 25 * BYTES_PER_MEBIBYTE;
 
-const isCalendarObjectPath = (path: string): boolean => path.includes(".ics");
+const toComparablePath = (path: string): string => {
+  const trimmed = path.replace(/\/+$/u, "");
+  try {
+    return decodeURIComponent(trimmed);
+  } catch {
+    return trimmed;
+  }
+};
+
+const isCalendarObjectPath = (path: string, collectionPath: string): boolean =>
+  !path.endsWith("/") && toComparablePath(path) !== toComparablePath(collectionPath);
 
 const toCalDAVTimestamp = (value: string): string =>
   `${new Date(value).toISOString().slice(0, 19).replaceAll(/[-:.]/gu, "")}Z`;

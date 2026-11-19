@@ -155,7 +155,7 @@ describe("createCalDAVSyncProvider", () => {
     expect(remoteEvents.map((event) => event.uid)).toEqual([insideUid]);
   });
 
-  it("asks the server for Keeper-named objects only", async () => {
+  it("asks the server only for objects that could hold a Keeper event", async () => {
     const keeperUid = generateDeterministicEventUid("any-event-id");
     clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
       "https://caldav.example.com/calendar/",
@@ -171,7 +171,70 @@ describe("createCalDAVSyncProvider", () => {
     expect(pathFilter(`/calendar/${keeperUid}.ics`)).toBe(true);
     expect(pathFilter(`/calendar/${encodeURIComponent(keeperUid)}.ics`)).toBe(true);
     expect(pathFilter("/calendar/user-owned.ics")).toBe(false);
-    expect(pathFilter(`/calendar/${keeperUid}.txt`)).toBe(false);
+    expect(pathFilter("/calendar/AAMkAGI2_w%3D%3D.EML")).toBe(true);
+    expect(pathFilter("/calendar/7f3a9c")).toBe(true);
+  });
+
+  it("recognises a Keeper event by its UID when the object name does not carry it", async () => {
+    const keeperEvent = createEvent();
+    const keeperUid = generateDeterministicEventUid(keeperEvent.id);
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: eventToICalString(keeperEvent, keeperUid),
+      url: "https://caldav.example.com/calendar/AAMkAGI2_w%3D%3D.EML",
+    }, {
+      data: eventToICalString(keeperEvent, "user-owned@example.com"),
+      url: "https://caldav.example.com/calendar/AAMkAGI3_w%3D%3D.EML",
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map(({ deleteId, uid }) => ({ deleteId, uid }))).toEqual([{
+      deleteId: "/calendar/AAMkAGI2_w%3D%3D.EML",
+      uid: keeperUid,
+    }]);
+  });
+
+  it("does not let a malformed unrelated object with an opaque name abort Keeper reconciliation", async () => {
+    const keeperEvent = createEvent();
+    const keeperUid = generateDeterministicEventUid(keeperEvent.id);
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:user-owned@example.com\r\nDTSTART:not-a-date\r\nDESCRIPTION:ask support@keeper.sh\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      url: "https://caldav.example.com/calendar/AAMkAGI3_w%3D%3D.EML",
+    }, {
+      data: eventToICalString(keeperEvent, keeperUid),
+      url: "https://caldav.example.com/calendar/AAMkAGI2_w%3D%3D.EML",
+    }]);
+
+    const remoteEvents = await createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    expect(remoteEvents.map((event) => event.uid)).toEqual([keeperUid]);
+  });
+
+  it("does not hide a malformed Keeper-owned object with an opaque name", async () => {
+    clientMocks.resolveCalendarUrl.mockResolvedValueOnce(
+      "https://caldav.example.com/calendar/",
+    );
+    clientMocks.fetchCalendarObjects.mockResolvedValueOnce([{
+      data: "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:malformed@keeper.sh\r\nDTSTART:not-a-date\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+      url: "https://caldav.example.com/calendar/AAMkAGI2_w%3D%3D.EML",
+    }]);
+
+    await expect(createProvider().listRemoteEvents({
+      timeMax: new Date("2099-01-01T00:00:00.000Z"),
+      timeMin: new Date("2026-01-01T00:00:00.000Z"),
+    })).rejects.toThrow();
   });
 
   it("does not let an unrelated user RDATE abort Keeper reconciliation", async () => {
