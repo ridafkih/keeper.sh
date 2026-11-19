@@ -348,6 +348,7 @@ class RecurrenceCalendarHarness {
       excludeAllDayEvents: false,
       excludeFocusTime: false,
       excludeOutOfOffice: false,
+      feedName: "Work",
       includeEventDescription: true,
       includeEventLocation: true,
       includeEventName: true,

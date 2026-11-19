@@ -20,6 +20,7 @@ interface FeedSettings {
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
   customEventName: string;
+  feedName: string;
 }
 
 interface CalendarEvent {
@@ -284,10 +285,16 @@ const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): st
   const includedEvents = groups.flatMap(({ master, overrides }) => [master, ...overrides]);
   const timezones = collectTimezones(includedEvents);
 
+  /*
+   * Subscribers label the calendar from X-WR-CALNAME. Without it, Google
+   * Calendar names a subscription after its URL, so the feed's own name is
+   * published unless it is empty.
+   */
   const calendar: IcsCalendar = {
     events: icsEvents,
     prodId: "-//Keeper//Keeper Calendar//EN",
     version: "2.0",
+    ...(settings.feedName && { name: settings.feedName }),
     ...(timezones.length > 0 && { timezones }),
   };
 

@@ -7,6 +7,7 @@ const SETTINGS = {
   excludeAllDayEvents: false,
   excludeFocusTime: false,
   excludeOutOfOffice: false,
+  feedName: "Work",
   includeEventDescription: false,
   includeEventLocation: false,
   includeEventName: false,
