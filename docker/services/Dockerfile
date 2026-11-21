@@ -94,8 +94,12 @@ EXPOSE 3000 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f -H "Accept: text/html" http://localhost:3000/ || exit 1
 
-ARG COMMIT_SHA
-ARG VERSION
+ARG BUILD_REVISION=
+ARG BUILD_VERSION=
+# Generic build args first, so a build system can stamp this image without
+# knowing the repo's names; COMMIT_SHA/VERSION still override them.
+ARG COMMIT_SHA=${BUILD_REVISION}
+ARG VERSION=${BUILD_VERSION}
 RUN test -n "$COMMIT_SHA" && test -n "$VERSION" || { echo "Build with --build-arg COMMIT_SHA=<git commit> --build-arg VERSION=<release version>" >&2; exit 1; }
 ENV COMMIT_SHA=$COMMIT_SHA
 ENV VERSION=$VERSION
