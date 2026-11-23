@@ -47,6 +47,15 @@ const resolveEventTimezones = (
   return [timezone];
 };
 
+const toTimeTransparency = (
+  availability: MaterializedSyncableEvent["availability"],
+): NonNullable<IcsEvent["timeTransparent"]> => {
+  if (availability === "free") {
+    return "TRANSPARENT";
+  }
+  return "OPAQUE";
+};
+
 const eventToICalString = (event: MaterializedSyncableEvent, uid: string): string => {
   const isAllDay = resolveIsAllDayEvent(event);
   const timezones = resolveEventTimezones(event, isAllDay);
@@ -57,7 +66,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     stamp: { date: new Date() },
     start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
     summary: event.summary.replaceAll(/\r\n?/g, "\n"),
-    ...(event.availability === "free" && { timeTransparent: "TRANSPARENT" }),
+    timeTransparent: toTimeTransparency(event.availability),
     ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
   };
