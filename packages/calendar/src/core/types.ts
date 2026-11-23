@@ -89,6 +89,7 @@ interface PushResult {
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
+  remoteAvailability?: EventAvailability;
   writeAccessDenied?: boolean;
 }
 

@@ -99,6 +99,7 @@ describe("in-place update mapping changes", () => {
       deleteIdentifier: CANONICAL_DELETE_IDENTIFIER,
       endTime: event.endTime,
       id: MAPPING_ID,
+      remoteAvailability: null,
       startTime: event.startTime,
       syncEventHash: createSyncEventContentHash(event),
       syncEventId: event.id,

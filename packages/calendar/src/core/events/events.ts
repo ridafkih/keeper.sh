@@ -621,6 +621,7 @@ const getEventsForDestination = async (
 };
 
 export {
+  isEventAvailability,
   getEventsForCalendars,
   getEventsForCalendarsWithDiagnostics,
   getEventsForDestination,

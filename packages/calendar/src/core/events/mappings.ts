@@ -1,6 +1,8 @@
 import { eventMappingsTable, eventStatesTable } from "@keeper.sh/database/schema";
 import { and, count, eq } from "drizzle-orm";
 import type { BunSQLClient } from "../database-client";
+import type { EventAvailability } from "../types";
+import { isEventAvailability } from "./events";
 
 const DEFAULT_COUNT = 0;
 
@@ -12,6 +14,7 @@ interface EventMapping {
   sourceCalendarId: string | null;
   destinationEventUid: string;
   deleteIdentifier: string;
+  remoteAvailability?: EventAvailability | null;
   syncEventHash: string | null;
   startTime: Date;
   endTime: Date;
@@ -42,6 +45,13 @@ const requireMappingSourceCalendarId = (
   return sourceCalendarId;
 };
 
+const readRemoteAvailability = (value: string | null): EventAvailability | null => {
+  if (!isEventAvailability(value)) {
+    return null;
+  }
+  return value;
+};
+
 const getEventMappingsForDestination = async (
   database: BunSQLClient,
   calendarId: string,
@@ -55,6 +65,7 @@ const getEventMappingsForDestination = async (
       eventStateCalendarId: eventStatesTable.calendarId,
       eventStateId: eventMappingsTable.eventStateId,
       id: eventMappingsTable.id,
+      remoteAvailability: eventMappingsTable.remoteAvailability,
       sourceCalendarId: eventMappingsTable.sourceCalendarId,
       syncEventId: eventMappingsTable.syncEventId,
       syncEventHash: eventMappingsTable.syncEventHash,
@@ -70,6 +81,7 @@ const getEventMappingsForDestination = async (
     return {
       ...mapping,
       deleteIdentifier: mapping.deleteIdentifier ?? mapping.destinationEventUid,
+      remoteAvailability: readRemoteAvailability(mapping.remoteAvailability),
       sourceCalendarId,
       syncEventId,
     };
