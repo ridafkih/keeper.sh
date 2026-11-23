@@ -396,6 +396,7 @@ interface ExecuteRemoteResult {
   superseded: boolean;
   checkpointRejected: boolean;
   updateFallbacks: number;
+  updated: number;
 }
 
 interface RunResult {
@@ -526,6 +527,7 @@ interface ChunkedExecutionState {
   checkpointRejected: boolean;
   protectedRemoteUids: Set<string>;
   updateFallbacks: number;
+  updated: number;
 }
 
 const checkpointRun = async (
@@ -684,6 +686,7 @@ const executeReplacements = async (
   if (updateEvents) {
     const { runResult, unresolved } = await executeUpdateRun(replacements, updateEvents);
     mergeRunResult(state, runResult);
+    state.updated += runResult.result.added;
     const unresolvedMappingIds = new Set(unresolved.map((operation) => operation.staleMappingId));
     for (const replacement of replacements) {
       if (!unresolvedMappingIds.has(replacement.staleMappingId)) {
@@ -769,6 +772,7 @@ const executeRemoteOperations = async (
     checkpointRejected: false,
     protectedRemoteUids: new Set<string>(),
     updateFallbacks: 0,
+    updated: 0,
   };
 
   for (const chunk of operationChunks) {
@@ -837,6 +841,7 @@ const executeRemoteOperations = async (
     superseded: state.superseded,
     checkpointRejected: state.checkpointRejected,
     updateFallbacks: state.updateFallbacks,
+    updated: state.updated,
   };
 };
 
@@ -1044,12 +1049,14 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       reconciliationScope,
     ));
 
-    const addCount = operations.filter((op) => op.type === "add" || op.type === "replace").length;
-    const removeCount = operations.filter((op) => op.type === "remove" || op.type === "replace").length;
+    const addCount = operations.filter((op) => op.type === "add").length;
+    const removeCount = operations.filter((op) => op.type === "remove").length;
+    const replaceCount = operations.filter((op) => op.type === "replace").length;
 
     wideEvent["operations.add_count"] = addCount;
     wideEvent["operations.remove_count"] = removeCount;
-    wideEvent["operations.total"] = addCount + removeCount;
+    wideEvent["operations.replace_count"] = replaceCount;
+    wideEvent["operations.total"] = addCount + removeCount + replaceCount;
     wideEvent["stale_mappings.count"] = staleMappingIds.length;
     appendStaleReasonFields(wideEvent, staleReasonCounts);
     wideEvent["mapping_updates.count"] = mappingUpdates.length;
@@ -1062,6 +1069,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       wideEvent["outcome"] = "in-sync";
       wideEvent["flushed"] = false;
       wideEvent["events.added"] = 0;
+      wideEvent["events.updated"] = 0;
       wideEvent["events.add_failed"] = 0;
       wideEvent["events.removed"] = 0;
       wideEvent["events.remove_failed"] = 0;
@@ -1092,7 +1100,8 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       },
     );
 
-    wideEvent["events.added"] = outcome.result.added;
+    wideEvent["events.added"] = outcome.result.added - outcome.updated;
+    wideEvent["events.updated"] = outcome.updated;
     wideEvent["events.add_failed"] = outcome.result.addFailed;
     wideEvent["events.removed"] = outcome.result.removed;
     wideEvent["events.remove_failed"] = outcome.result.removeFailed;
