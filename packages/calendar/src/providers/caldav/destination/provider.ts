@@ -9,6 +9,7 @@ import { getErrorMessage } from "../../../core/utils/error";
 import { resolveTimeRangeEnd } from "../../../core/events/time-range";
 import type {
   DeleteResult,
+  EventAvailability,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   PushResult,
@@ -23,6 +24,7 @@ import {
   parseICalCalendarsToRemoteEvents,
   parseICalToRemoteEvent,
   readCalendarObjectUids,
+  toMirroredAvailability,
 } from "../shared/ics";
 import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
@@ -144,6 +146,13 @@ const recoverCreateConflict = async (
   });
 };
 
+interface CalDAVReadBackCounts {
+  attempts: number;
+  substituted: number;
+  unappliedUpdates: number;
+  unavailable: number;
+}
+
 interface CalDAVRemoveCounts {
   byPath: number;
   byUid: number;
@@ -163,6 +172,12 @@ const toRemoveDiagnostics = (counts: CalDAVRemoveCounts): Record<string, number>
       count,
     ]),
   ),
+});
+
+const toReadBackDiagnostics = (counts: CalDAVReadBackCounts): Record<string, number> => ({
+  "events.read_back_unavailable": counts.unavailable,
+  "events.read_back_unchanged_availability": counts.unappliedUpdates,
+  "events.read_back_substituted_availability": counts.substituted,
 });
 
 const toListingDiagnostics = (listing: CalDAVListingStats): Record<string, number> => ({
@@ -250,6 +265,12 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     succeeded: 0,
   };
   let removeAttempts = 0;
+  const readBackCounts: CalDAVReadBackCounts = {
+    attempts: 0,
+    substituted: 0,
+    unappliedUpdates: 0,
+    unavailable: 0,
+  };
   let listing: CalDAVListingStats | null = null;
 
   const client = new CalDAVClient({
@@ -268,49 +289,45 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     }
   };
 
-  const pushEvents = (events: MaterializedSyncableEvent[]): Promise<PushResult[]> =>
-    Promise.all(
-      events.map((event) =>
-        rateLimiter.execute(async (): Promise<PushResult> => {
-          try {
-            const uid = generateDeterministicEventUid(event.id);
-            const iCalString = eventToICalString(event, uid);
+  const createObject = (event: MaterializedSyncableEvent): Promise<PushResult> =>
+    rateLimiter.execute(async (): Promise<PushResult> => {
+      try {
+        const uid = generateDeterministicEventUid(event.id);
+        const iCalString = eventToICalString(event, uid);
 
-            try {
-              await client.createCalendarObject({
-                calendarUrl: config.calendarUrl,
-                filename: `${uid}.ics`,
-                iCalString,
-              });
-            } catch (error) {
-              if (!(error instanceof CalDAVCreateConflictError)) {
-                throw error;
-              }
-
-              try {
-                await recoverCreateConflict(client, config.calendarUrl, uid, iCalString, event);
-              } catch (recoveryError) {
-                throw new CalDAVConflictRecoveryError(uid, recoveryError);
-              }
-              return {
-                conflictResolved: true,
-                deleteId: uid,
-                echo: CALDAV_PUSH_ECHO,
-                remoteId: uid,
-                success: true,
-              };
-            }
-
-            return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
-          } catch (error) {
-            if (config.safeFetchOptions?.signal?.aborted) {
-              throw error;
-            }
-            return createFailureResult(error);
+        try {
+          await client.createCalendarObject({
+            calendarUrl: config.calendarUrl,
+            filename: `${uid}.ics`,
+            iCalString,
+          });
+        } catch (error) {
+          if (!(error instanceof CalDAVCreateConflictError)) {
+            throw error;
           }
-        }, config.safeFetchOptions?.signal),
-      ),
-    );
+
+          try {
+            await recoverCreateConflict(client, config.calendarUrl, uid, iCalString, event);
+          } catch (recoveryError) {
+            throw new CalDAVConflictRecoveryError(uid, recoveryError);
+          }
+          return {
+            conflictResolved: true,
+            deleteId: uid,
+            echo: CALDAV_PUSH_ECHO,
+            remoteId: uid,
+            success: true,
+          };
+        }
+
+        return { deleteId: uid, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
+      } catch (error) {
+        if (config.safeFetchOptions?.signal?.aborted) {
+          throw error;
+        }
+        return createFailureResult(error);
+      }
+    }, config.safeFetchOptions?.signal);
 
   const calendarBaseUrl = toCalendarBaseUrl(config.calendarUrl);
 
@@ -347,30 +364,100 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
   };
 
-  const updateEvents = (updates: EventUpdate[]): Promise<PushResult[]> =>
-    Promise.all(
-      updates.map(({ deleteId, event }) =>
-        rateLimiter.execute(async (): Promise<PushResult> => {
-          try {
-            const uid = generateDeterministicEventUid(event.id);
-            const { etag, objectUrl } = await resolveUpdateTarget(deleteId, uid);
+  const updateObject = (
+    { deleteId, event }: EventUpdate,
+  ): Promise<{ objectUrl?: string; result: PushResult }> =>
+    rateLimiter.execute(async () => {
+      try {
+        const uid = generateDeterministicEventUid(event.id);
+        const { etag, objectUrl } = await resolveUpdateTarget(deleteId, uid);
 
-            await client.updateCalendarObjectByUrl({
-              ...(etag && { etag }),
-              iCalString: eventToICalString(event, uid),
-              objectUrl,
-            });
+        await client.updateCalendarObjectByUrl({
+          ...(etag && { etag }),
+          iCalString: eventToICalString(event, uid),
+          objectUrl,
+        });
 
-            return { deleteId, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true };
-          } catch (error) {
-            if (config.safeFetchOptions?.signal?.aborted) {
-              throw error;
-            }
-            return createFailureResult(error);
+        return {
+          objectUrl,
+          result: { deleteId, echo: CALDAV_PUSH_ECHO, remoteId: uid, success: true },
+        };
+      } catch (error) {
+        if (config.safeFetchOptions?.signal?.aborted) {
+          throw error;
+        }
+        return { result: createFailureResult(error) };
+      }
+    }, config.safeFetchOptions?.signal);
+
+  const readStoredAvailabilities = async (
+    objectUrls: string[],
+  ): Promise<Map<string, EventAvailability>> => {
+    const stored = new Map<string, EventAvailability>();
+    if (objectUrls.length === 0) {
+      return stored;
+    }
+    readBackCounts.attempts += objectUrls.length;
+    try {
+      const calendarUrl = await client.resolveCalendarUrl(config.calendarUrl);
+      const objects = await client.fetchCalendarObjectsByUrls({ calendarUrl, objectUrls });
+      for (const { data, url } of objects) {
+        if (!data) {
+          continue;
+        }
+        const objectPath = new URL(url, calendarUrl).pathname;
+        for (const parsed of readKeeperEvents(data, objectPath)) {
+          if (parsed.availability && !parsed.recurrenceId) {
+            stored.set(parsed.uid, parsed.availability);
           }
-        }, config.safeFetchOptions?.signal),
-      ),
+        }
+      }
+    } catch (error) {
+      if (config.safeFetchOptions?.signal?.aborted) {
+        throw error;
+      }
+    }
+    readBackCounts.unavailable += objectUrls.length - stored.size;
+    return stored;
+  };
+
+  const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
+    const results = await Promise.all(events.map((event) => createObject(event)));
+    const stored = await readStoredAvailabilities(results.flatMap((result) => {
+      if (!result.success || !result.remoteId) {
+        return [];
+      }
+      return [toObjectUrl(result.remoteId)];
+    }));
+    return results.map((result, index) => {
+      const remoteAvailability = result.remoteId && stored.get(result.remoteId);
+      if (!remoteAvailability) {
+        return result;
+      }
+      if (remoteAvailability !== toMirroredAvailability(events[index]?.availability)) {
+        readBackCounts.substituted += 1;
+      }
+      return { ...result, remoteAvailability };
+    });
+  };
+
+  const updateEvents = async (updates: EventUpdate[]): Promise<PushResult[]> => {
+    const outcomes = await Promise.all(updates.map((update) => updateObject(update)));
+    const stored = await readStoredAvailabilities(
+      outcomes.flatMap(({ objectUrl }) => objectUrl ?? []),
     );
+    return outcomes.map(({ result }, index) => {
+      const remoteAvailability = result.remoteId && stored.get(result.remoteId);
+      if (!result.success || !remoteAvailability) {
+        return result;
+      }
+      if (remoteAvailability !== toMirroredAvailability(updates[index]?.event.availability)) {
+        readBackCounts.unappliedUpdates += 1;
+        return { success: false };
+      }
+      return { ...result, remoteAvailability };
+    });
+  };
 
   const recordRemoveFailure = (error: unknown): void => {
     const httpError = findCalDAVHttpError(error);
@@ -431,6 +518,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     "provider.caldav.host": calendarHost,
     ...(listing && toListingDiagnostics(listing)),
     ...(removeAttempts > 0 && toRemoveDiagnostics(removeCounts)),
+    ...(readBackCounts.attempts > 0 && toReadBackDiagnostics(readBackCounts)),
   });
 
   const listRemoteEvents = async (

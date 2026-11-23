@@ -47,13 +47,20 @@ const resolveEventTimezones = (
   return [timezone];
 };
 
-const toTimeTransparency = (
+type MirroredAvailability = "busy" | "free";
+
+const toMirroredAvailability = (
   availability: MaterializedSyncableEvent["availability"],
-): NonNullable<IcsEvent["timeTransparent"]> => {
+): MirroredAvailability => {
   if (availability === "free") {
-    return "TRANSPARENT";
+    return "free";
   }
-  return "OPAQUE";
+  return "busy";
+};
+
+const TIME_TRANSPARENCY: Record<MirroredAvailability, NonNullable<IcsEvent["timeTransparent"]>> = {
+  busy: "OPAQUE",
+  free: "TRANSPARENT",
 };
 
 const eventToICalString = (event: MaterializedSyncableEvent, uid: string): string => {
@@ -66,7 +73,7 @@ const eventToICalString = (event: MaterializedSyncableEvent, uid: string): strin
     stamp: { date: new Date() },
     start: buildZonedIcsDate(event.startTime, event.startTimeZone, isAllDay),
     summary: event.summary.replaceAll(/\r\n?/g, "\n"),
-    timeTransparent: toTimeTransparency(event.availability),
+    timeTransparent: TIME_TRANSPARENCY[toMirroredAvailability(event.availability)],
     ...(event.isPrivate && { class: "PRIVATE" }),
     uid,
   };
@@ -297,5 +304,6 @@ export {
   parseICalToRemoteEvent,
   parseICalToRemoteEvents,
   readCalendarObjectUids,
+  toMirroredAvailability,
 };
 export type { ParsedCalendarEvent, ParseICalCalendarsOptions, ParsedCalendarResources };

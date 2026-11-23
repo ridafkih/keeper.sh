@@ -14,6 +14,12 @@ interface RecordedWrite {
   name: string;
 }
 
+interface RenamingCalDAVServerOptions {
+  resolvesClientNames?: boolean;
+  storeCreated?: (data: string) => string;
+  storeUpdated?: (stored: string, data: string) => string;
+}
+
 interface RenamingCalDAVServer {
   fetch: typeof globalThis.fetch;
   names: () => string[];
@@ -82,8 +88,13 @@ const readUrl = (input: string | Request | URL): URL => {
   return new URL(input.toString());
 };
 
-const createRenamingCalDAVServer = (): RenamingCalDAVServer => {
+const keepAsSent = (data: string): string => data;
+
+const createRenamingCalDAVServer = (options: RenamingCalDAVServerOptions = {}): RenamingCalDAVServer => {
+  const storeCreated = options.storeCreated ?? keepAsSent;
+  const storeUpdated = options.storeUpdated ?? ((_stored: string, data: string) => data);
   const objects = new Map<string, StoredObject>();
+  const clientNames = new Map<string, string>();
   const writes: RecordedWrite[] = [];
   let stored = 0;
 
@@ -94,10 +105,17 @@ const createRenamingCalDAVServer = (): RenamingCalDAVServer => {
     return name;
   };
 
+  const resolveName = (name: string): string => {
+    if (objects.has(name) || !options.resolvesClientNames) {
+      return name;
+    }
+    return clientNames.get(name) ?? name;
+  };
+
   const answerReport = (body: string): Response => {
     if (body.includes("calendar-multiget")) {
       return multistatus(requestedHrefs(body).map((href) => {
-        const object = objects.get(toName(new URL(href, RENAMING_SERVER_URL).pathname));
+        const object = objects.get(resolveName(toName(new URL(href, RENAMING_SERVER_URL).pathname)));
         if (!object) {
           return missingObject(href);
         }
@@ -107,7 +125,8 @@ const createRenamingCalDAVServer = (): RenamingCalDAVServer => {
     return multistatus([...objects].map(([name, object]) => listedObject(name, object)).join(""));
   };
 
-  const answerPut = (name: string, data: string, ifMatch: string | null): Response => {
+  const answerPut = (requestedName: string, data: string, ifMatch: string | null): Response => {
+    const name = resolveName(requestedName);
     writes.push({ ifMatch, name });
     const existing = objects.get(name);
     if (ifMatch !== null && existing?.etag !== ifMatch) {
@@ -116,10 +135,11 @@ const createRenamingCalDAVServer = (): RenamingCalDAVServer => {
     if (existing) {
       stored += 1;
       const etag = `"${String(stored)}"`;
-      objects.set(name, { data, etag });
+      objects.set(name, { data: storeUpdated(existing.data, data), etag });
       return new Response(null, { headers: { etag, location: toHref(name) }, status: 204 });
     }
-    const storedName = store(data);
+    const storedName = store(storeCreated(data));
+    clientNames.set(requestedName, storedName);
     return new Response(null, {
       headers: { etag: objects.get(storedName)?.etag ?? "", location: toHref(storedName) },
       status: 201,
@@ -127,7 +147,7 @@ const createRenamingCalDAVServer = (): RenamingCalDAVServer => {
   };
 
   const answerDelete = (name: string): Response => {
-    if (!objects.delete(name)) {
+    if (!objects.delete(resolveName(name))) {
       return new Response(null, { status: 404 });
     }
     return new Response(null, { status: 204 });
@@ -173,4 +193,4 @@ export {
   RENAMING_CALENDAR_URL,
   RENAMING_SERVER_URL,
 };
-export type { RenamingCalDAVServer };
+export type { RenamingCalDAVServer, RenamingCalDAVServerOptions };
