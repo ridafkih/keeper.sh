@@ -7,6 +7,8 @@ import {
 import type { SessionCookieSet } from "../../src/utils/session-cookies";
 
 const SESSION_PATHNAME = "/api/auth/get-session";
+const SESSION_MAX_AGE_SECONDS = 604_800;
+const SESSION_EXPIRES_AT = "2026-11-30T22:02:34.000Z";
 
 const secureCookies: SessionCookieSet = {
   sessionData: {
@@ -14,7 +16,13 @@ const secureCookies: SessionCookieSet = {
     name: "__Secure-better-auth.session_data",
   },
   sessionToken: {
-    attributes: { httpOnly: true, path: "/", sameSite: "lax", secure: true },
+    attributes: {
+      httpOnly: true,
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      path: "/",
+      sameSite: "lax",
+      secure: true,
+    },
     name: "__Secure-better-auth.session_token",
   },
 };
@@ -25,7 +33,13 @@ const plainCookies: SessionCookieSet = {
     name: "better-auth.session_data",
   },
   sessionToken: {
-    attributes: { httpOnly: true, path: "/", sameSite: "lax", secure: false },
+    attributes: {
+      httpOnly: true,
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      path: "/",
+      sameSite: "lax",
+      secure: false,
+    },
     name: "better-auth.session_token",
   },
 };
@@ -38,12 +52,20 @@ const respondWith = (body: unknown, setCookies: string[] = []): Response => {
   return response;
 };
 
+const browserRequest = (cookie = ""): Request =>
+  new Request("https://keeper.example.com/api/auth/get-session", { headers: { cookie } });
+
 const finalize = async (
   cookies: SessionCookieSet,
   response: Response,
   pathname = SESSION_PATHNAME,
+  request = browserRequest(),
 ): Promise<string[]> => {
-  const finalized = await createSessionCookies(cookies).finalizeAuthResponse(pathname, response);
+  const finalized = await createSessionCookies(cookies).finalizeAuthResponse(
+    pathname,
+    request,
+    response,
+  );
   return finalized.headers.getSetCookie();
 };
 
@@ -82,12 +104,42 @@ describe("companion cookie", () => {
       "/api/auth/sign-in/email",
     );
 
-    expect(setCookies.at(-1)).toBe(`${COMPANION_COOKIE_NAME}=1; Path=/; Secure; SameSite=Lax`);
+    expect(setCookies.at(-1)).toBe(
+      `${COMPANION_COOKIE_NAME}=1; Max-Age=604800; Path=/; Secure; SameSite=Lax`,
+    );
   });
 
   it("is set without Secure when the session cookie is not Secure", async () => {
     const setCookies = await finalize(
       plainCookies,
+      respondWith({}, ["better-auth.session_token=abc; Path=/; HttpOnly; SameSite=Lax"]),
+      "/api/auth/sign-in/email",
+    );
+
+    expect(setCookies.at(-1)).toBe(`${COMPANION_COOKIE_NAME}=1; Max-Age=604800; Path=/; SameSite=Lax`);
+  });
+
+  it("lives as long as the session cookie, so it survives a browser restart", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({}, [
+        "__Secure-better-auth.session_token=abc; Max-Age=604800; Path=/; HttpOnly; Secure; SameSite=Lax",
+      ]),
+      "/api/auth/callback/google",
+    );
+
+    expect(setCookies.at(-1)).toContain("Max-Age=604800");
+  });
+
+  it("is a browser-session cookie only when the session cookie is one too", async () => {
+    const setCookies = await finalize(
+      {
+        sessionData: plainCookies.sessionData,
+        sessionToken: {
+          attributes: { httpOnly: true, path: "/", sameSite: "lax", secure: false },
+          name: plainCookies.sessionToken.name,
+        },
+      },
       respondWith({}, ["better-auth.session_token=abc; Path=/; HttpOnly; SameSite=Lax"]),
       "/api/auth/sign-in/email",
     );
@@ -177,8 +229,13 @@ describe("a session read that finds no session", () => {
     expect(setCookies.every((cookie) => cookie.includes("Domain=example.com"))).toBe(true);
   });
 
-  it("leaves the cookies alone when the session is present", async () => {
-    const setCookies = await finalize(secureCookies, respondWith({ session: { id: "abc" } }));
+  it("leaves the cookies alone when the session is present and the companion with it", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({ session: { expiresAt: SESSION_EXPIRES_AT, id: "abc" } }),
+      SESSION_PATHNAME,
+      browserRequest(`__Secure-better-auth.session_token=abc; ${COMPANION_COOKIE_NAME}=1`),
+    );
 
     expect(setCookies).toEqual([]);
   });
@@ -192,11 +249,60 @@ describe("a session read that finds no session", () => {
   it("keeps the status and body of the response", async () => {
     const finalized = await createSessionCookies(secureCookies).finalizeAuthResponse(
       SESSION_PATHNAME,
+      browserRequest(),
       respondWith(null),
     );
 
     expect(finalized.status).toBe(200);
     await expect(finalized.json()).resolves.toBeNull();
+  });
+});
+
+describe("a session read that finds a session the companion has lost", () => {
+  it("restores the companion until the session expires", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({ session: { expiresAt: SESSION_EXPIRES_AT, id: "abc" } }),
+      SESSION_PATHNAME,
+      browserRequest("__Secure-better-auth.session_token=abc"),
+    );
+
+    expect(setCookies).toEqual([
+      `${COMPANION_COOKIE_NAME}=1; Expires=Mon, 30 Nov 2026 22:02:34 GMT; Path=/; Secure; SameSite=Lax`,
+    ]);
+  });
+
+  it("does not mistake a cookie that only starts with the companion's name for it", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({ session: { expiresAt: SESSION_EXPIRES_AT, id: "abc" } }),
+      SESSION_PATHNAME,
+      browserRequest(`__Secure-better-auth.session_token=abc; ${COMPANION_COOKIE_NAME}_old=1`),
+    );
+
+    expect(setCookies).toHaveLength(1);
+  });
+
+  it("leaves the response alone when the session carries no expiry", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({ session: { id: "abc" } }),
+      SESSION_PATHNAME,
+      browserRequest("__Secure-better-auth.session_token=abc"),
+    );
+
+    expect(setCookies).toEqual([]);
+  });
+
+  it("leaves other auth responses with a session alone", async () => {
+    const setCookies = await finalize(
+      secureCookies,
+      respondWith({ session: { expiresAt: SESSION_EXPIRES_AT, id: "abc" } }),
+      "/api/auth/list-sessions",
+      browserRequest("__Secure-better-auth.session_token=abc"),
+    );
+
+    expect(setCookies).toEqual([]);
   });
 });
 

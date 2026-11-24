@@ -1,6 +1,7 @@
 interface SessionCookieAttributes {
   domain?: string;
   httpOnly?: boolean;
+  maxAge?: number;
   partitioned?: boolean;
   path?: string;
   sameSite?: string;
@@ -18,7 +19,11 @@ interface SessionCookieSet {
 }
 
 interface SessionCookies {
-  finalizeAuthResponse: (pathname: string, response: Response) => Promise<Response>;
+  finalizeAuthResponse: (
+    pathname: string,
+    request: Request,
+    response: Response,
+  ) => Promise<Response>;
   hasSessionToken: (request: Request) => boolean;
 }
 
@@ -49,8 +54,26 @@ const serializeAttributes = (attributes: SessionCookieAttributes): string[] => {
   return serialized;
 };
 
+const serializeMaxAge = (attributes: SessionCookieAttributes): string[] => {
+  if (typeof attributes.maxAge !== "number") {
+    return [];
+  }
+  return [`Max-Age=${Math.floor(attributes.maxAge)}`];
+};
+
 const serializeCookie = (cookie: SessionCookie, value: string): string =>
-  [`${cookie.name}=${value}`, ...serializeAttributes(cookie.attributes)].join("; ");
+  [
+    `${cookie.name}=${value}`,
+    ...serializeMaxAge(cookie.attributes),
+    ...serializeAttributes(cookie.attributes),
+  ].join("; ");
+
+const serializeCookieUntil = (cookie: SessionCookie, value: string, expiresAt: Date): string =>
+  [
+    `${cookie.name}=${value}`,
+    `Expires=${expiresAt.toUTCString()}`,
+    ...serializeAttributes(cookie.attributes),
+  ].join("; ");
 
 const serializeExpiredCookie = (cookie: SessionCookie): string =>
   [`${cookie.name}=`, EXPIRED_ATTRIBUTE, ...serializeAttributes(cookie.attributes)].join("; ");
@@ -72,6 +95,31 @@ const isNullSession = (body: unknown): body is null | { session: null } => {
   }
   return body.session === null;
 };
+
+const readSessionExpiry = (body: unknown): Date | null => {
+  if (typeof body !== "object" || body === null || !("session" in body)) {
+    return null;
+  }
+  const { session } = body;
+  if (typeof session !== "object" || session === null || !("expiresAt" in session)) {
+    return null;
+  }
+  const { expiresAt } = session;
+  if (typeof expiresAt !== "string" && !(expiresAt instanceof Date)) {
+    return null;
+  }
+  const expiry = new Date(expiresAt);
+  if (Number.isNaN(expiry.getTime())) {
+    return null;
+  }
+  return expiry;
+};
+
+const readRequestCookieNames = (request: Request): string[] =>
+  (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((cookie) => cookie.split("=", 1)[0]?.trim() ?? "")
+    .filter((name) => name.length > 0);
 
 const withCookies = (response: Response, cookies: string[]): Response => {
   const headers = new Headers(response.headers);
@@ -100,7 +148,14 @@ const createSessionCookies = ({ sessionData, sessionToken }: SessionCookieSet): 
   const hasSessionTokenCleared = (response: Response): boolean =>
     readSessionTokenCookies(response).some((cookie) => cookie.includes(EXPIRED_ATTRIBUTE));
 
-  const finalizeAuthResponse = async (pathname: string, response: Response): Promise<Response> => {
+  const hasCompanion = (request: Request): boolean =>
+    readRequestCookieNames(request).includes(companion.name);
+
+  const finalizeAuthResponse = async (
+    pathname: string,
+    request: Request,
+    response: Response,
+  ): Promise<Response> => {
     if (hasSessionTokenSet(response)) {
       return withCookies(response, [companionSet]);
     }
@@ -116,7 +171,11 @@ const createSessionCookies = ({ sessionData, sessionToken }: SessionCookieSet): 
     const body = await response.clone().json();
 
     if (!isNullSession(body)) {
-      return response;
+      const expiry = readSessionExpiry(body);
+      if (!expiry || hasCompanion(request)) {
+        return response;
+      }
+      return withCookies(response, [serializeCookieUntil(companion, "1", expiry)]);
     }
 
     return withCookies(response, [
