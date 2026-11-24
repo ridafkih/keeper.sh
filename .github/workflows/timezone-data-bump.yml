@@ -1,0 +1,286 @@
+name: Bump Time Zone Data
+
+concurrency:
+  group: timezone-data-bump
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  TZDB_SIGNING_KEY_FINGERPRINT: 7E3792A9D8ACF7D633BC1588ED97E90E62AA7E34
+
+jobs:
+  tzdata:
+    name: Bump the tzdb and ICU data
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write # opens an issue when a bump fails
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Find the newest ICU time zone data
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current="$(cat docker/icu-timezone/VERSION)"
+          icu_commit="$(gh api repos/unicode-org/icu-data/commits/main --jq .sha)"
+          latest="$(gh api "repos/unicode-org/icu-data/contents/tzdata/icunew?ref=$icu_commit" \
+            --jq '[.[] | select(.type == "dir") | .name | select(test("^[0-9]{4}[a-z]$"))] | sort | last')"
+          if ! [[ "$current" =~ ^[0-9]{4}[a-z]$ && "$latest" =~ ^[0-9]{4}[a-z]$ && "$icu_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the current ($current) or latest ($latest) version at icu-data $icu_commit."
+            exit 1
+          fi
+          branch="chore/bump-tzdata-$latest"
+          if [[ ! "$latest" > "$current" ]]; then
+            echo "Vendored $current is current (ICU has $latest); nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$branch" > /dev/null \
+            || [ -n "$(gh pr list --head "$branch" --state all --json number --jq '.[].number')" ]; then
+            echo "A branch or pull request for $latest already exists; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "version=$latest"
+            echo "icu-commit=$icu_commit"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify the signed IANA release
+        if: steps.target.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/tzdb"
+          mkdir -p "$release/data" "$release/gnupg"
+          chmod 700 "$release/gnupg"
+          curl -fsSL --proto '=https' -o "$release/tzdata.tar.gz" "https://data.iana.org/time-zones/releases/tzdata$VERSION.tar.gz"
+          curl -fsSL --proto '=https' -o "$release/tzdata.tar.gz.asc" "https://data.iana.org/time-zones/releases/tzdata$VERSION.tar.gz.asc"
+          export GNUPGHOME="$release/gnupg"
+          gpg --batch --quiet --import .github/keys/tzdb-release-signing-key.asc
+          gpg --batch --status-fd 1 --verify "$release/tzdata.tar.gz.asc" "$release/tzdata.tar.gz" > "$release/status"
+          if ! grep -Eq "^\[GNUPG:\] VALIDSIG [0-9A-F]{40} .* $TZDB_SIGNING_KEY_FINGERPRINT$" "$release/status"; then
+            echo "::error::tzdata$VERSION.tar.gz is not signed by $TZDB_SIGNING_KEY_FINGERPRINT."
+            exit 1
+          fi
+          tar -xzf "$release/tzdata.tar.gz" -C "$release/data"
+          if [ "$(cat "$release/data/version")" != "$VERSION" ]; then
+            echo "::error::The signed release says it is $(cat "$release/data/version"), not $VERSION."
+            exit 1
+          fi
+
+      - name: Verify the eggert/tz tag matches the signed release
+        if: steps.target.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          for file in africa antarctica asia australasia backward etcetera europe northamerica southamerica; do
+            curl -fsSL --proto '=https' -o "$RUNNER_TEMP/tzdb/tag-$file" "https://raw.githubusercontent.com/eggert/tz/$VERSION/$file"
+            if ! cmp -s "$RUNNER_TEMP/tzdb/tag-$file" "$RUNNER_TEMP/tzdb/data/$file"; then
+              echo "::error::eggert/tz $VERSION/$file differs from the signed IANA release."
+              exit 1
+            fi
+          done
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.target.outputs.changed == 'true'
+
+      - name: Update the vendored data
+        if: steps.target.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.target.outputs.version }}
+        run: |
+          set -euo pipefail
+          bun scripts/update-icu-timezone.ts "$VERSION"
+          bun scripts/update-timezone-links.ts "$VERSION"
+
+      - name: Verify the ICU files match icu-data
+        if: steps.target.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.target.outputs.version }}
+          ICU_COMMIT: ${{ steps.target.outputs.icu-commit }}
+        run: |
+          set -euo pipefail
+          gh api "repos/unicode-org/icu-data/contents/tzdata/icunew/$VERSION/44/le?ref=$ICU_COMMIT" \
+            --jq '.[] | select(.type == "file") | "\(.name) \(.sha)"' > "$RUNNER_TEMP/icu-blobs"
+          for file in metaZones.res timezoneTypes.res windowsZones.res zoneinfo64.res; do
+            expected="$(awk -v name="$file" '$1 == name { print $2 }' "$RUNNER_TEMP/icu-blobs")"
+            actual="$(git hash-object "docker/icu-timezone/$file")"
+            if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+              echo "::error::docker/icu-timezone/$file does not match icu-data $ICU_COMMIT."
+              exit 1
+            fi
+          done
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app
+        if: steps.target.outputs.changed == 'true'
+        with:
+          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: ridafkih
+          repositories: keeper.sh
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open a pull request
+        if: steps.target.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ steps.target.outputs.version }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -euo pipefail
+          BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add docker/icu-timezone packages/calendar/src/utils/timezone-data-currency.ts packages/calendar/src/ics/utils/timezone-links.ts
+          git commit -m "chore(tzdata): bump to $VERSION"
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" push origin "$BRANCH"
+          gh pr create --title "chore(tzdata): bump to $VERSION" --head "$BRANCH" \
+            --body "Time zone data $VERSION, checked against the signed IANA release."
+
+          gh pr list --state open --json number,headRefName --jq \
+            ".[] | select(.headRefName | startswith(\"chore/bump-tzdata-\")) | select(.headRefName != \"${BRANCH}\") | .number" \
+          | while read -r n; do
+              [ -n "$n" ] || continue
+              gh pr close "$n" --comment "Superseded by chore(tzdata): bump to $VERSION."
+            done
+
+      - name: Report a failed bump
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Bumping the time zone data failed"
+          if [ -n "$(gh issue list --search "$TITLE in:title" --state open --json number --jq '.[].number')" ]; then
+            echo "An open issue already tracks this."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "The run that failed: $RUN"
+
+  windows-zones:
+    name: Bump the Windows zone map
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write # opens an issue when a bump fails
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - name: Find the newest CLDR Windows zones
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          current="$(sed -nE '1s|^// Generated by scripts/update-windows-timezones.ts from unicode-org/cldr ([0-9a-f]{40}); do not edit\.$|\1|p' \
+            packages/calendar/src/ics/utils/windows-timezones.ts)"
+          latest="$(gh api "repos/unicode-org/cldr/commits?sha=main&path=common/supplemental/windowsZones.xml&per_page=1" --jq '.[0].sha')"
+          if ! [[ "$current" =~ ^[0-9a-f]{40}$ && "$latest" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the current ($current) or latest ($latest) CLDR commit."
+            exit 1
+          fi
+          pin="${latest:0:7}"
+          branch="chore/bump-windows-zones-$pin"
+          if [ "$latest" = "$current" ]; then
+            echo "Windows zones are current at $pin; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "$branch" > /dev/null \
+            || [ -n "$(gh pr list --head "$branch" --state all --json number --jq '.[].number')" ]; then
+            echo "A branch or pull request for $pin already exists; nothing to do."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "sha=$latest"
+            echo "pin=$pin"
+            echo "branch=$branch"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        if: steps.target.outputs.changed == 'true'
+
+      - name: Update the Windows zone map
+        if: steps.target.outputs.changed == 'true'
+        env:
+          SHA: ${{ steps.target.outputs.sha }}
+        run: bun scripts/update-windows-timezones.ts "$SHA"
+
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: app
+        if: steps.target.outputs.changed == 'true'
+        with:
+          app-id: ${{ secrets.KEEPER_BOT_APP_ID }}
+          private-key: ${{ secrets.KEEPER_BOT_PRIVATE_KEY }}
+          owner: ridafkih
+          repositories: keeper.sh
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Open a pull request
+        if: steps.target.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+          PIN: ${{ steps.target.outputs.pin }}
+          BRANCH: ${{ steps.target.outputs.branch }}
+        run: |
+          set -euo pipefail
+          BOT_ID="$(gh api "/users/${APP_SLUG}%5Bbot%5D" --jq .id)"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+
+          git checkout -b "$BRANCH"
+          git add packages/calendar/src/ics/utils/windows-timezones.ts
+          git commit -m "chore(windows-zones): bump to $PIN"
+          header="AUTHORIZATION: basic $(echo -n "x-access-token:$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=$header" push origin "$BRANCH"
+          gh pr create --title "chore(windows-zones): bump to $PIN" --head "$BRANCH" \
+            --body "Windows time zone map from CLDR $PIN."
+
+          gh pr list --state open --json number,headRefName --jq \
+            ".[] | select(.headRefName | startswith(\"chore/bump-windows-zones-\")) | select(.headRefName != \"${BRANCH}\") | .number" \
+          | while read -r n; do
+              [ -n "$n" ] || continue
+              gh pr close "$n" --comment "Superseded by chore(windows-zones): bump to $PIN."
+            done
+
+      - name: Report a failed bump
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Bumping the Windows time zone map failed"
+          if [ -n "$(gh issue list --search "$TITLE in:title" --state open --json number --jq '.[].number')" ]; then
+            echo "An open issue already tracks this."
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "The run that failed: $RUN"
