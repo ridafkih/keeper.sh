@@ -4,11 +4,12 @@ import {
   generateDeterministicEventUid,
 } from "../../../../src/core/events/identity";
 
-const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
 import { CalDAVCreateConflictError } from "../../../../src/providers/caldav/shared/client";
 import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
+
+const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),

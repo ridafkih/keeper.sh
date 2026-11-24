@@ -4,11 +4,12 @@ import {
   generateDeterministicEventUid,
 } from "../../../../src/core/events/identity";
 
-const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
 import { CalDAVCreateConflictError, CalDAVHttpError } from "../../../../src/providers/caldav/shared/client";
 import { eventToICalString } from "../../../../src/providers/caldav/shared/ics";
+
+const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 
 const clientMocks = vi.hoisted(() => ({
   createCalendarObject: vi.fn(),
@@ -21,18 +22,20 @@ const clientMocks = vi.hoisted(() => ({
 
 vi.mock("../../../../src/providers/caldav/shared/client", () => {
   class MockCalDAVHttpError extends Error {
+    precondition: string | null;
     status: number;
 
-    constructor(response: Response) {
+    constructor(response: Response, _operation?: string, precondition: string | null = null) {
       super(`CalDAV request failed: ${response.status}`);
       this.name = "CalDAVHttpError";
+      this.precondition = precondition;
       this.status = response.status;
     }
   }
 
   class MockCalDAVCreateConflictError extends MockCalDAVHttpError {
-    constructor(response: Response) {
-      super(response);
+    constructor(response: Response, precondition: string | null = null) {
+      super(response, "create", precondition);
       this.name = "CalDAVCreateConflictError";
     }
   }
@@ -535,6 +538,35 @@ describe("createCalDAVSyncProvider", () => {
 
   it("omits listing counts until a listing has actually happened", () => {
     expect(createProvider().getSyncDiagnostics()).not.toHaveProperty("remote_objects.listed_count");
+  });
+
+  it("reports a create conflict whose object cannot be read back as a 412 with its reason", async () => {
+    clientMocks.createCalendarObject.mockRejectedValueOnce(
+      new CalDAVCreateConflictError(new Response(null, { status: 412 })),
+    );
+    clientMocks.fetchCalendarObject.mockResolvedValueOnce(null);
+    const provider = createProvider();
+
+    const results = await provider.pushEvents([createEvent()]);
+
+    expect(results).toEqual([expect.objectContaining({
+      errorType: "CalDAVConflictRecoveryError",
+      reason: "conflict_object_missing",
+      statusCode: 412,
+      success: false,
+    })]);
+  });
+
+  it("reports the precondition the server named for a refused create", async () => {
+    clientMocks.createCalendarObject.mockRejectedValueOnce(
+      new CalDAVCreateConflictError(new Response(null, { status: 412 }), "no-uid-conflict"),
+    );
+    clientMocks.fetchCalendarObject.mockResolvedValueOnce(null);
+    const provider = createProvider();
+
+    const results = await provider.pushEvents([createEvent()]);
+
+    expect(results).toEqual([expect.objectContaining({ reason: "no-uid-conflict", statusCode: 412 })]);
   });
 
   it("preserves the HTTP status and recovery phase when conflict recovery fails", async () => {

@@ -42,27 +42,34 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
     }
   };
 
+  const createCalendarObject = (params: { calendarUrl: string; filename: string; iCalString: string }) => {
+    claimUids(params.calendarUrl, params.iCalString);
+    account.objects.set(`${params.calendarUrl}${params.filename}`, {
+      calendarUrl: params.calendarUrl,
+      data: params.iCalString,
+    });
+    return Promise.resolve();
+  };
+
+  const fetchCalendarObject = (params: { calendarUrl: string; filename: string }) => {
+    const object = account.objects.get(`${params.calendarUrl}${params.filename}`);
+    if (!object) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve({ data: object.data, etag: "\"1\"", url: params.filename });
+  };
+
+  const updateCalendarObjectByUrl = (params: { iCalString: string; objectUrl: string }) => {
+    const calendarUrl = params.objectUrl.slice(0, params.objectUrl.lastIndexOf("/") + 1);
+    claimUids(calendarUrl, params.iCalString);
+    account.objects.set(params.objectUrl, { calendarUrl, data: params.iCalString });
+    return Promise.resolve();
+  };
+
   class CalDAVClient {
-    createCalendarObject = (params: { calendarUrl: string; filename: string; iCalString: string }) => {
-      claimUids(params.calendarUrl, params.iCalString);
-      account.objects.set(`${params.calendarUrl}${params.filename}`, {
-        calendarUrl: params.calendarUrl,
-        data: params.iCalString,
-      });
-      return Promise.resolve();
-    };
-
-    fetchCalendarObject = (params: { calendarUrl: string; filename: string }) => {
-      const object = account.objects.get(`${params.calendarUrl}${params.filename}`);
-      return Promise.resolve(object ? { data: object.data, etag: "\"1\"", url: params.filename } : null);
-    };
-
-    updateCalendarObjectByUrl = (params: { iCalString: string; objectUrl: string }) => {
-      const calendarUrl = params.objectUrl.slice(0, params.objectUrl.lastIndexOf("/") + 1);
-      claimUids(calendarUrl, params.iCalString);
-      account.objects.set(params.objectUrl, { calendarUrl, data: params.iCalString });
-      return Promise.resolve();
-    };
+    createCalendarObject = createCalendarObject;
+    fetchCalendarObject = fetchCalendarObject;
+    updateCalendarObjectByUrl = updateCalendarObjectByUrl;
   }
 
   return {

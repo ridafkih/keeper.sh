@@ -51,13 +51,37 @@ interface CalDAVSyncProviderConfig {
   safeFetchOptions?: SafeFetchOptions;
 }
 
+type CalDAVConflictRecoveryReason =
+  | "conflict_foreign_uid"
+  | "conflict_object_missing"
+  | "conflict_rewrite_failed"
+  | "conflict_without_etag";
+
+class CalDAVConflictInspectionError extends Error {
+  readonly reason: CalDAVConflictRecoveryReason;
+
+  constructor(reason: CalDAVConflictRecoveryReason, message: string) {
+    super(message);
+    this.name = "CalDAVConflictInspectionError";
+    this.reason = reason;
+  }
+}
+
 class CalDAVConflictRecoveryError extends Error {
-  constructor(uid: string, cause: unknown) {
+  readonly conflict: CalDAVHttpError;
+  readonly reason: CalDAVConflictRecoveryReason;
+
+  constructor(uid: string, conflict: CalDAVHttpError, cause: unknown) {
     super(
       `CalDAV create conflict recovery failed for event ${uid}: ${getErrorMessage(cause)}`,
       { cause },
     );
     this.name = "CalDAVConflictRecoveryError";
+    this.conflict = conflict;
+    this.reason = "conflict_rewrite_failed";
+    if (cause instanceof CalDAVConflictInspectionError) {
+      this.reason = cause.reason;
+    }
   }
 }
 
@@ -75,13 +99,42 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   return null;
 };
 
+const resolveFailureReason = (
+  error: unknown,
+  httpError: CalDAVHttpError | null,
+): string | null => {
+  if (httpError?.precondition) {
+    return httpError.precondition;
+  }
+  if (error instanceof CalDAVConflictRecoveryError) {
+    return error.conflict.precondition ?? error.reason;
+  }
+  return null;
+};
+
+const resolveFailureStatus = (
+  error: unknown,
+  httpError: CalDAVHttpError | null,
+): number | null => {
+  if (httpError) {
+    return httpError.status;
+  }
+  if (error instanceof CalDAVConflictRecoveryError) {
+    return error.conflict.status;
+  }
+  return null;
+};
+
 const createFailureResult = (error: unknown): {
   error: string;
   errorType: string;
+  reason?: string;
   statusCode?: number;
   success: false;
 } => {
   const httpError = findCalDAVHttpError(error);
+  const reason = resolveFailureReason(error, httpError);
+  const statusCode = resolveFailureStatus(error, httpError);
   let errorType = "UnknownError";
   if (error instanceof Error) {
     errorType = error.name;
@@ -89,7 +142,8 @@ const createFailureResult = (error: unknown): {
   return {
     error: getErrorMessage(error),
     errorType,
-    ...(httpError && { statusCode: httpError.status }),
+    ...(reason && { reason }),
+    ...(statusCode !== null && { statusCode }),
     success: false,
   };
 };
@@ -107,7 +161,10 @@ const recoverCreateConflict = async (
   });
 
   if (!existing?.data) {
-    throw new Error(`CalDAV event ${uid} already exists but could not be fetched`);
+    throw new CalDAVConflictInspectionError(
+      "conflict_object_missing",
+      `CalDAV event ${uid} already exists but could not be fetched`,
+    );
   }
 
   const remoteEvent = parseICalToRemoteEvent(existing.data);
@@ -130,13 +187,17 @@ const recoverCreateConflict = async (
   }
 
   if (remoteEvent?.uid !== uid) {
-    throw new Error(
+    throw new CalDAVConflictInspectionError(
+      "conflict_foreign_uid",
       `CalDAV object ${uid}.ics carries uid ${remoteEvent?.uid ?? "none"}, so it is not this event's mirror`,
     );
   }
 
   if (!existing.etag) {
-    throw new Error(`CalDAV event ${uid} already exists but has no ETag for a safe recreation`);
+    throw new CalDAVConflictInspectionError(
+      "conflict_without_etag",
+      `CalDAV event ${uid} already exists but has no ETag for a safe recreation`,
+    );
   }
 
   await client.deleteCalendarObject({
@@ -320,7 +381,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           try {
             await recoverCreateConflict(client, config.calendarUrl, uid, iCalString, event);
           } catch (recoveryError) {
-            throw new CalDAVConflictRecoveryError(uid, recoveryError);
+            throw new CalDAVConflictRecoveryError(uid, error, recoveryError);
           }
           return {
             conflictResolved: true,
@@ -369,7 +430,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
     if (!endsInCalendarExtension(objectPath)) {
       const { data, etag } = await readStoredObject(objectUrl);
-      const storedUids = data ? readCalendarObjectUids(data) : [];
+      const storedUids = readCalendarObjectUids(data ?? "");
       const storedUid = uids.find((uid) => storedUids.includes(uid));
       if (storedUid) {
         return { etag, objectUrl, uid: storedUid };

@@ -16,6 +16,7 @@ import { computeSyncOperations } from "../sync/operations";
 import type { ReconciliationScope, StaleReasonCounts } from "../sync/operations";
 import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate } from "./types";
 import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
+import { appendOperationErrorTallies } from "./operation-error-tallies";
 import type { UnrecordedCopyTally } from "./unrecorded-copies";
 
 /*
@@ -105,6 +106,7 @@ interface OperationError {
   type: "add" | "remove" | "update";
   error: string;
   errorType?: string;
+  reason?: string;
   statusCode?: number;
   writeAccessDenied?: boolean;
 }
@@ -256,6 +258,7 @@ const processAddResults = (
           type: "add",
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
+          ...(pushResult.reason && { reason: pushResult.reason }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
           ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
@@ -325,6 +328,7 @@ const processUpdateResults = (
           type: "update",
           error: pushResult.error,
           ...(pushResult.errorType && { errorType: pushResult.errorType }),
+          ...(pushResult.reason && { reason: pushResult.reason }),
           ...(typeof pushResult.statusCode === "number" && { statusCode: pushResult.statusCode }),
           ...(pushResult.writeAccessDenied && { writeAccessDenied: true }),
         });
@@ -371,6 +375,7 @@ const processDeleteResults = (
           type: "remove",
           error: deleteResult.error,
           ...(deleteResult.errorType && { errorType: deleteResult.errorType }),
+          ...(deleteResult.reason && { reason: deleteResult.reason }),
           ...(typeof deleteResult.statusCode === "number" && { statusCode: deleteResult.statusCode }),
           ...(deleteResult.writeAccessDenied && { writeAccessDenied: true }),
         });
@@ -1113,6 +1118,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     appendPushEchoFields(wideEvent, outcome.pushEcho);
 
     if (outcome.errors.length > 0) {
+      appendOperationErrorTallies(wideEvent, outcome.errors);
       wideEvent["operation_errors"] = outcome.errors.slice(0, OPERATION_ERROR_SAMPLE_SIZE);
       wideEvent["operation_errors.count"] = outcome.errors.length;
       wideEvent["operation_errors.truncated"] = outcome.errors.length > OPERATION_ERROR_SAMPLE_SIZE;

@@ -86,6 +86,7 @@ interface PushResult {
   echo?: PushEchoComparison;
   error?: string;
   errorType?: string;
+  reason?: string;
   statusCode?: number;
   shouldContinue?: boolean;
   conflictResolved?: boolean;
@@ -126,6 +127,7 @@ interface DeleteResult {
   success: boolean;
   error?: string;
   errorType?: string;
+  reason?: string;
   statusCode?: number;
   shouldContinue?: boolean;
   writeAccessDenied?: boolean;

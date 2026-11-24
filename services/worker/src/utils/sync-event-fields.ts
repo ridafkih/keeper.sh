@@ -22,6 +22,9 @@ const recordOperationFailures = (syncEvent: Record<string, unknown>): void => {
     if (typeof operationError.errorType === "string") {
       widelog.append("sync.failure_error_types", operationError.errorType);
     }
+    if (typeof operationError.reason === "string") {
+      widelog.append("sync.failure_reasons", operationError.reason);
+    }
     if (typeof operationError.statusCode === "number") {
       widelog.append("sync.failure_status_codes", operationError.statusCode);
     }
