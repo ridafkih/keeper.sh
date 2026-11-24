@@ -16,6 +16,7 @@ import {
 } from "../sync/effective-sources";
 import { parseStoredRecurrenceForMaterialization } from "./stored-recurrence";
 import { materializeRecurrenceEvents } from "./recurrence-materializer";
+import { appendMeetingLink } from "./meeting-link";
 import { isEmptyTimeRange, isInvertedTimeRange, resolveTimeRangeEnd } from "./time-range";
 
 const EMPTY_SOURCES_COUNT = 0;
@@ -252,6 +253,7 @@ const getViaCalendars = async (
       excludeAvailabilities: calendarsTable.excludeAvailabilities,
       excludeEventDescription: calendarsTable.excludeEventDescription,
       excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventMeetingLink: calendarsTable.excludeEventMeetingLink,
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
@@ -335,9 +337,21 @@ interface PresentedEvent {
   description: string | null;
   isAllDay: boolean | null;
   location: string | null;
+  meetingLink: string | null;
   sourceEventType: string | null;
   title: string | null;
 }
+
+const presentDescription = (
+  event: PresentedEvent,
+  rules: EffectiveSyncRules,
+): string | undefined => {
+  const description = excludeOrAbsent(rules.excludeEventDescription, event.description);
+  if (rules.excludeEventMeetingLink || !event.meetingLink) {
+    return description;
+  }
+  return appendMeetingLink(description, event.meetingLink);
+};
 
 const presentEvent = (
   event: PresentedEvent,
@@ -370,7 +384,7 @@ const presentEvent = (
   }
 
   return {
-    description: excludeOrAbsent(rules.excludeEventDescription, event.description),
+    description: presentDescription(event, rules),
     isPrivate: trueOrAbsent(rules.markEventsAsPrivate),
     location: excludeOrAbsent(rules.excludeEventLocation, event.location),
     remindersDisabled: trueOrAbsent(rules.disableEventReminders),
@@ -393,6 +407,7 @@ const presentEventThroughHops = (
         ...event,
         description: current.description ?? null,
         location: current.location ?? null,
+        meetingLink: null,
         title: current.summary,
       },
       hop.calendarName,
@@ -447,6 +462,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       excludeAvailabilities: calendarsTable.excludeAvailabilities,
       excludeEventDescription: calendarsTable.excludeEventDescription,
       excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventMeetingLink: calendarsTable.excludeEventMeetingLink,
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,
@@ -460,6 +476,7 @@ const getEventsForCalendarsWithDiagnostics = async (
       id: eventStatesTable.id,
       isAllDay: eventStatesTable.isAllDay,
       location: eventStatesTable.location,
+      meetingLink: eventStatesTable.meetingLink,
       recurrenceRule: eventStatesTable.recurrenceRule,
       recurrenceId: eventStatesTable.recurrenceId,
       sourceEventType: eventStatesTable.sourceEventType,

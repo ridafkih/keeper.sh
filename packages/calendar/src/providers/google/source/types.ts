@@ -23,7 +23,6 @@ interface GoogleEventDateTime {
 }
 
 interface GoogleCalendarEvent {
-  hangoutLink?: string;
   conferenceData?: {
     entryPoints?: { entryPointType?: string; uri?: string }[];
   };
@@ -85,6 +84,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  meetingLink?: string;
 }
 
 export type {

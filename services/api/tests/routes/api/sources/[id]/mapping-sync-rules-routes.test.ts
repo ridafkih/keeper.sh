@@ -20,6 +20,7 @@ const SOURCE_RULES: SyncRules = {
   excludeAvailabilities: [],
   excludeEventDescription: true,
   excludeEventLocation: true,
+  excludeEventMeetingLink: false,
   excludeEventName: true,
   excludeFocusTime: false,
   excludeOutOfOffice: false,

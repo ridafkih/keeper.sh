@@ -49,6 +49,7 @@ create table event_states (
   "exceptionDates" text,
   "isAllDay" boolean,
   "location" text,
+  "meetingLink" text,
   "recurrenceId" timestamptz,
   "recurrenceRule" text,
   "sourceEventId" text,

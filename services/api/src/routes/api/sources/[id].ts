@@ -44,6 +44,7 @@ const getSourceCalendar: AuthenticatedRouteCallback = async ({ params, userId })
       excludeAvailabilities: calendarsTable.excludeAvailabilities,
       excludeEventDescription: calendarsTable.excludeEventDescription,
       excludeEventLocation: calendarsTable.excludeEventLocation,
+      excludeEventMeetingLink: calendarsTable.excludeEventMeetingLink,
       excludeEventName: calendarsTable.excludeEventName,
       excludeFocusTime: calendarsTable.excludeFocusTime,
       excludeOutOfOffice: calendarsTable.excludeOutOfOffice,

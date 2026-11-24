@@ -549,6 +549,7 @@ const DEFAULT_SOURCE_SYNC_RULES = {
   customEventName: "{{calendar_name}}",
   excludeEventDescription: true,
   excludeEventLocation: true,
+  excludeEventMeetingLink: false,
   excludeEventName: true,
   includeInIcalFeed: true,
 } as const;
@@ -567,6 +568,7 @@ const SYNC_RULE_FIELDS = [
   "excludeAvailabilities",
   "excludeEventDescription",
   "excludeEventLocation",
+  "excludeEventMeetingLink",
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",
@@ -582,6 +584,7 @@ interface SyncRules<TAvailability extends string = string> {
   excludeAvailabilities: TAvailability[];
   excludeEventDescription: boolean;
   excludeEventLocation: boolean;
+  excludeEventMeetingLink: boolean;
   excludeEventName: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
@@ -600,6 +603,7 @@ const NO_SYNC_RULE_OVERRIDES: Readonly<SyncRuleOverrides<never>> = Object.freeze
   excludeAvailabilities: null,
   excludeEventDescription: null,
   excludeEventLocation: null,
+  excludeEventMeetingLink: null,
   excludeEventName: null,
   excludeFocusTime: null,
   excludeOutOfOffice: null,
@@ -619,6 +623,7 @@ const resolveSyncRules = <TAvailability extends string>(
     excludeAvailabilities: applied.excludeAvailabilities ?? source.excludeAvailabilities,
     excludeEventDescription: applied.excludeEventDescription ?? source.excludeEventDescription,
     excludeEventLocation: applied.excludeEventLocation ?? source.excludeEventLocation,
+    excludeEventMeetingLink: applied.excludeEventMeetingLink ?? source.excludeEventMeetingLink,
     excludeEventName: applied.excludeEventName ?? source.excludeEventName,
     excludeFocusTime: applied.excludeFocusTime ?? source.excludeFocusTime,
     excludeOutOfOffice: applied.excludeOutOfOffice ?? source.excludeOutOfOffice,
@@ -647,6 +652,7 @@ const syncRuleOverridesPatchSchema = type({
   "excludeAvailabilities?": excludableAvailabilitySchema.array().or("null"),
   "excludeEventDescription?": "boolean | null",
   "excludeEventLocation?": "boolean | null",
+  "excludeEventMeetingLink?": "boolean | null",
   "excludeEventName?": "boolean | null",
   "excludeFocusTime?": "boolean | null",
   "excludeOutOfOffice?": "boolean | null",

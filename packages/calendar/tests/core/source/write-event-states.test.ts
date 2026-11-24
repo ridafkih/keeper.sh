@@ -160,6 +160,7 @@ describe("insertEventStatesWithConflictResolution", () => {
       "exceptionDates",
       "isAllDay",
       "location",
+      "meetingLink",
       "recurrenceId",
       "recurrenceRule",
       "sourceEventId",

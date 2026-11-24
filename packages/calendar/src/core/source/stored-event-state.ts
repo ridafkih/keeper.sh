@@ -14,6 +14,7 @@ interface StoredSourceEventState {
   id: string;
   isAllDay?: boolean | null;
   location?: string | null;
+  meetingLink?: string | null;
   recurrenceId: Date | null;
   recurrenceRule: string | null;
   sourceEventId?: string | null;

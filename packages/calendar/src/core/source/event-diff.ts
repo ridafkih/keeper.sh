@@ -79,6 +79,7 @@ interface SourceEventIdentityInput {
   title?: string | null;
   description?: string | null;
   location?: string | null;
+  meetingLink?: string | null;
   exceptionDates?: IcsExceptionDates | null;
   recurrenceId?: Date | null;
   recurrenceDuration?: SourceEvent["recurrenceDuration"];
@@ -102,6 +103,7 @@ const buildSourceEventIdentityKey = (
     normalizeIdentityContent(input.title),
     normalizeIdentityContent(input.description),
     normalizeIdentityContent(input.location),
+    normalizeIdentityContent(input.meetingLink),
     normalizeIdentityContent(input.startTimeZone),
     serializeStructuredIdentityValue(input.recurrenceDuration),
     serializeStructuredIdentityValue(input.recurrenceRule),
@@ -145,6 +147,7 @@ const buildExistingEventIdentitySet = (
           exceptionDates: existingEvent.exceptionDates,
           isAllDay: existingEvent.isAllDay,
           location: existingEvent.location,
+          meetingLink: existingEvent.meetingLink,
           recurrenceId: existingEvent.recurrenceId,
           recurrenceDuration: existingEvent.recurrenceDuration,
           recurrenceRule: existingEvent.recurrenceRule,
@@ -185,6 +188,7 @@ const buildSourceEventsToAdd = (
             exceptionDates: incomingEvent.exceptionDates,
             isAllDay: incomingEvent.isAllDay,
             location: incomingEvent.location,
+            meetingLink: incomingEvent.meetingLink,
             recurrenceId: incomingEvent.recurrenceId,
             recurrenceDuration: incomingEvent.recurrenceDuration,
             recurrenceRule: incomingEvent.recurrenceRule,
