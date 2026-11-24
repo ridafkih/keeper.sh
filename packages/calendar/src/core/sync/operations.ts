@@ -1,5 +1,6 @@
 import type { EventMapping } from "../events/mappings";
 import type {
+  EventAvailability,
   MaterializedSyncableEvent,
   RemoteEvent,
   SyncOperation,
@@ -287,6 +288,18 @@ const divergedContentLengths = (
   return { [field]: { local: local.length, remote: remote.length } };
 };
 
+const resolveWrittenAvailability = (
+  localEvent: MaterializedSyncableEvent,
+  remoteEvent: RemoteEvent,
+): EventAvailability => {
+  const localAvailability = localEvent.availability ?? "busy";
+  const supportedAvailabilities = remoteEvent.supportedAvailabilities ?? [];
+  if (supportedAvailabilities.includes(localAvailability)) {
+    return localAvailability;
+  }
+  return "busy";
+};
+
 const getRemoteStateChanges = (
   mapping: EventMapping,
   localEvent: MaterializedSyncableEvent,
@@ -310,12 +323,8 @@ const getRemoteStateChanges = (
       summary: remoteContent.summary !== localContent.summary,
     };
   }
-  const localAvailability = localEvent.availability ?? "busy";
-  const supportedAvailabilities = remoteEvent.supportedAvailabilities ?? [];
-  let expectedRemoteAvailability: MaterializedSyncableEvent["availability"] = "busy";
-  if (supportedAvailabilities.includes(localAvailability)) {
-    expectedRemoteAvailability = localAvailability;
-  }
+  const expectedRemoteAvailability = mapping.remoteAvailability
+    ?? resolveWrittenAvailability(localEvent, remoteEvent);
   const remoteAvailabilityChanged = typeof remoteEvent.editableAvailability === "string"
     && remoteEvent.editableAvailability !== expectedRemoteAvailability;
   const remoteTimeChanged = !isSameSerializedSecond(remoteEvent.startTime, mapping.startTime)

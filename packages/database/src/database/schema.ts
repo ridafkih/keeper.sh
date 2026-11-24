@@ -437,6 +437,7 @@ const eventMappingsTable = pgTable(
     eventStateId: uuid()
       .references(() => eventStatesTable.id, { onDelete: "set null" }),
     id: uuid().notNull().primaryKey().defaultRandom(),
+    remoteAvailability: text(),
     syncEventId: text(),
     syncEventHash: text(),
     // Nullable for rolling compatibility with writers from before this column existed.

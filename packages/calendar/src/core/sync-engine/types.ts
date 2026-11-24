@@ -1,5 +1,6 @@
 import type {
   DeleteResult,
+  EventAvailability,
   ListRemoteEventsOptions,
   MaterializedSyncableEvent,
   ProviderThrottleMetrics,
@@ -32,6 +33,7 @@ interface PendingInsert {
   calendarId: string;
   destinationEventUid: string;
   deleteIdentifier: string;
+  remoteAvailability?: EventAvailability | null;
   syncEventHash: string | null;
   startTime: Date;
   endTime: Date;
@@ -41,6 +43,7 @@ interface PendingUpdate {
   deleteIdentifier: string;
   endTime: Date;
   id: string;
+  remoteAvailability?: EventAvailability | null;
   startTime: Date;
   syncEventHash: string;
   syncEventId: string;

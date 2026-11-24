@@ -65,6 +65,7 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
               calendarId: insert.calendarId,
               destinationEventUid: insert.destinationEventUid,
               deleteIdentifier: insert.deleteIdentifier,
+              remoteAvailability: insert.remoteAvailability,
               syncEventHash: insert.syncEventHash,
               startTime: insert.startTime,
               endTime: insert.endTime,
@@ -81,6 +82,7 @@ const createDatabaseFlush = (database: BunSQLClient): (changes: PendingChanges) 
               .update(eventMappingsTable)
               .set({
                 deleteIdentifier: update.deleteIdentifier,
+                remoteAvailability: update.remoteAvailability,
                 syncEventHash: update.syncEventHash,
                 syncEventId: update.syncEventId,
                 startTime: update.startTime,

@@ -806,6 +806,57 @@ describe("computeSyncOperations", () => {
     });
   });
 
+  it("leaves a mirror alone when it still holds the availability the destination stored after the last write", () => {
+    const event = createLocalEvent({ availability: "free" });
+    const mapping = createEventMapping({
+      deleteIdentifier: "remote-delete-id-1",
+      destinationEventUid: "remote-uid-1",
+      endTime: event.endTime,
+      remoteAvailability: "busy",
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash(event),
+      endTime: event.endTime,
+      startTime: event.startTime,
+      supportedAvailabilities: ["busy", "free"],
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.operations).toEqual([]);
+    expect(result.staleMappingIds).toEqual([]);
+  });
+
+  it("restores a mirror whose availability moved away from what the destination stored after the last write", () => {
+    const event = createLocalEvent({ availability: "free" });
+    const mapping = createEventMapping({
+      deleteIdentifier: "remote-delete-id-1",
+      destinationEventUid: "remote-uid-1",
+      endTime: event.endTime,
+      remoteAvailability: "free",
+      startTime: event.startTime,
+      syncEventHash: createSyncEventContentHash(event),
+    });
+    const remoteEvent = createRemoteEvent({
+      editableAvailability: "busy",
+      editableContentHash: createEditableEventContentHash(event),
+      endTime: event.endTime,
+      startTime: event.startTime,
+      supportedAvailabilities: ["busy", "free"],
+    });
+
+    const result = computeSyncOperations([event], [mapping], [remoteEvent]);
+
+    expect(result.operations).toHaveLength(1);
+    expect(result.staleReasonCounts).toEqual({
+      ...EMPTY_STALE_REASON_COUNTS,
+      remoteAvailabilityChanged: 1,
+    });
+  });
+
   it("matches a legacy Google UID delete identifier to the provider event ID", () => {
     const event = createLocalEvent({});
     const legacyUid = "legacy-google-event@keeper.sh";

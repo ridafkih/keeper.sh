@@ -86,6 +86,31 @@ describe("eventToICalString", () => {
     expect(parsedEvent?.endTime.toISOString()).toBe("2026-03-09T00:00:00.000Z");
   });
 
+  it.each([
+    ["busy", "TRANSP:OPAQUE"],
+    [null, "TRANSP:OPAQUE"],
+    ["oof", "TRANSP:OPAQUE"],
+    ["free", "TRANSP:TRANSPARENT"],
+  ] as const)("states the transparency of a %s event instead of leaving it to the default", (availability, line) => {
+    const icsString = eventToICalString(
+      {
+        ...(availability && { availability }),
+        calendarId: "calendar-id",
+        calendarName: "Calendar",
+        calendarUrl: null,
+        endTime: new Date("2026-03-08T15:00:00.000Z"),
+        id: "event-id",
+        sourceEventUid: "source-uid",
+        startTime: new Date("2026-03-08T14:00:00.000Z"),
+        summary: "Planning",
+      },
+      "destination-uid",
+    );
+
+    expect(icsString).toContain(line);
+    expect(icsString).not.toContain("X-MICROSOFT-CDO-BUSYSTATUS");
+  });
+
   it("emits a TZID-qualified local datetime when startTimeZone is set", () => {
     const icsString = eventToICalString(
       {
