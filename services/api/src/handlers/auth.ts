@@ -96,7 +96,7 @@ const processAuth = async (pathname: string, request: Request): Promise<Response
   });
 
   const response = await auth.handler(routeOidcCallbackRequest(preparedTokenRequest.request));
-  return cookies.finalizeAuthResponse(pathname, response);
+  return cookies.finalizeAuthResponse(pathname, request, response);
 };
 
 const recordAuthErrorDetail = async (response: Response): Promise<void> => {

@@ -57,6 +57,7 @@ create table "verification" (
 
 interface StoredCookie {
   httpOnly: boolean;
+  persistent: boolean;
   path: string;
   sameSite: string | null;
   secure: boolean;
@@ -65,9 +66,11 @@ interface StoredCookie {
 
 interface Browser {
   cookieHeader: () => string;
+  forget: (name: string) => void;
   names: () => string[];
   read: (name: string) => StoredCookie | null;
   receive: (response: Response) => void;
+  restart: () => void;
   store: (name: string, cookie: StoredCookie) => void;
 }
 
@@ -107,6 +110,8 @@ const createBrowser = (origin: string): Browser => {
 
     cookies.set(name, {
       httpOnly: flags.has("httponly"),
+      persistent:
+        readAttribute(attributes, "Max-Age") !== null || readAttribute(attributes, "Expires") !== null,
       path: readAttribute(attributes, "Path") ?? "/",
       sameSite: readAttribute(attributes, "SameSite"),
       secure,
@@ -117,11 +122,21 @@ const createBrowser = (origin: string): Browser => {
   return {
     cookieHeader: () =>
       [...cookies.entries()].map(([name, { value }]) => `${name}=${value}`).join("; "),
+    forget: (name) => {
+      cookies.delete(name);
+    },
     names: () => [...cookies.keys()].toSorted(),
     read: (name) => cookies.get(name) ?? null,
     receive: (response) => {
       for (const setCookie of response.headers.getSetCookie()) {
         accept(setCookie);
+      }
+    },
+    restart: () => {
+      for (const [name, cookie] of cookies) {
+        if (!cookie.persistent) {
+          cookies.delete(name);
+        }
       }
     },
     store: (name, cookie) => {
@@ -151,9 +166,11 @@ const createSite = async (baseUrl: string) => {
     if (cookieHeader) {
       headers.set("cookie", cookieHeader);
     }
+    const authRequest = new Request(`${baseUrl}${pathname}`, { ...init, headers });
     const response = await sessionCookies.finalizeAuthResponse(
       pathname,
-      await auth.handler(new Request(`${baseUrl}${pathname}`, { ...init, headers })),
+      authRequest,
+      await auth.handler(authRequest),
     );
     browser.receive(response);
     return response;
@@ -263,6 +280,27 @@ describe.each(sites)("session cookies on $label", ({ baseUrl, secure, sessionCoo
     await expect(readSession()).resolves.toBeNull();
 
     expect(browser.names()).toEqual([]);
+  });
+
+  it("keeps both cookies across a browser restart, which drops cookies without a lifetime", async () => {
+    const { browser, readSession, signUp } = await createSite(baseUrl);
+    await signUp();
+
+    browser.restart();
+
+    expect(browser.names()).toEqual([COMPANION_COOKIE, sessionCookie].toSorted());
+    await expect(readSession()).resolves.toMatchObject({ user: { username: "calendar-owner" } });
+  });
+
+  it("restores a lost companion cookie on the next session read", async () => {
+    const { browser, readSession, signUp } = await createSite(baseUrl);
+    await signUp();
+    browser.forget(COMPANION_COOKIE);
+    expect(browser.names()).toEqual([sessionCookie]);
+
+    await readSession();
+
+    expect(browser.read(COMPANION_COOKIE)).toMatchObject({ persistent: true, value: "1" });
   });
 
   it("stays signed in across session reads", async () => {
