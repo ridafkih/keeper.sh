@@ -16,6 +16,7 @@ type IngestSegmentKey =
   | "wait.token_refresh_ms"
   | "wait.rate_limiter_ms"
   | "wait.provider_retry_ms"
+  | "wait.account_cooldown_ms"
   | "wait.flush_reserve_ms"
   | "wait.db_pool_ms"
   | "wait.read_gate_ms"

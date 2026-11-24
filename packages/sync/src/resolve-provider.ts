@@ -122,6 +122,7 @@ const resolveCalDAVProvider = async (
   calendarId: string,
   encryptionKey: string,
   safeFetchOptions?: SafeFetchOptions,
+  rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
@@ -147,6 +148,8 @@ const resolveCalDAVProvider = async (
   return createCalDAVSyncProvider({
     authMethod: resolveAuthMethod(caldavCred.authMethod),
     calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
+    destinationCalendarId: calendarId,
+    rateLimiter,
     serverUrl: caldavCred.serverUrl,
     username: caldavCred.username,
     password,
@@ -194,6 +197,7 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
       options.calendarId,
       options.encryptionKey,
       options.safeFetchOptions,
+      options.rateLimiter,
       options.signal,
     );
   }

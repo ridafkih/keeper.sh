@@ -92,6 +92,7 @@ const createHarness = (events: MaterializedSyncableEvent[]): Harness => {
     mappings,
     runSync: () => {
       const provider = createCalDAVSyncProvider({
+        destinationCalendarId: "destination-calendar-id",
         authMethod: "basic",
         calendarUrl: RENAMING_CALENDAR_URL,
         password: "password",

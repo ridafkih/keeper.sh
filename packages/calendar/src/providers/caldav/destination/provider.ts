@@ -1,5 +1,11 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
-import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import { isAccountThrottledError } from "../../../core/utils/adaptive-account-throttle";
+import {
+  generateCalendarScopedEventUid,
+  generateDeterministicEventUid,
+  isKeeperEvent,
+} from "../../../core/events/identity";
 import {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
@@ -40,19 +46,45 @@ const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as c
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
   calendarUrl: string;
+  destinationCalendarId: string;
   serverUrl: string;
   username: string;
   password: string;
+  rateLimiter?: RedisRateLimiter;
   safeFetchOptions?: SafeFetchOptions;
 }
 
+type CalDAVConflictRecoveryReason =
+  | "conflict_foreign_uid"
+  | "conflict_object_missing"
+  | "conflict_rewrite_failed"
+  | "conflict_without_etag";
+
+class CalDAVConflictInspectionError extends Error {
+  readonly reason: CalDAVConflictRecoveryReason;
+
+  constructor(reason: CalDAVConflictRecoveryReason, message: string) {
+    super(message);
+    this.name = "CalDAVConflictInspectionError";
+    this.reason = reason;
+  }
+}
+
 class CalDAVConflictRecoveryError extends Error {
-  constructor(uid: string, cause: unknown) {
+  readonly conflict: CalDAVHttpError;
+  readonly reason: CalDAVConflictRecoveryReason;
+
+  constructor(uid: string, conflict: CalDAVHttpError, cause: unknown) {
     super(
       `CalDAV create conflict recovery failed for event ${uid}: ${getErrorMessage(cause)}`,
       { cause },
     );
     this.name = "CalDAVConflictRecoveryError";
+    this.conflict = conflict;
+    this.reason = "conflict_rewrite_failed";
+    if (cause instanceof CalDAVConflictInspectionError) {
+      this.reason = cause.reason;
+    }
   }
 }
 
@@ -70,13 +102,45 @@ const findCalDAVHttpError = (value: unknown): CalDAVHttpError | null => {
   return null;
 };
 
+const resolveFailureReason = (
+  error: unknown,
+  httpError: CalDAVHttpError | null,
+): string | null => {
+  if (isAccountThrottledError(error)) {
+    return "account_cooling_down";
+  }
+  if (httpError?.precondition) {
+    return httpError.precondition;
+  }
+  if (error instanceof CalDAVConflictRecoveryError) {
+    return error.conflict.precondition ?? error.reason;
+  }
+  return null;
+};
+
+const resolveFailureStatus = (
+  error: unknown,
+  httpError: CalDAVHttpError | null,
+): number | null => {
+  if (httpError) {
+    return httpError.status;
+  }
+  if (error instanceof CalDAVConflictRecoveryError) {
+    return error.conflict.status;
+  }
+  return null;
+};
+
 const createFailureResult = (error: unknown): {
   error: string;
   errorType: string;
+  reason?: string;
   statusCode?: number;
   success: false;
 } => {
   const httpError = findCalDAVHttpError(error);
+  const reason = resolveFailureReason(error, httpError);
+  const statusCode = resolveFailureStatus(error, httpError);
   let errorType = "UnknownError";
   if (error instanceof Error) {
     errorType = error.name;
@@ -84,7 +148,8 @@ const createFailureResult = (error: unknown): {
   return {
     error: getErrorMessage(error),
     errorType,
-    ...(httpError && { statusCode: httpError.status }),
+    ...(reason && { reason }),
+    ...(statusCode !== null && { statusCode }),
     success: false,
   };
 };
@@ -102,7 +167,10 @@ const recoverCreateConflict = async (
   });
 
   if (!existing?.data) {
-    throw new Error(`CalDAV event ${uid} already exists but could not be fetched`);
+    throw new CalDAVConflictInspectionError(
+      "conflict_object_missing",
+      `CalDAV event ${uid} already exists but could not be fetched`,
+    );
   }
 
   const remoteEvent = parseICalToRemoteEvent(existing.data);
@@ -125,13 +193,17 @@ const recoverCreateConflict = async (
   }
 
   if (remoteEvent?.uid !== uid) {
-    throw new Error(
+    throw new CalDAVConflictInspectionError(
+      "conflict_foreign_uid",
       `CalDAV object ${uid}.ics carries uid ${remoteEvent?.uid ?? "none"}, so it is not this event's mirror`,
     );
   }
 
   if (!existing.etag) {
-    throw new Error(`CalDAV event ${uid} already exists but has no ETag for a safe recreation`);
+    throw new CalDAVConflictInspectionError(
+      "conflict_without_etag",
+      `CalDAV event ${uid} already exists but has no ETag for a safe recreation`,
+    );
   }
 
   await client.deleteCalendarObject({
@@ -256,6 +328,12 @@ const readKeeperEvents = (data: string, objectPath: string): ParsedCalendarEvent
 };
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
+  const toEventUid = (event: MaterializedSyncableEvent): string =>
+    generateCalendarScopedEventUid(event.id, config.destinationCalendarId);
+  const toWritableUids = (event: MaterializedSyncableEvent): string[] => [
+    toEventUid(event),
+    generateDeterministicEventUid(event.id),
+  ];
   const calendarHost = new URL(config.calendarUrl).hostname;
   const removeCounts: CalDAVRemoveCounts = {
     byPath: 0,
@@ -273,9 +351,14 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
   let listing: CalDAVListingStats | null = null;
 
+  const { rateLimiter: accountLimiter } = config;
   const client = new CalDAVClient({
     authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
+    ...(accountLimiter && {
+      onBeforeRequest: () => accountLimiter.acquire(1, config.safeFetchOptions?.signal),
+    }),
+    ...(accountLimiter?.reportThrottle && { onThrottle: accountLimiter.reportThrottle }),
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);
 
@@ -292,7 +375,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const createObject = (event: MaterializedSyncableEvent): Promise<PushResult> =>
     rateLimiter.execute(async (): Promise<PushResult> => {
       try {
-        const uid = generateDeterministicEventUid(event.id);
+        const uid = toEventUid(event);
         const iCalString = eventToICalString(event, uid);
 
         try {
@@ -309,7 +392,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
           try {
             await recoverCreateConflict(client, config.calendarUrl, uid, iCalString, event);
           } catch (recoveryError) {
-            throw new CalDAVConflictRecoveryError(uid, recoveryError);
+            throw new CalDAVConflictRecoveryError(uid, error, recoveryError);
           }
           return {
             conflictResolved: true,
@@ -346,22 +429,26 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const resolveUpdateTarget = async (
     deleteId: string,
-    uid: string,
-  ): Promise<{ etag?: string; objectUrl: string }> => {
+    uids: string[],
+  ): Promise<{ etag?: string; objectUrl: string; uid: string }> => {
     const objectUrl = toObjectUrl(deleteId);
     const objectPath = new URL(objectUrl).pathname;
-    if (readObjectName(objectPath) === `${uid}${CALENDAR_OBJECT_EXTENSION}`) {
-      return { objectUrl };
+    const objectName = readObjectName(objectPath);
+    const namedUid = uids.find((uid) => objectName === `${uid}${CALENDAR_OBJECT_EXTENSION}`);
+    if (namedUid) {
+      return { objectUrl, uid: namedUid };
     }
 
     if (!endsInCalendarExtension(objectPath)) {
       const { data, etag } = await readStoredObject(objectUrl);
-      if (data && readCalendarObjectUids(data).includes(uid)) {
-        return { etag, objectUrl };
+      const storedUids = readCalendarObjectUids(data ?? "");
+      const storedUid = uids.find((uid) => storedUids.includes(uid));
+      if (storedUid) {
+        return { etag, objectUrl, uid: storedUid };
       }
     }
 
-    throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
+    throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uids[0]}`);
   };
 
   const updateObject = (
@@ -369,8 +456,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   ): Promise<{ objectUrl?: string; result: PushResult }> =>
     rateLimiter.execute(async () => {
       try {
-        const uid = generateDeterministicEventUid(event.id);
-        const { etag, objectUrl } = await resolveUpdateTarget(deleteId, uid);
+        const { etag, objectUrl, uid } = await resolveUpdateTarget(deleteId, toWritableUids(event));
 
         await client.updateCalendarObjectByUrl({
           ...(etag && { etag }),

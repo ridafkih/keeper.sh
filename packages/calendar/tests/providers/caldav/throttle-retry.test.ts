@@ -80,3 +80,59 @@ describe("CalDAV throttle retry", () => {
     expect(sends).toBe(1);
   });
 });
+
+describe("reporting a CalDAV throttle to the account it belongs to", () => {
+  it("reports each throttled response with the interval the server named", async () => {
+    const reported: (number | null)[] = [];
+    const queue = [throttled("45"), throttled(null)];
+
+    await fetchHonouringRetryAfter(
+      () => Promise.resolve(queue.shift() ?? new Response(null, { status: 200 })),
+      "https://caldav.icloud.com/",
+      {
+        onThrottle: (retryAfterMs) => {
+          reported.push(retryAfterMs);
+        },
+        sleep: () => Promise.resolve(),
+      },
+    );
+
+    expect(reported).toEqual([45_000, null]);
+  });
+
+  it("reports a Retry-After longer than its own retry ceiling in full", async () => {
+    const reported: (number | null)[] = [];
+    const queue = [throttled("600")];
+
+    await fetchHonouringRetryAfter(
+      () => Promise.resolve(queue.shift() ?? new Response(null, { status: 200 })),
+      "https://caldav.icloud.com/",
+      {
+        onThrottle: (retryAfterMs) => {
+          reported.push(retryAfterMs);
+        },
+        sleep: () => Promise.resolve(),
+      },
+    );
+
+    expect(reported).toEqual([600_000]);
+  });
+
+  it("stops retrying when the account refuses further requests while it cools down", async () => {
+    let sends = 0;
+    const refusal = new Error("account cooling down");
+
+    await expect(fetchHonouringRetryAfter(
+      () => {
+        sends += 1;
+        if (sends > 1) {
+          return Promise.reject(refusal);
+        }
+        return Promise.resolve(throttled("600"));
+      },
+      "https://caldav.icloud.com/",
+      { onThrottle: () => Promise.resolve(), sleep: () => Promise.resolve() },
+    )).rejects.toBe(refusal);
+    expect(sends).toBe(2);
+  });
+});

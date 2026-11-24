@@ -38,6 +38,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
+    createAdaptiveCalDAVAccountLimiter: factorySpies.caldavAccount,
     createCalDAVAccountRateLimiter: factorySpies.caldavAccount,
     createGoogleUserRateLimiter: factorySpies.google,
     createHostRateLimiter: factorySpies.host,

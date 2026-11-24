@@ -5,6 +5,9 @@ const generateDeterministicEventUid = (seed: string): string => {
   return `${hash}${KEEPER_EVENT_SUFFIX}`;
 };
 
+const generateCalendarScopedEventUid = (eventId: string, calendarId: string): string =>
+  generateDeterministicEventUid(`${eventId}:${calendarId}`);
+
 const isKeeperEvent = (uid: string): boolean => uid.endsWith(KEEPER_EVENT_SUFFIX);
 
-export { generateDeterministicEventUid, isKeeperEvent };
+export { generateCalendarScopedEventUid, generateDeterministicEventUid, isKeeperEvent };

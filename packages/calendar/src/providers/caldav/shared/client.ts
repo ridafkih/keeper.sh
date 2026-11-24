@@ -22,8 +22,10 @@ import type { SafeFetchOptions, WithheldCredentials } from "../../../utils/safe-
 import type { CalDAVClientConfig, CalendarInfo } from "../types";
 import { measureProviderRequest } from "../../../core/telemetry/segments";
 import { fetchMultiGetBatch } from "./multiget";
+import { readResponsePrecondition } from "./precondition";
 
 const MISSING_HREF_SAMPLE_SIZE = 5;
+const CALDAV_ERROR_BODY_SAMPLE_BYTES = 4096;
 
 const CALENDAR_DISCOVERY_PROPS = {
   "c:calendar-description": {},
@@ -86,14 +88,28 @@ class CalDAVIncompleteMultiGetError extends Error {
 
 type CalDAVWriteOperation = "create" | "delete" | "update";
 
+const describeHttpFailure = (
+  response: Response,
+  operation: CalDAVWriteOperation,
+  precondition: string | null,
+): string => {
+  const summary = `CalDAV ${operation} failed: ${response.status} ${response.statusText}`.trim();
+  if (!precondition) {
+    return summary;
+  }
+  return `${summary} (${precondition})`;
+};
+
 class CalDAVHttpError extends Error {
   readonly operation: CalDAVWriteOperation;
+  readonly precondition: string | null;
   readonly status: number;
 
-  constructor(response: Response, operation: CalDAVWriteOperation) {
-    super(`CalDAV ${operation} failed: ${response.status} ${response.statusText}`.trim());
+  constructor(response: Response, operation: CalDAVWriteOperation, precondition: string | null = null) {
+    super(describeHttpFailure(response, operation, precondition));
     this.name = "CalDAVHttpError";
     this.operation = operation;
+    this.precondition = precondition;
     this.status = response.status;
   }
 }
@@ -121,8 +137,8 @@ class CalDAVWithheldCredentialsError extends Error {
 }
 
 class CalDAVCreateConflictError extends CalDAVHttpError {
-  constructor(response: Response) {
-    super(response, "create");
+  constructor(response: Response, precondition: string | null = null) {
+    super(response, "create", precondition);
     this.name = "CalDAVCreateConflictError";
   }
 }
@@ -135,10 +151,14 @@ const assertSuccessfulResponse = async (
   response: Response,
   operation: CalDAVWriteOperation,
 ): Promise<void> => {
-  await releaseResponseBody(response);
   if (!response.ok) {
-    throw new CalDAVHttpError(response, operation);
+    throw new CalDAVHttpError(
+      response,
+      operation,
+      await readResponsePrecondition(response, CALDAV_ERROR_BODY_SAMPLE_BYTES),
+    );
   }
+  await releaseResponseBody(response);
 };
 
 type DAVClientInstance = Awaited<ReturnType<typeof createDAVClient>>;
@@ -266,7 +286,7 @@ class CalDAVClient {
           return safeFetch(attempt, init);
         },
         input,
-        { signal: init?.signal, sleep: sleepWithSignal },
+        { onThrottle: this.config.onThrottle, signal: init?.signal, sleep: sleepWithSignal },
       );
       const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
@@ -370,8 +390,10 @@ class CalDAVClient {
     });
 
     if (response.status === 412) {
-      await releaseResponseBody(response);
-      throw new CalDAVCreateConflictError(response);
+      throw new CalDAVCreateConflictError(
+        response,
+        await readResponsePrecondition(response, CALDAV_ERROR_BODY_SAMPLE_BYTES),
+      );
     }
     await assertSuccessfulResponse(response, "create");
   }

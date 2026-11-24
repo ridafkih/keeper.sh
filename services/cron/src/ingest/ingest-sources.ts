@@ -9,6 +9,7 @@ import {
   createGoogleUserRateLimiter,
   withGoogleProjectBudget,
   createRedisRateLimiter,
+  createAdaptiveCalDAVAccountLimiter,
   createCalDAVAccountRateLimiter,
   createHostRateLimiter,
   createOutlookAccountSemaphore,
@@ -16,6 +17,7 @@ import {
   isCalDAVProvider,
   isHostedCalDAVProvider,
   getCalDAVAccountRequestsPerMinute,
+  getCalDAVAccountThrottlePolicy,
   ensureValidToken,
   REDIS_UNAVAILABLE_SLUG,
   isRedisUnavailableError,
@@ -664,6 +666,10 @@ const resolveRateLimiter = (
 
   if (isCalDAVProvider(provider)) {
     if (isHostedCalDAVProvider(provider) && source.accountId) {
+      const throttlePolicy = getCalDAVAccountThrottlePolicy(provider);
+      if (throttlePolicy) {
+        return createAdaptiveCalDAVAccountLimiter(refreshLockRedis, source.accountId, throttlePolicy);
+      }
       return createCalDAVAccountRateLimiter(
         refreshLockRedis,
         source.accountId,
@@ -1530,6 +1536,7 @@ const ingestCalDAVSources = async (
                   onBeforeRequest: async () => {
                     await rateLimiter?.acquire(1, signal);
                   },
+                  ...(rateLimiter?.reportThrottle && { onThrottle: rateLimiter.reportThrottle }),
                   serverUrl: currentSource.serverUrl,
                   username: currentSource.username,
                   password: decryptPassword(currentSource.encryptedPassword, encryptionKey),

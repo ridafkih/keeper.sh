@@ -16,6 +16,7 @@ interface CalDAVSourceFetcherConfig {
   safeFetchOptions?: SafeFetchOptions;
   plan: SourceIngestionPlan;
   onBeforeRequest?: () => Promise<void> | void;
+  onThrottle?: (retryAfterMs: number | null) => Promise<void> | void;
   calendarDiscoveryCache?: CalendarDiscoveryCache;
 }
 
@@ -29,6 +30,7 @@ const createCalDAVSourceFetcher = (config: CalDAVSourceFetcherConfig): CalDAVSou
     calendarDiscoveryCache: config.calendarDiscoveryCache,
     credentials: { password: config.password, username: config.username },
     onBeforeRequest: config.onBeforeRequest,
+    onThrottle: config.onThrottle,
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);
 

@@ -298,6 +298,7 @@ describe("caldav destination named event lookup", () => {
   ]);
 
   const createProvider = () => createCalDAVSyncProvider({
+    destinationCalendarId: "destination-calendar-id",
     calendarUrl: CALENDAR_URL,
     password: "pass",
     serverUrl: "https://caldav.example.com",

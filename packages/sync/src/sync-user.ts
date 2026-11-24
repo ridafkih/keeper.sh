@@ -3,8 +3,10 @@ import {
   getEventsForCalendarsWithDiagnostics,
   getEventMappingsForDestination,
   createDatabaseFlush,
+  createAdaptiveCalDAVAccountLimiter,
   createGoogleUserRateLimiter,
   createRedisRateLimiter,
+  getCalDAVAccountThrottlePolicy,
   withGoogleProjectBudget,
   buildCalendarBackoffState,
   RESET_CALENDAR_BACKOFF_STATE,
@@ -62,9 +64,14 @@ import type { SyncLockHandle } from "./sync-lock";
 const createProviderRateLimiter = (
   redis: Redis,
   userId: string,
+  accountId: string,
   provider: string,
   googleProjectRequestsPerMinute?: number,
 ): RedisRateLimiter | undefined => {
+  const caldavThrottlePolicy = getCalDAVAccountThrottlePolicy(provider);
+  if (caldavThrottlePolicy) {
+    return createAdaptiveCalDAVAccountLimiter(redis, accountId, caldavThrottlePolicy);
+  }
   if (provider === "google") {
     return withGoogleProjectBudget(
       redis,
@@ -914,6 +921,7 @@ const syncDestinationsForUser = async (
           rateLimiter: createProviderRateLimiter(
             redis,
             userId,
+            destination.accountId,
             destination.provider,
             config.googleProjectRequestsPerMinute,
           ),

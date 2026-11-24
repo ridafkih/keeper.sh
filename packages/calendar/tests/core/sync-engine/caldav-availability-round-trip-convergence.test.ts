@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { syncCalendar } from "../../../src/core/sync-engine/index";
 import type { PendingChanges } from "../../../src/core/sync-engine/types";
 import type { EventMapping, MaterializedSyncableEvent } from "../../../src/index";
-import { generateDeterministicEventUid } from "../../../src/core/events/identity";
 import { createCalDAVSyncProvider } from "../../../src/providers/caldav/destination/provider";
 import { eventToICalString } from "../../../src/providers/caldav/shared/ics";
 import {
@@ -13,6 +12,8 @@ import type {
   RenamingCalDAVServer,
   RenamingCalDAVServerOptions,
 } from "../../providers/caldav/shared/fake-renaming-caldav";
+
+const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 
 const WINDOW = {
   timeMax: new Date("2100-01-01T00:00:00.000Z"),
@@ -99,6 +100,7 @@ const createHarness = (events: MaterializedSyncableEvent[]): Harness => {
     mappings,
     runSync: async () => {
       const provider = createCalDAVSyncProvider({
+        destinationCalendarId: DESTINATION_CALENDAR_ID,
         authMethod: "basic",
         calendarUrl: RENAMING_CALENDAR_URL,
         password: "password",
@@ -198,7 +200,7 @@ describe("a CalDAV destination that stores Exchange busy status", () => {
     await harness.runSync();
     const [name] = server.names();
     server.remove(name ?? "");
-    const legacyMirror = eventToICalString(event, generateDeterministicEventUid(event.id));
+    const legacyMirror = eventToICalString(event, harness.mappings[0]?.destinationEventUid ?? "");
     server.seed(withTransparency(legacyMirror, "TRANSPARENT"));
     for (const mapping of harness.mappings) {
       mapping.remoteAvailability = null;

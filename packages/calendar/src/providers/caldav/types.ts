@@ -78,6 +78,7 @@ interface CalDAVClientConfig {
   authMethod?: "basic" | "digest";
   /* Awaited before every HTTP request the client sends to the origin. */
   onBeforeRequest?: () => Promise<void> | void;
+  onThrottle?: (retryAfterMs: number | null) => Promise<void> | void;
   calendarDiscoveryCache?: CalendarDiscoveryCache;
 }
 

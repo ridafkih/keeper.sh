@@ -27,6 +27,7 @@ interface RateLimiterPermit {
 interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
   acquirePermit?(signal?: AbortSignal): Promise<RateLimiterPermit>;
+  reportThrottle?(retryAfterMs: number | null): Promise<void>;
 }
 
 interface RedisRateLimiterConfig {
@@ -398,13 +399,15 @@ const createGoogleInteractiveRateLimiter = (
 
 const CALDAV_ACCOUNT_REQUESTS_PER_MINUTE = 240;
 
+const toCalDAVAccountRateLimitKey = (accountId: string): string => `ratelimit:caldav-account:${accountId}`;
+
 const createCalDAVAccountRateLimiter = (
   redis: RedisScriptClient,
   accountId: string,
   requestsPerMinute: number = CALDAV_ACCOUNT_REQUESTS_PER_MINUTE,
 ): RedisRateLimiter => createRedisRateLimiter(
   redis,
-  `ratelimit:caldav-account:${accountId}`,
+  toCalDAVAccountRateLimitKey(accountId),
   { requestsPerMinute },
 );
 
@@ -556,6 +559,7 @@ export {
   FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
   ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
   createCalDAVAccountRateLimiter,
+  toCalDAVAccountRateLimitKey,
   createHostRateLimiter,
   createOutlookAccountRequestLimiter,
   createOutlookAccountSemaphore,
