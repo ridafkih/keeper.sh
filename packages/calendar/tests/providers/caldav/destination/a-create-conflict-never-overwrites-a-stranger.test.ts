@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { generateDeterministicEventUid } from "../../../../src/core/events/identity";
+import {
+  generateCalendarScopedEventUid,
+  generateDeterministicEventUid,
+} from "../../../../src/core/events/identity";
+
+const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
 import { CalDAVCreateConflictError } from "../../../../src/providers/caldav/shared/client";
@@ -72,6 +77,7 @@ const strangersEvent = (): MaterializedSyncableEvent => ({
 
 const createProvider = () =>
   createCalDAVSyncProvider({
+    destinationCalendarId: DESTINATION_CALENDAR_ID,
     calendarUrl: "https://caldav.example.com/calendar/",
     password: "pass",
     serverUrl: "https://caldav.example.com",
@@ -122,7 +128,7 @@ describe("a create conflict never overwrites a stranger", () => {
   });
 
   it("still replaces our own object when its content has drifted", async () => {
-    const ourUid = generateDeterministicEventUid(ourEvent().id);
+    const ourUid = generateCalendarScopedEventUid(ourEvent().id, DESTINATION_CALENDAR_ID);
     conflictOnCreate();
     clientMocks.fetchCalendarObject.mockResolvedValueOnce({
       data: eventToICalString({ ...ourEvent(), summary: "Our meeting, older title" }, ourUid),

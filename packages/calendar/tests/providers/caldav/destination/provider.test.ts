@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { generateDeterministicEventUid } from "../../../../src/core/events/identity";
+import {
+  generateCalendarScopedEventUid,
+  generateDeterministicEventUid,
+} from "../../../../src/core/events/identity";
+
+const DESTINATION_CALENDAR_ID = "destination-calendar-id";
 import type { MaterializedSyncableEvent } from "../../../../src/core/types";
 import { createCalDAVSyncProvider } from "../../../../src/providers/caldav/destination/provider";
 import { CalDAVCreateConflictError, CalDAVHttpError } from "../../../../src/providers/caldav/shared/client";
@@ -64,6 +69,7 @@ const createEvent = (
 
 const createProvider = () =>
   createCalDAVSyncProvider({
+    destinationCalendarId: DESTINATION_CALENDAR_ID,
     calendarUrl: "https://caldav.example.com/calendar/",
     password: "pass",
     serverUrl: "https://caldav.example.com",
@@ -325,7 +331,7 @@ describe("createCalDAVSyncProvider", () => {
 
   it("restores the mapping when a create conflict contains identical event content", async () => {
     const event = createEvent();
-    const existingData = eventToICalString(event, generateDeterministicEventUid(event.id));
+    const existingData = eventToICalString(event, generateCalendarScopedEventUid(event.id, DESTINATION_CALENDAR_ID));
     clientMocks.createCalendarObject.mockRejectedValueOnce(
       new CalDAVCreateConflictError(new Response(null, { status: 412 })),
     );
@@ -353,7 +359,7 @@ describe("createCalDAVSyncProvider", () => {
       .mockRejectedValueOnce(new CalDAVCreateConflictError(new Response(null, { status: 412 })))
       .mockImplementationOnce(() => Promise.resolve());
     clientMocks.fetchCalendarObject.mockResolvedValueOnce({
-      data: eventToICalString(previousEvent, generateDeterministicEventUid(previousEvent.id)),
+      data: eventToICalString(previousEvent, generateCalendarScopedEventUid(previousEvent.id, DESTINATION_CALENDAR_ID)),
       etag: "etag-1",
       url: "https://caldav.example.com/calendar/existing-uid.ics",
     });
@@ -541,7 +547,7 @@ describe("createCalDAVSyncProvider", () => {
       new CalDAVCreateConflictError(new Response(null, { status: 412 })),
     );
     clientMocks.fetchCalendarObject.mockResolvedValueOnce({
-      data: eventToICalString(previousEvent, generateDeterministicEventUid(previousEvent.id)),
+      data: eventToICalString(previousEvent, generateCalendarScopedEventUid(previousEvent.id, DESTINATION_CALENDAR_ID)),
       etag: "etag-1",
     });
     clientMocks.deleteCalendarObject.mockRejectedValueOnce(

@@ -1,5 +1,9 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
-import { generateDeterministicEventUid, isKeeperEvent } from "../../../core/events/identity";
+import {
+  generateCalendarScopedEventUid,
+  generateDeterministicEventUid,
+  isKeeperEvent,
+} from "../../../core/events/identity";
 import {
   createEditableEventContentSnapshot,
   createSyncEventContentHash,
@@ -40,6 +44,7 @@ const CALDAV_PUSH_ECHO = { comparable: false, reason: "echo-body-missing" } as c
 interface CalDAVSyncProviderConfig {
   authMethod?: "basic" | "digest";
   calendarUrl: string;
+  destinationCalendarId: string;
   serverUrl: string;
   username: string;
   password: string;
@@ -256,6 +261,12 @@ const readKeeperEvents = (data: string, objectPath: string): ParsedCalendarEvent
 };
 
 const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
+  const toEventUid = (event: MaterializedSyncableEvent): string =>
+    generateCalendarScopedEventUid(event.id, config.destinationCalendarId);
+  const toWritableUids = (event: MaterializedSyncableEvent): string[] => [
+    toEventUid(event),
+    generateDeterministicEventUid(event.id),
+  ];
   const calendarHost = new URL(config.calendarUrl).hostname;
   const removeCounts: CalDAVRemoveCounts = {
     byPath: 0,
@@ -292,7 +303,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   const createObject = (event: MaterializedSyncableEvent): Promise<PushResult> =>
     rateLimiter.execute(async (): Promise<PushResult> => {
       try {
-        const uid = generateDeterministicEventUid(event.id);
+        const uid = toEventUid(event);
         const iCalString = eventToICalString(event, uid);
 
         try {
@@ -346,22 +357,26 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const resolveUpdateTarget = async (
     deleteId: string,
-    uid: string,
-  ): Promise<{ etag?: string; objectUrl: string }> => {
+    uids: string[],
+  ): Promise<{ etag?: string; objectUrl: string; uid: string }> => {
     const objectUrl = toObjectUrl(deleteId);
     const objectPath = new URL(objectUrl).pathname;
-    if (readObjectName(objectPath) === `${uid}${CALENDAR_OBJECT_EXTENSION}`) {
-      return { objectUrl };
+    const objectName = readObjectName(objectPath);
+    const namedUid = uids.find((uid) => objectName === `${uid}${CALENDAR_OBJECT_EXTENSION}`);
+    if (namedUid) {
+      return { objectUrl, uid: namedUid };
     }
 
     if (!endsInCalendarExtension(objectPath)) {
       const { data, etag } = await readStoredObject(objectUrl);
-      if (data && readCalendarObjectUids(data).includes(uid)) {
-        return { etag, objectUrl };
+      const storedUids = data ? readCalendarObjectUids(data) : [];
+      const storedUid = uids.find((uid) => storedUids.includes(uid));
+      if (storedUid) {
+        return { etag, objectUrl, uid: storedUid };
       }
     }
 
-    throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uid}`);
+    throw new Error(`CalDAV update target ${objectUrl} does not belong to event ${uids[0]}`);
   };
 
   const updateObject = (
@@ -369,8 +384,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   ): Promise<{ objectUrl?: string; result: PushResult }> =>
     rateLimiter.execute(async () => {
       try {
-        const uid = generateDeterministicEventUid(event.id);
-        const { etag, objectUrl } = await resolveUpdateTarget(deleteId, uid);
+        const { etag, objectUrl, uid } = await resolveUpdateTarget(deleteId, toWritableUids(event));
 
         await client.updateCalendarObjectByUrl({
           ...(etag && { etag }),
