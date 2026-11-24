@@ -257,6 +257,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
+    createAdaptiveCalDAVAccountLimiter: harness.createCalDAVAccountRateLimiter,
     createCalDAVAccountRateLimiter: harness.createCalDAVAccountRateLimiter,
     createHostRateLimiter: harness.createHostRateLimiter,
     ingestSource: harness.ingestSource,

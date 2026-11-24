@@ -1,4 +1,6 @@
 import { RateLimiter } from "../../../core/utils/rate-limiter";
+import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
+import { isAccountThrottledError } from "../../../core/utils/adaptive-account-throttle";
 import {
   generateCalendarScopedEventUid,
   generateDeterministicEventUid,
@@ -48,6 +50,7 @@ interface CalDAVSyncProviderConfig {
   serverUrl: string;
   username: string;
   password: string;
+  rateLimiter?: RedisRateLimiter;
   safeFetchOptions?: SafeFetchOptions;
 }
 
@@ -103,6 +106,9 @@ const resolveFailureReason = (
   error: unknown,
   httpError: CalDAVHttpError | null,
 ): string | null => {
+  if (isAccountThrottledError(error)) {
+    return "account_cooling_down";
+  }
   if (httpError?.precondition) {
     return httpError.precondition;
   }
@@ -345,9 +351,14 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   };
   let listing: CalDAVListingStats | null = null;
 
+  const { rateLimiter: accountLimiter } = config;
   const client = new CalDAVClient({
     authMethod: config.authMethod,
     credentials: { password: config.password, username: config.username },
+    ...(accountLimiter && {
+      onBeforeRequest: () => accountLimiter.acquire(1, config.safeFetchOptions?.signal),
+    }),
+    ...(accountLimiter?.reportThrottle && { onThrottle: accountLimiter.reportThrottle }),
     serverUrl: config.serverUrl,
   }, config.safeFetchOptions);
 

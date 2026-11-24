@@ -34,6 +34,7 @@ const recordThrottle = (retryAfterMs: number | null, delayMs: number): void => {
 };
 
 interface ThrottleRetryOptions {
+  onThrottle?: (retryAfterMs: number | null) => Promise<void> | void;
   sleep: (milliseconds: number, signal?: AbortSignal | null) => Promise<void>;
   signal?: AbortSignal | null;
 }
@@ -61,14 +62,20 @@ const fetchHonouringRetryAfter = async <TInput>(
       return response;
     }
 
-    const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
-    const delayMs = resolveThrottleDelayMs(retryAfterMs, attempt);
-    recordThrottle(retryAfterMs, delayMs);
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const retryAfterMs = parseRetryAfterMs(retryAfterHeader);
     await response.body?.cancel();
-    await measureSegment(
-      "wait.provider_retry_ms",
-      () => options.sleep(delayMs, options.signal),
-    );
+    if (options.onThrottle) {
+      widelog.count("ratelimit.provider_throttle_count", 1);
+      await options.onThrottle(parseRetryAfterMs(retryAfterHeader, Number.POSITIVE_INFINITY));
+    } else {
+      const delayMs = resolveThrottleDelayMs(retryAfterMs, attempt);
+      recordThrottle(retryAfterMs, delayMs);
+      await measureSegment(
+        "wait.provider_retry_ms",
+        () => options.sleep(delayMs, options.signal),
+      );
+    }
     response = await send(cloneAttempt(input));
   }
 

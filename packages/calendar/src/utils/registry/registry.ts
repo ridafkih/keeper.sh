@@ -1,7 +1,8 @@
 import {
-  FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
-  ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
+  FASTMAIL_ACCOUNT_THROTTLE_POLICY,
+  ICLOUD_ACCOUNT_THROTTLE_POLICY,
 } from "@keeper.sh/constants";
+import type { AccountThrottlePolicy } from "@keeper.sh/constants";
 import type { AuthType, ProviderDefinition } from "../../core/types";
 
 const googleCalendarDefinition = {
@@ -152,17 +153,20 @@ const isHostedCalDAVProvider = (id: string): boolean => {
   return (provider.caldav?.serverUrl ?? "").length > 0;
 };
 
-const HOSTED_CALDAV_ACCOUNT_REQUESTS_PER_MINUTE: Record<string, number> = {
-  fastmail: FASTMAIL_ACCOUNT_REQUESTS_PER_MINUTE,
-  icloud: ICLOUD_ACCOUNT_REQUESTS_PER_MINUTE,
+const HOSTED_CALDAV_ACCOUNT_THROTTLE_POLICIES: Record<string, AccountThrottlePolicy> = {
+  fastmail: FASTMAIL_ACCOUNT_THROTTLE_POLICY,
+  icloud: ICLOUD_ACCOUNT_THROTTLE_POLICY,
 };
 
-const getCalDAVAccountRequestsPerMinute = (id: string): number | undefined => {
+const getCalDAVAccountThrottlePolicy = (id: string): AccountThrottlePolicy | undefined => {
   if (!isHostedCalDAVProvider(id)) {
     return;
   }
-  return HOSTED_CALDAV_ACCOUNT_REQUESTS_PER_MINUTE[id];
+  return HOSTED_CALDAV_ACCOUNT_THROTTLE_POLICIES[id];
 };
+
+const getCalDAVAccountRequestsPerMinute = (id: string): number | undefined =>
+  getCalDAVAccountThrottlePolicy(id)?.requestsPerMinute;
 
 const isOAuthProvider = (id: string): id is OAuthProviderId => {
   const provider = getProvider(id);
@@ -182,6 +186,7 @@ export {
   getOAuthProviders,
   getCalDAVProviders,
   getCalDAVAccountRequestsPerMinute,
+  getCalDAVAccountThrottlePolicy,
   isCalDAVProvider,
   isHostedCalDAVProvider,
   isOAuthProvider,

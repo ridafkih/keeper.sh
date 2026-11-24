@@ -286,7 +286,7 @@ class CalDAVClient {
           return safeFetch(attempt, init);
         },
         input,
-        { signal: init?.signal, sleep: sleepWithSignal },
+        { onThrottle: this.config.onThrottle, signal: init?.signal, sleep: sleepWithSignal },
       );
       const { fetch: digestAwareFetch, getResolvedMethod } = createDigestAwareFetch({
         credentials: this.config.credentials,
