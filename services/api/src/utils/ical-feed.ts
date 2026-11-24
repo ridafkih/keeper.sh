@@ -8,7 +8,7 @@ import {
 } from "@keeper.sh/calendar";
 import { syncRangeSchema } from "@keeper.sh/data-schemas";
 import type { SyncRange } from "@keeper.sh/data-schemas";
-import { formatEventsAsIcal, shouldIncludeEvent } from "./ical-format";
+import { buildFeedIcalDocument, formatEventsAsIcal, shouldIncludeEvent } from "./ical-format";
 import type { CalendarEvent, FeedSettings } from "./ical-format";
 
 /**
@@ -121,6 +121,7 @@ interface FeedResponse {
   body: string | null;
   etag: string;
   eventCount: number;
+  unresolvedTimeZoneEventCount: number;
   withheld: FeedWithheldCounts;
 }
 
@@ -206,6 +207,7 @@ const generateCalendarFeed = async <TScope>(
       body,
       etag: buildFeedEtag("", feedSettings),
       eventCount: 0,
+      unresolvedTimeZoneEventCount: 0,
       withheld: NOTHING_WITHHELD,
     };
   }
@@ -218,7 +220,7 @@ const generateCalendarFeed = async <TScope>(
   );
 
   if (ifNoneMatch === etag) {
-    return { body: null, etag, eventCount: 0, withheld: NOTHING_WITHHELD };
+    return { body: null, etag, eventCount: 0, unresolvedTimeZoneEventCount: 0, withheld: NOTHING_WITHHELD };
   }
 
   const [rows, exclusions] = await Promise.all([
@@ -227,11 +229,13 @@ const generateCalendarFeed = async <TScope>(
   ]);
 
   const events = rows.map((row) => toCalendarEvent(row));
+  const document = buildFeedIcalDocument(events, feedSettings);
 
   return {
-    body: formatEventsAsIcal(events, feedSettings),
+    body: document.body,
     etag,
     eventCount: rows.length,
+    unresolvedTimeZoneEventCount: document.unresolvedTimeZoneEventCount,
     withheld: {
       ...exclusions,
       allDay: countWithheldBy(events, feedSettings, "excludeAllDayEvents"),

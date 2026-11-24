@@ -39,10 +39,11 @@ const EMPTY_CALENDAR = [
 
 const FEED_TOKEN = `feed_${"a".repeat(64)}`;
 
-const renderedFeed = (body: string): FeedResponse => ({
+const renderedFeed = (body: string, unresolvedTimeZoneEventCount = 0): FeedResponse => ({
   body,
   etag: '"etag-1"',
   eventCount: 0,
+  unresolvedTimeZoneEventCount,
   withheld: {
     allDay: 0,
     focusTime: 0,
@@ -122,6 +123,14 @@ describe("GET /api/cal/:identifier", () => {
     expect(response.headers.get("Content-Type")).toBe("text/calendar; charset=utf-8");
     expect(response.headers.get("ETag")).toBe('"etag-1"');
     expect(response.headers.get("Cache-Control")).toBe("private, no-cache");
+  });
+
+  it("records how many served events carry a time zone that cannot be resolved", async () => {
+    generateUserCalendar.mockResolvedValue(renderedFeed(EMPTY_CALENDAR, 3));
+
+    await requestFeed(`${FEED_TOKEN}.ics`);
+
+    expect(widelogSet.mock.calls).toContainEqual(["feed.unresolved_time_zone_event_count", 3]);
   });
 
   it("never records the feed token in the wide event", async () => {

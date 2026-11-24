@@ -34,6 +34,7 @@ const RENDERED_FEED: FeedResponse = {
   body: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
   etag: '"etag-1"',
   eventCount: 4,
+  unresolvedTimeZoneEventCount: 0,
   withheld: { allDay: 1, focusTime: 5, outOfOffice: 6, workingElsewhere: 2, workingLocation: 3 },
 };
 
@@ -41,6 +42,7 @@ const NOT_MODIFIED_FEED: FeedResponse = {
   body: null,
   etag: '"etag-1"',
   eventCount: 0,
+  unresolvedTimeZoneEventCount: 0,
   withheld: { allDay: 0, focusTime: 0, outOfOffice: 0, workingElsewhere: 0, workingLocation: 0 },
 };
 
