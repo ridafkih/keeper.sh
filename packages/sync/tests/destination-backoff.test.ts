@@ -200,11 +200,25 @@ describe("destination backoff on a wholly failed run", () => {
       lastFailureAt: START,
       nextAttemptAt: new Date(START.getTime() - 1),
     });
-    setOutcome({ added: 1, addFailed: 9 });
+    setOutcome({ added: 5, addFailed: 5 });
 
     await syncDestinationsForUser(USER_ID, config(database));
 
     expect(row).toEqual({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null });
+  });
+
+  it("keeps backing off when the run made only token progress against a burst of failures", async () => {
+    const { database, row } = createHarness({
+      failureCount: 4,
+      lastFailureAt: START,
+      nextAttemptAt: new Date(START.getTime() - 1),
+    });
+    setOutcome({ added: 1, addFailed: 149 });
+
+    await syncDestinationsForUser(USER_ID, config(database));
+
+    expect(row.failureCount).toBe(5);
+    expect(row.nextAttemptAt?.getTime()).toBeGreaterThan(START.getTime());
   });
 
   it("writes nothing for a healthy destination that had nothing to do", async () => {

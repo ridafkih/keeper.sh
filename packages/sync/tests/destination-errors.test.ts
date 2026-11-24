@@ -121,6 +121,22 @@ describe("resolveDestinationAttemptVerdict", () => {
       .toBe("succeeded");
   });
 
+  it("fails a run that made only token progress against a burst of failures", () => {
+    expect(resolveDestinationAttemptVerdict(result({ added: 1, addFailed: 149 }), false)).toBe("failed");
+  });
+
+  it("fails a mostly failing run at the configured failure share", () => {
+    expect(resolveDestinationAttemptVerdict(result({ added: 1, addFailed: 3 }), false, 0.75)).toBe("failed");
+    expect(resolveDestinationAttemptVerdict(result({ added: 2, addFailed: 3 }), false, 0.75)).toBe("succeeded");
+  });
+
+  it("does not take write access away when some writes in a mostly failing run landed", () => {
+    expect(resolveDestinationAttemptVerdict(
+      result({ added: 1, addFailed: 99, writeAccessDenied: true }),
+      false,
+    )).toBe("failed");
+  });
+
   it("succeeds a run that found the destination already in sync", () => {
     expect(resolveDestinationAttemptVerdict(result(), false)).toBe("succeeded");
   });
