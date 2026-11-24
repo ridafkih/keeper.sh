@@ -4,6 +4,7 @@ import type { MappingSyncRules } from "../../src/types/api";
 import {
   DETAIL_SWITCH_RULES,
   EXCLUSION_SWITCH_RULES,
+  PROVIDER_DETAIL_SWITCH_RULES,
   PROVIDER_EXCLUSION_SWITCH_RULES,
   RESET_ALL_OVERRIDES_PATCH,
   applyOverridePatch,
@@ -16,6 +17,7 @@ import {
   formatExcludedTitleKeywords,
   formatInherited,
   formatSwitchState,
+  getDetailSwitchRules,
   getExclusionSwitchRules,
   isSwitchRuleOn,
   resolveEventNameChoice,
@@ -31,6 +33,7 @@ const SOURCE_RULES: Rules = {
   excludeAvailabilities: ["free"],
   excludeEventDescription: true,
   excludeEventLocation: true,
+  excludeEventMeetingLink: false,
   excludeEventName: true,
   excludeFocusTime: false,
   excludeOutOfOffice: false,
@@ -55,6 +58,7 @@ const createMapping = (
 
 const ALL_SWITCH_RULES: SwitchRule[] = [
   ...DETAIL_SWITCH_RULES,
+  ...PROVIDER_DETAIL_SWITCH_RULES,
   ...EXCLUSION_SWITCH_RULES,
   ...PROVIDER_EXCLUSION_SWITCH_RULES,
 ];
@@ -111,6 +115,7 @@ describe("switch rules", () => {
       "excludeAllDayEvents",
       "excludeEventDescription",
       "excludeEventLocation",
+      "excludeEventMeetingLink",
       "excludeFocusTime",
       "excludeOutOfOffice",
       "markEventsAsPrivate",
@@ -152,6 +157,18 @@ describe("switch rules", () => {
     ]);
     expect(getExclusionSwitchRules("outlook").map((rule) => rule.field))
       .toEqual(["excludeAllDayEvents"]);
+  });
+
+  it("offers the meeting link switch only for Google sources", () => {
+    expect(getDetailSwitchRules("google").map((rule) => rule.field)).toEqual([
+      "excludeEventDescription",
+      "excludeEventLocation",
+      "markEventsAsPrivate",
+      "disableEventReminders",
+      "excludeEventMeetingLink",
+    ]);
+    expect(getDetailSwitchRules("outlook").map((rule) => rule.field))
+      .not.toContain("excludeEventMeetingLink");
   });
 
   it("formats switch states and inherited values", () => {

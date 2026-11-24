@@ -84,6 +84,7 @@ const SOURCE_RULES: Rules = {
   excludeAvailabilities: [],
   excludeEventDescription: true,
   excludeEventLocation: true,
+  excludeEventMeetingLink: false,
   excludeEventName: true,
   excludeFocusTime: false,
   excludeOutOfOffice: false,

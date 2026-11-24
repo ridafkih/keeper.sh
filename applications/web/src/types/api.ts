@@ -61,6 +61,7 @@ export interface CalendarDetail {
   excludeAvailabilities: ExcludableAvailability[];
   excludeEventDescription: boolean;
   excludeEventLocation: boolean;
+  excludeEventMeetingLink: boolean;
   excludeEventName: boolean;
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
