@@ -5,12 +5,13 @@ import {
   shouldExcludeSyncEvent,
 } from "@keeper.sh/calendar";
 import {
-  buildVtimezone,
-  buildZonedIcsDate,
+  canonicalizeTimeZone,
+  createIcsZoneLedger,
   getIcsDurationNominalMilliseconds,
 } from "@keeper.sh/calendar/ics";
+import type { IcsZoneLedger } from "@keeper.sh/calendar/ics";
 import { generateIcsCalendar } from "ts-ics";
-import type { IcsCalendar, IcsDateObject, IcsDuration, IcsEvent, IcsRecurrenceRule, IcsTimezone } from "ts-ics";
+import type { IcsCalendar, IcsDateObject, IcsDuration, IcsEvent, IcsRecurrenceRule } from "ts-ics";
 
 interface FeedSettings {
   includeEventName: boolean;
@@ -42,10 +43,16 @@ interface CalendarEvent {
   startTimeZone?: string | null;
 }
 
-const resolveEventTimeZone = (event: CalendarEvent): string | undefined =>
-  buildZonedIcsDate(event.startTime, event.startTimeZone ?? "", false).local?.timezone;
+interface FeedIcalDocument {
+  body: string;
+  unresolvedTimeZoneEventCount: number;
+}
+
+const resolveEventTimeZone = (ledger: IcsZoneLedger, event: CalendarEvent): string | undefined =>
+  ledger.resolveWrittenTimeZone(event.startTime, event.startTimeZone);
 
 const buildExceptionDate = (
+  ledger: IcsZoneLedger,
   value: IcsDateObject,
   timezone: string | undefined,
   masterIsAllDay: boolean,
@@ -53,7 +60,7 @@ const buildExceptionDate = (
   if (value.type === "DATE") {
     return { date: value.date, type: "DATE" };
   }
-  return buildZonedIcsDate(value.date, timezone, masterIsAllDay);
+  return ledger.writeDate(value.date, timezone, masterIsAllDay);
 };
 
 const toUtcDateObject = (value: IcsDateObject): IcsDateObject => {
@@ -151,13 +158,18 @@ const groupEventsBySourceUid = (events: CalendarEvent[]): EventGroup[] => {
 const isPositiveIcsDuration = (duration: IcsDuration): boolean =>
   !duration.before && getIcsDurationNominalMilliseconds(duration) > 0;
 
-const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSettings): IcsEvent => {
+const buildBaseIcsEvent = (
+  ledger: IcsZoneLedger,
+  event: CalendarEvent,
+  uid: string,
+  settings: FeedSettings,
+): IcsEvent => {
   const isAllDay = resolveIsAllDayEvent(toAllDayShape(event));
-  const timezone = event.startTimeZone ?? "";
+  const timezone = event.startTimeZone;
   const { endTime, startTime } = resolveRepresentableTimeRange(toAllDayShape(event));
   const common = {
     stamp: { date: new Date() },
-    start: buildZonedIcsDate(startTime, timezone, isAllDay),
+    start: ledger.writeDate(startTime, timezone, isAllDay),
     summary: resolveEventSummary(event, settings),
     uid,
     ...buildTransparency(event.availability),
@@ -167,71 +179,61 @@ const buildBaseIcsEvent = (event: CalendarEvent, uid: string, settings: FeedSett
   if (event.recurrenceRule && event.recurrenceDuration && isPositiveIcsDuration(event.recurrenceDuration)) {
     return { ...common, duration: event.recurrenceDuration };
   }
-  return { ...common, end: buildZonedIcsDate(endTime, timezone, isAllDay) };
+  return { ...common, end: ledger.writeDate(endTime, timezone, isAllDay) };
 };
 
 const buildMasterIcsEvent = (
+  ledger: IcsZoneLedger,
   master: CalendarEvent,
   uid: string,
   settings: FeedSettings,
   masterIsAllDay: boolean,
 ): IcsEvent => {
-  const timezone = resolveEventTimeZone(master);
+  const timezone = resolveEventTimeZone(ledger, master);
   return {
-    ...buildBaseIcsEvent(master, uid, settings),
+    ...buildBaseIcsEvent(ledger, master, uid, settings),
     ...(master.recurrenceRule && { recurrenceRule: normalizeRecurrenceRuleToUtc(master.recurrenceRule) }),
     ...(master.exceptionDates?.length && {
-      exceptionDates: master.exceptionDates.map((value) => buildExceptionDate(value, timezone, masterIsAllDay)),
+      exceptionDates: master.exceptionDates.map((value) =>
+        buildExceptionDate(ledger, value, timezone, masterIsAllDay)),
     }),
   };
 };
 
 const buildOverrideIcsEvent = (
+  ledger: IcsZoneLedger,
   override: CalendarEvent,
   uid: string,
   settings: FeedSettings,
   masterTimeZone: string | undefined,
   masterIsAllDay: boolean,
 ): IcsEvent => ({
-  ...buildBaseIcsEvent(override, uid, settings),
+  ...buildBaseIcsEvent(ledger, override, uid, settings),
   ...(override.recurrenceId && {
-    recurrenceId: { value: buildZonedIcsDate(override.recurrenceId, masterTimeZone, masterIsAllDay) },
+    recurrenceId: { value: ledger.writeDate(override.recurrenceId, masterTimeZone, masterIsAllDay) },
   }),
 });
 
-const buildIcsEventsForGroup = (group: EventGroup, settings: FeedSettings): IcsEvent[] => {
+const buildIcsEventsForGroup = (
+  ledger: IcsZoneLedger,
+  group: EventGroup,
+  settings: FeedSettings,
+): IcsEvent[] => {
   const uid = `${group.master.id}${KEEPER_EVENT_SUFFIX}`;
-  const masterTimeZone = resolveEventTimeZone(group.master);
+  const masterTimeZone = resolveEventTimeZone(ledger, group.master);
   const masterIsAllDay = resolveIsAllDayEvent(toAllDayShape(group.master));
   return [
-    buildMasterIcsEvent(group.master, uid, settings, masterIsAllDay),
+    buildMasterIcsEvent(ledger, group.master, uid, settings, masterIsAllDay),
     ...group.overrides.map((override) =>
-      buildOverrideIcsEvent(override, uid, settings, masterTimeZone, masterIsAllDay),
+      buildOverrideIcsEvent(ledger, override, uid, settings, masterTimeZone, masterIsAllDay),
     ),
   ];
 };
 
-const collectTimezones = (events: CalendarEvent[]): IcsTimezone[] => {
-  const referenceByZone = new Map<string, Date>();
-  for (const event of events) {
-    if (resolveIsAllDayEvent(toAllDayShape(event))) {
-      continue;
-    }
-    const zone = resolveEventTimeZone(event);
-    if (zone && !referenceByZone.has(zone)) {
-      referenceByZone.set(zone, event.startTime);
-    }
-  }
-
-  const timezones: IcsTimezone[] = [];
-  for (const [zone, reference] of referenceByZone) {
-    const timezone = buildVtimezone(zone, reference);
-    if (timezone) {
-      timezones.push(timezone);
-    }
-  }
-  return timezones;
-};
+const hasUnresolvedTimeZone = (event: CalendarEvent): boolean =>
+  !resolveIsAllDayEvent(toAllDayShape(event))
+  && Boolean(event.startTimeZone?.trim())
+  && !canonicalizeTimeZone(event.startTimeZone);
 
 const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boolean => {
   if (settings.excludeAllDayEvents && resolveIsAllDayEvent(toAllDayShape(event))) {
@@ -250,7 +252,7 @@ const shouldIncludeEvent = (event: CalendarEvent, settings: FeedSettings): boole
   });
 };
 
-const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string => {
+const buildFeedIcalDocument = (events: CalendarEvent[], settings: FeedSettings): FeedIcalDocument => {
   const groups = groupEventsBySourceUid(events).flatMap((group): EventGroup[] => {
     if (!shouldIncludeEvent(group.master, settings)) {
       return group.overrides
@@ -280,9 +282,10 @@ const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): st
       overrides: includedOverrides,
     }];
   });
-  const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(group, settings));
+  const ledger = createIcsZoneLedger();
+  const icsEvents = groups.flatMap((group) => buildIcsEventsForGroup(ledger, group, settings));
   const includedEvents = groups.flatMap(({ master, overrides }) => [master, ...overrides]);
-  const timezones = collectTimezones(includedEvents);
+  const timezones = ledger.buildTimezones();
 
   const calendar: IcsCalendar = {
     events: icsEvents,
@@ -291,8 +294,14 @@ const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): st
     ...(timezones.length > 0 && { timezones }),
   };
 
-  return generateIcsCalendar(calendar);
+  return {
+    body: generateIcsCalendar(calendar),
+    unresolvedTimeZoneEventCount: includedEvents.filter((event) => hasUnresolvedTimeZone(event)).length,
+  };
 };
 
-export { formatEventsAsIcal, shouldIncludeEvent };
-export type { CalendarEvent, FeedSettings };
+const formatEventsAsIcal = (events: CalendarEvent[], settings: FeedSettings): string =>
+  buildFeedIcalDocument(events, settings).body;
+
+export { buildFeedIcalDocument, formatEventsAsIcal, shouldIncludeEvent };
+export type { CalendarEvent, FeedIcalDocument, FeedSettings };

@@ -20,5 +20,8 @@ export type {
 export { interpretFullDayTimedEventsAsAllDay } from "./utils/interpret-full-day-timed-events";
 export { buildZonedIcsDate, formatTzOffset } from "./utils/build-zoned-date";
 export { buildVtimezone } from "./utils/build-vtimezone";
+export { canonicalizeTimeZone } from "./utils/canonical-time-zone";
+export { createIcsZoneLedger } from "./utils/ics-zone-ledger";
+export type { IcsZoneLedger } from "./utils/ics-zone-ledger";
 export { normalizeTimezone } from "./utils/normalize-timezone";
 export { getIcsDurationNominalMilliseconds } from "./utils/recurrence-duration";

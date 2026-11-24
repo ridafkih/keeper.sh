@@ -128,12 +128,10 @@ const buildRecurringObservance = (transition: TimeZoneTransition): IcsTimezonePr
   recurrenceRule: buildAnnualRecurrenceRule(transition),
 });
 
-const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): IcsTimezone | undefined => {
-  const resolved = normalizeTimezone(timezone);
-  if (!resolved || !isSupportedTimeZone(resolved) || Number.isNaN(referenceInstant.getTime())) {
-    return;
+const buildZoneVtimezone = (resolved: string, referenceInstant: Date): IcsTimezone => {
+  if (Number.isNaN(referenceInstant.getTime())) {
+    throw new RangeError(`A VTIMEZONE for ${resolved} needs a valid reference instant`);
   }
-
   const referenceYear = referenceInstant.getUTCFullYear();
   const currentYear = new Date().getUTCFullYear();
   const projectionBaseYear = Math.max(referenceYear, currentYear);
@@ -177,4 +175,12 @@ const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): I
   return builtTimezone;
 };
 
-export { buildVtimezone };
+const buildVtimezone = (timezone: string | undefined, referenceInstant: Date): IcsTimezone | undefined => {
+  const resolved = normalizeTimezone(timezone);
+  if (!resolved || !isSupportedTimeZone(resolved) || Number.isNaN(referenceInstant.getTime())) {
+    return;
+  }
+  return buildZoneVtimezone(resolved, referenceInstant);
+};
+
+export { buildVtimezone, buildZoneVtimezone };
