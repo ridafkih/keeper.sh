@@ -8,6 +8,7 @@ import type { IcsCalendar, IcsTimezone, IcsTimezoneProp } from "ts-ics";
 import { RRule } from "rrule";
 import type { Weekday } from "rrule";
 import { buildVtimezone } from "../../../src/ics/utils/build-vtimezone";
+import { buildZonedIcsDate } from "../../../src/ics/utils/build-zoned-date";
 import { wallTimeToInstant } from "../../../src/ics/utils/timezone-instant";
 
 interface RenderedTimezone {
@@ -198,13 +199,76 @@ describe("buildVtimezone", () => {
     const { ics, timezone } = renderAndParseVtimezone("Europe/Berlin", REFERENCE);
 
     expect(ics).toContain("TZID:Europe/Berlin");
-    expect(ics).toContain("DTSTART:20250330T020000");
+    expect(ics).toContain("DTSTART:20240331T020000");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3");
     expect(ics).toContain("TZOFFSETFROM:+0100");
     expect(ics).toContain("TZOFFSETTO:+0200");
-    expect(ics).toContain("DTSTART:20251026T030000");
+    expect(ics).toContain("DTSTART:20241027T030000");
     expect(ics).toContain("RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10");
-    expect(timezone.props).toHaveLength(3);
+    expect(timezone.props).toHaveLength(2);
+  });
+
+  it("writes a zone with annual rules as one STANDARD and one DAYLIGHT rule with no no-op baseline", () => {
+    const { ics, timezone } = renderAndParseVtimezone(
+      "America/Chicago",
+      new Date("2026-11-24T16:00:00.000Z"),
+    );
+    const block = ics.slice(ics.indexOf("BEGIN:VTIMEZONE"), ics.indexOf("END:VTIMEZONE"));
+
+    expect(block.match(/BEGIN:STANDARD/g)).toHaveLength(1);
+    expect(block.match(/BEGIN:DAYLIGHT/g)).toHaveLength(1);
+    expect(block.match(/RRULE:/g)).toHaveLength(2);
+    expect(block).not.toContain("DTSTART:20240101T000000");
+    expect(timezone.props.filter((prop) => prop.offsetFrom === prop.offsetTo)).toEqual([]);
+    expect(timezone.props.map((prop) => [prop.type, prop.offsetFrom, prop.offsetTo])).toEqual([
+      ["DAYLIGHT", "-0600", "-0500"],
+      ["STANDARD", "-0500", "-0600"],
+    ]);
+    expect(block).toContain("DTSTART:20240310T020000");
+    expect(block).toContain("RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3");
+    expect(block).toContain("DTSTART:20241103T020000");
+    expect(block).toContain("RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11");
+  });
+
+  it.each([
+    ["America/Chicago", "2026-01-05T12:00:00.000Z", "DTSTART;TZID=America/Chicago:20260105T060000"],
+    ["America/Chicago", "2026-03-07T12:00:00.000Z", "DTSTART;TZID=America/Chicago:20260307T060000"],
+    ["Europe/Berlin", "2026-01-05T12:00:00.000Z", "DTSTART;TZID=Europe/Berlin:20260105T130000"],
+    ["Australia/Sydney", "2026-01-05T12:00:00.000Z", "DTSTART;TZID=Australia/Sydney:20260105T230000"],
+  ])("lets ts-ics write %s at %s, before the reference year's first onset", (zone, iso, expected) => {
+    const instant = new Date(iso);
+    const builtTimezone = buildVtimezone(zone, instant);
+    if (!builtTimezone) {
+      throw new Error(`Expected ${zone} to resolve`);
+    }
+    const ics = generateIcsCalendar({
+      version: "2.0",
+      prodId: "-//Test//Test//EN",
+      timezones: [builtTimezone],
+      events: [{
+        uid: "event",
+        stamp: { date: instant },
+        start: buildZonedIcsDate(instant, zone, false),
+        end: buildZonedIcsDate(new Date(instant.getTime() + MS_PER_MINUTE), zone, false),
+        summary: "Busy",
+      }],
+    });
+
+    expect(ics).toContain(expected);
+  });
+
+  it.each([
+    ["America/Chicago", "2026-01-01T00:00:00.000Z"],
+    ["America/Chicago", "2026-11-24T10:00:00.000Z"],
+    ["America/Chicago", "2027-06-17T12:00:00.000Z"],
+    ["Europe/Berlin", "2026-01-01T00:00:00.000Z"],
+    ["Australia/Sydney", "2026-01-01T00:00:00.000Z"],
+  ])("without a baseline still covers %s wall time %s from the earliest written instant on", (zone, iso) => {
+    const { timezone } = renderAndParseVtimezone(zone, new Date("2026-01-01T00:00:00.000Z"));
+    const wallTime = new Date(iso);
+
+    expect(resolveWallTimeFromEmittedTimezone(timezone, wallTime))
+      .toEqual(wallTimeToInstant(wallTime, zone));
   });
 
   it("does not invent a perpetual rule for Morocco's moving Ramadan transitions", () => {
@@ -265,10 +329,10 @@ describe("buildVtimezone", () => {
   it("preserves southern-hemisphere transition direction", () => {
     const { ics } = renderAndParseVtimezone("Australia/Sydney", REFERENCE);
 
-    expect(ics).toContain("DTSTART:20250406T030000");
+    expect(ics).toContain("DTSTART:20240407T030000");
     expect(ics).toContain("TZOFFSETFROM:+1100");
     expect(ics).toContain("TZOFFSETTO:+1000");
-    expect(ics).toContain("DTSTART:20251005T020000");
+    expect(ics).toContain("DTSTART:20241006T020000");
     expect(ics).toContain("TZOFFSETFROM:+1000");
     expect(ics).toContain("TZOFFSETTO:+1100");
   });

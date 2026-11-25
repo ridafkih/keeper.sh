@@ -147,7 +147,31 @@ describe("feed VTIMEZONE coverage", () => {
     ], SETTINGS);
 
     const firstObservanceStart = unfold(ics).find((line) => line.startsWith("DTSTART:"));
-    expect(firstObservanceStart).toBe("DTSTART:20180101T000000");
+    expect(firstObservanceStart).toBe("DTSTART:20170312T020000");
+  });
+
+  it("writes America/Chicago in the two-rule form Outlook reads correctly", () => {
+    const ics = formatEventsAsIcal([makeEvent({ startTimeZone: "America/Chicago" })], SETTINGS);
+    const lines = unfold(ics);
+    const block = lines.slice(lines.indexOf("BEGIN:VTIMEZONE"), lines.indexOf("END:VTIMEZONE") + 1);
+
+    expect(block).toEqual([
+      "BEGIN:VTIMEZONE",
+      "TZID:America/Chicago",
+      "BEGIN:DAYLIGHT",
+      "DTSTART:20240310T020000",
+      "TZOFFSETFROM:-0600",
+      "TZOFFSETTO:-0500",
+      "RRULE:FREQ=YEARLY;BYDAY=2SU;BYMONTH=3",
+      "END:DAYLIGHT",
+      "BEGIN:STANDARD",
+      "DTSTART:20241103T020000",
+      "TZOFFSETFROM:-0500",
+      "TZOFFSETTO:-0600",
+      "RRULE:FREQ=YEARLY;BYDAY=1SU;BYMONTH=11",
+      "END:STANDARD",
+      "END:VTIMEZONE",
+    ]);
   });
 
   it("gives every TZID it writes a VTIMEZONE across the zone names it accepts", () => {

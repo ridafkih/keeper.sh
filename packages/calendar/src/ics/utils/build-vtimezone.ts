@@ -10,7 +10,7 @@ import type { TimeZoneTransition } from "./timezone-instant";
 
 const MS_PER_MINUTE = 60 * 1000;
 const PROJECTION_YEARS_AFTER_REFERENCE = 100;
-const PROJECTION_YEARS_BEFORE_REFERENCE = 1;
+const PROJECTION_YEARS_BEFORE_REFERENCE = 2;
 const DAYS_OF_WEEK = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 const vtimezoneCache = new Map<string, IcsTimezone>();
 
@@ -152,25 +152,20 @@ const buildZoneVtimezone = (resolved: string, referenceInstant: Date): IcsTimezo
     firstYear,
     finalYear,
   );
-  const transitionObservances: IcsTimezoneProp[] = [];
-  if (recurringTransitions) {
-    for (const [first] of recurringTransitions) {
-      if (first) {
-        transitionObservances.push(buildRecurringObservance(first));
-      }
-    }
-  } else {
-    for (const transition of transitions) {
-      transitionObservances.push(buildTransitionObservance(transition));
+  const recurringObservances: IcsTimezoneProp[] = [];
+  for (const [first] of recurringTransitions ?? []) {
+    if (first) {
+      recurringObservances.push(buildRecurringObservance(first));
     }
   }
-  const builtTimezone: IcsTimezone = {
-    id: resolved,
-    props: [
+  let props: IcsTimezoneProp[] = recurringObservances;
+  if (recurringObservances.length === 0) {
+    props = [
       buildBaselineObservance(firstWallTime, initialOffset),
-      ...transitionObservances,
-    ],
-  };
+      ...transitions.map((transition) => buildTransitionObservance(transition)),
+    ];
+  }
+  const builtTimezone: IcsTimezone = { id: resolved, props };
   vtimezoneCache.set(cacheKey, builtTimezone);
   return builtTimezone;
 };

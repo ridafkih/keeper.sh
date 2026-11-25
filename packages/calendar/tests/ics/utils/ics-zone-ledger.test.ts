@@ -43,6 +43,6 @@ describe("createIcsZoneLedger", () => {
     ledger.writeDate(new Date("2019-03-01T16:00:00Z"), "America/Chicago", false);
 
     const [timezone] = ledger.buildTimezones();
-    expect(timezone?.props[0]?.start.getUTCFullYear()).toBe(2018);
+    expect(timezone?.props[0]?.start.getUTCFullYear()).toBe(2017);
   });
 });
