@@ -10,13 +10,6 @@ import type { TimeZoneTransition } from "./timezone-instant";
 
 const MS_PER_MINUTE = 60 * 1000;
 const PROJECTION_YEARS_AFTER_REFERENCE = 100;
-/*
- * Two years, not one. Ts-ics 2.4.3 drops the DTSTART occurrence of an observance RRULE whose
- * DTSTART carries a time of day, so the first year of the rules supplies no expanded onsets.
- * Starting the rules two years back leaves a whole expanded year before the earliest written
- * instant. Without it ts-ics finds no observance between January and the first onset of the
- * reference year, and generateIcsCalendar throws.
- */
 const PROJECTION_YEARS_BEFORE_REFERENCE = 2;
 const DAYS_OF_WEEK = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"] as const;
 const vtimezoneCache = new Map<string, IcsTimezone>();
@@ -165,16 +158,6 @@ const buildZoneVtimezone = (resolved: string, referenceInstant: Date): IcsTimezo
       recurringObservances.push(buildRecurringObservance(first));
     }
   }
-  /*
-   * A zone with stable annual rules is written as exactly one STANDARD and one DAYLIGHT
-   * observance, each with a yearly RRULE. Both first onsets fall in firstYear, well before
-   * the earliest instant written in the zone, so every written time is covered.
-   *
-   * A no-op baseline STANDARD (offset to the same offset, no RRULE) in front of the rules
-   * makes Outlook and Microsoft 365 subscribed calendars show standard-time events one hour
-   * late. It is kept only where it carries information: fixed-offset zones, where it is the
-   * sole observance, and zones without stable rules, where it anchors the explicit transitions.
-   */
   let props: IcsTimezoneProp[] = recurringObservances;
   if (recurringObservances.length === 0) {
     props = [

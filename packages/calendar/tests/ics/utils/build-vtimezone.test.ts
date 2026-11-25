@@ -209,10 +209,6 @@ describe("buildVtimezone", () => {
   });
 
   it("writes a zone with annual rules as one STANDARD and one DAYLIGHT rule with no no-op baseline", () => {
-    /*
-     * Outlook and Microsoft 365 subscribed calendars showed 10:00 America/Chicago on 2026-11-24
-     * at 11:00 when this VTIMEZONE led with a STANDARD observance from -0600 to -0600 and no RRULE.
-     */
     const { ics, timezone } = renderAndParseVtimezone(
       "America/Chicago",
       new Date("2026-11-24T16:00:00.000Z"),
@@ -240,10 +236,6 @@ describe("buildVtimezone", () => {
     ["Europe/Berlin", "2026-01-05T12:00:00.000Z", "DTSTART;TZID=Europe/Berlin:20260105T130000"],
     ["Australia/Sydney", "2026-01-05T12:00:00.000Z", "DTSTART;TZID=Australia/Sydney:20260105T230000"],
   ])("lets ts-ics write %s at %s, before the reference year's first onset", (zone, iso, expected) => {
-    /*
-     * Ts-ics drops the DTSTART occurrence of an observance RRULE, so without a no-op baseline
-     * the rules must start early enough to leave expanded onsets before every written instant.
-     */
     const instant = new Date(iso);
     const builtTimezone = buildVtimezone(zone, instant);
     if (!builtTimezone) {
@@ -272,7 +264,6 @@ describe("buildVtimezone", () => {
     ["Europe/Berlin", "2026-01-01T00:00:00.000Z"],
     ["Australia/Sydney", "2026-01-01T00:00:00.000Z"],
   ])("without a baseline still covers %s wall time %s from the earliest written instant on", (zone, iso) => {
-    // The earliest written instant anchors the projection, so nothing before its year is written.
     const { timezone } = renderAndParseVtimezone(zone, new Date("2026-01-01T00:00:00.000Z"));
     const wallTime = new Date(iso);
 
