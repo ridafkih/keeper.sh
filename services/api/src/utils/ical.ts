@@ -42,6 +42,7 @@ const FEED_COLUMNS = {
   excludeFocusTime: icalFeedsTable.excludeFocusTime,
   excludeOutOfOffice: icalFeedsTable.excludeOutOfOffice,
   customEventName: icalFeedsTable.customEventName,
+  feedName: icalFeedsTable.name,
 };
 
 interface FeedRow {
@@ -55,6 +56,7 @@ interface FeedRow {
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
   customEventName: string;
+  feedName: string;
 }
 
 const toResolvedFeed = (row: FeedRow): ResolvedFeed => ({
@@ -69,6 +71,7 @@ const toResolvedFeed = (row: FeedRow): ResolvedFeed => ({
     excludeFocusTime: row.excludeFocusTime,
     excludeOutOfOffice: row.excludeOutOfOffice,
     customEventName: row.customEventName,
+    feedName: row.feedName,
   },
 });
 

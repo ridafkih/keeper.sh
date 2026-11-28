@@ -12,6 +12,7 @@ const FEED_SETTINGS: FeedSettings = {
   excludeAllDayEvents: false,
   excludeFocusTime: false,
   excludeOutOfOffice: false,
+  feedName: "Work",
   includeEventDescription: false,
   includeEventLocation: false,
   includeEventName: false,
@@ -222,6 +223,32 @@ describe("generateCalendarFeed", () => {
     const after = await responseFor([createStoredEvent("event-1", shiftDays(2))]);
 
     expect(after?.etag).not.toBe(before?.etag);
+  });
+
+  it("changes the validator when the feed is renamed", async () => {
+    const events = [createStoredEvent("event-1", shiftDays(1))];
+    const responseNamed = (feedName: string): Promise<FeedResponse | null> =>
+      generateCalendarFeed<FeedScope>("feed-token", {
+        now: NOW,
+        readFeedCalendars: () => Promise.resolve([{
+          id: "calendar-1",
+          syncFutureRange: "2_years",
+          syncHistoricRange: "1_month",
+        }]),
+        readFeedEvents: createReader(events),
+        readFeedExclusions: () => Promise.resolve({ workingElsewhere: 0, workingLocation: 0 }),
+        readFeedRevision: createRevisionReader(events),
+        resolveFeed: () => Promise.resolve({
+          scope: { feedId: "feed-1" },
+          settings: { ...FEED_SETTINGS, feedName },
+        }),
+      });
+
+    const before = await responseNamed("Team");
+    const after = await responseNamed("Family");
+
+    expect(after?.etag).not.toBe(before?.etag);
+    expect(after?.body).toContain("X-WR-CALNAME:Family");
   });
 
   it("renders an empty calendar when no calendars opt into the feed", async () => {

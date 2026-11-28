@@ -11,12 +11,15 @@ interface PerFeedSettings {
   excludeFocusTime: boolean;
   excludeOutOfOffice: boolean;
   customEventName: string;
+  feedName: string;
 }
 
+/* An empty name publishes no X-WR-CALNAME, so the output stays comparable to the legacy feed. */
 const FILTERS_OFF: PerFeedSettings = {
   ...LEGACY_FEED_SETTINGS,
   excludeFocusTime: false,
   excludeOutOfOffice: false,
+  feedName: "",
 };
 
 const normalizeIcs = (ics: string): string =>

@@ -11,6 +11,7 @@ const SETTINGS: FeedSettings = {
   excludeFocusTime: false,
   excludeOutOfOffice: true,
   customEventName: "Busy",
+  feedName: "Work",
 };
 
 const makeEvent = (overrides: Partial<CalendarEvent> = {}): CalendarEvent => ({
