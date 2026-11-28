@@ -10,6 +10,7 @@ import {
   RecurrenceMaterializationLimitError,
   REDIS_UNAVAILABLE_SLUG,
 } from "@keeper.sh/calendar";
+import { CalDAVWriteRefusedError } from "@keeper.sh/calendar/caldav";
 import { recordFirstSyncedMappings, syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
@@ -86,6 +87,10 @@ const classifyKnownSyncError = (error: unknown): string | null => {
 
   if (error instanceof SyncLockRenewalError) {
     return "sync-lock-renewal-failed";
+  }
+
+  if (error instanceof CalDAVWriteRefusedError) {
+    return "provider-write-refused";
   }
 
   return null;
