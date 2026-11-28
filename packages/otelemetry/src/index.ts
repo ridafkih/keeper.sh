@@ -21,6 +21,7 @@ import {
 } from "./collector-pipeline";
 import type { DroppedRecordsReport } from "./dropped-records";
 import { separateTraceContext } from "./log-trace-context";
+import { isEchoedToStdout, readStdoutEchoLevel } from "./stdout-echo";
 
 const PINO_SEVERITY: Record<number, SeverityNumber> = {
   10: SeverityNumber.TRACE,
@@ -114,6 +115,7 @@ const writeDropReportToStderr = (serviceName: string) => (report: DroppedRecords
 
 const createCollectorSink = (): LineSink => {
   const { serviceName, serviceVersion, deploymentEnvironment } = readCollectorIdentity(process.env);
+  const stdoutEchoLevel = readStdoutEchoLevel(process.env);
 
   const resource = detectResources({
     detectors: [envDetector, hostDetector, osDetector, processDetector],
@@ -136,8 +138,11 @@ const createCollectorSink = (): LineSink => {
 
   return {
     write: (line) => {
-      process.stdout.write(`${line}\n`);
-      forwardToCollector(pipeline.logger, line, parseStructuredLogLine(line));
+      const entry = parseStructuredLogLine(line);
+      if (isEchoedToStdout(entry?.level, stdoutEchoLevel)) {
+        process.stdout.write(`${line}\n`);
+      }
+      forwardToCollector(pipeline.logger, line, entry);
     },
     shutdown: async () => {
       const deadline = Bun.sleep(SHUTDOWN_TIMEOUT_MS);
