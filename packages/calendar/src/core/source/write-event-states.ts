@@ -31,6 +31,7 @@ const buildEventStateInsertRow = (
   exceptionDates: serializeOptionalJson(event.exceptionDates),
   isAllDay: event.isAllDay,
   location: event.location,
+  meetingLink: event.meetingLink,
   recurrenceId: event.recurrenceId,
   recurrenceRule: serializeStoredIcsRecurrenceRule(
     event.recurrenceRule,
@@ -82,6 +83,7 @@ const EVENT_STATE_CONFLICT_SET = {
   exceptionDates: excludedColumn(eventStatesTable.exceptionDates.name),
   isAllDay: excludedColumn(eventStatesTable.isAllDay.name),
   location: excludedColumn(eventStatesTable.location.name),
+  meetingLink: excludedColumn(eventStatesTable.meetingLink.name),
   recurrenceRule: excludedColumn(eventStatesTable.recurrenceRule.name),
   recurrenceId: excludedColumn(eventStatesTable.recurrenceId.name),
   sourceEventId: excludedColumn(eventStatesTable.sourceEventId.name),

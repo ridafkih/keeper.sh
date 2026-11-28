@@ -23,6 +23,9 @@ interface GoogleEventDateTime {
 }
 
 interface GoogleCalendarEvent {
+  conferenceData?: {
+    entryPoints?: { entryPointType?: string; uri?: string }[];
+  };
   id?: string;
   iCalUID?: string;
   status?: "confirmed" | "tentative" | "cancelled";
@@ -81,6 +84,7 @@ interface EventTimeSlot {
   title?: string;
   description?: string;
   location?: string;
+  meetingLink?: string;
 }
 
 export type {

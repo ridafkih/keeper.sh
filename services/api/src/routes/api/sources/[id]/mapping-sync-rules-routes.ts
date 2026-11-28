@@ -50,6 +50,7 @@ const BOOLEAN_OVERRIDE_FIELDS = [
   "excludeAllDayEvents",
   "excludeEventDescription",
   "excludeEventLocation",
+  "excludeEventMeetingLink",
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",

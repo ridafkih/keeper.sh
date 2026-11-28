@@ -33,6 +33,17 @@ const createIncomingEvent = (overrides: Partial<SourceEvent>): SourceEvent => ({
 });
 
 describe("source event diff", () => {
+  it("updates a stored event when its meeting link changes or goes away", () => {
+    const link = "https://meet.google.com/abc-defg-hij";
+    const stored = createExistingEvent({ meetingLink: link });
+    const changed = createIncomingEvent({ meetingLink: "https://meet.google.com/new-link-xyz" });
+    const removed = createIncomingEvent({});
+
+    expect(buildSourceEventsToAdd([stored], [createIncomingEvent({ meetingLink: link })])).toEqual([]);
+    expect(buildSourceEventsToAdd([stored], [changed])).toEqual([changed]);
+    expect(buildSourceEventsToAdd([stored], [removed])).toEqual([removed]);
+  });
+
   it("does not update when recurrence set fields arrive in a different order", () => {
     const existing = createExistingEvent({
       exceptionDates: [

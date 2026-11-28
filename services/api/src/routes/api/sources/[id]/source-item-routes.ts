@@ -8,6 +8,7 @@ const EVENT_FILTER_FIELDS = [
   "excludeAllDayEvents",
   "excludeEventDescription",
   "excludeEventLocation",
+  "excludeEventMeetingLink",
   "excludeEventName",
   "excludeFocusTime",
   "excludeOutOfOffice",

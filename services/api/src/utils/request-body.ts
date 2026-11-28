@@ -24,6 +24,7 @@ const sourcePatchBodySchema = type({
   "excludeAvailabilities?": excludableAvailabilitySchema.array(),
   "excludeEventDescription?": "boolean",
   "excludeEventLocation?": "boolean",
+  "excludeEventMeetingLink?": "boolean",
   "excludeEventName?": "boolean",
   "excludeFocusTime?": "boolean",
   "excludeFreeEvents?": "boolean",

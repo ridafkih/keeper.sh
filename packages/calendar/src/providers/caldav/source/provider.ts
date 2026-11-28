@@ -122,6 +122,7 @@ const createCalDAVSourceProvider = (
         id: eventStatesTable.id,
         isAllDay: eventStatesTable.isAllDay,
         location: eventStatesTable.location,
+        meetingLink: eventStatesTable.meetingLink,
         recurrenceId: eventStatesTable.recurrenceId,
         recurrenceRule: eventStatesTable.recurrenceRule,
         sourceEventId: eventStatesTable.sourceEventId,

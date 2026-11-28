@@ -20,6 +20,7 @@ export type SwitchRuleField =
   | "excludeAllDayEvents"
   | "excludeEventDescription"
   | "excludeEventLocation"
+  | "excludeEventMeetingLink"
   | "excludeFocusTime"
   | "excludeOutOfOffice"
   | "markEventsAsPrivate";
@@ -37,6 +38,10 @@ export const DETAIL_SWITCH_RULES: SwitchRule[] = [
   { field: "disableEventReminders", label: "Disable Reminders", onWhenFieldIs: true },
 ];
 
+export const PROVIDER_DETAIL_SWITCH_RULES: SwitchRule[] = [
+  { field: "excludeEventMeetingLink", label: "Sync Meeting Links", onWhenFieldIs: false },
+];
+
 export const EXCLUSION_SWITCH_RULES: SwitchRule[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", onWhenFieldIs: true },
 ];
@@ -46,10 +51,17 @@ export const PROVIDER_EXCLUSION_SWITCH_RULES: SwitchRule[] = [
   { field: "excludeOutOfOffice", label: "Exclude Out of Office Events", onWhenFieldIs: true },
 ];
 
-const PROVIDERS_WITH_EXTRA_EXCLUSIONS = new Set(["google"]);
+const PROVIDERS_WITH_EXTRA_RULES = new Set(["google"]);
+
+export const getDetailSwitchRules = (provider: string): SwitchRule[] => {
+  if (PROVIDERS_WITH_EXTRA_RULES.has(provider)) {
+    return [...DETAIL_SWITCH_RULES, ...PROVIDER_DETAIL_SWITCH_RULES];
+  }
+  return DETAIL_SWITCH_RULES;
+};
 
 export const getExclusionSwitchRules = (provider: string): SwitchRule[] => {
-  if (PROVIDERS_WITH_EXTRA_EXCLUSIONS.has(provider)) {
+  if (PROVIDERS_WITH_EXTRA_RULES.has(provider)) {
     return [...EXCLUSION_SWITCH_RULES, ...PROVIDER_EXCLUSION_SWITCH_RULES];
   }
   return EXCLUSION_SWITCH_RULES;

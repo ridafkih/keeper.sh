@@ -20,7 +20,8 @@ import { useMappingSyncRules } from "@/hooks/use-mapping-sync-rules";
 import type { PatchRuleOverrides } from "@/hooks/use-mapping-sync-rules";
 import { HttpError } from "@/lib/fetcher";
 import type { CalendarDetail, CalendarSource, MappingSyncRules } from "@/types/api";
-import { DETAIL_SWITCH_RULES, getExclusionSwitchRules } from "@/utils/mapping-sync-rules";
+import { getDetailSwitchRules, getExclusionSwitchRules } from "@/utils/mapping-sync-rules";
+import type { SwitchRule } from "@/utils/mapping-sync-rules";
 
 export const Route = createFileRoute(
   "/(dashboard)/dashboard/accounts/$accountId/$calendarId_/destinations/$destinationId",
@@ -87,7 +88,7 @@ function MappingSyncRulesPage() {
           <NavigationMenu>
             <EventNameOverrideItems mapping={mapping} locked={disabled} onPatch={patchOverrides} />
             <SwitchRuleItems
-              rules={DETAIL_SWITCH_RULES}
+              rules={getDetailSwitchRules(source.provider)}
               mapping={mapping}
               locked={disabled}
               onPatch={patchOverrides}
@@ -153,7 +154,7 @@ function SwitchRuleItems({
   locked,
   onPatch,
 }: {
-  rules: typeof DETAIL_SWITCH_RULES;
+  rules: SwitchRule[];
   mapping: MappingSyncRules;
   locked: boolean;
   onPatch: PatchRuleOverrides;

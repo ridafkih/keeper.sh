@@ -1,3 +1,4 @@
+import { resolveGoogleMeetingLink } from "./meeting-link";
 import type {
   FetchEventsOptions,
   FetchEventsResult,
@@ -378,6 +379,7 @@ const parseGoogleEventsWithDiagnostics = (
       endTime,
       isAllDay: isAllDayGoogleEvent(event),
       location: resolveGoogleLocation(event),
+      meetingLink: resolveGoogleMeetingLink(event),
       sourceEventType: resolveSourceEventType(event.eventType),
       startTime,
       startTimeZone: event.start?.timeZone ?? event.end?.timeZone,

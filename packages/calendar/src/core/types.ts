@@ -222,6 +222,7 @@ interface SourceEvent {
   title?: string;
   description?: string;
   location?: string;
+  meetingLink?: string;
 }
 
 export type {

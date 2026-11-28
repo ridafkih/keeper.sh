@@ -112,6 +112,10 @@ const SYNC_SETTINGS: SyncSetting[] = [
   { field: "disableEventReminders", label: "Disable Reminders", matchesField: true },
 ];
 
+const PROVIDER_SYNC_SETTINGS: SyncSetting[] = [
+  { field: "excludeEventMeetingLink", label: "Sync Meeting Links", matchesField: false },
+];
+
 const EXCLUSION_SETTINGS: SyncSetting[] = [
   { field: "excludeAllDayEvents", label: "Exclude All Day Events", matchesField: true },
 ];
@@ -204,7 +208,7 @@ function CalendarDetailPage() {
           </>
         )}
         {isPushCapable && <SyncWindowSection calendarId={calendarId} />}
-        {isPullCapable && <SyncSettingsSection calendarId={calendarId} />}
+        {isPullCapable && <SyncSettingsSection calendarId={calendarId} provider={calendar.provider} />}
         {isPullCapable && <ExclusionsSection calendarId={calendarId} provider={calendar.provider} />}
         <CalendarInfoSection account={account} accountId={accountId} />
         {isRemovable && <DeleteCalendarSection accountId={accountId} calendarId={calendarId} />}
@@ -614,10 +618,13 @@ function DestinationCheckboxIndicator({ destinationId }: { destinationId: string
   );
 }
 
-function SyncSettingsSection({ calendarId }: { calendarId: string }) {
+function SyncSettingsSection({ calendarId, provider }: { calendarId: string; provider: string }) {
   const { data: entitlements } = useEntitlements();
   const locked = Boolean(entitlements && !entitlements.canUseEventFilters);
   const calendarType = useAtomValue(calendarTypeAtom);
+  const syncSettings = PROVIDERS_WITH_EXTRA_SETTINGS.has(provider)
+    ? [...SYNC_SETTINGS, ...PROVIDER_SYNC_SETTINGS]
+    : SYNC_SETTINGS;
 
   return (
     <>
@@ -630,7 +637,7 @@ function SyncSettingsSection({ calendarId }: { calendarId: string }) {
           <SyncEventNameTemplateItem calendarId={calendarId} locked={locked} />
           <SyncEventNameToggle calendarId={calendarId} locked={locked} />
           <ProviderSyncSettings calendarId={calendarId} calendarType={calendarType} locked={locked} />
-          {SYNC_SETTINGS.map((setting) => (
+          {syncSettings.map((setting) => (
             <ExcludeFieldToggle
               key={setting.field}
               calendarId={calendarId}
