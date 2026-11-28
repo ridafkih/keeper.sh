@@ -417,6 +417,7 @@ export {
 } from "./core/sync-engine";
 export type {
   CalendarSyncProvider,
+  OperationDeferralLedger,
   PendingChanges,
   SyncCalendarOptions,
 } from "./core/sync-engine";

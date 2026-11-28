@@ -18,6 +18,15 @@ import type { CalendarSyncProvider, EventUpdate, PendingChanges, PendingUpdate }
 import { flushOrDeleteUnrecordedCopies } from "./unrecorded-copies";
 import { appendOperationErrorTallies } from "./operation-error-tallies";
 import type { UnrecordedCopyTally } from "./unrecorded-copies";
+import {
+  appendOperationOutcomes,
+  collectOperationOutcomes,
+  createOperationOutcomes,
+  getOperationKey,
+  hasOperationOutcomes,
+  orderDeferredOperationsLast,
+} from "./operation-deferral";
+import type { OperationDeferralLedger, OperationOutcomes } from "./operation-deferral";
 
 /*
  * A run whose provider rejects everything produces one error per operation. The wide
@@ -411,6 +420,7 @@ interface RunResult {
   result: SyncResult;
   conflictsResolved: number;
   errors: OperationError[];
+  outcomes: OperationOutcomes;
   pushEcho?: PushEchoCounts;
 }
 
@@ -434,6 +444,7 @@ const executeAddRun = async (
     result: { added, addFailed, removed: 0, removeFailed: 0 },
     conflictsResolved,
     errors,
+    outcomes: collectOperationOutcomes(adds, pushResults),
     pushEcho,
   };
 };
@@ -456,6 +467,10 @@ const executeUpdateRun = async (
       result: { added: updated, addFailed: 0, removed: 0, removeFailed: 0 },
       conflictsResolved,
       errors,
+      outcomes: {
+        failed: [],
+        succeeded: collectOperationOutcomes(replacements, pushResults).succeeded,
+      },
       pushEcho,
     },
     unresolved,
@@ -475,6 +490,7 @@ const executeRemoveRun = async (
     result: { added: 0, addFailed: 0, removed, removeFailed },
     conflictsResolved: 0,
     errors,
+    outcomes: collectOperationOutcomes(removes, deleteResults),
   };
 };
 
@@ -498,6 +514,7 @@ const mergeRunResult = (
   };
   state.conflictsResolved += runResult.conflictsResolved;
   state.errors.push(...runResult.errors);
+  appendOperationOutcomes(state.outcomes, runResult.outcomes);
   if (runResult.pushEcho) {
     for (const key of Object.keys(state.pushEcho) as (keyof PushEchoCounts)[]) {
       state.pushEcho[key] += runResult.pushEcho[key];
@@ -512,6 +529,7 @@ const mergeRunResult = (
 
 type ProgressCallback = (processed: number, total: number) => void;
 type CheckpointCallback = (changes: PendingChanges) => Promise<boolean>;
+type OutcomesCallback = (outcomes: OperationOutcomes) => Promise<void>;
 
 const OPERATION_CHUNK_SIZE = 50;
 
@@ -528,6 +546,7 @@ interface ChunkedExecutionState {
   result: SyncResult;
   conflictsResolved: number;
   errors: OperationError[];
+  outcomes: OperationOutcomes;
   processed: number;
   pushEcho: PushEchoCounts;
   superseded: boolean;
@@ -647,6 +666,12 @@ const replaceViaDeleteThenAdd = async (
     },
     conflictsResolved: 0,
     errors: processedRemoves.errors,
+    outcomes: {
+      failed: replacements
+        .filter((_replacement, index) => !deleteResults[index]?.success)
+        .map((replacement) => getOperationKey(replacement)),
+      succeeded: [],
+    },
   }, false);
 
   const adds: Extract<SyncOperation, { type: "add" }>[] = [];
@@ -749,6 +774,18 @@ const getOperationWeight = (operation: SyncOperation): number => {
 const getTotalOperationCount = (operations: SyncOperation[]): number =>
   operations.reduce((total, operation) => total + getOperationWeight(operation), 0);
 
+const settleOperationOutcomes = async (
+  state: ChunkedExecutionState,
+  onOutcomes?: OutcomesCallback,
+): Promise<void> => {
+  if (!onOutcomes || !hasOperationOutcomes(state.outcomes)) {
+    return;
+  }
+  const { outcomes } = state;
+  state.outcomes = createOperationOutcomes();
+  await onOutcomes(outcomes);
+};
+
 const executeRemoteOperations = async (
   operations: SyncOperation[],
   existingMappings: EventMapping[],
@@ -757,6 +794,7 @@ const executeRemoteOperations = async (
   isCurrent?: () => Promise<boolean>,
   onRunComplete?: ProgressCallback,
   checkpoint?: CheckpointCallback,
+  onOutcomes?: OutcomesCallback,
 ): Promise<ExecuteRemoteResult> => {
   const mappingsByRemoteIdentity = new Map<string, EventMapping>();
   for (const mapping of existingMappings) {
@@ -773,6 +811,7 @@ const executeRemoteOperations = async (
     result: { added: 0, addFailed: 0, removed: 0, removeFailed: 0 },
     conflictsResolved: 0,
     errors: [],
+    outcomes: createOperationOutcomes(),
     processed: 0,
     pushEcho: createPushEchoCounts(),
     superseded: false,
@@ -837,7 +876,9 @@ const executeRemoteOperations = async (
       onRunComplete,
       checkpoint,
     );
+    await settleOperationOutcomes(state, onOutcomes);
   }
+  await settleOperationOutcomes(state, onOutcomes);
 
   return {
     changes: state.changes,
@@ -865,6 +906,7 @@ interface SyncCalendarOptions {
   flush: (changes: PendingChanges) => Promise<void>;
   onSyncEvent?: (event: Record<string, unknown>) => void;
   onProgress?: (update: SyncProgressUpdate) => void;
+  operationDeferral?: OperationDeferralLedger;
   reconciliationScope: ReconciliationScope;
 }
 
@@ -982,6 +1024,18 @@ const appendProviderDiagnostics = (
   }
 };
 
+const NO_DEFERRED_OPERATION_KEYS: ReadonlySet<string> = new Set();
+
+const readDeferredOperationKeys = (
+  operationDeferral: OperationDeferralLedger | undefined,
+  operations: SyncOperation[],
+): Promise<ReadonlySet<string>> => {
+  if (!operationDeferral || operations.length === 0) {
+    return Promise.resolve(NO_DEFERRED_OPERATION_KEYS);
+  }
+  return operationDeferral.readDeferredOperationKeys();
+};
+
 const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarResult> => {
   const {
     userId,
@@ -992,6 +1046,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     flush,
     onSyncEvent,
     onProgress,
+    operationDeferral,
     reconciliationScope,
   } = options;
 
@@ -1046,7 +1101,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
     emitProgress("comparing", localEvents.length, state.remoteEvents.length);
     const {
       mappingUpdates,
-      operations,
+      operations: plannedOperations,
       staleMappingIds,
       staleReasonCounts,
     } = timer.measureSync("compute_operations", () => computeSyncOperations(
@@ -1055,6 +1110,18 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
       state.remoteEvents,
       reconciliationScope,
     ));
+
+    const deferredOperationKeys = await timer.measure(
+      "read_state",
+      () => readDeferredOperationKeys(operationDeferral, plannedOperations),
+    );
+    const { deferredCount, operations } = orderDeferredOperationsLast(
+      plannedOperations,
+      deferredOperationKeys,
+    );
+    if (deferredCount > 0) {
+      wideEvent["operations.deferred_count"] = deferredCount;
+    }
 
     const addCount = operations.filter((op) => op.type === "add").length;
     const removeCount = operations.filter((op) => op.type === "remove").length;
@@ -1105,6 +1172,7 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
         flushed = true;
         return true;
       },
+      operationDeferral?.recordOperationOutcomes,
     );
 
     wideEvent["events.added"] = outcome.result.added - outcome.updated;
@@ -1176,4 +1244,4 @@ const syncCalendar = async (options: SyncCalendarOptions): Promise<SyncCalendarR
 };
 
 export { executeRemoteOperations, syncCalendar, OPERATION_ERROR_SAMPLE_SIZE };
-export type { CalendarSyncProvider, PendingChanges, SyncCalendarOptions };
+export type { CalendarSyncProvider, OperationDeferralLedger, PendingChanges, SyncCalendarOptions };

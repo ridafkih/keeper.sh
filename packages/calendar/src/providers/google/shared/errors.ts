@@ -46,6 +46,12 @@ const getErrorReasons = (error: GoogleApiError | undefined): string[] => {
   return reasons;
 };
 
+const getPrimaryErrorReason = (error: GoogleApiError): string | undefined => {
+  const [firstError] = error.errors ?? [];
+  const [firstDetail] = error.details ?? [];
+  return firstError?.reason ?? firstDetail?.reason ?? error.status;
+};
+
 const hasReason = (error: GoogleApiError | undefined, reasonSet: Set<string>): boolean => {
   const reasons = getErrorReasons(error);
   return reasons.some((reason) => reasonSet.has(reason));
@@ -151,6 +157,7 @@ const isGoogleWriteAccessDeniedError = (error: unknown): boolean => {
 export {
   GoogleBatchApiError,
   GoogleCalendarApiError,
+  getPrimaryErrorReason,
   hasRateLimitMessage,
   isAuthError,
   isGoogleWriteAccessDeniedError,

@@ -106,11 +106,9 @@ describe("partial remote reads", () => {
     expect(staleReasonCounts.remoteMissing).toBe(1);
     expect(operations).toEqual([
       {
-        deleteId: covered.mapping.deleteIdentifier,
         event: covered.event,
         staleMappingId: covered.mapping.id,
-        type: "replace",
-        uid: covered.mapping.destinationEventUid,
+        type: "add",
       },
     ]);
   });

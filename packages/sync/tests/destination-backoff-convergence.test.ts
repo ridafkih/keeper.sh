@@ -10,6 +10,7 @@ import type {
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 import { shouldExcludeSyncEvent } from "../../calendar/src/core/events/events";
 import { serializeGoogleEvent } from "../../calendar/src/providers/google/destination/serialize-event";
+import { createInertDeferralRedis } from "./inert-deferral-redis";
 
 const resolveSyncProviderMock = vi.fn();
 const isCalendarInvalidatedMock = vi.fn(
@@ -208,7 +209,7 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
 const config = (database: unknown, overrides: Record<string, unknown> = {}) => ({
   destinationCalendarId: CALENDAR_ID,
   database: database as never,
-  redis: {} as never,
+  redis: createInertDeferralRedis() as never,
   oauthConfig: {} as never,
   recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,

@@ -415,6 +415,7 @@ describe("createGoogleSyncProvider", () => {
     expect(result).toEqual({
       error: "You need to have writer access to this calendar.",
       errorType: "GoogleCalendarApiError",
+      reason: "requiredAccessLevel",
       statusCode: 403,
       success: false,
       writeAccessDenied: true,
@@ -433,6 +434,7 @@ describe("createGoogleSyncProvider", () => {
     expect(result).toEqual({
       error: "Rate Limit Exceeded",
       errorType: "GoogleCalendarApiError",
+      reason: "rateLimitExceeded",
       statusCode: 403,
       success: false,
     });
@@ -446,6 +448,7 @@ describe("createGoogleSyncProvider", () => {
     await expect(createProvider().deleteEvents(["keeper-event@keeper.sh"])).resolves.toEqual([{
       error: "You need to have writer access to this calendar.",
       errorType: "GoogleCalendarApiError",
+      reason: "requiredAccessLevel",
       statusCode: 403,
       success: false,
       writeAccessDenied: true,

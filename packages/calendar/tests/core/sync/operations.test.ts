@@ -511,7 +511,7 @@ describe("computeSyncOperations", () => {
   });
 
 
-  it("replaces a mapped event when the remote copy is missing", () => {
+  it("recreates a mapped event directly when the remote copy is missing", () => {
     const event = createLocalEvent({});
     const mapping = createEventMapping({
       eventStateId: event.id,
@@ -526,11 +526,9 @@ describe("computeSyncOperations", () => {
       remoteMissing: 1,
     });
     expect(result.operations).toEqual([{
-      deleteId: mapping.deleteIdentifier,
       event,
       staleMappingId: mapping.id,
-      type: "replace",
-      uid: mapping.destinationEventUid,
+      type: "add",
     }]);
   });
 
