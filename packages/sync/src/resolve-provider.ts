@@ -8,7 +8,8 @@ import {
 } from "@keeper.sh/calendar";
 import { createGoogleSyncProvider } from "@keeper.sh/calendar/google";
 import { createOutlookSyncProvider } from "@keeper.sh/calendar/outlook";
-import { createCalDAVSyncProvider } from "@keeper.sh/calendar/caldav";
+import { createCalDAVSyncProvider, createCalendarDiscoveryCache } from "@keeper.sh/calendar/caldav";
+import type { DiscoveryCacheRedis } from "@keeper.sh/calendar/caldav";
 import { resolveAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/constants";
 import { decryptPassword } from "@keeper.sh/database";
@@ -120,10 +121,12 @@ const resolveOAuthProvider = async (
 const resolveCalDAVProvider = async (
   database: BunSQLDatabase,
   calendarId: string,
+  accountId: string,
   encryptionKey: string,
   safeFetchOptions?: SafeFetchOptions,
   rateLimiter?: RedisRateLimiter,
   signal?: AbortSignal,
+  discoveryCacheRedis?: DiscoveryCacheRedis,
 ): Promise<CalendarSyncProvider | null> => {
   const [caldavCred] = await database
     .select({
@@ -147,6 +150,9 @@ const resolveCalDAVProvider = async (
 
   return createCalDAVSyncProvider({
     authMethod: resolveAuthMethod(caldavCred.authMethod),
+    ...discoveryCacheRedis && {
+      calendarDiscoveryCache: createCalendarDiscoveryCache(discoveryCacheRedis, accountId),
+    },
     calendarUrl: caldavCred.calendarUrl ?? caldavCred.serverUrl,
     destinationCalendarId: calendarId,
     rateLimiter,
@@ -174,6 +180,8 @@ interface ResolveProviderOptions {
   rateLimiter?: RedisRateLimiter;
   safeFetchOptions?: SafeFetchOptions;
   signal?: AbortSignal;
+  /* Shares the ingest path's CalDAV discovery cache, so a push does not re-walk the account. */
+  discoveryCacheRedis?: DiscoveryCacheRedis;
 }
 
 const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarSyncProvider | null> => {
@@ -195,10 +203,12 @@ const resolveSyncProvider = (options: ResolveProviderOptions): Promise<CalendarS
     return resolveCalDAVProvider(
       options.database,
       options.calendarId,
+      options.accountId,
       options.encryptionKey,
       options.safeFetchOptions,
       options.rateLimiter,
       options.signal,
+      options.discoveryCacheRedis,
     );
   }
 

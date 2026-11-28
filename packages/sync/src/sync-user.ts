@@ -914,6 +914,7 @@ const syncDestinationsForUser = async (
           calendarId: destination.calendarId,
           userId: destination.userId,
           accountId: destination.accountId,
+          discoveryCacheRedis: redis,
           oauthConfig: config.oauthConfig,
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
