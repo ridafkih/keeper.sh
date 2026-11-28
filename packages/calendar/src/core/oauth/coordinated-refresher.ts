@@ -15,11 +15,11 @@ import type { Keyring } from "@keeper.sh/database";
 import { widelog } from "widelogger";
 import { abortableSleep } from "../utils/backoff";
 import {
+  isRefreshTokenRotated,
   readCredentialAccessToken,
-  storeCredentialAccessToken,
-  storeCredentialRefreshToken,
+  storeRefreshedTokens,
 } from "./credential-tokens";
-import type { StoredAccessToken, StoredRefreshToken } from "./credential-tokens";
+import type { StoredRefreshedTokens } from "./credential-tokens";
 import { eq } from "drizzle-orm";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
 
@@ -28,10 +28,8 @@ const MS_PER_SECOND = 1000;
 const PERSIST_ATTEMPTS = 3;
 const PERSIST_BACKOFF_MS = 50;
 
-interface RefreshedCredential {
-  accessToken: StoredAccessToken;
+interface RefreshedCredential extends StoredRefreshedTokens {
   expiresAt: Date;
-  refreshToken: StoredRefreshToken;
 }
 
 const persistRefreshedCredential = async (
@@ -126,22 +124,12 @@ const createCoordinatedRefresher = (options: CoordinatedRefresherOptions) => {
           const result = await rawRefresh(refreshToken);
 
           const newExpiresAt = new Date(Date.now() + result.expires_in * MS_PER_SECOND);
-          const rotated = typeof result.refresh_token === "string"
-            && result.refresh_token !== refreshToken;
+          const rotated = isRefreshTokenRotated(result, refreshToken);
 
           try {
             await persistRefreshedCredential(database, oauthCredentialId, {
-              accessToken: storeCredentialAccessToken(
-                oauthCredentialId,
-                result.access_token,
-                keyring,
-              ),
+              ...storeRefreshedTokens(oauthCredentialId, result, refreshToken, keyring),
               expiresAt: newExpiresAt,
-              refreshToken: storeCredentialRefreshToken(
-                oauthCredentialId,
-                result.refresh_token ?? refreshToken,
-                keyring,
-              ),
             });
           } catch (error) {
             widelog.set("token.rotation_lost", rotated);

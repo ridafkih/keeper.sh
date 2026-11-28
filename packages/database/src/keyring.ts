@@ -101,8 +101,16 @@ const resolveKeys = (options: KeyringOptions): ResolvedKeys => {
   return { byId, ordered, primary: ordered[0] ?? null };
 };
 
+const isUsableKey = (encodedKey: string | undefined): boolean => {
+  const trimmedKey = encodedKey?.trim();
+  if (!trimmedKey) {
+    return false;
+  }
+  return decodeKey(trimmedKey)?.length === secretbox.keyLength;
+};
+
 const createKeyring = (options: KeyringOptions = {}): Keyring => {
-  const encryptOnWrite = options.encryptOnWrite ?? false;
+  const encryptOnWrite = options.encryptOnWrite ?? isUsableKey(options.primaryKey);
   let resolved: ResolvedKeys | null = null;
 
   const resolve = (): ResolvedKeys => {

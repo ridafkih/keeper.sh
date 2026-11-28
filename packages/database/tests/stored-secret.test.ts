@@ -424,24 +424,28 @@ describe("values stored before the versioned format", () => {
   });
 });
 
-describe("writing before encryption on write is enabled", () => {
-  it("stores tokens exactly as given", () => {
-    const keyring = createKeyring({ primaryKey: generateKey() });
-    const stored = sealSecret("oauth_credentials.accessToken", ACCESS_TOKEN, keyring, ROW_ID);
+describe("writing without a usable key", () => {
+  it("stores tokens exactly as given when no key is set", () => {
+    const stored = sealSecret("oauth_credentials.accessToken", ACCESS_TOKEN, createKeyring(), ROW_ID);
 
     expect(storedSecretValue(stored)).toBe(ACCESS_TOKEN);
     expect(storedSecretValue(sealSecret("oauth_credentials.refreshToken", "1//r", createKeyring(), ROW_ID)))
       .toBe("1//r");
   });
 
-  it("stores passwords in the original two-part format", () => {
-    const keyring = createKeyring({ primaryKey: generateKey() });
-    const stored = sealSecret("caldav_credentials.encryptedPassword", "hunter2", keyring, ROW_ID);
+  it("stores tokens exactly as given when the key cannot be used", () => {
+    const keyring = createKeyring({ primaryKey: "not-a-key" });
 
-    expect(isSecretVersioned(stored)).toBe(false);
-    expect(storedSecretValue(stored).split(":")).toHaveLength(2);
-    expect(storedSecretValue(stored)).not.toContain("hunter2");
-    expect(openSecret(stored, keyring, OTHER_ROW_ID)).toBe("hunter2");
+    expect(keyring.encryptOnWrite).toBe(false);
+    expect(storedSecretValue(sealSecret("oauth_credentials.accessToken", ACCESS_TOKEN, keyring, ROW_ID)))
+      .toBe(ACCESS_TOKEN);
+  });
+
+  it("refuses to store a password when the key cannot be used", () => {
+    const keyring = createKeyring({ primaryKey: "not-a-key" });
+
+    expect(() => sealSecret("caldav_credentials.encryptedPassword", "hunter2", keyring, ROW_ID))
+      .toThrow(KeyringConfigurationError);
   });
 
   it("refuses to store a password without a key", () => {
@@ -452,6 +456,44 @@ describe("writing before encryption on write is enabled", () => {
   it("refuses to store a token that would be mistaken for an encrypted value", () => {
     expect(() => sealSecret("oauth_credentials.accessToken", "enc:v1:forged", createKeyring(), ROW_ID))
       .toThrow(SecretEncryptionError);
+  });
+});
+
+describe("writing with a key", () => {
+  it("encrypts tokens and passwords without being asked to", () => {
+    const keyring = createKeyring({ primaryKey: generateKey() });
+    const token = sealSecret("oauth_credentials.accessToken", ACCESS_TOKEN, keyring, ROW_ID);
+    const password = sealSecret("caldav_credentials.encryptedPassword", "hunter2", keyring, ROW_ID);
+
+    expect(keyring.encryptOnWrite).toBe(true);
+    expect(isSecretVersioned(token)).toBe(true);
+    expect(isSecretVersioned(password)).toBe(true);
+    expect(openSecret(token, keyring, ROW_ID)).toBe(ACCESS_TOKEN);
+    expect(openSecret(password, keyring, ROW_ID)).toBe("hunter2");
+  });
+
+  it("rejects a decrypt-only key that cannot be used as soon as the keyring is created", () => {
+    expect(() => createKeyring({ decryptOnlyKeys: "not-a-key", primaryKey: generateKey() }))
+      .toThrow(KeyringConfigurationError);
+  });
+});
+
+describe("writing with encryption on write turned off", () => {
+  it("stores tokens exactly as given", () => {
+    const keyring = createKeyring({ encryptOnWrite: false, primaryKey: generateKey() });
+    const stored = sealSecret("oauth_credentials.accessToken", ACCESS_TOKEN, keyring, ROW_ID);
+
+    expect(storedSecretValue(stored)).toBe(ACCESS_TOKEN);
+  });
+
+  it("stores passwords in the original two-part format", () => {
+    const keyring = createKeyring({ encryptOnWrite: false, primaryKey: generateKey() });
+    const stored = sealSecret("caldav_credentials.encryptedPassword", "hunter2", keyring, ROW_ID);
+
+    expect(isSecretVersioned(stored)).toBe(false);
+    expect(storedSecretValue(stored).split(":")).toHaveLength(2);
+    expect(storedSecretValue(stored)).not.toContain("hunter2");
+    expect(openSecret(stored, keyring, OTHER_ROW_ID)).toBe("hunter2");
   });
 });
 
