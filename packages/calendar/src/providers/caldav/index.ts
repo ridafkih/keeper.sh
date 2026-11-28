@@ -8,6 +8,7 @@ export {
 export { createCalDAVSourceFetcher, type CalDAVSourceFetcherConfig } from "./source/fetch-adapter";
 export { isCalDAVAuthenticationError } from "./source/auth-error-classification";
 export { createCalDAVSyncProvider, type CalDAVSyncProviderConfig } from "./destination/provider";
+export { CalDAVWriteRefusedError } from "./destination/write-authentication-latch";
 
 export { createCalDAVSourceProvider } from "./source/provider";
 export { createCalDAVSourceService } from "./source/sync";

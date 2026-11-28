@@ -24,15 +24,6 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
 
   class MockCalDAVCreateConflictError extends MockCalDAVHttpError {}
 
-  class MockCalDAVAuthenticationError extends Error {
-    readonly status = 401;
-
-    constructor(cause: unknown) {
-      super("Invalid credentials", { cause });
-      this.name = "CalDAVAuthenticationError";
-    }
-  }
-
   const write = async (): Promise<void> => {
     server.writes += 1;
     await Promise.resolve();
@@ -51,7 +42,6 @@ vi.mock("../../../../src/providers/caldav/shared/client", () => {
   }
 
   return {
-    CalDAVAuthenticationError: MockCalDAVAuthenticationError,
     CalDAVClient,
     CalDAVCreateConflictError: MockCalDAVCreateConflictError,
     CalDAVHttpError: MockCalDAVHttpError,
@@ -89,10 +79,9 @@ describe("a CalDAV destination that refuses the login on a write", () => {
     server.writes = 0;
   });
 
-  it("stops adding after the writes already in flight and fails the run as an authentication failure", async () => {
+  it("stops adding after the writes already in flight and fails the batch as a refused write", async () => {
     await expect(createProvider().pushEvents(createEvents())).rejects.toMatchObject({
-      message: "Invalid credentials",
-      name: "CalDAVAuthenticationError",
+      name: "CalDAVWriteRefusedError",
     });
     expect(server.writes).toBeLessThanOrEqual(WRITE_CONCURRENCY);
   });
@@ -104,7 +93,7 @@ describe("a CalDAV destination that refuses the login on a write", () => {
     }));
 
     await expect(createProvider().updateEvents(updates)).rejects.toMatchObject({
-      name: "CalDAVAuthenticationError",
+      name: "CalDAVWriteRefusedError",
     });
     expect(server.writes).toBeLessThanOrEqual(WRITE_CONCURRENCY);
   });
@@ -113,7 +102,7 @@ describe("a CalDAV destination that refuses the login on a write", () => {
     const deleteIds = createEvents().map((event) => `/calendar/${event.id}.ics`);
 
     await expect(createProvider().deleteEvents(deleteIds)).rejects.toMatchObject({
-      name: "CalDAVAuthenticationError",
+      name: "CalDAVWriteRefusedError",
     });
     expect(server.writes).toBeLessThanOrEqual(WRITE_CONCURRENCY);
   });

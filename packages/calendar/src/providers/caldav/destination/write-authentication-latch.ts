@@ -1,6 +1,11 @@
-import { CalDAVAuthenticationError } from "../shared/client";
-
 const HTTP_UNAUTHORIZED = 401;
+
+class CalDAVWriteRefusedError extends Error {
+  constructor(cause: Error) {
+    super("CalDAV server refused a write with 401, so the run stopped writing", { cause });
+    this.name = "CalDAVWriteRefusedError";
+  }
+}
 
 const hasUnauthorizedStatus = (error: Error): boolean =>
   "status" in error && error.status === HTTP_UNAUTHORIZED;
@@ -30,11 +35,11 @@ const createWriteAuthenticationLatch = () => {
 
   const throwIfRefused = (): void => {
     if (refusal) {
-      throw new CalDAVAuthenticationError(refusal);
+      throw new CalDAVWriteRefusedError(refusal);
     }
   };
 
   return { isRefused, noteFailure, throwIfRefused };
 };
 
-export { createWriteAuthenticationLatch };
+export { CalDAVWriteRefusedError, createWriteAuthenticationLatch };
