@@ -49,6 +49,7 @@ import type { DestinationAttemptVerdict } from "./destination-errors";
 import { countEventsBySource, describeFirstSync } from "./first-sync-report";
 import { resolveSyncProvider } from "./resolve-provider";
 import { withPushPace } from "./push-pace";
+import { createRedisOperationDeferralLedger } from "./operation-deferral-store";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
@@ -1091,6 +1092,7 @@ const syncDestinationsForUser = async (
           isCurrent: isAttemptCurrent,
           flush: createDatabaseFlush(database),
           onProgress: withPushPace(destination.provider, callbacks?.onProgress),
+          operationDeferral: createRedisOperationDeferralLedger(config.redis, destination.calendarId),
           onSyncEvent: (event) => {
             const enrichedEvent = {
               ...event,

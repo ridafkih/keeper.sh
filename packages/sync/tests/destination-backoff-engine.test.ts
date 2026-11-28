@@ -7,6 +7,7 @@ import type {
   RemoteEvent,
 } from "@keeper.sh/calendar";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
+import { createInertDeferralRedis } from "./inert-deferral-redis";
 
 const resolveSyncProviderMock = vi.fn();
 const isCalendarInvalidatedMock = vi.fn(
@@ -174,7 +175,7 @@ const createHarness = (initial: Partial<CalendarRow> = {}) => {
 const config = (database: unknown, overrides: Record<string, unknown> = {}) => ({
   destinationCalendarId: CALENDAR_ID,
   database: database as never,
-  redis: {} as never,
+  redis: createInertDeferralRedis() as never,
   oauthConfig: {} as never,
   recordFirstSyncs: () => Promise.resolve([]),
   plan: "pro" as never,
