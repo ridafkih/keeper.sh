@@ -23,11 +23,12 @@ import { withBackoff } from "../../../core/utils/backoff";
 import { executeBatchChunked } from "../shared/batch";
 import {
   GoogleCalendarApiError,
+  getPrimaryErrorReason,
   isRateLimitApiError,
   isWriteAccessDeniedApiError,
   parseGoogleApiErrorFromBody,
 } from "../shared/errors";
-import type { BatchSubRequest, BatchSubResponse } from "../shared/batch";
+import type { BatchConflictCounts, BatchSubRequest, BatchSubResponse } from "../shared/batch";
 import { parseEventTime } from "../shared/date-time";
 import { normalizeGoogleEvent } from "./normalize-event";
 import { serializeGoogleEvent } from "./serialize-event";
@@ -61,13 +62,16 @@ const extractBatchErrorMessage = (body: unknown, fallbackStatus: number): string
 };
 
 const createFailedSubResponseResult = (response: BatchSubResponse): PushResult & DeleteResult => {
+  const apiError = parseGoogleApiErrorFromBody(response.body);
+  const reason = getPrimaryErrorReason(apiError);
   const result = {
     error: extractBatchErrorMessage(response.body, response.statusCode),
     errorType: "GoogleCalendarApiError",
+    ...(reason && { reason }),
     statusCode: response.statusCode,
     success: false,
   };
-  if (isWriteAccessDeniedApiError(response.statusCode, parseGoogleApiErrorFromBody(response.body))) {
+  if (isWriteAccessDeniedApiError(response.statusCode, apiError)) {
     return { ...result, writeAccessDenied: true };
   }
   return result;
@@ -236,6 +240,25 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
     }
   };
 
+  const conflictCounts: BatchConflictCounts = { retriedInBatch: 0, retriedIndividually: 0, unresolved: 0 };
+  const batchOptions = {
+    conflictCounts,
+    rateLimiter: config.rateLimiter,
+    signal: config.signal,
+    timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS,
+  };
+
+  const getSyncDiagnostics = (): Record<string, number | string> => {
+    if (conflictCounts.retriedInBatch + conflictCounts.retriedIndividually === 0) {
+      return {};
+    }
+    return {
+      "provider.google.conflict_retried_in_batch_count": conflictCounts.retriedInBatch,
+      "provider.google.conflict_retried_individually_count": conflictCounts.retriedIndividually,
+      "provider.google.conflict_unresolved_count": conflictCounts.unresolved,
+    };
+  };
+
   const eventsPath = `/calendar/v3/calendars/${encodeURIComponent(config.externalCalendarId)}/events`;
 
   // Writes go through events.import, which upserts by iCalUID: re-pushing an existing event updates it rather than 409ing.
@@ -297,7 +320,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, batchOptions);
 
     for (const entry of pending) {
       const response = responses[entry.batchIndex];
@@ -360,7 +383,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       path: `${eventsPath}?iCalUID=${encodeURIComponent(uid)}`,
     }));
 
-    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+    const findResponses = await executeBatchChunked(findSubRequests, tokenState.accessToken, batchOptions);
 
     for (let findIndex = 0; findIndex < lookupIds.length; findIndex++) {
       const originalIndex = lookupOriginalIndices[findIndex];
@@ -402,7 +425,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       return results;
     }
 
-    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+    const deleteResponses = await executeBatchChunked(subRequests, tokenState.accessToken, batchOptions);
 
     for (let deleteIndex = 0; deleteIndex < deleteResponses.length; deleteIndex++) {
       const originalIndex = indexMap[deleteIndex];
@@ -520,7 +543,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
       path: `${eventsPath}/${encodeURIComponent(eventId)}`,
     }));
 
-    const responses = await executeBatchChunked(requests, tokenState.accessToken, { rateLimiter: config.rateLimiter, signal: config.signal, timeoutMs: PROVIDER_PUSH_REQUEST_TIMEOUT_MS });
+    const responses = await executeBatchChunked(requests, tokenState.accessToken, batchOptions);
 
     const remoteEvents: RemoteEvent[] = [];
     for (let index = 0; index < eventIds.length; index++) {
@@ -552,6 +575,7 @@ const createGoogleSyncProvider = (config: GoogleSyncProviderConfig) => {
   return {
     deleteEvents,
     getRemoteEventsByIds,
+    getSyncDiagnostics,
     listRemoteEvents,
     normalizeEvent: normalizeGoogleEvent,
     pushEvents,
