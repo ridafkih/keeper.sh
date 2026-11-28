@@ -6,6 +6,7 @@ import type {
   PushResult,
   RemoteEvent,
 } from "@keeper.sh/calendar";
+import { CalDAVAuthenticationError } from "@keeper.sh/calendar/caldav";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 
 const resolveSyncProviderMock = vi.fn();
@@ -740,5 +741,28 @@ describe("first syncs recorded by a destination run", () => {
       "first_sync.events_add_failed": 1,
       "first_sync.outcome": "destination-rejected",
     })]);
+  });
+});
+
+describe("a destination that refuses the login on a write", () => {
+  it("ends the run at the refused chunk and backs the destination off", async () => {
+    const { database, row } = createHarness();
+    localEventsMock.mockImplementation(() =>
+      Array.from({ length: 120 }, (_value, index) =>
+        makeEvent(`ev-${index}`, new Date(2026, 2, 10, 9, 0, 0))));
+    let pushCalls = 0;
+    setProvider({
+      pushEvents: () => {
+        pushCalls += 1;
+        return Promise.reject(new CalDAVAuthenticationError(new Error("CalDAV create failed: 401")));
+      },
+    });
+
+    const result = await syncDestinationsForUser(USER_ID, config(database));
+
+    expect(pushCalls).toBe(1);
+    expect(result.errors).toEqual(["Invalid credentials"]);
+    expect(row.failureCount).toBe(1);
+    expect(row.nextAttemptAt).toEqual(new Date(START.getTime() + FIVE_MINUTES_MS));
   });
 });
