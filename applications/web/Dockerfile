@@ -33,6 +33,7 @@ RUN chmod +x ./applications/web/entrypoint.sh
 WORKDIR /app/applications/web
 
 ENV ENV=production
+ENV STDOUT_LOG_LEVEL=warn
 EXPOSE 3000
 
 ARG COMMIT_SHA
