@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "migrate": {
-      "passThroughEnv": ["DATABASE_URL"]
+      "passThroughEnv": ["DATABASE_URL", "ENCRYPTION_KEY", "ENCRYPTION_KEYS_DECRYPT_ONLY"]
     }
   }
 }

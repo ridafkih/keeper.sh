@@ -372,6 +372,31 @@ describe("keyring", () => {
     expect(openSecret(stored, keyring, ROW_ID)).toBe(ACCESS_TOKEN);
   });
 
+  it("names the setting and position of a malformed key, and never the key", () => {
+    const malformed = "not-a-32-byte-key";
+    const usable = generateKey();
+    const readProblem = (options: { decryptOnlyKeys?: string; primaryKey: string }): string => {
+      try {
+        createKeyring(options).resolve();
+      } catch (error) {
+        return `${String(error)} ${JSON.stringify(error)} ${Bun.inspect(error)}`;
+      }
+      return "";
+    };
+
+    const primary = readProblem({ primaryKey: malformed });
+    const decryptOnly = readProblem({
+      decryptOnlyKeys: `${generateKey()}, ,${malformed}`,
+      primaryKey: usable,
+    });
+
+    expect(primary).toContain("ENCRYPTION_KEY must be 32 bytes (base64 encoded)");
+    expect(decryptOnly)
+      .toContain("ENCRYPTION_KEYS_DECRYPT_ONLY entry 2 must be 32 bytes (base64 encoded)");
+    expect(`${primary}${decryptOnly}`).not.toContain(malformed);
+    expect(decryptOnly).not.toContain(usable);
+  });
+
   it("refuses decrypt-only keys without a primary key", () => {
     expect(() => createKeyring({ decryptOnlyKeys: generateKey() }).resolve())
       .toThrow(KeyringConfigurationError);

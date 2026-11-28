@@ -48,12 +48,16 @@ const decodeKey = (encodedKey: string): Uint8Array | null => {
   }
 };
 
-const deriveEncryptionKey = (encodedKey: string): EncryptionKey => {
+const PRIMARY_KEY_SETTING = "ENCRYPTION_KEY";
+const DECRYPT_ONLY_KEYS_SETTING = "ENCRYPTION_KEYS_DECRYPT_ONLY";
+
+const describeUnusableKey = (source: string): string =>
+  `${source} must be ${secretbox.keyLength} bytes (base64 encoded)`;
+
+const deriveEncryptionKey = (encodedKey: string, source: string): EncryptionKey => {
   const legacyKey = decodeKey(encodedKey);
   if (legacyKey?.length !== secretbox.keyLength) {
-    throw new KeyringConfigurationError(
-      `Encryption key must be ${secretbox.keyLength} bytes (base64 encoded)`,
-    );
+    throw new KeyringConfigurationError(describeUnusableKey(source));
   }
 
   return {
@@ -86,11 +90,19 @@ const resolveKeys = (options: KeyringOptions): ResolvedKeys => {
   const ordered: EncryptionKey[] = [];
   const byId = new Map<string, EncryptionKey>();
 
-  for (const encodedKey of [primaryKey, ...decryptOnlyKeys]) {
+  const sources = [
+    { encodedKey: primaryKey, source: PRIMARY_KEY_SETTING },
+    ...decryptOnlyKeys.map((encodedKey, index) => ({
+      encodedKey,
+      source: `${DECRYPT_ONLY_KEYS_SETTING} entry ${index + 1}`,
+    })),
+  ];
+
+  for (const { encodedKey, source } of sources) {
     if (!encodedKey) {
       continue;
     }
-    const key = deriveEncryptionKey(encodedKey);
+    const key = deriveEncryptionKey(encodedKey, source);
     if (byId.has(key.id)) {
       continue;
     }
