@@ -5,7 +5,6 @@ import type { TraceCarrier } from "@keeper.sh/otelemetry/tracing";
 import type { Plan } from "@keeper.sh/data-schemas";
 
 const PUSH_SYNC_QUEUE_NAME = "push-sync-v2";
-const USER_TIMEOUT_MS = 300_000;
 
 type PushSyncTrigger = "cron" | "push";
 
@@ -86,5 +85,5 @@ const createPushSyncQueue = (connection: ConnectionOptions): PushSyncQueue =>
     },
   });
 
-export { PUSH_SYNC_QUEUE_NAME, USER_TIMEOUT_MS, PushSyncQueue, createPushSyncQueue, resolvePushSyncJobId };
+export { PUSH_SYNC_QUEUE_NAME, PushSyncQueue, createPushSyncQueue, resolvePushSyncJobId };
 export type { PushSyncJobPayload, PushSyncJobResult, PushSyncTrigger };

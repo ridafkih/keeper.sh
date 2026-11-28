@@ -1,12 +1,13 @@
 import { createHeartbeat } from "@keeper.sh/heartbeat";
-import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
 import { HEARTBEAT_FILE_PATH } from "./utils/heartbeat-file";
 import { context, widelog } from "./utils/logging";
 import { createJobFlow, probeQueue } from "./queue-progress";
+import { resolveRunSettleTimeoutMs } from "./utils/run-deadline";
 import type { JobFlow } from "./queue-progress";
 
 const QUEUE_STALE_AFTER_MS = 900_000;
-const JOB_STALL_AFTER_MS = 2 * USER_TIMEOUT_MS;
+const JOB_STALL_AFTER_MS = resolveRunSettleTimeoutMs(PUSH_SYNC_DEADLINE_POLICY);
 const PROBE_INTERVAL_MS = 30_000;
 const PING_TIMEOUT_MS = 10_000;
 

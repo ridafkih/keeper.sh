@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
 
 const recordedRequests = vi.hoisted((): { userId: unknown }[] => []);
-const scenario = vi.hoisted(() => ({ checkpointed: 0, deadlineFires: true }));
+const scenario = vi.hoisted(() => ({ checkpointed: 0, deadlineFires: true, plannedOperations: 0 }));
 
 vi.mock("../src/utils/logging", () => ({
   context: (run: () => Promise<unknown>) => run(),
@@ -51,12 +51,20 @@ vi.mock("@keeper.sh/broadcast", () => ({
 
 interface ProgressHandlers {
   onProgress: (update: Record<string, unknown>) => void;
+  onWritesPlanned: (plan: { calendarId: string; operationCount: number; requestsPerMinute: number | null }) => void;
 }
 
 vi.mock("@keeper.sh/sync", () => ({
   SyncLockRenewalError: class SyncLockRenewalError extends Error {},
   recordFirstSyncedMappings: () => Promise.resolve([]),
   syncDestinationsForUser: (_userId: string, _options: unknown, handlers: ProgressHandlers) => {
+    if (scenario.plannedOperations > 0) {
+      handlers.onWritesPlanned({
+        calendarId: "calendar-1",
+        operationCount: scenario.plannedOperations,
+        requestsPerMinute: 240,
+      });
+    }
     if (scenario.checkpointed > 0) {
       handlers.onProgress({
         calendarId: "calendar-1",
@@ -67,7 +75,7 @@ vi.mock("@keeper.sh/sync", () => ({
       });
     }
     if (scenario.deadlineFires) {
-      vi.advanceTimersByTime(USER_TIMEOUT_MS + 1);
+      vi.advanceTimersByTime(PUSH_SYNC_DEADLINE_POLICY.floorMs + 1);
     }
     return Promise.resolve({
       added: 0,
@@ -96,6 +104,7 @@ beforeEach(() => {
   recordedRequests.length = 0;
   scenario.checkpointed = 0;
   scenario.deadlineFires = true;
+  scenario.plannedOperations = 0;
   vi.useFakeTimers();
 });
 
@@ -111,6 +120,16 @@ describe("a push sync cut short by its deadline", () => {
 
     expect(recordedRequests).toEqual([{ userId: "user-1" }]);
     expect(result.continuationRequested).toBe(true);
+  });
+
+  it("lets a run with a large plan of writes outlive the floor", async () => {
+    scenario.checkpointed = 250;
+    scenario.plannedOperations = 2400;
+
+    const result = await runJob();
+
+    expect(recordedRequests).toEqual([]);
+    expect(result.continuationRequested).toBe(false);
   });
 
   it("leaves the next run to the schedule when nothing was checkpointed", async () => {

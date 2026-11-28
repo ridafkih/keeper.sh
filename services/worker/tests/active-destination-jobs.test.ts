@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
+import { resolveRunSettleTimeoutMs } from "../src/utils/run-deadline";
 import {
   createActiveDestinationJobs,
   DEFAULT_RELEASE_DELAY_MS,
@@ -10,6 +12,7 @@ const createHarness = () => {
   const tracker = createActiveDestinationJobs({
     beginUserRun,
     releaseUserRun,
+    stalledJobTimeoutMs: resolveRunSettleTimeoutMs(PUSH_SYNC_DEADLINE_POLICY),
   });
   return { beginUserRun, releaseUserRun, tracker };
 };
