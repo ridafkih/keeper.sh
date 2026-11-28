@@ -8,7 +8,7 @@ interface ActiveDestinationJobsConfig {
   beginUserRun: (userId: string) => void;
   releaseDelayMs?: number;
   releaseUserRun: (userId: string) => void;
-  stalledJobTimeoutMs?: number;
+  stalledJobTimeoutMs: number;
 }
 
 interface ActiveDestinationJobs {
@@ -18,12 +18,6 @@ interface ActiveDestinationJobs {
 }
 
 const DEFAULT_RELEASE_DELAY_MS = 2000;
-/*
- * BullMQ emits `completed`/`failed` only after a Redis round-trip that can reject,
- * so a job can go active and never settle on this worker. Without a watchdog its
- * entry pins the user's syncing hold until the process restarts.
- */
-const DEFAULT_STALLED_JOB_TIMEOUT_MS = 600_000;
 
 const createActiveDestinationJobs = (
   config: ActiveDestinationJobsConfig,
@@ -33,7 +27,7 @@ const createActiveDestinationJobs = (
   const releaseTimersByUser = new Map<string, ReturnType<typeof setTimeout>>();
   const stalledTimersByCalendar = new Map<string, ReturnType<typeof setTimeout>>();
   const releaseDelayMs = config.releaseDelayMs ?? DEFAULT_RELEASE_DELAY_MS;
-  const stalledJobTimeoutMs = config.stalledJobTimeoutMs ?? DEFAULT_STALLED_JOB_TIMEOUT_MS;
+  const { stalledJobTimeoutMs } = config;
 
   const clearStalledWatchdog = (calendarId: string): void => {
     const timer = stalledTimersByCalendar.get(calendarId);
@@ -82,6 +76,11 @@ const createActiveDestinationJobs = (
     releaseTimersByUser.set(job.userId, timer);
   };
 
+  /*
+   * BullMQ emits `completed`/`failed` only after a Redis round-trip that can reject,
+   * so a job can go active and never settle on this worker. Without a watchdog its
+   * entry pins the user's syncing hold until the process restarts.
+   */
   const armStalledWatchdog = (job: ActiveDestinationJob): void => {
     clearStalledWatchdog(job.calendarId);
     const timer = setTimeout(() => {

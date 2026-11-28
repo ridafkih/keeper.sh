@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
 
 interface WideEvent {
   values: Record<string, unknown>;
@@ -121,7 +121,7 @@ vi.mock("@keeper.sh/sync", () => ({
     });
 
     clock.ms += DEADLINE_OVERRUN_MS;
-    vi.advanceTimersByTime(USER_TIMEOUT_MS + 1);
+    vi.advanceTimersByTime(PUSH_SYNC_DEADLINE_POLICY.floorMs + 1);
 
     return Promise.resolve({
       added: 1,

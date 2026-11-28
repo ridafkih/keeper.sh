@@ -28,6 +28,7 @@ interface RedisRateLimiter {
   acquire(count: number, signal?: AbortSignal): Promise<void>;
   acquirePermit?(signal?: AbortSignal): Promise<RateLimiterPermit>;
   reportThrottle?(retryAfterMs: number | null): Promise<void>;
+  currentRequestsPerMinute?(): Promise<number>;
 }
 
 interface RedisRateLimiterConfig {
@@ -293,7 +294,9 @@ const createRedisRateLimiter = (
     }
   };
 
-  return { acquire };
+  const currentRequestsPerMinute = (): Promise<number> => Promise.resolve(requestsPerMinute);
+
+  return { acquire, currentRequestsPerMinute };
 };
 
 type GoogleRateLimitLane = "ingest" | "push";
@@ -347,13 +350,18 @@ const withGoogleProjectBudget = (
   if (requestsPerMinute === null) {
     return userLimiter;
   }
+  const backgroundRequestsPerMinute = Math.max(1, Math.floor(requestsPerMinute * GOOGLE_BACKGROUND_SHARE_OF_PROJECT));
   const projectLimiter = createRedisRateLimiter(redis, GOOGLE_PROJECT_RATE_LIMIT_KEY, {
-    requestsPerMinute: Math.max(1, Math.floor(requestsPerMinute * GOOGLE_BACKGROUND_SHARE_OF_PROJECT)),
+    requestsPerMinute: backgroundRequestsPerMinute,
   });
   return {
     acquire: async (count, signal) => {
       await userLimiter.acquire(count, signal);
       await projectLimiter.acquire(count, signal);
+    },
+    currentRequestsPerMinute: async () => {
+      const userRequestsPerMinute = await userLimiter.currentRequestsPerMinute?.();
+      return Math.min(userRequestsPerMinute ?? backgroundRequestsPerMinute, backgroundRequestsPerMinute);
     },
   };
 };

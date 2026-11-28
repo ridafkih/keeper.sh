@@ -1,6 +1,6 @@
 import type { Job } from "bullmq";
 import type { PushSyncJobPayload, PushSyncJobResult } from "@keeper.sh/queue";
-import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
 import type { DestinationSyncResult } from "@keeper.sh/calendar";
 import {
   createMappingSyncStatePublisher,
@@ -24,6 +24,7 @@ import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
 import { createEventsCopiedMilestone } from "./utils/user-milestones";
 import { shouldContinueAfterDeadline } from "./utils/sync-continuation";
+import { createRunDeadline } from "./utils/run-deadline";
 import env from "./env";
 import { safeFetchOptions } from "./utils/safe-fetch-options";
 
@@ -271,10 +272,7 @@ const processJob = (
       widelog.set("push_sync.reflect_ms", Math.max(0, Date.now() - webhookReceivedAt));
     };
 
-    const deadlineMs = Date.now() + USER_TIMEOUT_MS;
-
-    const deadlineController = new AbortController();
-    const deadlineTimer = setTimeout(() => deadlineController.abort(), USER_TIMEOUT_MS);
+    const runDeadline = createRunDeadline(PUSH_SYNC_DEADLINE_POLICY);
     const jobStartedAt = performance.now();
     let calendarOutcomeReported = false;
     const pendingDestinationSyncs: Promise<void>[] = [];
@@ -285,7 +283,7 @@ const processJob = (
         .reduce((total, operations) => total + operations, 0);
       if (!shouldContinueAfterDeadline({
         checkpointedOperations,
-        deadlineReached: deadlineController.signal.aborted,
+        deadlineReached: runDeadline.signal.aborted,
       })) {
         return false;
       }
@@ -300,13 +298,13 @@ const processJob = (
     };
 
     try {
-      const abortSignal = mergeAbortSignals(deadlineController.signal, signal);
+      const abortSignal = mergeAbortSignals(runDeadline.signal, signal);
       const result = await syncDestinationsForUser(userId, {
         destinationCalendarId: calendarId,
         database,
         redis: refreshLockRedis,
         refreshLockStore,
-        deadlineMs,
+        resolveDeadlineMs: runDeadline.deadlineAt,
         abortSignal,
         encryptionKey: env.ENCRYPTION_KEY,
         googleProjectRequestsPerMinute: env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
@@ -321,6 +319,14 @@ const processJob = (
         recordFirstSyncs: (destinationCalendarId, sourceCalendarIds) =>
           recordFirstSyncedMappings(database, destinationCalendarId, sourceCalendarIds),
       }, {
+        onWritesPlanned: (plannedWrites) => {
+          runDeadline.planWrites(plannedWrites);
+          widelog.set("push_sync.planned_operations", plannedWrites.operationCount);
+          if (plannedWrites.requestsPerMinute !== null) {
+            widelog.set("push_sync.planned_requests_per_minute", plannedWrites.requestsPerMinute);
+          }
+          widelog.set("push_sync.deadline_budget_ms", runDeadline.budgetMs());
+        },
         onProgress: (update) => {
           if (signal?.aborted) {
             return;
@@ -452,11 +458,11 @@ const processJob = (
       throw error;
     } finally {
       await Promise.all(pendingDestinationSyncs);
-      clearTimeout(deadlineTimer);
-      if (deadlineController.signal.aborted) {
+      runDeadline.clear();
+      if (runDeadline.signal.aborted) {
         widelog.set("timeout.fired", true);
         widelog.set("timeout.kind", "job_deadline");
-        widelog.set("timeout.limit_ms", USER_TIMEOUT_MS);
+        widelog.set("timeout.limit_ms", runDeadline.budgetMs());
         widelog.set("error.slug", "sync-deadline-exceeded");
       }
       recordReflectMs();

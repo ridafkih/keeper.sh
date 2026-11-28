@@ -131,7 +131,7 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   return {
     ...original,
     createDatabaseFlush: () => () => Promise.resolve(),
-    createGoogleUserRateLimiter: () => null,
+    createGoogleUserRateLimiter: () => ({ acquire: () => Promise.resolve() }),
     getEventMappingsForDestination: () => Promise.resolve([]),
     getEventsForCalendarsWithDiagnostics: () => Promise.resolve({
       diagnostics: {

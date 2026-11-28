@@ -9,7 +9,9 @@ import {
   createMigrationReadinessDatabase,
   waitForDatabaseMigrations,
 } from "@keeper.sh/database";
+import { PUSH_SYNC_DEADLINE_POLICY } from "@keeper.sh/constants";
 import { processJob } from "./processor";
+import { resolveRunSettleTimeoutMs } from "./utils/run-deadline";
 import { createActiveDestinationJobs } from "./active-destination-jobs";
 import { enqueueSyncContinuation, requestsContinuation } from "./utils/sync-continuation";
 import { context, destroy, widelog } from "./utils/logging";
@@ -119,6 +121,7 @@ await entry({
       releaseUserRun: (userId) => {
         syncAggregateRuntime.releaseSyncing(userId);
       },
+      stalledJobTimeoutMs: resolveRunSettleTimeoutMs(PUSH_SYNC_DEADLINE_POLICY),
     });
 
     worker.on("active", (job) => {

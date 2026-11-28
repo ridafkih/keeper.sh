@@ -99,6 +99,7 @@ const parseState = (raw: unknown): AccountThrottleState => {
 
 interface AdaptiveAccountLimiter extends RedisRateLimiter {
   reportThrottle(retryAfterMs: number | null): Promise<void>;
+  currentRequestsPerMinute(): Promise<number>;
 }
 
 interface AdaptiveAccountLimiterOptions {
@@ -137,6 +138,11 @@ const createAdaptiveAccountLimiter = (
     await measureSegment("wait.account_cooldown_ms", () => sleep(remainingMs, signal));
   };
 
+  const currentRequestsPerMinute = async (): Promise<number> => {
+    const state = await readState();
+    return resolveRequestsPerMinute(resolveEffectiveLevel(state, now(), policy), policy);
+  };
+
   const acquire = async (count: number, signal?: AbortSignal): Promise<void> => {
     const state = await readState();
     await waitOutCooldown(state, signal);
@@ -166,7 +172,7 @@ const createAdaptiveAccountLimiter = (
     ));
   };
 
-  return { acquire, reportThrottle };
+  return { acquire, currentRequestsPerMinute, reportThrottle };
 };
 
 const createAdaptiveCalDAVAccountLimiter = (

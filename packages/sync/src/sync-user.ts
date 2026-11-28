@@ -49,6 +49,8 @@ import type { DestinationAttemptVerdict } from "./destination-errors";
 import { countEventsBySource, describeFirstSync } from "./first-sync-report";
 import { resolveSyncProvider } from "./resolve-provider";
 import { withPushPace } from "./push-pace";
+import { resolvePushRequestsPerMinute, withPlannedPushWrites } from "./push-write-plan";
+import type { PlannedPushWritesListener } from "./push-write-plan";
 import type { OAuthConfig } from "./resolve-provider";
 import {
   createMappingMutationLockId,
@@ -146,7 +148,7 @@ interface SyncConfig {
   recordFirstSyncs: (destinationCalendarId: string, sourceCalendarIds: string[]) => Promise<string[]>;
   refreshLockStore?: RefreshLockStore | null;
   safeFetchOptions?: SafeFetchOptions;
-  deadlineMs?: number;
+  resolveDeadlineMs?: () => number;
   abortSignal?: AbortSignal;
 }
 
@@ -641,6 +643,7 @@ interface SyncCallbacks {
   onCalendarComplete?: (completion: CalendarSyncCompletion) => void;
   onCalendarError?: (failure: CalendarSyncFailure) => void;
   onCalendarSkipped?: (skip: DestinationSyncSkip) => void;
+  onWritesPlanned?: PlannedPushWritesListener;
 }
 
 interface DestinationAttempt {
@@ -699,10 +702,10 @@ const isDestinationAttemptSuperseded = (
   if (config.abortSignal?.aborted === true) {
     return true;
   }
-  if (!config.deadlineMs) {
+  if (!config.resolveDeadlineMs) {
     return false;
   }
-  return Date.now() >= config.deadlineMs;
+  return Date.now() >= config.resolveDeadlineMs();
 };
 
 const resetDestinationBackoffIfNeeded = async (
@@ -826,6 +829,18 @@ const getEffectiveSourceCalendarIds = async (
   return sources.map((source) => source.sourceCalendarId);
 };
 
+const withPushWritePlanning = async (
+  rateLimiter: RedisRateLimiter | undefined,
+  callbacks: SyncCallbacks | undefined,
+  onProgress: SyncCallbacks["onProgress"],
+): Promise<SyncCallbacks["onProgress"]> => {
+  if (!callbacks?.onWritesPlanned) {
+    return onProgress;
+  }
+  const requestsPerMinute = await resolvePushRequestsPerMinute(rateLimiter);
+  return withPlannedPushWrites(requestsPerMinute, callbacks.onWritesPlanned, onProgress);
+};
+
 const syncDestinationsForUser = async (
   userId: string,
   config: SyncConfig,
@@ -908,6 +923,13 @@ const syncDestinationsForUser = async (
         const destination = currentDestination;
         attemptedDestination = destination;
 
+        const rateLimiter = createProviderRateLimiter(
+          redis,
+          userId,
+          destination.accountId,
+          destination.provider,
+          config.googleProjectRequestsPerMinute,
+        );
         const providerResolve = await measurePhase(() => resolveSyncProvider({
           database,
           provider: destination.provider,
@@ -918,13 +940,7 @@ const syncDestinationsForUser = async (
           encryptionKey: config.encryptionKey,
           refreshLockStore: config.refreshLockStore,
           safeFetchOptions: config.safeFetchOptions,
-          rateLimiter: createProviderRateLimiter(
-            redis,
-            userId,
-            destination.accountId,
-            destination.provider,
-            config.googleProjectRequestsPerMinute,
-          ),
+          rateLimiter,
           signal: config.abortSignal,
         }));
         const syncProvider = providerResolve.value;
@@ -1083,6 +1099,11 @@ const syncDestinationsForUser = async (
           }
           return handle.isCurrent();
         };
+        const onProgress = await withPushWritePlanning(
+          rateLimiter,
+          callbacks,
+          withPushPace(destination.provider, callbacks?.onProgress),
+        );
         const result = await syncCalendar({
           userId: destination.userId,
           calendarId: destination.calendarId,
@@ -1090,7 +1111,7 @@ const syncDestinationsForUser = async (
           readState: () => Promise.resolve(reconciliationState),
           isCurrent: isAttemptCurrent,
           flush: createDatabaseFlush(database),
-          onProgress: withPushPace(destination.provider, callbacks?.onProgress),
+          onProgress,
           onSyncEvent: (event) => {
             const enrichedEvent = {
               ...event,
