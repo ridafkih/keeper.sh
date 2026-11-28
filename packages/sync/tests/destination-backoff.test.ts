@@ -369,7 +369,7 @@ describe("a run that did no work because it was superseded", () => {
 
     await syncDestinationsForUser(USER_ID, {
       ...config(database),
-      deadlineMs: START.getTime() - 1,
+      resolveDeadlineMs: () => START.getTime() - 1,
     });
 
     expect(row.failureCount).toBe(5);
@@ -404,7 +404,7 @@ describe("a run that did no work because it was superseded", () => {
       const truncated = index % 2 === 1;
       await syncDestinationsForUser(USER_ID, {
         ...config(database),
-        ...(truncated && { deadlineMs: Date.now() - 1 }),
+        ...(truncated && { resolveDeadlineMs: () => Date.now() - 1 }),
       });
       observed.push(row.failureCount);
     }

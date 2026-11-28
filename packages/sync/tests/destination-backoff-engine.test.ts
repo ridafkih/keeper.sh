@@ -6,6 +6,7 @@ import type {
   PushResult,
   RemoteEvent,
 } from "@keeper.sh/calendar";
+import { GOOGLE_PUSH_REQUESTS_PER_MINUTE } from "@keeper.sh/constants";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 
 const resolveSyncProviderMock = vi.fn();
@@ -26,7 +27,6 @@ vi.mock("@keeper.sh/calendar", async (importOriginal) => {
   return {
     ...original,
     createDatabaseFlush: () => () => Promise.resolve(),
-    createGoogleUserRateLimiter: () => null,
     getEventMappingsForDestination: () => Promise.resolve(mappingsMock()),
     getEventsForCalendarsWithDiagnostics: () => Promise.resolve({
       diagnostics: {
@@ -329,7 +329,7 @@ describe("a run that completes after its deadline has passed", () => {
     inSyncState();
     const deadlineMs = START.getTime() + 30_000;
 
-    await syncDestinationsForUser(USER_ID, config(database, { deadlineMs }), {
+    await syncDestinationsForUser(USER_ID, config(database, { resolveDeadlineMs: () => deadlineMs }), {
       onSyncEvent: () => {
         vi.setSystemTime(new Date(deadlineMs + 1));
       },
@@ -348,7 +348,7 @@ describe("a run that completes after its deadline has passed", () => {
 
     await syncDestinationsForUser(
       USER_ID,
-      config(database, { deadlineMs: START.getTime() - 1 }),
+      config(database, { resolveDeadlineMs: () => START.getTime() - 1 }),
     );
 
     expect(row.failureCount).toBe(5);
@@ -383,7 +383,7 @@ describe("supersession part way through the remote operations", () => {
 
     const result = await syncDestinationsForUser(
       USER_ID,
-      config(database, { deadlineMs }),
+      config(database, { resolveDeadlineMs: () => deadlineMs }),
     );
 
     expect(pushCalls).toBe(1);
@@ -410,7 +410,7 @@ describe("supersession part way through the remote operations", () => {
 
     const result = await syncDestinationsForUser(
       USER_ID,
-      config(database, { deadlineMs }),
+      config(database, { resolveDeadlineMs: () => deadlineMs }),
     );
 
     expect(pushCalls).toBe(1);
@@ -437,7 +437,8 @@ describe("a destination that alternates between deadline-truncated and failing r
       }
       const truncation: Record<string, unknown> = {};
       if (index % 2 === 1) {
-        truncation.deadlineMs = Date.now() - 1;
+        const truncatedAt = Date.now() - 1;
+        truncation.resolveDeadlineMs = () => truncatedAt;
       }
       await syncDestinationsForUser(USER_ID, config(database, truncation));
       counts.push(row.failureCount);
@@ -633,7 +634,7 @@ describe("a deadline that expires exactly at the current instant", () => {
 
     await syncDestinationsForUser(
       USER_ID,
-      config(database, { deadlineMs: START.getTime() }),
+      config(database, { resolveDeadlineMs: () => START.getTime() }),
     );
 
     expect(writes).toEqual([]);
@@ -740,5 +741,55 @@ describe("first syncs recorded by a destination run", () => {
       "first_sync.events_add_failed": 1,
       "first_sync.outcome": "destination-rejected",
     })]);
+  });
+});
+
+describe("a run whose deadline follows its planned writes", () => {
+  const sixtyEvents = () =>
+    Array.from({ length: 60 }, (_value, index) =>
+      makeEvent(`ev-${index}`, new Date(2026, 2, 10, 9, 0, 0)));
+
+  it("announces the pending operations at the destination's current push pace", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(sixtyEvents);
+    const onWritesPlanned = vi.fn();
+
+    await syncDestinationsForUser(USER_ID, config(database), { onWritesPlanned });
+
+    expect(onWritesPlanned).toHaveBeenCalledExactlyOnceWith({
+      calendarId: CALENDAR_ID,
+      operationCount: 60,
+      requestsPerMinute: GOOGLE_PUSH_REQUESTS_PER_MINUTE,
+    });
+  });
+
+  it("keeps writing past the original deadline once the plan extends it", async () => {
+    const { database } = createHarness();
+    localEventsMock.mockImplementation(sixtyEvents);
+    let deadlineMs = START.getTime() + 30_000;
+    let pushCalls = 0;
+    setProvider({
+      pushEvents: (events) => {
+        pushCalls += 1;
+        vi.setSystemTime(new Date(START.getTime() + 30_001));
+        return Promise.resolve(events.map((_event, index) => ({
+          remoteId: `remote-${pushCalls}-${index}`,
+          success: true,
+        })));
+      },
+    });
+
+    const result = await syncDestinationsForUser(
+      USER_ID,
+      config(database, { resolveDeadlineMs: () => deadlineMs }),
+      {
+        onWritesPlanned: () => {
+          deadlineMs = START.getTime() + 600_000;
+        },
+      },
+    );
+
+    expect(pushCalls).toBe(2);
+    expect(result.added).toBe(60);
   });
 });

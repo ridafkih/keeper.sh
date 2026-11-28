@@ -393,8 +393,9 @@ describe("a destination whose every run is cut short by the worker deadline", ()
 
     for (let minute = 0; minute < 5; minute++) {
       vi.setSystemTime(new Date(START.getTime() + minute * MINUTE_MS));
+      const deadlineMs = Date.now() - 1;
       await syncDestinationsForUser(USER_ID, config(database, {
-        deadlineMs: Date.now() - 1,
+        resolveDeadlineMs: () => deadlineMs,
       }));
     }
 

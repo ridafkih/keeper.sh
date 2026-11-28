@@ -170,7 +170,7 @@ describe("a deploy or deadline abort does not punish the destination", () => {
 
     await syncDestinationsForUser(USER_ID, {
       ...config(database),
-      deadlineMs,
+      resolveDeadlineMs: () => deadlineMs,
     });
 
     expect(writes).toEqual([]);

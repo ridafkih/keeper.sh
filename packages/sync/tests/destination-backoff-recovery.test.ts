@@ -221,7 +221,7 @@ describe("a repaired destination that is already in sync", () => {
 
     await syncDestinationsForUser(USER_ID, {
       ...config(database),
-      deadlineMs: START.getTime() + 10 * 1000,
+      resolveDeadlineMs: () => START.getTime() + 10 * 1000,
     });
 
     expect(row).toEqual({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null });
@@ -237,9 +237,10 @@ describe("a repaired destination that is already in sync", () => {
 
     for (let index = 0; index < 6; index++) {
       vi.setSystemTime(new Date(START.getTime() + index * 60 * 1000));
+      const deadlineMs = Date.now() + 10 * 1000;
       await syncDestinationsForUser(USER_ID, {
         ...config(database),
-        deadlineMs: Date.now() + 10 * 1000,
+        resolveDeadlineMs: () => deadlineMs,
       });
     }
     expect(row.failureCount).toBe(0);
@@ -260,9 +261,10 @@ describe("a repaired destination that is already in sync", () => {
     setInSyncRunThatOverrunsDeadline(30 * 1000);
     for (let index = 0; index < 6; index++) {
       vi.setSystemTime(new Date(START.getTime() + index * 60 * 1000));
+      const deadlineMs = Date.now() + 10 * 1000;
       await syncDestinationsForUser(USER_ID, {
         ...config(database),
-        deadlineMs: Date.now() + 10 * 1000,
+        resolveDeadlineMs: () => deadlineMs,
       });
     }
 
@@ -343,7 +345,7 @@ describe("a healthy destination interrupted by a worker shutdown", () => {
 
     await syncDestinationsForUser(USER_ID, {
       ...config(database),
-      deadlineMs: START.getTime() + 10 * 1000,
+      resolveDeadlineMs: () => START.getTime() + 10 * 1000,
     });
 
     expect(row.failureCount).toBe(1);
