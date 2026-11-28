@@ -36,6 +36,7 @@ import type { ParsedCalendarEvent } from "../shared/ics";
 import type { EventUpdate } from "../../../core/sync-engine/types";
 import type { SafeFetchOptions } from "../../../utils/safe-fetch";
 import { normalizeCalDAVEvent } from "./normalize-event";
+import { createWriteAuthenticationLatch } from "./write-authentication-latch";
 
 const CALDAV_RATE_LIMIT_CONCURRENCY = 5;
 const CALENDAR_OBJECT_EXTENSION = ".ics";
@@ -363,6 +364,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
   }, config.safeFetchOptions);
 
   const rateLimiter = new RateLimiter({ concurrency: CALDAV_RATE_LIMIT_CONCURRENCY });
+  const writeAuthentication = createWriteAuthenticationLatch();
 
   const mayHoldKeeperEventAt = (objectUrl: string): boolean => {
     try {
@@ -374,6 +376,9 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const createObject = (event: MaterializedSyncableEvent): Promise<PushResult> =>
     rateLimiter.execute(async (): Promise<PushResult> => {
+      if (writeAuthentication.isRefused()) {
+        return { success: false };
+      }
       try {
         const uid = toEventUid(event);
         const iCalString = eventToICalString(event, uid);
@@ -408,6 +413,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         if (config.safeFetchOptions?.signal?.aborted) {
           throw error;
         }
+        writeAuthentication.noteFailure(error);
         return createFailureResult(error);
       }
     }, config.safeFetchOptions?.signal);
@@ -455,6 +461,9 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     { deleteId, event }: EventUpdate,
   ): Promise<{ objectUrl?: string; result: PushResult }> =>
     rateLimiter.execute(async () => {
+      if (writeAuthentication.isRefused()) {
+        return { result: { success: false } };
+      }
       try {
         const { etag, objectUrl, uid } = await resolveUpdateTarget(deleteId, toWritableUids(event));
 
@@ -472,6 +481,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
         if (config.safeFetchOptions?.signal?.aborted) {
           throw error;
         }
+        writeAuthentication.noteFailure(error);
         return { result: createFailureResult(error) };
       }
     }, config.safeFetchOptions?.signal);
@@ -509,6 +519,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const pushEvents = async (events: MaterializedSyncableEvent[]): Promise<PushResult[]> => {
     const results = await Promise.all(events.map((event) => createObject(event)));
+    writeAuthentication.throwIfRefused();
     const stored = await readStoredAvailabilities(results.flatMap((result) => {
       if (!result.success || !result.remoteId) {
         return [];
@@ -529,6 +540,7 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
 
   const updateEvents = async (updates: EventUpdate[]): Promise<PushResult[]> => {
     const outcomes = await Promise.all(updates.map((update) => updateObject(update)));
+    writeAuthentication.throwIfRefused();
     const stored = await readStoredAvailabilities(
       outcomes.flatMap(({ objectUrl }) => objectUrl ?? []),
     );
@@ -569,10 +581,13 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
     });
   };
 
-  const deleteEvents = (eventIds: string[]): Promise<DeleteResult[]> =>
-    Promise.all(
+  const deleteEvents = async (eventIds: string[]): Promise<DeleteResult[]> => {
+    const results = await Promise.all(
       eventIds.map((deleteId) =>
         rateLimiter.execute(async (): Promise<DeleteResult> => {
+          if (writeAuthentication.isRefused()) {
+            return { success: false };
+          }
           removeAttempts += 1;
           if (deleteId.includes("/")) {
             removeCounts.byPath += 1;
@@ -593,12 +608,16 @@ const createCalDAVSyncProvider = (config: CalDAVSyncProviderConfig) => {
               removeCounts.notFound += 1;
               return { success: true };
             }
+            writeAuthentication.noteFailure(error);
             recordRemoveFailure(error);
             return createFailureResult(error);
           }
         }, config.safeFetchOptions?.signal),
       ),
     );
+    writeAuthentication.throwIfRefused();
+    return results;
+  };
 
   const getSyncDiagnostics = (): Record<string, number | string> => ({
     "provider.caldav.host": calendarHost,
