@@ -31,6 +31,7 @@ COPY --from=source /app/services/mcp/entrypoint.sh ./services/mcp/entrypoint.sh
 RUN chmod +x ./services/mcp/entrypoint.sh
 
 ENV ENV=production
+ENV STDOUT_LOG_LEVEL=warn
 EXPOSE 3002
 
 ARG COMMIT_SHA

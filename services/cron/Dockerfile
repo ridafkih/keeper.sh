@@ -31,6 +31,7 @@ COPY --from=source /app/services/cron/entrypoint.sh ./services/cron/entrypoint.s
 RUN chmod +x ./services/cron/entrypoint.sh
 
 ENV ENV=production
+ENV STDOUT_LOG_LEVEL=warn
 
 ARG COMMIT_SHA
 ARG VERSION

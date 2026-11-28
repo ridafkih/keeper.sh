@@ -31,6 +31,7 @@ COPY --from=source /app/services/worker/entrypoint.sh ./services/worker/entrypoi
 RUN chmod +x ./services/worker/entrypoint.sh
 
 ENV ENV=production
+ENV STDOUT_LOG_LEVEL=warn
 
 ARG COMMIT_SHA
 ARG VERSION

@@ -35,6 +35,7 @@ COPY --from=source /app/services/api/entrypoint.sh ./services/api/entrypoint.sh
 RUN chmod +x ./services/api/entrypoint.sh
 
 ENV ENV=production
+ENV STDOUT_LOG_LEVEL=warn
 EXPOSE 3001
 
 ARG COMMIT_SHA
