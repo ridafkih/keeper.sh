@@ -4,6 +4,7 @@ import {
   createGoogleTokenRefresher,
   createMicrosoftTokenRefresher,
   ensureValidToken,
+  readCredentialTokens,
   resolvePushRegistrar,
   toPushChannelState,
 } from "@keeper.sh/calendar";
@@ -131,7 +132,7 @@ const deregisterPushChannelsWithin = async (
   scopeId: string,
   scopeColumn: "accountId" | "calendarId",
 ): Promise<number> => {
-  const { database, env, refreshLockStore, webhookConfig } = await import("@/context");
+  const { database, env, keyring, refreshLockStore, webhookConfig } = await import("@/context");
 
   return await runDeregisterAccountPushChannels(scopeId, {
     createRegistrarContext: async (channel) => {
@@ -164,9 +165,8 @@ const deregisterPushChannelsWithin = async (
       }
 
       const tokenState: TokenState = {
-        accessToken: credentials.accessToken,
+        ...readCredentialTokens(credentials, keyring),
         accessTokenExpiresAt: credentials.expiresAt,
-        refreshToken: credentials.refreshToken,
       };
 
       const rawRefresh = resolveTokenRefresher(channel.provider, {
@@ -179,6 +179,7 @@ const deregisterPushChannelsWithin = async (
         await ensureValidToken(tokenState, createCoordinatedRefresher({
           calendarAccountId: credentials.calendarAccountId,
           database,
+          keyring,
           oauthCredentialId: credentials.oauthCredentialId,
           rawRefresh,
           refreshLockStore,

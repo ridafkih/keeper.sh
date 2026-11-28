@@ -13,6 +13,7 @@ import {
   isRedisUnavailableError,
   isTimeoutError,
   markCalendarRediscoveryAttempt,
+  readCredentialTokens,
   REDIS_UNAVAILABLE_SLUG,
   resolveRediscoveryCalendarType,
   toDiscoveredCalDAVCalendars,
@@ -28,7 +29,13 @@ import {
 import type { CalDAVAuthMethod } from "@keeper.sh/calendar/digest-fetch";
 import { listUserCalendars as listGoogleCalendars } from "@keeper.sh/calendar/google";
 import { listUserCalendars as listOutlookCalendars } from "@keeper.sh/calendar/outlook";
-import { buildImportedCalendarExists, decryptPassword } from "@keeper.sh/database";
+import {
+  buildImportedCalendarExists,
+  hasEncryptionKey,
+  hasStoredSecret,
+  openSecret,
+} from "@keeper.sh/database";
+import type { StoredSecret } from "@keeper.sh/database";
 import {
   caldavCredentialsTable,
   calendarAccountsTable,
@@ -38,6 +45,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { withCronWideEvent } from "@/utils/with-wide-event";
 import { context, widelog } from "@/utils/logging";
 import { database, premiumService, refreshLockRedis, refreshLockStore } from "@/context";
+import { keyring } from "@/utils/keyring";
 import env from "@/env";
 import { safeFetchOptions } from "@/utils/safe-fetch-options";
 import { releaseRefreshLock } from "@/utils/refresh-lock-release";
@@ -62,12 +70,13 @@ const FREE_STALENESS_MS = 24 * HOUR_MS;
 
 interface RediscoveryAccount extends RediscoveryCandidate {
   hasImportedCalendar: boolean;
-  accessToken: string | null;
+  accessToken: StoredSecret<"oauth_credentials.accessToken"> | null;
   authMethod: string | null;
-  encryptedPassword: string | null;
+  caldavCredentialId: string | null;
+  encryptedPassword: StoredSecret<"caldav_credentials.encryptedPassword"> | null;
   expiresAt: Date | null;
   oauthCredentialId: string | null;
-  refreshToken: string | null;
+  refreshToken: StoredSecret<"oauth_credentials.refreshToken"> | null;
   serverUrl: string | null;
   username: string | null;
 }
@@ -93,6 +102,7 @@ const loadRediscoveryCandidates = (): Promise<RediscoveryAccount[]> =>
       accountId: calendarAccountsTable.id,
       authMethod: caldavCredentialsTable.authMethod,
       authType: calendarAccountsTable.authType,
+      caldavCredentialId: caldavCredentialsTable.id,
       calendarsRefreshAttemptedAt: calendarAccountsTable.calendarsRefreshAttemptedAt,
       calendarsRefreshedAt: calendarAccountsTable.calendarsRefreshedAt,
       encryptedPassword: caldavCredentialsTable.encryptedPassword,
@@ -141,15 +151,25 @@ const discoverOAuthCalendars = async (
   account: RediscoveryAccount,
   signal: AbortSignal,
 ): Promise<DiscoveredCalendar[]> => {
-  if (!account.oauthCredentialId || !account.accessToken
-    || !account.refreshToken || !account.expiresAt) {
+  if (
+    !account.oauthCredentialId
+    || !hasStoredSecret(account.accessToken)
+    || !hasStoredSecret(account.refreshToken)
+    || !account.expiresAt
+  ) {
     throw new Error(`Calendar account ${account.accountId} has no OAuth credential`);
   }
 
   const tokenState: TokenState = {
-    accessToken: account.accessToken,
+    ...readCredentialTokens(
+      {
+        accessToken: account.accessToken,
+        oauthCredentialId: account.oauthCredentialId,
+        refreshToken: account.refreshToken,
+      },
+      keyring,
+    ),
     accessTokenExpiresAt: account.expiresAt,
-    refreshToken: account.refreshToken,
   };
 
   signal.throwIfAborted();
@@ -159,6 +179,7 @@ const discoverOAuthCalendars = async (
     await ensureValidToken(tokenState, createCoordinatedRefresher({
       calendarAccountId: account.accountId,
       database,
+      keyring,
       oauthCredentialId: account.oauthCredentialId,
       rawRefresh: rawRefresher,
       refreshLockStore,
@@ -189,17 +210,21 @@ const discoverOAuthCalendars = async (
 
 const discoverCalDAVCalendars = async (
   account: RediscoveryAccount,
-  encryptionKey: string,
   signal: AbortSignal,
 ): Promise<DiscoveredCalendar[]> => {
-  if (!account.serverUrl || !account.username || !account.encryptedPassword) {
+  if (
+    !account.caldavCredentialId
+    || !account.serverUrl
+    || !account.username
+    || !hasStoredSecret(account.encryptedPassword)
+  ) {
     throw new Error(`Calendar account ${account.accountId} has no CalDAV credential`);
   }
 
   const client = createCalDAVClient({
     authMethod: (account.authMethod ?? "basic") as CalDAVAuthMethod,
     credentials: {
-      password: decryptPassword(account.encryptedPassword, encryptionKey),
+      password: openSecret(account.encryptedPassword, keyring, account.caldavCredentialId),
       username: account.username,
     },
     serverUrl: account.serverUrl,
@@ -213,12 +238,12 @@ const discoverAccountCalendars = (
   signal: AbortSignal,
 ): Promise<DiscoveredCalendar[]> => {
   if (account.authType === "caldav") {
-    if (!env.ENCRYPTION_KEY) {
+    if (!hasEncryptionKey(keyring)) {
       throw new Error(
         `Calendar account ${account.accountId} needs ENCRYPTION_KEY to rediscover CalDAV calendars`,
       );
     }
-    return discoverCalDAVCalendars(account, env.ENCRYPTION_KEY, signal);
+    return discoverCalDAVCalendars(account, signal);
   }
   return discoverOAuthCalendars(account, signal);
 };
@@ -379,7 +404,7 @@ const runRediscoveryBatch = async (): Promise<void> => {
   const candidates = await loadRediscoveryCandidates();
   const { selectable: configured, excluded } = excludeUnconfiguredCalDAVAccounts(
     candidates,
-    Boolean(env.ENCRYPTION_KEY),
+    hasEncryptionKey(keyring),
   );
 
   if (excluded > 0) {

@@ -12,7 +12,8 @@ vi.mock("@keeper.sh/calendar/caldav", () => ({
 }));
 
 vi.mock("@keeper.sh/database", () => ({
-  decryptPassword: () => "password",
+  hasEncryptionKey: () => true,
+  openSecret: () => "password",
 }));
 
 const { resolveSyncProvider } = await import("../src/resolve-provider");
@@ -45,7 +46,7 @@ const resolveCalDAVSafeFetchOptions = async (): Promise<SafeFetchOptions> => {
     userId: "user-1",
     accountId: "account-1",
     oauthConfig: {},
-    encryptionKey: "key",
+    keyring: {} as never,
   });
 
   const [config] = capturedConfigs;

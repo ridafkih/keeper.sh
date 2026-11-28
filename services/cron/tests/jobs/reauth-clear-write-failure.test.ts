@@ -212,7 +212,7 @@ vi.mock("@keeper.sh/sync", async (importOriginal) => ({
 vi.mock("@keeper.sh/database", async (importOriginal) => ({
   ...await importOriginal<Record<string, unknown>>(),
   createDatabase: () => Promise.resolve({}),
-  decryptPassword: () => "plaintext",
+  openSecret: () => "plaintext",
 }));
 
 vi.mock("@keeper.sh/calendar", async (importOriginal) => ({

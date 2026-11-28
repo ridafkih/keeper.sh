@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   pgTable,
@@ -21,6 +22,8 @@ import {
   SYNC_RANGE_DEFINITIONS,
 } from "@keeper.sh/data-schemas";
 import { user } from "./auth-schema";
+import { readStoredSecret, storedSecretValue } from "../stored-secret";
+import type { SecretPurpose, StoredSecret } from "../stored-secret";
 
 const DEFAULT_EVENT_COUNT = 0;
 
@@ -31,17 +34,28 @@ const SYNC_RANGE_SQL_VALUES = SYNC_RANGE_DEFINITIONS
   .map(({ value }) => `'${value}'`)
   .join(", ");
 
+const storedSecret = <Purpose extends SecretPurpose>(purpose: Purpose) =>
+  customType<{ data: StoredSecret<Purpose>; driverData: string }>({
+    dataType: () => "text",
+    fromDriver: (value) => readStoredSecret(purpose, value),
+    toDriver: (value) => storedSecretValue(value),
+  });
+
+const storedAccessToken = storedSecret("oauth_credentials.accessToken");
+const storedRefreshToken = storedSecret("oauth_credentials.refreshToken");
+const storedCaldavPassword = storedSecret("caldav_credentials.encryptedPassword");
+
 const oauthCredentialsTable = pgTable(
   "oauth_credentials",
   {
-    accessToken: text().notNull(),
+    accessToken: storedAccessToken().notNull(),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     email: text(),
     expiresAt: timestamp({ withTimezone: true }).notNull(),
     id: uuid().notNull().primaryKey().defaultRandom(),
     needsReauthentication: boolean().notNull().default(false),
     provider: text().notNull(),
-    refreshToken: text().notNull(),
+    refreshToken: storedRefreshToken().notNull(),
     updatedAt: timestamp({ withTimezone: true })
       .notNull()
       .defaultNow()
@@ -60,7 +74,7 @@ const oauthCredentialsTable = pgTable(
 const caldavCredentialsTable = pgTable("caldav_credentials", {
   authMethod: text().notNull().default("basic"),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-  encryptedPassword: text().notNull(),
+  encryptedPassword: storedCaldavPassword().notNull(),
   id: uuid().notNull().primaryKey().defaultRandom(),
   serverUrl: text().notNull(),
   updatedAt: timestamp({ withTimezone: true })

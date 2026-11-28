@@ -52,6 +52,15 @@ export {
   type CoordinatedRefresherOptions,
 } from "./core/oauth/coordinated-refresher";
 export {
+  readCredentialTokens,
+  storeCredentialAccessToken,
+  storeCredentialRefreshToken,
+  type CredentialTokens,
+  type StoredAccessToken,
+  type StoredCredentialTokens,
+  type StoredRefreshToken,
+} from "./core/oauth/credential-tokens";
+export {
   OAUTH_SYNC_WINDOW_VERSION,
   getDeterministicRefreshOffset,
   getOAuthSyncTokenVersion,

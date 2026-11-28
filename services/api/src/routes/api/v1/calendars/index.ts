@@ -1,9 +1,9 @@
 import { createKeeperApi } from "@/read-models";
 import type { KeeperSource } from "@/types";
 import { withV1Auth, withWideEvent } from "@/utils/middleware";
-import { database } from "@/context";
+import { database, keyring } from "@/context";
 
-const keeperApi = createKeeperApi(database);
+const keeperApi = createKeeperApi(database, { keyring });
 
 const toCalendar = (source: KeeperSource) => ({
   id: source.id,

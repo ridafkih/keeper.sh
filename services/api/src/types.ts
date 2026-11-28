@@ -1,4 +1,5 @@
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import type { StoredSecret } from "@keeper.sh/database";
 import type { FreeSlot, WorkingHours } from "@/utils/free-time";
 
 type KeeperDatabase = BunSQLDatabase;
@@ -148,15 +149,16 @@ interface ProviderCredentials {
   email: string | null;
   oauth?: {
     credentialId: string;
-    accessToken: string;
-    refreshToken: string;
+    accessToken: StoredSecret<"oauth_credentials.accessToken">;
+    refreshToken: StoredSecret<"oauth_credentials.refreshToken">;
     expiresAt: Date;
   };
   caldav?: {
     authMethod: string;
+    credentialId: string;
     serverUrl: string;
     username: string;
-    encryptedPassword: string;
+    encryptedPassword: StoredSecret<"caldav_credentials.encryptedPassword">;
   };
 }
 

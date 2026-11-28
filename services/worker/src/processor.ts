@@ -20,6 +20,7 @@ import {
 } from "@keeper.sh/database";
 import { markActiveSpanFailed } from "@keeper.sh/otelemetry/tracing";
 import { database, refreshLockRedis, refreshLockStore } from "./context";
+import { keyring } from "./utils/keyring";
 import { context, widelog } from "./utils/logging";
 import { applySyncEventFields } from "./utils/sync-event-fields";
 import { createEventsCopiedMilestone } from "./utils/user-milestones";
@@ -308,7 +309,7 @@ const processJob = (
         refreshLockStore,
         deadlineMs,
         abortSignal,
-        encryptionKey: env.ENCRYPTION_KEY,
+        keyring,
         googleProjectRequestsPerMinute: env.GOOGLE_PROJECT_REQUESTS_PER_MINUTE,
         safeFetchOptions,
         oauthConfig: {

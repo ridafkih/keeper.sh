@@ -72,7 +72,7 @@ const createHarness = (overrides: Partial<AccountCalendarRefreshDependencies> = 
   const configured: AccountCalendarRefreshDependencies = {
     applyPlan: () => Promise.resolve(emptyPlan),
     discoverCalendars: () => Promise.resolve([]),
-    encryptionKey: "encryption-key",
+    encryptionConfigured: true,
     // eslint-disable-next-line @eslint/no-undefined @eslint-plugin-unicorn/no-useless-undefined
     enqueuePush: () => undefined,
     loadAccount: () => Promise.resolve(oauthAccount),
@@ -199,7 +199,7 @@ describe("runAccountCalendarRefresh", () => {
 
   it("fails visibly when a CalDAV refresh has no encryption key configured", async () => {
     const harness = createHarness({
-      encryptionKey: null,
+      encryptionConfigured: false,
       loadAccount: () => Promise.resolve(caldavAccount),
     });
 

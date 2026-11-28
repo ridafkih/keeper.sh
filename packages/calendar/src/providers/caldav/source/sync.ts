@@ -1,7 +1,11 @@
 import { calendarAccountsTable, caldavCredentialsTable, calendarsTable } from "@keeper.sh/database/schema";
 import { and, eq } from "drizzle-orm";
-import { decryptPassword } from "@keeper.sh/database";
-import type { CalDAVSourceAccount, CalDAVSourceProviderConfig } from "../types";
+import { openSecret } from "@keeper.sh/database";
+import type {
+  CalDAVSourceAccount,
+  CalDAVSourceProviderConfig,
+  StoredCalDAVPassword,
+} from "../types";
 
 const CALDAV_CALENDAR_TYPE = "caldav";
 
@@ -9,15 +13,18 @@ interface CalDAVSourceService {
   getAllCalDAVSources: () => Promise<CalDAVSourceAccount[]>;
   getCalDAVSourcesByProvider: (provider: string) => Promise<CalDAVSourceAccount[]>;
   getCalDAVSourcesForUser: (userId: string) => Promise<CalDAVSourceAccount[]>;
-  getDecryptedPassword: (encryptedPassword: string) => string;
+  getDecryptedPassword: (
+    credential: Pick<CalDAVSourceAccount, "caldavCredentialId" | "encryptedPassword">,
+  ) => string;
   updateSyncToken: (calendarId: string, syncToken: string | null) => Promise<void>;
 }
 
 const mapSourceToAccount = (source: {
   authMethod: string;
+  caldavCredentialId: string;
   calendarAccountId: string;
   calendarUrl: string | null;
-  encryptedPassword: string;
+  encryptedPassword: StoredCalDAVPassword;
   name: string;
   originalName: string | null;
   provider: string;
@@ -38,12 +45,13 @@ const mapSourceToAccount = (source: {
 };
 
 const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSourceService => {
-  const { database, encryptionKey } = config;
+  const { database, keyring } = config;
 
   const getAllCalDAVSources = async (): Promise<CalDAVSourceAccount[]> => {
     const sources = await database
       .select({
         authMethod: caldavCredentialsTable.authMethod,
+        caldavCredentialId: caldavCredentialsTable.id,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -75,6 +83,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
     const sources = await database
       .select({
         authMethod: caldavCredentialsTable.authMethod,
+        caldavCredentialId: caldavCredentialsTable.id,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -107,6 +116,7 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
     const sources = await database
       .select({
         authMethod: caldavCredentialsTable.authMethod,
+        caldavCredentialId: caldavCredentialsTable.id,
         calendarAccountId: calendarAccountsTable.id,
         calendarId: calendarsTable.id,
         calendarUrl: calendarsTable.calendarUrl,
@@ -135,8 +145,9 @@ const createCalDAVSourceService = (config: CalDAVSourceProviderConfig): CalDAVSo
     return sources.map((source) => mapSourceToAccount(source));
   };
 
-  const getDecryptedPassword = (encryptedPassword: string): string =>
-    decryptPassword(encryptedPassword, encryptionKey);
+  const getDecryptedPassword = (
+    credential: Pick<CalDAVSourceAccount, "caldavCredentialId" | "encryptedPassword">,
+  ): string => openSecret(credential.encryptedPassword, keyring, credential.caldavCredentialId);
 
   const updateSyncToken = async (calendarId: string, syncToken: string | null): Promise<void> => {
     await database

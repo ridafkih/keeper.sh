@@ -1,6 +1,8 @@
 import { calendarAccountsTable, oauthCredentialsTable } from "@keeper.sh/database/schema";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
-import { database, oauthProviders } from "@/context";
+import { readCredentialTokens } from "@keeper.sh/calendar";
+import type { StoredAccessToken, StoredRefreshToken } from "@keeper.sh/calendar";
+import { database, keyring, oauthProviders } from "@/context";
 import { context, destroy, widelog } from "@/utils/logging";
 
 const PUSH_PROVIDERS = ["google", "outlook"];
@@ -10,8 +12,9 @@ interface BackfillRow {
   accountRowId: string;
   provider: string;
   email: string | null;
-  accessToken: string;
-  refreshToken: string;
+  oauthCredentialId: string;
+  accessToken: StoredAccessToken;
+  refreshToken: StoredRefreshToken;
   expiresAt: Date;
   credentialNeedsReauthentication: boolean;
   accountNeedsReauthentication: boolean;
@@ -29,6 +32,7 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
       accountRowId: calendarAccountsTable.id,
       provider: calendarAccountsTable.provider,
       email: calendarAccountsTable.email,
+      oauthCredentialId: oauthCredentialsTable.id,
       accessToken: oauthCredentialsTable.accessToken,
       refreshToken: oauthCredentialsTable.refreshToken,
       expiresAt: oauthCredentialsTable.expiresAt,
@@ -49,8 +53,10 @@ const selectCandidates = (): Promise<BackfillRow[]> =>
     ));
 
 const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
+  const tokens = readCredentialTokens(row, keyring);
+
   if (row.expiresAt.getTime() - EXPIRY_SKEW_MS > Date.now()) {
-    return row.accessToken;
+    return tokens.accessToken;
   }
 
   const provider = oauthProviders.getProvider(row.provider);
@@ -58,7 +64,7 @@ const resolveAccessToken = async (row: BackfillRow): Promise<string> => {
     throw new Error(`No OAuth provider registered for ${row.provider}`);
   }
 
-  const refreshed = await provider.refreshAccessToken(row.refreshToken);
+  const refreshed = await provider.refreshAccessToken(tokens.refreshToken);
   return refreshed.access_token;
 };
 

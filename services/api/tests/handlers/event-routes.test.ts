@@ -6,6 +6,7 @@ import {
   handleGetEventRoute,
   handleGetEventsInRangeRoute,
 } from "../../src/handlers/event-routes";
+import { createKeyring } from "@keeper.sh/database";
 import { createKeeperApi } from "../../src/read-models";
 import { eventPatchBodySchema } from "../../src/utils/request-body";
 import type { EventInput, EventUpdateInput, KeeperDatabase, KeeperEvent } from "../../src/types";
@@ -237,7 +238,7 @@ create table user_events (
 
 const writeClient = new PGlite();
 const writeDatabase = drizzle(writeClient) as unknown as KeeperDatabase;
-const keeperApi = createKeeperApi(writeDatabase);
+const keeperApi = createKeeperApi(writeDatabase, { keyring: createKeyring() });
 
 interface ProviderCall {
   body: Record<string, unknown> | null;

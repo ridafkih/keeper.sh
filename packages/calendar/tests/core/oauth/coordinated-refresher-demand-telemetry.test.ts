@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { widelog, widelogger } from "widelogger";
 import type { BunSQLDatabase } from "drizzle-orm/bun-sql";
+import { createKeyring } from "@keeper.sh/database";
 import { createCoordinatedRefresher } from "../../../src/core/oauth/coordinated-refresher";
 
 interface EmittedEvent {
@@ -97,6 +98,7 @@ const refreshOnce = async (
   const refresher = createCoordinatedRefresher({
     calendarAccountId: "account-1",
     database: fake.database,
+    keyring: createKeyring(),
     oauthCredentialId: `credential-${String(credentialSequence)}`,
     rawRefresh,
     refreshLockStore: null,
