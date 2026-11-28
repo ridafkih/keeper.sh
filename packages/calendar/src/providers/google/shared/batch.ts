@@ -2,7 +2,8 @@ import { HTTP_STATUS, PROVIDER_PUSH_REQUEST_TIMEOUT_MS } from "@keeper.sh/consta
 import type { RedisRateLimiter } from "../../../core/utils/redis-rate-limiter";
 import { chunkArray } from "../../../core/utils/chunk";
 import { fetchWithTimeout } from "../../../core/utils/fetch-with-timeout";
-import { GOOGLE_BATCH_API, GOOGLE_BATCH_MAX_SIZE } from "./api";
+import { GOOGLE_BATCH_API, GOOGLE_BATCH_CONFLICT_RETRY_BATCHES, GOOGLE_BATCH_MAX_SIZE } from "./api";
+import { executeSingleRequest } from "./single-request";
 import { withBackoff, abortableSleep, computeDelay, DEFAULT_MAX_RETRIES } from "../../../core/utils/backoff";
 import { GoogleBatchApiError, isRateLimitApiError, parseGoogleApiErrorFromBody } from "./errors";
 
@@ -281,11 +282,53 @@ const collectRateLimitedIndices = (responses: BatchSubResponse[]): number[] => {
   return indices;
 };
 
+interface BatchConflictCounts {
+  retriedInBatch: number;
+  retriedIndividually: number;
+  unresolved: number;
+}
+
 interface BatchChunkedOptions {
+  conflictCounts?: BatchConflictCounts;
   rateLimiter?: RedisRateLimiter;
   signal?: AbortSignal;
   timeoutMs?: number;
 }
+
+const collectConflictedIndices = (responses: BatchSubResponse[]): number[] => {
+  const indices: number[] = [];
+  for (let index = 0; index < responses.length; index++) {
+    if (responses[index]?.statusCode === HTTP_STATUS.CONFLICT) {
+      indices.push(index);
+    }
+  }
+  return indices;
+};
+
+const pickSubRequests = (subRequests: BatchSubRequest[], indices: number[]): BatchSubRequest[] =>
+  indices.map((index) => {
+    const subRequest = subRequests[index];
+    if (!subRequest) {
+      throw new Error(`Missing batch sub-request at index ${index}`);
+    }
+    return subRequest;
+  });
+
+const replaceResponses = (
+  responses: BatchSubResponse[],
+  indices: number[],
+  replacements: BatchSubResponse[],
+): BatchSubResponse[] => {
+  const merged = [...responses];
+  for (let position = 0; position < indices.length; position++) {
+    const index = indices[position];
+    const replacement = replacements[position];
+    if (typeof index === "number" && replacement) {
+      merged[index] = replacement;
+    }
+  }
+  return merged;
+};
 
 const retryRateLimitedSubRequests = async (
   subRequests: BatchSubRequest[],
@@ -338,6 +381,90 @@ const retryRateLimitedSubRequests = async (
   return results;
 };
 
+const executeChunkWithRateLimitRetry = async (
+  chunk: BatchSubRequest[],
+  accessToken: string,
+  options?: BatchChunkedOptions,
+): Promise<BatchSubResponse[]> => {
+  const responses = await executeBatch(chunk, accessToken, {
+    rateLimiter: options?.rateLimiter,
+    signal: options?.signal,
+    timeoutMs: options?.timeoutMs,
+  });
+
+  const rateLimitedIndices = collectRateLimitedIndices(responses);
+  if (rateLimitedIndices.length === 0) {
+    return responses;
+  }
+
+  const retryResponses = await retryRateLimitedSubRequests(
+    pickSubRequests(chunk, rateLimitedIndices),
+    accessToken,
+    options,
+  );
+  return replaceResponses(responses, rateLimitedIndices, retryResponses);
+};
+
+const executeConflictedIndividually = async (
+  subRequests: BatchSubRequest[],
+  accessToken: string,
+  options?: BatchChunkedOptions,
+): Promise<BatchSubResponse[]> => {
+  const responses: BatchSubResponse[] = [];
+  for (const subRequest of subRequests) {
+    responses.push(await executeSingleRequest(subRequest, accessToken, {
+      rateLimiter: options?.rateLimiter,
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+    }));
+  }
+  return responses;
+};
+
+const retryConflictedSubRequests = async (
+  chunk: BatchSubRequest[],
+  initialResponses: BatchSubResponse[],
+  accessToken: string,
+  options?: BatchChunkedOptions,
+): Promise<BatchSubResponse[]> => {
+  let responses = initialResponses;
+  const conflictCounts = options?.conflictCounts;
+
+  for (let attempt = 0; attempt < GOOGLE_BATCH_CONFLICT_RETRY_BATCHES; attempt++) {
+    const conflictedIndices = collectConflictedIndices(responses);
+    if (conflictedIndices.length === 0) {
+      return responses;
+    }
+    if (conflictCounts) {
+      conflictCounts.retriedInBatch += conflictedIndices.length;
+    }
+    const retryResponses = await executeChunkWithRateLimitRetry(
+      pickSubRequests(chunk, conflictedIndices),
+      accessToken,
+      options,
+    );
+    responses = replaceResponses(responses, conflictedIndices, retryResponses);
+  }
+
+  const conflictedIndices = collectConflictedIndices(responses);
+  if (conflictedIndices.length === 0) {
+    return responses;
+  }
+  if (conflictCounts) {
+    conflictCounts.retriedIndividually += conflictedIndices.length;
+  }
+  const individualResponses = await executeConflictedIndividually(
+    pickSubRequests(chunk, conflictedIndices),
+    accessToken,
+    options,
+  );
+  const settled = replaceResponses(responses, conflictedIndices, individualResponses);
+  if (conflictCounts) {
+    conflictCounts.unresolved += collectConflictedIndices(settled).length;
+  }
+  return settled;
+};
+
 const executeBatchChunked = async (
   subRequests: BatchSubRequest[],
   accessToken: string,
@@ -351,41 +478,8 @@ const executeBatchChunked = async (
   const allResponses: BatchSubResponse[] = [];
 
   for (const chunk of chunks) {
-    const responses = await executeBatch(chunk, accessToken, {
-      rateLimiter: options?.rateLimiter,
-      signal: options?.signal,
-      timeoutMs: options?.timeoutMs,
-    });
-
-    const rateLimitedIndices = collectRateLimitedIndices(responses);
-    if (rateLimitedIndices.length === 0) {
-      allResponses.push(...responses);
-      continue;
-    }
-
-    const rateLimitedRequests: BatchSubRequest[] = [];
-    for (const index of rateLimitedIndices) {
-      const request = chunk[index];
-      if (!request) {
-        throw new Error(`Missing batch sub-request at index ${index}`);
-      }
-      rateLimitedRequests.push(request);
-    }
-    const retryResponses = await retryRateLimitedSubRequests(
-      rateLimitedRequests,
-      accessToken,
-      options,
-    );
-
-    for (let retryIndex = 0; retryIndex < rateLimitedIndices.length; retryIndex++) {
-      const originalIndex = rateLimitedIndices[retryIndex];
-      const retryResponse = retryResponses[retryIndex];
-      if (typeof originalIndex === "number" && retryResponse) {
-        responses[originalIndex] = retryResponse;
-      }
-    }
-
-    allResponses.push(...responses);
+    const responses = await executeChunkWithRateLimitRetry(chunk, accessToken, options);
+    allResponses.push(...await retryConflictedSubRequests(chunk, responses, accessToken, options));
   }
 
   return allResponses;
@@ -398,4 +492,4 @@ export {
   executeBatchChunked,
   extractResponseBoundary,
 };
-export type { BatchSubRequest, BatchSubResponse };
+export type { BatchConflictCounts, BatchSubRequest, BatchSubResponse };
