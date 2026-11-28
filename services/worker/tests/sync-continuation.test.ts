@@ -27,9 +27,17 @@ const finishedJob = (continuationRequested: boolean, trigger?: "cron" | "push") 
 
 describe("shouldContinueAfterDeadline", () => {
   it("continues only a deadline-cut run that checkpointed operations", () => {
-    expect(shouldContinueAfterDeadline({ checkpointedOperations: 50, deadlineReached: true })).toBe(true);
-    expect(shouldContinueAfterDeadline({ checkpointedOperations: 0, deadlineReached: true })).toBe(false);
-    expect(shouldContinueAfterDeadline({ checkpointedOperations: 50, deadlineReached: false })).toBe(false);
+    expect(shouldContinueAfterDeadline({ checkpointedOperations: 50, deadlineReached: true, writeRefused: false }))
+      .toBe(true);
+    expect(shouldContinueAfterDeadline({ checkpointedOperations: 0, deadlineReached: true, writeRefused: false }))
+      .toBe(false);
+    expect(shouldContinueAfterDeadline({ checkpointedOperations: 50, deadlineReached: false, writeRefused: false }))
+      .toBe(false);
+  });
+
+  it("never continues a run the server cancelled by refusing a write with 401", () => {
+    expect(shouldContinueAfterDeadline({ checkpointedOperations: 1150, deadlineReached: true, writeRefused: true }))
+      .toBe(false);
   });
 });
 

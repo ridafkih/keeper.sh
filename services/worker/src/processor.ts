@@ -284,6 +284,7 @@ const processJob = (
     let calendarOutcomeReported = false;
     const pendingDestinationSyncs: Promise<void>[] = [];
     const checkpointedOperationsByCalendar = new Map<string, number>();
+    let writeRefused = false;
 
     const requestContinuationIfCutShort = async (): Promise<boolean> => {
       const checkpointedOperations = [...checkpointedOperationsByCalendar.values()]
@@ -291,6 +292,7 @@ const processJob = (
       if (!shouldContinueAfterDeadline({
         checkpointedOperations,
         deadlineReached: deadlineController.signal.aborted,
+        writeRefused,
       })) {
         return false;
       }
@@ -415,6 +417,7 @@ const processJob = (
           calendarOutcomeReported = true;
         },
         onCalendarError: (failure) => {
+          writeRefused = failure.error instanceof CalDAVWriteRefusedError;
           widelog.set("provider.name", failure.provider);
           widelog.set("provider.account_id", failure.accountId);
           widelog.set("provider.calendar_id", failure.calendarId);
