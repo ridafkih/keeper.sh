@@ -1,4 +1,5 @@
 import { RecurrenceMaterializationLimitError, RequestTimeoutError } from "@keeper.sh/calendar";
+import { CalDAVWriteRefusedError } from "@keeper.sh/calendar/caldav";
 import { isGoogleWriteAccessDeniedError } from "@keeper.sh/calendar/google";
 import { isDatabaseError } from "@keeper.sh/database";
 import { DESTINATION_BACKOFF_FAILURE_SHARE } from "@keeper.sh/constants";
@@ -32,7 +33,7 @@ const isBackoffEligibleError = (error: unknown): boolean => {
     return false;
   }
 
-  if (error instanceof RequestTimeoutError) {
+  if (error instanceof RequestTimeoutError || error instanceof CalDAVWriteRefusedError) {
     return true;
   }
 

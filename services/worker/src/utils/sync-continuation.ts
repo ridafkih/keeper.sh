@@ -13,12 +13,17 @@ interface ContinuationQueue {
 interface DeadlineOutcome {
   deadlineReached: boolean;
   checkpointedOperations: number;
+  writeRefused: boolean;
 }
 
 const CONTINUATION_PRIORITY_BY_TRIGGER = { push: 1, cron: 2 } as const;
 
-const shouldContinueAfterDeadline = ({ deadlineReached, checkpointedOperations }: DeadlineOutcome): boolean =>
-  deadlineReached && checkpointedOperations > 0;
+const shouldContinueAfterDeadline = ({
+  deadlineReached,
+  checkpointedOperations,
+  writeRefused,
+}: DeadlineOutcome): boolean =>
+  deadlineReached && checkpointedOperations > 0 && !writeRefused;
 
 type FinishedPushSyncJob = Pick<Job<PushSyncJobPayload, PushSyncJobResult>, "data" | "returnvalue">;
 

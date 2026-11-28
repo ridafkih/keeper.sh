@@ -6,6 +6,7 @@ import type {
   PushResult,
   RemoteEvent,
 } from "@keeper.sh/calendar";
+import { CalDAVWriteRefusedError } from "@keeper.sh/calendar/caldav";
 import { createSyncEventContentHash } from "../../calendar/src/core/events/content-hash";
 
 const resolveSyncProviderMock = vi.fn();
@@ -740,5 +741,48 @@ describe("first syncs recorded by a destination run", () => {
       "first_sync.events_add_failed": 1,
       "first_sync.outcome": "destination-rejected",
     })]);
+  });
+});
+
+describe("a destination that refuses a write with 401", () => {
+  const refusedWrite = () =>
+    new CalDAVWriteRefusedError(Object.assign(new Error("CalDAV create failed: 401"), { status: 401 }));
+
+  it("ends the run at the refused chunk and only backs the destination off", async () => {
+    const { database, row, writes } = createHarness();
+    localEventsMock.mockImplementation(() =>
+      Array.from({ length: 120 }, (_value, index) =>
+        makeEvent(`ev-${index}`, new Date(2026, 2, 10, 9, 0, 0))));
+    let pushCalls = 0;
+    setProvider({
+      pushEvents: () => {
+        pushCalls += 1;
+        return Promise.reject(refusedWrite());
+      },
+    });
+
+    await syncDestinationsForUser(USER_ID, config(database));
+
+    expect(pushCalls).toBe(1);
+    expect(row.failureCount).toBe(1);
+    expect(row.nextAttemptAt).toEqual(new Date(START.getTime() + FIVE_MINUTES_MS));
+    const writtenColumns = new Set(writes.flatMap((write) => Object.keys(write)));
+    expect([...writtenColumns].toSorted()).toEqual(["failureCount", "lastFailureAt", "nextAttemptAt"]);
+  });
+
+  it("recovers by itself on the next attempt the server accepts", async () => {
+    const { database, row } = createHarness();
+    localEventsMock.mockImplementation(() => [
+      makeEvent("ev-1", new Date("2026-03-10T09:00:00.000Z")),
+    ]);
+    setProvider({ pushEvents: () => Promise.reject(refusedWrite()) });
+    await syncDestinationsForUser(USER_ID, config(database));
+    expect(row.failureCount).toBe(1);
+
+    setProvider({});
+    vi.setSystemTime(row.nextAttemptAt ?? START);
+    await syncDestinationsForUser(USER_ID, config(database));
+
+    expect(row).toEqual({ failureCount: 0, lastFailureAt: null, nextAttemptAt: null });
   });
 });

@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { USER_TIMEOUT_MS } from "@keeper.sh/queue";
+import { CalDAVWriteRefusedError } from "@keeper.sh/calendar/caldav";
 
 const recordedRequests = vi.hoisted((): { userId: unknown }[] => []);
-const scenario = vi.hoisted(() => ({ checkpointed: 0, deadlineFires: true }));
+const scenario = vi.hoisted(() => ({ checkpointed: 0, deadlineFires: true, writeRefused: false }));
 
 vi.mock("../src/utils/logging", () => ({
   context: (run: () => Promise<unknown>) => run(),
@@ -51,6 +52,7 @@ vi.mock("@keeper.sh/broadcast", () => ({
 
 interface ProgressHandlers {
   onProgress: (update: Record<string, unknown>) => void;
+  onCalendarError: (failure: Record<string, unknown>) => void;
 }
 
 vi.mock("@keeper.sh/sync", () => ({
@@ -68,6 +70,18 @@ vi.mock("@keeper.sh/sync", () => ({
     }
     if (scenario.deadlineFires) {
       vi.advanceTimersByTime(USER_TIMEOUT_MS + 1);
+    }
+    if (scenario.writeRefused) {
+      handlers.onCalendarError({
+        accountId: "account-1",
+        backoffApplied: true,
+        calendarId: "calendar-1",
+        durationMs: 0,
+        error: new CalDAVWriteRefusedError(Object.assign(new Error("CalDAV create failed: 401"), { status: 401 })),
+        provider: "icloud",
+        pushRemoved: false,
+        userId: "user-1",
+      });
     }
     return Promise.resolve({
       added: 0,
@@ -96,6 +110,7 @@ beforeEach(() => {
   recordedRequests.length = 0;
   scenario.checkpointed = 0;
   scenario.deadlineFires = true;
+  scenario.writeRefused = false;
   vi.useFakeTimers();
 });
 
@@ -123,6 +138,16 @@ describe("a push sync cut short by its deadline", () => {
   it("does not continue a run that finished inside its deadline", async () => {
     scenario.checkpointed = 250;
     scenario.deadlineFires = false;
+
+    const result = await runJob();
+
+    expect(recordedRequests).toEqual([]);
+    expect(result.continuationRequested).toBe(false);
+  });
+
+  it("never continues a run the server cancelled by refusing a write with 401", async () => {
+    scenario.checkpointed = 1150;
+    scenario.writeRefused = true;
 
     const result = await runJob();
 

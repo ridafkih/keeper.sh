@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { CalDAVWithheldCredentialsError } from "../../../../src/providers/caldav/shared/client";
+import { CalDAVHttpError, CalDAVWithheldCredentialsError } from "../../../../src/providers/caldav/shared/client";
+import { CalDAVWriteRefusedError } from "../../../../src/providers/caldav/destination/write-authentication-latch";
 import { isCalDAVAuthenticationError } from "../../../../src/providers/caldav/source/auth-error-classification";
 
 describe("isCalDAVAuthenticationError", () => {
+  it("never reads a write refused with 401 as a reason to re-authenticate", () => {
+    const refusedWrite = new CalDAVHttpError(new Response(null, { status: 401 }), "create");
+
+    expect(isCalDAVAuthenticationError(new CalDAVWriteRefusedError(refusedWrite))).toBe(false);
+  });
+
   it("returns true for explicit invalid-credentials errors", () => {
     expect(isCalDAVAuthenticationError(new Error("Invalid credentials"))).toBe(true);
   });

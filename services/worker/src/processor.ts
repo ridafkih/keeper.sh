@@ -10,6 +10,7 @@ import {
   RecurrenceMaterializationLimitError,
   REDIS_UNAVAILABLE_SLUG,
 } from "@keeper.sh/calendar";
+import { CalDAVWriteRefusedError } from "@keeper.sh/calendar/caldav";
 import { recordFirstSyncedMappings, syncDestinationsForUser, SyncLockRenewalError } from "@keeper.sh/sync";
 import { createBroadcastService } from "@keeper.sh/broadcast";
 import { syncStatusTable } from "@keeper.sh/database/schema";
@@ -86,6 +87,10 @@ const classifyKnownSyncError = (error: unknown): string | null => {
 
   if (error instanceof SyncLockRenewalError) {
     return "sync-lock-renewal-failed";
+  }
+
+  if (error instanceof CalDAVWriteRefusedError) {
+    return "provider-write-refused";
   }
 
   return null;
@@ -279,6 +284,7 @@ const processJob = (
     let calendarOutcomeReported = false;
     const pendingDestinationSyncs: Promise<void>[] = [];
     const checkpointedOperationsByCalendar = new Map<string, number>();
+    let writeRefused = false;
 
     const requestContinuationIfCutShort = async (): Promise<boolean> => {
       const checkpointedOperations = [...checkpointedOperationsByCalendar.values()]
@@ -286,6 +292,7 @@ const processJob = (
       if (!shouldContinueAfterDeadline({
         checkpointedOperations,
         deadlineReached: deadlineController.signal.aborted,
+        writeRefused,
       })) {
         return false;
       }
@@ -410,6 +417,7 @@ const processJob = (
           calendarOutcomeReported = true;
         },
         onCalendarError: (failure) => {
+          writeRefused = failure.error instanceof CalDAVWriteRefusedError;
           widelog.set("provider.name", failure.provider);
           widelog.set("provider.account_id", failure.accountId);
           widelog.set("provider.calendar_id", failure.calendarId);
