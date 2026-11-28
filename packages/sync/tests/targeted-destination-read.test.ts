@@ -167,11 +167,9 @@ describe("the push path reads only what it writes", () => {
     expect(targeted.operations).toEqual(listed.operations);
     expect(targeted.staleMappingIds.toSorted()).toEqual(listed.staleMappingIds.toSorted());
     expect(targeted.operations).toContainEqual({
-      deleteId: "destination-event-2",
       event: localEvents[1],
       staleMappingId: "mapping-2",
-      type: "replace",
-      uid: "destination-uid-2",
+      type: "add",
     });
   });
 
